@@ -62,7 +62,7 @@ namespace EXUI
             _asyncPrefabLoadHandle = asyncLoadHandle;  
         }  
 
-        // XUIManager.cs — 新增重载（保留旧接口向后兼容）  
+        // XUI 配置注册入口
         public void RegisterConfig(IXUIConfig config)  
         {  
             _viewPrefabPathMap = new Dictionary<Type, string>(config.GetViewPrefabPathMap());  

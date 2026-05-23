@@ -2,6 +2,30 @@ using System;
 
 namespace GAS.Runtime
 {
+    public static class GameplayCueConfigRegistry
+    {
+        private static Func<int, GameplayCueConfig> _getConfigByID;
+
+        public static void RegisterGetConfigByIDFunc(Func<int, GameplayCueConfig> func)
+        {
+            ConfigRegistryDiagnostics.ClearForConfigKind(ConfigRegistryConfigKind.GameplayCue);
+            _getConfigByID = func;
+        }
+
+        public static GameplayCueConfig GetConfigByID(
+            int id,
+            ConfigRegistryReferenceContext context = default)
+        {
+            var config = _getConfigByID?.Invoke(id);
+            if (config == null)
+                ConfigRegistryDiagnostics.ReportMissingConfig(
+                    ConfigRegistryConfigKind.GameplayCue,
+                    id,
+                    context);
+            return config;
+        }
+    }
+
     [Serializable]
     public class GameplayCueConfig
     {
@@ -45,18 +69,18 @@ namespace GAS.Runtime
             SetRequiredTagRequirement(requiredAllTags, requiredAnyTags, requiredNoneTags);
             SetImmunityTagRequirement(immunityAllTags, immunityAnyTags, immunityNoneTags);
         }
-        
+
         public void SetCueTypeAndParameter(Type cueType, XParam xParam)
         {
             CueType = cueType;
             Param = xParam;
         }
-        
+
         public void SetRequiredTags(int[] requiredTags)
         {
             SetRequiredTagRequirement(requiredTags, Array.Empty<int>(), Array.Empty<int>());
         }
-        
+
         public void SetImmunityTags(int[] immunityTags)
         {
             SetImmunityTagRequirement(Array.Empty<int>(), Array.Empty<int>(), immunityTags);
@@ -75,7 +99,7 @@ namespace GAS.Runtime
             ImmunityAnyTags = any;
             ImmunityNoneTags = none;
         }
-        
+
         public GameplayCueBase CreateCue()
         {
             return CueHelper.TryCreateCue(CueType, Param);

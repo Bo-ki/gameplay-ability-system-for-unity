@@ -79,10 +79,6 @@ namespace GAS.Editor
         public string PathOfExcelCue => $"{ConfigProjectPath}/Datas/{GASConstDefine.EXCEL_FILE_NAME_OF_CUE}.xlsx";
         public string PathOfCodeCue => $"{CodeGeneratePath}/{GASConstDefine.CODE_FILE_NAME_OF_CUE}.cs";
         
-        public string PathOfJsonMmc => $"{TableOutpuPath}/{GASConstDefine.JSON_FILE_NAME_OF_MMC}.json";
-        public string PathOfExcelMmc => $"{ConfigProjectPath}/Datas/{GASConstDefine.EXCEL_FILE_NAME_OF_MMC}.xlsx";
-        public string PathOfCodeMmc => $"{CodeGeneratePath}/{GASConstDefine.CODE_FILE_NAME_OF_MMC}.cs";
-        
         public string PathOfJsonAsc => $"{TableOutpuPath}/{GASConstDefine.JSON_FILE_NAME_OF_ASC}.json";
         public string PathOfExcelAsc => $"{ConfigProjectPath}/Datas/{GASConstDefine.EXCEL_FILE_NAME_OF_ASC}.xlsx";
 
@@ -119,10 +115,7 @@ namespace GAS.Editor
                     $"Ability脚本路径: {PathOfCodeAbility}\n\n" +
                     $"Cue配置Json路径: {PathOfJsonCue}\n" +
                     $"Cue配置Excel路径: {PathOfExcelCue}\n" +
-                    $"Cue脚本路径: {PathOfCodeCue}\n\n" +
-                    $"Mmc配置Json路径: {PathOfJsonMmc}\n" +
-                    $"Mmc配置Excel路径: {PathOfExcelMmc}\n" +
-                    $"Mmc脚本路径: {PathOfCodeMmc}\n\n";
+                    $"Cue脚本路径: {PathOfCodeCue}\n\n";
                 return $"<color=white>{content}</color>";
             }
         }

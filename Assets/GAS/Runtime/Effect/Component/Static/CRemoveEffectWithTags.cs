@@ -1,12 +1,10 @@
-using System;
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
 {
     public struct CRemoveEffectWithTags : IComponentData
     {
-        public TagRequirementData requirement;
+        public TagRequirementMask requirement;
     }
     
     public sealed class ConfRemoveEffectWithTags:GameplayEffectComponentConfig
@@ -18,15 +16,9 @@ namespace GAS.Runtime
         
         public override void LoadToGameplayEffectEntity(Entity ge)
         {
-            EntityHelper.AddComponent<CRemoveEffectWithTags>(ge);
-            EntityHelper.SetComponent(ge, new CRemoveEffectWithTags
+            GASManager.EntityManager.AddComponentData(ge, new CRemoveEffectWithTags
             {
-                requirement = new TagRequirementData
-                {
-                    all = new NativeArray<int>(all ?? Array.Empty<int>(), Allocator.Persistent),
-                    any = new NativeArray<int>(any ?? tags ?? Array.Empty<int>(), Allocator.Persistent),
-                    none = new NativeArray<int>(none ?? Array.Empty<int>(), Allocator.Persistent)
-                }
+                requirement = TagHelper.BuildRequirementMask(all, any ?? tags, none)
             });
         }
     }

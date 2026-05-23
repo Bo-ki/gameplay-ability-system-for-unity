@@ -9,7 +9,6 @@ namespace GAS.Editor
     {
         private static List<ValueDropdownItem> _cues;
         private static List<ValueDropdownItem> _effects;
-        private static List<ValueDropdownItem> _mmcs;
         private static List<ValueDropdownItem> _abilities;
         private static List<ValueDropdownItem> _ascs;
         private static List<ValueDropdownItem> _tags;
@@ -20,7 +19,6 @@ namespace GAS.Editor
         {
             var setting = GASSettingAsset.LoadOrCreate();
             _cues = LoadChoiceListFromExcel(setting.PathOfExcelCue, "Cue", true);
-            _mmcs = LoadChoiceListFromExcel(setting.PathOfExcelMmc, "MMC", true);
             _tags = LoadChoiceListFromExcel(setting.PathOfExcelTag, "Tag", false);
             _effects = LoadChoiceListFromExcel(setting.PathOfExcelEffect, "Effect", true);
             _abilities = LoadChoiceListFromExcel(setting.PathOfExcelAbility, "Ability", true);
@@ -109,13 +107,6 @@ namespace GAS.Editor
             if (_effects == null)
                 LoadChoices();
             return _effects;
-        }
-        
-        public static List<ValueDropdownItem> MMCs()
-        {
-            if (_mmcs == null)
-                LoadChoices();
-            return _mmcs;
         }
         
         public static List<ValueDropdownItem> Abilities()

@@ -16,8 +16,7 @@ namespace GAS.Runtime
         public override void LoadToGameplayEffectEntity(Entity ge)
         {
             var entities = CreateCueEntityArray(ge);
-            EntityHelper.AddComponent<CCueOnAdd>(ge);
-            EntityHelper.SetComponent(ge, new CCueOnAdd
+            GASManager.EntityManager.AddComponentData(ge, new CCueOnAdd
             {
                 cues = entities
             });

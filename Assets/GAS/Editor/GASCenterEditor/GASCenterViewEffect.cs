@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using GAS.Editor.General;
@@ -169,7 +169,7 @@ namespace GAS.Editor
                 {
                     worksheet.Cells[row, _headerMap[field.ExcelHeader]].Value =
                         ComponentTypes.Contains(field.Component)
-                            ? EditorEffectHelper.EncodeTagRequirementCell(GetRequirement(field.Component), field.Mode)
+                            ? EditorEffectHelper.EncodeTagRequirementCell(GetRequirement(field.Component))
                             : string.Empty;
                 }
 
@@ -229,7 +229,7 @@ namespace GAS.Editor
                 if (ComponentTypes.Contains(EffectEditComponent.Modifiers))
                 {
                     var modifiers = Modifiers.Select(mod =>
-                        $"{mod.AttrSet};{mod.Attribute};{mod.Magnitude};{(int)mod.Operation};{mod.MMC}").ToList();
+                        $"{mod.AttrSet};{mod.Attribute};{mod.Magnitude};{(int)mod.Operation}").ToList();
                     worksheet.Cells[row, _headerMap["Modifiers"]].Value = string.Join("|", modifiers);
                 }
                 else
@@ -334,7 +334,7 @@ namespace GAS.Editor
 
             foreach (var field in EditorEffectHelper.TagRequirementProtocolFields)
             {
-                var requirement = EditorEffectHelper.ParseTagRequirementCell(ReadCell(field.ExcelHeader), field.Mode);
+                var requirement = EditorEffectHelper.ParseTagRequirementCell(ReadCell(field.ExcelHeader));
                 switch (field.Component)
                 {
                     case EffectEditComponent.ApplicationRequiredTags:
@@ -472,8 +472,7 @@ namespace GAS.Editor
                     mod.AttrSet = int.Parse(cfg[0]);
                     mod.Attribute = int.Parse(cfg[1]);
                     mod.Magnitude = float.Parse(cfg[2]);
-                    mod.Operation = (GEOperation)int.Parse(cfg[3]);
-                    mod.MMC = int.Parse(cfg[4]);
+                    mod.Operation = (EModifierOp)int.Parse(cfg[3]);
                     Modifiers.Add(mod);
                 }
             }
@@ -721,3 +720,4 @@ namespace GAS.Editor
         #endregion
     }
 }
+

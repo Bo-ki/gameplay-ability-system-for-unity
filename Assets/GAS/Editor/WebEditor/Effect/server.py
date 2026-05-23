@@ -26,7 +26,6 @@ TAG_XLSX_PATH = ""
 ATTRSET_XLSX_PATH = ""  
 ABILITY_XLSX_PATH = ""  
 CUE_XLSX_PATH = ""  
-MMC_XLSX_PATH = ""
 ATTR_XLSX_PATH = ""
 
 STATIC_TYPES = {  
@@ -119,27 +118,6 @@ def read_cues_for_dropdown():
         print(f"[WARN] 读取Cue失败: {e}")  
         return []  
 
-def read_mmcs_for_dropdown():  
-    """读取MMC数据用于下拉选择"""  
-    if not MMC_XLSX_PATH or not os.path.exists(MMC_XLSX_PATH):  
-        return []  
-    try:  
-        wb = openpyxl.load_workbook(MMC_XLSX_PATH)  
-        ws = wb.worksheets[0]  
-        mmcs = []  
-        row = DATA_START_ROW  
-        while ws.cell(row=row, column=2).value is not None:  
-            mmc_id = ws.cell(row=row, column=2).value  
-            mmc_name = ws.cell(row=row, column=3).value  
-            if mmc_id is not None:  
-                mmcs.append({"id": int(mmc_id), "name": str(mmc_name or "")})  
-            row += 1  
-        wb.close()  
-        return mmcs  
-    except Exception as e:  
-        print(f"[WARN] 读取MMC失败: {e}")  
-        return []
-          
 def read_attrsets_for_dropdown():  
     """读取AttributeSet数据用于下拉选择（Modifier 的 AttrSet/Attr 级联下拉）  
   
@@ -272,19 +250,17 @@ def parse_tag_requirement(val, mode):
         return []  
     raw = str(val).strip()  
     parts = raw.split(';')  
-    # Requirement format: all;any;none (each section uses comma)
-    if len(parts) == 3:  
-        if mode == 'all':  
-            target = parts[0]  
-        elif mode == 'any':  
-            target = parts[1]  
-        else:  
-            target = parts[2]  
-        if target == '0' or target.strip() == '':  
-            return []  
-        return parse_int_list(target)  
-    # legacy list format: a;b;c
-    return parse_int_list(raw)  
+    if len(parts) != 3:
+        return []
+    if mode == 'all':
+        target = parts[0]
+    elif mode == 'any':
+        target = parts[1]
+    else:
+        target = parts[2]
+    if target == '0' or target.strip() == '':
+        return []
+    return parse_int_list(target)
 
 def encode_tag_requirement(vals, mode):  
     nums = [int(x) for x in (vals or []) if int(x) > 0]  
@@ -385,13 +361,12 @@ def read_effects():
                     if not mod_str.strip():  
                         continue  
                     parts = mod_str.strip().split(';')  
-                    if len(parts) >= 5:  
+                    if len(parts) >= 4:  
                         effect["modifiers"].append({  
                             "attrSet": int(parts[0]),  
                             "attr": int(parts[1]),  
                             "magnitude": float(parts[2]),  
-                            "operation": ENUM_OPERATION_REV.get(int(parts[3]), "Add"),  
-                            "mmc": int(parts[4])  
+                            "operation": ENUM_OPERATION_REV.get(int(parts[3]), "Add")  
                         })  
                 if effect["modifiers"]:  
                     effect["components"].append("Modifiers")  
@@ -519,7 +494,7 @@ def write_effects(effects):
             for m in mods:  
                 mod_strs.append(  
                     f"{m.get('attrSet', 0)};{m.get('attr', 0)};{m.get('magnitude', 0)};"  
-                    f"{ENUM_OPERATION.get(m.get('operation', 'Add'), 0)};{m.get('mmc', 0)}"  
+                    f"{ENUM_OPERATION.get(m.get('operation', 'Add'), 0)}"  
                 )  
             ws.cell(row=row, column=modifiers_col).value = "|".join(mod_strs) if mod_strs else None  
         elif modifiers_col:  
@@ -657,12 +632,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:  
                 self.send_json({"ok": False, "error": str(e)}, 500)  
                 
-        elif p == "/api/choices/mmcs":  
-                    try:  
-                        self.send_json({"ok": True, "mmcs": read_mmcs_for_dropdown()})  
-                    except Exception as e:  
-                        self.send_json({"ok": False, "error": str(e)}, 500)
-                        
         elif p == "/api/enums":  
             self.send_json({  
                 "ok": True,  
@@ -797,7 +766,7 @@ class Handler(BaseHTTPRequestHandler):
 # ── 入口 ────────────────────────────────────────────────────────────────────    
   
 def main():    
-    global XLSX_PATH, TAG_XLSX_PATH, ATTRSET_XLSX_PATH, ABILITY_XLSX_PATH, CUE_XLSX_PATH, MMC_XLSX_PATH, ATTR_XLSX_PATH   
+    global XLSX_PATH, TAG_XLSX_PATH, ATTRSET_XLSX_PATH, ABILITY_XLSX_PATH, CUE_XLSX_PATH, ATTR_XLSX_PATH   
   
     ap = argparse.ArgumentParser(description="EX-GAS GameplayEffect 网页编辑器服务")    
     ap.add_argument("--xlsx", required=True, help="#exgas.gameplayEffects.xlsx 路径")    
@@ -806,7 +775,6 @@ def main():
     ap.add_argument("--attrset-xlsx", help="#exgas.attributeSets.xlsx 路径")    
     ap.add_argument("--ability-xlsx", help="#exgas.abilities.xlsx 路径")    
     ap.add_argument("--cue-xlsx", help="#exgas.cues.xlsx 路径")    
-    ap.add_argument("--mmc-xlsx", help="#exgas.mmc.xlsx 路径")    
     ap.add_argument("--port", type=int, default=8769)    
     ap.add_argument("--no-browser", action="store_true")    
     args = ap.parse_args()    
@@ -824,8 +792,6 @@ def main():
         ABILITY_XLSX_PATH = os.path.abspath(args.ability_xlsx)    
     if args.cue_xlsx:    
         CUE_XLSX_PATH = os.path.abspath(args.cue_xlsx)    
-    if args.mmc_xlsx:    
-        MMC_XLSX_PATH = os.path.abspath(args.mmc_xlsx)   
     if args.attr_xlsx:  
         ATTR_XLSX_PATH = os.path.abspath(args.attr_xlsx) 
   
@@ -834,8 +800,6 @@ def main():
     url = f"http://127.0.0.1:{args.port}"    
     print(f"[EX-GAS Effect Editor] {url}")    
     print(f"  Excel: {XLSX_PATH}")    
-    if MMC_XLSX_PATH:    
-        print(f"  MMC:   {MMC_XLSX_PATH}")    
     print(f"  Ctrl+C 停止")    
   
     if not args.no_browser:    

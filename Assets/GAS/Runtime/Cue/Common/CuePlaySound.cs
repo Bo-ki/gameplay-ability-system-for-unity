@@ -20,7 +20,7 @@ namespace GAS.Runtime
         {  
             base.OnAdd(time);  
   
-            var go = _abilitySystemCell?.GameObject;  
+            var go = TargetGameObject;  
             if (go == null) return;  
   
             // 加载 AudioClip  

@@ -1,41 +1,48 @@
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
 {
-    public struct CPeriod : IComponentData
+    /// <summary>
+    /// Period 的静态定义。由配置/prototype/Blob 共享，不承载 tick 游标。
+    /// </summary>
+    public struct CPeriodDefinition : IComponentData
     {
         public int Period;
         public bool ResetTimeCountWhenDeactivated;
-        
-        public NativeArray<Entity> GameplayEffects;
-        
-        // -------------------------------------以下是RUNTIME数据，不需要初始化---------------------------------------//
+    }
+
+    /// <summary>
+    /// Period 的运行时游标。只属于 runtime GE instance。
+    /// </summary>
+    public struct CPeriodRuntime : IComponentData
+    {
         public int StartTime;
     }
-    
-    public sealed class ConfPeriod:GameplayEffectComponentConfig
+
+    public sealed class ConfPeriod : GameplayEffectComponentConfig
     {
         public int Period;
         public bool ResetTimeCountWhenDeactivated;
-        public GameplayEffectComponentConfig[][] GameplayEffectSettings;
+        public int[] GameplayEffectCodes;
 
         public override void LoadToGameplayEffectEntity(Entity ge)
         {
-            var geEntities = new NativeArray<Entity>(GameplayEffectSettings.Length, Allocator.Persistent);
-            for (var i = 0; i < GameplayEffectSettings.Length; i++)
-            {
-                var comConfigs = GameplayEffectSettings[i];
-                geEntities[i] = GameplayEffectHelper.CreateGameplayEffectEntity(comConfigs);
-            }
-            
-            EntityHelper.AddComponent<CPeriod>(ge);
-            EntityHelper.SetComponent(ge, new CPeriod
+            var em = GASManager.EntityManager;
+            em.AddComponentData(ge, new CPeriodDefinition
             {
                 Period = Period,
                 ResetTimeCountWhenDeactivated = ResetTimeCountWhenDeactivated,
-                GameplayEffects = geEntities,
             });
+
+            if (GameplayEffectCodes == null || GameplayEffectCodes.Length == 0)
+                return;
+
+            var periodGEs = em.AddBuffer<BPeriodGEConfig>(ge);
+            foreach (var effectCode in GameplayEffectCodes)
+            {
+                if (effectCode > 0)
+                    periodGEs.Add(new BPeriodGEConfig { GameplayEffectCode = effectCode });
+            }
         }
     }
 }

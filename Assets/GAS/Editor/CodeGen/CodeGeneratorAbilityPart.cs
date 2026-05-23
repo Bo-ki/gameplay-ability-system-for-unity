@@ -41,35 +41,6 @@ namespace GAS.Editor
                     writer.WriteLine("{");
                     writer.Indent++;
                     {
-                        writer.WriteLine("///  AbilityLogic");
-                        var subTypes = EditorAbilityHelper.GetCachedAbilityLogicTypes();
-                        foreach (var subType in subTypes)
-                        {
-                            var typeFullName = subType.FullName;
-                            var shortTypeName = subType.Name;
-                            var abilityParamType =
-                                EditorAbilityHelper.AbilityToAbilityParamTypeMap()[shortTypeName];
-                            var abilityParamTypeFullName = abilityParamType.FullName;
-                            writer.WriteLine($"var {shortTypeName} = typeof({typeFullName});");
-                            writer.WriteLine(
-                                $"GAS.Runtime.AbilityHelper.RegisterAbilityLogic({shortTypeName}.Name, {shortTypeName},typeof({abilityParamTypeFullName}));");
-                        }
-                        writer.WriteLine("");
-                        writer.WriteLine("///  AbilityTask");
-                        var subTaskTypes = EditorAbilityHelper.GetCachedAbilityTaskTypes();
-                        foreach (var subTaskType in subTaskTypes)
-                        {
-                            var typeFullName = subTaskType.FullName;
-                            var shortTypeName = subTaskType.Name;
-                            var abilityTaskParamType =
-                                EditorAbilityHelper.AbilityTaskToAbilityTaskParamTypeMap()[shortTypeName];
-                            var abilityTaskParamTypeFullName = abilityTaskParamType.FullName;
-                            writer.WriteLine($"var {shortTypeName} = typeof({typeFullName});");
-                            writer.WriteLine(
-                                $"GAS.Runtime.AbilityHelper.RegisterAbilityTask({shortTypeName}.Name, {shortTypeName},typeof({abilityTaskParamTypeFullName}));");
-                        }
-                        
-                        writer.WriteLine("");  
                         writer.WriteLine("///  TargetCatcher");  
                         var subCatcherTypes = EditorTargetCatcherHelper.GetCachedTargetCatcherTypes();  
                         foreach (var subCatcherType in subCatcherTypes)  

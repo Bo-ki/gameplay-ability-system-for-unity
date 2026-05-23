@@ -1,17 +1,12 @@
 using System.Collections.Generic;
-using Sirenix.OdinInspector;
 
 namespace GAS.Runtime
 {
     public class XParamAnimator : XParam
     {
-        [ShowInInspector]
-        [LabelText("动画机节点路径")]
         [BeanField(nameof(SetAnimatorNodePath), Comment = "动画机节点路径")]
         public string AnimatorNodePath;
         
-        [ShowInInspector]
-        [LabelText("动画状态名称")]
         [BeanField(nameof(SetAnimationName), Comment = "动画状态名称")]
         public string AnimationName;
 

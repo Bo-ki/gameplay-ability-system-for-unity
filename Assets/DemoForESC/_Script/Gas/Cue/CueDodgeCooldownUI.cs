@@ -19,10 +19,15 @@ namespace DemoForESC._Script.Gas.Cue
         {
             base.OnTick(time);
 
-            var spec = GetEffectSpec();
-            if (spec == null) return;
-            var duration = spec.GetDuration();
-            var startTime = spec.GetDurationActiveTime();
+            var effect = GetSourceEffectEntity();
+            if (effect == Unity.Entities.Entity.Null
+                || !EntityManager.Exists(effect)
+                || !EntityManager.HasComponent<CDurationRuntime>(effect))
+                return;
+
+            var durationComponent = EntityManager.GetComponentData<CDurationRuntime>(effect);
+            var duration = durationComponent.ResolvedDuration;
+            var startTime = durationComponent.ActiveTime;
             var currentGasTime = GASManager.CurrentFrame;
             
             var w = XUI.M.Windows<MainWindow>();

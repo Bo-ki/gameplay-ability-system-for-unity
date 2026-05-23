@@ -1,72 +1,91 @@
-# EX-GAS Wiki -- GameplayCue
->目前EX-GAS的GameplayCue功能还未完善。功能相对简陋。
-## GameplayCue的作用
-GameplayCue是一个用于播放游戏提示的类，它的作用是在游戏运行时播放游戏效果，比如播放一个特效、播放一个音效等。
+# EX-GAS Wiki - GameplayCue
 
-## GameplayCue的原则
-Cue是游戏提示，他必须遵守以下原则：
-- _**Cue不应该对游戏的数值体系产生影响，比如不应该对游戏的属性进行修改，不应该对游戏的Buff进行修改等。**_
-- _**Cue不应该对游戏玩法产生实际影响，比如即时战斗类的游戏，Cue不应该影响角色的位移、攻击等。**_
+更新时间：2026-05-23
 
-第一条原则是所有类型游戏必须遵守的。
+GameplayCue 是 EX-GAS 的表现层扩展点，用于播放特效、音效、动画、浮字、UI 标记或其他可视化反馈。当前架构中 Cue 可以保留托管表现对象，但它不属于 Simulation 权威。
 
-而第二条原则就见仁见智了，因为游戏类型和玩法决定了cue的影响范围。
-比如即时战斗类游戏，cue对角色位移有操作显然就是干涉了战斗，但如果是回合制游戏，cue对角色位移的操作就可以被当成是动画表现。
-（甚至，即便是即时战斗类游戏，cue对角色位移的操作也可以被当成是动画表现，只要游戏开发人员认为cue的位移操作不影响游戏的战斗结果即可。）
+## 原则
 
-## GameplayCue的类型
-GameplayCue的类型分两大类：
-- GameplayCueInstant：瞬时性的Cue，比如播放动画，伤害UI提示等
-- GameplayCueDurational：持续性的Cue，比如持续性的特效、持续性的音效等
+Cue 必须遵守：
 
-GameplayCueInstant和GameplayCueDurational都是抽象类，它们的子类才是真正的可使用Cue类。
-Cue是需要程序开发人员大量实现的，毕竟游戏不同导致游戏提示千变万化。
+1. 不修改 Attribute、Tag、GE、Ability runtime state。
+2. 不作为 gameplay 判定输入。
+3. 不反向驱动 Ability commit、GE apply、damage routing 或 lifecycle。
+4. 生命周期必须绑定到明确的 source entity、GE entity、Ability entity 或 presentation event。
+5. 失败、播放、停止、销毁应可以被 fact / replay / log 追踪。
 
-### 关于Cue的子类实现
-Cue的完整组成为GameplayCue和GameplayCueSpec：
-- GameplayCue< T >（抽象基类,T为对应的Spec类）：Cue的数据实类，是一个可编辑类，开发人员可以在编辑器中设置Cue的各种参数。该类只可以被视作数据类。
-  - 必须实现CreateSpec方法：用于创建对应的Spec类
-- GameplayCueSpec（抽象基类）：Cue的规格类，是Runtime下Cue的真正实例，Cue的具体逻辑在该类中实现。
-  - GameplayCueInstantSpec：瞬时性Cue的规格类
-    - Trigger(): 必须实现的方法，用于触发Cue
-  - GameplayCueDurationalSpec：持续性Cue的规格类
-    - OnAdd(): 必须实现的方法，用于Cue被添加时的逻辑
-    - OnRemove(): 必须实现的方法，用于Cue被移除时的逻辑
-    - OnGameplayEffectActivated(): 必须实现的方法，用于Cue所属的GameplayEffect被激活时的逻辑
-    - OnGameplayEffectDeactivated(): 必须实现的方法，用于Cue所属的GameplayEffect被移除时的逻辑
-    - OnTick(): 必须实现的方法，用于Cue的每帧更新逻辑
+## 当前位置
 
-### 关于Cue的参数传递
-目前EX-GAS的Cue参数传递非常简陋，依赖于结构体GameplayCueParameters，成员如下：
-- GameplayEffectSpec sourceGameplayEffectSpec：Cue所属的GameplayEffect实例（如果是GE触发）
-- AbilitySpec sourceAbilitySpec：Cue所属的Ability实例（如果是Ability触发）
-- object[] customArguments：自定义参数，不同于GameplayCue中的数据。
-customArguments是供程序开发人员在业务逻辑内自由传递参数的载体。
->注意：customArguments是一个object数组，开发人员需要自己保证传递的参数类型正确，否则会导致运行时错误。
-customArguments是最暴力的设计，往后EX-GAS的Cue参数传递设计还会进行优化。
-## GameplayCue的使用
-GameplayCue的使用手段很多，最基础的是在GameplayEffect中使用，Cue最开始的设计基础也是依附于GameplayEffect。Ability也可以对Cue进行操作。
+Cue 位于 Observation / Presentation Plane：
 
-除此之外，Cue的使用不限制于EX-GAS的体系内。开发者可以在任何地方使用Cue，只要能获取到GameplayCue的资源实例并且遵守Cue的原则即可。
+```text
+GameplayEffect / Ability / Timeline system
+  -> Cue request / gameplay fact
+  -> CGameplayEventBus
+  -> SPresentationOutboxProjection
+  -> BPresentationEvent
+  -> Cue system / UI / VFX / SFX
+```
 
-### Cue标签过滤（2026-03）
-Cue 的播放条件底层已统一到 `TagRequirementData` 三模式：`all` / `any` / `none`。  
-当前语义规范：
-- `RequiredTags` 使用 `all` 语义（必须全部满足才播放）。
-- `ImmunityTags` 使用 `none` 语义（命中任一则阻止播放）。
+无头 Demo 中，Cue / UI / VFX / SFX / FloatingText / Settlement 会被折算为 presentation marker 和 outbox event，用于自动验收表现交互没有丢失。
 
-### 在GameplayEffect中使用Cue
-GameplayEffect中使用Cue会根据GameplayEffect执行策略产生变化。
-- 即时执行的GameplayEffect: 提供以下选项
-  - CueOnExecute（Instant）：Cue都会在GameplayEffect执行时触发。
-- 持续执行的GameplayEffect: 提供以下选项
-  - CueDurational（Durational）：生命周期完全和GameplayEffect同步
-  - CueOnAdd（Instant）：GameplayEffect添加时触发
-  - CueOnRemove（Instant）：GameplayEffect移除时触发
-  - CueOnActivate（Instant）：GameplayEffect激活时触发。
-  - CueOnDeactivate（Instant）：GameplayEffect失活时触发。
+## Runtime 组件
 
-### 在Ability中使用Cue
-AbilityAsset中提供了Instant和Durational两个选项的Cue参数。
-但是Cue的使用完全依赖于Ability自身的业务逻辑，因此程序开发者在AbilitySpec中实现Cue逻辑时一定要保证合理性。
-特别是对于Durational类型的Cue，一定要保证Cue生命周期的合理性，切记不要出现遗漏销毁Cue的情况。
+当前 Cue 相关对象仍包括：
+
+- `GameplayCueBase<TParam>`：表现逻辑基类。
+- `MCCue`：Cue Entity 上的 managed component，承载表现对象引用。
+- `ECCuePlayable` / `ECCuePlaying` / `ECKillCue`：Cue 播放状态。
+- `SCueRequestBridge`、`SCueStart`、`SCueTick`、`SCueEnd`、`SCueDestroy`：Cue system 链路。
+
+这些对象只能处理表现生命周期，不应写 simulation state。
+
+## 参数与配置
+
+Cue 参数来自 Luban 的 `GameplayCueBase` 多态 Bean：
+
+1. Cue 类继承 `GameplayCueBase<TParam>`。
+2. `TParam` 继承 `XParam`，并用 `[BeanField]` 暴露入表字段。
+3. `BeanUpdater` 把 Cue 类型写入 `__beans__.xlsx`。
+4. `CodeGeneratorLubanPart` 生成 `XLuban` 转换代码。
+5. 运行时由 `CueHelper` / Cue request 创建 Cue 实例或配置。
+
+`XParamCue` 可配置：
+
+- `RequiredTags`
+- `ImmunityTags`
+- `CueLogic: GameplayCueBase`
+
+## 标签过滤
+
+Cue 播放条件统一走 tag requirement：
+
+- `RequiredTags`：目标必须满足。
+- `ImmunityTags`：命中则阻止播放。
+
+Cue tag 过滤失败只影响表现，不应影响 GE 是否施加或 Ability 是否激活。
+
+## 在 GE / Ability 中使用
+
+GE 中常见 Cue：
+
+- `CueOnApply`
+- `CueOnTick`
+- `CueOnAdd`
+- `CueOnRemove`
+- `CueOnActivate`
+- `CueOnDeactivate`
+
+Ability / Timeline 中播放 Cue 应输出明确 request 或 presentation fact。对于持续 Cue，必须绑定 source 和销毁策略，避免表现对象泄漏。
+
+## 调试与验收
+
+表现层问题优先从这些数据看：
+
+- `BCueRequest`
+- `BPresentationEvent`
+- `BDebugReplayEvent`
+- structured log export
+- headless presentation marker summary
+
+不要通过让 Cue 写 gameplay state 来“补救”表现时序问题。

@@ -1,4 +1,3 @@
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
@@ -8,7 +7,7 @@ namespace GAS.Runtime
         /// <summary>
         /// AssetTags,描述GE性质的Tag。用于Tag相关逻辑判断。
         /// </summary>
-        public NativeArray<int> tags;
+        public CTagMask Tags;
     }
     
     public sealed class ConfAssetTags:GameplayEffectComponentConfig
@@ -17,10 +16,9 @@ namespace GAS.Runtime
         
         public override void LoadToGameplayEffectEntity(Entity ge)
         {
-            EntityHelper.AddComponent<CEffectAssetTags>(ge);
-            EntityHelper.SetComponent(ge, new CEffectAssetTags
+            GASManager.EntityManager.AddComponentData(ge, new CEffectAssetTags
             {
-                tags = new NativeArray<int>(tags, Allocator.Persistent)
+                Tags = TagHelper.BuildMask(tags, includeParents: true)
             });
         }
     }

@@ -18,13 +18,12 @@ namespace DemoForESC._Script.UI.ViewModel
         public ObservableVariable<string> DodgeCdText { get; } = new();
         public ObservableVariable<int> DodgeLayer { get; } = new();
 
-        private AbilitySystemComponent PlayerAsc
+        private AbilitySystemBinding PlayerAbilitySystem
         {
             get
             {
                 var player = DemoPlayer.Player();
-                var asc = player.AbilitySystemComponent;
-                return asc;
+                return player.AbilitySystem;
             }
         }
 
@@ -34,76 +33,30 @@ namespace DemoForESC._Script.UI.ViewModel
             LabelPlayer.Value = "[玩家]";
             DodgeName.Value = "闪避";
             RefreshState();
-
-            RegisterUpdateEvent();
         }
 
-        public override void OnHide()
+        public override void Update_f()
         {
-            base.OnHide();
-            UnregisterUpdateEvent();
+            RefreshState();
         }
 
         private void RefreshState()
         {
-            var asc = PlayerAsc;
-            var hp = asc.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.Hp);
-            var hpMax = asc.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.HpMax);
+            var asc = PlayerAbilitySystem;
+            var hp = asc.Facade.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.Hp);
+            var hpMax = asc.Facade.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.HpMax);
             HpText.Value = $"{hp}/{hpMax}";
             Hp.Value = hp / hpMax;
 
-            var mp = asc.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.Mp);
-            var mpMax = asc.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.MpMax);
+            var mp = asc.Facade.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.Mp);
+            var mpMax = asc.Facade.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.MpMax);
             MpText.Value = $"{mp}/{mpMax}";
             Mp.Value = mp / mpMax;
 
-            var sp = asc.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.Sp);
-            var spMax = asc.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.SpMax);
+            var sp = asc.Facade.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.Sp);
+            var spMax = asc.Facade.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.SpMax);
             SpText.Value = $"{sp}/{spMax}";
             Sp.Value = sp / spMax;
-        }
-
-        private void RegisterUpdateEvent()
-        {
-            var asc = PlayerAsc;
-            GASEventCenter.RegisterOnAttrCurrentValueChangeAfter(asc.Cell, XAttrSet.FightUnit, XAttribute.Hp,
-                OnHpChange);
-            GASEventCenter.RegisterOnAttrCurrentValueChangeAfter(asc.Cell, XAttrSet.FightUnit, XAttribute.Mp,
-                OnMpChange);
-            GASEventCenter.RegisterOnAttrCurrentValueChangeAfter(asc.Cell, XAttrSet.FightUnit, XAttribute.Sp,
-                OnSpChange);
-        }
-
-        private void UnregisterUpdateEvent()
-        {
-            var asc = PlayerAsc;
-            GASEventCenter.UnRegisterOnAttrCurrentValueChangeAfter(asc.Cell, XAttrSet.FightUnit, XAttribute.Hp,
-                OnHpChange);
-            GASEventCenter.UnRegisterOnAttrCurrentValueChangeAfter(asc.Cell, XAttrSet.FightUnit, XAttribute.Mp,
-                OnMpChange);
-            GASEventCenter.UnRegisterOnAttrCurrentValueChangeAfter(asc.Cell, XAttrSet.FightUnit, XAttribute.Sp,
-                OnSpChange);
-        }
-
-        private void OnHpChange(float lastValue, float newValue)
-        {
-            var hpMax = PlayerAsc.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.HpMax);
-            HpText.Value = $"{newValue}/{hpMax}";
-            Hp.Value = newValue / hpMax;
-        }
-
-        private void OnMpChange(float lastValue, float newValue)
-        {
-            var mpMax = PlayerAsc.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.MpMax);
-            MpText.Value = $"{newValue}/{mpMax}";
-            Mp.Value = newValue / mpMax;
-        }
-
-        private void OnSpChange(float lastValue, float newValue)
-        {
-            var spMax = PlayerAsc.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.SpMax);
-            SpText.Value = $"{newValue}/{spMax}";
-            Sp.Value = newValue / spMax;
         }
 
         public void SetDodgeVisible(bool visible)

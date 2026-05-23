@@ -118,7 +118,6 @@ namespace GAS.Editor
             var xlsxAttrSet = Path.GetFullPath(setting.PathOfExcelAttrSet);  
             var xlsxAbility = Path.GetFullPath(setting.PathOfExcelAbility);  
             var xlsxCue     = Path.GetFullPath(setting.PathOfExcelCue);  
-            var xlsxMmc     = Path.GetFullPath(setting.PathOfExcelMmc);  
             var xlsxAttr    = Path.GetFullPath(setting.PathOfExcelAttr);  // ← 新增  
   
             if (!File.Exists(xlsxPath))  
@@ -130,7 +129,7 @@ namespace GAS.Editor
             }  
   
             var batPath = GetFullPath(EFFECT_EDITOR_DIR, "start.bat");  
-            RunBat(batPath, $"\"{xlsxPath}\" --tag-xlsx \"{xlsxTag}\" --attrset-xlsx \"{xlsxAttrSet}\" --ability-xlsx \"{xlsxAbility}\" --cue-xlsx \"{xlsxCue}\" --mmc-xlsx \"{xlsxMmc}\" --attr-xlsx \"{xlsxAttr}\"");  
+            RunBat(batPath, $"\"{xlsxPath}\" --tag-xlsx \"{xlsxTag}\" --attrset-xlsx \"{xlsxAttrSet}\" --ability-xlsx \"{xlsxAbility}\" --cue-xlsx \"{xlsxCue}\" --attr-xlsx \"{xlsxAttr}\"");  
         }
 
         // ── 工具方法 ──────────────────────────────────────────────────────  

@@ -1,11 +1,10 @@
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
 {
     public struct CEffectGrantedTags : IComponentData
     {
-        public NativeArray<int> tags;
+        public CTagMask Tags;
     }
 
     public sealed class ConfEffectGrantedTags : GameplayEffectComponentConfig
@@ -14,10 +13,9 @@ namespace GAS.Runtime
 
         public override void LoadToGameplayEffectEntity(Entity ge)
         {
-            EntityHelper.AddComponent<CEffectGrantedTags>(ge);
-            EntityHelper.SetComponent(ge, new CEffectGrantedTags
+            GASManager.EntityManager.AddComponentData(ge, new CEffectGrantedTags
             {
-                tags = new NativeArray<int>(tags, Allocator.Persistent)
+                Tags = TagHelper.BuildMask(tags, includeParents: true)
             });
         }
     }

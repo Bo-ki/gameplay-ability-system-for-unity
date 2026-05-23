@@ -5,7 +5,7 @@ using UnityEngine;
 namespace GAS.Runtime
 {
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(SysGrpDisplay))]
+    [UpdateInGroup(typeof(GASCueGroup))]
     public partial struct SCueStart : ISystem
     {
         [BurstCompile]

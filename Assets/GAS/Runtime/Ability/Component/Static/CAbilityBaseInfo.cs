@@ -5,8 +5,8 @@ namespace GAS.Runtime
     public struct CAbilityBaseInfo : IComponentData
     {
         /// <summary>
-        ///  能力代码，用于标识能力，查找Ability的对应自定义类
-        ///  初始化时，由MCAbilityLogic赋值
+        /// 能力代码，用于标识 Ability 配置。
+        /// 初始化时由 ConfAbilityBaseInfo 写入。
         /// </summary>
         public int Code;
         

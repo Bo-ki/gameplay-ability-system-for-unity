@@ -1,18 +1,13 @@
 using System;
 using System.Collections.Generic;
-using Sirenix.OdinInspector;
 
 namespace GAS.Runtime
 {
     public class XParamLogging:XParam
     {
-        [LabelText("日志")]
-        [ShowInInspector]
         [BeanField(nameof(SetValue), Comment = "日志",Order = 1)]
         public string Value { get; private set; }
         
-        [LabelText("持续时长")]
-        [ShowInInspector]
         [BeanField(nameof(SetDuration), Comment = "持续时长",Order = 2)]
         public float Duration;
         

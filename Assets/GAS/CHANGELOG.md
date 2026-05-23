@@ -7,12 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] - 2026-02-08
 
-重大更新，重构了GAS整体的实现逻辑，变为ECS结构。基于DOTS重新实现了GAS的交互逻辑。
-优化了数据分层，舍弃了ScriptableObject的配置方式，改为纯配置表配置。
+重大更新，EX-GAS 主线从 1.x 托管 OOP 运行模型切换为 Unity DOTS / ECS 架构。运行时权威状态由 Entity / Component / System 承载，GameObject 和 MonoBehaviour 只作为输入、表现和生命周期绑定壳。
+配置分层改为以 Luban 表、生成代码和 ECS definition / runtime component 为主，不再以 ScriptableObject 或托管 Spec 对象作为运行时主入口。
 
 ### Changed
 
-- 进行了一系列的优化
+- Runtime 主入口调整为 `AbilitySystemBinding` + `AbilitySystemFacade`；外部调用通过 command / request entity 写入 ECS。
+- Ability 行为改为数据化配置和 ECS system 推进，不再以 `AbilityLogicBase` / `AbilityTaskBase` 作为当前扩展入口。
+- GameplayEffect 施加链路改为 `CApplyGameplayEffectRequest`、spec/context component、runtime GE entity 和生命周期 system。
+- Event / Cue / Log / Replay 改为从 `CGameplayEventBus`、`BPresentationEvent`、`BDebugReplayEvent` 等事实和观察数据派生，不再决定 gameplay 状态。
+- Runtime system 调度收敛到 `GASSystemScheduleContract`，新增 system 需要显式纳入调度契约。
 
 ## [1.1.8] - 2024-07-30
 
@@ -24,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.6] - 2024-06-26
 
-修复了AbilitySpec中CheckCost时，modifier为减法时的计算错误；追加了Attribute的钳制功能。
+修复了旧版 Ability CheckCost 中 modifier 为减法时的计算错误；追加了Attribute的钳制功能。
 
 ### Changed
 
@@ -32,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 修复了AbilitySpec中CheckCost时，modifier为减法时的计算错误。
+- 修复了旧版 Ability CheckCost 中 modifier 为减法时的计算错误。
 
 
 ## [1.1.6] - 2024-06-26
@@ -50,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.5] - 2024-06-19
 
-修复了AttrBasedMMC的快照读取错误；Modifier新增了减法，除法操作类型。
+修复了旧属性派生 Modifier 的快照读取错误；Modifier新增了减法，除法操作类型。
 
 ### Changed
 
@@ -58,18 +62,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 修复了AttrBasedMMC的快照读取错误。
+- 修复了旧属性派生 Modifier 的快照读取错误。
 
 
 ## [1.1.4] - 2024-06-14
 
-重新整理了ASC的ApplyGameplayEffect方法的逻辑,现在GE的Tag相关判断是在实例化之后。允许用户在GameplayEffectSpec生效前对GE进行修改和操作。
+重新整理了ASC的ApplyGameplayEffect方法的逻辑,现在GE的Tag相关判断是在实例化之后。允许用户在GameplayEffectHandle生效前对GE进行修改和操作。
 
 ### Changed
 
-- 重新整理了ASC的ApplyGameplayEffectTo(GameplayEffect gameplayEffect, AbilitySystemComponent target)方法的逻辑
-- ASC新增：ApplyGameplayEffectTo(GameplayEffectSpec gameplayEffectSpec, AbilitySystemComponent target) 和
-          ApplyGameplayEffectToSelf(GameplayEffectSpec gameplayEffectSpec)
+- 重新整理了旧版 ASC 的 ApplyGameplayEffectTo 入口逻辑
+- 旧版 ASC 新增：ApplyGameplayEffectTo(GameplayEffectHandle gameplayEffectHandle, target) 和
+          ApplyGameplayEffectToSelf(GameplayEffectHandle gameplayEffectHandle)
 
 ## [1.1.3] - 2024-06-13
 
@@ -100,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- 添加Stack相关MMC
+- 添加旧 Stack 相关 Modifier 计算逻辑
 - 补充stack刷新计算current value逻辑
 - 添加stack count变化监听事件
 
@@ -192,7 +196,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 推导属性的实时更新错误。补上了AttributeBasedMMC的Track类修改器属性变化监听。
+- 推导属性的实时更新错误。补上了旧属性派生 Modifier 的 Track 类修改器属性变化监听。
 - 修复GASHost销毁时的错误逻辑，Host的静态单例改为饿汉式，同步GAS的初始化只会执行一次。
 
 ### Changed

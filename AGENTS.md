@@ -13,7 +13,7 @@ This repository is a Unity project (2022.3 LTS) centered on EX-GAS 2.0.
 Do not commit generated caches/build folders like `Library/`, `Temp/`, `Logs/`, or `obj/`.
 
 ## Build, Test, and Development Commands
-- Open project with Unity `2022.3.16f1` (see `ProjectSettings/ProjectVersion.txt`).
+- Open project with Unity `2022.3.62f3` (see `ProjectSettings/ProjectVersion.txt`).
 - Regenerate config JSON from Excel:
   - Windows: `EX_GAS_Config\ProjectConfigTable\exgas_config\gen.bat`
   - macOS/Linux: `bash EX_GAS_Config/ProjectConfigTable/exgas_config/gen.sh`

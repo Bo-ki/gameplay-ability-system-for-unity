@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
-using Sirenix.OdinInspector;
 
 namespace GAS.Runtime
 {
     public class XParamArrayInt: XParam
     {
-        [ShowInInspector]
         public int[] Value { get; private set; }
 
         public void SetValue(int[] value)

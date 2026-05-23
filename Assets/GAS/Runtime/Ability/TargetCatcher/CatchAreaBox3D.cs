@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using GAS.General;
-using Sirenix.OdinInspector;
+using Unity.Entities;
 using UnityEngine;
 
 namespace GAS.Runtime
@@ -9,7 +9,7 @@ namespace GAS.Runtime
     {  
         private static readonly Collider[] Colliders = new Collider[64];  
   
-        protected override void CatchTargetsNonAlloc(AbilitySystemCell mainTarget, List<AbilitySystemCell> results)  
+        protected override void CatchTargetsNonAlloc(Entity mainTarget, List<Entity> results)  
         {  
             int count;  
             if (Parameter.isWorldSpace)  
@@ -23,7 +23,10 @@ namespace GAS.Runtime
             }  
             else  
             {  
-                var mainTransform = mainTarget.GameObject.transform;  
+                var mainGameObject = EntityHelper.GetGameObjectFromEntity(mainTarget);
+                if (mainGameObject == null) return;
+
+                var mainTransform = mainGameObject.transform;  
                 count = Physics.OverlapBoxNonAlloc(  
                     mainTransform.TransformPoint(Parameter.offset),  
                     Parameter.size * 0.5f,  
@@ -34,9 +37,8 @@ namespace GAS.Runtime
   
             for (var i = 0; i < count; ++i)  
             {  
-                // 通过 MonoBehaviour 上的 AbilitySystemComponent 拿到 Cell  
-                var mono = Colliders[i].GetComponent<AbilitySystemComponent>();  
-                if (mono != null)  results.Add(mono.Cell);  
+                var mono = Colliders[i].GetComponent<AbilitySystemBinding>();  
+                if (mono != null)  results.Add(mono.Entity);  
             }  
         }
 
@@ -68,23 +70,18 @@ namespace GAS.Runtime
 
     public class XParamCatchAreaBox3D : XParam
     {
-        [LabelText("是否是世界空间坐标系")]
         [BeanField(nameof(SetIsWorldSpace),Order = 1)]
         public bool isWorldSpace;
         
-        [LabelText("偏移")]
         [BeanField(nameof(SetOffset),Order = 2)]
         public Vector3 offset;
         
-        [LabelText("大小")]
         [BeanField(nameof(SetSize),Order = 3)]
         public Vector3 size;
         
-        [LabelText("旋转")]
         [BeanField(nameof(SetRotation),Order = 4)]
         public Vector3 rotation;
         
-        [LabelText("监测层级")]
         [BeanField(nameof(SetLayer), LubanType = "int",Order = 5)]
         public LayerMask layer;
         

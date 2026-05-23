@@ -6,7 +6,7 @@ namespace GAS.Runtime
 {  
     /// <summary>  
     /// EX-GAS 统一资源加载器  
-    /// 框架内所有需要加载资源的地方（Cue、AbilityLogic等）统一通过此类加载，  
+    /// 框架内所有需要加载资源的地方（Cue、Ability执行配置等）统一通过此类加载，  
     /// 用户通过注册自定义的加载/释放委托来适配不同的资源管理方案（YooAsset、Addressables、AssetBundle等）。  
     /// 未注册时 fallback 到 Resources.Load。  
     /// </summary>  

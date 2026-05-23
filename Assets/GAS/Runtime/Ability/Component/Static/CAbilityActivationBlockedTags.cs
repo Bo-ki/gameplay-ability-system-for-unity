@@ -1,12 +1,10 @@
-using System;
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
 {
     public struct CAbilityActivationBlockedTags : IComponentData
     {
-        public TagRequirementData requirement;
+        public TagRequirementMask requirement;
     }
     
     public sealed class ConfAbilityActivationBlockedTags:AbilityComponentConfig
@@ -20,12 +18,7 @@ namespace GAS.Runtime
         {
             _entityManager.AddComponentData(ability, new CAbilityActivationBlockedTags
             {
-                requirement = new TagRequirementData
-                {
-                    all = new NativeArray<int>(all ?? Array.Empty<int>(), Allocator.Persistent),
-                    any = new NativeArray<int>(any ?? Array.Empty<int>(), Allocator.Persistent),
-                    none = new NativeArray<int>(none ?? tags ?? Array.Empty<int>(), Allocator.Persistent)
-                }
+                requirement = TagHelper.BuildRequirementMask(all, any, none ?? tags)
             });
         }
     }

@@ -32,7 +32,7 @@ namespace Framework.Core
   
             // ── Step 1：初始化 EX-GAS ECS World ──  
             // XLauncher.Launch() 内部调用：  
-            //   XAbility.LoadAbilityCode() / XMmc.LoadMmcType() / XCue.LoadCueType()（缓存注册）  
+            //   XAbility.LoadAbilityCode() / XCue.LoadCueType()（缓存注册）  
             //   GASManager.Initialize()（创建 ECS World 和系统组）  
             //   XTag.InitTagList()（注意必须在 Initialize 之后）  
             XLauncher.Launch();  

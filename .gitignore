@@ -8,6 +8,7 @@
 /[Bb]uild/
 /[Bb]uilds/
 /[Ll]ogs/
+/[Tt]est[Rr]esults/
 /[Uu]ser[Ss]ettings/
 
 # MemoryCaptures can get excessive in size.
@@ -76,13 +77,23 @@ crashlytics-build.properties
 
 #Test
 /[Aa]ssets/_Test/*
+!/[Aa]ssets/_Test/GAS.meta
+!/[Aa]ssets/_Test/GAS/
+!/[Aa]ssets/_Test/GAS/**
 /Bundles/StandaloneWindows64/MainPackage/Simulate
 Bundles/StandaloneWindows64/MainPackage/Simulate/MainPackage_Simulate.bytes
 Bundles/StandaloneWindows64/MainPackage/Simulate/MainPackage_Simulate.hash
 Bundles/StandaloneWindows64/MainPackage/Simulate/MainPackage_Simulate.json
+
+# Luban / SourceGenerator generated code
+/[Aa]ssets/[Dd]emo[Ff]orESC/_Script/[Gg]en/
+/[Aa]ssets/[Dd]ata[Gg]enerated/[Ll]uban/
 
 # Python cache
 __pycache__/
 __pycache__.meta
 *.py[cod]
 *$py.class
+
+# Local architecture discussion drafts / iteration notes
+/方案讨论/

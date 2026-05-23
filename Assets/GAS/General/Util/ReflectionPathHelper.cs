@@ -316,7 +316,6 @@ namespace GAS.General
         public static List<int> GetGameplayEffectIDs() => GetLubanTableKeysToList("TbgameplayEffect");
         public static List<int> GetAttributeIDs() => GetLubanTableKeysToList("Tbattribute");
         public static List<int> GetAttributeSetIDs() => GetLubanTableKeysToList("TbattributeSet");
-        public static List<int> GetMmcIDs() => GetLubanTableKeysToList("Tbmmc");
         
 
         public static string GetGameplayTagName(int id)

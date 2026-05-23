@@ -72,7 +72,7 @@ namespace GAS.Editor
         private Dictionary<string, int> _headerMap;
         private Dictionary<int, Dictionary<int, object>> _data;
         private Dictionary<int, int> _idToRowMap;
-        private Dictionary<int, List<object>> _abilityLogicParameter;
+        private Dictionary<int, List<object>> _abilityExecutionParameter;
         
         private void LoadFile()
         {
@@ -96,7 +96,7 @@ namespace GAS.Editor
                 // 读取数据行,从第4行开始，第二列为key，即id。
                 // 以第2列是否有值为结束标志
                 _data = new Dictionary<int, Dictionary<int, object>>();
-                _abilityLogicParameter = new Dictionary<int, List<object>>();
+                _abilityExecutionParameter = new Dictionary<int, List<object>>();
                 _idToRowMap = new Dictionary<int, int>();
                 var safeCnt = 99999;
                 var row = 4;
@@ -109,7 +109,7 @@ namespace GAS.Editor
                     foreach (var colIndex in _headerMap.Values)
                         rowData.Add(colIndex, worksheet.Cells[row, colIndex].Value);
 
-                    var parameterCol = _headerMap["AbilityLogic"];
+                    var parameterCol = _headerMap["AbilityExecution"];
                     var abilityParams = new List<object>();
                     for (var i = parameterCol + 1; i < 51 + parameterCol; i++)
                     {
@@ -119,7 +119,7 @@ namespace GAS.Editor
                     }
 
                     _data.Add(id, rowData);
-                    _abilityLogicParameter.Add(id, abilityParams);
+                    _abilityExecutionParameter.Add(id, abilityParams);
                     _idToRowMap.Add(id, row);
                     row++;
                 }
@@ -172,12 +172,12 @@ namespace GAS.Editor
                     ? string.Join(";", activationBlockedTags)
                     : string.Empty;
                 
-                // abilityLogic需要特殊处理
-                worksheet.Cells[row, _headerMap["AbilityLogic"]].Value = type;
+                // Ability 执行配置需要特殊处理。
+                worksheet.Cells[row, _headerMap["AbilityExecution"]].Value = type;
                 var abilityParams = XParam.EncodeExcelData();
                 for (var i = 0; i < abilityParams.Count; i++)
                 {
-                    var colIndex = _headerMap["AbilityLogic"] + 1 + i;
+                    var colIndex = _headerMap["AbilityExecution"] + 1 + i;
                     if (colIndex > worksheet.Dimension.End.Column) break; // 防止超出列数
                     worksheet.Cells[row, colIndex].Value = abilityParams[i];
                 }
@@ -193,7 +193,7 @@ namespace GAS.Editor
 
         public List<ValueDropdownItem> TagChoices => GasXlsxChoice.Tags();
         public IEnumerable<AbilityEditComponent> ComponentChoice => EditorAbilityHelper.ComponentTypes();
-        public IEnumerable<string> AbilityLogicClassChoice => EditorAbilityHelper.GetCachedAbilityLogicTypesName();
+        public IEnumerable<string> AbilityExecutionChoice => EditorAbilityHelper.GetAbilityExecutionTypeNames();
 
         private int MaxRowForNewID()
         {
@@ -283,11 +283,10 @@ namespace GAS.Editor
                 ? GASCenterParseHelper.ParseIntListLoose(selectInfo[_headerMap["ActivationBlockedTags"]].ToString())
                 : new List<int>();
             
-            // abilityLogic	
-            type = selectInfo.ContainsKey(_headerMap["AbilityLogic"])
-                ? selectInfo[_headerMap["AbilityLogic"]]?.ToString()
+            type = selectInfo.ContainsKey(_headerMap["AbilityExecution"])
+                ? selectInfo[_headerMap["AbilityExecution"]]?.ToString()
                 : string.Empty;
-            XParam = _abilityLogicParameter.TryGetValue(SelectedId, out var abilityParams) ? EditorAbilityHelper.CreateAbilityParameter(type, abilityParams) : null;
+            XParam = _abilityExecutionParameter.TryGetValue(SelectedId, out var abilityParams) ? EditorAbilityHelper.CreateAbilityParameter(type, abilityParams) : null;
             
             // Components加载
             ComponentTypes = new List<AbilityEditComponent>();
@@ -309,7 +308,7 @@ namespace GAS.Editor
         private const string T_G = "编辑配置";
         private const string T_G_A = "编辑配置/A";
         private const string T_G_A_B = "编辑配置/A/组件详情";
-        private const string T_G_AL = "编辑配置/技能逻辑";
+        private const string T_G_AL = "编辑配置/执行配置";
         private const string T_G_A_B_CD = "编辑配置/TAB/详情/冷却CD";
         private const string T_G_TAB = "编辑配置/TAB";
 
@@ -377,8 +376,8 @@ namespace GAS.Editor
         public string description;
 
         [BoxGroup(T_G_AL)]
-        [LabelText("技能逻辑类型")]
-        [ValueDropdown(nameof(AbilityLogicClassChoice))]
+        [LabelText("执行配置类型")]
+        [ValueDropdown(nameof(AbilityExecutionChoice))]
         [OnValueChanged(nameof(OnTypeChange))]
         public string type;
 

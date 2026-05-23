@@ -39,12 +39,12 @@ namespace GAS.Editor
                     var trackNameCell = worksheet.Cells[row, 6].Value;
                     var startTimeCell = worksheet.Cells[row, 7].Value;
                     var endTimeCell = worksheet.Cells[row, 8].Value;
-                    var taskNameCell = worksheet.Cells[row, 9].Value;
-                    var taskTypeCell = worksheet.Cells[row, 10].Value;
+                    var actionNameCell = worksheet.Cells[row, 9].Value;
+                    var actionTypeCell = worksheet.Cells[row, 10].Value;
 
                     // 如果所有关键单元格都为空，结束解析
                     if (idCell == null && nameCell == null && lifeTimeCell == null &&
-                        manualEndCell == null && trackNameCell == null && taskTypeCell == null)
+                        manualEndCell == null && trackNameCell == null && actionTypeCell == null)
                         break;
 
                     // 处理新技能
@@ -80,8 +80,8 @@ namespace GAS.Editor
                         };
                     }
 
-                    // 处理任务
-                    if (taskTypeCell != null)
+                    // 处理 Timeline Action
+                    if (actionTypeCell != null)
                     {
                         if (currentTrack == null)
                         {
@@ -90,12 +90,12 @@ namespace GAS.Editor
                             if (currentAbility != null) currentAbility.Tracks.Add(currentTrack);
                         }
 
-                        var task = new TaskClipData
+                        var action = new TimelineActionClipData
                         {
-                            TaskType = taskTypeCell.ToString(),
+                            ActionType = actionTypeCell.ToString(),
                             StartTime = startTimeCell != null ? int.Parse(startTimeCell.ToString()) : 0,
                             EndTime = endTimeCell != null ? int.Parse(endTimeCell.ToString()) : 0,
-                            Name = taskNameCell?.ToString() ?? ""
+                            Name = actionNameCell?.ToString() ?? ""
                         };
 
                         // 读取参数（假设最多10个参数，从第10列到第19列）
@@ -107,10 +107,10 @@ namespace GAS.Editor
                                 parameters.Add(paramCell);
                         }
 
-                        var param = EditorAbilityHelper.CreateAbilityTaskParameter(taskTypeCell.ToString());
+                        var param = EditorAbilityHelper.CreateTimelineActionParameter(actionTypeCell.ToString());
                         param.DecodeExcelData(parameters);
-                        task.SetParameter(param);
-                        currentTrack.TaskClips.Add(task);
+                        action.SetParameter(param);
+                        currentTrack.ActionClips.Add(action);
                     }
 
                     row++;
@@ -160,28 +160,28 @@ namespace GAS.Editor
 
                 var row = dataStartRow;
 
-                // 按 XParamTimeline -> Track -> TaskClipData 的层级写回
+                // 按 XParamTimeline -> Track -> TimelineActionClipData 的层级写回
                 foreach (var ability in _timelineAbilities)
                 {
                     // 标记：当前 ability 的第一条任务所在行，需要写 ID/Name/LifeTime/ManualEndAbility
                     var firstTrackInAbility = true;
 
-                    // 如果某个技能没有任何 Track/Task，也可以选择至少写一行，只写基础信息；
-                    // 下面代码选择：只有存在 Task 时才写行；若你需要“空技能”也写一行，可额外处理。
+                    // 如果某个技能没有任何 Track/Action，也可以选择至少写一行，只写基础信息；
+                    // 下面代码选择：只有存在 Action 时才写行；若你需要“空技能”也写一行，可额外处理。
                     if (ability.Tracks == null || ability.Tracks.Count == 0)
                         continue;
 
                     foreach (var track in ability.Tracks)
                     {
-                        var firstTaskInTrack = true;
+                        var firstActionInTrack = true;
 
-                        if (track.TaskClips == null || track.TaskClips.Count == 0)
+                        if (track.ActionClips == null || track.ActionClips.Count == 0)
                             continue;
 
-                        foreach (var task in track.TaskClips)
+                        foreach (var action in track.ActionClips)
                         {
-                            // ===== 写 Ability 基本信息（只在该技能第一条任务那一行写一次） =====
-                            if (firstTrackInAbility && firstTaskInTrack)
+                            // ===== 写 Ability 基本信息（只在该技能第一条 Action 那一行写一次） =====
+                            if (firstTrackInAbility && firstActionInTrack)
                             {
                                 worksheet.Cells[row, 2].Value = ability.ID;
                                 worksheet.Cells[row, 3].Value = ability.Name;
@@ -189,19 +189,19 @@ namespace GAS.Editor
                                 worksheet.Cells[row, 5].Value = ability.ManualEndAbility;
                             }
 
-                            // ===== 写 Track 名（只在该轨道第一条任务那一行写一次） =====
-                            if (firstTaskInTrack) worksheet.Cells[row, 6].Value = track.Name;
+                            // ===== 写 Track 名（只在该轨道第一条 Action 那一行写一次） =====
+                            if (firstActionInTrack) worksheet.Cells[row, 6].Value = track.Name;
 
-                            // ===== 写 TaskClipData 基本信息，每条任务一行 =====
-                            worksheet.Cells[row, 7].Value = task.StartTime;
-                            worksheet.Cells[row, 8].Value = task.EndTime;
-                            worksheet.Cells[row, 9].Value = task.Name;
-                            worksheet.Cells[row, 10].Value = task.TaskType;
+                            // ===== 写 TimelineActionClipData 基本信息，每条 Action 一行 =====
+                            worksheet.Cells[row, 7].Value = action.StartTime;
+                            worksheet.Cells[row, 8].Value = action.EndTime;
+                            worksheet.Cells[row, 9].Value = action.Name;
+                            worksheet.Cells[row, 10].Value = action.ActionType;
 
                             // ===== 写参数（列 11~20），调用 XParam.EncodeExcelData() =====
-                            if (task.Parameter != null)
+                            if (action.Parameter != null)
                             {
-                                var paramList = task.Parameter.EncodeExcelData(); // List<object>
+                                var paramList = action.Parameter.EncodeExcelData(); // List<object>
                                 if (paramList != null)
                                 {
                                     // 最多占用 10 列（11~20）
@@ -211,9 +211,9 @@ namespace GAS.Editor
                                 }
                             }
 
-                            // 移动到下一行，后续任务继续写
+                            // 移动到下一行，后续 Action 继续写
                             row++;
-                            firstTaskInTrack = false;
+                            firstActionInTrack = false;
                         }
 
                         // 当前 ability 已经至少写过一行了，后续 Track 都不再写 ID/Name/LifeTime/ManualEndAbility

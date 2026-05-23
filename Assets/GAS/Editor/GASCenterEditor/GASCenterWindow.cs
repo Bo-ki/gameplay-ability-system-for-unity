@@ -16,7 +16,6 @@ namespace GAS.Editor
         private static GASCenterViewAttrSet _viewAttrSet;
         private static GASCenterViewEffect _viewEffect;
         private static GASCenterViewCue _viewCue;
-        private static GASCenterViewMmc _viewMmc;
         private static GASCenterViewAbility _viewAbility;
         private static GASCenterViewAsc _viewAsc;
         
@@ -38,7 +37,6 @@ namespace GAS.Editor
             tree.Add("Attribute属性", AttributeEditor());
             tree.Add("Attribute Set属性集", AttributeSetEditor());
             tree.Add("GameplayCue演出提示", GameplayCueEditor());
-            tree.Add("MMC修改器", MMCEditor());
             tree.Add("GameplayEffect效果buff", GameplayEffectEditor());
             tree.Add("GameplayAbility技能", GameplayAbilityEditor());
             tree.Add("ASC预设", GameplayAbilityAscEditor());
@@ -78,11 +76,6 @@ namespace GAS.Editor
         private static GASCenterViewCue GameplayCueEditor()
         {
             return _viewCue ??= new GASCenterViewCue();
-        }
-        
-        private static GASCenterViewMmc MMCEditor()
-        {
-            return _viewMmc ??= new GASCenterViewMmc();
         }
         
         private static GASCenterViewAbility GameplayAbilityEditor()

@@ -1,14 +1,15 @@
-﻿using Unity.Entities;
+using Unity.Entities;
 
 namespace GAS.Runtime
 {
     public enum CueSourceType
     {
         None,
-        AbilitySystemCell,
-        GameplayEffect
+        AscEntity,
+        GameplayEffect,
+        GameplayAbility,
     }
-    
+
     public class GameplayCueParametersBase
     {
         public CueSourceType SourceType;

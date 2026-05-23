@@ -1,13 +1,11 @@
 
 using System;
 using System.Collections.Generic;
-using Sirenix.OdinInspector;
 
 namespace GAS.Runtime
 {
     public class XParamCueIDs : XParam
     {
-        [ShowInInspector] 
         [BeanField(nameof(SetValue))]
         public int[] IDs;
 

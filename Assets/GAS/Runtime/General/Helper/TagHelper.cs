@@ -1,7 +1,5 @@
+using System;
 using System.Collections.Generic;
-using Sirenix.OdinInspector;
-using Unity.Collections;
-using Unity.Entities;
 using UnityEngine;
 
 namespace GAS.Runtime
@@ -10,6 +8,8 @@ namespace GAS.Runtime
     {
         private static Dictionary<int, GameplayTag> _tagMap;
         private static Dictionary<int, string> _tagCode2TagName;
+        private static Dictionary<int, int> _tagCodeToDenseIndex;
+        private static Dictionary<int, int> _tagDenseIndexToCode;
         
         /// <summary>
         ///     初始化TagMap
@@ -20,18 +20,22 @@ namespace GAS.Runtime
         {
             _tagMap = tagMap;
             _tagCode2TagName = tagCode2TagName;
-            
-            // ECS专用单例TagMap
-            var map = new NativeHashMap<int, ComGameplayTag>(tagMap.Keys.Count, Allocator.Persistent);
-            foreach (var p in tagMap)
-                map.TryAdd(p.Key, new ComGameplayTag
-                {
-                    Code = p.Value.Code,
-                    Children = new NativeArray<int>(p.Value.Children, Allocator.Persistent),
-                    Parents = new NativeArray<int>(p.Value.Parents, Allocator.Persistent)
-                });
+            _tagCodeToDenseIndex = new Dictionary<int, int>(tagMap.Count);
+            _tagDenseIndexToCode = new Dictionary<int, int>(tagMap.Count);
 
-            GASManager.EntityManager.CreateSingleton(new SingletonGameplayTagMap { Map = map });
+            var denseIndex = 0;
+            foreach (var tagCode in tagMap.Keys)
+            {
+                if (denseIndex >= 256)
+                {
+                    Debug.LogError("[EX-GAS] CTagMask currently supports at most 256 gameplay tags. Regenerate a wider mask or reduce tag count.");
+                    break;
+                }
+
+                _tagCodeToDenseIndex[tagCode] = denseIndex;
+                _tagDenseIndexToCode[denseIndex] = tagCode;
+                denseIndex++;
+            }
         }
 
         /// <summary>
@@ -46,23 +50,91 @@ namespace GAS.Runtime
                 return _tagMap[tagA].HasTag(_tagMap[tagB]);
             return false;
         }
-        
-        public static bool HasTemporaryTag(Entity asc,Entity source,int tag)
+
+        public static bool TryGetDenseIndex(int tagCode, out int denseIndex)
         {
-            var temporaryTags = GASManager.EntityManager.GetBuffer<BTemporaryTag>(asc);
-            foreach (var t in temporaryTags)
-                if (t.source==source && HasTag(t.tag, tag))
-                    return true;
-            return false;
+            denseIndex = -1;
+            return _tagCodeToDenseIndex != null && _tagCodeToDenseIndex.TryGetValue(tagCode, out denseIndex);
         }
 
-        public static bool AddTemporaryTagTo(Entity ascTarget,Entity source,int tag)
+        public static bool TryGetTagCode(int denseIndex, out int tagCode)
         {
-            var temporaryTags = GASManager.EntityManager.GetBuffer<BTemporaryTag>(ascTarget);
-            if(HasTemporaryTag(ascTarget,source,tag))
+            tagCode = -1;
+            return _tagDenseIndexToCode != null && _tagDenseIndexToCode.TryGetValue(denseIndex, out tagCode);
+        }
+
+        public static bool TryAddTagToMask(ref CTagMask mask, int tagCode, bool includeParents = true)
+        {
+            if (!TryGetDenseIndex(tagCode, out var denseIndex))
                 return false;
-            temporaryTags.Add(new BTemporaryTag {source = source,tag = tag});
+
+            mask.AddTag(denseIndex);
+
+            if (includeParents && _tagMap != null && _tagMap.TryGetValue(tagCode, out var tag))
+            {
+                foreach (var parentCode in tag.Parents)
+                    if (TryGetDenseIndex(parentCode, out var parentIndex))
+                        mask.AddTag(parentIndex);
+            }
+
             return true;
+        }
+
+        public static CTagMask BuildMask(IEnumerable<int> tagCodes, bool includeParents = true)
+        {
+            var mask = new CTagMask();
+            if (tagCodes == null) return mask;
+
+            foreach (var tagCode in tagCodes)
+                TryAddTagToMask(ref mask, tagCode, includeParents);
+
+            return mask;
+        }
+
+        public static TagRequirementMask BuildRequirementMask(
+            IEnumerable<int> all,
+            IEnumerable<int> any,
+            IEnumerable<int> none,
+            bool includeParents = true)
+        {
+            return new TagRequirementMask
+            {
+                All = BuildMask(all, includeParents),
+                Any = BuildMask(any, includeParents),
+                None = BuildMask(none, includeParents),
+            };
+        }
+
+        public static int[] ToDenseIndices(IEnumerable<int> tagCodes, bool includeParents = false)
+        {
+            if (tagCodes == null) return Array.Empty<int>();
+
+            var result = new List<int>();
+            foreach (var tagCode in tagCodes)
+            {
+                if (TryGetDenseIndex(tagCode, out var denseIndex) && !result.Contains(denseIndex))
+                    result.Add(denseIndex);
+
+                if (!includeParents || _tagMap == null || !_tagMap.TryGetValue(tagCode, out var tag))
+                    continue;
+
+                foreach (var parentCode in tag.Parents)
+                    if (TryGetDenseIndex(parentCode, out var parentIndex) && !result.Contains(parentIndex))
+                        result.Add(parentIndex);
+            }
+
+            return result.ToArray();
+        }
+
+        public static int[] ToDenseIndices(in CTagMask mask)
+        {
+            if (mask.IsEmpty) return Array.Empty<int>();
+
+            var result = new List<int>();
+            for (var i = 0; i < CTagMask.Capacity; i++)
+                if (mask.HasTag(i))
+                    result.Add(i);
+            return result.ToArray();
         }
         
         public static string GetTagFullName(int tagCode)

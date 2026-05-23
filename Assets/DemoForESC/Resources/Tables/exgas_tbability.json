@@ -23,8 +23,8 @@
         2010
       ]
     },
-    "AbilityLogic": {
-      "$type": "ALMove",
+    "AbilityExecution": {
+      "$type": "MoveInput",
       "Param": {
         "RotationOffset": 0.5
       }
@@ -50,8 +50,8 @@
         0
       ]
     },
-    "AbilityLogic": {
-      "$type": "ALApplyEffect",
+    "AbilityExecution": {
+      "$type": "ApplyEffectsOnActivate",
       "Param": {
         "IDs": [
           1002,
@@ -69,8 +69,8 @@
     "Cd": 0,
     "AssetTags": [],
     "ActivationOwnedTags": [],
-    "AbilityLogic": {
-      "$type": "ALApplyEffect",
+    "AbilityExecution": {
+      "$type": "ApplyEffectsOnActivate",
       "Param": {
         "IDs": [
           1003
@@ -87,8 +87,8 @@
     "Cd": 0,
     "AssetTags": [],
     "ActivationOwnedTags": [],
-    "AbilityLogic": {
-      "$type": "ALApplyEffect",
+    "AbilityExecution": {
+      "$type": "ApplyEffectsOnActivate",
       "Param": {
         "IDs": [
           1005
@@ -118,8 +118,8 @@
         3003
       ]
     },
-    "AbilityLogic": {
-      "$type": "ALTimeline",
+    "AbilityExecution": {
+      "$type": "TimelineRef",
       "Param": {
         "ID": 101
       }
@@ -160,8 +160,8 @@
         3002
       ]
     },
-    "AbilityLogic": {
-      "$type": "ALTimeline",
+    "AbilityExecution": {
+      "$type": "TimelineRef",
       "Param": {
         "ID": 103
       }

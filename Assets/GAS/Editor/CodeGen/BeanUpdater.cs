@@ -13,7 +13,7 @@ namespace GAS.Editor
 {
     /// <summary>  
     /// 自动化更新 __beans__.xlsx 文件  
-    /// 扫描自定义类（Cue、MMC、AbilityLogic、AbilityTask）及其参数类型  
+    /// 扫描 Cue、自定义参数和数据化 Ability 执行配置，更新 Luban Bean 定义。
     /// 自动生成/更新对应的Luban Bean定义  
     /// </summary>  
     public static class BeanUpdater
@@ -103,17 +103,13 @@ namespace GAS.Editor
             EditorUtility.DisplayProgressBar(title, "收集 Cue 逻辑类...", 1f / 6f);
             CollectCueBeans(beans);
 
-            // 3. 收集MMC逻辑类  
-            EditorUtility.DisplayProgressBar(title, "收集 MMC 逻辑类...", 2f / 6f);
-            CollectMmcBeans(beans);
+            // 3. 收集 Ability 执行配置  
+            EditorUtility.DisplayProgressBar(title, "收集 Ability 执行配置...", 3f / 6f);
+            CollectAbilityExecutionBeans(beans);
 
-            // 4. 收集AbilityLogic逻辑类  
-            EditorUtility.DisplayProgressBar(title, "收集 AbilityLogic 逻辑类...", 3f / 6f);
-            CollectAbilityLogicBeans(beans);
-
-            // 5. 收集AbilityTask类  
-            EditorUtility.DisplayProgressBar(title, "收集 AbilityTask 类...", 4f / 6f);
-            CollectAbilityTaskBeans(beans);
+            // 4. 收集 Timeline Action 参数配置  
+            EditorUtility.DisplayProgressBar(title, "收集 Timeline Action 参数配置...", 4f / 6f);
+            CollectTimelineActionParameterBeans(beans);
 
             // 6. 收集TargetCatcher类  
             EditorUtility.DisplayProgressBar(title, "收集 TargetCatcher 类...", 5f / 6f);
@@ -200,40 +196,32 @@ namespace GAS.Editor
         }
 
         /// <summary>  
-        /// 收集MMC逻辑类Bean定义  
+        /// 收集 Ability 执行配置 Bean 定义。
         /// </summary>  
-        private static void CollectMmcBeans(List<BeanDefinition> beans)
+        private static void CollectAbilityExecutionBeans(List<BeanDefinition> beans)
         {
-            var mmcTypes = GetTypesInheritingFrom(typeof(ModMagnitudeCalculationBase));
-
-            // 添加抽象基类  
             beans.Add(new BeanDefinition
             {
-                Name = "ModMagnitudeCalculationBase",
+                Name = "AbilityExecutionBase",
                 Parent = "",
-                Comment = "MMC逻辑基类",
+                Comment = "Ability执行配置基类",
                 IsAbstract = true
             });
 
-            foreach (var type in mmcTypes)
+            foreach (var schema in EditorAbilityHelper.GetAbilityExecutionSchemas())
             {
-                if (type.IsAbstract) continue;
-
-                var paramType = GetGenericParamType(type, typeof(ModMagnitudeCalculationBase<>));
-                if (paramType == null) continue;
-
                 var bean = new BeanDefinition
                 {
-                    Name = type.Name,
-                    Parent = "ModMagnitudeCalculationBase",
-                    Comment = GetXmlComment(type) ?? $"MMC: {type.Name}",
+                    Name = schema.Name,
+                    Parent = "AbilityExecutionBase",
+                    Comment = $"Ability执行配置: {schema.Name}",
                     IsAbstract = false
                 };
 
                 bean.Fields.Add(new BeanField
                 {
                     Name = "Param",
-                    Type = paramType.Name,
+                    Type = schema.ParamType.Name,
                     Comment = "参数"
                 });
 
@@ -242,86 +230,34 @@ namespace GAS.Editor
         }
 
         /// <summary>  
-        /// 收集AbilityLogic逻辑类Bean定义  
+        /// 收集 Timeline Action 参数 Bean 定义。
         /// </summary>  
-        private static void CollectAbilityLogicBeans(List<BeanDefinition> beans)
+        private static void CollectTimelineActionParameterBeans(List<BeanDefinition> beans)
         {
-            var abilityTypes = GetTypesInheritingFrom(typeof(AbilityLogicBase));
-
-            // 添加抽象基类  
             beans.Add(new BeanDefinition
             {
-                Name = "AbilityLogicBase",
+                Name = "TimelineActionParameterBase",
                 Parent = "",
-                Comment = "Ability逻辑基类",
+                Comment = "Timeline Action参数配置基类",
                 IsAbstract = true
             });
 
-            foreach (var type in abilityTypes)
+            foreach (var schema in EditorAbilityHelper.GetTimelineActionParameterSchemas())
             {
-                if (type.IsAbstract) continue;
-
-                var paramType = GetGenericParamType(type, typeof(AbilityLogicBase<>));
-                if (paramType == null) continue;
-
                 var bean = new BeanDefinition
                 {
-                    Name = type.Name,
-                    Parent = "AbilityLogicBase",
-                    Comment = GetXmlComment(type) ?? $"Ability: {type.Name}",
+                    Name = schema.Name,
+                    Parent = "TimelineActionParameterBase",
+                    Comment = $"Timeline Action参数: {schema.Name}",
                     IsAbstract = false
                 };
 
                 bean.Fields.Add(new BeanField
                 {
                     Name = "Param",
-                    Type = paramType.Name,
+                    Type = schema.ParamType.Name,
                     Comment = "参数"
                 });
-
-                beans.Add(bean);
-            }
-        }
-
-        /// <summary>  
-        /// 收集AbilityTask类Bean定义  
-        /// </summary>  
-        private static void CollectAbilityTaskBeans(List<BeanDefinition> beans)
-        {
-            var taskTypes = GetTypesInheritingFrom(typeof(AbilityTaskBase));
-
-            // 添加抽象基类  
-            beans.Add(new BeanDefinition
-            {
-                Name = "AbilityTaskBase",
-                Parent = "",
-                Comment = "AbilityTask基类",
-                IsAbstract = true
-            });
-
-            foreach (var type in taskTypes)
-            {
-                if (type.IsAbstract) continue;
-
-                var paramType = GetGenericParamType(type, typeof(AbilityTaskBase<>));
-
-                var bean = new BeanDefinition
-                {
-                    Name = type.Name,
-                    Parent = "AbilityTaskBase",
-                    Comment = GetXmlComment(type) ?? $"Task: {type.Name}",
-                    IsAbstract = false
-                };
-
-                if (paramType != null)
-                {
-                    bean.Fields.Add(new BeanField
-                    {
-                        Name = "Param",
-                        Type = paramType.Name,
-                        Comment = "参数"
-                    });
-                }
 
                 beans.Add(bean);
             }

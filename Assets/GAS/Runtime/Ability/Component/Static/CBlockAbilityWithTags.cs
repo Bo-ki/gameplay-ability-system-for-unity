@@ -1,11 +1,10 @@
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
 {
     public struct CBlockAbilityWithTags : IComponentData
     {
-        public NativeArray<int> tags;
+        public CTagMask Tags;
     }
     
     public sealed class ConfBlockAbilityWithTags:AbilityComponentConfig
@@ -16,7 +15,7 @@ namespace GAS.Runtime
         {
             _entityManager.AddComponentData(ability, new CBlockAbilityWithTags
             {
-                tags = new NativeArray<int>(tags, Allocator.Persistent)
+                Tags = TagHelper.BuildMask(tags, includeParents: false)
             });
         }
     }

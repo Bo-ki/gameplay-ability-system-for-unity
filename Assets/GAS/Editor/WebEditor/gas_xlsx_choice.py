@@ -20,7 +20,6 @@ EX-GAS Web编辑器 - 跨表 ID/Name 选项集合
         "cue":    args.cue_xlsx,  
         "effect": args.effect_xlsx,  
         "ability": args.ability_xlsx,  
-        "mmc":    args.mmc_xlsx,  
     })  
 """  
   
@@ -132,7 +131,6 @@ class GasXlsxChoice:
         "cue"     -> #exgas.gameplayCue.xlsx  
         "effect"  -> #exgas.gameplayEffect.xlsx  
         "ability" -> #exgas.ability.xlsx  
-        "mmc"     -> #exgas.mmc.xlsx  
   
     任何 key 对应的路径为空或文件不存在时，对应方法返回空列表（不抛异常）。  
     """  
@@ -181,7 +179,7 @@ class GasXlsxChoice:
             attrset_id  
         )  
   
-    # C# 侧读取逻辑已确认这4个表均从第4行开始、第2列为ID（参见 GASCenterViewCue.cs / GASCenterViewMmc.cs）  
+    # C# 侧读取逻辑已确认这些表均从第4行开始、第2列为ID。  
     # 但各表的完整列结构（CueLogic列偏移、effect的复合字段等）需要截图确认后补充  
     # 目前 _read_id_name 只读 ID 和 Name，对 choice 用途已足够  
   
@@ -206,19 +204,10 @@ class GasXlsxChoice:
         """  
         Ability: DATA_START_ROW=4, COL_ID=2, COL_NAME=3  
         对标 #exgas.ability.xlsx  
-        已通过截图确认表头结构（ID/Name/Desc/Cost/CdEffect/Cd/各Tag列/AbilityLogic + 后续50列流式参数）。  
-        choice 只需 ID/Name，_read_id_name 通用逻辑已足够，无需解析 AbilityLogic 及参数列。  
+        已通过截图确认表头结构（ID/Name/Desc/Cost/CdEffect/Cd/各Tag列/Ability执行列 + 后续50列流式参数）。  
+        choice 只需 ID/Name，_read_id_name 通用逻辑已足够，无需解析 Ability 执行参数列。  
         """  
         return _read_id_name(self._path("ability"), data_start_row=4)
-  
-    def mmcs(self) -> list:  
-        """  
-        MMC: DATA_START_ROW=4, COL_ID=2, COL_NAME=3  
-        对标 #exgas.mmc.xlsx  
-        已通过截图确认表头结构（ID/Name/Desc/MmcLogic + 后续流式参数列）。  
-        choice 只需 ID/Name，_read_id_name 通用逻辑已足够，无需解析 MmcLogic 及参数列。  
-        """  
-        return _read_id_name(self._path("mmc"), data_start_row=4)
   
     # ── 聚合接口（供前端 /api/choices 一次性获取所有选项） ─────────────────────  
   
@@ -234,5 +223,4 @@ class GasXlsxChoice:
             "cues":     self.cues(),  
             "effects":  self.effects(),  
             "abilities": self.abilities(),  
-            "mmcs":     self.mmcs(),  
         }

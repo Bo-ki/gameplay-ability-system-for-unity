@@ -1,39 +1,40 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using Unity.Entities;
 using UnityEngine;
 
 namespace GAS.Runtime
 {
-    public abstract class TargetCatcherBase  
-    {  
-        public AbilitySystemCell Owner;  
-  
-        public virtual void Init(AbilitySystemCell owner)  
-        {  
-            Owner = owner;  
-        }  
-  
-        [Obsolete("请使用CatchTargetsNonAlloc方法来避免产生垃圾收集（GC）。")]  
-        public List<AbilitySystemCell> CatchTargets(AbilitySystemCell mainTarget)  
-        {  
-            var result = new List<AbilitySystemCell>();  
-            CatchTargetsNonAlloc(mainTarget, result);  
-            return result;  
-        }  
-  
-        public void CatchTargetsNonAllocSafe(AbilitySystemCell mainTarget, ref List<AbilitySystemCell> results)  
-        {  
-            results.Clear();  
-            CatchTargetsNonAlloc(mainTarget, results);  
-        }  
-  
-        protected abstract void CatchTargetsNonAlloc(AbilitySystemCell mainTarget, List<AbilitySystemCell> results);  
-  
-        public virtual void InitParameters(XParam parameter) { }  
-        
-        public virtual void OnEditorPreview(GameObject obj) { }  
+    public abstract class TargetCatcherBase
+    {
+        public Entity Owner;
+
+        public virtual void Init(Entity owner)
+        {
+            Owner = owner;
+        }
+
+        [Obsolete("请使用CatchTargetsNonAlloc方法来避免产生垃圾收集（GC）。")]
+        public List<Entity> CatchTargets(Entity mainTarget)
+        {
+            var result = new List<Entity>();
+            CatchTargetsNonAlloc(mainTarget, result);
+            return result;
+        }
+
+        public void CatchTargetsNonAllocSafe(Entity mainTarget, ref List<Entity> results)
+        {
+            results.Clear();
+            CatchTargetsNonAlloc(mainTarget, results);
+        }
+
+        protected abstract void CatchTargetsNonAlloc(Entity mainTarget, List<Entity> results);
+
+        public virtual void InitParameters(XParam parameter) { }
+
+        public virtual void OnEditorPreview(GameObject obj) { }
     }
-    
+
     public abstract class TargetCatcherBase<T> : TargetCatcherBase where T : XParam
     {
         public T Parameter { get; private set; }

@@ -16,7 +16,6 @@ let cueChoices     = [];   // [{id, name}]
 let abilityChoices = [];   // [{id, name}]  
 let attrSetChoices = [];   // [{id, name, attrs:[{id,name}]}]  
 let effectChoices  = [];   // [{id, name}]  
-let mmcChoices     = [];   // [{id, name}]  
 
 // ── 枚举（与 server.py ENUM_* 对齐）─────────────────────────────────  
 const ENUM_TIME_UNIT        = ['Frame', 'Turn'];
@@ -185,7 +184,7 @@ let _sdCounter = 0;
 
 /**
  * 生成可搜索下拉 HTML
- * @param {string} selectId - 兼容旧 addChip 的 select id
+ * @param {string} selectId - hidden select id used by addChip
  * @param {string} placeholder
  * @param {Array} choices - [{id, name}]
  * @param {string} displayMode - 'tag' 显示 name(#id), 'default' 显示 [id] name
@@ -266,20 +265,18 @@ async function loadInfo() {
 
 async function loadChoices() {
     try {
-        const [tags, cues, abilities, attrsets, effects, mmcs] = await Promise.all([
+        const [tags, cues, abilities, attrsets, effects] = await Promise.all([
             fetch(`${API}/api/choices/tags`).then(r => r.json()),
             fetch(`${API}/api/choices/cues`).then(r => r.json()),
             fetch(`${API}/api/choices/abilities`).then(r => r.json()),
             fetch(`${API}/api/choices/attrsets`).then(r => r.json()),
             fetch(`${API}/api/choices/effects`).then(r => r.json()),
-            fetch(`${API}/api/choices/mmcs`).then(r => r.json()).catch(() => ({ok:false})),
         ]);
         if (tags.ok)      tagChoices     = tags.tags       || [];
         if (cues.ok)      cueChoices     = cues.cues       || [];
         if (abilities.ok) abilityChoices = abilities.abilities || [];
         if (attrsets.ok)  attrSetChoices = attrsets.attrsets  || [];
         if (effects.ok)   effectChoices  = effects.effects    || [];
-        if (mmcs.ok)      mmcChoices     = mmcs.mmcs          || [];
     } catch(e) { console.warn('loadChoices failed', e); }
 }
 
@@ -405,11 +402,6 @@ function modifierItemHtml(m, i) {
         `<option value="${a.id}" ${a.id===m.attr?'selected':''}>[${a.id}] ${escHtml(a.name)}</option>`
     ).join('');
 
-    const mmcVal = m.mmc ?? 0;
-    const mmcOpts = mmcChoices.map(mc =>
-        `<option value="${mc.id}" ${mc.id===mmcVal?'selected':''}>[${mc.id}] ${escHtml(mc.name)}</option>`
-    ).join('');
-
     return `  
 <div class="modifier-item" data-idx="${i}">  
     <button class="remove-btn" onclick="removeModifier(${i})">✕</button>  
@@ -433,13 +425,6 @@ function modifierItemHtml(m, i) {
         <div class="field-group">  
             <label>数值 Magnitude</label>  
             <input type="number" step="any" data-mod-magnitude="${i}" value="${m.magnitude ?? 0}">  
-        </div>  
-        <div class="field-group">  
-            <label>MMC</label>  
-            <select data-mod-mmc="${i}">  
-                <option value="0">-- 无MMC --</option>  
-                ${mmcOpts}  
-            </select>  
         </div>  
     </div>  
     <div class="field-group">  
@@ -469,7 +454,7 @@ function addModifier() {
     if (!list) return;
     const idx = list.querySelectorAll('.modifier-item').length;
     list.insertAdjacentHTML('beforeend', modifierItemHtml({
-        attrSet:0, attr:0, magnitude:0, operation:'Add', mmc:0
+        attrSet:0, attr:0, magnitude:0, operation:'Add'
     }, idx));
 }
 
@@ -858,7 +843,6 @@ function buildEffectFromForm() {
                 attr:      parseInt(el.querySelector(`[data-mod-attr="${idx}"]`)?.value || 0),
                 magnitude: parseFloat(el.querySelector(`[data-mod-magnitude="${idx}"]`)?.value || 0),
                 operation: getEnumBtnValue(`mod-op-btns-${idx}`, 'Add'),
-                mmc:       parseInt(el.querySelector(`[data-mod-mmc="${idx}"]`)?.value || 0),
             };
         });
     } else {

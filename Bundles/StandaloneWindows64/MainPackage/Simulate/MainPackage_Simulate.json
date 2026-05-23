@@ -10,7 +10,7 @@
     "BuildPipeline": "EditorSimulateBuildPipeline",
     "PackageName": "MainPackage",
     "PackageVersion": "Simulate",
-    "PackageNote": "2026/5/19 9:28:43",
+    "PackageNote": "2026/5/20 21:59:37",
     "AssetList": [
         {
             "Address": "Animation_attack",
@@ -245,19 +245,11 @@
             "DependBundleIDs": []
         },
         {
-            "Address": "Tables_exgas_tbmmc",
-            "AssetPath": "Assets/DemoForESC/Resources/Tables/exgas_tbmmc.json",
-            "AssetGUID": "f0010d70d40472c4597c4b8fcabde76b",
-            "AssetTags": [],
-            "BundleID": 29,
-            "DependBundleIDs": []
-        },
-        {
             "Address": "Tables_exgas_tbtimelineability",
             "AssetPath": "Assets/DemoForESC/Resources/Tables/exgas_tbtimelineability.json",
             "AssetGUID": "dae0f11cdb3b32b49b9c564d46b17d3b",
             "AssetTags": [],
-            "BundleID": 30,
+            "BundleID": 29,
             "DependBundleIDs": []
         },
         {
@@ -265,7 +257,7 @@
             "AssetPath": "Assets/DemoForESC/Resources/Texture/ex_hard_studio_logo.png",
             "AssetGUID": "9cc34e2e7dfc62645b359f4e79546d08",
             "AssetTags": [],
-            "BundleID": 31,
+            "BundleID": 30,
             "DependBundleIDs": []
         },
         {
@@ -273,7 +265,7 @@
             "AssetPath": "Assets/DemoForESC/Resources/Timeline/anim_float.anim",
             "AssetGUID": "741ee455797b320409a46850c1e97a82",
             "AssetTags": [],
-            "BundleID": 32,
+            "BundleID": 31,
             "DependBundleIDs": []
         },
         {
@@ -281,7 +273,7 @@
             "AssetPath": "Assets/DemoForESC/Resources/Timeline/opening.prefab",
             "AssetGUID": "0865ebc6936baa24582b924288cdcd89",
             "AssetTags": [],
-            "BundleID": 33,
+            "BundleID": 32,
             "DependBundleIDs": []
         },
         {
@@ -289,7 +281,7 @@
             "AssetPath": "Assets/DemoForESC/Resources/Timeline/TimelineOpening.playable",
             "AssetGUID": "4746ba3176716984cb0e19eaeb684dbb",
             "AssetTags": [],
-            "BundleID": 34,
+            "BundleID": 33,
             "DependBundleIDs": []
         },
         {
@@ -297,7 +289,7 @@
             "AssetPath": "Assets/DemoForESC/Resources/Timeline/Virtual Camera.controller",
             "AssetGUID": "a69fc2dfe912ab449ba0419f1a60f681",
             "AssetTags": [],
-            "BundleID": 35,
+            "BundleID": 34,
             "DependBundleIDs": []
         },
         {
@@ -305,7 +297,7 @@
             "AssetPath": "Assets/DemoForESC/Resources/UI/Atlas/logo.png",
             "AssetGUID": "23e2312f2a7b9ef4b8c66890dc2c3b4a",
             "AssetTags": [],
-            "BundleID": 36,
+            "BundleID": 35,
             "DependBundleIDs": []
         },
         {
@@ -313,7 +305,7 @@
             "AssetPath": "Assets/DemoForESC/Resources/UI/Atlas/white.png",
             "AssetGUID": "1cabf48321ac5194992b83d083d9de0e",
             "AssetTags": [],
-            "BundleID": 37,
+            "BundleID": 36,
             "DependBundleIDs": []
         },
         {
@@ -321,7 +313,7 @@
             "AssetPath": "Assets/DemoForESC/Resources/UI/sanjililiang_jianti_cu.ttf",
             "AssetGUID": "69267910aca4b2840947de018347b614",
             "AssetTags": [],
-            "BundleID": 38,
+            "BundleID": 37,
             "DependBundleIDs": []
         },
         {
@@ -329,7 +321,7 @@
             "AssetPath": "Assets/DemoForESC/Scene/DemoForECS.unity",
             "AssetGUID": "e2c5d7f094ea4b446ac86fd3ec87024c",
             "AssetTags": [],
-            "BundleID": 39,
+            "BundleID": 38,
             "DependBundleIDs": []
         },
         {
@@ -337,7 +329,7 @@
             "AssetPath": "Assets/DemoForESC/Scene/DemoForECS/ReflectionProbe-0.exr",
             "AssetGUID": "dce2b0846b69292479322eb21cb8c75c",
             "AssetTags": [],
-            "BundleID": 40,
+            "BundleID": 39,
             "DependBundleIDs": []
         },
         {
@@ -345,7 +337,7 @@
             "AssetPath": "Assets/DemoForESC/Scene/EditorUI.unity",
             "AssetGUID": "d3be949fe5d454c429b55883f96d5ad6",
             "AssetTags": [],
-            "BundleID": 39,
+            "BundleID": 38,
             "DependBundleIDs": []
         },
         {
@@ -353,7 +345,7 @@
             "AssetPath": "Assets/DemoForESC/Scene/Init.unity",
             "AssetGUID": "edac8363a1c534b4799e555f89a24386",
             "AssetTags": [],
-            "BundleID": 39,
+            "BundleID": 38,
             "DependBundleIDs": []
         },
         {
@@ -361,7 +353,7 @@
             "AssetPath": "Assets/DemoForESC/Scene/TrainRoom.unity",
             "AssetGUID": "b99fc8da31000a444ad6f7e0227bbc03",
             "AssetTags": [],
-            "BundleID": 39,
+            "BundleID": 38,
             "DependBundleIDs": []
         }
     ],
@@ -591,7 +583,7 @@
             "UnityCRC": 0,
             "FileHash": "3d78ec38738d68d10be7a4c474c08098",
             "FileCRC": 0,
-            "FileSize": 2725,
+            "FileSize": 2781,
             "Encrypted": false,
             "Tags": [],
             "DependBundleIDs": []
@@ -641,7 +633,7 @@
             "UnityCRC": 0,
             "FileHash": "253e74ad3329f279434e9ac5402681e3",
             "FileCRC": 0,
-            "FileSize": 6731,
+            "FileSize": 6555,
             "Encrypted": false,
             "Tags": [],
             "DependBundleIDs": []
@@ -657,21 +649,11 @@
             "DependBundleIDs": []
         },
         {
-            "BundleName": "mainpackage_assets_demoforesc_resources_tables_exgas_tbmmc.bundle",
-            "UnityCRC": 0,
-            "FileHash": "b7120c1f7da784abd67f9feb2169b9a4",
-            "FileCRC": 0,
-            "FileSize": 954,
-            "Encrypted": false,
-            "Tags": [],
-            "DependBundleIDs": []
-        },
-        {
             "BundleName": "mainpackage_assets_demoforesc_resources_tables_exgas_tbtimelineability.bundle",
             "UnityCRC": 0,
             "FileHash": "1b99c73e24e7e1b0da441a105884bfac",
             "FileCRC": 0,
-            "FileSize": 7212,
+            "FileSize": 7215,
             "Encrypted": false,
             "Tags": [],
             "DependBundleIDs": []

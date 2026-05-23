@@ -316,62 +316,6 @@ namespace GAS.Editor
             AssetDatabase.Refresh();
         }
         
-        [MenuItem("EXTool/EX-GAS/生成脚本/ModMagnitudeCalculation")]
-        public static void GenerateMmcCode()
-        {
-            var setting = GASSettingAsset.LoadOrCreate();
-            var filePath = setting.PathOfCodeMmc;
-           using var writer = new IndentedWriter(new StreamWriter(filePath));
-            writer.WriteLine("///////////////////////////////////");
-            writer.WriteLine("//// This is a generated file. ////");
-            writer.WriteLine("////     Do not modify it.     ////");
-            writer.WriteLine("///////////////////////////////////");
-
-            writer.WriteLine("");
-            
-            writer.WriteLine("namespace GAS.Runtime");
-            writer.WriteLine("{");
-            writer.Indent++;
-            {
-                writer.WriteLine("public static class XMmc");
-                writer.WriteLine("{");
-                writer.Indent++;
-                {
-                    var allMmc = EditorMmcHelper.GetCachedMmcTypes();
-                    var mmcTypes = allMmc as Type[] ?? allMmc.ToArray();
-                    foreach (var mmcType in mmcTypes)
-                    {
-                        var mmcName = mmcType.Name;
-                        writer.WriteLine($"public const string MMC_{mmcName} = \"{mmcName}\";");
-                    }
-
-                    writer.WriteLine("");
-                    writer.WriteLine("public static void LoadMmcType()");
-                    writer.WriteLine("{");
-                    writer.Indent++;
-                    {
-                        foreach (var mmcType in mmcTypes)
-                        {
-                            var mmcName = mmcType.Name;
-                            var typeFullName = mmcType.FullName;
-                            var mmcParaName = EditorMmcHelper.MmcToMmcParamTypeMap()[mmcName];
-                            writer.WriteLine($"var {mmcName} = typeof({typeFullName});");
-                            writer.WriteLine($"MmcHelper.RegisterMmc(MMC_{mmcName}, {mmcName},typeof({mmcParaName.FullName}));");
-                        }
-                    }
-                    writer.Indent--;
-                    writer.WriteLine("}");
-                }
-                writer.Indent--;
-                writer.WriteLine("}");
-            }
-            writer.Indent--;
-            writer.WriteLine("}");
-            
-            Console.WriteLine($"Generated MmcCode at path: {filePath}");
-            AssetDatabase.Refresh();
-        }
-        
         [MenuItem("EXTool/EX-GAS/生成脚本/LubanExtension")]
         public static void GenerateLubanExtension()
         {
@@ -388,7 +332,6 @@ namespace GAS.Editor
             //         public static void InitCache()
             //         {
             //             XAbility.LoadAbilityCode();
-            //             XMmc.LoadMmcType();
             //             XCue.LoadCueType();
             //             XLuban.Init();
             //         }
@@ -428,7 +371,6 @@ namespace GAS.Editor
                     writer.Indent++;
                     {
                         writer.WriteLine("XAbility.LoadAbilityCode();");
-                        writer.WriteLine("XMmc.LoadMmcType();");
                         writer.WriteLine("XCue.LoadCueType();");
                     }
                     writer.Indent--;
@@ -480,7 +422,6 @@ namespace GAS.Editor
             GenerateAttrSetCode();
             GenerateAbilityCode();
             GenerateCueCode();
-            GenerateMmcCode();
             GenerateLubanExtension();
             GenerateLauncher();
         }

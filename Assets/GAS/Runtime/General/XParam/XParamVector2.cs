@@ -1,12 +1,9 @@
 using System.Collections.Generic;
-using Sirenix.OdinInspector;
 
 namespace GAS.Runtime
 {
     public class XParamVector2: XParam
     {
-        [LabelText("值")]
-        [ShowInInspector]
         [BeanField(nameof(SetValue), Comment = "值")]
         public UnityEngine.Vector2 Value { get; private set; }
         

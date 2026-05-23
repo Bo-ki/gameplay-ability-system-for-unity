@@ -7,13 +7,13 @@
     "Tracks": [
       {
         "Name": "动画轨道",
-        "TaskClips": [
+        "ActionClips": [
           {
             "StartTime": 2,
             "EndTime": 24,
             "Name": "播放攻击动画",
-            "Task": {
-              "$type": "TaskPlayCue",
+            "Action": {
+              "$type": "PlayCue",
               "Param": {
                 "RequiredTags": [
                   2001
@@ -35,13 +35,13 @@
       },
       {
         "Name": "音效轨道",
-        "TaskClips": [
+        "ActionClips": [
           {
             "StartTime": 6,
             "EndTime": 6,
             "Name": "播放攻击音效",
-            "Task": {
-              "$type": "TaskDebug",
+            "Action": {
+              "$type": "DebugLog",
               "Param": {
                 "Value": "播放攻击音效1"
               }
@@ -51,13 +51,13 @@
       },
       {
         "Name": "特效轨道",
-        "TaskClips": [
+        "ActionClips": [
           {
             "StartTime": 3,
             "EndTime": 24,
             "Name": "添加拖尾特效",
-            "Task": {
-              "$type": "TaskDoNothing",
+            "Action": {
+              "$type": "NoOp",
               "Param": {}
             }
           }
@@ -65,13 +65,13 @@
       },
       {
         "Name": "GE轨道",
-        "TaskClips": [
+        "ActionClips": [
           {
             "StartTime": 1,
             "EndTime": 1,
             "Name": "消耗",
-            "Task": {
-              "$type": "TaskDoCost",
+            "Action": {
+              "$type": "ApplyCost",
               "Param": {}
             }
           },
@@ -79,8 +79,8 @@
             "StartTime": 8,
             "EndTime": 8,
             "Name": "造成伤害",
-            "Task": {
-              "$type": "TaskApplyEffects",
+            "Action": {
+              "$type": "ApplyEffects",
               "Param": {
                 "IDs": [
                   2002
@@ -122,13 +122,13 @@
     "Tracks": [
       {
         "Name": "轨道1",
-        "TaskClips": [
+        "ActionClips": [
           {
             "StartTime": 3,
             "EndTime": 4,
             "Name": "调试3",
-            "Task": {
-              "$type": "TaskDebug",
+            "Action": {
+              "$type": "DebugLog",
               "Param": {
                 "Value": "开头"
               }
@@ -138,8 +138,8 @@
             "StartTime": 15,
             "EndTime": 50,
             "Name": "调试5",
-            "Task": {
-              "$type": "TaskDebug",
+            "Action": {
+              "$type": "DebugLog",
               "Param": {
                 "Value": "结尾"
               }
@@ -157,13 +157,13 @@
     "Tracks": [
       {
         "Name": "Cue轨道1",
-        "TaskClips": [
+        "ActionClips": [
           {
             "StartTime": 0,
             "EndTime": 5,
             "Name": "前摇动画",
-            "Task": {
-              "$type": "TaskPlayCue",
+            "Action": {
+              "$type": "PlayCue",
               "Param": {
                 "RequiredTags": [
                   0
@@ -185,8 +185,8 @@
             "StartTime": 5,
             "EndTime": 18,
             "Name": "闪避动画",
-            "Task": {
-              "$type": "TaskPlayCue",
+            "Action": {
+              "$type": "PlayCue",
               "Param": {
                 "RequiredTags": [
                   0
@@ -208,8 +208,8 @@
             "StartTime": 18,
             "EndTime": 25,
             "Name": "闪避结束动画",
-            "Task": {
-              "$type": "TaskPlayCue",
+            "Action": {
+              "$type": "PlayCue",
               "Param": {
                 "RequiredTags": [
                   0
@@ -231,13 +231,13 @@
       },
       {
         "Name": "功能轨道1",
-        "TaskClips": [
+        "ActionClips": [
           {
             "StartTime": 0,
             "EndTime": 18,
             "Name": "闪避Task逻辑",
-            "Task": {
-              "$type": "TaskDodgeMove",
+            "Action": {
+              "$type": "DodgeMove",
               "Param": {
                 "DodgeSpeed": 10,
                 "WindUpFrames": 5
@@ -248,13 +248,13 @@
       },
       {
         "Name": "功能轨道2",
-        "TaskClips": [
+        "ActionClips": [
           {
             "StartTime": 5,
             "EndTime": 5,
             "Name": "执行消耗",
-            "Task": {
-              "$type": "TaskDoCost",
+            "Action": {
+              "$type": "ApplyCost",
               "Param": {}
             }
           },
@@ -262,8 +262,8 @@
             "StartTime": 5,
             "EndTime": 18,
             "Name": "添加无敌帧",
-            "Task": {
-              "$type": "TaskApplyEffects",
+            "Action": {
+              "$type": "ApplyEffects",
               "Param": {
                 "IDs": [
                   1003
@@ -279,13 +279,13 @@
       },
       {
         "Name": "功能轨道3",
-        "TaskClips": [
+        "ActionClips": [
           {
             "StartTime": 5,
             "EndTime": 5,
             "Name": "执行Cooldown冷却",
-            "Task": {
-              "$type": "TaskDoCooldown",
+            "Action": {
+              "$type": "ApplyCooldown",
               "Param": {}
             }
           }

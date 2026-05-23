@@ -1,4 +1,4 @@
-﻿using Cinemachine;
+using Cinemachine;
 using DemoForESC._Script.UI.View;
 using DemoForESC._Script.UI.ViewModel;
 using EXUI;
@@ -14,14 +14,14 @@ namespace DemoForESC._Script
     public class GameManager
     {
         private static GameManager _inst;
-        
+
         // I For Instance
         public static GameManager I => _inst ??= new GameManager();
 
-        public AbilitySystemCell GlobalAsc { get; } 
+        public AbilitySystemFacade GlobalAsc { get; }
 
         private PlayableDirector _openingTimeline;
-        
+
         private DemoPlayer _player;
 
         public DemoPlayer Player
@@ -33,14 +33,13 @@ namespace DemoForESC._Script
                 return _player;
             }
         }
-        
-        
+
+
         public GameManager()
         {
-            GlobalAsc= new();
-            //GASEventCenter.RegisterOnTagIsDirty(GlobalAsc,OnGlobalAscTagChange);
+            GlobalAsc = AbilitySystemFacade.Create();
         }
-        
+
         public void LoadMainScene()
         {
             //加载主场景
@@ -49,12 +48,12 @@ namespace DemoForESC._Script
 
         private void OnMainSceneLoaded(SceneHandle sceneHandle)
         {
-            Debug.Log("主场景加载完成");  
-            var w = XUI.M.OpenWindow<MaskWindow>();   // ✅ 直接用返回值  
-            w.VM.SetOnOpen(LoadMenu);                 // ✅ 通过 w.VM 访问，不走 XUI.M.VM<T>()  
-            w.VM.MaskFadeIn(false);  
+            Debug.Log("主场景加载完成");
+            var w = XUI.M.OpenWindow<MaskWindow>();   // ✅ 直接用返回值
+            w.VM.SetOnOpen(LoadMenu);                 // ✅ 通过 w.VM 访问，不走 XUI.M.VM<T>()
+            w.VM.MaskFadeIn(false);
         }
-        
+
         /// <summary>
         /// 加载开始主菜单
         /// 1.加载MenuWindow
@@ -82,7 +81,7 @@ namespace DemoForESC._Script
             // 5.关闭MaskWindow
             XUI.M.VM<VMMaskWindow>().MaskFadeOut();
         }
-        
+
         public void OnStartGameByMenu()
         {
             if (_openingTimeline != null)
@@ -93,38 +92,18 @@ namespace DemoForESC._Script
             GlobalAsc.AddFixedTag(XTag.Guide_Type1);
         }
 
-        private void OnGlobalAscTagChange(int tag, GameplayTagChangeEvent tagChangeEvent)
+        /// <summary>
+        /// 由 GuideManager.OnGuideEnd() 调用，正式开始游戏
+        /// </summary>
+        public void OnGuideComplete()
         {
-            if (tagChangeEvent == GameplayTagChangeEvent.AddTag)
-            {
-                if (tag == XTag.Guide_Type1)
-                {
-                    // 进入类型1引导
-                    GuideManager.I.StartGuide();
-                }
-            }
-            else if (tagChangeEvent == GameplayTagChangeEvent.RemoveTag)
-            {
-                if (TagHelper.HasTag(tag, XTag.Guide))
-                {
-                    // 结束引导
-                    GuideManager.I.OnGuideEnd();
-                }
-            }
-        }
-        
-        /// <summary>  
-        /// 由 GuideManager.OnGuideEnd() 调用，正式开始游戏  
-        /// </summary>  
-        public void OnGuideComplete()  
-        {  
-            // 1. 移除引导 Tag，触发 OnGlobalAscTagChange 的 RemoveTag 分支  
-            GlobalAsc.KillFixedTag(XTag.Guide_Type1);  
-  
-            // 2. 生成 Spider Boss（地址参考 YooAsset 注册的 Monster_ 前缀）  
-            var spiderPrefab = XYoo.LoadAssetSync<GameObject>(  
-                "Assets/DemoForESC/Resources/Prefabs/Monster/Spider.prefab");  
-            Object.Instantiate(spiderPrefab, new Vector3(0, 0, 10), Quaternion.identity);  
+            // 1. 移除引导 Tag
+            GlobalAsc.KillFixedTag(XTag.Guide_Type1);
+
+            // 2. 生成 Spider Boss（地址参考 YooAsset 注册的 Monster_ 前缀）
+            var spiderPrefab = XYoo.LoadAssetSync<GameObject>(
+                "Assets/DemoForESC/Resources/Prefabs/Monster/Spider.prefab");
+            Object.Instantiate(spiderPrefab, new Vector3(0, 0, 10), Quaternion.identity);
         }
 
         private static readonly Vector3 GuidePlayerPosition = new Vector3(0,1.5f,0);
@@ -135,7 +114,7 @@ namespace DemoForESC._Script
         {
             if(GuideManager.I.GuideInfo.resetPosition)
                 Player.transform.position = GuidePlayerPosition;
-            
+
             PlayerFreeLookCameraControl.Instance.AlignViewToPlayer();
         }
     }

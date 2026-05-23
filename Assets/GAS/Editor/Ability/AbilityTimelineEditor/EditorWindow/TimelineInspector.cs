@@ -25,7 +25,7 @@ namespace GAS.Editor
             {
                 switch (CurrentInspectorObject)
                 {
-                    case TaskClip oldTrackItem:
+                    case TimelineActionClip oldTrackItem:
                         oldTrackItem.ClipVe.OnUnSelect();
                         break;
                     case AbilityTimelineTrack oldTrack:
@@ -40,7 +40,7 @@ namespace GAS.Editor
                 case null:
                     UnityEditor.Selection.activeObject = null;
                     return;
-                case TaskClip trackClip:
+                case TimelineActionClip trackClip:
                     UnityEditor.Selection.activeObject = trackClip.DataInspector;
                     break;
                 case AbilityTimelineTrack track:

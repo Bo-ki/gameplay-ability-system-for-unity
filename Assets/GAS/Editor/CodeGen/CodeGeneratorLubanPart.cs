@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -8,27 +8,27 @@ namespace GAS.Editor
 {
     public static class CodeGeneratorLubanPart
     {
-        // C# 运行时类型 FullName → Luban cfg 类型转换模板（{0} 为字段访问表达式）    
-        private static readonly Dictionary<string, string> LubanTypeConversionMap = new()  
-        {  
-            ["UnityEngine.Vector3"] = "new UnityEngine.Vector3({0}.X, {0}.Y, {0}.Z)",  
-            ["UnityEngine.Vector2"] = "new UnityEngine.Vector2({0}.X, {0}.Y)",  
-            ["UnityEngine.Vector4"] = "new UnityEngine.Vector4({0}.X, {0}.Y, {0}.Z, {0}.W)",  
+        // C# 运行时类型 FullName → Luban cfg 类型转换模板（{0} 为字段访问表达式）
+        private static readonly Dictionary<string, string> LubanTypeConversionMap = new()
+        {
+            ["UnityEngine.Vector3"] = "new UnityEngine.Vector3({0}.X, {0}.Y, {0}.Z)",
+            ["UnityEngine.Vector2"] = "new UnityEngine.Vector2({0}.X, {0}.Y)",
+            ["UnityEngine.Vector4"] = "new UnityEngine.Vector4({0}.X, {0}.Y, {0}.Z, {0}.W)",
         };
 
-        /// <summary>  
-        /// 将字段名首字母大写，匹配 Luban 的 format_property_name PascalCase 规则  
-        /// </summary>  
-        private static string ToPascalCase(string name)  
-        {  
-            if (string.IsNullOrEmpty(name)) return name;  
-            return char.ToUpperInvariant(name[0]) + name.Substring(1);  
+        /// <summary>
+        /// 将字段名首字母大写，匹配 Luban 的 format_property_name PascalCase 规则
+        /// </summary>
+        private static string ToPascalCase(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return name;
+            return char.ToUpperInvariant(name[0]) + name.Substring(1);
         }
-        
+
         private static void WriteFieldAssignment(
             IndentedWriter writer,
             string paramVar,
-            string setter, // BeanFieldAttribute.Setter  
+            string setter, // BeanFieldAttribute.Setter
             string dataAccessExpr,
             Type fieldType)
         {
@@ -44,17 +44,17 @@ namespace GAS.Editor
             }
         }
 
-        /// <summary>  
-        /// 生成多态 Bean 的拆解代码（通用逻辑）  
-        /// 包括: 设置 TypeName、创建 Param 实例、switch-case 逐子类赋值、设置 Param  
-        /// </summary>  
+        /// <summary>
+        /// 生成多态 Bean 的拆解代码（通用逻辑）
+        /// 包括: 设置 TypeName、创建 Param 实例、switch-case 逐子类赋值、设置 Param
+        /// </summary>
         private static void WritePolymorphicFieldAssignment(
             IndentedWriter writer,
-            string paramVar, // 宿主变量名, e.g. "tp"  
-            string dataAccessExpr, // 数据访问路径, e.g. "taskData.Param.CueLogic"  
+            string paramVar, // 宿主变量名, e.g. "tp"
+            string dataAccessExpr, // 数据访问路径, e.g. "taskData.Param.CueLogic"
             EXEditorHelper.BeanPolymorphicFieldInfo polyInfo,
-            IEnumerable<Type> subtypes, // 多态子类列表  
-            Func<string, Type> getParamTypeByName) // subtypeName → runtime XParam type  
+            IEnumerable<Type> subtypes, // 多态子类列表
+            Func<string, Type> getParamTypeByName) // subtypeName → runtime XParam type
         {
             writer.WriteLine($"// [BeanPolymorphicField] {ToPascalCase(polyInfo.BeanFieldName)}");
             writer.WriteLine($"var polyBean = {dataAccessExpr};");
@@ -74,7 +74,7 @@ namespace GAS.Editor
                         var subtypeName = subtype.Name;
                         var runtimeParamType = getParamTypeByName(subtypeName);
 
-                        // 检查 cfg 侧是否有 Param 成员  
+                        // 检查 cfg 侧是否有 Param 成员
                         var tType = ReflectionHelper.GetMemberType($"cfg.{subtypeName}", "Param");
                         if (tType == null) continue;
 
@@ -129,6 +129,183 @@ namespace GAS.Editor
                 default:
                     throw new ArgumentException($"Unknown HelperCategory: {helperCategory}");
             }
+        }
+
+        private static void WriteTimelineAbilityConfigMethods(IndentedWriter writer)
+        {
+            var lines = new[]
+            {
+                "public static XParamTimeline GetTimelineAbilityConfig(int id)",
+                "{",
+                "    var data = Tables.TbtimelineAbility.GetOrDefault(id);",
+                "    if (data == null)",
+                "    {",
+                "        Debug.LogError($\"TimelineAbility_ID:{id}  不存在.\");",
+                "        return null;",
+                "    }",
+                "",
+                "    var tracks = new List<Track>();",
+                "    if (data.Tracks != null)",
+                "    {",
+                "        for (var i = 0; i < data.Tracks.Length; i++)",
+                "            tracks.Add(ConvertTimelineTrack(data.Tracks[i]));",
+                "    }",
+                "",
+                "    return new XParamTimeline(data.ID, data.Name, data.LifeTime, data.ManualEndAbility, tracks);",
+                "}",
+                "",
+                "private static Track ConvertTimelineTrack(cfg.Track data)",
+                "{",
+                "    var track = new Track",
+                "    {",
+                "        Name = data.Name,",
+                "    };",
+                "",
+                "    if (data.ActionClips != null)",
+                "    {",
+                "        for (var i = 0; i < data.ActionClips.Length; i++)",
+                "            track.ActionClips.Add(ConvertTimelineActionClip(data.ActionClips[i]));",
+                "    }",
+                "",
+                "    return track;",
+                "}",
+                "",
+                "private static TimelineActionClipData ConvertTimelineActionClip(cfg.TimelineActionClip data)",
+                "{",
+                "    return new TimelineActionClipData",
+                "    {",
+                "        Name = data.Name,",
+                "        StartTime = data.StartTime,",
+                "        EndTime = data.EndTime,",
+                "        ActionType = data.Action?.GetType().Name ?? string.Empty,",
+                "        Parameter = ConvertTimelineActionParameter(data.Action),",
+                "    };",
+                "}",
+                "",
+                "private static XParam ConvertTimelineActionParameter(cfg.TimelineActionParameterBase action)",
+                "{",
+                "    return action switch",
+                "    {",
+                "        cfg.ApplyEffects applyEffects => ConvertApplyEffectsParam(applyEffects.Param),",
+                "        cfg.PlayCue playCue => ConvertCueParam(playCue.Param),",
+                "        cfg.PlayCuePreset playCuePreset => new XParamCueList(playCuePreset.Param?.IDs ?? Array.Empty<int>()),",
+                "        _ => null,",
+                "    };",
+                "}",
+                "",
+                "private static XParamCue ConvertCueParam(cfg.XParamCue data)",
+                "{",
+                "    if (data?.CueLogic == null)",
+                "        return null;",
+                "",
+                "    var cueLogic = data.CueLogic;",
+                "    return new XParamCue(",
+                "        cueLogic.GetType().Name,",
+                "        ConvertCueLogicParameter(cueLogic),",
+                "        data.RequiredTags ?? Array.Empty<int>(),",
+                "        data.ImmunityTags ?? Array.Empty<int>());",
+                "}",
+                "",
+                "private static XParamApplyEffects ConvertApplyEffectsParam(cfg.XParamApplyEffects data)",
+                "{",
+                "    if (data == null)",
+                "        return null;",
+                "",
+                "    var param = new XParamApplyEffects();",
+                "    param.SetIDs(data.IDs ?? Array.Empty<int>());",
+                "",
+                "    if (data.TargetCatcher != null)",
+                "    {",
+                "        param.SetCatcherType(data.TargetCatcher.GetType().Name);",
+                "        param.SetParam(ConvertTargetCatcherParam(data.TargetCatcher));",
+                "    }",
+                "",
+                "    return param;",
+                "}",
+                "",
+                "private static XParam ConvertTargetCatcherParam(cfg.TargetCatcherBase catcher)",
+                "{",
+                "    switch (catcher)",
+                "    {",
+                "        case cfg.CatchSelf:",
+                "        case cfg.CatchTarget:",
+                "            return new XParamNone();",
+                "        case cfg.CatchAreaBox3D area:",
+                "        {",
+                "            var param = new XParamCatchAreaBox3D();",
+                "            if (area.Param == null)",
+                "                return param;",
+                "",
+                "            param.SetIsWorldSpace(area.Param.IsWorldSpace);",
+                "            param.SetOffset(new UnityEngine.Vector3(area.Param.Offset.X, area.Param.Offset.Y, area.Param.Offset.Z));",
+                "            param.SetSize(new UnityEngine.Vector3(area.Param.Size.X, area.Param.Size.Y, area.Param.Size.Z));",
+                "            param.SetRotation(new UnityEngine.Vector3(area.Param.Rotation.X, area.Param.Rotation.Y, area.Param.Rotation.Z));",
+                "            param.SetLayer(area.Param.Layer);",
+                "            return param;",
+                "        }",
+                "        default:",
+                "            return null;",
+                "    }",
+                "}",
+            };
+
+            foreach (var line in lines)
+                writer.WriteLine(line);
+
+            writer.WriteLine("");
+            WriteCueLogicParameterConverter(writer);
+        }
+
+        private static void WriteCueLogicParameterConverter(IndentedWriter writer)
+        {
+            writer.WriteLine("private static XParam ConvertCueLogicParameter(cfg.GameplayCueBase cueLogic)");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("if (cueLogic == null)");
+            writer.WriteLine("    return null;");
+            writer.WriteLine("");
+            writer.WriteLine("switch (cueLogic)");
+            writer.WriteLine("{");
+            writer.Indent++;
+
+            var allCue = EditorCueHelper.GetCachedCueTypes();
+            var cueTypes = allCue as Type[] ?? allCue.ToArray();
+            foreach (var cueType in cueTypes)
+            {
+                var cueName = cueType.Name;
+                var cueParamType = EditorCueHelper.CueToCueParamTypeMap()[cueName];
+                Type tType = ReflectionHelper.GetMemberType($"cfg.{cueName}", "Param");
+                if (tType == null) continue;
+
+                writer.WriteLine($"case cfg.{cueName} cData:");
+                writer.WriteLine("{");
+                writer.Indent++;
+                writer.WriteLine($"var param = new {cueParamType.FullName}();");
+
+                var beanFields = EXEditorHelper.GetBeanFields(cueParamType);
+                foreach (var bf in beanFields)
+                    WriteFieldAssignment(writer, "param", bf.Setter, $"cData.Param.{ToPascalCase(bf.Name)}", bf.MemberType);
+
+                var polyFields = EXEditorHelper.GetBeanPolymorphicFields(cueParamType);
+                foreach (var pf in polyFields)
+                {
+                    var (subtypes, getParamType) = GetPolymorphicHelperInfo(pf.HelperCategory);
+                    WritePolymorphicFieldAssignment(writer, "param", $"cData.Param.{pf.BeanFieldName}", pf, subtypes, getParamType);
+                }
+
+                writer.WriteLine("return param;");
+                writer.Indent--;
+                writer.WriteLine("}");
+            }
+
+            writer.WriteLine("default:");
+            writer.Indent++;
+            writer.WriteLine("return null;");
+            writer.Indent--;
+            writer.Indent--;
+            writer.WriteLine("}");
+            writer.Indent--;
+            writer.WriteLine("}");
         }
 
         public static void GenerateLubanExtension()
@@ -206,7 +383,34 @@ namespace GAS.Editor
                     writer.WriteLine("{");
                     writer.Indent++;
                     writer.WriteLine("LoadTables(loader);");
-                    writer.WriteLine("GameplayEffectHelper.RegisterGetConfigByIDFunc(GetGameplayEffectConfig);");
+                    writer.WriteLine("GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(GetGameplayEffectConfig);");
+                    writer.WriteLine("GameplayCueConfigRegistry.RegisterGetConfigByIDFunc(GetGameplayCueConfig);");
+                    writer.WriteLine("AbilityConfigRegistry.RegisterGetConfigByIDFunc(GetAbilityConfig);");
+                    writer.WriteLine("TimelineAbilityConfigRegistry.RegisterGetConfigByIDFunc(GetTimelineAbilityConfig);");
+                    writer.WriteLine("WarmupConfigRegistryGraph();");
+                    writer.Indent--;
+                    writer.WriteLine("}");
+
+                    writer.WriteLine("");
+
+                    writer.WriteLine("public static ConfigRegistryGraphWarmupResult WarmupConfigRegistryGraph(bool clearDiagnostics = true)");
+                    writer.WriteLine("{");
+                    writer.Indent++;
+                    writer.WriteLine("if (_tables == null)");
+                    writer.WriteLine("{");
+                    writer.Indent++;
+                    writer.WriteLine("Debug.LogError(\"XLuban.Tables 未初始化!\");");
+                    writer.WriteLine("return ConfigRegistryGraphWarmupResult.Empty;");
+                    writer.Indent--;
+                    writer.WriteLine("}");
+                    writer.WriteLine("");
+                    writer.WriteLine("return ConfigRegistryGraphValidator.Warmup(");
+                    writer.Indent++;
+                    writer.WriteLine("Tables.Tbability.DataList.Select(data => data.ID),");
+                    writer.WriteLine("Tables.TbgameplayEffect.DataList.Select(data => data.ID),");
+                    writer.WriteLine("Tables.TbtimelineAbility.DataList.Select(data => data.ID),");
+                    writer.WriteLine("clearDiagnostics);");
+                    writer.Indent--;
                     writer.Indent--;
                     writer.WriteLine("}");
 
@@ -214,7 +418,7 @@ namespace GAS.Editor
 
                     #region ASC
 
-                    writer.WriteLine("public static AbilitySystemCellConfig GetAscConfig(int id)");
+                    writer.WriteLine("public static AbilitySystemConfig GetAscConfig(int id)");
                     writer.WriteLine("{");
                     writer.Indent++;
                     {
@@ -224,25 +428,15 @@ namespace GAS.Editor
                         writer.Indent++;
                         writer.WriteLine("Debug.LogError($\"ASC_ID:{id}  不存在.\");");
                         writer.WriteLine(
-                            "return new AbilitySystemCellConfig(Array.Empty<int>(), Array.Empty<AttrSetConfig>(),Array.Empty<AbilityConfig>(), 0);");
+                            "return new AbilitySystemConfig(Array.Empty<int>(), Array.Empty<AttrSetConfig>(), Array.Empty<int>(), 0);");
                         writer.Indent--;
                         writer.WriteLine("}");
-                        writer.WriteLine("var abilityIds = data.Ability;");
-                        writer.WriteLine("var abilities = new AbilityConfig[abilityIds.Length];");
-                        writer.WriteLine("for (var i = 0; i < abilityIds.Length; i++)");
-                        writer.WriteLine("{");
-                        writer.Indent++;
-                        writer.WriteLine("var abilityId = abilityIds[i];");
-                        writer.WriteLine("abilities[i] = GetAbilityConfig(abilityId);");
-                        writer.Indent--;
-                        writer.WriteLine("}");
-
                         writer.WriteLine("var attrSets = new AttrSetConfig[data.AttrSet.Length];");
                         writer.WriteLine("for (var i = 0; i < data.AttrSet.Length; i++)");
                         writer.WriteLine("    attrSets[i] = XAttrSet.AttributeSetMap[data.AttrSet[i]];");
 
                         writer.WriteLine(
-                            "return new AbilitySystemCellConfig(data.Tag, attrSets, abilities, data.Level);");
+                            "return new AbilitySystemConfig(data.Tag, attrSets, data.Ability, data.Level);");
                     }
                     writer.Indent--;
                     writer.WriteLine("}");
@@ -302,13 +496,13 @@ namespace GAS.Editor
                                 writer.Indent++;
                                 writer.WriteLine($"var cp = cueParam as {cueParamType.FullName};");
 
-                                // 标准 BeanField 赋值  
+                                // 标准 BeanField 赋值
                                 var beanFields = EXEditorHelper.GetBeanFields(cueParamType);
                                 foreach (var bf in beanFields)
                                     WriteFieldAssignment(writer, "cp", bf.Setter, $"cData.Param.{ToPascalCase(bf.Name)}",
                                         bf.MemberType);
 
-                                // 多态 BeanPolymorphicField 赋值  
+                                // 多态 BeanPolymorphicField 赋值
                                 var polyFields = EXEditorHelper.GetBeanPolymorphicFields(cueParamType);
                                 foreach (var pf in polyFields)
                                 {
@@ -328,7 +522,7 @@ namespace GAS.Editor
 
                         writer.Indent--;
                         writer.WriteLine("}");
-                        writer.WriteLine("(int[] all, int[] any, int[] none) ParseTagRequirement(cfg.TagRequirementData? requirement)");
+                        writer.WriteLine("(int[] all, int[] any, int[] none) ParseTagRequirement(cfg.TagRequirementSpec? requirement)");
                         writer.WriteLine("{");
                         writer.Indent++;
                         writer.WriteLine("if (requirement == null) return (Array.Empty<int>(), Array.Empty<int>(), Array.Empty<int>());");
@@ -369,7 +563,7 @@ namespace GAS.Editor
                         writer.WriteLine("");
                         writer.WriteLine("var configs = new List<GameplayEffectComponentConfig>();");
                         writer.WriteLine("");
-                        writer.WriteLine("(int[] all, int[] any, int[] none)? ParseTagRequirement(cfg.TagRequirementData requirement)");
+                        writer.WriteLine("(int[] all, int[] any, int[] none)? ParseTagRequirement(cfg.TagRequirementSpec requirement)");
                         writer.WriteLine("{");
                         writer.WriteLine("");
                         writer.WriteLine("    int[] all = null, any = null, none = null;");
@@ -442,20 +636,12 @@ namespace GAS.Editor
                         writer.WriteLine("if (data.Period is { Time: > 0 })");
                         writer.WriteLine("{");
                         writer.Indent++;
-                        writer.WriteLine("var gameplayEffectSettings = new List<GameplayEffectComponentConfig[]>();");
-                        writer.WriteLine("foreach (var effectID in data.Period.Value.Effects)");
-                        writer.WriteLine("{");
-                        writer.Indent++;
-                        writer.WriteLine("var effect = GetGameplayEffectConfig(effectID);");
-                        writer.WriteLine("gameplayEffectSettings.Add(effect.ComponentConfigs);");
-                        writer.Indent--;
-                        writer.WriteLine("}");
                         writer.WriteLine("configs.Add(new ConfPeriod");
                         writer.WriteLine("{");
                         writer.Indent++;
                         writer.WriteLine("Period = data.Period.Value.Time,");
                         writer.WriteLine("ResetTimeCountWhenDeactivated = data.Period.Value.FirstTrigger,");
-                        writer.WriteLine("GameplayEffectSettings = gameplayEffectSettings.ToArray()");
+                        writer.WriteLine("GameplayEffectCodes = data.Period.Value.Effects");
                         writer.Indent--;
                         writer.WriteLine("});");
                         writer.Indent--;
@@ -466,24 +652,23 @@ namespace GAS.Editor
                         writer.WriteLine("{");
                         writer.Indent++;
                         writer.WriteLine(
-                            "ModifierSetting[] modifierSettings = new ModifierSetting[data.Modifiers.Count];");
+                            "ModifierDefinitionSetting[] modifierSettings = new ModifierDefinitionSetting[data.Modifiers.Count];");
                         writer.WriteLine("for (var i = 0; i < data.Modifiers.Count; i++)");
                         writer.WriteLine("{");
                         writer.Indent++;
                         writer.WriteLine("var info = data.Modifiers[i];");
-                        writer.WriteLine("modifierSettings[i] = new ModifierSetting()");
+                        writer.WriteLine("modifierSettings[i] = new ModifierDefinitionSetting()");
                         writer.WriteLine("{");
                         writer.Indent++;
                         writer.WriteLine("AttrSetCode = info.AttrSet,");
                         writer.WriteLine("AttrCode = info.Attribute,");
                         writer.WriteLine("Magnitude = info.Magnitude,");
-                        writer.WriteLine("Operation = (GEOperation)info.Operation,");
-                        writer.WriteLine("MMC = GetMmcConfig(info.Mmc)");
+                        writer.WriteLine("Operation = (EModifierOp)info.Operation");
                         writer.Indent--;
                         writer.WriteLine("};");
                         writer.Indent--;
                         writer.WriteLine("}");
-                        writer.WriteLine("configs.Add(new MCConfModifiers(){ modifierSettings = modifierSettings });");
+                        writer.WriteLine("configs.Add(new ConfModifierConfig(){ ModifierSettings = modifierSettings });");
                         writer.Indent--;
                         writer.WriteLine("}");
 
@@ -514,15 +699,15 @@ namespace GAS.Editor
                         writer.WriteLine("if (data.GrantedAbility.Count > 0)");
                         writer.WriteLine("{");
                         writer.Indent++;
-                        writer.WriteLine("var grantedAbilities = new GrantedAbility[data.GrantedAbility.Count];");
+                        writer.WriteLine("var grantedAbilities = new GrantedAbilityConfigSetting[data.GrantedAbility.Count];");
                         writer.WriteLine("for (var i = 0; i < data.GrantedAbility.Count; i++)");
                         writer.WriteLine("{");
                         writer.Indent++;
                         writer.WriteLine("var info = data.GrantedAbility[i];");
-                        writer.WriteLine("grantedAbilities[i] = new GrantedAbility()");
+                        writer.WriteLine("grantedAbilities[i] = new GrantedAbilityConfigSetting()");
                         writer.WriteLine("{");
                         writer.Indent++;
-                        writer.WriteLine("AbilityConfig = GetAbilityConfig(info.ID),");
+                        writer.WriteLine("AbilityCode = info.ID,");
                         writer.WriteLine("ActivationPolicy = (GrantedAbilityActivationPolicy)info.ActivationPolicy,");
                         writer.WriteLine(
                             "DeactivationPolicy = (GrantedAbilityDeactivationPolicy)info.DeactivationPolicy,");
@@ -533,7 +718,7 @@ namespace GAS.Editor
                         writer.Indent--;
                         writer.WriteLine("}");
                         writer.WriteLine(
-                            "configs.Add(new MCConfGrantedAbility() { GrantedAbilities = grantedAbilities });");
+                            "configs.Add(new ConfGrantedAbilityConfig() { GrantedAbilities = grantedAbilities });");
                         writer.Indent--;
                         writer.WriteLine("}");
 
@@ -541,14 +726,6 @@ namespace GAS.Editor
                         writer.WriteLine("if (data.Stacking!=null && data.Stacking.Value.StackCode != 0)");
                         writer.WriteLine("{");
                         writer.Indent++;
-                        writer.WriteLine("var effectConfigs = new List<GameplayEffectConfig>();");
-                        writer.WriteLine("foreach (var effectID in data.Stacking.Value.OverflowEffects)");
-                        writer.WriteLine("{");
-                        writer.Indent++;
-                        writer.WriteLine("var effect = GetGameplayEffectConfig(effectID);");
-                        writer.WriteLine("effectConfigs.Add(effect);");
-                        writer.Indent--;
-                        writer.WriteLine("}");
                         writer.WriteLine("configs.Add(new ConfStacking()");
                         writer.WriteLine("{");
                         writer.Indent++;
@@ -563,7 +740,7 @@ namespace GAS.Editor
                             "EffectExpirationPolicy = (EffectExpirationPolicy)data.Stacking.Value.ExpirationPolicy,");
                         writer.WriteLine("denyOverflowApplication = data.Stacking.Value.DenyOverflowApplication,");
                         writer.WriteLine("clearStackOnOverflow = data.Stacking.Value.ClearStackOnOverflow,");
-                        writer.WriteLine("overflowEffects = effectConfigs.ToArray()");
+                        writer.WriteLine("OverflowEffectCodes = data.Stacking.Value.OverflowEffects");
                         writer.Indent--;
                         writer.WriteLine("});");
                         writer.Indent--;
@@ -590,7 +767,7 @@ namespace GAS.Editor
                         writer.WriteLine("{");
                         writer.Indent++;
                         writer.WriteLine("Debug.LogError($\"Ability_ID:{id}  不存在.\");");
-                        writer.WriteLine("return new AbilityConfig(Array.Empty<AbilityComponentConfig>());");
+                        writer.WriteLine("return null;");
                         writer.Indent--;
                         writer.WriteLine("}");
                         writer.WriteLine("");
@@ -604,14 +781,14 @@ namespace GAS.Editor
                         writer.WriteLine("// cost");
                         writer.WriteLine("if (data.Cost != 0)");
                         writer.WriteLine(
-                            "    configs.Add(new ConfAbilityCost{ CostComponentConfigs = GetGameplayEffectConfig(data.Cost).ComponentConfigs });");
+                            "    configs.Add(new ConfAbilityCost{ GameplayEffectCode = data.Cost });");
 
                         writer.WriteLine("// assetTags");
                         writer.WriteLine("if (data.AssetTags is { Count: > 0 })");
                         writer.WriteLine(
                             "    configs.Add(new ConfAbilityAssetTags { tags = data.AssetTags.ToArray() });");
 
-                        writer.WriteLine("(int[] all, int[] any, int[] none)? ParseTagRequirement(cfg.TagRequirementData? requirement)");
+                        writer.WriteLine("(int[] all, int[] any, int[] none)? ParseTagRequirement(cfg.TagRequirementSpec? requirement)");
                         writer.WriteLine("{");
                         writer.Indent++;
                         writer.WriteLine("if (requirement == null) return null;");
@@ -673,101 +850,28 @@ namespace GAS.Editor
                         writer.WriteLine("{");
                         writer.Indent++;
                         writer.WriteLine("Cooldown = data.Cd,");
-                        writer.WriteLine(
-                            "CooldownComponentConfigs = GetGameplayEffectConfig(data.CdEffect).ComponentConfigs");
+                        writer.WriteLine("GameplayEffectCode = data.CdEffect");
                         writer.Indent--;
                         writer.WriteLine("});");
                         writer.Indent--;
                         writer.WriteLine("}");
 
-                        writer.WriteLine("// abilityLogic");
-                        writer.WriteLine(
-                            "var abilityLogicType = AbilityHelper.GetAbilityLogicType(data.AbilityLogic.GetType().Name);");
-                        writer.WriteLine("if (abilityLogicType == null)");
-                        writer.WriteLine(
-                            "    Debug.LogError($\"Ability_ID:{id}  AbilityLogicType:{data.AbilityLogic.GetType().Name} 不存在.\");");
-                        writer.WriteLine("else");
+                        writer.WriteLine("// abilityExecution");
+                        writer.WriteLine("switch (data.AbilityExecution)");
                         writer.WriteLine("{");
                         writer.Indent++;
-                        {
-                            writer.WriteLine("var abilityLogic = data.AbilityLogic;");
-                            writer.WriteLine("var abilityLogicName = abilityLogic.GetType().Name;");
-                            writer.WriteLine(
-                                "var abilityLogicParamType = AbilityHelper.GetAbilityLogicParamType(abilityLogicName);");
-                            writer.WriteLine(
-                                "var abilityParam = Activator.CreateInstance(abilityLogicParamType) as XParam;");
-                            writer.WriteLine("if (abilityParam != null)");
-                            writer.WriteLine("{");
-                            writer.Indent++;
-                            {
-                                writer.WriteLine("switch (abilityLogic)");
-                                writer.WriteLine("{");
-                                writer.Indent++;
-
-
-                                var allAbilities = EditorAbilityHelper.GetCachedAbilityLogicTypes();
-                                var abilityTypes = allAbilities as Type[] ?? allAbilities.ToArray();
-                                foreach (var abilityType in abilityTypes)
-                                {
-                                    var abilityTypeName = abilityType.Name;
-                                    var abilityParamType =
-                                        EditorAbilityHelper.AbilityToAbilityParamTypeMap()[abilityTypeName];
-                                    Type tType = ReflectionHelper.GetMemberType($"cfg.{abilityTypeName}", "Param");
-                                    if (tType == null) continue;
-
-                                    writer.WriteLine($"case cfg.{abilityTypeName} aData:");
-                                    writer.WriteLine("{");
-                                    writer.Indent++;
-                                    writer.WriteLine($"var ap = abilityParam as {abilityParamType.FullName};");
-
-                                    // 标准 BeanField 赋值  
-                                    var beanFields = EXEditorHelper.GetBeanFields(abilityParamType);
-                                    foreach (var bf in beanFields)
-                                        WriteFieldAssignment(writer, "ap", bf.Setter, $"aData.Param.{ToPascalCase(bf.Name)}",
-                                            bf.MemberType);
-
-                                    // 多态 BeanPolymorphicField 赋值  
-                                    var polyFields = EXEditorHelper.GetBeanPolymorphicFields(abilityParamType);
-                                    foreach (var pf in polyFields)
-                                    {
-                                        var (subtypes, getParamType) = GetPolymorphicHelperInfo(pf.HelperCategory);
-                                        WritePolymorphicFieldAssignment(writer, "ap", $"aData.Param.{pf.BeanFieldName}",
-                                            pf, subtypes, getParamType);
-                                    }
-
-                                    if (abilityParamType.Name == "XParamALTimelineID")
-                                    {
-                                        // 特殊处理TimelineAbility的Param，主动生成XParamTimeline的缓存  
-                                        writer.WriteLine("// 缓存Timeline参数");
-                                        writer.WriteLine("if (ap != null)");
-                                        writer.WriteLine("{");
-                                        writer.Indent++;
-                                        writer.WriteLine(
-                                            "var xParamTimeline = GetTimelineAbilityParam(aData.Param.ID);");
-                                        writer.WriteLine("ap.CacheTimelineParam(xParamTimeline);");
-                                        writer.Indent--;
-                                        writer.WriteLine("}");
-                                    }
-
-                                    writer.WriteLine("abilityParam = ap;");
-                                    writer.WriteLine("break;");
-                                    writer.Indent--;
-                                    writer.WriteLine("}");
-                                }
-
-                                writer.Indent--;
-                                writer.WriteLine("}");
-                            }
-                            writer.Indent--;
-                            writer.WriteLine("}");
-                            writer.WriteLine("configs.Add(new MCConfAbilityLogic()");
-                            writer.WriteLine("{");
-                            writer.Indent++;
-                            writer.WriteLine("AbilityLogicType = abilityLogicName,");
-                            writer.WriteLine("Param = abilityParam");
-                            writer.Indent--;
-                            writer.WriteLine("});");
-                        }
+                        writer.WriteLine("case cfg.ApplyEffectsOnActivate aData:");
+                        writer.WriteLine("    configs.Add(new ConfAbilityEffectsOnActivate { EffectCodes = aData.Param.IDs });");
+                        writer.WriteLine("    break;");
+                        writer.WriteLine("case cfg.TimelineRef aData:");
+                        writer.WriteLine("    configs.Add(new ConfAbilityTimelineRef { TimelineId = aData.Param.ID });");
+                        writer.WriteLine("    break;");
+                        writer.WriteLine("case cfg.MoveInput aData:");
+                        writer.WriteLine("    configs.Add(new ConfAbilityMoveInput { RotationOffset = aData.Param.RotationOffset });");
+                        writer.WriteLine("    break;");
+                        writer.WriteLine("default:");
+                        writer.WriteLine("    Debug.LogError($\"Ability_ID:{id}  AbilityExecution:{data.AbilityExecution?.GetType().Name ?? \\\"null\\\"} 不存在.\");");
+                        writer.WriteLine("    break;");
                         writer.Indent--;
                         writer.WriteLine("}");
                         writer.WriteLine("");
@@ -780,257 +884,13 @@ namespace GAS.Editor
 
                     writer.WriteLine("");
 
-                    #region MMC
-
-                    writer.WriteLine("public static MMCConfig GetMmcConfig(int id)");
-                    writer.WriteLine("{");
-                    writer.Indent++;
-                    {
-                        writer.WriteLine("var data = Tables.Tbmmc.Get(id);");
-                        writer.WriteLine("if (data == null)");
-                        writer.WriteLine("{");
-                        writer.Indent++;
-                        writer.WriteLine("Debug.LogError($\"MMC_ID:{id}  不存在.\");");
-                        writer.WriteLine("return new MMCConfig() { };");
-                        writer.Indent--;
-                        writer.WriteLine("}");
-
-                        writer.WriteLine("");
-
-                        writer.WriteLine("var mmcLogic = data.MmcLogic;");
-                        writer.WriteLine("var mmcLogicName = data.MmcLogic.GetType().Name;");
-                        writer.WriteLine("var mmcLogicParamType = MmcHelper.GetMmcParamTypeByMmcType(mmcLogicName);");
-                        writer.WriteLine(
-                            "XParam mmcParam = Activator.CreateInstance(mmcLogicParamType) as XParam;");
-                        writer.WriteLine("if (mmcParam != null)");
-                        writer.WriteLine("{");
-                        writer.Indent++;
-                        {
-                            writer.WriteLine("switch (mmcLogic)");
-                            writer.WriteLine("{");
-                            writer.Indent++;
-
-
-                            var mmcs = EditorMmcHelper.GetCachedMmcTypes();
-                            var mmcTypes = mmcs as Type[] ?? mmcs.ToArray();
-                            foreach (var mmcType in mmcTypes)
-                            {
-                                var mmcTypeName = mmcType.Name;
-                                var mmcParamType = EditorMmcHelper.MmcToMmcParamTypeMap()[mmcTypeName];
-                                var tType = ReflectionHelper.GetMemberType($"cfg.{mmcTypeName}", "Param");
-                                if (tType == null) continue;
-
-                                writer.WriteLine($"case cfg.{mmcTypeName} mmcData:");
-                                writer.WriteLine("{");
-                                writer.Indent++;
-                                writer.WriteLine($"var mp = mmcParam as {mmcParamType.FullName};");
-
-                                // 标准 BeanField 赋值  
-                                var beanFields = EXEditorHelper.GetBeanFields(mmcParamType);
-                                foreach (var bf in beanFields)
-                                    WriteFieldAssignment(writer, "mp", bf.Setter, $"mmcData.Param.{ToPascalCase(bf.Name)}",
-                                        bf.MemberType);
-
-                                // 多态 BeanPolymorphicField 赋值  
-                                var polyFields = EXEditorHelper.GetBeanPolymorphicFields(mmcParamType);
-                                foreach (var pf in polyFields)
-                                {
-                                    var (subtypes, getParamType) = GetPolymorphicHelperInfo(pf.HelperCategory);
-                                    WritePolymorphicFieldAssignment(writer, "mp", $"mmcData.Param.{pf.BeanFieldName}",
-                                        pf, subtypes, getParamType);
-                                }
-
-                                writer.WriteLine("mmcParam = mp;");
-                                writer.WriteLine("break;");
-                                writer.Indent--;
-                                writer.WriteLine("}");
-                            }
-
-                            writer.Indent--;
-                            writer.WriteLine("}");
-                        }
-                        writer.Indent--;
-                        writer.WriteLine("}");
-                        writer.WriteLine("");
-                        writer.WriteLine("return new MMCConfig()");
-                        writer.WriteLine("{");
-                        writer.Indent++;
-                        writer.WriteLine("MmcType = MmcHelper.GetMmcType(mmcLogicName),");
-                        writer.WriteLine("MmcParameter = mmcParam");
-                        writer.Indent--;
-                        writer.WriteLine("};");
-                    }
-                    writer.Indent--;
-                    writer.WriteLine("}");
-
-                    #endregion
-
-                    writer.WriteLine("");
-
                     #region TimelineAbility
 
-                    //                     public static XParamTimeline GetTimelineAbilityParam(int id)
-                    // {
-                    //     XParamTimeline timelineParam = new XParamTimeline();
-                    //     var data = Tables.TbtimelineAbility.Get(id);
-                    //     if (data == null)
-                    //     {
-                    //         Debug.LogError($"TimelineAbility_ID:{id}  不存在.");
-                    //         return new XParamTimeline() { };
-                    //     }
-                    //
-                    //     timelineParam.SetID(data.ID);
-                    //     timelineParam.SetName(data.Name);
-                    //     timelineParam.SetLifeTime(data.LifeTime);
-                    //     timelineParam.SetManualEndAbility(data.ManualEndAbility);
-                    //     
-                    //     List<Track> tracks = new List<Track>();
-                    //     foreach (var trackData in data.Tracks)
-                    //     {
-                    //         var track = new Track();
-                    //         track.Name = trackData.Name;
-                    //         track.TaskClips = new List<TaskClipData>();
-                    //         foreach (var clipData in trackData.TaskClips)
-                    //         {
-                    //             var taskClip = new TaskClipData();
-                    //             taskClip.Name = clipData.Name;
-                    //             taskClip.StartTime = clipData.StartTime;
-                    //             taskClip.EndTime = clipData.EndTime;
-                    //             taskClip.TaskType = clipData.Task.GetType().Name;
-                    //             
-                    //             var taskParamType = AbilityHelper.GetAbilityTaskParamType(taskClip.TaskType);
-                    //             var taskParam = Activator.CreateInstance(taskParamType) as XParam;
-                    //             if (taskParam != null)
-                    //             {
-                    //                 switch (clipData.Task)
-                    //                 {
-                    //                     case cfg.TaskDoNothing taskData:
-                    //                     {
-                    //                         var tp = taskParam as GAS.Runtime.XParamNone;
-                    //                         taskParam = tp;
-                    //                         break;
-                    //                     }
-                    //                     case cfg.TaskDebug taskData:
-                    //                     {
-                    //                         var tp = taskParam as GAS.Runtime.XParamString;
-                    //                         tp?.SetValue(taskData.Param.Value);
-                    //                         taskParam = tp;
-                    //                         break;
-                    //                     }
-                    //                 }
-                    //             }
-                    //             taskClip.Parameter = taskParam;
-                    //             
-                    //             track.TaskClips.Add(taskClip);
-                    //         }
-                    //         tracks.Add(track);
-                    //     }
-                    //     timelineParam.SetTracks(tracks);
-                    //     return timelineParam;
-                    // }
-                    writer.WriteLine("");
-                    writer.WriteLine("public static XParamTimeline GetTimelineAbilityParam(int id)");
-                    writer.WriteLine("{");
-                    writer.Indent++;
-                    writer.WriteLine("XParamTimeline timelineParam = new XParamTimeline();");
-                    writer.WriteLine("var data = Tables.TbtimelineAbility.Get(id);");
-                    writer.WriteLine("if (data == null)");
-                    writer.WriteLine("{");
-                    writer.Indent++;
-                    writer.WriteLine("Debug.LogError($\"TimelineAbility_ID:{id}  不存在.\");");
-                    writer.WriteLine("return new XParamTimeline() { };");
-                    writer.Indent--;
-                    writer.WriteLine("}");
-                    writer.WriteLine("timelineParam.SetID(data.ID);");
-                    writer.WriteLine("timelineParam.SetName(data.Name);");
-                    writer.WriteLine("timelineParam.SetLifeTime(data.LifeTime);");
-                    writer.WriteLine("timelineParam.SetManualEndAbility(data.ManualEndAbility);");
-                    writer.WriteLine("List<Track> tracks = new List<Track>();");
-                    writer.WriteLine("foreach (var trackData in data.Tracks)");
-                    writer.WriteLine("{");
-                    writer.Indent++;
-                    writer.WriteLine("var track = new Track();");
-                    writer.WriteLine("track.Name = trackData.Name;");
-                    writer.WriteLine("track.TaskClips = new List<TaskClipData>();");
-                    writer.WriteLine("foreach (var clipData in trackData.TaskClips)");
-                    writer.WriteLine("{");
-                    writer.Indent++;
-                    writer.WriteLine("var taskClip = new TaskClipData();");
-                    writer.WriteLine("taskClip.Name = clipData.Name;");
-                    writer.WriteLine("taskClip.StartTime = clipData.StartTime;");
-                    writer.WriteLine("taskClip.EndTime = clipData.EndTime;");
-                    writer.WriteLine("taskClip.TaskType = clipData.Task.GetType().Name;");
-                    writer.WriteLine("var taskParamType = AbilityHelper.GetAbilityTaskParamType(taskClip.TaskType);");
-                    writer.WriteLine("var taskParam = Activator.CreateInstance(taskParamType) as XParam;");
-                    writer.WriteLine("if (taskParam != null)");
-                    writer.WriteLine("{");
-                    writer.Indent++;
-                    {
-                        writer.WriteLine("switch (clipData.Task)");
-                        writer.WriteLine("{");
-                        writer.Indent++;
-
-
-                        var allTasks = EditorAbilityHelper.GetCachedAbilityTaskTypes();
-                        var taskTypes = allTasks as Type[] ?? allTasks.ToArray();
-                        foreach (var taskType in taskTypes)
-                        {
-                            var taskTypeName = taskType.Name;
-                            var taskParamType =
-                                EditorAbilityHelper.AbilityTaskToAbilityTaskParamTypeMap()[taskTypeName];
-                            var tType = ReflectionHelper.GetMemberType($"cfg.{taskTypeName}", "Param");
-                            if (tType == null) continue;
-
-                            writer.WriteLine($"case cfg.{taskTypeName} taskData:");
-                            writer.WriteLine("{");
-                            writer.Indent++;
-                            writer.WriteLine($"var tp = taskParam as {taskParamType.FullName};");
-
-                            // 标准 BeanField 赋值  
-                            var beanFields = EXEditorHelper.GetBeanFields(taskParamType);
-                            foreach (var bf in beanFields)
-                                WriteFieldAssignment(writer, "tp", bf.Setter, $"taskData.Param.{ToPascalCase(bf.Name)}",
-                                    bf.MemberType);
-
-                            // 多态 BeanPolymorphicField 赋值  
-                            var polyFields = EXEditorHelper.GetBeanPolymorphicFields(taskParamType);
-                            foreach (var pf in polyFields)
-                            {
-                                var (subtypes, getParamType) = GetPolymorphicHelperInfo(pf.HelperCategory);
-                                WritePolymorphicFieldAssignment(writer, "tp", $"taskData.Param.{ToPascalCase(pf.BeanFieldName)}", pf,
-                                    subtypes, getParamType);
-                            }
-
-                            writer.WriteLine("taskParam = tp;");
-                            writer.WriteLine("break;");
-                            writer.Indent--;
-                            writer.WriteLine("}");
-                        }
-
-
-                        writer.Indent--;
-                        writer.WriteLine("}");
-                    }
-                    writer.Indent--;
-                    writer.WriteLine("}");
-                    writer.WriteLine("taskClip.Parameter = taskParam;");
-                    writer.WriteLine("track.TaskClips.Add(taskClip);");
-                    writer.Indent--;
-                    writer.WriteLine("}");
-                    writer.WriteLine("tracks.Add(track);");
-                    writer.Indent--;
-                    writer.WriteLine("}");
-                    writer.WriteLine("timelineParam.SetTracks(tracks);");
-                    writer.WriteLine("return timelineParam;");
-                    writer.Indent--;
-                    writer.WriteLine("}");
-                    writer.Indent--;
-                    writer.WriteLine("");
+                    WriteTimelineAbilityConfigMethods(writer);
 
                     #endregion
 
                     writer.WriteLine("");
-
 
                     #region Utils
 
@@ -1083,3 +943,4 @@ namespace GAS.Editor
         }
     }
 }
+

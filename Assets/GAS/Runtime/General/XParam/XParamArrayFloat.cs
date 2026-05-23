@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Sirenix.OdinInspector;
 
 namespace GAS.Runtime
 {
@@ -16,7 +15,6 @@ namespace GAS.Runtime
             Value = value;
         }
 
-        [ShowInInspector]
         [BeanField(nameof(SetValue))]
         public float[] Value { get; private set; }
 

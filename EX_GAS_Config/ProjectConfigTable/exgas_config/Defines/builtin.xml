@@ -37,7 +37,6 @@
         <var name="Attribute" type="int"/>
         <var name="Magnitude" type="float"/>
         <var name="Operation" type="int"/>
-        <var name="Mmc" type="int"/>
     </bean>
 
     <bean name="Duration" valueType="1">
@@ -64,19 +63,19 @@
         <var name="OverflowEffects" type="(array#sep=;),int"/>
     </bean>
 
-    <bean name="TaskClip" valueType="1" sep=",">
+    <bean name="TimelineActionClip" valueType="1" sep=",">
         <var name="StartTime" type="int"/>
         <var name="EndTime" type="int"/>
         <var name="Name" type="string"/>
-        <var name="Task" type="AbilityTaskBase"/>
+        <var name="Action" type="TimelineActionParameterBase"/>
     </bean>
     
     <bean name="Track" valueType="1" sep=",">
         <var name="Name" type="string"/>
-        <var name="TaskClips" type="array,TaskClip"/>
+        <var name="ActionClips" type="array,TimelineActionClip"/>
     </bean>
 
-    <bean name="TagRequirementData" valueType="1" sep=";">
+    <bean name="TagRequirementSpec" valueType="1" sep=";">
         <var name="All" type="(list#sep=,), int"/>
         <var name="Any" type="(list#sep=,), int"/>
         <var name="None" type="(list#sep=,), int"/>

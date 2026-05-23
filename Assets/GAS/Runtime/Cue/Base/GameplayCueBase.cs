@@ -1,4 +1,4 @@
-﻿using Unity.Entities;
+using Unity.Entities;
 using UnityEngine;
 
 namespace GAS.Runtime
@@ -9,11 +9,9 @@ namespace GAS.Runtime
         protected Entity _sourceEntity;
         protected CueSourceType _sourceType;
         protected Entity _targetAscEntity;
-        protected AbilitySystemCell _abilitySystemCell;
         protected static EntityManager EntityManager => GASManager.EntityManager;
+        protected GameObject TargetGameObject => EntityHelper.GetGameObjectFromEntity(_targetAscEntity);
 
-        protected GameplayEffectSpec _effectSpec;
-        
         public abstract void InitParameters(XParam xParam);
 
         public virtual void Reset()
@@ -40,7 +38,6 @@ namespace GAS.Runtime
             if (e != Entity.Null)
             {
                 _targetAscEntity = e;
-                _abilitySystemCell = GASManager.GetAscFromEntity(_targetAscEntity);
                 OnAdd(Time.time);
             }
         }
@@ -51,7 +48,6 @@ namespace GAS.Runtime
         public void RemoveFromTargetAsc()
         {
             OnRemove(Time.time);
-            _abilitySystemCell = null;
             _targetAscEntity = Entity.Null;
         }
 
@@ -72,11 +68,11 @@ namespace GAS.Runtime
         {
             if (CanPlay())
             {
-                EntityHelper.SetComponentEnabled<ECCuePlayable>(_cueEntity, true);
+                EntityManager.SetComponentEnabled<ECCuePlayable>(_cueEntity, true);
                 if (replay)
                 {
                     Reset();
-                    EntityHelper.SetComponentEnabled<ECCuePlaying>(_cueEntity, false);
+                    EntityManager.SetComponentEnabled<ECCuePlaying>(_cueEntity, false);
                 }
             }
         }
@@ -103,23 +99,18 @@ namespace GAS.Runtime
             RemoveFromTargetAsc();
         }
 
-        public GameplayEffectSpec GetEffectSpec()
+        public Entity GetSourceEffectEntity()
         {
-            if (_sourceType != CueSourceType.GameplayEffect) return null;
+            if (_sourceType != CueSourceType.GameplayEffect) return Entity.Null;
+            if (_sourceEntity == Entity.Null || !EntityManager.Exists(_sourceEntity)) return Entity.Null;
+            return _sourceEntity;
+        }
 
-            if (_effectSpec != null)
-            {
-                if (_effectSpec.IsValid) return _effectSpec;
-
-                _sourceEntity = Entity.Null;
-                _effectSpec = null;
-                return null;
-            }
-
-            if (_sourceEntity == Entity.Null || !EntityManager.Exists(_sourceEntity)) return null;
-            _effectSpec = new GameplayEffectSpec(_sourceEntity);
-            return _effectSpec;
-
+        public Entity GetSourceAbilityEntity()
+        {
+            if (_sourceType != CueSourceType.GameplayAbility) return Entity.Null;
+            if (_sourceEntity == Entity.Null || !EntityManager.Exists(_sourceEntity)) return Entity.Null;
+            return _sourceEntity;
         }
 
         #region system function
@@ -147,7 +138,7 @@ namespace GAS.Runtime
         public virtual void OnDestroy(float time)
         {
         }
-        
+
 #if UNITY_EDITOR
         /// <summary>
         ///     编辑器预览Cue效果
@@ -170,7 +161,7 @@ namespace GAS.Runtime
     public abstract class GameplayCueBase<T> : GameplayCueBase where T : XParam
     {
         public T Parameter { get; private set; }
-        
+
         public override void InitParameters(XParam xParam)
         {
             if (xParam is T t)

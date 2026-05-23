@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Sirenix.OdinInspector;
 using UnityEngine;
 
 namespace GAS.Runtime
@@ -12,9 +11,6 @@ namespace GAS.Runtime
     {
         #region 资源配置
 
-        [ShowInInspector]
-        [LabelText("Prefab资源路径")]
-        [InfoBox("相对于Resources目录的路径，不含扩展名。如需使用自定义加载器，路径格式由加载器决定。")]
         [BeanField(nameof(SetPrefabPath), Comment = "Prefab资源路径")]
         public string PrefabPath;
 
@@ -22,14 +18,9 @@ namespace GAS.Runtime
 
         #region 挂载配置
 
-        [ShowInInspector]
-        [LabelText("挂载点路径")]
-        [InfoBox("为空则挂载到宿主根节点，否则挂载到指定子节点路径")]
         [BeanField(nameof(SetMountPointPath), Comment = "挂载点路径")]
         public string MountPointPath;
 
-        [ShowInInspector]
-        [LabelText("是否跟随宿主")]
         [Tooltip("true: Prefab成为挂载点的子物体，跟随宿主移动\nfalse: Prefab挂载到场景根节点，不跟随宿主")]
         [BeanField(nameof(SetFollowHost), Comment = "是否跟随宿主")]
         public bool FollowHost = true;
@@ -38,26 +29,18 @@ namespace GAS.Runtime
 
         #region 变换配置
 
-        [ShowInInspector]
-        [LabelText("位置偏移")]
         [Tooltip("相对于挂载点的位置偏移")]
         [BeanField(nameof(SetLocalPosition), Comment = "位置偏移")]
         public Vector3 LocalPosition = Vector3.zero;
 
-        [ShowInInspector]
-        [LabelText("旋转偏移")]
         [Tooltip("相对于挂载点的旋转偏移（欧拉角）")]
         [BeanField(nameof(SetLocalRotation), Comment = "旋转偏移")]
         public Vector3 LocalRotation = Vector3.zero;
 
-        [ShowInInspector]
-        [LabelText("缩放")]
         [Tooltip("Prefab的缩放值")]
         [BeanField(nameof(SetLocalScale), Comment = "缩放")]
         public Vector3 LocalScale = Vector3.one;
 
-        [ShowInInspector]
-        [LabelText("使用世界坐标")]
         [Tooltip("true: 位置和旋转使用世界坐标系\nfalse: 位置和旋转使用相对于挂载点的本地坐标系")]
         [BeanField(nameof(SetUseWorldSpace), Comment = "使用世界坐标")]
         public bool UseWorldSpace = false;
@@ -66,26 +49,18 @@ namespace GAS.Runtime
 
         #region 渲染配置
 
-        [ShowInInspector]
-        [LabelText("渲染层级")]
         [Tooltip("设置实例化对象的Layer，-1表示不修改（保持Prefab原始设置）")]
         [BeanField(nameof(SetLayer), Comment = "渲染层级")]
         public int Layer = -1;
 
-        [ShowInInspector]
-        [LabelText("排序层")]
         [Tooltip("用于2D渲染的SortingOrder，0表示不修改")]
         [BeanField(nameof(SetSortingOrder), Comment = "排序层")]
         public int SortingOrder = 0;
 
-        [ShowInInspector]
-        [LabelText("排序层名称")]
         [Tooltip("用于2D渲染的SortingLayer名称，空表示不修改")]
         [BeanField(nameof(SetSortingLayerName), Comment = "排序层名称")]
         public string SortingLayerName = "";
 
-        [ShowInInspector]
-        [LabelText("层级传递")]
         [Tooltip("是否将Layer设置传递给所有子物体")]
         [BeanField(nameof(SetRecursiveLayer), Comment = "层级传递")]
         public bool RecursiveLayer = false;
@@ -94,22 +69,15 @@ namespace GAS.Runtime
 
         #region 生命周期配置
 
-        [ShowInInspector]
-        [LabelText("宿主销毁时销毁")]
         [Tooltip("当宿主GameObject销毁时，是否自动销毁挂载的Prefab")]
         [BeanField(nameof(SetDestroyWithHost), Comment = "宿主销毁时销毁")]
         public bool DestroyWithHost = true;
 
-        [ShowInInspector]
-        [LabelText("停止时销毁")]
         [Tooltip("当Cue停止（Deactivate）时是否立即销毁Prefab")]
         [BeanField(nameof(SetDestroyOnStop), Comment = "停止时销毁")]
         public bool DestroyOnStop = false;
 
-        [ShowInInspector]
-        [LabelText("延迟销毁时间")]
         [Tooltip("Prefab销毁前的延迟时间（秒），0表示立即销毁")]
-        [PropertyRange(0f, 60f)]
         [BeanField(nameof(SetDestroyDelay), Comment = "延迟销毁时间")]
         public float DestroyDelay = 0f;
 
@@ -117,20 +85,14 @@ namespace GAS.Runtime
 
         #region 特效配置
 
-        [ShowInInspector]
-        [LabelText("自动播放粒子系统")]
         [Tooltip("如果Prefab包含ParticleSystem，是否自动播放")]
         [BeanField(nameof(SetAutoPlayParticle), Comment = "自动播放粒子系统")]
         public bool AutoPlayParticle = true;
 
-        [ShowInInspector]
-        [LabelText("停止时停止粒子")]
         [Tooltip("当Cue停止时是否停止粒子系统播放")]
         [BeanField(nameof(SetStopParticleOnDeactivate), Comment = "停止时停止粒子")]
         public bool StopParticleOnDeactivate = true;
 
-        [ShowInInspector]
-        [LabelText("粒子停止模式")]
         [Tooltip("粒子系统停止时的行为")]
         [BeanField(nameof(SetParticleStopAction),LubanType = "int", Comment = "粒子停止模式")]
         public ParticleSystemStopAction ParticleStopAction = ParticleSystemStopAction.None;

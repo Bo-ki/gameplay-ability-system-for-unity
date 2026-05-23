@@ -26,7 +26,7 @@ namespace GAS.Editor
                     // 确认是否是所需的基类泛型定义
                     if (genericBaseDef == typeof(GameplayCueBase<>))
                     {
-                        // 获取实际使用的泛型参数（如 MmcParamString）
+                        // 获取实际使用的泛型参数（如 XParamCueIDs）
                         var genericArgs = baseType.GetGenericArguments();
                         var paramType = genericArgs[0];
 

@@ -23,59 +23,57 @@ namespace DemoForESC._Script
 
             
             // 自动恢复耐力Buff
-            var buff1 = new GameplayEffectSpec(XLuban.GetGameplayEffectConfig(1007).ComponentConfigs);
-            AbilitySystemComponent.Cell.ApplyGameplayEffectToSelf(buff1);
+            AbilitySystem.Facade.RequestGameplayEffectToSelf(1007);
         }
 
         public override void Move(Vector3 direction)
         {
-            if(!AbilitySystemComponent.Cell.IsAbilityActive(XAbility.ABILITY_move))
-                AbilitySystemComponent.TryActivateAbility(XAbility.ABILITY_move,_cacheParamMove);
+            if(!AbilitySystem.Facade.IsAbilityActive(XAbility.ABILITY_move))
+                AbilitySystem.Facade.TryActivateAbility(XAbility.ABILITY_move);
             
             var viewPointForward = Vector3.ProjectOnPlane(_mainCamera.transform.forward, Vector3.up).normalized;
-            _cacheParamMove.SetDirection(direction,viewPointForward);
-            AbilitySystemComponent.Cell.SetAbilityParam(XAbility.ABILITY_move,_cacheParamMove);
+            ApplyMove(direction, viewPointForward);
         }
 
         public void StartRun()
         {
-            if(!AbilitySystemComponent.Cell.IsAbilityActive(XAbility.ABILITY_RunSpeedUp))
-                AbilitySystemComponent.TryActivateAbility(XAbility.ABILITY_RunSpeedUp);
+            if(!AbilitySystem.Facade.IsAbilityActive(XAbility.ABILITY_RunSpeedUp))
+                AbilitySystem.Facade.TryActivateAbility(XAbility.ABILITY_RunSpeedUp);
         }
 
         public void StopRun()
         {
-            if(AbilitySystemComponent.Cell.IsAbilityActive(XAbility.ABILITY_RunSpeedUp)) 
-                AbilitySystemComponent.TryEndAbility(XAbility.ABILITY_RunSpeedUp);
+            if(AbilitySystem.Facade.IsAbilityActive(XAbility.ABILITY_RunSpeedUp)) 
+                AbilitySystem.Facade.TryEndAbility(XAbility.ABILITY_RunSpeedUp);
         }
         
         public void StartDebugGE1()
         {
-            if(!AbilitySystemComponent.Cell.IsAbilityActive(XAbility.ABILITY_debug_ge_ability)) 
-                AbilitySystemComponent.TryActivateAbility(XAbility.ABILITY_debug_ge_ability);
+            if(!AbilitySystem.Facade.IsAbilityActive(XAbility.ABILITY_debug_ge_ability)) 
+                AbilitySystem.Facade.TryActivateAbility(XAbility.ABILITY_debug_ge_ability);
         }
         
         public void StartDebugGE2()
         {
-            if(!AbilitySystemComponent.Cell.IsAbilityActive(XAbility.ABILITY_debug_ge_2)) 
-                AbilitySystemComponent.TryActivateAbility(XAbility.ABILITY_debug_ge_2);
+            if(!AbilitySystem.Facade.IsAbilityActive(XAbility.ABILITY_debug_ge_2)) 
+                AbilitySystem.Facade.TryActivateAbility(XAbility.ABILITY_debug_ge_2);
         }
         
         public void StopDebugGE1()
         {
-            if(AbilitySystemComponent.Cell.IsAbilityActive(XAbility.ABILITY_debug_ge_ability)) 
-                AbilitySystemComponent.TryEndAbility(XAbility.ABILITY_debug_ge_ability);
+            if(AbilitySystem.Facade.IsAbilityActive(XAbility.ABILITY_debug_ge_ability)) 
+                AbilitySystem.Facade.TryEndAbility(XAbility.ABILITY_debug_ge_ability);
         }
         
         public void StopDebugGE2()
         {
-            if(AbilitySystemComponent.Cell.IsAbilityActive(XAbility.ABILITY_debug_ge_2)) 
-                AbilitySystemComponent.TryEndAbility(XAbility.ABILITY_debug_ge_2);
+            if(AbilitySystem.Facade.IsAbilityActive(XAbility.ABILITY_debug_ge_2)) 
+                AbilitySystem.Facade.TryEndAbility(XAbility.ABILITY_debug_ge_2);
         }
 
         public void Dodge()
         {
-            AbilitySystemComponent.TryActivateAbility(XAbility.ABILITY_Dodge);
+            AbilitySystem.Facade.TryActivateAbility(XAbility.ABILITY_Dodge);
         }
 
         protected override void OnSpChangeAfter(float lastSp, float newSp)

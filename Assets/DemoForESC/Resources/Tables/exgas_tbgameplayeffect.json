@@ -48,8 +48,7 @@
         "AttrSet": 1,
         "Attribute": 3,
         "Magnitude": 3,
-        "Operation": 1,
-        "Mmc": 1001
+        "Operation": 1
       }
     ],
     "CueOnApply": [],
@@ -73,8 +72,7 @@
         "AttrSet": 1,
         "Attribute": 2,
         "Magnitude": 10,
-        "Operation": 3,
-        "Mmc": 1002
+        "Operation": 3
       }
     ],
     "CueOnApply": [
@@ -112,8 +110,7 @@
         "AttrSet": 1,
         "Attribute": 1,
         "Magnitude": 1,
-        "Operation": 3,
-        "Mmc": 1001
+        "Operation": 3
       }
     ],
     "CueOnApply": [],
@@ -158,8 +155,7 @@
         "AttrSet": 1,
         "Attribute": 6,
         "Magnitude": 2,
-        "Operation": 0,
-        "Mmc": 1001
+        "Operation": 0
       }
     ],
     "CueOnApply": [],
@@ -208,8 +204,7 @@
         "AttrSet": 1,
         "Attribute": 1,
         "Magnitude": 3,
-        "Operation": 3,
-        "Mmc": 1001
+        "Operation": 3
       }
     ],
     "CueOnApply": [],
@@ -231,8 +226,7 @@
         "AttrSet": 1,
         "Attribute": 1,
         "Magnitude": 10,
-        "Operation": 3,
-        "Mmc": 1001
+        "Operation": 3
       }
     ],
     "CueOnApply": [
@@ -280,8 +274,7 @@
         "AttrSet": 1,
         "Attribute": 6,
         "Magnitude": 20,
-        "Operation": 3,
-        "Mmc": 1001
+        "Operation": 3
       }
     ],
     "CueOnApply": [],
@@ -325,8 +318,7 @@
         "AttrSet": 1,
         "Attribute": 6,
         "Magnitude": 1,
-        "Operation": 3,
-        "Mmc": 1001
+        "Operation": 3
       }
     ],
     "CueOnApply": [],

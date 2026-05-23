@@ -1,22 +1,13 @@
 using System;
 using System.Collections.Generic;
-using GAS.General;
-using Sirenix.OdinInspector;
 
 namespace GAS.Runtime
 {
     public class XParamApplyEffects : XParam
     {
-        [ShowInInspector] 
-        [LabelText("buff效果ID")] 
-        [ValueDropdown(nameof(GameplayEffectIDChoices), IsUniqueList = true)]
         [BeanField(nameof(SetIDs),Comment = "buff效果ID")] 
         public int[] IDs;
         
-        [ShowInInspector]
-        [LabelText("Catcher类型")]
-        [ValueDropdown(nameof(CatcherClassChoice))]
-        [OnValueChanged(nameof(OnTypeChange))]
         [BeanPolymorphicField(  
             beanFieldName: "TargetCatcher",  
             lubanPolymorphicType: nameof(TargetCatcherBase),  
@@ -26,9 +17,6 @@ namespace GAS.Runtime
             HelperCategory = "TargetCatcher")]  
         public string CatcherType { get; private set; }
 
-        [ShowInInspector]
-        [HideLabel]
-        [HideReferenceObjectPicker]
         public XParam Param { get; set; }
         
         public void SetIDs(int[] value)
@@ -56,17 +44,6 @@ namespace GAS.Runtime
         public XParamApplyEffects(int[] ids)
         {
             IDs = ids;
-        }
-        
-        public List<ValueDropdownItem> GameplayEffectIDChoices => GeneralGasChoiceHelper.GameplayEffects();
-        
-        public IEnumerable<string> CatcherClassChoice => TargetCatcherHelper.GetCatcherTypeNames();
-
-        private void OnTypeChange()  
-        {  
-#if UNITY_EDITOR  
-            Param = TargetCatcherHelper.CreateCatcherParameter(CatcherType);  
-#endif  
         }
         
 #if UNITY_EDITOR

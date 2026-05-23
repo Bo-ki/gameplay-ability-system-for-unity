@@ -61,35 +61,26 @@ namespace GAS.Editor
     
     public static class EditorEffectHelper
     {
-        public enum TagRequirementMode
-        {
-            All,
-            Any,
-            None
-        }
-
         public readonly struct TagRequirementProtocolField
         {
-            public TagRequirementProtocolField(EffectEditComponent component, string excelHeader, string jsonKey, TagRequirementMode mode)
+            public TagRequirementProtocolField(EffectEditComponent component, string excelHeader, string jsonKey)
             {
                 Component = component;
                 ExcelHeader = excelHeader;
                 JsonKey = jsonKey;
-                Mode = mode;
             }
 
             public EffectEditComponent Component { get; }
             public string ExcelHeader { get; }
             public string JsonKey { get; }
-            public TagRequirementMode Mode { get; }
         }
 
         public static readonly TagRequirementProtocolField[] TagRequirementProtocolFields =
         {
-            new(EffectEditComponent.ApplicationRequiredTags, "ApplicationRequiredTags", "applicationRequiredTags", TagRequirementMode.All),
-            new(EffectEditComponent.OngoingRequiredTags, "OngoingRequiredTags", "ongoingRequiredTags", TagRequirementMode.All),
-            new(EffectEditComponent.RemoveGameplayEffectsWithTags, "RemoveGameplayEffectsWithTags", "removeEffectsWithTags", TagRequirementMode.Any),
-            new(EffectEditComponent.ImmunityTags, "ImmunityTags", "immunityTags", TagRequirementMode.Any)
+            new(EffectEditComponent.ApplicationRequiredTags, "ApplicationRequiredTags", "applicationRequiredTags"),
+            new(EffectEditComponent.OngoingRequiredTags, "OngoingRequiredTags", "ongoingRequiredTags"),
+            new(EffectEditComponent.RemoveGameplayEffectsWithTags, "RemoveGameplayEffectsWithTags", "removeEffectsWithTags"),
+            new(EffectEditComponent.ImmunityTags, "ImmunityTags", "immunityTags")
         };
 
         public static IEnumerable<EffectEditComponent> ComponentTypes()
@@ -116,47 +107,27 @@ namespace GAS.Editor
             };
         }
 
-        public static GEEditTagRequirement ParseTagRequirementCell(string raw, TagRequirementMode mode)
+        public static GEEditTagRequirement ParseTagRequirementCell(string raw)
         {
             var requirement = new GEEditTagRequirement();
             if (string.IsNullOrWhiteSpace(raw)) return requirement;
 
             var text = raw.Trim();
             var parts = text.Split(';');
-            var useRequirementFormat = parts.Length == 3 &&
-                                       (text.Contains(",") || parts.Any(p => p == "0" || string.IsNullOrWhiteSpace(p)));
+            if (parts.Length != 3) return requirement;
 
-            if (useRequirementFormat)
-            {
-                requirement.All = ParseTagCsv(parts.Length > 0 ? parts[0] : string.Empty);
-                requirement.Any = ParseTagCsv(parts.Length > 1 ? parts[1] : string.Empty);
-                requirement.None = ParseTagCsv(parts.Length > 2 ? parts[2] : string.Empty);
-                return requirement;
-            }
-
-            var tags = ParseLegacyTagList(text);
-            switch (mode)
-            {
-                case TagRequirementMode.All:
-                    requirement.All = tags;
-                    break;
-                case TagRequirementMode.Any:
-                    requirement.Any = tags;
-                    break;
-                case TagRequirementMode.None:
-                    requirement.None = tags;
-                    break;
-            }
+            requirement.All = ParseTagCsv(parts[0]);
+            requirement.Any = ParseTagCsv(parts[1]);
+            requirement.None = ParseTagCsv(parts[2]);
 
             return requirement;
         }
 
-        public static string EncodeTagRequirementCell(GEEditTagRequirement requirement, TagRequirementMode mode)
+        public static string EncodeTagRequirementCell(GEEditTagRequirement requirement)
         {
             if (requirement == null) return string.Empty;
-            var tags = GetTagsByMode(requirement, mode);
-            if (tags == null || tags.Count == 0) return string.Empty;
-            return string.Join(";", tags);
+            if (!requirement.HasAnyValue()) return string.Empty;
+            return $"{EncodeTagCsv(requirement.All)};{EncodeTagCsv(requirement.Any)};{EncodeTagCsv(requirement.None)}";
         }
 
         private static List<int> ParseTagCsv(string raw)
@@ -168,23 +139,11 @@ namespace GAS.Editor
                 .ToList();
         }
 
-        private static List<int> ParseLegacyTagList(string raw)
+        private static string EncodeTagCsv(List<int> tags)
         {
-            if (string.IsNullOrWhiteSpace(raw)) return new List<int>();
-            return raw.Split(';', StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => int.TryParse(x.Trim(), out var value) ? value : 0)
-                .Where(x => x > 0)
-                .ToList();
-        }
-
-        private static List<int> GetTagsByMode(GEEditTagRequirement requirement, TagRequirementMode mode)
-        {
-            return mode switch
-            {
-                TagRequirementMode.All => requirement.All,
-                TagRequirementMode.Any => requirement.Any,
-                _ => requirement.None
-            };
+            return tags == null || tags.Count == 0
+                ? "0"
+                : string.Join(",", tags.Where(x => x > 0));
         }
     }
 }

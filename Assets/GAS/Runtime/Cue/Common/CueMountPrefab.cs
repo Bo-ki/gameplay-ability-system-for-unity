@@ -34,7 +34,7 @@ namespace GAS.Runtime
         {
             base.OnAdd(time);
 
-            var hostGo = _abilitySystemCell?.GameObject;
+            var hostGo = TargetGameObject;
             if (hostGo == null)
             {
 #if UNITY_EDITOR

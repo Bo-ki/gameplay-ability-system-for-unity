@@ -1,12 +1,9 @@
 using System.Collections.Generic;
-using Sirenix.OdinInspector;
 
 namespace GAS.Runtime
 {
     public class XParamFloat:XParam
     {
-        [LabelText("值")]
-        [ShowInInspector]
         [BeanField(nameof(SetValue), Comment = "值")]
         public float Value { get; private set; }
         

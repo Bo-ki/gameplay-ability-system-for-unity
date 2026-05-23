@@ -4,6 +4,6 @@ namespace GAS.Runtime
 {
     public struct CPlayRequiredTags : IComponentData
     {
-        public TagRequirementData requirement;
+        public TagRequirementMask requirement;
     }
 }

@@ -1,33 +1,21 @@
 using System.Collections.Generic;  
-using Sirenix.OdinInspector;  
   
 namespace GAS.Runtime  
 {  
     public class XParamPlaySound : XParam  
     {  
-        [ShowInInspector]  
-        [LabelText("音效资源路径")]  
         [BeanField(nameof(SetAudioClipPath), Comment = "音效资源路径")]
         public string AudioClipPath;  
   
-        [ShowInInspector]  
-        [LabelText("音量"), PropertyRange(0f, 1f)]  
         [BeanField(nameof(SetVolume), Comment = "音量")]
         public float Volume;  
   
-        [ShowInInspector]  
-        [LabelText("播放速度"), PropertyRange(0.1f, 3f)]  
         [BeanField(nameof(SetSpeed), Comment = "播放速度")]
         public float Speed;  
   
-        [ShowInInspector]  
-        [LabelText("是否循环")]  
         [BeanField(nameof(SetLoop), Comment = "是否循环")]
         public bool Loop;  
   
-        [ShowInInspector]  
-        [LabelText("AudioSource节点路径")]  
-        [InfoBox("为空表示物体根节点")]  
         [BeanField(nameof(SetAudioSourceNodePath), Comment = "AudioSource节点路径")]
         public string AudioSourceNodePath;  
   

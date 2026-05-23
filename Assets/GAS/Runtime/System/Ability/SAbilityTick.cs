@@ -3,36 +3,61 @@ using Unity.Entities;
 
 namespace GAS.Runtime
 {
-    [UpdateInGroup(typeof(SGAbility))]
-    [UpdateAfter(typeof(STryEndAbility))]
+    /// <summary>
+    /// Burst 兼容的 Ability Tick System。按 Ability 类型分派到各自的 ISystem 处理。
+    /// 本 System 只负责通用逻辑：运行时状态更新、计时推进。
+    /// </summary>
+    [UpdateInGroup(typeof(GASAbilityGroup))]
+    [BurstCompile]
     public partial struct SAbilityTick : ISystem
     {
+        private EntityQuery _activeQuery;
+
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            state.RequireForUpdate<CAbilityActive>();
+            _activeQuery = SystemAPI.QueryBuilder()
+                .WithAll<CAbilityBaseInfo, CAbilityRuntimeState>()
+                .Build();
         }
 
+        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            var ecb = EntityHelper.RegisterEntityCommandBuffer();
-            
-            var globalTimer = SystemAPI.GetSingletonRW<GlobalTimer>();
-            
-            foreach (var (_, abilityLogic) in SystemAPI.Query<RefRO<CAbilityActive>, MCAbilityLogic>())
+            state.Dependency = new TickJob
             {
-                abilityLogic.Logic.AbilityTick(globalTimer.ValueRO);
-            }
-            
-            ecb.Playback(state.EntityManager);
-            EntityHelper.ExecuteDeferredCommands();
-            ecb.Dispose();
-            EntityHelper.UnregisterEntityCommandBuffer();
+                DeltaTime = SystemAPI.Time.DeltaTime,
+            }.ScheduleParallel(_activeQuery, state.Dependency);
         }
 
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
+        }
+
+        [BurstCompile]
+        private partial struct TickJob : IJobEntity
+        {
+            public float DeltaTime;
+
+            private void Execute(ref CAbilityRuntimeState runtime)
+            {
+                if (runtime.Phase != EAbilityPhase.Active && runtime.Phase != EAbilityPhase.Activating)
+                    return;
+
+                runtime.Timer += DeltaTime;
+
+                // 激活阶段转为活跃
+                if (runtime.Phase == EAbilityPhase.Activating)
+                    runtime.Phase = EAbilityPhase.Active;
+
+                if (runtime.RemainingFrame > 0)
+                {
+                    runtime.RemainingFrame--;
+                    if (runtime.RemainingFrame == 0)
+                        runtime.Phase = EAbilityPhase.Ending;
+                }
+            }
         }
     }
 }

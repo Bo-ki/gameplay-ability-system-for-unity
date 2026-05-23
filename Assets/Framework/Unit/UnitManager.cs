@@ -56,7 +56,7 @@ namespace Framework.Unit
   
         /// <summary>  
         /// 返回持有指定 GameplayTag 的所有单位。  
-        /// 内部调用 AbilitySystemComponent.HasTag(tagId)。  
+        /// 内部通过 ASC Entity 的 Facade 查询 Tag。  
         /// </summary>  
         public List<UnitBase> GetUnitsWithTag(int tagId)  
             => _units.Where(u => u != null && u.HasTag(tagId)).ToList();  

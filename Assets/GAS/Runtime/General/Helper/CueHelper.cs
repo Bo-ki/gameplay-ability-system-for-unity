@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.Burst;
@@ -13,7 +13,7 @@ namespace GAS.Runtime
         {
             return TryCreateCue(param.CueType, param.Param);
         }
-        
+
         public static GameplayCueBase TryCreateCue(string cueType, XParam param)
         {
             if (CueTypeMap.TryGetValue(cueType, out var type))
@@ -60,13 +60,13 @@ namespace GAS.Runtime
         {
             return CueType2CueParamTypeMap.TryGetValue(cueType,out var cueParam) ? CueParamTypeMap[cueParam] : null;
         }
-        
+
         public static Type GetCueLogicParamType(Type cueType)
         {
             var cueParam = CueType2CueParamTypeMap[cueType.Name];
             return CueParamTypeMap[cueParam];
         }
-        
+
         #region Cue
 
         private static readonly Dictionary<string, Type> CueTypeMap = new();
@@ -79,7 +79,7 @@ namespace GAS.Runtime
             CueParamTypeMap[cueParamType.Name] = cueParamType;
             CueType2CueParamTypeMap[sType] = cueParamType.Name;
         }
-        
+
         public static Type GetCueType(string sType)
         {
             if (CueTypeMap.TryGetValue(sType, out var type)) return type;
@@ -98,7 +98,7 @@ namespace GAS.Runtime
         {
             return CueTypeMap.Keys.ToList();
         }
-        
+
         #endregion
 
         [BurstCompile]
@@ -107,7 +107,7 @@ namespace GAS.Runtime
             if (entityManager.IsComponentEnabled<ECCuePlaying>(cueEntity))
                 entityManager.SetComponentEnabled<ECCuePlayable>(cueEntity,false);
         }
-        
+
         [BurstCompile]
         public static void PlayCue(Entity cueEntity,EntityManager entityManager)
         {
@@ -121,7 +121,7 @@ namespace GAS.Runtime
             cue.cue.SetCueEntity(cueEntity);
             return cue;
         }
-        
+
         public static MCCue CopyCueComponent(MCCue cue)
         {
             return new MCCue()
@@ -132,31 +132,43 @@ namespace GAS.Runtime
 
         #region 通用型工具接口
 
-        private static bool EvaluateAscTagRequirement(Entity asc, in TagRequirementData requirement)
+        public static void TryPlayCueOnAsc(EntityManager entityManager, Entity targetAsc, Entity cueEntity, Entity sourceGE)
         {
-            bool passAll = !requirement.all.IsCreated || requirement.all.Length == 0 || ASCHelper.HasAllTags(asc, requirement.all);
-            bool passAny = !requirement.any.IsCreated || requirement.any.Length == 0 || ASCHelper.HasAnyTags(asc, requirement.any);
-            bool passNone = !requirement.none.IsCreated || requirement.none.Length == 0 || !ASCHelper.HasAnyTags(asc, requirement.none);
-            return passAll && passAny && passNone;
+            TryPlayCueOnAsc(entityManager, targetAsc, cueEntity, sourceGE, CueSourceType.GameplayEffect);
         }
 
-        public static void TryPlayCueOnAsc(EntityManager entityManager, Entity targetAsc, Entity cueEntity, Entity sourceGE)
+        public static void TryPlayCueOnAsc(
+            EntityManager entityManager,
+            Entity targetAsc,
+            Entity cueEntity,
+            Entity sourceEntity,
+            CueSourceType sourceType)
         {
             // 1.先判断tag是否可以播放cue
             if (entityManager.HasComponent<CPlayRequiredTags>(cueEntity))
             {
                 var requiredTags = entityManager.GetComponentData<CPlayRequiredTags>(cueEntity);
-                if (!EvaluateAscTagRequirement(targetAsc, requiredTags.requirement)) return;
+                if (!TagRequirementEvaluator
+                    .EvaluateRequired(entityManager, targetAsc, requiredTags.requirement)
+                    .Passed)
+                {
+                    return;
+                }
             }
             if (entityManager.HasComponent<CPlayImmunitedTags>(cueEntity))
             {
                 var immunityTags = entityManager.GetComponentData<CPlayImmunitedTags>(cueEntity);
-                if (!EvaluateAscTagRequirement(targetAsc, immunityTags.requirement)) return;
+                if (!TagRequirementEvaluator
+                    .EvaluateImmunity(entityManager, targetAsc, immunityTags.requirement)
+                    .Passed)
+                {
+                    return;
+                }
             }
             // 2.重置Cue逻辑单元
             var cueLogic = entityManager.GetComponentData<MCCue>(cueEntity);
             cueLogic.cue.Reset();
-            cueLogic.cue.SetSourceEntity(sourceGE, CueSourceType.GameplayEffect);
+            cueLogic.cue.SetSourceEntity(sourceEntity, sourceType);
             cueLogic.cue.AddToTargetAsc(targetAsc);
             // 3.激活CuePlaying
             cueLogic.cue.Play(true);

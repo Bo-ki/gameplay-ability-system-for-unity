@@ -25,12 +25,7 @@ namespace GAS.Editor
         [LabelText("操作类型")]
         [LabelWidth(70)]
         [EnumToggleButtons]
-        public GEOperation Operation;
-
-        [LabelText("修改器类型")]
-        [LabelWidth(70)]
-        [ValueDropdown("@GasXlsxChoice.MMCs()",IsUniqueList = true)]
-        public int MMC;
+        public EModifierOp Operation;
 
         private List<ValueDropdownItem> AttrChoices()
         {

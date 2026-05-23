@@ -28,14 +28,19 @@ namespace UI.ViewModel
         public override void OnHide()
         {
             base.OnHide();
-            UnregisterUpdateEvent();
+        }
+
+        public override void Update_f()
+        {
+            if (_unit != null)
+                RefreshState();
         }
 
         private void RefreshState()
         {
-            var asc = _unit.AbilitySystemComponent;
-            var hp = asc.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.Hp);
-            var hpMax = asc.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.HpMax);
+            var asc = _unit.AbilitySystem;
+            var hp = asc.Facade.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.Hp);
+            var hpMax = asc.Facade.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.HpMax);
             LabelValue.Value = $"{hp}/{hpMax}";
             Value.Value = hp / hpMax;
         }
@@ -43,29 +48,7 @@ namespace UI.ViewModel
         public void BindTargetHp(BaseUnit unit)
         {
             _unit = unit;
-            RegisterUpdateEvent();
             RefreshState();
-        }
-        
-        private void RegisterUpdateEvent()
-        {
-            var asc = _unit.AbilitySystemComponent;
-            GASEventCenter.RegisterOnAttrCurrentValueChangeAfter(asc.Cell, XAttrSet.FightUnit, XAttribute.Hp,
-                OnHpChange);
-        }
-
-        private void UnregisterUpdateEvent()
-        {
-            var asc = _unit.AbilitySystemComponent;
-            GASEventCenter.UnRegisterOnAttrCurrentValueChangeAfter(asc.Cell, XAttrSet.FightUnit, XAttribute.Hp,
-                OnHpChange);
-        }
-
-        private void OnHpChange(float lastValue, float newValue)
-        {
-            var hpMax = _unit.AbilitySystemComponent.GetAttrCurrentValue(XAttrSet.FightUnit, XAttribute.HpMax);
-            LabelValue.Value = $"{newValue}/{hpMax}";
-            Value.Value = newValue / hpMax;
         }
     }
 }

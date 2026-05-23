@@ -1,551 +1,157 @@
-# EX-GAS Demo Gameplay Framework — 框架说明文档 v1.0
+# EX-GAS 2.0 Demo 与项目接入说明
 
-> 本文档面向新 session 重建用途。读完后可独立实现与本框架接口一致的完整实现。
+更新时间：2026-05-23
 
----
+本文替代旧版 `UnitBase + AbilitySystemCell + GASEventCenter` Demo 框架说明。当前 EX-GAS 2.0 的 Demo 和项目接入口径以 ECS Runtime 为准：GameObject 可以作为输入、表现和生命周期绑定壳，但玩法权威必须留在 ECS Entity / Component / System。
 
-## 一、总览
+## 接入目标
 
-本框架是架设在 **EX-GAS 2.0**（Unity DOTS/ECS GAS 系统）之上的**关卡运行 Gameplay 框架**，不修改 EX-GAS 内部逻辑。
+推荐把项目层拆成四类代码：
 
-EX-GAS 核心概念简记：
-- **WHO**：`AbilitySystemCell`（ASC）— GAS 运行单元，每个游戏单位持有一个
-- **DO**：`Ability` — 所有行为/技能的触发载体
-- **WHAT**：`GameplayEffect`（GE）— 属性修改的唯一途径
-- **ECS 驱动**：`GASManager.Run()` 启动，`GASManager.Stop()` 关闭
-- **配置**：Excel → Luban → JSON，运行时由 `XLuban.GetAscConfig(id)` 加载
+| 层 | 可以做什么 | 不应该做什么 |
+| --- | --- | --- |
+| GameObject Shell | 挂 `AbilitySystemBinding`，接收输入，绑定表现对象 | 保存 GAS 权威状态 |
+| Facade / Adapter | 调用 `AbilitySystemFacade` 创建 request，读取 `AbilitySystemObservation` | 直接改 Attribute、Tag、GE、Ability runtime state |
+| ECS Gameplay Core | 实现 Ability / GE / Attribute / Tag / reaction / driver system | 依赖 GameObject、Editor、Odin 或托管事件中心 |
+| Presentation | 读取 `BPresentationEvent`、Cue request、replay / log snapshot | 反向驱动 simulation 判定 |
 
----
+## 初始化顺序
 
-## 二、目录结构
+典型项目启动顺序：
 
-```
-Assets/
-├── Framework/                      ← 可跨项目复用，不含业务逻辑
-│   ├── Core/
-│   │   ├── GameEntry.cs            ← MonoBehaviour 启动入口
-│   │   ├── GameEventBus.cs         ← 泛型全局事件总线
-│   │   └── GameSettings.cs         ← ScriptableObject 全局参数
-│   ├── Level/
-│   │   ├── LevelBase.cs            ← 关卡抽象基类
-│   │   ├── LevelManager.cs         ← 关卡生命周期单例
-│   │   └── LevelFlowController.cs  ← 波次/胜负状态机
-│   ├── Unit/
-│   │   ├── UnitBase.cs             ← 单位基类（持有 ASC）
-│   │   ├── UnitManager.cs          ← 单位注册/查找
-│   │   ├── PlayerUnit.cs           ← 玩家单位扩展
-│   │   └── EnemyUnit.cs            ← 敌人单位扩展
-│   ├── Input/
-│   │   └── PlayerController.cs     ← 输入 → Ability 分发
-│   └── UI/
-│       ├── HUDController.cs        ← 属性事件 → UI 刷新
-│       └── AttributeBarView.cs     ← 通用进度条视图
-└── Demo/                           ← 业务层，依赖 Framework
-    ├── Levels/
-    ├── Units/
-    ├── Config/                     ← EX-GAS Luban JSON 表
-    └── Scenes/
-```
+1. `GASManager.Initialize()` 创建 EX-GAS World、系统组、全局计时器和 event bus。
+2. `XLuban.Init(loader)` 或等价配置入口加载表数据，并注册 Ability / GameplayEffect / Cue / Timeline registry provider。
+3. 调用 `GameplayEffectConfigRegistry.ReloadDefinitionCaches(...)` 或由注册入口触发 registry warmup。
+4. `GASManager.Run()` 允许 EX-GAS World 随 PlayerLoop 推进。
+5. 场景对象通过 `AbilitySystemBinding.Init(config)` 创建 ASC 初始化 request。
+6. 输入、AI 或业务 driver 创建 Ability / GE / ASC request。
+7. UI / 表现层读取 observation / presentation outbox / replay snapshot。
+8. 场景或游戏退出时通过 facade / binding 发起 ASC destroy；全局停服时再 `GASManager.Stop()`。
 
----
+`GASManager.Run()` 只是运行开关，不代表外部可以绕过 request 直接改状态。
 
-## 三、依赖层级图
+## ASC 接入
 
-```mermaid
-graph TD
-    EXGAS["EX-GAS 2.0\n(外部，不改动)"]
-    GameEventBus["GameEventBus"]
-    GameSettings["GameSettings"]
-    UnitBase["UnitBase"]
-    UnitManager["UnitManager"]
-    PlayerUnit["PlayerUnit"]
-    EnemyUnit["EnemyUnit"]
-    LevelFlowController["LevelFlowController"]
-    LevelBase["LevelBase"]
-    PlayerController["PlayerController"]
-    AttributeBarView["AttributeBarView"]
-    LevelManager["LevelManager"]
-    HUDController["HUDController"]
-    GameEntry["GameEntry"]
-
-    UnitBase --> EXGAS
-    UnitManager --> UnitBase
-    UnitManager --> GameEventBus
-    PlayerUnit --> UnitBase
-    EnemyUnit --> UnitBase
-    LevelFlowController --> GameEventBus
-    LevelFlowController --> UnitManager
-    LevelBase --> LevelFlowController
-    PlayerController --> PlayerUnit
-    PlayerController --> EXGAS
-    LevelManager --> LevelBase
-    LevelManager --> GameEventBus
-    LevelManager --> UnitManager
-    HUDController --> EXGAS
-    HUDController --> UnitManager
-    HUDController --> AttributeBarView
-    GameEntry --> EXGAS
-    GameEntry --> LevelManager
-    GameEntry --> GameSettings
-```
-
-**开发顺序（零依赖优先）**：
-`GameEventBus` → `UnitBase` → `UnitManager` → `PlayerUnit`/`EnemyUnit` → `LevelFlowController` → `LevelBase` → `PlayerController` / `AttributeBarView` → `LevelManager` → `HUDController` → `GameEntry`
-
----
-
-## 四、各模块接口规范
-
-### 4.1 `GameEventBus`（Core/GameEventBus.cs）
-
-**职责**：全局事件解耦，无任何外部依赖。
+最小 GameObject 绑定：
 
 ```csharp
-public static class GameEventBus
+using GAS.Runtime;
+using UnityEngine;
+
+public sealed class PlayerGasBinding : MonoBehaviour
 {
-    public static void Register<T>(Action<T> handler);
-    public static void Unregister<T>(Action<T> handler);
-    public static void Dispatch<T>(T evt);
-}
-```
-
-**约定事件结构体举例**：
-```csharp
-public struct UnitDeadEvent   { public UnitBase Unit; }
-public struct LevelEndEvent   { public LevelResult Result; }
-public struct WaveStartEvent  { public int WaveIndex; }
-```
-
-> 现有 Demo 中等价实现为 `EventCenter`（字符串 key），新框架改为泛型强类型。
-
----
-
-### 4.2 `GameSettings`（Core/GameSettings.cs）
-
-**职责**：`ScriptableObject`，存放全局只读配置参数（初始关卡 ID、资源包名等）。
-
-```csharp
-[CreateAssetMenu(menuName = "Framework/GameSettings")]
-public class GameSettings : ScriptableObject
-{
-    public string AssetPackageName;
-    public string GameConfigDir;
-    public int    StartLevelId;
-}
-```
-
----
-
-### 4.3 `GameEntry`（Core/GameEntry.cs）
-
-**职责**：`MonoBehaviour`，挂在永不销毁的启动 GameObject 上，按序初始化所有子系统。
-
-对应现有 `DemoLauncher`。
-
-```csharp
-public class GameEntry : MonoBehaviour
-{
-    [SerializeField] private GameSettings _settings;
+    [SerializeField] private AbilitySystemConfig config;
+    private AbilitySystemBinding binding;
 
     private void Awake()
     {
-        DontDestroyOnLoad(gameObject);
-        // 1. 启动 ECS GAS World
-        XLauncher.Launch();
-        GASManager.Run();
-        // 2. 初始化资源系统（YooAsset 或其他）
-        // 3. 初始化 UI 系统
-        // 4. 注册 GameEventBus 顶层事件
-        // 5. 配置表加载完成后：LevelManager.Instance.LoadLevel(_settings.StartLevelId)
+        binding = GetComponent<AbilitySystemBinding>();
+        binding.Init(config);
+    }
+
+    public void Activate(int abilityCode)
+    {
+        binding.Facade.TryActivateAbility(abilityCode);
     }
 }
 ```
 
-**关键约定**：
-- `GASManager.Run()` 必须在任何 ASC 创建之前调用
-- 配置表（`XLuban.InitConfigTables`）必须在 `UnitBase.Awake` 之前加载完毕
-- 关卡卸载时调用 `GASManager.Stop()` 防止 ECS World 泄漏 
+注意：
 
----
+- `TryActivateAbility` 返回的是 request entity，不是“立即激活完成”。
+- `SetAttrBaseValue`、`AddFixedTag`、`RequestGameplayEffectToSelf` 也是写 request。
+- 读取当前值请走 `binding.Facade.Observation` 或 facade 的只读便捷方法。
 
-### 4.4 `UnitBase`（Unit/UnitBase.cs）
+## Ability 输入
 
-**职责**：所有游戏单位的基类 `MonoBehaviour`，持有 `AbilitySystemComponent`。
-
-对应现有 `BaseUnit`。
+玩家输入或 AI 决策只应产生命令：
 
 ```csharp
-public abstract class UnitBase : MonoBehaviour
+public void OnAttack(AbilitySystemFacade self, AbilitySystemFacade target, int attackAbility)
 {
-    public AbilitySystemComponent ASC { get; private set; }
-    [SerializeField] protected int _ascPresetId;
-
-    protected virtual void Awake()
-    {
-        ASC = GetOrAddComponent<AbilitySystemComponent>();
-        ASC.Init(XLuban.GetAscConfig(_ascPresetId));   // ASC 预设初始化
-        UnitManager.Instance.Register(this);
-    }
-
-    protected virtual void OnDestroy()
-    {
-        UnitManager.Instance.Unregister(this);
-        GameEventBus.Dispatch(new UnitDeadEvent { Unit = this });
-    }
-
-    // 供子类调用的 GAS 快捷方法
-    public bool TryActivateAbility(int abilityId, params object[] args)
-        => ASC.Cell.TryActivateAbility(abilityId, args);
-
-    public void ApplyEffectToSelf(int effectId, int level = 1)
-        => ASC.Cell.ApplyGameplayEffectToSelf(effectId, level);
-
-    public bool HasTag(int tagId) => ASC.Cell.HasTag(tagId);
+    self.TryActivateAbility(attackAbility, target);
 }
 ```
 
-**ASC 初始化流程**：`XLuban.GetAscConfig(id)` → `AbilitySystemCellConfig` → `ASC.Init(tags, attrSets, abilities, level)`。
+复杂玩法不要写成 MonoBehaviour 回调链。推荐方式：
 
-**属性事件注册约定**（参照现有 `BaseUnit.OnEnable`）：
+1. 配置层新增 AbilityExecution schema。
+2. `CodeGeneratorLubanPart` 把表格执行配置映射为 `AbilityComponentConfig`。
+3. Ability entity 上装载对应 ECS component / buffer。
+4. 专用 `ISystem` 在明确 system group 中读取组件、状态和 facts，输出 request / fact。
+5. 新 system 进入 `GASSystemScheduleContract`。
+
+## GameplayEffect 输入
+
+GE 施加使用 facade 或 system writer：
 
 ```csharp
-protected virtual void OnEnable()
-{
-    // 属性钳制/监听 用 GASEventCenter
-    GASEventCenter.SetOnAttrBaseValueChangeBefore(ASC.Cell, attrSetId, attrId, ClampCallback);
-}
-protected virtual void OnDisable()
-{
-    GASEventCenter.ClearOnAttrBaseValueChangeBefore(ASC.Cell, attrSetId, attrId);
-}
+self.RequestGameplayEffectTo(effectCode, target, level: 1);
 ```
 
----
-
-### 4.5 `PlayerUnit`（Unit/PlayerUnit.cs）
-
-**职责**：玩家单位，继承 `UnitBase`，暴露 Ability 触发方法供 `PlayerController` 调用。
-
-对应现有 `DemoPlayer`。
+带 SetByCaller：
 
 ```csharp
-public class PlayerUnit : UnitBase
+var values = new[]
 {
-    public static PlayerUnit Instance { get; private set; }
-
-    protected override void Awake()
-    {
-        base.Awake();
-        Instance = this;
-        // 可在此施加初始 buff，添加固有 Tag 等
-        // ASC.Cell.AddFixedTag(XTag.Ability);
-        // ASC.Cell.ApplyGameplayEffectToSelf(initBuffId);
-    }
-
-    public void Move(Vector3 inputDir, Vector3 cameraForward) { /* 调用 ABILITY_move */ }
-    public void StopMove()   { /* TryEndAbility */ }
-    public void StartRun()   { /* TryActivateAbility(ABILITY_run) */ }
-    public void StopRun()    { /* TryEndAbility(ABILITY_run) */ }
-    public void Attack()     { /* TryActivateAbility(ABILITY_attack) */ }
-}
+    new BSetByCallerValue { Key = DamageKeys.Amount, Value = 25f },
+};
+self.RequestGameplayEffectTo(effectCode, target, values, level: 1);
 ```
 
----
+在 ECS system 内推荐使用 `GameplayEffectRequestWriter`，并显式写 `CTargetDataHeader`、`BTargetEntity` 和 `BSetByCallerValue`。不要直接修改目标 Attribute，也不要手动伪造 Attribute change fact。
 
-### 4.6 `EnemyUnit`（Unit/EnemyUnit.cs）
+## UI 与表现
 
-**职责**：敌人单位，继承 `UnitBase`，包含简单 AI 逻辑（定时激活 Ability）。
+HUD / 表现层读取三类数据：
 
-```csharp
-public class EnemyUnit : UnitBase
-{
-    [SerializeField] private int _attackAbilityId;
-    // AI 逻辑：感知范围检测 PlayerUnit，调用 TryActivateAbility(_attackAbilityId)
-}
+| 需求 | 当前入口 |
+| --- | --- |
+| 当前属性、Tag、Ability active 状态 | `AbilitySystemObservation` |
+| 当帧 UI/VFX/SFX/FloatingText/Cue 事件 | `PeekPresentationEvents(...)` / `BPresentationEvent` |
+| 调试、回放、日志、测试断言 | `BDebugReplayEvent` / `GasStructuredLogExport` |
+
+旧的 `GASEventCenter.RegisterOnAttrCurrentValueChangeAfter(...)` 不再是当前推荐入口。属性变化会投影为 ECS fact，再进入 observation / replay / presentation。
+
+## 当前 Demo 路线
+
+### Headless AutoBattle
+
+`Assets/GAS/Runtime/Demo/AutoBattle` 是较小的无头样板，用于验证 Ability / GE / Attribute / Cue 的基础链路。
+
+### Headless AutoChess
+
+`Assets/GAS/Runtime/Demo/AutoChess` 是当前主要验收 Demo。它覆盖：
+
+- generated definition source / package / export / toolchain / real Luban process gate。
+- Ability、GE、Attribute、Tag、Cue、Timeline definition 到 runtime provider。
+- 多局 scale / determinism / performance validation。
+- Shield、Summon、Damage Type、Counter、Cleanse、Rally、LifeSteal、Poison、Execute、Death Burst、Enrage 等业务链。
+- typed facts、presentation outbox、structured replay / log。
+- 真实 Editor Scene runtime 与 batchmode validation。
+
+该 Demo 的重点不是“如何写一个 MonoBehaviour 战斗框架”，而是证明复杂玩法可以在 ECS request / fact / presentation outbox 单向链路中闭合。
+
+## 验证建议
+
+常规 C# 编译：
+
+```powershell
+dotnet build .\com.exhard.exgas.runtime.csproj --no-restore
+dotnet build .\com.exhard.exgas.editor.csproj --no-restore
+dotnet build .\com.exhard.exgas.runtime.tests.csproj --no-restore
 ```
 
----
-
-### 4.7 `UnitManager`（Unit/UnitManager.cs）
-
-**职责**：单位注册/注销/查找，按 `GameplayTag` 过滤。
-
-```csharp
-public class UnitManager : MonoSingleton<UnitManager>
-{
-    private List<UnitBase> _units = new();
-
-    public void Register(UnitBase unit)   { _units.Add(unit); }
-    public void Unregister(UnitBase unit) { _units.Remove(unit); }
-
-    // 按 Tag 过滤（调用 asc.Cell.HasTag）
-    public List<UnitBase> GetUnitsWithTag(int tagId)
-        => _units.Where(u => u.ASC.Cell.HasTag(tagId)).ToList();
-
-    // 按类型获取
-    public T GetUnit<T>() where T : UnitBase
-        => _units.OfType<T>().FirstOrDefault();
-
-    // Spawn：从预设 ID 实例化并初始化
-    public UnitBase SpawnUnit(GameObject prefab, int ascPresetId, Vector3 pos)
-    {
-        var go = Instantiate(prefab, pos, Quaternion.identity);
-        var unit = go.GetComponent<UnitBase>();
-        // unit._ascPresetId 已在 prefab 中配置，Awake 时自动 Init
-        return unit;
-    }
-}
-```
-
-`HasTag` 接口来自 EX-GAS `AbilitySystemCell`。
-
----
-
-### 4.8 `PlayerController`（Input/PlayerController.cs）
-
-**职责**：捕获输入，调用 `PlayerUnit` 的 Ability 触发方法。不硬编码按键，通过 `InputActionAsset` 或简单字典配置映射。
-
-对应现有 `EasyInputController`。
-
-```csharp
-public class PlayerController : MonoBehaviour
-{
-    [SerializeField] private PlayerUnit _player;
-    private bool _inputBanned;
-
-    private void Update()
-    {
-        if (_inputBanned) return;
-        HandleMove();
-        HandleRun();
-        HandleAttack();
-    }
-
-    public void SetBanInput(bool ban) => _inputBanned = ban;
-
-    private void HandleMove()  { /* 读轴 → _player.Move(dir, cameraFwd) / StopMove() */ }
-    private void HandleRun()   { /* LeftShift Down/Up → _player.StartRun/StopRun() */ }
-    private void HandleAttack(){ /* E Down → _player.Attack() */ }
-}
-```
-
-**关键约定**：
-- `PlayerController` 只调用 `PlayerUnit` 的语义方法（`Move/Attack/StartRun`），不直接调用 `ASC` API。
-- 输入屏蔽由 `SetBanInput(true)` 实现（对应现有 `EasyInputController.SetBanInput`）。 
-
----
-
-### 4.9 `LevelFlowController`（Level/LevelFlowController.cs）
-
-**职责**：波次/胜负状态机，通过 `GameEventBus` 监听事件，通过 `UnitManager` 查询单位。
-
-```csharp
-public enum FlowState { Preparing, Running, Paused, Ended }
-
-public class LevelFlowController
-{
-    public FlowState State { get; private set; }
-    private int _currentWave;
-
-    public void StartFlow()
-    {
-        State = FlowState.Running;
-        SpawnNextWave();
-    }
-
-    public void Pause()  { State = FlowState.Paused; }
-    public void Resume() { State = FlowState.Running; }
-
-    private void SpawnNextWave()
-    {
-        _currentWave++;
-        GameEventBus.Dispatch(new WaveStartEvent { WaveIndex = _currentWave });
-        // 具体 Spawn 逻辑由 LevelBase 的子类重写或订阅 WaveStartEvent
-    }
-
-    // 监听单位死亡，判断胜负
-    private void OnUnitDead(UnitDeadEvent e)
-    {
-        var remaining = UnitManager.Instance.GetUnitsWithTag(EnemyTagId);
-        if (remaining.Count == 0)
-        {
-            State = FlowState.Ended;
-            GameEventBus.Dispatch(new LevelEndEvent { Result = LevelResult.Win });
-        }
-    }
-}
-```
-
----
-
-### 4.10 `LevelBase`（Level/LevelBase.cs）
-
-**职责**：关卡抽象基类，定义关卡生命周期，持有 `LevelFlowController` 实例。
-
-```csharp
-public abstract class LevelBase
-{
-    protected LevelFlowController FlowController { get; } = new();
-
-    public virtual void OnInit()   { /* 初始化单位、配置 */ }
-    public virtual void OnStart()  { FlowController.StartFlow(); }
-    public virtual void OnPause()  { FlowController.Pause(); }
-    public virtual void OnResume() { FlowController.Resume(); }
-    public virtual void OnEnd(LevelResult result) { /* 清理工作 */ }
-}
-```
-
-**设计约定**：
-- `LevelBase` 单向持有 `LevelFlowController`（不反向依赖）。
-- `LevelFlowController` 通过 `GameEventBus.Dispatch(LevelEndEvent)` 通知关卡结束，`LevelBase` 订阅该事件后调用 `OnEnd()`，以打破潜在循环依赖。
-
----
-
-### 4.11 `LevelManager`（Level/LevelManager.cs）
-
-**职责**：关卡加载/卸载/生命周期驱动的单例，对应现有 `GameManager` 中的场景管理部分。
-
-```csharp
-public class LevelManager : MonoSingleton<LevelManager>
-{
-    private LevelBase _currentLevel;
-
-    public void LoadLevel<T>(string sceneName) where T : LevelBase, new()
-    {
-        // 异步加载场景，加载完成后：
-        // 1. _currentLevel = new T();
-        // 2. _currentLevel.OnInit();
-        // 3. _currentLevel.OnStart();
-    }
-
-    public void UnloadCurrentLevel()
-    {
-        _currentLevel?.OnEnd(LevelResult.Quit);
-        _currentLevel = null;
-        GASManager.Stop(); // 关卡卸载时停止 ECS World
-    }
-}
-```
-
----
-
-### 4.12 `AttributeBarView`（UI/AttributeBarView.cs）
-
-**职责**：纯 View 组件，显示单条属性进度条（Hp/Mp/Sp 等），无业务逻辑依赖。
-
-对应现有 `VMMainWindow` 中的 `ObservableVariable<float> Hp/Mp/Sp`。
-
-```csharp
-public class AttributeBarView : MonoBehaviour
-{
-    [SerializeField] private Slider _slider;
-    [SerializeField] private TMP_Text _label;
-
-    public void SetValue(float current, float max)
-    {
-        _slider.value = max > 0 ? current / max : 0;
-        _label.text = $"{current}/{max}";
-    }
-}
-```
-
----
-
-### 4.13 `HUDController`（UI/HUDController.cs）
-
-**职责**：订阅 EX-GAS `GASEventCenter` 的属性变化事件，刷新 `AttributeBarView`。
-
-对应现有 `VMMainWindow.RegisterUpdateEvent`。
-
-```csharp
-public class HUDController : MonoBehaviour
-{
-    [SerializeField] private AttributeBarView _hpBar;
-    [SerializeField] private AttributeBarView _mpBar;
-    [SerializeField] private AttributeBarView _spBar;
-
-    private AbilitySystemComponent _watchedAsc;
-
-    public void Bind(AbilitySystemComponent asc)
-    {
-        _watchedAsc = asc;
-        RefreshAll();
-        GASEventCenter.RegisterOnAttrCurrentValueChangeAfter(asc.Cell, attrSetId, XAttribute.Hp, OnHpChange);
-        GASEventCenter.RegisterOnAttrCurrentValueChangeAfter(asc.Cell, attrSetId, XAttribute.Mp, OnMpChange);
-        GASEventCenter.RegisterOnAttrCurrentValueChangeAfter(asc.Cell, attrSetId, XAttribute.Sp, OnSpChange);
-    }
-
-    public void Unbind()
-    {
-        GASEventCenter.UnRegisterOnAttrCurrentValueChangeAfter(_watchedAsc.Cell, attrSetId, XAttribute.Hp, OnHpChange);
-        // ... Mp, Sp 同理
-    }
-
-    private void OnHpChange(float last, float cur)
-    {
-        var max = _watchedAsc.GetAttrCurrentValue(attrSetId, XAttribute.HpMax);
-        _hpBar.SetValue(cur, max);
-    }
-    // OnMpChange / OnSpChange 同理
-}
-```
-
-**关键约定**：
-- `Bind(asc)` 由外部（如 `LevelBase.OnStart` 或 `GameEntry`）在玩家单位就绪后调用。
-- 显示/隐藏窗口时必须对应调用 `Bind/Unbind`，防止 GASEventCenter 事件泄漏。
-
----
-
-## 五、EX-GAS API 速查表
-
-| 操作 | API | 说明 |
-|---|---|---|
-| 启动 GAS ECS World | `GASManager.Run()` | GameEntry 最先调用 |
-| 停止 GAS | `GASManager.Stop()` | 关卡卸载时调用 |
-| 初始化 ASC | `ASC.Init(XLuban.GetAscConfig(id))` | UnitBase.Awake |
-| 激活技能 | `ASC.Cell.TryActivateAbility(id, param)` | PlayerUnit 方法内 |
-| 结束技能 | `ASC.Cell.TryEndAbility(id)` | PlayerUnit.StopRun 等 |
-| 判断技能激活状态 | `ASC.Cell.IsAbilityActive(id)` | 防重复激活 |
-| 设置技能参数 | `ASC.Cell.SetAbilityParam(id, param)` | 移动方向更新 |
-| 施加 GE | `ASC.Cell.ApplyGameplayEffectToSelf(spec)` | Buff/Debuff |
-| 对目标施加 GE | `ASC.Cell.ApplyGameplayEffectTo(spec, target)` | 攻击伤害 |
-| 查询 Tag | `ASC.Cell.HasTag(tagId)` | UnitManager 过滤 |
-| 添加固有 Tag | `ASC.Cell.AddFixedTag(tagId)` | 阵营/状态初始化 |
-| 属性变化监听 | `GASEventCenter.RegisterOnAttrCurrentValueChangeAfter(...)` | HUDController |
-| 属性钳制 | `GASEventCenter.SetOnAttrBaseValueChangeBefore(...)` | UnitBase.OnEnable |
-
-参考现有 `DemoPlayer` 的完整 Ability 调用模式：
-
----
-
-## 六、关键约束与实现规则
-
-1. **初始化顺序（强制）**：`XLauncher.Launch()` → `GASManager.Run()` → 资源系统就绪 → `XLuban` 配置表加载 → 场景加载 → `UnitBase.Awake`（ASC 初始化）。
-2. **ASC 必须由 `AbilitySystemComponent` 包装**：框架层通过 `ASC.Cell` 访问 `AbilitySystemCell`，不直接 new。
-3. **GE 构造方式**：`new GameplayEffectSpec(XLuban.GetGameplayEffectConfig(id).ComponentConfigs)`。 
-4. **属性事件必须成对注册/注销**：`OnEnable` 注册，`OnDisable` 注销，防止野引用。 
-5. **`GameplayCue` 不在框架层处理**：特效/音效由 GE/Ability 配置中的 `CueOnApply/OnTick` 驱动，框架脚本不封装 Cue。
-6. **`GameEventBus` 用强类型 struct 事件**，不用字符串 key（区别于现有 `EventCenter`）。
-7. **`LevelFlowController` 通过事件通知 `LevelBase`**，不直接持有引用，避免循环依赖。
-
----
-
-## 七、现有 Demo 脚本 → 新框架映射对照
-
-| 现有脚本 | 新框架对应 | 变化点 |
-|---|---|---|
-| `DemoLauncher` | `GameEntry` | 拆出 GameManager 职责，职责单一化 |
-| `GameManager` | `LevelManager` + `GameEntry` | 分拆为关卡管理 + 启动入口 |
-| `BaseUnit` | `UnitBase` | 去除硬编码 move Ability 绑定，改为虚方法 |
-| `DemoPlayer` | `PlayerUnit` | 静态单例改为 `UnitManager.GetUnit<PlayerUnit>()` 获取 |
-| `EasyInputController` | `PlayerController` | 解除 CharacterController 耦合，仅调用 PlayerUnit 方法 |
-| `VMMainWindow` | `HUDController` + `AttributeBarView` | MVVM 改为轻量 MVC，去除 Loxodon 依赖 |
-| `EventCenter`（字符串） | `GameEventBus`（泛型） | 强类型，编译期安全 |
-
----
-
-## Notes
-
-- `MonoSingleton<T>` 是一个通用的 Unity MonoBehaviour 单例基类，需自行在 `Framework/Core/` 中实现（`Awake` 中 `Instance = this; DontDestroyOnLoad(gameObject)`）。
-- `PlayerUnit.Instance` 的静态单例写法参考现有 `DemoPlayer.Player()`，  但新框架优先通过 `UnitManager.GetUnit<PlayerUnit>()` 获取，解耦静态引用。
-- 现有 `VMMainWindow.RefreshState()` 展示了属性初始值刷新的完整实现，可作为 `HUDController` 的参考。
+AutoChess 命令行验收入口位于 `Assets/_Test/GAS/Runtime/AutoChess`，可按测试类中的静态入口在 Unity batchmode 中运行。
+
+## 迁移检查清单
+
+迁移旧 Demo 或项目代码时逐项检查：
+
+1. 是否还在保存 `AbilitySystemCell`、`AbilitySpec`、`GameplayEffectSpec` 等旧对象引用。
+2. 是否在 MonoBehaviour 中直接修改 Attribute / Tag / GE / Ability 状态。
+3. 是否把 Cue / replay / log / UI 事件当成 gameplay 输入。
+4. 是否在 ECS system 中边读 `DynamicBuffer<T>` 边做结构变化。
+5. 新 system 是否已经加入 `GASSystemScheduleContract`。
+6. 新配置是否通过 Bean / Luban / registry / definition table 进入 runtime。
+7. 测试是否能证明 request、runtime state、fact、presentation outbox 全链路闭合。

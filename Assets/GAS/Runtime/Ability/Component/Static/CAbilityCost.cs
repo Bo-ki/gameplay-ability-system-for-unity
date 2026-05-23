@@ -4,18 +4,18 @@ namespace GAS.Runtime
 {
     public struct CAbilityCost : IComponentData
     {
-        public Entity ProtoGameplayEffectCost;
+        public int GameplayEffectCode;
     }
-    
+
     public sealed class ConfAbilityCost:AbilityComponentConfig
     {
-        public GameplayEffectComponentConfig[] CostComponentConfigs;
-        
+        public int GameplayEffectCode;
+
         public override void LoadToGameplayAbilityEntity(Entity ability)
         {
             _entityManager.AddComponentData(ability, new CAbilityCost
             {
-                ProtoGameplayEffectCost = GameplayEffectHelper.CreateGameplayEffectEntity(CostComponentConfigs),
+                GameplayEffectCode = GameplayEffectCode,
             });
         }
     }

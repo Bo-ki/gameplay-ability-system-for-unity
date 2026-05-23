@@ -1,5 +1,3 @@
-using Unity.Entities;
-
 namespace GAS.Runtime
 {
     public class GameplayEffectConfig
@@ -11,11 +9,6 @@ namespace GAS.Runtime
         public GameplayEffectConfig(GameplayEffectComponentConfig[] configs)
         {
             _componentConfigs = configs;
-        }
-
-        public Entity CreateGameplayEffectEntity()
-        {
-            return GameplayEffectHelper.CreateGameplayEffectEntity(_componentConfigs);
         }
     }
 }

@@ -1,23 +1,17 @@
 using System.Collections.Generic;
-using Sirenix.OdinInspector;
 
 namespace GAS.Runtime
 {
     public class XParamTimeline : XParam
     {
-        [ShowInInspector]
         public int ID { get; private set; }
         
-        [ShowInInspector]
         public string Name { get; private set; }
         
-        [ShowInInspector]
         public int LifeTime { get; private set; }
         
-        [ShowInInspector]
         public bool ManualEndAbility { get; private set; }
         
-        [ShowInInspector]
         public List<Track> Tracks = new List<Track>();
         
         public XParamTimeline()

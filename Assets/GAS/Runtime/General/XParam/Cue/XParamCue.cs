@@ -1,30 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using GAS.General;
-using Sirenix.OdinInspector;
 
 namespace GAS.Runtime
 {
     public class XParamCue : XParam
     {
-        [ShowInInspector]
-        [LabelText("需求标签")] 
-        [ValueDropdown(nameof(TagChoices), IsUniqueList = true)]
         [BeanField(nameof(SetRequiredTags),Order = 1)]
         public List<int> RequiredTags;
 
-        [ShowInInspector] 
-        [LabelText("免疫标签")] 
-        [ValueDropdown(nameof(TagChoices), IsUniqueList = true)]
         [BeanField(nameof(SetImmunityTags),Order = 2)]
         public List<int> ImmunityTags;
         
         
-        [ShowInInspector]
-        [LabelText("Cue类型")]
-        [ValueDropdown(nameof(CueClassChoice))]
-        [OnValueChanged(nameof(OnTypeChange))]
         [BeanPolymorphicField(  
             beanFieldName: "CueLogic",  
             lubanPolymorphicType: nameof(GameplayCueBase),  
@@ -35,9 +23,6 @@ namespace GAS.Runtime
             Order = 3)] 
         public string CueType { get; private set; }
 
-        [ShowInInspector]
-        [HideLabel]
-        [HideReferenceObjectPicker]
         public XParam Param { get; set; }
         
         public void SetCueType(string cueType)
@@ -83,17 +68,6 @@ namespace GAS.Runtime
             return new GameplayCueConfig(cueType, Param, RequiredTags.ToArray(), ImmunityTags.ToArray());
         }
         
-        public List<ValueDropdownItem> TagChoices => GeneralGasChoiceHelper.Tags();
-        public IEnumerable<string> CueClassChoice => CueHelper.GetCueTypeNames();
-
-        private void OnTypeChange()
-        {
-#if UNITY_EDITOR
-            Param = CueHelper.CreateCueParameter(CueType);
-#endif
-        }
-
-
 #if UNITY_EDITOR
         public void DecodeExcelData(List<object> paramData)
         {

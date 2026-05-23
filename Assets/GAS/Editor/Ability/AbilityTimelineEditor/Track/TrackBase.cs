@@ -11,7 +11,7 @@ namespace GAS.Editor
     {
         protected float _frameWidth;
         protected Track _trackInfo;
-        protected List<TaskClip> _trackItems = new();
+        protected List<TimelineActionClip> _trackItems = new();
         protected VisualElement BoundingBox;
         protected VisualElement Lock;
         protected VisualElement MenuBox;
@@ -74,7 +74,7 @@ namespace GAS.Editor
         private void OnPointerOut(PointerOutEvent evt)
         {
             foreach (var trackItemBase in _trackItems)
-                if (trackItemBase is TaskClip clipViewPair)
+                if (trackItemBase is TimelineActionClip clipViewPair)
                     clipViewPair.ClipVe.OnHover(false);
         }
 
@@ -82,7 +82,7 @@ namespace GAS.Editor
         {
             var mousePos = evt.position;
             foreach (var trackItemBase in _trackItems)
-                if (trackItemBase is TaskClip clipViewPair)
+                if (trackItemBase is TimelineActionClip clipViewPair)
                 {
                     clipViewPair.ClipVe.OnHover(false);
                     if (!clipViewPair.ClipVe.InClipRect(mousePos)) continue;
@@ -102,7 +102,7 @@ namespace GAS.Editor
             RefreshShow(_frameWidth);
         }
 
-        public void RemoveTrackItem(TaskClip item)
+        public void RemoveTrackItem(TimelineActionClip item)
         {
             Track.Remove(item.Ve);
             _trackItems.Remove(item);
@@ -146,7 +146,7 @@ namespace GAS.Editor
 
         private void OnContextMenu(ContextualMenuPopulateEvent evt)
         {
-            evt.menu.AppendAction("添加任务", OnAddTrackItem, DropdownMenuAction.AlwaysEnabled);
+            evt.menu.AppendAction("添加Action", OnAddTrackItem, DropdownMenuAction.AlwaysEnabled);
             evt.menu.AppendAction("删除轨道", OnRemoveTrack, DropdownMenuAction.AlwaysEnabled);
         }
 

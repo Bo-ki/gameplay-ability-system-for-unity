@@ -9,7 +9,7 @@ namespace GAS.Runtime
         public override void OnAdd(float time)
         {
             base.OnAdd(time);
-            var go = _abilitySystemCell?.GameObject;
+            var go = TargetGameObject;
             if (go != null)
             {
                 var node = go.transform.Find(Parameter.AnimatorNodePath);

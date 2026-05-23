@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using GAS.Runtime;
 using Sirenix.OdinInspector;
-using Unity.Entities;
-using UnityEngine;
 
 namespace GAS.Editor
 {
@@ -12,31 +11,58 @@ namespace GAS.Editor
     {
         [LabelText("消耗[GE]")]
         Cost,
-        
+
         [LabelText("冷却[GE]")]
         Cooldown,
-        
+
         [LabelText("描述标签")]
         AssetTags,
-        
+
         [LabelText("拥有【任意】Tag的Ability会被取消")]
         CancelAbilityWithTags,
-        
+
         [LabelText("拥有【任意】Tag的Ability会被阻止")]
         BlockAbilityWithTags,
-        
+
         [LabelText("激活后获得的Tag")]
         ActivationOwnedTags,
-        
+
         [LabelText("激活需要的Tag")]
         ActivationRequiredTags,
-        
+
         [LabelText("阻止激活的Tag")]
         ActivationBlockedTags,
     }
 
+    public readonly struct AbilityExecutionSchema
+    {
+        public readonly string Name;
+        public readonly Type ParamType;
+
+        public AbilityExecutionSchema(string name, Type paramType)
+        {
+            Name = name;
+            ParamType = paramType;
+        }
+    }
+
+    public readonly struct TimelineActionParameterSchema
+    {
+        public readonly string Name;
+        public readonly Type ParamType;
+
+        public TimelineActionParameterSchema(string name, Type paramType)
+        {
+            Name = name;
+            ParamType = paramType;
+        }
+    }
+
     public static class EditorAbilityHelper
     {
+        private static IReadOnlyList<AbilityExecutionSchema> _abilityExecutionSchemas;
+        private static IReadOnlyList<TimelineActionParameterSchema> _timelineActionParameterSchemas;
+
         public static IEnumerable<AbilityEditComponent> ComponentTypes()
         {
             return new[]
@@ -52,158 +78,103 @@ namespace GAS.Editor
             };
         }
 
-        #region AbilityLogic
-
-        private static IEnumerable<Type> _cachedAbilityLogicTypes;
-
-        public static IEnumerable<Type> GetCachedAbilityLogicTypes()
+        public static IReadOnlyList<AbilityExecutionSchema> GetAbilityExecutionSchemas()
         {
-            if (_cachedAbilityLogicTypes != null) return _cachedAbilityLogicTypes;
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            _cachedAbilityLogicTypes = assemblies
-                .SelectMany(asm => asm.GetTypes())
-                .Where(type =>
-                    type.IsSubclassOf(typeof(AbilityLogicBase)) &&
-                    !type.IsAbstract
-                )
-                .ToList();
-
-            return _cachedAbilityLogicTypes;
+            return _abilityExecutionSchemas ??= new[]
+            {
+                new AbilityExecutionSchema("ApplyEffectsOnActivate", typeof(XParamEffectIDs)),
+                new AbilityExecutionSchema("TimelineRef", typeof(XParamTimelineID)),
+                new AbilityExecutionSchema("MoveInput", ResolveXParamType("MoveInput", "DemoForESC._Script.Gas.Ability.XParamMove", "XParamMove")),
+            };
         }
 
-        private static Dictionary<string, Type> _cachedAbilityToParamTypeMap;
-
-        public static Dictionary<string, Type> AbilityToAbilityParamTypeMap()
+        public static IEnumerable<string> GetAbilityExecutionTypeNames()
         {
-            if (_cachedAbilityToParamTypeMap != null)
-                return _cachedAbilityToParamTypeMap;
-            var abilityLogicTypes = GetCachedAbilityLogicTypes();
-            _cachedAbilityToParamTypeMap = new Dictionary<string, Type>();
-            foreach (var derivedType in abilityLogicTypes)
-            {
-                var baseType = derivedType.BaseType; // 获取基类类型
-
-                if (baseType != null && baseType.IsGenericType)
-                {
-                    var genericBaseDef = baseType.GetGenericTypeDefinition();
-
-                    // 确认是否是所需的基类泛型定义
-                    if (genericBaseDef == typeof(AbilityLogicBase<>))
-                    {
-                        // 获取实际使用的泛型参数
-                        var genericArgs = baseType.GetGenericArguments();
-                        var paramType = genericArgs[0];
-
-                        if (derivedType.FullName != null) _cachedAbilityToParamTypeMap[derivedType.Name] = paramType;
-                    }
-                }
-            }
-
-            return _cachedAbilityToParamTypeMap;
+            return GetAbilityExecutionSchemas().Select(schema => schema.Name);
         }
 
         public static XParam CreateAbilityParameter(string type, List<object> paramData = null)
         {
-            var map = AbilityToAbilityParamTypeMap();
-            if (!map.TryGetValue(type, out var abilityParamConfigType))
-                throw new KeyNotFoundException($"未找到类型为 {type} 的 XParam 类型。");
-            var abilityParamEditor = (XParam)Activator.CreateInstance(abilityParamConfigType);
+            var schema = GetAbilityExecutionSchemas().FirstOrDefault(item => item.Name == type);
+            if (schema.ParamType == null)
+                throw new KeyNotFoundException($"未找到 Ability 执行配置 {type} 对应的 XParam 类型。");
+
+            var abilityParamEditor = (XParam)Activator.CreateInstance(schema.ParamType);
             if (paramData != null) abilityParamEditor.DecodeExcelData(paramData);
             return abilityParamEditor;
         }
 
-        public static IEnumerable<string> GetCachedAbilityLogicTypesName()
+        public static IReadOnlyList<TimelineActionParameterSchema> GetTimelineActionParameterSchemas()
         {
-            var types = GetCachedAbilityLogicTypes();
-            return types
-                .Select(type => type.Name)
-                .Where(name => !string.IsNullOrEmpty(name))
-                .ToList();
-        }
-
-        #endregion
-
-        #region Ability Task
-        private static IEnumerable<Type> _cachedAbilityTaskTypes;
-        public static IEnumerable<Type> GetCachedAbilityTaskTypes()
-        {
-            if (_cachedAbilityTaskTypes != null) return _cachedAbilityTaskTypes;
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            _cachedAbilityTaskTypes = assemblies
-                .SelectMany(asm => asm.GetTypes())
-                .Where(type =>
-                    type.IsSubclassOf(typeof(AbilityTaskBase)) &&
-                    !type.IsAbstract
-                )
-                .ToList();
-
-            return _cachedAbilityTaskTypes;
-        }
-        
-        private static Dictionary<string, Type> _cachedAbilityTaskToParamTypeMap;
-        
-        public static Dictionary<string, Type> AbilityTaskToAbilityTaskParamTypeMap()
-        {
-            if (_cachedAbilityTaskToParamTypeMap != null)
-                return _cachedAbilityTaskToParamTypeMap;
-            var abilityLogicTypes = GetCachedAbilityTaskTypes();
-            _cachedAbilityTaskToParamTypeMap = new Dictionary<string, Type>();
-            foreach (var derivedType in abilityLogicTypes)
+            return _timelineActionParameterSchemas ??= new[]
             {
-                var baseType = derivedType.BaseType; // 获取基类类型
+                new TimelineActionParameterSchema("NoOp", typeof(XParamNone)),
+                new TimelineActionParameterSchema("DebugLog", typeof(XParamString)),
+                new TimelineActionParameterSchema("ApplyCost", typeof(XParamNone)),
+                new TimelineActionParameterSchema("ApplyCooldown", typeof(XParamNone)),
+                new TimelineActionParameterSchema("PlayCue", typeof(XParamCue)),
+                new TimelineActionParameterSchema("ApplyEffects", typeof(XParamApplyEffects)),
+                new TimelineActionParameterSchema("DodgeMove", ResolveXParamType("DodgeMove", "DemoForESC._Script.Gas.Ability.XParamDodgeMove", "XParamDodgeMove")),
+                new TimelineActionParameterSchema("PlayCuePreset", typeof(XParamCueList)),
+            };
+        }
 
-                if (baseType != null && baseType.IsGenericType)
-                {
-                    var genericBaseDef = baseType.GetGenericTypeDefinition();
+        public static IEnumerable<string> GetTimelineActionTypeNames()
+        {
+            return GetTimelineActionParameterSchemas().Select(schema => schema.Name);
+        }
 
-                    // 确认是否是所需的基类泛型定义
-                    if (genericBaseDef == typeof(AbilityTaskBase<>))
-                    {
-                        // 获取实际使用的泛型参数
-                        var genericArgs = baseType.GetGenericArguments();
-                        var paramType = genericArgs[0];
+        public static XParam CreateTimelineActionParameter(string type, List<object> paramData = null)
+        {
+            var schema = GetTimelineActionParameterSchemas().FirstOrDefault(item => item.Name == type);
+            if (schema.ParamType == null)
+                throw new KeyNotFoundException($"未找到 Timeline Action 配置 {type} 对应的 XParam 类型。");
 
-                        if (derivedType.FullName != null) _cachedAbilityTaskToParamTypeMap[derivedType.Name] = paramType;
-                    }
-                }
+            var abilityParamEditor = (XParam)Activator.CreateInstance(schema.ParamType);
+            if (paramData != null) abilityParamEditor.DecodeExcelData(paramData);
+            return abilityParamEditor;
+        }
+
+        private static Type ResolveXParamType(string ownerName, params string[] typeNames)
+        {
+            foreach (var typeName in typeNames)
+            {
+                var resolved = ResolveType(typeName);
+                if (resolved != null && typeof(XParam).IsAssignableFrom(resolved))
+                    return resolved;
             }
 
-            return _cachedAbilityTaskToParamTypeMap;
+            throw new InvalidOperationException($"未找到 {ownerName} 需要的 XParam 类型：{string.Join(", ", typeNames)}");
         }
-        
-        public static XParam CreateAbilityTaskParameter(string type, List<object> paramData = null)
+
+        private static Type ResolveType(string typeName)
         {
-            var map = AbilityTaskToAbilityTaskParamTypeMap();
-            if (!map.TryGetValue(type, out var abilityParamConfigType))
-                throw new KeyNotFoundException($"未找到类型为 {type} 的 XParam 类型。");
-            var abilityParamEditor = (XParam)Activator.CreateInstance(abilityParamConfigType);
-            if (paramData != null) abilityParamEditor.DecodeExcelData(paramData);
-            return abilityParamEditor;
-        }
-        
-        public static AbilityTaskBase CreateTaskInEditor(string taskType,
-            XParam paramLogic,XParam paramTask)
-        {
-            var taskTypes = GetCachedAbilityTaskTypes();
-            var type = taskTypes.FirstOrDefault(t => t.Name == taskType);
-            
-            if(type == null)
-            {
-                Debug.LogError($"Ability Task Type [{taskType}] not found");
+            if (string.IsNullOrWhiteSpace(typeName))
                 return null;
-            }
-            
-            ALTimeline al = new ALTimeline(Entity.Null);
-            al.SetTimelineParam(paramLogic as XParamTimeline);
-            if (Activator.CreateInstance(type,al) is AbilityTaskBase task)
+
+            var direct = Type.GetType(typeName);
+            if (direct != null)
+                return direct;
+
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                task.InitParameters(paramTask);
-                return task;
+                Type[] types;
+                try
+                {
+                    types = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException e)
+                {
+                    types = e.Types.Where(t => t != null).ToArray();
+                }
+
+                var resolved = types.FirstOrDefault(type =>
+                    type.FullName == typeName || type.Name == typeName);
+                if (resolved != null)
+                    return resolved;
             }
 
-            Debug.LogError($"Ability Task Type [{taskType}] not found");
             return null;
         }
-        #endregion
     }
 }
