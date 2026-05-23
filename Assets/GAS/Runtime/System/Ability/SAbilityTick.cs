@@ -17,8 +17,9 @@ namespace GAS.Runtime
         public void OnCreate(ref SystemState state)
         {
             _activeQuery = SystemAPI.QueryBuilder()
-                .WithAll<CAbilityBaseInfo, CAbilityRuntimeState>()
+                .WithAll<CAbilityActive, CAbilityBaseInfo, CAbilityRuntimeState>()
                 .Build();
+            state.RequireForUpdate(_activeQuery);
         }
 
         [BurstCompile]

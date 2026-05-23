@@ -30,11 +30,10 @@ namespace GAS.Runtime
         public void OnUpdate(ref SystemState state)
         {
             var em = state.EntityManager;
-            using var drivers = _driverQuery.ToEntityArray(Allocator.Temp);
-            if (drivers.Length == 0)
+            if (_driverQuery.IsEmptyIgnoreFilter)
                 return;
 
-            var driverEntity = drivers[0];
+            var driverEntity = _driverQuery.GetSingletonEntity();
             var driver = em.GetComponentData<CHeadlessAutoChessDriver>(driverEntity);
             if (!driver.Enabled || driver.Completed)
                 return;
@@ -43,9 +42,11 @@ namespace GAS.Runtime
             if (driver.LastDecisionFrame == frame)
                 return;
             SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
 
             using var units = _unitQuery.ToEntityArray(Allocator.Temp);
-            if (TryResolveWinner(em, units, out var winner))
+            using var unitSnapshots = BuildUnitSnapshots(em, units, Allocator.Temp);
+            if (TryResolveWinner(unitSnapshots, out var winner))
             {
                 driver.Completed = true;
                 driver.Winner = winner;
@@ -55,11 +56,9 @@ namespace GAS.Runtime
             }
 
             if (!TryFindNextActor(
-                    em,
-                    units,
+                    unitSnapshots,
                     driver.NextTurnOrder,
-                    out var actor,
-                    out var unit,
+                    out var actorSnapshot,
                     out var nextTurnOrder,
                     out var startedNewRound))
             {
@@ -76,8 +75,10 @@ namespace GAS.Runtime
             driver.NextTurnOrder = nextTurnOrder;
             driver.TurnCount++;
             driver.LastDecisionFrame = frame;
+            var actor = actorSnapshot.Entity;
+            var unit = actorSnapshot.Unit;
 
-            if (IsCrowdControlled(em, actor, unit))
+            if (IsCrowdControlled(actorSnapshot))
             {
                 driver.CrowdControlTurnSkippedCount++;
                 EmitControlTurnSkipped(em, eventBusEntity, actor, unit, driver);
@@ -86,11 +87,10 @@ namespace GAS.Runtime
             }
 
             if (TrySelectCommand(
-                    em,
-                    units,
-                    actor,
-                    unit,
+                    unitSnapshots,
+                    actorSnapshot,
                     driver.Round,
+                    out var abilityEntity,
                     out var abilityCode,
                     out var target,
                     out var targetPolicy,
@@ -99,17 +99,7 @@ namespace GAS.Runtime
                     out var isSupportAbility,
                     out var isSummonAbility))
             {
-                using var ecb = new EntityCommandBuffer(Allocator.Temp);
-                var request = ecb.CreateEntity();
-                ecb.SetName(request, $"AutoChessActivate_{abilityCode}");
-                ecb.AddComponent(request, new CAbilityCommandRequest
-                {
-                    Owner = actor,
-                    AbilityCode = abilityCode,
-                    CommandType = EAbilityCommandType.Activate,
-                    TargetAsc = target,
-                });
-                ecb.Playback(em);
+                RequestAbilityActivation(em, abilityEntity, target);
 
                 driver.IssuedCommandCount++;
                 if (isSummonAbility)
@@ -143,50 +133,44 @@ namespace GAS.Runtime
         }
 
         private static bool TryFindNextActor(
-            EntityManager em,
-            NativeArray<Entity> units,
+            NativeArray<UnitSnapshot> units,
             int cursor,
-            out Entity actor,
-            out CHeadlessAutoChessUnit actorUnit,
+            out UnitSnapshot actorSnapshot,
             out int nextTurnOrder,
             out bool startedNewRound)
         {
-            actor = Entity.Null;
-            actorUnit = default;
+            actorSnapshot = default;
             nextTurnOrder = cursor;
             startedNewRound = false;
 
-            if (TryFindActorAtOrAfter(em, units, cursor, out actor, out actorUnit))
+            if (TryFindActorAtOrAfter(units, cursor, out actorSnapshot))
             {
-                nextTurnOrder = actorUnit.TurnOrder + 1;
+                nextTurnOrder = actorSnapshot.Unit.TurnOrder + 1;
                 return true;
             }
 
-            if (!TryFindActorAtOrAfter(em, units, int.MinValue, out actor, out actorUnit))
+            if (!TryFindActorAtOrAfter(units, int.MinValue, out actorSnapshot))
                 return false;
 
             startedNewRound = true;
-            nextTurnOrder = actorUnit.TurnOrder + 1;
+            nextTurnOrder = actorSnapshot.Unit.TurnOrder + 1;
             return true;
         }
 
         private static bool TryFindActorAtOrAfter(
-            EntityManager em,
-            NativeArray<Entity> units,
+            NativeArray<UnitSnapshot> units,
             int cursor,
-            out Entity actor,
-            out CHeadlessAutoChessUnit actorUnit)
+            out UnitSnapshot actorSnapshot)
         {
-            actor = Entity.Null;
-            actorUnit = default;
+            actorSnapshot = default;
             var bestOrder = int.MaxValue;
             var bestSlot = int.MaxValue;
 
             for (var i = 0; i < units.Length; i++)
             {
                 var candidate = units[i];
-                var unit = em.GetComponentData<CHeadlessAutoChessUnit>(candidate);
-                if (unit.TurnOrder < cursor || !IsAlive(em, candidate, unit))
+                var unit = candidate.Unit;
+                if (unit.TurnOrder < cursor || !candidate.Alive)
                     continue;
                 if (unit.TurnOrder > bestOrder)
                     continue;
@@ -194,27 +178,25 @@ namespace GAS.Runtime
                     continue;
                 if (unit.TurnOrder == bestOrder
                     && unit.Slot == bestSlot
-                    && actor != Entity.Null
-                    && candidate.Index >= actor.Index)
+                    && actorSnapshot.Entity != Entity.Null
+                    && candidate.Entity.Index >= actorSnapshot.Entity.Index)
                 {
                     continue;
                 }
 
-                actor = candidate;
-                actorUnit = unit;
+                actorSnapshot = candidate;
                 bestOrder = unit.TurnOrder;
                 bestSlot = unit.Slot;
             }
 
-            return actor != Entity.Null;
+            return actorSnapshot.Entity != Entity.Null;
         }
 
         private static bool TrySelectCommand(
-            EntityManager em,
-            NativeArray<Entity> units,
-            Entity actor,
-            in CHeadlessAutoChessUnit unit,
+            NativeArray<UnitSnapshot> units,
+            in UnitSnapshot actorSnapshot,
             int round,
+            out Entity abilityEntity,
             out int abilityCode,
             out Entity target,
             out HeadlessAutoChessTargetPolicy targetPolicy,
@@ -223,6 +205,7 @@ namespace GAS.Runtime
             out bool isSupportAbility,
             out bool isSummonAbility)
         {
+            abilityEntity = Entity.Null;
             abilityCode = 0;
             target = Entity.Null;
             targetPolicy = HeadlessAutoChessTargetPolicy.Frontline;
@@ -230,13 +213,21 @@ namespace GAS.Runtime
             isControlAbility = false;
             isSupportAbility = false;
             isSummonAbility = false;
+            var actor = actorSnapshot.Entity;
+            var unit = actorSnapshot.Unit;
 
             if (unit.SupportAbilityCode > 0
-                && CanActivate(em, actor, unit, unit.SupportAbilityCode, unit.SupportCooldownTagIndex))
+                && CanActivate(
+                    actorSnapshot,
+                    unit.SupportAbilityCode,
+                    unit.SupportCooldownTagIndex,
+                    actorSnapshot.SupportAbility,
+                    actorSnapshot.SupportAbilityBusy))
             {
-                var supportTarget = FindSupportTarget(em, units, actor, unit, unit.SupportTargetPolicy);
+                var supportTarget = FindSupportTarget(units, actor, actorSnapshot, unit.SupportTargetPolicy);
                 if (supportTarget != Entity.Null)
                 {
+                    abilityEntity = actorSnapshot.SupportAbility;
                     abilityCode = unit.SupportAbilityCode;
                     target = supportTarget;
                     targetPolicy = unit.SupportTargetPolicy;
@@ -246,9 +237,15 @@ namespace GAS.Runtime
             }
 
             if (unit.SummonAbilityCode > 0
-                && CanActivate(em, actor, unit, unit.SummonAbilityCode, unit.SummonCooldownTagIndex)
-                && !HasReachedActiveSummonLimit(em, units, actor, unit.MaxActiveSummons))
+                && CanActivate(
+                    actorSnapshot,
+                    unit.SummonAbilityCode,
+                    unit.SummonCooldownTagIndex,
+                    actorSnapshot.SummonAbility,
+                    actorSnapshot.SummonAbilityBusy)
+                && !HasReachedActiveSummonLimit(units, actor, unit.MaxActiveSummons))
             {
+                abilityEntity = actorSnapshot.SummonAbility;
                 abilityCode = unit.SummonAbilityCode;
                 target = actor;
                 targetPolicy = HeadlessAutoChessTargetPolicy.Frontline;
@@ -257,12 +254,18 @@ namespace GAS.Runtime
             }
 
             if (unit.ManaAbilityCode > 0
-                && GetAttribute(em, actor, unit.ManaAttrSetCode, unit.ManaAttrCode) >= unit.ManaAbilityThreshold
-                && CanActivate(em, actor, unit, unit.ManaAbilityCode, unit.ManaCooldownTagIndex))
+                && actorSnapshot.Mana >= unit.ManaAbilityThreshold
+                && CanActivate(
+                    actorSnapshot,
+                    unit.ManaAbilityCode,
+                    unit.ManaCooldownTagIndex,
+                    actorSnapshot.ManaAbility,
+                    actorSnapshot.ManaAbilityBusy))
             {
-                var manaTarget = FindAliveEnemy(em, units, unit, unit.ManaTargetPolicy);
+                var manaTarget = FindAliveEnemy(units, actorSnapshot, unit.ManaTargetPolicy);
                 if (manaTarget != Entity.Null)
                 {
+                    abilityEntity = actorSnapshot.ManaAbility;
                     abilityCode = unit.ManaAbilityCode;
                     target = manaTarget;
                     targetPolicy = unit.ManaTargetPolicy;
@@ -273,15 +276,20 @@ namespace GAS.Runtime
 
             if (unit.ControlAbilityCode > 0
                 && ShouldConsiderControl(round)
-                && CanActivate(em, actor, unit, unit.ControlAbilityCode, unit.ControlCooldownTagIndex))
+                && CanActivate(
+                    actorSnapshot,
+                    unit.ControlAbilityCode,
+                    unit.ControlCooldownTagIndex,
+                    actorSnapshot.ControlAbility,
+                    actorSnapshot.ControlAbilityBusy))
             {
                 var controlTarget = FindUncontrolledAliveEnemy(
-                    em,
                     units,
-                    unit,
+                    actorSnapshot,
                     unit.ControlTargetPolicy);
                 if (controlTarget != Entity.Null)
                 {
+                    abilityEntity = actorSnapshot.ControlAbility;
                     abilityCode = unit.ControlAbilityCode;
                     target = controlTarget;
                     targetPolicy = unit.ControlTargetPolicy;
@@ -291,15 +299,21 @@ namespace GAS.Runtime
             }
 
             if (unit.PrimaryAbilityCode <= 0
-                || !CanActivate(em, actor, unit, unit.PrimaryAbilityCode, unit.PrimaryCooldownTagIndex))
+                || !CanActivate(
+                    actorSnapshot,
+                    unit.PrimaryAbilityCode,
+                    unit.PrimaryCooldownTagIndex,
+                    actorSnapshot.PrimaryAbility,
+                    actorSnapshot.PrimaryAbilityBusy))
             {
                 return false;
             }
 
-            target = FindAliveEnemy(em, units, unit, unit.PrimaryTargetPolicy);
+            target = FindAliveEnemy(units, actorSnapshot, unit.PrimaryTargetPolicy);
             if (target == Entity.Null)
                 return false;
 
+            abilityEntity = actorSnapshot.PrimaryAbility;
             abilityCode = unit.PrimaryAbilityCode;
             targetPolicy = unit.PrimaryTargetPolicy;
             return true;
@@ -311,8 +325,7 @@ namespace GAS.Runtime
         }
 
         private static bool HasReachedActiveSummonLimit(
-            EntityManager em,
-            NativeArray<Entity> units,
+            NativeArray<UnitSnapshot> units,
             Entity owner,
             int maxActiveSummons)
         {
@@ -323,15 +336,13 @@ namespace GAS.Runtime
             for (var i = 0; i < units.Length; i++)
             {
                 var candidate = units[i];
-                if (!em.HasComponent<CHeadlessAutoChessSummonedUnit>(candidate))
+                if (!candidate.IsSummoned)
                     continue;
 
-                var summoned = em.GetComponentData<CHeadlessAutoChessSummonedUnit>(candidate);
-                if (summoned.OwnerAsc != owner || summoned.DespawnRequested)
+                if (candidate.Summoned.OwnerAsc != owner || candidate.Summoned.DespawnRequested)
                     continue;
 
-                var unit = em.GetComponentData<CHeadlessAutoChessUnit>(candidate);
-                if (!IsAlive(em, candidate, unit))
+                if (!candidate.Alive)
                     continue;
 
                 activeSummons++;
@@ -343,79 +354,75 @@ namespace GAS.Runtime
         }
 
         private static Entity FindSupportTarget(
-            EntityManager em,
-            NativeArray<Entity> units,
+            NativeArray<UnitSnapshot> units,
             Entity actor,
-            in CHeadlessAutoChessUnit source,
+            in UnitSnapshot source,
             HeadlessAutoChessTargetPolicy policy)
         {
-            return source.SupportAbilityCode == HeadlessAutoChessScenario.AbilityPlayerCleanse
-                ? FindStunnedAlly(em, units, actor, source, policy)
-                : FindShieldSupportTarget(em, units, source, policy);
+            return source.Unit.SupportAbilityCode == HeadlessAutoChessScenario.AbilityPlayerCleanse
+                ? FindStunnedAlly(units, actor, source, policy)
+                : FindShieldSupportTarget(units, source, policy);
         }
 
         private static Entity FindUncontrolledAliveEnemy(
-            EntityManager em,
-            NativeArray<Entity> units,
-            in CHeadlessAutoChessUnit source,
+            NativeArray<UnitSnapshot> units,
+            in UnitSnapshot source,
             HeadlessAutoChessTargetPolicy policy)
         {
             return policy == HeadlessAutoChessTargetPolicy.LowestHealth
-                ? FindLowestHealthAliveEnemy(em, units, source, source.CrowdControlTagIndex)
-                : FindFrontlineAliveEnemy(em, units, source, source.CrowdControlTagIndex);
+                ? FindLowestHealthAliveEnemy(units, source, source.Unit.CrowdControlTagIndex)
+                : FindFrontlineAliveEnemy(units, source, source.Unit.CrowdControlTagIndex);
         }
 
         private static Entity FindAliveEnemy(
-            EntityManager em,
-            NativeArray<Entity> units,
-            in CHeadlessAutoChessUnit source,
+            NativeArray<UnitSnapshot> units,
+            in UnitSnapshot source,
             HeadlessAutoChessTargetPolicy policy)
         {
             return policy == HeadlessAutoChessTargetPolicy.LowestHealth
-                ? FindLowestHealthAliveEnemy(em, units, source, -1)
-                : FindFrontlineAliveEnemy(em, units, source, -1);
+                ? FindLowestHealthAliveEnemy(units, source, -1)
+                : FindFrontlineAliveEnemy(units, source, -1);
         }
 
         private static Entity FindShieldSupportTarget(
-            EntityManager em,
-            NativeArray<Entity> units,
-            in CHeadlessAutoChessUnit source,
+            NativeArray<UnitSnapshot> units,
+            in UnitSnapshot source,
             HeadlessAutoChessTargetPolicy policy)
         {
             return policy == HeadlessAutoChessTargetPolicy.LowestHealth
-                ? FindLowestHealthUnshieldedAlly(em, units, source)
-                : FindFrontlineUnshieldedAlly(em, units, source);
+                ? FindLowestHealthUnshieldedAlly(units, source)
+                : FindFrontlineUnshieldedAlly(units, source);
         }
 
         private static Entity FindFrontlineAliveEnemy(
-            EntityManager em,
-            NativeArray<Entity> units,
-            in CHeadlessAutoChessUnit source,
+            NativeArray<UnitSnapshot> units,
+            in UnitSnapshot source,
             int excludedTagIndex)
         {
             var target = Entity.Null;
-            var bestBoardX = source.Team == HeadlessAutoChessTeam.Player ? int.MaxValue : int.MinValue;
+            var sourceUnit = source.Unit;
+            var bestBoardX = sourceUnit.Team == HeadlessAutoChessTeam.Player ? int.MaxValue : int.MinValue;
             var bestSlot = int.MaxValue;
 
             for (var i = 0; i < units.Length; i++)
             {
                 var candidate = units[i];
-                var unit = em.GetComponentData<CHeadlessAutoChessUnit>(candidate);
-                if (unit.Team == source.Team
-                    || !IsAlive(em, candidate, unit)
-                    || HasDenseTag(em, candidate, excludedTagIndex))
+                var unit = candidate.Unit;
+                if (unit.Team == sourceUnit.Team
+                    || !candidate.Alive
+                    || candidate.HasTag(excludedTagIndex))
                 {
                     continue;
                 }
 
-                var betterFile = source.Team == HeadlessAutoChessTeam.Player
+                var betterFile = sourceUnit.Team == HeadlessAutoChessTeam.Player
                     ? unit.BoardX < bestBoardX
                     : unit.BoardX > bestBoardX;
                 var sameFile = unit.BoardX == bestBoardX;
                 if (!betterFile && (!sameFile || unit.Slot >= bestSlot))
                     continue;
 
-                target = candidate;
+                target = candidate.Entity;
                 bestBoardX = unit.BoardX;
                 bestSlot = unit.Slot;
             }
@@ -424,29 +431,29 @@ namespace GAS.Runtime
         }
 
         private static Entity FindFrontlineUnshieldedAlly(
-            EntityManager em,
-            NativeArray<Entity> units,
-            in CHeadlessAutoChessUnit source)
+            NativeArray<UnitSnapshot> units,
+            in UnitSnapshot source)
         {
             var target = Entity.Null;
-            var bestBoardX = source.Team == HeadlessAutoChessTeam.Player ? int.MinValue : int.MaxValue;
+            var sourceUnit = source.Unit;
+            var bestBoardX = sourceUnit.Team == HeadlessAutoChessTeam.Player ? int.MinValue : int.MaxValue;
             var bestSlot = int.MaxValue;
 
             for (var i = 0; i < units.Length; i++)
             {
                 var candidate = units[i];
-                var unit = em.GetComponentData<CHeadlessAutoChessUnit>(candidate);
-                if (unit.Team != source.Team || !IsAlive(em, candidate, unit) || HasShield(em, candidate, unit))
+                var unit = candidate.Unit;
+                if (unit.Team != sourceUnit.Team || !candidate.Alive || candidate.HasShield)
                     continue;
 
-                var betterFile = source.Team == HeadlessAutoChessTeam.Player
+                var betterFile = sourceUnit.Team == HeadlessAutoChessTeam.Player
                     ? unit.BoardX > bestBoardX
                     : unit.BoardX < bestBoardX;
                 var sameFile = unit.BoardX == bestBoardX;
                 if (!betterFile && (!sameFile || unit.Slot >= bestSlot))
                     continue;
 
-                target = candidate;
+                target = candidate.Entity;
                 bestBoardX = unit.BoardX;
                 bestSlot = unit.Slot;
             }
@@ -455,28 +462,28 @@ namespace GAS.Runtime
         }
 
         private static Entity FindLowestHealthUnshieldedAlly(
-            EntityManager em,
-            NativeArray<Entity> units,
-            in CHeadlessAutoChessUnit source)
+            NativeArray<UnitSnapshot> units,
+            in UnitSnapshot source)
         {
             var target = Entity.Null;
             var bestHealth = float.MaxValue;
             var bestSlot = int.MaxValue;
+            var sourceUnit = source.Unit;
 
             for (var i = 0; i < units.Length; i++)
             {
                 var candidate = units[i];
-                var unit = em.GetComponentData<CHeadlessAutoChessUnit>(candidate);
-                if (unit.Team != source.Team || !IsAlive(em, candidate, unit) || HasShield(em, candidate, unit))
+                var unit = candidate.Unit;
+                if (unit.Team != sourceUnit.Team || !candidate.Alive || candidate.HasShield)
                     continue;
 
-                var health = GetAttribute(em, candidate, unit.HealthAttrSetCode, unit.HealthAttrCode);
+                var health = candidate.Health;
                 if (health > bestHealth)
                     continue;
                 if (health == bestHealth && unit.Slot >= bestSlot)
                     continue;
 
-                target = candidate;
+                target = candidate.Entity;
                 bestHealth = health;
                 bestSlot = unit.Slot;
             }
@@ -485,47 +492,46 @@ namespace GAS.Runtime
         }
 
         private static Entity FindStunnedAlly(
-            EntityManager em,
-            NativeArray<Entity> units,
+            NativeArray<UnitSnapshot> units,
             Entity actor,
-            in CHeadlessAutoChessUnit source,
+            in UnitSnapshot source,
             HeadlessAutoChessTargetPolicy policy)
         {
             return policy == HeadlessAutoChessTargetPolicy.LowestHealth
-                ? FindLowestHealthStunnedAlly(em, units, actor, source)
-                : FindFrontlineStunnedAlly(em, units, actor, source);
+                ? FindLowestHealthStunnedAlly(units, actor, source)
+                : FindFrontlineStunnedAlly(units, actor, source);
         }
 
         private static Entity FindFrontlineStunnedAlly(
-            EntityManager em,
-            NativeArray<Entity> units,
+            NativeArray<UnitSnapshot> units,
             Entity actor,
-            in CHeadlessAutoChessUnit source)
+            in UnitSnapshot source)
         {
             var target = Entity.Null;
-            var bestBoardX = source.Team == HeadlessAutoChessTeam.Player ? int.MinValue : int.MaxValue;
+            var sourceUnit = source.Unit;
+            var bestBoardX = sourceUnit.Team == HeadlessAutoChessTeam.Player ? int.MinValue : int.MaxValue;
             var bestSlot = int.MaxValue;
 
             for (var i = 0; i < units.Length; i++)
             {
                 var candidate = units[i];
-                var unit = em.GetComponentData<CHeadlessAutoChessUnit>(candidate);
-                if (candidate == actor
-                    || unit.Team != source.Team
-                    || !IsAlive(em, candidate, unit)
-                    || !HasDenseTag(em, candidate, HeadlessAutoChessScenario.TagAutoChessStunned))
+                var unit = candidate.Unit;
+                if (candidate.Entity == actor
+                    || unit.Team != sourceUnit.Team
+                    || !candidate.Alive
+                    || !candidate.HasTag(HeadlessAutoChessScenario.TagAutoChessStunned))
                 {
                     continue;
                 }
 
-                var betterFile = source.Team == HeadlessAutoChessTeam.Player
+                var betterFile = sourceUnit.Team == HeadlessAutoChessTeam.Player
                     ? unit.BoardX > bestBoardX
                     : unit.BoardX < bestBoardX;
                 var sameFile = unit.BoardX == bestBoardX;
                 if (!betterFile && (!sameFile || unit.Slot >= bestSlot))
                     continue;
 
-                target = candidate;
+                target = candidate.Entity;
                 bestBoardX = unit.BoardX;
                 bestSlot = unit.Slot;
             }
@@ -534,34 +540,34 @@ namespace GAS.Runtime
         }
 
         private static Entity FindLowestHealthStunnedAlly(
-            EntityManager em,
-            NativeArray<Entity> units,
+            NativeArray<UnitSnapshot> units,
             Entity actor,
-            in CHeadlessAutoChessUnit source)
+            in UnitSnapshot source)
         {
             var target = Entity.Null;
             var bestHealth = float.MaxValue;
             var bestSlot = int.MaxValue;
+            var sourceUnit = source.Unit;
 
             for (var i = 0; i < units.Length; i++)
             {
                 var candidate = units[i];
-                var unit = em.GetComponentData<CHeadlessAutoChessUnit>(candidate);
-                if (candidate == actor
-                    || unit.Team != source.Team
-                    || !IsAlive(em, candidate, unit)
-                    || !HasDenseTag(em, candidate, HeadlessAutoChessScenario.TagAutoChessStunned))
+                var unit = candidate.Unit;
+                if (candidate.Entity == actor
+                    || unit.Team != sourceUnit.Team
+                    || !candidate.Alive
+                    || !candidate.HasTag(HeadlessAutoChessScenario.TagAutoChessStunned))
                 {
                     continue;
                 }
 
-                var health = GetAttribute(em, candidate, unit.HealthAttrSetCode, unit.HealthAttrCode);
+                var health = candidate.Health;
                 if (health > bestHealth)
                     continue;
                 if (health == bestHealth && unit.Slot >= bestSlot)
                     continue;
 
-                target = candidate;
+                target = candidate.Entity;
                 bestHealth = health;
                 bestSlot = unit.Slot;
             }
@@ -570,33 +576,33 @@ namespace GAS.Runtime
         }
 
         private static Entity FindLowestHealthAliveEnemy(
-            EntityManager em,
-            NativeArray<Entity> units,
-            in CHeadlessAutoChessUnit source,
+            NativeArray<UnitSnapshot> units,
+            in UnitSnapshot source,
             int excludedTagIndex)
         {
             var target = Entity.Null;
             var bestHealth = float.MaxValue;
             var bestSlot = int.MaxValue;
+            var sourceUnit = source.Unit;
 
             for (var i = 0; i < units.Length; i++)
             {
                 var candidate = units[i];
-                var unit = em.GetComponentData<CHeadlessAutoChessUnit>(candidate);
-                if (unit.Team == source.Team
-                    || !IsAlive(em, candidate, unit)
-                    || HasDenseTag(em, candidate, excludedTagIndex))
+                var unit = candidate.Unit;
+                if (unit.Team == sourceUnit.Team
+                    || !candidate.Alive
+                    || candidate.HasTag(excludedTagIndex))
                 {
                     continue;
                 }
 
-                var health = GetAttribute(em, candidate, unit.HealthAttrSetCode, unit.HealthAttrCode);
+                var health = candidate.Health;
                 if (health > bestHealth)
                     continue;
                 if (health == bestHealth && unit.Slot >= bestSlot)
                     continue;
 
-                target = candidate;
+                target = candidate.Entity;
                 bestHealth = health;
                 bestSlot = unit.Slot;
             }
@@ -605,34 +611,24 @@ namespace GAS.Runtime
         }
 
         private static bool CanActivate(
-            EntityManager em,
-            Entity asc,
-            in CHeadlessAutoChessUnit unit,
+            in UnitSnapshot unit,
             int abilityCode,
-            int cooldownTagIndex)
+            int cooldownTagIndex,
+            Entity abilityEntity,
+            bool abilityBusy)
         {
-            return asc != Entity.Null
-                   && em.Exists(asc)
-                   && !em.HasComponent<CAscDestroying>(asc)
-                   && !HasDenseTag(em, asc, cooldownTagIndex)
-                   && IsAlive(em, asc, unit)
-                   && !IsAbilityBusy(em, asc, abilityCode);
+            return unit.Entity != Entity.Null
+                   && abilityCode > 0
+                   && abilityEntity != Entity.Null
+                   && !unit.AscDestroying
+                   && !unit.HasTag(cooldownTagIndex)
+                   && unit.Alive
+                   && !abilityBusy;
         }
 
-        private static bool IsCrowdControlled(
-            EntityManager em,
-            Entity asc,
-            in CHeadlessAutoChessUnit unit)
+        private static bool IsCrowdControlled(in UnitSnapshot unit)
         {
-            return HasDenseTag(em, asc, unit.CrowdControlTagIndex);
-        }
-
-        private static bool HasShield(
-            EntityManager em,
-            Entity asc,
-            in CHeadlessAutoChessUnit unit)
-        {
-            return GetAttribute(em, asc, unit.ShieldAttrSetCode, unit.ShieldAttrCode) > 0f;
+            return unit.HasTag(unit.Unit.CrowdControlTagIndex);
         }
 
         private static void EmitControlTurnSkipped(
@@ -670,55 +666,8 @@ namespace GAS.Runtime
             });
         }
 
-        private static bool IsAbilityBusy(EntityManager em, Entity asc, int abilityCode)
-        {
-            if (!em.HasBuffer<BGrantedAbility>(asc))
-                return true;
-
-            var abilities = em.GetBuffer<BGrantedAbility>(asc);
-            for (var i = 0; i < abilities.Length; i++)
-            {
-                var ability = abilities[i].AbilityEntity;
-                if (!IsAbilityWithCode(em, ability, abilityCode))
-                    continue;
-
-                if (em.HasComponent<CAbilityInTryActivate>(ability)
-                    || em.HasComponent<CAbilityCommitRequest>(ability)
-                    || em.HasComponent<CAbilityActive>(ability))
-                {
-                    return true;
-                }
-
-                if (!em.HasComponent<CAbilityRuntimeState>(ability))
-                    return false;
-
-                var runtime = em.GetComponentData<CAbilityRuntimeState>(ability);
-                return runtime.Phase is EAbilityPhase.Activating or EAbilityPhase.Active or EAbilityPhase.Ending;
-            }
-
-            return true;
-        }
-
-        private static bool IsAbilityWithCode(EntityManager em, Entity ability, int abilityCode)
-        {
-            if (ability == Entity.Null || !em.Exists(ability))
-                return false;
-            if (em.HasComponent<CAbilityBaseInfo>(ability)
-                && em.GetComponentData<CAbilityBaseInfo>(ability).Code == abilityCode)
-            {
-                return true;
-            }
-
-            if (!em.HasComponent<CAbilityConfig>(ability))
-                return false;
-
-            var config = em.GetComponentData<CAbilityConfig>(ability).Config;
-            return config.IsCreated && config.Value.Code == abilityCode;
-        }
-
         private static bool TryResolveWinner(
-            EntityManager em,
-            NativeArray<Entity> units,
+            NativeArray<UnitSnapshot> units,
             out HeadlessAutoChessTeam winner)
         {
             var playerAlive = false;
@@ -726,13 +675,13 @@ namespace GAS.Runtime
 
             for (var i = 0; i < units.Length; i++)
             {
-                var unit = em.GetComponentData<CHeadlessAutoChessUnit>(units[i]);
-                if (!CanStillParticipateInResolution(em, units[i], unit))
+                var unit = units[i];
+                if (!CanStillParticipateInResolution(unit))
                     continue;
 
-                if (unit.Team == HeadlessAutoChessTeam.Player)
+                if (unit.Unit.Team == HeadlessAutoChessTeam.Player)
                     playerAlive = true;
-                else if (unit.Team == HeadlessAutoChessTeam.Enemy)
+                else if (unit.Unit.Team == HeadlessAutoChessTeam.Enemy)
                     enemyAlive = true;
             }
 
@@ -750,56 +699,301 @@ namespace GAS.Runtime
             return true;
         }
 
-        private static bool IsAlive(
+        private static bool CanStillParticipateInResolution(in UnitSnapshot unit)
+        {
+            return unit.Alive || unit.RevivePending || unit.CanRequestRevive;
+        }
+
+        private static NativeArray<UnitSnapshot> BuildUnitSnapshots(
+            EntityManager em,
+            NativeArray<Entity> units,
+            Allocator allocator)
+        {
+            var snapshots = new NativeArray<UnitSnapshot>(units.Length, allocator);
+            for (var i = 0; i < units.Length; i++)
+            {
+                var entity = units[i];
+                if (entity == Entity.Null || !em.Exists(entity))
+                    continue;
+
+                var unit = em.GetComponentData<CHeadlessAutoChessUnit>(entity);
+                var ascDestroying = em.HasComponent<CAscDestroying>(entity);
+                ReadCoreAttributes(em, entity, unit, out var health, out var shield, out var mana);
+                var isSummoned = em.HasComponent<CHeadlessAutoChessSummonedUnit>(entity);
+                var passiveState = em.HasComponent<CHeadlessAutoChessPassiveState>(entity)
+                    ? em.GetComponentData<CHeadlessAutoChessPassiveState>(entity)
+                    : default;
+                var passiveRules = em.HasComponent<CHeadlessAutoChessPassiveRules>(entity)
+                    ? em.GetComponentData<CHeadlessAutoChessPassiveRules>(entity)
+                    : default;
+                var snapshot = new UnitSnapshot
+                {
+                    Entity = entity,
+                    Unit = unit,
+                    Tags = em.HasComponent<CTagMask>(entity)
+                        ? em.GetComponentData<CTagMask>(entity)
+                        : default,
+                    Summoned = isSummoned
+                        ? em.GetComponentData<CHeadlessAutoChessSummonedUnit>(entity)
+                        : default,
+                    Health = health,
+                    Shield = shield,
+                    Mana = mana,
+                    Alive = !ascDestroying && health > 0f,
+                    AscDestroying = ascDestroying,
+                    RevivePending = passiveState.RevivePending,
+                    CanRequestRevive = passiveRules.ReviveGameplayEffectCode > 0
+                                       && passiveRules.MaxReviveCount > 0
+                                       && !passiveState.RevivePending
+                                       && passiveState.ReviveCount < passiveRules.MaxReviveCount,
+                    IsSummoned = isSummoned,
+                };
+                ResolveAbilitySlots(em, entity, ref snapshot);
+                snapshots[i] = snapshot;
+            }
+
+            return snapshots;
+        }
+
+        private static void ResolveAbilitySlots(
+            EntityManager em,
+            Entity asc,
+            ref UnitSnapshot snapshot)
+        {
+            if (asc == Entity.Null || !em.Exists(asc))
+                return;
+
+            if (!em.HasComponent<CHeadlessAutoChessAbilitySlots>(asc))
+                TryCacheAbilitySlots(em, asc, snapshot.Unit);
+
+            if (!em.HasComponent<CHeadlessAutoChessAbilitySlots>(asc))
+                return;
+
+            var slots = em.GetComponentData<CHeadlessAutoChessAbilitySlots>(asc);
+            snapshot.PrimaryAbility = slots.PrimaryAbility;
+            snapshot.ManaAbility = slots.ManaAbility;
+            snapshot.ControlAbility = slots.ControlAbility;
+            snapshot.SupportAbility = slots.SupportAbility;
+            snapshot.SummonAbility = slots.SummonAbility;
+            snapshot.PrimaryAbilityBusy = IsAbilityBusy(em, slots.PrimaryAbility);
+            snapshot.ManaAbilityBusy = IsAbilityBusy(em, slots.ManaAbility);
+            snapshot.ControlAbilityBusy = IsAbilityBusy(em, slots.ControlAbility);
+            snapshot.SupportAbilityBusy = IsAbilityBusy(em, slots.SupportAbility);
+            snapshot.SummonAbilityBusy = IsAbilityBusy(em, slots.SummonAbility);
+        }
+
+        private static void TryCacheAbilitySlots(
             EntityManager em,
             Entity asc,
             in CHeadlessAutoChessUnit unit)
         {
-            return asc != Entity.Null
-                   && em.Exists(asc)
-                   && !em.HasComponent<CAscDestroying>(asc)
-                   && GetAttribute(em, asc, unit.HealthAttrSetCode, unit.HealthAttrCode) > 0f;
+            if (!em.HasBuffer<BGrantedAbility>(asc))
+                return;
+
+            var slots = new CHeadlessAutoChessAbilitySlots();
+            var abilities = em.GetBuffer<BGrantedAbility>(asc);
+            for (var i = 0; i < abilities.Length; i++)
+            {
+                var ability = abilities[i].AbilityEntity;
+                if (!TryReadAbilityCode(em, ability, out var abilityCode))
+                    continue;
+
+                if (abilityCode == unit.PrimaryAbilityCode)
+                {
+                    slots.PrimaryAbility = ability;
+                    continue;
+                }
+
+                if (abilityCode == unit.ManaAbilityCode)
+                {
+                    slots.ManaAbility = ability;
+                    continue;
+                }
+
+                if (abilityCode == unit.ControlAbilityCode)
+                {
+                    slots.ControlAbility = ability;
+                    continue;
+                }
+
+                if (abilityCode == unit.SupportAbilityCode)
+                {
+                    slots.SupportAbility = ability;
+                    continue;
+                }
+
+                if (abilityCode == unit.SummonAbilityCode)
+                {
+                    slots.SummonAbility = ability;
+                }
+            }
+
+            if (slots.PrimaryAbility != Entity.Null
+                || slots.ManaAbility != Entity.Null
+                || slots.ControlAbility != Entity.Null
+                || slots.SupportAbility != Entity.Null
+                || slots.SummonAbility != Entity.Null)
+            {
+                em.AddComponentData(asc, slots);
+            }
         }
 
-        private static bool CanStillParticipateInResolution(
+        private static void RequestAbilityActivation(
             EntityManager em,
-            Entity asc,
-            in CHeadlessAutoChessUnit unit)
+            Entity ability,
+            Entity targetAsc)
         {
-            return IsAlive(em, asc, unit)
-                   || (asc != Entity.Null
-                       && em.Exists(asc)
-                       && em.HasComponent<CHeadlessAutoChessPassiveState>(asc)
-                       && em.GetComponentData<CHeadlessAutoChessPassiveState>(asc).RevivePending);
+            if (ability == Entity.Null || !em.Exists(ability))
+                return;
+
+            SetMainTarget(em, ability, targetAsc);
+            if (!em.HasComponent<CAbilityInTryActivate>(ability))
+                em.AddComponent<CAbilityInTryActivate>(ability);
         }
 
-        private static float GetAttribute(
+        private static void SetMainTarget(
+            EntityManager em,
+            Entity ability,
+            Entity targetAsc)
+        {
+            if (targetAsc == Entity.Null
+                || !em.Exists(targetAsc)
+                || em.HasComponent<CAscDestroying>(targetAsc))
+            {
+                if (em.HasComponent<CAbilityMainTarget>(ability))
+                    em.RemoveComponent<CAbilityMainTarget>(ability);
+                return;
+            }
+
+            var target = new CAbilityMainTarget
+            {
+                TargetAsc = targetAsc,
+            };
+
+            if (em.HasComponent<CAbilityMainTarget>(ability))
+                em.SetComponentData(ability, target);
+            else
+                em.AddComponentData(ability, target);
+        }
+
+        private struct UnitSnapshot
+        {
+            public Entity Entity;
+            public CHeadlessAutoChessUnit Unit;
+            public CTagMask Tags;
+            public CHeadlessAutoChessSummonedUnit Summoned;
+            public float Health;
+            public float Shield;
+            public float Mana;
+            public bool Alive;
+            public bool AscDestroying;
+            public bool RevivePending;
+            public bool CanRequestRevive;
+            public bool IsSummoned;
+            public Entity PrimaryAbility;
+            public Entity ManaAbility;
+            public Entity ControlAbility;
+            public Entity SupportAbility;
+            public Entity SummonAbility;
+            public bool PrimaryAbilityBusy;
+            public bool ManaAbilityBusy;
+            public bool ControlAbilityBusy;
+            public bool SupportAbilityBusy;
+            public bool SummonAbilityBusy;
+
+            public bool HasShield => Shield > 0f;
+
+            public bool HasTag(int denseTagIndex)
+            {
+                return CTagMask.IsValidIndex(denseTagIndex) && Tags.HasTag(denseTagIndex);
+            }
+        }
+
+        private static bool TryReadAbilityCode(
+            EntityManager em,
+            Entity ability,
+            out int abilityCode)
+        {
+            if (ability == Entity.Null || !em.Exists(ability))
+            {
+                abilityCode = 0;
+                return false;
+            }
+
+            if (em.HasComponent<CAbilityBaseInfo>(ability))
+            {
+                abilityCode = em.GetComponentData<CAbilityBaseInfo>(ability).Code;
+                return abilityCode > 0;
+            }
+
+            if (em.HasComponent<CAbilityConfig>(ability))
+            {
+                var config = em.GetComponentData<CAbilityConfig>(ability).Config;
+                if (config.IsCreated)
+                {
+                    abilityCode = config.Value.Code;
+                    return abilityCode > 0;
+                }
+            }
+
+            abilityCode = 0;
+            return false;
+        }
+
+        private static bool IsAbilityBusy(EntityManager em, Entity ability)
+        {
+            if (ability == Entity.Null || !em.Exists(ability))
+                return true;
+
+            if (em.HasComponent<CAbilityInTryActivate>(ability)
+                || em.HasComponent<CAbilityCommitRequest>(ability)
+                || em.HasComponent<CAbilityActive>(ability))
+            {
+                return true;
+            }
+
+            if (!em.HasComponent<CAbilityRuntimeState>(ability))
+                return false;
+
+            var runtime = em.GetComponentData<CAbilityRuntimeState>(ability);
+            return runtime.Phase is EAbilityPhase.Activating or EAbilityPhase.Active or EAbilityPhase.Ending;
+        }
+
+        private static void ReadCoreAttributes(
             EntityManager em,
             Entity asc,
-            int attrSetCode,
-            int attrCode)
+            in CHeadlessAutoChessUnit unit,
+            out float health,
+            out float shield,
+            out float mana)
         {
+            health = 0f;
+            shield = 0f;
+            mana = 0f;
+
             if (asc == Entity.Null || !em.Exists(asc) || !em.HasBuffer<BAttribute>(asc))
-                return 0f;
+                return;
 
             var attributes = em.GetBuffer<BAttribute>(asc);
             for (var i = 0; i < attributes.Length; i++)
             {
                 var attribute = attributes[i];
-                if (attribute.AttrSetCode == attrSetCode && attribute.Code == attrCode)
-                    return attribute.CurrentValue;
+                if (attribute.AttrSetCode == unit.HealthAttrSetCode
+                    && attribute.Code == unit.HealthAttrCode)
+                {
+                    health = attribute.CurrentValue;
+                }
+                else if (attribute.AttrSetCode == unit.ShieldAttrSetCode
+                         && attribute.Code == unit.ShieldAttrCode)
+                {
+                    shield = attribute.CurrentValue;
+                }
+                else if (attribute.AttrSetCode == unit.ManaAttrSetCode
+                         && attribute.Code == unit.ManaAttrCode)
+                {
+                    mana = attribute.CurrentValue;
+                }
             }
-
-            return 0f;
-        }
-
-        private static bool HasDenseTag(EntityManager em, Entity asc, int denseTagIndex)
-        {
-            return CTagMask.IsValidIndex(denseTagIndex)
-                   && asc != Entity.Null
-                   && em.Exists(asc)
-                   && em.HasComponent<CTagMask>(asc)
-                   && em.GetComponentData<CTagMask>(asc).HasTag(denseTagIndex);
         }
     }
 }

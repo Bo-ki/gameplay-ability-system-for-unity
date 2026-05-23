@@ -11,6 +11,7 @@ namespace GAS.Runtime
     public struct CGameplayEventBus : IComponentData
     {
         public int NextSequence;
+        public int NextContextId;
     }
 
     /// <summary>
@@ -430,6 +431,15 @@ namespace GAS.Runtime
     }
 
     /// <summary>
+    /// ASC outboxes touched during the current GAS tick. The next tick clears
+    /// only these buffers instead of scanning every ASC with a presentation outbox.
+    /// </summary>
+    public struct BPresentationOutboxOwner : IBufferElementData
+    {
+        public Entity ASC;
+    }
+
+    /// <summary>
     /// Tracks how much of the current-tick simulation fact stream has already
     /// been projected into per-ASC presentation outboxes.
     /// </summary>
@@ -441,6 +451,15 @@ namespace GAS.Runtime
         public int ProcessedCueRequestCount;
         public int ProcessedTagEventCount;
         public int ProcessedDamageEventCount;
+    }
+
+    /// <summary>
+    /// Runtime switch for raw fact fan-out into per-ASC presentation outboxes.
+    /// Marker projection can stay enabled while raw facts remain in replay/debug streams.
+    /// </summary>
+    public struct CPresentationOutboxProjectionOptions : IComponentData
+    {
+        public byte ProjectRawFacts;
     }
 
     public enum EDebugReplayEventKind : byte

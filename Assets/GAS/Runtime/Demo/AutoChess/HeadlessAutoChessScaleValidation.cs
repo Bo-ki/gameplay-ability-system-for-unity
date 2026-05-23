@@ -215,11 +215,13 @@ namespace GAS.Runtime
         public readonly string ReferenceDeterminismSignature;
         public readonly int TotalBattleTicks;
         public readonly int TotalTicks;
+        public readonly int TotalMeasuredTicks;
         public readonly int TotalReplayEvents;
         public readonly int TotalStructuredLogEntries;
         public readonly double TotalElapsedMilliseconds;
         public readonly double AverageTickMilliseconds;
         public readonly double MaxRunAverageTickMilliseconds;
+        public readonly HeadlessAutoChessRuntimeTickTiming RuntimeTiming;
         public readonly HeadlessAutoChessScaleVariantResult[] Variants;
         public readonly HeadlessAutoChessScaleRunResult[] Runs;
         public readonly HeadlessAutoChessScaleValidationReport Report;
@@ -232,10 +234,12 @@ namespace GAS.Runtime
             string referenceDeterminismSignature,
             int totalBattleTicks,
             int totalTicks,
+            int totalMeasuredTicks,
             int totalReplayEvents,
             int totalStructuredLogEntries,
             double totalElapsedMilliseconds,
             double maxRunAverageTickMilliseconds,
+            in HeadlessAutoChessRuntimeTickTiming runtimeTiming,
             HeadlessAutoChessScaleVariantResult[] variants,
             HeadlessAutoChessScaleRunResult[] runs,
             HeadlessAutoChessScaleValidationReport report)
@@ -247,11 +251,19 @@ namespace GAS.Runtime
             ReferenceDeterminismSignature = referenceDeterminismSignature ?? string.Empty;
             TotalBattleTicks = totalBattleTicks;
             TotalTicks = totalTicks;
+            TotalMeasuredTicks = totalMeasuredTicks;
             TotalReplayEvents = totalReplayEvents;
             TotalStructuredLogEntries = totalStructuredLogEntries;
             TotalElapsedMilliseconds = totalElapsedMilliseconds;
-            AverageTickMilliseconds = totalTicks > 0 ? totalElapsedMilliseconds / totalTicks : 0d;
+            AverageTickMilliseconds = totalMeasuredTicks > 0
+                ? totalElapsedMilliseconds / totalMeasuredTicks
+                : totalBattleTicks > 0
+                    ? totalElapsedMilliseconds / totalBattleTicks
+                    : totalTicks > 0
+                        ? totalElapsedMilliseconds / totalTicks
+                        : 0d;
             MaxRunAverageTickMilliseconds = maxRunAverageTickMilliseconds;
+            RuntimeTiming = runtimeTiming;
             Variants = variants ?? Array.Empty<HeadlessAutoChessScaleVariantResult>();
             Runs = runs ?? Array.Empty<HeadlessAutoChessScaleRunResult>();
             Report = report;
@@ -312,7 +324,11 @@ namespace GAS.Runtime
                 scenario.PostVictoryFlushTicks,
                 options.ExportLogs,
                 runExportDirectory,
-                scenario.ValidationThresholds);
+                scenario.ValidationThresholds,
+                scenario.CollectSystemTimings,
+                scenario.UnitScale,
+                scenario.CaptureAssertionLog,
+                scenario.ExportTextLogs);
         }
 
         private static HeadlessAutoChessScaleValidationResult BuildResult(
@@ -323,10 +339,12 @@ namespace GAS.Runtime
             var passedRunCount = 0;
             var totalBattleTicks = 0;
             var totalTicks = 0;
+            var totalMeasuredTicks = 0;
             var totalReplayEvents = 0;
             var totalStructuredLogEntries = 0;
             var totalElapsedMilliseconds = 0d;
             var maxRunAverageTickMilliseconds = 0d;
+            var runtimeTiming = new HeadlessAutoChessRuntimeTickTiming();
             var failures = new List<string>();
 
             if (runs.Length == 0)
@@ -370,9 +388,11 @@ namespace GAS.Runtime
 
                 totalBattleTicks += result.BattleTicks;
                 totalTicks += result.TotalTicks;
+                totalMeasuredTicks += result.MeasuredTicks;
                 totalReplayEvents += result.EventCounts.ReplayEvents;
                 totalStructuredLogEntries += result.EventCounts.StructuredLogEntries;
                 totalElapsedMilliseconds += result.ElapsedMilliseconds;
+                runtimeTiming.Accumulate(result.RuntimeTiming);
                 if (result.AverageTickMilliseconds > maxRunAverageTickMilliseconds)
                     maxRunAverageTickMilliseconds = result.AverageTickMilliseconds;
             }
@@ -391,7 +411,13 @@ namespace GAS.Runtime
             var referenceSignature = variantResults.Length > 0
                 ? variantResults[0].ReferenceDeterminismSignature
                 : string.Empty;
-            var averageTickMilliseconds = totalTicks > 0 ? totalElapsedMilliseconds / totalTicks : 0d;
+            var averageTickMilliseconds = totalMeasuredTicks > 0
+                ? totalElapsedMilliseconds / totalMeasuredTicks
+                : totalBattleTicks > 0
+                    ? totalElapsedMilliseconds / totalBattleTicks
+                    : totalTicks > 0
+                        ? totalElapsedMilliseconds / totalTicks
+                        : 0d;
             if (options.RequireDeterministicOutcome && !deterministic)
                 failures.Add("variant determinism signatures diverged");
             if (averageTickMilliseconds > options.MaxAverageTickMilliseconds)
@@ -416,11 +442,13 @@ namespace GAS.Runtime
                 referenceSignature,
                 totalBattleTicks,
                 totalTicks,
+                totalMeasuredTicks,
                 totalReplayEvents,
                 totalStructuredLogEntries,
                 totalElapsedMilliseconds,
                 averageTickMilliseconds,
-                maxRunAverageTickMilliseconds);
+                maxRunAverageTickMilliseconds,
+                runtimeTiming);
 
             return new HeadlessAutoChessScaleValidationResult(
                 runs.Length,
@@ -430,10 +458,12 @@ namespace GAS.Runtime
                 referenceSignature,
                 totalBattleTicks,
                 totalTicks,
+                totalMeasuredTicks,
                 totalReplayEvents,
                 totalStructuredLogEntries,
                 totalElapsedMilliseconds,
                 maxRunAverageTickMilliseconds,
+                runtimeTiming,
                 variantResults,
                 runs,
                 report);
@@ -527,11 +557,13 @@ namespace GAS.Runtime
             string referenceSignature,
             int totalBattleTicks,
             int totalTicks,
+            int totalMeasuredTicks,
             int totalReplayEvents,
             int totalStructuredLogEntries,
             double totalElapsedMilliseconds,
             double averageTickMilliseconds,
-            double maxRunAverageTickMilliseconds)
+            double maxRunAverageTickMilliseconds,
+            in HeadlessAutoChessRuntimeTickTiming runtimeTiming)
         {
             var summaryPath = options.ExportLogs
                 ? Path.Combine(exportDirectory, "headless-autochess.scale.validation.txt")
@@ -547,11 +579,13 @@ namespace GAS.Runtime
                 referenceSignature,
                 totalBattleTicks,
                 totalTicks,
+                totalMeasuredTicks,
                 totalReplayEvents,
                 totalStructuredLogEntries,
                 totalElapsedMilliseconds,
                 averageTickMilliseconds,
                 maxRunAverageTickMilliseconds,
+                runtimeTiming,
                 summaryPath);
             var summaryByteCount = 0L;
 
@@ -582,11 +616,13 @@ namespace GAS.Runtime
             string referenceSignature,
             int totalBattleTicks,
             int totalTicks,
+            int totalMeasuredTicks,
             int totalReplayEvents,
             int totalStructuredLogEntries,
             double totalElapsedMilliseconds,
             double averageTickMilliseconds,
             double maxRunAverageTickMilliseconds,
+            in HeadlessAutoChessRuntimeTickTiming runtimeTiming,
             string summaryPath)
         {
             var builder = new StringBuilder(4096);
@@ -606,6 +642,8 @@ namespace GAS.Runtime
                 .Append(totalBattleTicks)
                 .Append("|total=")
                 .Append(totalTicks)
+                .Append("|measuredTotal=")
+                .Append(totalMeasuredTicks)
                 .Append("|elapsedMs=")
                 .Append(FormatDouble(totalElapsedMilliseconds))
                 .Append("|avgTickMs=")
@@ -628,6 +666,28 @@ namespace GAS.Runtime
                 .Append(FormatDouble(options.MaxAverageTickMilliseconds))
                 .Append("|maxRunAvgTickMs=")
                 .Append(FormatDouble(options.MaxRunAverageTickMilliseconds))
+                .AppendLine();
+            builder.Append("measurement|scope=ecsRuntimeTickOnly|warmupTickExcluded=")
+                .Append(HeadlessAutoChessScenario.PerformanceWarmupBattleTicks)
+                .AppendLine("|excluded=bootstrap,presentationOutbox,validationExport");
+            builder.Append("groupTiming|ticks=")
+                .Append(runtimeTiming.TickCount)
+                .Append("|totalAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageTotalMilliseconds))
+                .Append("|commandAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageCommandMilliseconds))
+                .Append("|resetDirtyAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageResetDirtyMilliseconds))
+                .Append("|tagAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageTagMilliseconds))
+                .Append("|effectAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageEffectMilliseconds))
+                .Append("|attributeAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageAttributeMilliseconds))
+                .Append("|abilityAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageAbilityMilliseconds))
+                .Append("|cueAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageCueMilliseconds))
                 .AppendLine();
             builder.Append("exports|summary=")
                 .Append(summaryPath ?? string.Empty)
@@ -706,6 +766,8 @@ namespace GAS.Runtime
                 .Append(result.BattleTicks)
                 .Append("|total=")
                 .Append(result.TotalTicks)
+                .Append("|measured=")
+                .Append(result.MeasuredTicks)
                 .Append("|avgTickMs=")
                 .Append(FormatDouble(result.AverageTickMilliseconds))
                 .Append("|replay=")

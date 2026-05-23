@@ -18,6 +18,7 @@ namespace GAS.Runtime
                 .WithAll<CEffectContext, CDurationDefinition, CDurationRuntime>()
                 .WithNone<CEffectDestroy>()
                 .Build();
+            state.RequireForUpdate(_activeDurationQuery);
         }
 
         public void OnUpdate(ref SystemState state)
@@ -26,6 +27,7 @@ namespace GAS.Runtime
             var currentFrame = SystemAPI.GetSingleton<GlobalTimer>().Frame;
             var effects = _activeDurationQuery.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             foreach (var ge in effects)
             {
@@ -38,8 +40,11 @@ namespace GAS.Runtime
                 var durationDefinition = em.GetComponentData<CDurationDefinition>(ge);
                 var durationRuntime = em.GetComponentData<CDurationRuntime>(ge);
                 var context = em.GetComponentData<CEffectContext>(ge);
-                if (!EffectRuntimeUtility.IsAppliedDurationEffect(em, ge, context))
+                if (!durationRuntime.Active
+                    && !EffectRuntimeUtility.IsAppliedDurationEffect(em, ge, context))
+                {
                     continue;
+                }
 
                 if (!durationRuntime.Active)
                 {

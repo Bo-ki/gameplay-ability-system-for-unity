@@ -675,6 +675,36 @@ namespace GAS.Runtime
             return GameplayEffectEntityFactory.InstantiateFromPrototype(entityManager, prototype);
         }
 
+        internal static bool TryWarmupRuntimePrototype(
+            EntityManager entityManager,
+            int gameplayEffectCode,
+            ConfigRegistryReferenceContext context = default)
+        {
+            if (TryGetLivePrototype(entityManager, gameplayEffectCode, out _))
+                return true;
+
+            var config = GetConfigByID(gameplayEffectCode, context);
+            if (config == null)
+                return false;
+
+            if (!GameplayEffectEntityFactory.CanCreatePrototypeFromConfig(config.ComponentConfigs))
+            {
+                EnsureStaticDefinitionBlobFromConfig(
+                    entityManager,
+                    gameplayEffectCode,
+                    config.ComponentConfigs);
+                return false;
+            }
+
+            var prototype = GameplayEffectEntityFactory.CreatePrototypeFromConfig(
+                entityManager,
+                gameplayEffectCode,
+                config.ComponentConfigs);
+            PrototypeByCode[gameplayEffectCode] = prototype;
+            CacheStaticDefinitionBlob(entityManager, gameplayEffectCode, prototype);
+            return true;
+        }
+
         internal static bool TryGetCachedPrototype(int gameplayEffectCode, out Entity prototype)
         {
             if (!PrototypeByCode.TryGetValue(gameplayEffectCode, out prototype))

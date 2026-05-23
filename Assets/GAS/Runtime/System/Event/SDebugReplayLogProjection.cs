@@ -82,6 +82,9 @@ namespace GAS.Runtime
             for (var i = start; i < events.Length; i++)
             {
                 var evt = events[i];
+                if (IsPresentationMarker(evt.Type))
+                    continue;
+
                 log.Add(CreateLogEvent(ref sinkState, new BDebugReplayEvent
                 {
                     Kind = EDebugReplayEventKind.GameplayEvent,
@@ -102,6 +105,16 @@ namespace GAS.Runtime
             }
 
             sinkState.ProcessedGameplayEventCount = events.Length;
+        }
+
+        private static bool IsPresentationMarker(EGameplayEventType type)
+        {
+            return type == EGameplayEventType.AutoChessPresentationUiMarker
+                   || type == EGameplayEventType.AutoChessPresentationVfxMarker
+                   || type == EGameplayEventType.AutoChessPresentationSfxMarker
+                   || type == EGameplayEventType.AutoChessPresentationFloatingTextMarker
+                   || type == EGameplayEventType.AutoChessPresentationCueMarker
+                   || type == EGameplayEventType.AutoChessPresentationSettlementMarker;
         }
 
         private static void ProjectAttributeEvents(

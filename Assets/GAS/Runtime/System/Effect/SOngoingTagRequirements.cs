@@ -20,6 +20,7 @@ namespace GAS.Runtime
                 .WithAll<CEffectContext, CDurationDefinition, CDurationRuntime>()
                 .WithNone<CEffectDestroy>()
                 .Build();
+            state.RequireForUpdate(_query);
         }
 
         public void OnUpdate(ref SystemState state)
@@ -28,6 +29,7 @@ namespace GAS.Runtime
             var currentFrame = SystemAPI.GetSingleton<GlobalTimer>().Frame;
             var effects = _query.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             for (var i = 0; i < effects.Length; i++)
             {
@@ -38,11 +40,11 @@ namespace GAS.Runtime
                     || !em.HasComponent<CDurationRuntime>(ge))
                     continue;
 
-                var context = em.GetComponentData<CEffectContext>(ge);
-                if (!EffectRuntimeUtility.IsAppliedDurationEffect(em, ge, context))
+                if (!EffectRuntimeUtility.HasOngoingRequirements(em, ge))
                     continue;
 
-                if (!EffectRuntimeUtility.HasOngoingRequirements(em, ge))
+                var context = em.GetComponentData<CEffectContext>(ge);
+                if (!EffectRuntimeUtility.IsAppliedDurationEffect(em, ge, context))
                     continue;
 
                 var duration = em.GetComponentData<CDurationRuntime>(ge);

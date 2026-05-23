@@ -5,6 +5,14 @@ namespace GAS.Runtime
 {
     public static class GASManager
     {
+        private const int GameplayEventCapacity = 1024;
+        private const int AttributeChangeEventCapacity = 512;
+        private const int CueRequestCapacity = 512;
+        private const int DamageEventCapacity = 256;
+        private const int TagChangeEventCapacity = 256;
+        private const int DebugReplayEventCapacity = 8192;
+        private const int PresentationOutboxOwnerCapacity = 512;
+
         public static World ExWorld { get; private set; }
         public static EntityManager EntityManager { get; private set; }
 
@@ -42,6 +50,7 @@ namespace GAS.Runtime
             EntityGlobalTimer = ExWorld.EntityManager.CreateSingleton<GlobalTimer>();
             CreateEventBusSingleton();
             CreateEventLogSinkSingleton();
+            CreateRuntimeDebuggerSingleton();
             IsInitialized = true;
         }
 
@@ -81,16 +90,23 @@ namespace GAS.Runtime
 
         public static Entity EntityEventLogSink { get; private set; }
 
+        public static Entity EntityRuntimeDebugger { get; private set; }
+
         private static void CreateEventBusSingleton()
         {
             EntityEventBus = ExWorld.EntityManager.CreateEntity();
             ExWorld.EntityManager.AddComponent<CGameplayEventBus>(EntityEventBus);
             ExWorld.EntityManager.AddComponent<CPresentationOutboxProjectionState>(EntityEventBus);
-            ExWorld.EntityManager.AddBuffer<BDamageEvent>(EntityEventBus);
-            ExWorld.EntityManager.AddBuffer<BTagChangeEvent>(EntityEventBus);
-            ExWorld.EntityManager.AddBuffer<BGameplayEvent>(EntityEventBus);
-            ExWorld.EntityManager.AddBuffer<BAttributeChangeEvent>(EntityEventBus);
-            ExWorld.EntityManager.AddBuffer<BCueRequest>(EntityEventBus);
+            ExWorld.EntityManager.AddComponentData(EntityEventBus, new CPresentationOutboxProjectionOptions
+            {
+                ProjectRawFacts = 1,
+            });
+            ExWorld.EntityManager.AddBuffer<BDamageEvent>(EntityEventBus).EnsureCapacity(DamageEventCapacity);
+            ExWorld.EntityManager.AddBuffer<BTagChangeEvent>(EntityEventBus).EnsureCapacity(TagChangeEventCapacity);
+            ExWorld.EntityManager.AddBuffer<BGameplayEvent>(EntityEventBus).EnsureCapacity(GameplayEventCapacity);
+            ExWorld.EntityManager.AddBuffer<BAttributeChangeEvent>(EntityEventBus).EnsureCapacity(AttributeChangeEventCapacity);
+            ExWorld.EntityManager.AddBuffer<BCueRequest>(EntityEventBus).EnsureCapacity(CueRequestCapacity);
+            ExWorld.EntityManager.AddBuffer<BPresentationOutboxOwner>(EntityEventBus).EnsureCapacity(PresentationOutboxOwnerCapacity);
             ExWorld.EntityManager.SetName(EntityEventBus, "EventBus");
         }
 
@@ -98,8 +114,13 @@ namespace GAS.Runtime
         {
             EntityEventLogSink = ExWorld.EntityManager.CreateEntity();
             ExWorld.EntityManager.AddComponent<CGameplayEventLogSink>(EntityEventLogSink);
-            ExWorld.EntityManager.AddBuffer<BDebugReplayEvent>(EntityEventLogSink);
+            ExWorld.EntityManager.AddBuffer<BDebugReplayEvent>(EntityEventLogSink).EnsureCapacity(DebugReplayEventCapacity);
             ExWorld.EntityManager.SetName(EntityEventLogSink, "DebugReplayEventLog");
+        }
+
+        private static void CreateRuntimeDebuggerSingleton()
+        {
+            EntityRuntimeDebugger = GasRuntimeDebugger.CreateSingleton(ExWorld.EntityManager);
         }
 
     }

@@ -14,9 +14,10 @@ namespace GAS.Runtime
         public void OnCreate(ref SystemState state)
         {
             _effectQuery = SystemAPI.QueryBuilder()
-                .WithAll<CEffectContext>()
+                .WithAll<CEffectPendingApply, CEffectContext>()
                 .WithNone<CEffectDestroy>()
                 .Build();
+            state.RequireForUpdate(_effectQuery);
         }
 
         public void OnUpdate(ref SystemState state)
@@ -25,6 +26,8 @@ namespace GAS.Runtime
             var currentFrame = SystemAPI.GetSingleton<GlobalTimer>().Frame;
             var effects = _effectQuery.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            var hasPendingStructuralChanges = false;
 
             foreach (var ge in effects)
             {
@@ -34,34 +37,47 @@ namespace GAS.Runtime
                 var context = em.GetComponentData<CEffectContext>(ge);
                 if (em.HasComponent<CDurationDefinition>(ge))
                 {
+                    var hadDurationRuntime = em.HasComponent<CDurationRuntime>(ge);
                     var duration = GetOrCreateDurationRuntime(em, ref ecb, ge);
+                    if (!hadDurationRuntime)
+                        hasPendingStructuralChanges = true;
+
                     if (duration.Active || EffectRuntimeUtility.IsAppliedDurationEffect(em, ge, context))
+                    {
+                        hasPendingStructuralChanges |= RemovePendingApply(em, ref ecb, ge);
                         continue;
+                    }
 
                     if (!EffectRuntimeUtility.IsPendingApply(em, ge))
+                    {
+                        hasPendingStructuralChanges |= RemovePendingApply(em, ref ecb, ge);
                         continue;
-
-                    EffectRuntimeUtility.EnsureLifecycle(
-                        em,
-                        ref ecb,
-                        ge,
-                        EGameplayEffectLifecycleState.PendingApply,
-                        currentFrame);
-                    EffectRuntimeUtility.PlaybackAndReset(ref ecb, em);
+                    }
 
                     if (EffectRuntimeUtility.ShouldReject(em, context.TargetAsc, ge, out var durationRejection))
                     {
                         EffectRuntimeUtility.EnqueueApplicationRejectedEvent(em, ge, context, durationRejection);
                         EffectRuntimeUtility.DestroyEffectEntity(em, ref ecb, ge);
+                        hasPendingStructuralChanges = true;
                         continue;
                     }
 
-                    EffectRuntimeUtility.RemoveActiveGameplayEffectsWithTags(em, ref ecb, ge, context, currentFrame);
-                    EffectRuntimeUtility.PlaybackAndReset(ref ecb, em);
+                    var removedActiveEffects = EffectRuntimeUtility.RemoveActiveGameplayEffectsWithTags(
+                        em,
+                        ref ecb,
+                        ge,
+                        context,
+                        currentFrame);
+                    if (removedActiveEffects || hasPendingStructuralChanges)
+                    {
+                        EffectRuntimeUtility.PlaybackAndReset(ref ecb, em);
+                        hasPendingStructuralChanges = false;
+                    }
 
                     if (EffectRuntimeUtility.TryMergeStackingApplication(em, ref ecb, ge, context, ref duration, currentFrame))
                     {
                         EffectRuntimeUtility.PlaybackAndReset(ref ecb, em);
+                        hasPendingStructuralChanges = false;
                         continue;
                     }
 
@@ -70,32 +86,41 @@ namespace GAS.Runtime
                     else
                         EffectRuntimeUtility.ApplyInactiveDurationEffect(em, ref ecb, ge, context, ref duration, currentFrame);
 
+                    hasPendingStructuralChanges = true;
+                    hasPendingStructuralChanges |= RemovePendingApply(em, ref ecb, ge);
                     ecb.SetComponent(ge, duration);
                     continue;
                 }
 
                 if (!EffectRuntimeUtility.IsPendingApply(em, ge))
+                {
+                    hasPendingStructuralChanges |= RemovePendingApply(em, ref ecb, ge);
                     continue;
-
-                EffectRuntimeUtility.EnsureLifecycle(
-                    em,
-                    ref ecb,
-                    ge,
-                    EGameplayEffectLifecycleState.PendingApply,
-                    currentFrame);
-                EffectRuntimeUtility.PlaybackAndReset(ref ecb, em);
+                }
 
                 if (EffectRuntimeUtility.ShouldReject(em, context.TargetAsc, ge, out var instantRejection))
                 {
                     EffectRuntimeUtility.EnqueueApplicationRejectedEvent(em, ge, context, instantRejection);
                     EffectRuntimeUtility.DestroyEffectEntity(em, ref ecb, ge);
+                    hasPendingStructuralChanges = true;
                     continue;
                 }
 
-                EffectRuntimeUtility.RemoveActiveGameplayEffectsWithTags(em, ref ecb, ge, context, currentFrame);
-                EffectRuntimeUtility.PlaybackAndReset(ref ecb, em);
+                var removedEffects = EffectRuntimeUtility.RemoveActiveGameplayEffectsWithTags(
+                    em,
+                    ref ecb,
+                    ge,
+                    context,
+                    currentFrame);
+                if (removedEffects || hasPendingStructuralChanges)
+                {
+                    EffectRuntimeUtility.PlaybackAndReset(ref ecb, em);
+                    hasPendingStructuralChanges = false;
+                }
+
                 EffectRuntimeUtility.ApplyInstantEffect(em, ge, context);
                 EffectRuntimeUtility.DestroyEffectEntity(em, ref ecb, ge);
+                hasPendingStructuralChanges = true;
             }
 
             ecb.Playback(em);
@@ -124,5 +149,21 @@ namespace GAS.Runtime
             ecb.AddComponent(ge, runtime);
             return runtime;
         }
+
+        private static bool RemovePendingApply(
+            EntityManager em,
+            ref EntityCommandBuffer ecb,
+            Entity ge)
+        {
+            if (em.Exists(ge) && em.HasComponent<CEffectPendingApply>(ge))
+            {
+                ecb.RemoveComponent<CEffectPendingApply>(ge);
+                return true;
+            }
+
+            return false;
+        }
+
     }
+
 }

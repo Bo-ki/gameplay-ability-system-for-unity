@@ -26,8 +26,6 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency.Complete();
-
             if (!SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity))
                 return;
 
@@ -40,13 +38,13 @@ namespace GAS.Runtime
                 return;
             }
 
-            using var drivers = _driverQuery.ToEntityArray(Allocator.Temp);
-            if (drivers.Length == 0)
+            if (_driverQuery.IsEmptyIgnoreFilter)
                 return;
 
-            var driverEntity = drivers[0];
+            var driverEntity = _driverQuery.GetSingletonEntity();
             var facts = em.GetComponentData<CHeadlessAutoChessExecuteFacts>(driverEntity);
             var frame = ResolveCurrentFrame(em);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
             ResetProcessedCountsIfFrameChanged(ref facts, frame);
 
             ProjectExecuteTriggers(em, eventBusEntity, ref facts, frame);
@@ -79,20 +77,16 @@ namespace GAS.Runtime
             ref CHeadlessAutoChessExecuteFacts facts,
             int frame)
         {
-            var damageEvents = em.GetBuffer<BDamageEvent>(eventBusEntity);
-            var eventCount = damageEvents.Length;
-            var start = facts.ProcessedDamageEventCount > eventCount
-                ? 0
-                : facts.ProcessedDamageEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                damageEvents,
-                start,
-                eventCount,
-                Allocator.Temp);
+            using var damageEvents = EventBusHelper.SnapshotBufferRange<BDamageEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedDamageEventCount,
+                Allocator.Temp,
+                out var eventCount);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < damageEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
+                var evt = damageEvents[i];
                 if (!TryGetExecuteRules(em, evt.Source, out var rules)
                     || rules.DamageGameplayEffectCode <= 0
                     || evt.Source == Entity.Null
@@ -151,20 +145,16 @@ namespace GAS.Runtime
             ref CHeadlessAutoChessExecuteFacts facts,
             int frame)
         {
-            var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
-            var eventCount = gameplayEvents.Length;
-            var start = facts.ProcessedGameplayEventCount > eventCount
-                ? 0
-                : facts.ProcessedGameplayEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                gameplayEvents,
-                start,
-                eventCount,
-                Allocator.Temp);
+            using var gameplayEvents = EventBusHelper.SnapshotBufferRange<BGameplayEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedGameplayEventCount,
+                Allocator.Temp,
+                out var eventCount);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < gameplayEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
+                var evt = gameplayEvents[i];
                 if (evt.Type != EGameplayEventType.AutoChessDamageTypeResolved
                     || evt.SourceAsc == Entity.Null
                     || evt.TargetAsc == Entity.Null
@@ -200,20 +190,16 @@ namespace GAS.Runtime
             ref CHeadlessAutoChessExecuteFacts facts,
             int frame)
         {
-            var attributeEvents = em.GetBuffer<BAttributeChangeEvent>(eventBusEntity);
-            var eventCount = attributeEvents.Length;
-            var start = facts.ProcessedAttributeEventCount > eventCount
-                ? 0
-                : facts.ProcessedAttributeEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                attributeEvents,
-                start,
-                eventCount,
-                Allocator.Temp);
+            using var attributeEvents = EventBusHelper.SnapshotBufferRange<BAttributeChangeEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedAttributeEventCount,
+                Allocator.Temp,
+                out var eventCount);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < attributeEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
+                var evt = attributeEvents[i];
                 if (evt.ASC == Entity.Null
                     || evt.SourceAsc == Entity.Null
                     || evt.NewValue >= evt.OldValue
@@ -346,7 +332,8 @@ namespace GAS.Runtime
             if (source == Entity.Null || target == Entity.Null || gameplayEffectCode <= 0)
                 return;
 
-            var request = GameplayEffectRequestWriter.Create(
+            var targetKind = source == target ? ETargetDataKind.Self : ETargetDataKind.Entity;
+            GameplayEffectRequestWriter.ApplyFastOrCreateSingleTargetRequest(
                 em,
                 new CApplyGameplayEffectRequest
                 {
@@ -356,13 +343,9 @@ namespace GAS.Runtime
                     GameplayEffectCode = gameplayEffectCode,
                     Level = 1,
                 },
-                new CTargetDataHeader
-                {
-                    SourceAsc = source,
-                    Kind = source == target ? ETargetDataKind.Self : ETargetDataKind.Entity,
-                },
+                target,
+                targetKind,
                 namePrefix);
-            GameplayEffectRequestWriter.AddTarget(em, request, target);
         }
 
         private static bool IsEnemy(EntityManager em, Entity lhs, Entity rhs)

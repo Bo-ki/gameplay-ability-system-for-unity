@@ -15,7 +15,7 @@ namespace GAS.Runtime
         public void OnCreate(ref SystemState state)
         {
             _driverQuery = SystemAPI.QueryBuilder()
-                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessDeathBurstFacts>()
+                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessDeathBurstFacts, BHeadlessAutoChessUnitDefeatedFact>()
                 .Build();
             _burstUnitQuery = SystemAPI.QueryBuilder()
                 .WithAll<CHeadlessAutoChessUnit, CHeadlessAutoChessDeathBurstRules, CHeadlessAutoChessDeathBurstState, BAttribute, CTagMask>()
@@ -31,8 +31,6 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency.Complete();
-
             if (!SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity))
                 return;
 
@@ -44,17 +42,18 @@ namespace GAS.Runtime
                 return;
             }
 
-            using var drivers = _driverQuery.ToEntityArray(Allocator.Temp);
             using var targets = _targetUnitQuery.ToEntityArray(Allocator.Temp);
-            if (drivers.Length == 0 || targets.Length == 0)
+            if (_driverQuery.IsEmptyIgnoreFilter || targets.Length == 0)
                 return;
 
-            var driverEntity = drivers[0];
+            var driverEntity = _driverQuery.GetSingletonEntity();
             var facts = em.GetComponentData<CHeadlessAutoChessDeathBurstFacts>(driverEntity);
+            var unitDefeatedFacts = em.GetBuffer<BHeadlessAutoChessUnitDefeatedFact>(driverEntity);
             var frame = ResolveCurrentFrame(em);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
             ResetProcessedCountsIfFrameChanged(ref facts, frame);
 
-            ProjectDeathBurstTriggers(em, eventBusEntity, targets, ref facts, frame);
+            ProjectDeathBurstTriggers(em, eventBusEntity, unitDefeatedFacts, targets, ref facts, frame);
             ProjectDeathBurstDamageAppliedFacts(em, eventBusEntity, ref facts, frame);
 
             em.SetComponentData(driverEntity, facts);
@@ -73,65 +72,65 @@ namespace GAS.Runtime
 
             facts.LastProjectionFrame = frame;
             facts.ProcessedGameplayEventCount = 0;
+            facts.ProcessedUnitDefeatedFactCount = 0;
             facts.ProcessedAttributeEventCount = 0;
         }
 
         private static void ProjectDeathBurstTriggers(
             EntityManager em,
             Entity eventBusEntity,
+            DynamicBuffer<BHeadlessAutoChessUnitDefeatedFact> unitDefeatedFacts,
             NativeArray<Entity> targets,
             ref CHeadlessAutoChessDeathBurstFacts facts,
             int frame)
         {
-            var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
-            var eventCount = gameplayEvents.Length;
-            var start = facts.ProcessedGameplayEventCount > eventCount
-                ? 0
-                : facts.ProcessedGameplayEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                gameplayEvents,
+            var eventCount = unitDefeatedFacts.Length;
+            var start = EventBusHelper.ClampProcessedCount(
+                unitDefeatedFacts,
+                facts.ProcessedUnitDefeatedFactCount);
+            using var defeatFacts = EventBusHelper.CopyBufferRange(
+                unitDefeatedFacts,
                 start,
                 eventCount,
                 Allocator.Temp);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < defeatFacts.Length; i++)
             {
-                var evt = eventSnapshot[i];
-                if (evt.Type != EGameplayEventType.AutoChessUnitDefeated
-                    || evt.SourceAsc == Entity.Null
-                    || evt.TargetAsc == Entity.Null
-                    || evt.SourceAsc == evt.TargetAsc
-                    || !TryGetDeathBurstRules(em, evt.SourceAsc, out var rules)
+                var defeat = defeatFacts[i];
+                if (defeat.SourceAsc == Entity.Null
+                    || defeat.TargetAsc == Entity.Null
+                    || defeat.SourceAsc == defeat.TargetAsc
+                    || !TryGetDeathBurstRules(em, defeat.SourceAsc, out var rules)
                     || rules.DamageGameplayEffectCode <= 0
-                    || !HasDenseTag(em, evt.SourceAsc, rules.ReadyTagIndex)
-                    || !IsAliveAutoChessUnit(em, evt.SourceAsc)
-                    || !IsEnemy(em, evt.SourceAsc, evt.TargetAsc)
-                    || !TryFindDeathBurstTarget(em, targets, evt.SourceAsc, evt.TargetAsc, rules, out var target))
+                    || !HasDenseTag(em, defeat.SourceAsc, rules.ReadyTagIndex)
+                    || !IsAliveAutoChessUnit(em, defeat.SourceAsc)
+                    || !IsEnemy(em, defeat.SourceAsc, defeat.TargetAsc)
+                    || !TryFindDeathBurstTarget(em, targets, defeat.SourceAsc, defeat.TargetAsc, rules, out var target))
                 {
                     continue;
                 }
 
                 CreateApplyRequest(
                     em,
-                    evt.SourceAsc,
+                    defeat.SourceAsc,
                     target,
                     rules.DamageGameplayEffectCode,
                     "AutoChessDeathBurst");
 
-                var burstState = em.GetComponentData<CHeadlessAutoChessDeathBurstState>(evt.SourceAsc);
+                var burstState = em.GetComponentData<CHeadlessAutoChessDeathBurstState>(defeat.SourceAsc);
                 burstState.TriggerRequestCount++;
                 burstState.LastDeathBurstFrame = frame;
-                burstState.LastDeathBurstSource = evt.SourceAsc;
-                burstState.LastDeathBurstCorpse = evt.TargetAsc;
+                burstState.LastDeathBurstSource = defeat.SourceAsc;
+                burstState.LastDeathBurstCorpse = defeat.TargetAsc;
                 burstState.LastDeathBurstTarget = target;
                 burstState.LastDeathBurstDamage = rules.DamageAmount;
-                em.SetComponentData(evt.SourceAsc, burstState);
+                em.SetComponentData(defeat.SourceAsc, burstState);
 
                 facts.DeathBurstTriggeredFactCount++;
                 EventBusHelper.EnqueueGameplayEvent(em, eventBusEntity, new BGameplayEvent
                 {
                     Type = EGameplayEventType.AutoChessDeathBurstTriggered,
-                    SourceAsc = evt.SourceAsc,
+                    SourceAsc = defeat.SourceAsc,
                     TargetAsc = target,
                     EventCode = rules.DamageGameplayEffectCode,
                     ReasonCode = rules.ReadyTagIndex,
@@ -139,10 +138,7 @@ namespace GAS.Runtime
                 });
             }
 
-            facts.ProcessedGameplayEventCount = em.Exists(eventBusEntity)
-                                                && em.HasBuffer<BGameplayEvent>(eventBusEntity)
-                ? em.GetBuffer<BGameplayEvent>(eventBusEntity).Length
-                : eventCount;
+            facts.ProcessedUnitDefeatedFactCount = eventCount;
         }
 
         private static void ProjectDeathBurstDamageAppliedFacts(
@@ -151,20 +147,16 @@ namespace GAS.Runtime
             ref CHeadlessAutoChessDeathBurstFacts facts,
             int frame)
         {
-            var attributeEvents = em.GetBuffer<BAttributeChangeEvent>(eventBusEntity);
-            var eventCount = attributeEvents.Length;
-            var start = facts.ProcessedAttributeEventCount > eventCount
-                ? 0
-                : facts.ProcessedAttributeEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                attributeEvents,
-                start,
-                eventCount,
-                Allocator.Temp);
+            using var attributeEvents = EventBusHelper.SnapshotBufferRange<BAttributeChangeEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedAttributeEventCount,
+                Allocator.Temp,
+                out var eventCount);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < attributeEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
+                var evt = attributeEvents[i];
                 if (evt.ASC == Entity.Null
                     || evt.SourceAsc == Entity.Null
                     || evt.NewValue >= evt.OldValue
@@ -308,7 +300,8 @@ namespace GAS.Runtime
             if (source == Entity.Null || target == Entity.Null || gameplayEffectCode <= 0)
                 return;
 
-            var request = GameplayEffectRequestWriter.Create(
+            var targetKind = source == target ? ETargetDataKind.Self : ETargetDataKind.Entity;
+            GameplayEffectRequestWriter.ApplyFastOrCreateSingleTargetRequest(
                 em,
                 new CApplyGameplayEffectRequest
                 {
@@ -318,13 +311,9 @@ namespace GAS.Runtime
                     GameplayEffectCode = gameplayEffectCode,
                     Level = 1,
                 },
-                new CTargetDataHeader
-                {
-                    SourceAsc = source,
-                    Kind = source == target ? ETargetDataKind.Self : ETargetDataKind.Entity,
-                },
+                target,
+                targetKind,
                 namePrefix);
-            GameplayEffectRequestWriter.AddTarget(em, request, target);
         }
 
         private static bool IsEnemy(EntityManager em, Entity lhs, Entity rhs)

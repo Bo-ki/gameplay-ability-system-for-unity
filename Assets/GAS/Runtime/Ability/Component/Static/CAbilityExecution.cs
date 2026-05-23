@@ -8,6 +8,15 @@ namespace GAS.Runtime
         public int EffectCode;
     }
 
+    public struct BAbilityTargetEffectOnActivate : IBufferElementData
+    {
+        public int EffectCode;
+    }
+
+    public struct CAbilityAutoEndOnCommit : IComponentData
+    {
+    }
+
     public struct CAbilityTimelineRef : IComponentData
     {
         public int TimelineId;
@@ -36,6 +45,36 @@ namespace GAS.Runtime
                 if (EffectCodes[i] <= 0) continue;
                 effects.Add(new BAbilityEffectOnActivate { EffectCode = EffectCodes[i] });
             }
+        }
+    }
+
+    public sealed class ConfAbilityTargetEffectsOnActivate : AbilityComponentConfig
+    {
+        public int[] EffectCodes = Array.Empty<int>();
+        public bool AutoEndOnCommit = true;
+
+        public override void LoadToGameplayAbilityEntity(Entity ability)
+        {
+            if (EffectCodes == null || EffectCodes.Length == 0)
+                return;
+
+            var effects = _entityManager.HasBuffer<BAbilityTargetEffectOnActivate>(ability)
+                ? _entityManager.GetBuffer<BAbilityTargetEffectOnActivate>(ability)
+                : _entityManager.AddBuffer<BAbilityTargetEffectOnActivate>(ability);
+
+            for (var i = 0; i < EffectCodes.Length; i++)
+            {
+                if (EffectCodes[i] <= 0)
+                    continue;
+
+                effects.Add(new BAbilityTargetEffectOnActivate
+                {
+                    EffectCode = EffectCodes[i],
+                });
+            }
+
+            if (AutoEndOnCommit && !_entityManager.HasComponent<CAbilityAutoEndOnCommit>(ability))
+                _entityManager.AddComponent<CAbilityAutoEndOnCommit>(ability);
         }
     }
 

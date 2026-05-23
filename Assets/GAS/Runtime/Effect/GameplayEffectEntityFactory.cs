@@ -9,7 +9,6 @@ namespace GAS.Runtime
             GameplayEffectComponentConfig[] componentConfigs)
         {
             var entity = entityManager.CreateEntity();
-            entityManager.SetName(entity, $"GE_V{entity.Version}_{entity.Index}");
 
             LoadConfigComponents(entityManager, entity, componentConfigs);
             AddRuntimeComponents(entityManager, entity);
@@ -42,7 +41,6 @@ namespace GAS.Runtime
                 entityManager.RemoveComponent<CGameplayEffectPrototype>(entity);
 
             AddRuntimeComponents(entityManager, entity);
-            entityManager.SetName(entity, $"GE_V{entity.Version}_{entity.Index}");
             return entity;
         }
 
@@ -79,6 +77,9 @@ namespace GAS.Runtime
 
         private static void AddRuntimeComponents(EntityManager entityManager, Entity entity)
         {
+            if (!entityManager.HasComponent<CEffectPendingApply>(entity))
+                entityManager.AddComponent<CEffectPendingApply>(entity);
+
             if (entityManager.HasComponent<CDurationDefinition>(entity)
                 && !entityManager.HasComponent<CDurationRuntime>(entity))
             {

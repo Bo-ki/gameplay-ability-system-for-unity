@@ -166,6 +166,7 @@ namespace GAS.Runtime
     public struct CHeadlessAutoChessBattleFacts : IComponentData
     {
         public int LastDamageProjectionFrame;
+        public int LastTypedFactFrame;
         public int ProcessedAttributeEventCount;
         public int HealthDamageFactCount;
         public int ShieldAppliedFactCount;
@@ -184,10 +185,46 @@ namespace GAS.Runtime
         public bool BattleResolved;
     }
 
+    public struct BHeadlessAutoChessUnitDefeatedFact : IBufferElementData
+    {
+        public Entity SourceAsc;
+        public Entity TargetAsc;
+        public int UnitSlot;
+        public HeadlessAutoChessTeam Team;
+        public int Frame;
+        public int Round;
+        public int Turn;
+        public float FinalHealth;
+    }
+
+    public struct CHeadlessAutoChessGameplayEffectFacts : IComponentData
+    {
+        public int LastProjectionFrame;
+        public int ProcessedGameplayEventCount;
+        public int GameplayEffectAppliedFactCount;
+    }
+
+    public struct BHeadlessAutoChessGameplayEffectAppliedFact : IBufferElementData
+    {
+        public int Frame;
+        public int Sequence;
+        public Entity SourceAsc;
+        public Entity TargetAsc;
+        public Entity SourceAbility;
+        public Entity GameplayEffect;
+        public Entity RelatedAbility;
+        public int ContextId;
+        public int GameplayEffectCode;
+        public int ReasonCode;
+        public int RelatedAbilityCode;
+        public float Value;
+    }
+
     public struct CHeadlessAutoChessPassiveReactionFacts : IComponentData
     {
         public int LastReactionFrame;
         public int ProcessedGameplayEventCount;
+        public int ProcessedUnitDefeatedFactCount;
         public int PassiveTriggeredFactCount;
         public int KillManaGrantedFactCount;
         public int ReviveRequestedFactCount;
@@ -209,6 +246,8 @@ namespace GAS.Runtime
     {
         public int LastProjectionFrame;
         public int ProcessedGameplayEventCount;
+        public int ProcessedGameplayEffectAppliedFactCount;
+        public int ProcessedUnitDefeatedFactCount;
         public int SummonRequestedFactCount;
         public int SummonSpawnedFactCount;
         public int SummonExpiredFactCount;
@@ -221,6 +260,7 @@ namespace GAS.Runtime
     {
         public int LastProjectionFrame;
         public int ProcessedGameplayEventCount;
+        public int ProcessedGameplayEffectAppliedFactCount;
         public int ProcessedAttributeEventCount;
         public int ProcessedDamageEventCount;
         public int EquipmentAppliedFactCount;
@@ -232,6 +272,7 @@ namespace GAS.Runtime
     {
         public int LastProjectionFrame;
         public int ProcessedGameplayEventCount;
+        public int ProcessedGameplayEffectAppliedFactCount;
         public int ProcessedTagEventCount;
         public int CleanseRequestedFactCount;
         public int CleanseAppliedFactCount;
@@ -284,6 +325,7 @@ namespace GAS.Runtime
     {
         public int LastProjectionFrame;
         public int ProcessedGameplayEventCount;
+        public int ProcessedUnitDefeatedFactCount;
         public int ProcessedAttributeEventCount;
         public int DeathBurstTriggeredFactCount;
         public int DeathBurstDamageAppliedFactCount;
@@ -293,6 +335,7 @@ namespace GAS.Runtime
     {
         public int LastProjectionFrame;
         public int ProcessedGameplayEventCount;
+        public int ProcessedGameplayEffectAppliedFactCount;
         public int ProcessedAttributeEventCount;
         public int EnrageTriggeredFactCount;
         public int EnrageAppliedFactCount;
@@ -394,6 +437,15 @@ namespace GAS.Runtime
         public HeadlessAutoChessTargetPolicy ManaTargetPolicy;
         public HeadlessAutoChessTargetPolicy ControlTargetPolicy;
         public HeadlessAutoChessTargetPolicy SupportTargetPolicy;
+    }
+
+    public struct CHeadlessAutoChessAbilitySlots : IComponentData
+    {
+        public Entity PrimaryAbility;
+        public Entity ManaAbility;
+        public Entity ControlAbility;
+        public Entity SupportAbility;
+        public Entity SummonAbility;
     }
 
     public struct CHeadlessAutoChessCounterRules : IComponentData

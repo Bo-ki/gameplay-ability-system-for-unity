@@ -19,6 +19,7 @@ namespace GAS.Runtime
                 .WithAll<CEffectContext, CEffectSpecData, BExecutionCalculationDefinition>()
                 .WithNone<CEffectDestroy>()
                 .Build();
+            state.RequireForUpdate(_query);
         }
 
         public void OnUpdate(ref SystemState state)
@@ -26,6 +27,7 @@ namespace GAS.Runtime
             var em = state.EntityManager;
             var ecb = new EntityCommandBuffer(Allocator.Temp);
             using var effects = _query.ToEntityArray(Allocator.Temp);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             for (var i = 0; i < effects.Length; i++)
             {

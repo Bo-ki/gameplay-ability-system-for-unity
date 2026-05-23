@@ -14,7 +14,7 @@ namespace GAS.Runtime
         public void OnCreate(ref SystemState state)
         {
             _driverQuery = SystemAPI.QueryBuilder()
-                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessCounterFacts>()
+                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessCounterFacts, BHeadlessAutoChessGameplayEffectAppliedFact>()
                 .Build();
             _counterUnitQuery = SystemAPI.QueryBuilder()
                 .WithAll<CHeadlessAutoChessUnit, CHeadlessAutoChessCounterRules, CHeadlessAutoChessCounterState, BAttribute, CTagMask>()
@@ -26,8 +26,6 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency.Complete();
-
             if (!SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity))
                 return;
 
@@ -40,16 +38,17 @@ namespace GAS.Runtime
                 return;
             }
 
-            using var drivers = _driverQuery.ToEntityArray(Allocator.Temp);
-            if (drivers.Length == 0)
+            if (_driverQuery.IsEmptyIgnoreFilter)
                 return;
 
-            var driverEntity = drivers[0];
+            var driverEntity = _driverQuery.GetSingletonEntity();
             var facts = em.GetComponentData<CHeadlessAutoChessCounterFacts>(driverEntity);
+            var appliedFacts = em.GetBuffer<BHeadlessAutoChessGameplayEffectAppliedFact>(driverEntity);
             var frame = ResolveCurrentFrame(em);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
             ResetProcessedCountsIfFrameChanged(ref facts, frame);
 
-            ProjectEquipmentAppliedFacts(em, eventBusEntity, ref facts);
+            ProjectEquipmentAppliedFacts(em, eventBusEntity, appliedFacts, ref facts);
             ProjectCounterDamageAppliedFacts(em, eventBusEntity, ref facts, frame);
             ProjectCounterTriggers(em, eventBusEntity, ref facts, frame);
 
@@ -69,6 +68,7 @@ namespace GAS.Runtime
 
             facts.LastProjectionFrame = frame;
             facts.ProcessedGameplayEventCount = 0;
+            facts.ProcessedGameplayEffectAppliedFactCount = 0;
             facts.ProcessedAttributeEventCount = 0;
             facts.ProcessedDamageEventCount = 0;
         }
@@ -76,24 +76,23 @@ namespace GAS.Runtime
         private static void ProjectEquipmentAppliedFacts(
             EntityManager em,
             Entity eventBusEntity,
+            DynamicBuffer<BHeadlessAutoChessGameplayEffectAppliedFact> appliedFacts,
             ref CHeadlessAutoChessCounterFacts facts)
         {
-            var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
-            var eventCount = gameplayEvents.Length;
-            var start = facts.ProcessedGameplayEventCount > eventCount
-                ? 0
-                : facts.ProcessedGameplayEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                gameplayEvents,
+            var eventCount = appliedFacts.Length;
+            var start = EventBusHelper.ClampProcessedCount(
+                appliedFacts,
+                facts.ProcessedGameplayEffectAppliedFactCount);
+            using var gameplayEvents = EventBusHelper.CopyBufferRange(
+                appliedFacts,
                 start,
                 eventCount,
                 Allocator.Temp);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < gameplayEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
-                if (evt.Type != EGameplayEventType.GameplayEffectApplied
-                    || !TryGetCounterRules(em, evt.TargetAsc, out var rules)
+                var evt = gameplayEvents[i];
+                if (!TryGetCounterRules(em, evt.TargetAsc, out var rules)
                     || !IsGameplayEffectWithCode(em, evt.GameplayEffect, rules.EquipmentGameplayEffectCode))
                 {
                     continue;
@@ -123,10 +122,7 @@ namespace GAS.Runtime
                 });
             }
 
-            facts.ProcessedGameplayEventCount = em.Exists(eventBusEntity)
-                                                && em.HasBuffer<BGameplayEvent>(eventBusEntity)
-                ? em.GetBuffer<BGameplayEvent>(eventBusEntity).Length
-                : eventCount;
+            facts.ProcessedGameplayEffectAppliedFactCount = eventCount;
         }
 
         private static void ProjectCounterDamageAppliedFacts(
@@ -135,20 +131,16 @@ namespace GAS.Runtime
             ref CHeadlessAutoChessCounterFacts facts,
             int frame)
         {
-            var attributeEvents = em.GetBuffer<BAttributeChangeEvent>(eventBusEntity);
-            var eventCount = attributeEvents.Length;
-            var start = facts.ProcessedAttributeEventCount > eventCount
-                ? 0
-                : facts.ProcessedAttributeEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                attributeEvents,
-                start,
-                eventCount,
-                Allocator.Temp);
+            using var attributeEvents = EventBusHelper.SnapshotBufferRange<BAttributeChangeEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedAttributeEventCount,
+                Allocator.Temp,
+                out var eventCount);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < attributeEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
+                var evt = attributeEvents[i];
                 if (evt.ASC == Entity.Null
                     || evt.SourceAsc == Entity.Null
                     || evt.NewValue >= evt.OldValue
@@ -195,20 +187,16 @@ namespace GAS.Runtime
             ref CHeadlessAutoChessCounterFacts facts,
             int frame)
         {
-            var damageEvents = em.GetBuffer<BDamageEvent>(eventBusEntity);
-            var eventCount = damageEvents.Length;
-            var start = facts.ProcessedDamageEventCount > eventCount
-                ? 0
-                : facts.ProcessedDamageEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                damageEvents,
-                start,
-                eventCount,
-                Allocator.Temp);
+            using var damageEvents = EventBusHelper.SnapshotBufferRange<BDamageEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedDamageEventCount,
+                Allocator.Temp,
+                out var eventCount);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < damageEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
+                var evt = damageEvents[i];
                 if (!TryGetCounterRules(em, evt.Target, out var rules)
                     || evt.Source == Entity.Null
                     || evt.Source == evt.Target
@@ -311,32 +299,27 @@ namespace GAS.Runtime
             if (source == Entity.Null || target == Entity.Null || gameplayEffectCode <= 0)
                 return;
 
-            var request = GameplayEffectRequestWriter.Create(
-                em,
-                new CApplyGameplayEffectRequest
-                {
-                    SourceAsc = source,
-                    Instigator = source,
-                    Causer = source,
-                    GameplayEffectCode = gameplayEffectCode,
-                    Level = 1,
-                },
-                new CTargetDataHeader
-                {
-                    SourceAsc = source,
-                    Kind = source == target ? ETargetDataKind.Self : ETargetDataKind.Entity,
-                },
-                namePrefix);
-            GameplayEffectRequestWriter.AddTarget(em, request, target);
-
-            if (setByCallerKey > 0)
+            var targetKind = source == target ? ETargetDataKind.Self : ETargetDataKind.Entity;
+            var requestData = new CApplyGameplayEffectRequest
             {
-                em.AddBuffer<BSetByCallerValue>(request).Add(new BSetByCallerValue
-                {
-                    Key = setByCallerKey,
-                    Value = setByCallerValue,
-                });
-            }
+                SourceAsc = source,
+                Instigator = source,
+                Causer = source,
+                GameplayEffectCode = gameplayEffectCode,
+                Level = 1,
+            };
+            var setByCaller = new BSetByCallerValue
+            {
+                Key = setByCallerKey,
+                Value = setByCallerValue,
+            };
+            GameplayEffectRequestWriter.ApplyFastOrCreateSingleTargetRequest(
+                em,
+                requestData,
+                target,
+                targetKind,
+                setByCaller,
+                namePrefix);
         }
 
         private static bool TryGetCounterRules(

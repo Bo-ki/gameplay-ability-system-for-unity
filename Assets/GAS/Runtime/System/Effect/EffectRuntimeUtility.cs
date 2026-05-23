@@ -215,23 +215,25 @@ namespace GAS.Runtime
         public static void ApplyInstantEffect(EntityManager em, Entity ge, in CEffectContext context)
         {
             EnqueueCueRequests<CCueOnApply>(em, ge, context.TargetAsc, EGameplayCueEvent.OnApply);
+            EnqueueCueRequestOnApply(em, ge, context.TargetAsc, EGameplayCueEvent.OnApply);
             ApplyInstantModifiers(em, ge, context);
             EnqueueGameplayEvent(em, ge, context, EGameplayEventType.GameplayEffectApplied);
         }
 
-        public static void RemoveActiveGameplayEffectsWithTags(
+        public static bool RemoveActiveGameplayEffectsWithTags(
             EntityManager em,
             Entity ge,
             in CEffectContext context,
             int currentFrame)
         {
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            RemoveActiveGameplayEffectsWithTags(em, ref ecb, ge, context, currentFrame);
+            var removed = RemoveActiveGameplayEffectsWithTags(em, ref ecb, ge, context, currentFrame);
             ecb.Playback(em);
             ecb.Dispose();
+            return removed;
         }
 
-        public static void RemoveActiveGameplayEffectsWithTags(
+        public static bool RemoveActiveGameplayEffectsWithTags(
             EntityManager em,
             ref EntityCommandBuffer ecb,
             Entity ge,
@@ -241,24 +243,21 @@ namespace GAS.Runtime
             if (!TryGetRemoveGameplayEffectsRequirement(em, ge, out var requirement)
                 || requirement.IsEmpty)
             {
-                return;
+                return false;
             }
 
             var target = context.TargetAsc;
             if (!em.Exists(target) || !em.HasBuffer<BGameplayEffect>(target))
-                return;
+                return false;
 
             var activeEffects = em.GetBuffer<BGameplayEffect>(target);
             if (activeEffects.Length == 0)
-                return;
+                return false;
 
-            var effects = new NativeArray<Entity>(activeEffects.Length, Allocator.Temp);
+            var removed = false;
             for (var i = 0; i < activeEffects.Length; i++)
-                effects[i] = activeEffects[i].GameplayEffect;
-
-            for (var i = 0; i < effects.Length; i++)
             {
-                var activeEffect = effects[i];
+                var activeEffect = activeEffects[i].GameplayEffect;
                 if (activeEffect == ge
                     || !em.Exists(activeEffect)
                     || em.HasComponent<CEffectDestroy>(activeEffect)
@@ -268,9 +267,10 @@ namespace GAS.Runtime
                 }
 
                 MarkEffectForRemoval(em, ref ecb, activeEffect, currentFrame);
+                removed = true;
             }
 
-            effects.Dispose();
+            return removed;
         }
 
         private static bool TryGetRemoveGameplayEffectsRequirement(
@@ -382,30 +382,73 @@ namespace GAS.Runtime
             if (gameplayEffectCode <= 0)
                 return Entity.Null;
 
-            var request = GameplayEffectRequestWriter.Create(
+            var targetKind = context.TargetAsc == context.SourceAsc ? ETargetDataKind.Self : ETargetDataKind.Entity;
+            var request = new CApplyGameplayEffectRequest
+            {
+                SourceAsc = context.SourceAsc,
+                SourceAbility = context.SourceAbility,
+                SourceEffect = sourceEffect,
+                Instigator = context.Instigator,
+                Causer = context.Causer != Entity.Null ? context.Causer : sourceEffect,
+                GameplayEffectCode = gameplayEffectCode,
+                Level = ResolveSourceEffectLevel(em, sourceEffect),
+                ParentContextId = context.ContextId,
+            };
+
+            if (TryApplyDerivedFastInstant(em, sourceEffect, request, context.TargetAsc, targetKind))
+                return Entity.Null;
+
+            var requestEntity = GameplayEffectRequestWriter.Create(
                 ref ecb,
-                new CApplyGameplayEffectRequest
-                {
-                    SourceAsc = context.SourceAsc,
-                    SourceAbility = context.SourceAbility,
-                    SourceEffect = sourceEffect,
-                    Instigator = context.Instigator,
-                    Causer = context.Causer != Entity.Null ? context.Causer : sourceEffect,
-                    GameplayEffectCode = gameplayEffectCode,
-                    Level = ResolveSourceEffectLevel(em, sourceEffect),
-                    ParentContextId = context.ContextId,
-                },
+                request,
                 new CTargetDataHeader
                 {
                     SourceAsc = context.SourceAsc,
                     SourceAbility = context.SourceAbility,
-                    Kind = context.TargetAsc == context.SourceAsc ? ETargetDataKind.Self : ETargetDataKind.Entity,
+                    Kind = targetKind,
                 },
                 "DerivedApplyGERequest");
 
-            GameplayEffectRequestWriter.AddTarget(ref ecb, request, context.TargetAsc);
-            CopySetByCallerValues(em, ref ecb, sourceEffect, request);
-            return request;
+            GameplayEffectRequestWriter.AddTarget(ref ecb, requestEntity, context.TargetAsc);
+            CopySetByCallerValues(em, ref ecb, sourceEffect, requestEntity);
+            return requestEntity;
+        }
+
+        private static bool TryApplyDerivedFastInstant(
+            EntityManager em,
+            Entity sourceEffect,
+            in CApplyGameplayEffectRequest request,
+            Entity target,
+            ETargetDataKind targetKind)
+        {
+            if (sourceEffect == Entity.Null
+                || !em.Exists(sourceEffect)
+                || !em.HasBuffer<BSetByCallerValue>(sourceEffect))
+            {
+                return GameplayEffectRequestWriter.TryApplyFastInstantModifier(
+                    em,
+                    request,
+                    target,
+                    targetKind);
+            }
+
+            var values = em.GetBuffer<BSetByCallerValue>(sourceEffect);
+            if (values.Length == 0)
+            {
+                return GameplayEffectRequestWriter.TryApplyFastInstantModifier(
+                    em,
+                    request,
+                    target,
+                    targetKind);
+            }
+
+            return values.Length == 1
+                   && GameplayEffectRequestWriter.TryApplyFastInstantModifier(
+                       em,
+                       request,
+                       target,
+                       targetKind,
+                       values[0]);
         }
 
         private static int ResolveSourceEffectLevel(EntityManager em, Entity sourceEffect)
@@ -593,6 +636,7 @@ namespace GAS.Runtime
             int currentFrame)
         {
             EnqueueCueRequests<CCueOnApply>(em, ge, context.TargetAsc, EGameplayCueEvent.OnApply);
+            EnqueueCueRequestOnApply(em, ge, context.TargetAsc, EGameplayCueEvent.OnApply);
             EnqueueCueRequests<CCueOnAdd>(em, ge, context.TargetAsc, EGameplayCueEvent.OnAdd);
 
             AddRuntimeModifiers(em, ge, context);
@@ -635,6 +679,7 @@ namespace GAS.Runtime
             int currentFrame)
         {
             EnqueueCueRequests<CCueOnApply>(em, ge, context.TargetAsc, EGameplayCueEvent.OnApply);
+            EnqueueCueRequestOnApply(em, ge, context.TargetAsc, EGameplayCueEvent.OnApply);
             EnqueueCueRequests<CCueOnAdd>(em, ge, context.TargetAsc, EGameplayCueEvent.OnAdd);
             AddEffectToTarget(em, ge, context);
 
@@ -1733,6 +1778,48 @@ namespace GAS.Runtime
                 if (em.Exists(cue))
                     EnqueueCueRequest(em, ge, cue, target, cueEvent);
             }
+        }
+
+        private static void EnqueueCueRequestOnApply(
+            EntityManager em,
+            Entity ge,
+            Entity target,
+            EGameplayCueEvent cueEvent)
+        {
+            if (!em.Exists(ge) || !em.HasComponent<CGameplayEffectCueRequestOnApply>(ge))
+                return;
+
+            var cue = em.GetComponentData<CGameplayEffectCueRequestOnApply>(ge);
+            var context = em.HasComponent<CEffectContext>(ge)
+                ? em.GetComponentData<CEffectContext>(ge)
+                : default;
+            var sourceAsc = context.SourceAsc != Entity.Null ? context.SourceAsc : Entity.Null;
+            var sourceAbility = context.SourceAbility != Entity.Null ? context.SourceAbility : Entity.Null;
+
+            EventBusHelper.EnqueueCueRequest(em, GASManager.EntityEventBus, new BCueRequest
+            {
+                TargetAsc = target,
+                SourceAsc = sourceAsc,
+                SourceAbility = sourceAbility,
+                GameplayEffect = ge,
+                SourceEntity = ge,
+                SourceType = CueSourceType.GameplayEffect,
+                CueEntity = Entity.Null,
+                ContextId = context.ContextId,
+                CueEvent = cueEvent,
+            });
+
+            EventBusHelper.EnqueueGameplayEvent(em, GASManager.EntityEventBus, new BGameplayEvent
+            {
+                Type = EGameplayEventType.CueRequested,
+                SourceAsc = sourceAsc,
+                TargetAsc = target,
+                SourceAbility = sourceAbility,
+                GameplayEffect = ge,
+                ContextId = context.ContextId,
+                EventCode = (int)cueEvent,
+                ReasonCode = cue.CueCode,
+            });
         }
 
         private static void EnqueueStopCueRequests<TCueComponent>(EntityManager em, Entity ge)

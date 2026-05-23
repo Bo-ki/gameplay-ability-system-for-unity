@@ -103,7 +103,8 @@ namespace GAS.Runtime.Tests.Event
             Assert.That(IndexOf<SAbilityTick>(abilitySystems), Is.LessThan(IndexOf<SAttributeThresholdAbilityLifecycleRequest>(abilitySystems)));
             Assert.That(IndexOf<SAttributeThresholdAbilityLifecycleRequest>(abilitySystems), Is.LessThan(IndexOf<SAbilityLifecycleRequest>(abilitySystems)));
             Assert.That(IndexOf<SAbilityLifecycleRequest>(abilitySystems), Is.LessThan(IndexOf<SAbilityStateCleanup>(abilitySystems)));
-            Assert.That(IndexOf<SAbilityStateCleanup>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessSummonLifecycle>(abilitySystems)));
+            Assert.That(IndexOf<SAbilityStateCleanup>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessGameplayEffectFactProjection>(abilitySystems)));
+            Assert.That(IndexOf<SHeadlessAutoChessGameplayEffectFactProjection>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessSummonLifecycle>(abilitySystems)));
             Assert.That(IndexOf<SHeadlessAutoChessSummonLifecycle>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessPassiveReaction>(abilitySystems)));
             Assert.That(IndexOf<SHeadlessAutoChessPassiveReaction>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessEnrageReaction>(abilitySystems)));
             Assert.That(IndexOf<SHeadlessAutoChessEnrageReaction>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessCounterReaction>(abilitySystems)));

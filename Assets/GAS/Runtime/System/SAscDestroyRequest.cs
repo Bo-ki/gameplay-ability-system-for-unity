@@ -10,7 +10,6 @@ namespace GAS.Runtime
     {
         private EntityQuery _requestQuery;
         private EntityQuery _effectQuery;
-        private EntityQuery _abilityQuery;
 
         public void OnCreate(ref SystemState state)
         {
@@ -19,9 +18,7 @@ namespace GAS.Runtime
                 .Build();
             _effectQuery = SystemAPI.QueryBuilder()
                 .WithAll<CEffectContext>()
-                .Build();
-            _abilityQuery = SystemAPI.QueryBuilder()
-                .WithAll<CAbilityBaseInfo>()
+                .WithNone<CEffectDestroy>()
                 .Build();
             state.RequireForUpdate(_requestQuery);
         }
@@ -30,21 +27,20 @@ namespace GAS.Runtime
         {
             var em = state.EntityManager;
             var requests = _requestQuery.ToEntityArray(Allocator.Temp);
-            var effects = _effectQuery.ToEntityArray(Allocator.Temp);
-            var abilities = _abilityQuery.ToEntityArray(Allocator.Temp);
+            var effects = default(NativeArray<Entity>);
 
             for (var i = 0; i < requests.Length; i++)
             {
                 var requestEntity = requests[i];
                 var request = em.GetComponentData<CAscDestroyRequest>(requestEntity);
                 if (request.ASC != Entity.Null && em.Exists(request.ASC))
-                    ProcessDestroyRequest(em, request.ASC, effects, abilities);
+                    ProcessDestroyRequest(em, request.ASC, _effectQuery, ref effects);
 
                 em.DestroyEntity(requestEntity);
             }
 
-            abilities.Dispose();
-            effects.Dispose();
+            if (effects.IsCreated)
+                effects.Dispose();
             requests.Dispose();
         }
 
@@ -55,18 +51,50 @@ namespace GAS.Runtime
         private static void ProcessDestroyRequest(
             EntityManager em,
             Entity asc,
-            NativeArray<Entity> effects,
-            NativeArray<Entity> abilities)
+            EntityQuery effectQuery,
+            ref NativeArray<Entity> effects)
         {
             if (!em.HasComponent<CAscDestroying>(asc))
                 em.AddComponent<CAscDestroying>(asc);
 
-            MarkReferencingEffectsForDestroy(em, asc, effects);
-            DestroyOwnedAbilities(em, asc, abilities);
+            MarkOwnedEffectsForDestroy(em, asc);
+            MarkReferencingEffectsForDestroy(em, asc, effectQuery, ref effects);
+            DestroyOwnedAbilities(em, asc);
         }
 
-        private static void MarkReferencingEffectsForDestroy(EntityManager em, Entity asc, NativeArray<Entity> effects)
+        private static void MarkOwnedEffectsForDestroy(EntityManager em, Entity asc)
         {
+            if (!em.HasBuffer<BGameplayEffect>(asc))
+                return;
+
+            var activeEffects = em.GetBuffer<BGameplayEffect>(asc);
+            if (activeEffects.Length == 0)
+                return;
+
+            var effectSnapshot = new NativeArray<Entity>(activeEffects.Length, Allocator.Temp);
+            try
+            {
+                for (var i = 0; i < activeEffects.Length; i++)
+                    effectSnapshot[i] = activeEffects[i].GameplayEffect;
+
+                for (var i = 0; i < effectSnapshot.Length; i++)
+                    MarkEffectForDestroy(em, effectSnapshot[i]);
+            }
+            finally
+            {
+                effectSnapshot.Dispose();
+            }
+        }
+
+        private static void MarkReferencingEffectsForDestroy(
+            EntityManager em,
+            Entity asc,
+            EntityQuery effectQuery,
+            ref NativeArray<Entity> effects)
+        {
+            if (!effects.IsCreated)
+                effects = effectQuery.ToEntityArray(Allocator.Temp);
+
             for (var i = 0; i < effects.Length; i++)
             {
                 var effect = effects[i];
@@ -77,36 +105,65 @@ namespace GAS.Runtime
                 if (context.SourceAsc != asc && context.TargetAsc != asc)
                     continue;
 
-                if (!em.HasComponent<CEffectDestroy>(effect))
-                    em.AddComponent<CEffectDestroy>(effect);
+                MarkEffectForDestroy(em, effect);
             }
         }
 
-        private static void DestroyOwnedAbilities(EntityManager em, Entity asc, NativeArray<Entity> abilities)
+        private static void MarkEffectForDestroy(EntityManager em, Entity effect)
         {
-            for (var i = 0; i < abilities.Length; i++)
+            if (effect == Entity.Null
+                || !em.Exists(effect)
+                || em.HasComponent<CEffectDestroy>(effect))
             {
-                var ability = abilities[i];
-                if (!em.Exists(ability) || !em.HasComponent<CAbilityBaseInfo>(ability))
-                    continue;
+                return;
+            }
 
-                var baseInfo = em.GetComponentData<CAbilityBaseInfo>(ability);
-                if (baseInfo.Owner != asc)
-                    continue;
+            em.AddComponent<CEffectDestroy>(effect);
+        }
 
-                RemoveAbilityFromOwner(em, asc, ability);
-                if (IsAbilityRunning(em, ability))
+        private static void DestroyOwnedAbilities(EntityManager em, Entity asc)
+        {
+            if (!em.HasBuffer<BGrantedAbility>(asc))
+                return;
+
+            var grantedAbilities = em.GetBuffer<BGrantedAbility>(asc);
+            if (grantedAbilities.Length == 0)
+                return;
+
+            var abilitySnapshot = new NativeArray<Entity>(grantedAbilities.Length, Allocator.Temp);
+            try
+            {
+                for (var i = 0; i < grantedAbilities.Length; i++)
+                    abilitySnapshot[i] = grantedAbilities[i].AbilityEntity;
+
+                for (var i = 0; i < abilitySnapshot.Length; i++)
                 {
-                    AbilityRuntimeActions.RequestAbilityCancel(
-                        ability,
-                        em,
-                        EAbilityLifecycleReason.AscDestroy);
-                    AddMarker<CAbilityDestroyOnCleanup>(em, ability);
+                    var ability = abilitySnapshot[i];
+                    if (!em.Exists(ability) || !em.HasComponent<CAbilityBaseInfo>(ability))
+                        continue;
+
+                    var baseInfo = em.GetComponentData<CAbilityBaseInfo>(ability);
+                    if (baseInfo.Owner != asc)
+                        continue;
+
+                    RemoveAbilityFromOwner(em, asc, ability);
+                    if (IsAbilityRunning(em, ability))
+                    {
+                        AbilityRuntimeActions.RequestAbilityCancel(
+                            ability,
+                            em,
+                            EAbilityLifecycleReason.AscDestroy);
+                        AddMarker<CAbilityDestroyOnCleanup>(em, ability);
+                    }
+                    else
+                    {
+                        DestroyAbilityEntity(em, ability);
+                    }
                 }
-                else
-                {
-                    DestroyAbilityEntity(em, ability);
-                }
+            }
+            finally
+            {
+                abilitySnapshot.Dispose();
             }
         }
 

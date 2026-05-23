@@ -420,6 +420,62 @@ namespace GAS.Runtime.Tests.AutoChess
         }
 
         [Test]
+        public void RunDefaultSupportsScaledProfileWithoutAssertionLogMaterialization()
+        {
+            var result = HeadlessAutoChessScenario.RunDefault(
+                new HeadlessAutoChessOptions(
+                    maxTicks: 8,
+                    postVictoryFlushTicks: 0,
+                    collectSystemTimings: true,
+                    unitScale: 2,
+                    captureAssertionLog: false));
+
+            Assert.That(result.Units, Has.Length.EqualTo(12), result.ValidationReport.SummaryText);
+            Assert.That(result.PlayerUnitCount, Is.EqualTo(6), result.ValidationReport.SummaryText);
+            Assert.That(result.EnemyUnitCount, Is.EqualTo(6), result.ValidationReport.SummaryText);
+            Assert.That(result.MeasuredTicks, Is.GreaterThan(0), result.ValidationReport.SummaryText);
+            Assert.That(result.AssertionLog, Is.EqualTo(string.Empty), result.ValidationReport.SummaryText);
+            Assert.That(result.SystemTimings.Length, Is.GreaterThan(0), result.ValidationReport.SummaryText);
+            StringAssert.Contains("variant|name=DefaultBalancedx2", result.ValidationReport.SummaryText);
+            StringAssert.Contains("systemTimingDistribution|rows=", result.ValidationReport.SummaryText);
+            StringAssert.Contains("captureAssertionLog=false", result.ValidationReport.SummaryText);
+            StringAssert.Contains("exportTextLogs=true", result.ValidationReport.SummaryText);
+        }
+
+        [Test]
+        public void RunDefaultProfileExportCanWriteSummaryWithoutTextLogs()
+        {
+            var exportDirectory = Path.GetFullPath(Path.Combine(
+                "TestResults",
+                "AutoChess",
+                "T6-CHESS-AT-ProfileNoTextLogs"));
+            if (Directory.Exists(exportDirectory))
+                Directory.Delete(exportDirectory, true);
+
+            var result = HeadlessAutoChessScenario.RunDefault(
+                new HeadlessAutoChessOptions(
+                    maxTicks: 8,
+                    postVictoryFlushTicks: 0,
+                    exportLogs: true,
+                    exportDirectory: exportDirectory,
+                    collectSystemTimings: true,
+                    unitScale: 2,
+                    captureAssertionLog: false,
+                    exportTextLogs: false));
+
+            Assert.That(File.Exists(result.ValidationReport.SummaryPath), Is.True);
+            Assert.That(result.AssertionLog, Is.EqualTo(string.Empty), result.ValidationReport.SummaryText);
+            Assert.That(result.ValidationReport.AssertionLogFile.ByteCount, Is.EqualTo(0));
+            Assert.That(result.ValidationReport.HumanReadableLogFile.ByteCount, Is.EqualTo(0));
+            Assert.That(File.Exists(Path.Combine(exportDirectory, "headless-autochess.assertion.log")), Is.False);
+            Assert.That(File.Exists(Path.Combine(exportDirectory, "headless-autochess.human.log")), Is.False);
+            StringAssert.Contains("captureAssertionLog=false", result.ValidationReport.SummaryText);
+            StringAssert.Contains("exportTextLogs=false", result.ValidationReport.SummaryText);
+            StringAssert.Contains("assertionBytes=0", result.ValidationReport.SummaryText);
+            StringAssert.Contains("humanBytes=0", result.ValidationReport.SummaryText);
+        }
+
+        [Test]
         public void RunScaleValidationExportsBatchSummaryAndStaysDeterministic()
         {
             var exportDirectory = Path.GetFullPath(Path.Combine("TestResults", "AutoChess", "T6-CHESS-AF"));
@@ -794,6 +850,23 @@ namespace GAS.Runtime.Tests.AutoChess
         public static void RunExportValidationFromCommandLine()
         {
             new HeadlessAutoChessScenarioTests().RunDefaultExportsValidationReportAndMeetsPerformanceGate();
+        }
+
+        public static void RunSystemTimingProfileFromCommandLine()
+        {
+            var exportDirectory = Path.GetFullPath(Path.Combine("TestResults", "AutoChess", "T6-CHESS-AF-SystemTiming"));
+            var result = HeadlessAutoChessScenario.RunDefault(
+                new HeadlessAutoChessOptions(
+                    maxTicks: 128,
+                    postVictoryFlushTicks: 4,
+                    exportLogs: true,
+                    exportDirectory: exportDirectory,
+                    collectSystemTimings: true));
+            var report = result.ValidationReport;
+
+            Assert.That(result.Completed, Is.True, report.SummaryText);
+            Assert.That(report.Passed, Is.True, report.SummaryText);
+            Assert.That(result.SystemTimings.Length, Is.GreaterThan(0), report.SummaryText);
         }
 
         public static void RunScaleValidationFromCommandLine()

@@ -14,7 +14,7 @@ namespace GAS.Runtime
         public void OnCreate(ref SystemState state)
         {
             _driverQuery = SystemAPI.QueryBuilder()
-                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessCleanseFacts>()
+                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessCleanseFacts, BHeadlessAutoChessGameplayEffectAppliedFact>()
                 .Build();
             _cleanseUnitQuery = SystemAPI.QueryBuilder()
                 .WithAll<CHeadlessAutoChessUnit, CHeadlessAutoChessCleanseRules, CHeadlessAutoChessCleanseState>()
@@ -26,8 +26,6 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency.Complete();
-
             if (!SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity))
                 return;
 
@@ -39,19 +37,19 @@ namespace GAS.Runtime
                 return;
             }
 
-            using var drivers = _driverQuery.ToEntityArray(Allocator.Temp);
             using var cleansers = _cleanseUnitQuery.ToEntityArray(Allocator.Temp);
-            if (drivers.Length == 0 || cleansers.Length == 0)
+            if (_driverQuery.IsEmptyIgnoreFilter || cleansers.Length == 0)
                 return;
 
-            var driverEntity = drivers[0];
+            var driverEntity = _driverQuery.GetSingletonEntity();
             var facts = em.GetComponentData<CHeadlessAutoChessCleanseFacts>(driverEntity);
+            var appliedFacts = em.GetBuffer<BHeadlessAutoChessGameplayEffectAppliedFact>(driverEntity);
             var frame = ResolveCurrentFrame(em);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
             ResetProcessedCountsIfFrameChanged(ref facts, frame);
 
             ProjectCleanseRequests(em, eventBusEntity, ref facts, frame);
-            ProjectCleanseAppliedFacts(em, eventBusEntity, ref facts, frame);
-            ProjectCleanseRallyAppliedFacts(em, eventBusEntity, ref facts, frame);
+            ProjectCleanseEffectAppliedFacts(em, eventBusEntity, appliedFacts, ref facts, frame);
             ProjectCleanseRemovedTagFacts(em, eventBusEntity, cleansers, ref facts, frame);
 
             em.SetComponentData(driverEntity, facts);
@@ -70,6 +68,7 @@ namespace GAS.Runtime
 
             facts.LastProjectionFrame = frame;
             facts.ProcessedGameplayEventCount = 0;
+            facts.ProcessedGameplayEffectAppliedFactCount = 0;
             facts.ProcessedTagEventCount = 0;
         }
 
@@ -79,20 +78,16 @@ namespace GAS.Runtime
             ref CHeadlessAutoChessCleanseFacts facts,
             int frame)
         {
-            var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
-            var eventCount = gameplayEvents.Length;
-            var start = facts.ProcessedGameplayEventCount > eventCount
-                ? 0
-                : facts.ProcessedGameplayEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                gameplayEvents,
-                start,
-                eventCount,
-                Allocator.Temp);
+            using var gameplayEvents = EventBusHelper.SnapshotBufferRange<BGameplayEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedGameplayEventCount,
+                Allocator.Temp,
+                out var eventCount);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < gameplayEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
+                var evt = gameplayEvents[i];
                 if (evt.Type != EGameplayEventType.AutoChessCleanseRequested
                     || !TryGetCleanseRules(em, evt.SourceAsc, out _))
                 {
@@ -108,113 +103,86 @@ namespace GAS.Runtime
 
                 facts.CleanseRequestedFactCount++;
             }
+
+            facts.ProcessedGameplayEventCount = eventCount;
         }
 
-        private static void ProjectCleanseAppliedFacts(
+        private static void ProjectCleanseEffectAppliedFacts(
             EntityManager em,
             Entity eventBusEntity,
+            DynamicBuffer<BHeadlessAutoChessGameplayEffectAppliedFact> appliedFacts,
             ref CHeadlessAutoChessCleanseFacts facts,
             int frame)
         {
-            var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
-            var eventCount = gameplayEvents.Length;
-            var start = facts.ProcessedGameplayEventCount > eventCount
-                ? 0
-                : facts.ProcessedGameplayEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                gameplayEvents,
+            var eventCount = appliedFacts.Length;
+            var start = EventBusHelper.ClampProcessedCount(
+                appliedFacts,
+                facts.ProcessedGameplayEffectAppliedFactCount);
+            using var gameplayEvents = EventBusHelper.CopyBufferRange(
+                appliedFacts,
                 start,
                 eventCount,
                 Allocator.Temp);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < gameplayEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
-                if (evt.Type != EGameplayEventType.GameplayEffectApplied
-                    || !TryGetCleanseRules(em, evt.SourceAsc, out var rules)
-                    || !IsCleanseAppliedEvent(em, evt, rules))
+                var evt = gameplayEvents[i];
+                if (!TryGetCleanseRules(em, evt.SourceAsc, out var rules))
                 {
                     continue;
                 }
 
-                var cleanseState = em.GetComponentData<CHeadlessAutoChessCleanseState>(evt.SourceAsc);
-                cleanseState.CleanseAppliedCount++;
-                cleanseState.LastCleanseFrame = frame;
-                cleanseState.LastCleanseSource = evt.SourceAsc;
-                cleanseState.LastCleanseTarget = evt.TargetAsc;
-                em.SetComponentData(evt.SourceAsc, cleanseState);
-
-                facts.CleanseAppliedFactCount++;
-                EventBusHelper.EnqueueGameplayEvent(em, eventBusEntity, new BGameplayEvent
+                if (IsCleanseAppliedEvent(em, evt, rules))
                 {
-                    Type = EGameplayEventType.AutoChessCleanseApplied,
-                    SourceAsc = evt.SourceAsc,
-                    TargetAsc = evt.TargetAsc,
-                    SourceAbility = evt.SourceAbility,
-                    GameplayEffect = evt.GameplayEffect,
-                    ContextId = evt.ContextId,
-                    EventCode = rules.CleanseGameplayEffectCode,
-                    ReasonCode = rules.RemovableTagIndex,
-                    Value = cleanseState.CleanseAppliedCount,
-                });
-            }
+                    var cleanseState = em.GetComponentData<CHeadlessAutoChessCleanseState>(evt.SourceAsc);
+                    cleanseState.CleanseAppliedCount++;
+                    cleanseState.LastCleanseFrame = frame;
+                    cleanseState.LastCleanseSource = evt.SourceAsc;
+                    cleanseState.LastCleanseTarget = evt.TargetAsc;
+                    em.SetComponentData(evt.SourceAsc, cleanseState);
 
-        }
-
-        private static void ProjectCleanseRallyAppliedFacts(
-            EntityManager em,
-            Entity eventBusEntity,
-            ref CHeadlessAutoChessCleanseFacts facts,
-            int frame)
-        {
-            var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
-            var eventCount = gameplayEvents.Length;
-            var start = facts.ProcessedGameplayEventCount > eventCount
-                ? 0
-                : facts.ProcessedGameplayEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                gameplayEvents,
-                start,
-                eventCount,
-                Allocator.Temp);
-
-            for (var i = 0; i < eventSnapshot.Length; i++)
-            {
-                var evt = eventSnapshot[i];
-                if (evt.Type != EGameplayEventType.GameplayEffectApplied
-                    || !TryGetCleanseRules(em, evt.SourceAsc, out var rules)
-                    || rules.RallyGameplayEffectCode <= 0
-                    || !IsGameplayEffectWithCode(em, evt.GameplayEffect, rules.RallyGameplayEffectCode))
-                {
-                    continue;
+                    facts.CleanseAppliedFactCount++;
+                    EventBusHelper.EnqueueGameplayEvent(em, eventBusEntity, new BGameplayEvent
+                    {
+                        Type = EGameplayEventType.AutoChessCleanseApplied,
+                        SourceAsc = evt.SourceAsc,
+                        TargetAsc = evt.TargetAsc,
+                        SourceAbility = evt.SourceAbility,
+                        GameplayEffect = evt.GameplayEffect,
+                        ContextId = evt.ContextId,
+                        EventCode = rules.CleanseGameplayEffectCode,
+                        ReasonCode = rules.RemovableTagIndex,
+                        Value = cleanseState.CleanseAppliedCount,
+                    });
                 }
 
-                var cleanseState = em.GetComponentData<CHeadlessAutoChessCleanseState>(evt.SourceAsc);
-                cleanseState.CleanseRallyAppliedCount++;
-                cleanseState.LastCleanseFrame = frame;
-                cleanseState.LastCleanseSource = evt.SourceAsc;
-                cleanseState.LastCleanseTarget = evt.TargetAsc;
-                em.SetComponentData(evt.SourceAsc, cleanseState);
-
-                facts.CleanseRallyAppliedFactCount++;
-                EventBusHelper.EnqueueGameplayEvent(em, eventBusEntity, new BGameplayEvent
+                if (rules.RallyGameplayEffectCode > 0
+                    && IsGameplayEffectWithCode(em, evt.GameplayEffect, rules.RallyGameplayEffectCode))
                 {
-                    Type = EGameplayEventType.AutoChessCleanseRallyApplied,
-                    SourceAsc = evt.SourceAsc,
-                    TargetAsc = evt.TargetAsc,
-                    SourceAbility = evt.SourceAbility,
-                    GameplayEffect = evt.GameplayEffect,
-                    ContextId = evt.ContextId,
-                    EventCode = rules.RallyGameplayEffectCode,
-                    ReasonCode = rules.RemovableTagIndex,
-                    Value = cleanseState.CleanseRallyAppliedCount,
-                });
+                    var cleanseState = em.GetComponentData<CHeadlessAutoChessCleanseState>(evt.SourceAsc);
+                    cleanseState.CleanseRallyAppliedCount++;
+                    cleanseState.LastCleanseFrame = frame;
+                    cleanseState.LastCleanseSource = evt.SourceAsc;
+                    cleanseState.LastCleanseTarget = evt.TargetAsc;
+                    em.SetComponentData(evt.SourceAsc, cleanseState);
+
+                    facts.CleanseRallyAppliedFactCount++;
+                    EventBusHelper.EnqueueGameplayEvent(em, eventBusEntity, new BGameplayEvent
+                    {
+                        Type = EGameplayEventType.AutoChessCleanseRallyApplied,
+                        SourceAsc = evt.SourceAsc,
+                        TargetAsc = evt.TargetAsc,
+                        SourceAbility = evt.SourceAbility,
+                        GameplayEffect = evt.GameplayEffect,
+                        ContextId = evt.ContextId,
+                        EventCode = rules.RallyGameplayEffectCode,
+                        ReasonCode = rules.RemovableTagIndex,
+                        Value = cleanseState.CleanseRallyAppliedCount,
+                    });
+                }
             }
 
-            facts.ProcessedGameplayEventCount = em.Exists(eventBusEntity)
-                                                && em.HasBuffer<BGameplayEvent>(eventBusEntity)
-                ? em.GetBuffer<BGameplayEvent>(eventBusEntity).Length
-                : eventCount;
+            facts.ProcessedGameplayEffectAppliedFactCount = eventCount;
         }
 
         private static void ProjectCleanseRemovedTagFacts(
@@ -224,20 +192,16 @@ namespace GAS.Runtime
             ref CHeadlessAutoChessCleanseFacts facts,
             int frame)
         {
-            var tagEvents = em.GetBuffer<BTagChangeEvent>(eventBusEntity);
-            var eventCount = tagEvents.Length;
-            var start = facts.ProcessedTagEventCount > eventCount
-                ? 0
-                : facts.ProcessedTagEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                tagEvents,
-                start,
-                eventCount,
-                Allocator.Temp);
+            using var tagEvents = EventBusHelper.SnapshotBufferRange<BTagChangeEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedTagEventCount,
+                Allocator.Temp,
+                out var eventCount);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < tagEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
+                var evt = tagEvents[i];
                 if (evt.Added
                     || !TryFindRecentCleanser(
                         em,
@@ -348,7 +312,7 @@ namespace GAS.Runtime
 
         private static bool IsCleanseAppliedEvent(
             EntityManager em,
-            in BGameplayEvent evt,
+            in BHeadlessAutoChessGameplayEffectAppliedFact evt,
             in CHeadlessAutoChessCleanseRules rules)
         {
             if (evt.TargetAsc == Entity.Null || evt.TargetAsc == evt.SourceAsc)
@@ -436,7 +400,8 @@ namespace GAS.Runtime
             int gameplayEffectCode,
             string namePrefix)
         {
-            var request = GameplayEffectRequestWriter.Create(
+            var targetKind = source == target ? ETargetDataKind.Self : ETargetDataKind.Entity;
+            GameplayEffectRequestWriter.ApplyFastOrCreateSingleTargetRequest(
                 em,
                 new CApplyGameplayEffectRequest
                 {
@@ -446,13 +411,9 @@ namespace GAS.Runtime
                     GameplayEffectCode = gameplayEffectCode,
                     Level = 1,
                 },
-                new CTargetDataHeader
-                {
-                    SourceAsc = source,
-                    Kind = source == target ? ETargetDataKind.Self : ETargetDataKind.Entity,
-                },
+                target,
+                targetKind,
                 namePrefix);
-            GameplayEffectRequestWriter.AddTarget(em, request, target);
         }
 
         private static bool IsAliveAutoChessUnit(EntityManager em, Entity asc)

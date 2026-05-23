@@ -11,10 +11,32 @@ namespace GAS.Runtime
             in CEffectContext context,
             in CEffectSpecData spec)
         {
-            var ecb = new EntityCommandBuffer(Allocator.Temp);
-            ResolveModifiers(em, ref ecb, ge, context, spec);
-            ecb.Playback(em);
-            ecb.Dispose();
+            if (!em.HasBuffer<BModifierConfig>(ge))
+            {
+                if (em.HasBuffer<BResolvedModifier>(ge))
+                    em.GetBuffer<BResolvedModifier>(ge).Clear();
+
+                return;
+            }
+
+            EnsureResolverBuffers(em, ge);
+
+            var configBuffer = em.GetBuffer<BModifierConfig>(ge);
+            var resolvedModifiers = em.GetBuffer<BResolvedModifier>(ge);
+            resolvedModifiers.Clear();
+            for (var i = 0; i < configBuffer.Length; i++)
+            {
+                var config = configBuffer[i];
+                var magnitude = ResolveMagnitude(em, ge, i, config.Magnitude, context, spec);
+                resolvedModifiers.Add(new BResolvedModifier
+                {
+                    AttrSetCode = config.AttrSetCode,
+                    AttributeCode = config.AttributeCode,
+                    Op = config.Op,
+                    Magnitude = magnitude,
+                    SourceEffect = ge,
+                });
+            }
         }
 
         public static void ResolveModifiers(
@@ -32,33 +54,126 @@ namespace GAS.Runtime
                 return;
             }
 
-            var configBuffer = em.GetBuffer<BModifierConfig>(ge);
-            var configs = new NativeArray<BModifierConfig>(configBuffer.Length, Allocator.Temp);
-            for (var i = 0; i < configBuffer.Length; i++)
-                configs[i] = configBuffer[i];
+            EnsureResolverBuffers(em, ref ecb, ge);
 
-            try
+            var configBuffer = em.GetBuffer<BModifierConfig>(ge);
+            var resolvedModifiers = em.GetBuffer<BResolvedModifier>(ge);
+            resolvedModifiers.Clear();
+            for (var i = 0; i < configBuffer.Length; i++)
             {
-                GetOrCreateResolvedModifiers(em, ref ecb, ge).Clear();
-                for (var i = 0; i < configs.Length; i++)
+                var config = configBuffer[i];
+                var magnitude = ResolveMagnitude(em, ref ecb, ge, i, config.Magnitude, context, spec);
+                resolvedModifiers.Add(new BResolvedModifier
                 {
-                    var config = configs[i];
-                    var magnitude = ResolveMagnitude(em, ref ecb, ge, i, config.Magnitude, context, spec);
-                    var resolvedModifiers = em.GetBuffer<BResolvedModifier>(ge);
-                    resolvedModifiers.Add(new BResolvedModifier
-                    {
-                        AttrSetCode = config.AttrSetCode,
-                        AttributeCode = config.AttributeCode,
-                        Op = config.Op,
-                        Magnitude = magnitude,
-                        SourceEffect = ge,
-                    });
+                    AttrSetCode = config.AttrSetCode,
+                    AttributeCode = config.AttributeCode,
+                    Op = config.Op,
+                    Magnitude = magnitude,
+                    SourceEffect = ge,
+                });
+            }
+        }
+
+        private static void EnsureResolverBuffers(EntityManager em, Entity ge)
+        {
+            if (!em.HasBuffer<BResolvedModifier>(ge))
+                em.AddBuffer<BResolvedModifier>(ge);
+
+            if (RequiresAttributeCaptureBuffer(em, ge) && !em.HasBuffer<BAttributeCaptureValue>(ge))
+                em.AddBuffer<BAttributeCaptureValue>(ge);
+        }
+
+        private static void EnsureResolverBuffers(
+            EntityManager em,
+            ref EntityCommandBuffer ecb,
+            Entity ge)
+        {
+            var requiresPlayback = false;
+            if (!em.HasBuffer<BResolvedModifier>(ge))
+            {
+                ecb.AddBuffer<BResolvedModifier>(ge);
+                requiresPlayback = true;
+            }
+
+            if (RequiresAttributeCaptureBuffer(em, ge) && !em.HasBuffer<BAttributeCaptureValue>(ge))
+            {
+                ecb.AddBuffer<BAttributeCaptureValue>(ge);
+                requiresPlayback = true;
+            }
+
+            if (requiresPlayback)
+                PlaybackAndReset(ref ecb, em);
+        }
+
+        private static bool RequiresAttributeCaptureBuffer(EntityManager em, Entity ge)
+        {
+            if (!em.HasBuffer<BMagnitudeDefinition>(ge))
+                return false;
+
+            var definitions = em.GetBuffer<BMagnitudeDefinition>(ge);
+            for (var i = 0; i < definitions.Length; i++)
+            {
+                var definition = definitions[i];
+                if (definition.CaptureTiming == EAttributeCaptureTiming.CurrentValue)
+                    continue;
+
+                if (definition.Source == EMagnitudeSource.SourceAttribute
+                    || definition.Source == EMagnitudeSource.TargetAttribute)
+                {
+                    return true;
                 }
             }
-            finally
+
+            return false;
+        }
+
+        private static float ResolveMagnitude(
+            EntityManager em,
+            Entity ge,
+            int modifierIndex,
+            float constantMagnitude,
+            in CEffectContext context,
+            in CEffectSpecData spec)
+        {
+            if (!TryGetMagnitudeDefinition(em, ge, modifierIndex, out var definition))
+                return constantMagnitude;
+
+            var rawMagnitude = definition.Source switch
             {
-                configs.Dispose();
-            }
+                EMagnitudeSource.Constant => constantMagnitude,
+                EMagnitudeSource.SetByCaller => ResolveSetByCaller(em, ge, definition.Key, definition.FallbackMagnitude),
+                EMagnitudeSource.SourceAttribute => ResolveAttributeCapture(
+                    em,
+                    ge,
+                    modifierIndex,
+                    EMagnitudeSource.SourceAttribute,
+                    context.SourceAsc,
+                    definition.AttributeSetCode,
+                    definition.AttributeCode,
+                    definition.CaptureTiming,
+                    definition.FallbackMagnitude),
+                EMagnitudeSource.TargetAttribute => ResolveAttributeCapture(
+                    em,
+                    ge,
+                    modifierIndex,
+                    EMagnitudeSource.TargetAttribute,
+                    context.TargetAsc,
+                    definition.AttributeSetCode,
+                    definition.AttributeCode,
+                    definition.CaptureTiming,
+                    definition.FallbackMagnitude),
+                EMagnitudeSource.ExecutionCalculation => ResolveExecutionCalculation(
+                    em,
+                    ge,
+                    definition.Key,
+                    definition.FallbackMagnitude,
+                    context),
+                EMagnitudeSource.StackCount => ResolveStackCount(spec),
+                _ => constantMagnitude,
+            };
+
+            var coefficient = definition.Coefficient == 0 ? 1f : definition.Coefficient;
+            return ((rawMagnitude + definition.PreAdd) * coefficient) + definition.PostAdd;
         }
 
         private static float ResolveMagnitude(
@@ -213,21 +328,24 @@ namespace GAS.Runtime
             EAttributeCaptureTiming captureTiming,
             float fallbackMagnitude)
         {
-            var ecb = new EntityCommandBuffer(Allocator.Temp);
-            var result = ResolveAttributeCapture(
-                em,
-                ref ecb,
-                ge,
-                modifierIndex,
-                source,
-                asc,
-                attrSetCode,
-                attributeCode,
-                captureTiming,
-                fallbackMagnitude);
-            ecb.Playback(em);
-            ecb.Dispose();
-            return result;
+            if (captureTiming == EAttributeCaptureTiming.CurrentValue)
+                return ReadAttributeValue(em, asc, attrSetCode, attributeCode, fallbackMagnitude);
+
+            if (TryGetCapturedAttributeValue(
+                    em,
+                    ge,
+                    modifierIndex,
+                    source,
+                    attrSetCode,
+                    attributeCode,
+                    out var capturedValue))
+            {
+                return capturedValue;
+            }
+
+            var value = ReadAttributeValue(em, asc, attrSetCode, attributeCode, fallbackMagnitude);
+            StoreCapturedAttributeValue(em, ge, modifierIndex, source, attrSetCode, attributeCode, value);
+            return value;
         }
 
         internal static float ResolveAttributeCapture(
@@ -341,10 +459,16 @@ namespace GAS.Runtime
             int attributeCode,
             float value)
         {
-            var ecb = new EntityCommandBuffer(Allocator.Temp);
-            StoreCapturedAttributeValue(em, ref ecb, ge, modifierIndex, source, attrSetCode, attributeCode, value);
-            ecb.Playback(em);
-            ecb.Dispose();
+            var captures = GetOrCreateAttributeCaptures(em, ge);
+
+            captures.Add(new BAttributeCaptureValue
+            {
+                ModifierIndex = modifierIndex,
+                Source = source,
+                AttributeSetCode = attrSetCode,
+                AttributeCode = attributeCode,
+                Value = value,
+            });
         }
 
         internal static void StoreCapturedAttributeValue(
@@ -371,6 +495,15 @@ namespace GAS.Runtime
 
         private static DynamicBuffer<BResolvedModifier> GetOrCreateResolvedModifiers(
             EntityManager em,
+            Entity ge)
+        {
+            return em.HasBuffer<BResolvedModifier>(ge)
+                ? em.GetBuffer<BResolvedModifier>(ge)
+                : em.AddBuffer<BResolvedModifier>(ge);
+        }
+
+        private static DynamicBuffer<BResolvedModifier> GetOrCreateResolvedModifiers(
+            EntityManager em,
             ref EntityCommandBuffer ecb,
             Entity ge)
         {
@@ -381,6 +514,15 @@ namespace GAS.Runtime
             }
 
             return em.GetBuffer<BResolvedModifier>(ge);
+        }
+
+        private static DynamicBuffer<BAttributeCaptureValue> GetOrCreateAttributeCaptures(
+            EntityManager em,
+            Entity ge)
+        {
+            return em.HasBuffer<BAttributeCaptureValue>(ge)
+                ? em.GetBuffer<BAttributeCaptureValue>(ge)
+                : em.AddBuffer<BAttributeCaptureValue>(ge);
         }
 
         private static DynamicBuffer<BAttributeCaptureValue> GetOrCreateAttributeCaptures(

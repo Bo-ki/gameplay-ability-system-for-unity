@@ -92,6 +92,7 @@ namespace GAS.Runtime
             TimelineAbilityConfigRegistry.RegisterGetConfigByIDFunc(CreateTimelineConfig);
             GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(CreateGameplayEffectConfig);
             GameplayCueConfigRegistry.RegisterGetConfigByIDFunc(CreateGameplayCueConfig);
+            WarmupGameplayEffectPrototypes();
         }
 
         public static void ClearRuntimeProviders()
@@ -121,6 +122,25 @@ namespace GAS.Runtime
             return RuntimeProviderSnapshot.TryFindGameplayEffectRow(gameplayEffectCode, out var row)
                 ? CreateGameplayEffectConfig(row)
                 : null;
+        }
+
+        public static void WarmupGameplayEffectPrototypes()
+        {
+            if (!GASManager.IsInitialized)
+                return;
+
+            var em = GASManager.EntityManager;
+            var codes = RuntimeProviderSnapshot.CreateGameplayEffectCodes();
+            for (var i = 0; i < codes.Length; i++)
+            {
+                GameplayEffectConfigRegistry.TryWarmupRuntimePrototype(
+                    em,
+                    codes[i],
+                    new ConfigRegistryReferenceContext(
+                        ConfigRegistryConfigKind.GameplayEffect,
+                        codes[i],
+                        ConfigRegistryReferenceKind.Direct));
+            }
         }
 
         public static GameplayCueConfig CreateGameplayCueConfig(int gameplayCueCode)
@@ -163,10 +183,14 @@ namespace GAS.Runtime
 
             if (row.HasTimeline)
             {
-                components.Add(new ConfAbilityTimelineRef
+                if (RuntimeProviderSnapshot.TryFindTimelineRow(row.TimelineId, out var timelineRow))
                 {
-                    TimelineId = row.TimelineId,
-                });
+                    components.Add(new ConfAbilityTargetEffectsOnActivate
+                    {
+                        EffectCodes = timelineRow.CreateGameplayEffectCodes(),
+                        AutoEndOnCommit = true,
+                    });
+                }
             }
 
             return new AbilityConfig(components.ToArray());
@@ -300,12 +324,9 @@ namespace GAS.Runtime
 
             if (row.HasGameplayCue)
             {
-                components.Add(new ConfCueOnApply
+                components.Add(new ConfGameplayEffectCueRequestOnApply
                 {
-                    cues = new[]
-                    {
-                        CreateGameplayCueConfig(row.GameplayCueCode),
-                    },
+                    CueCode = row.GameplayCueCode,
                 });
             }
 

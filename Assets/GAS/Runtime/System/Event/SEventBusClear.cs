@@ -15,24 +15,40 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            foreach (var presentationEvents in SystemAPI.Query<DynamicBuffer<BPresentationEvent>>())
-                presentationEvents.Clear();
+            if (!SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBus))
+                return;
 
-            foreach (var (_, damageEvents, tagEvents, gameplayEvents, attributeEvents, cueRequests) in SystemAPI
-                         .Query<
-                             RefRO<CGameplayEventBus>,
-                             DynamicBuffer<BDamageEvent>,
-                             DynamicBuffer<BTagChangeEvent>,
-                             DynamicBuffer<BGameplayEvent>,
-                             DynamicBuffer<BAttributeChangeEvent>,
-                             DynamicBuffer<BCueRequest>>())
+            var em = state.EntityManager;
+            if (!em.Exists(eventBus))
+                return;
+
+            if (em.HasBuffer<BPresentationOutboxOwner>(eventBus))
+                ClearDirtyPresentationOutboxes(em, em.GetBuffer<BPresentationOutboxOwner>(eventBus));
+
+            if (em.HasBuffer<BDamageEvent>(eventBus))
+                em.GetBuffer<BDamageEvent>(eventBus).Clear();
+            if (em.HasBuffer<BTagChangeEvent>(eventBus))
+                em.GetBuffer<BTagChangeEvent>(eventBus).Clear();
+            if (em.HasBuffer<BGameplayEvent>(eventBus))
+                em.GetBuffer<BGameplayEvent>(eventBus).Clear();
+            if (em.HasBuffer<BAttributeChangeEvent>(eventBus))
+                em.GetBuffer<BAttributeChangeEvent>(eventBus).Clear();
+            if (em.HasBuffer<BCueRequest>(eventBus))
+                em.GetBuffer<BCueRequest>(eventBus).Clear();
+        }
+
+        private static void ClearDirtyPresentationOutboxes(
+            EntityManager em,
+            DynamicBuffer<BPresentationOutboxOwner> dirtyOutboxes)
+        {
+            for (var i = 0; i < dirtyOutboxes.Length; i++)
             {
-                damageEvents.Clear();
-                tagEvents.Clear();
-                gameplayEvents.Clear();
-                attributeEvents.Clear();
-                cueRequests.Clear();
+                var asc = dirtyOutboxes[i].ASC;
+                if (asc != Entity.Null && em.Exists(asc) && em.HasBuffer<BPresentationEvent>(asc))
+                    em.GetBuffer<BPresentationEvent>(asc).Clear();
             }
+
+            dirtyOutboxes.Clear();
         }
 
         public void OnDestroy(ref SystemState state)

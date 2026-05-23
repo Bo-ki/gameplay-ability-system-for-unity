@@ -18,6 +18,7 @@ namespace GAS.Runtime
             _removeQuery = SystemAPI.QueryBuilder()
                 .WithAll<CEffectDestroy>()
                 .Build();
+            state.RequireForUpdate(_removeQuery);
         }
 
         public void OnUpdate(ref SystemState state)
@@ -25,6 +26,7 @@ namespace GAS.Runtime
             var em = state.EntityManager;
             var effects = _removeQuery.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             foreach (var ge in effects)
             {

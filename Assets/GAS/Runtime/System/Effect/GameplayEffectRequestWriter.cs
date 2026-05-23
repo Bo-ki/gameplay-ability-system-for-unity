@@ -15,7 +15,6 @@ namespace GAS.Runtime
             string namePrefix = "ApplyGERequest")
         {
             var requestEntity = em.CreateEntity();
-            em.SetName(requestEntity, $"{namePrefix}_{request.GameplayEffectCode}_{requestEntity.Index}");
             em.AddComponentData(requestEntity, request);
             em.AddComponentData(requestEntity, targetDataHeader);
             return requestEntity;
@@ -28,7 +27,6 @@ namespace GAS.Runtime
             string namePrefix = "ApplyGERequest")
         {
             var requestEntity = ecb.CreateEntity();
-            ecb.SetName(requestEntity, $"{namePrefix}_{request.GameplayEffectCode}");
             ecb.AddComponent(requestEntity, request);
             ecb.AddComponent(requestEntity, targetDataHeader);
             return requestEntity;
@@ -41,6 +39,92 @@ namespace GAS.Runtime
                 : em.AddBuffer<BTargetEntity>(requestEntity);
 
             targets.Add(new BTargetEntity { TargetAsc = targetAsc });
+        }
+
+        public static bool TryApplyFastInstantModifier(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind)
+        {
+            return SApplyGameplayEffectRequest.TryApplyFastInstantModifierDirect(
+                em,
+                request,
+                targetAsc,
+                targetDataKind);
+        }
+
+        public static bool TryApplyFastInstantModifier(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind,
+            in BSetByCallerValue setByCallerValue)
+        {
+            return SApplyGameplayEffectRequest.TryApplyFastInstantModifierDirect(
+                em,
+                request,
+                targetAsc,
+                targetDataKind,
+                setByCallerValue);
+        }
+
+        public static Entity ApplyFastOrCreateSingleTargetRequest(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind,
+            string namePrefix = "ApplyGERequest")
+        {
+            if (TryApplyFastInstantModifier(em, request, targetAsc, targetDataKind))
+                return Entity.Null;
+
+            var requestEntity = Create(
+                em,
+                request,
+                new CTargetDataHeader
+                {
+                    SourceAsc = request.SourceAsc,
+                    SourceAbility = request.SourceAbility,
+                    Kind = targetDataKind,
+                },
+                namePrefix);
+            AddTarget(em, requestEntity, targetAsc);
+            return requestEntity;
+        }
+
+        public static Entity ApplyFastOrCreateSingleTargetRequest(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind,
+            in BSetByCallerValue setByCallerValue,
+            string namePrefix = "ApplyGERequest")
+        {
+            var canUseSetByCaller = setByCallerValue.Key > 0;
+            var appliedFast = canUseSetByCaller
+                ? TryApplyFastInstantModifier(em, request, targetAsc, targetDataKind, setByCallerValue)
+                : TryApplyFastInstantModifier(em, request, targetAsc, targetDataKind);
+            if (appliedFast)
+                return Entity.Null;
+
+            var requestEntity = Create(
+                em,
+                request,
+                new CTargetDataHeader
+                {
+                    SourceAsc = request.SourceAsc,
+                    SourceAbility = request.SourceAbility,
+                    Kind = targetDataKind,
+                },
+                namePrefix);
+            AddTarget(em, requestEntity, targetAsc);
+
+            if (!canUseSetByCaller)
+                return requestEntity;
+
+            em.AddBuffer<BSetByCallerValue>(requestEntity).Add(setByCallerValue);
+            return requestEntity;
         }
 
         public static void AddTarget(ref EntityCommandBuffer ecb, Entity requestEntity, Entity targetAsc)

@@ -34,6 +34,7 @@ namespace GAS.Runtime
             var em = state.EntityManager;
             var currentFrame = SystemAPI.GetSingleton<GlobalTimer>().Frame;
             var abilities = _query.ToEntityArray(Allocator.Temp);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             for (var i = 0; i < abilities.Length; i++)
             {

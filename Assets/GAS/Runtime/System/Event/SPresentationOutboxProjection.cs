@@ -16,6 +16,7 @@ namespace GAS.Runtime
         {
             state.RequireForUpdate<CGameplayEventBus>();
             state.RequireForUpdate<CPresentationOutboxProjectionState>();
+            state.RequireForUpdate<CPresentationOutboxProjectionOptions>();
         }
 
         public void OnUpdate(ref SystemState state)
@@ -25,29 +26,33 @@ namespace GAS.Runtime
 
             var em = state.EntityManager;
             if (!em.Exists(eventBus)
-                || !em.HasComponent<CPresentationOutboxProjectionState>(eventBus))
+                || !em.HasComponent<CPresentationOutboxProjectionState>(eventBus)
+                || !em.HasComponent<CPresentationOutboxProjectionOptions>(eventBus))
             {
                 return;
             }
+
+            if (em.GetComponentData<CPresentationOutboxProjectionOptions>(eventBus).ProjectRawFacts == 0)
+                return;
 
             var currentFrame = ResolveCurrentFrame(em);
             var projectionState = em.GetComponentData<CPresentationOutboxProjectionState>(eventBus);
             ResetProcessedCountsIfFrameChanged(ref projectionState, currentFrame);
 
             if (em.HasBuffer<BGameplayEvent>(eventBus))
-                ProjectGameplayEvents(em, em.GetBuffer<BGameplayEvent>(eventBus), ref projectionState, currentFrame);
+                ProjectGameplayEvents(em, eventBus, em.GetBuffer<BGameplayEvent>(eventBus), ref projectionState, currentFrame);
 
             if (em.HasBuffer<BAttributeChangeEvent>(eventBus))
-                ProjectAttributeEvents(em, em.GetBuffer<BAttributeChangeEvent>(eventBus), ref projectionState, currentFrame);
+                ProjectAttributeEvents(em, eventBus, em.GetBuffer<BAttributeChangeEvent>(eventBus), ref projectionState, currentFrame);
 
             if (em.HasBuffer<BCueRequest>(eventBus))
-                ProjectCueRequests(em, em.GetBuffer<BCueRequest>(eventBus), ref projectionState, currentFrame);
+                ProjectCueRequests(em, eventBus, em.GetBuffer<BCueRequest>(eventBus), ref projectionState, currentFrame);
 
             if (em.HasBuffer<BTagChangeEvent>(eventBus))
-                ProjectTagEvents(em, em.GetBuffer<BTagChangeEvent>(eventBus), ref projectionState, currentFrame);
+                ProjectTagEvents(em, eventBus, em.GetBuffer<BTagChangeEvent>(eventBus), ref projectionState, currentFrame);
 
             if (em.HasBuffer<BDamageEvent>(eventBus))
-                ProjectDamageEvents(em, em.GetBuffer<BDamageEvent>(eventBus), ref projectionState, currentFrame);
+                ProjectDamageEvents(em, eventBus, em.GetBuffer<BDamageEvent>(eventBus), ref projectionState, currentFrame);
 
             em.SetComponentData(eventBus, projectionState);
         }
@@ -69,6 +74,7 @@ namespace GAS.Runtime
 
         private static void ProjectGameplayEvents(
             EntityManager em,
+            Entity eventBus,
             DynamicBuffer<BGameplayEvent> events,
             ref CPresentationOutboxProjectionState projectionState,
             int fallbackFrame)
@@ -77,6 +83,9 @@ namespace GAS.Runtime
             for (var i = start; i < events.Length; i++)
             {
                 var evt = events[i];
+                if (IsPresentationMarker(evt.Type))
+                    continue;
+
                 var presentationEvent = new BPresentationEvent
                 {
                     Kind = EPresentationEventKind.GameplayEvent,
@@ -95,14 +104,25 @@ namespace GAS.Runtime
                     Value = evt.Value,
                 };
 
-                AppendToRelevantAsc(em, evt.TargetAsc, evt.SourceAsc, presentationEvent);
+                AppendToRelevantAsc(em, eventBus, evt.TargetAsc, evt.SourceAsc, presentationEvent);
             }
 
             projectionState.ProcessedGameplayEventCount = events.Length;
         }
 
+        private static bool IsPresentationMarker(EGameplayEventType type)
+        {
+            return type == EGameplayEventType.AutoChessPresentationUiMarker
+                   || type == EGameplayEventType.AutoChessPresentationVfxMarker
+                   || type == EGameplayEventType.AutoChessPresentationSfxMarker
+                   || type == EGameplayEventType.AutoChessPresentationFloatingTextMarker
+                   || type == EGameplayEventType.AutoChessPresentationCueMarker
+                   || type == EGameplayEventType.AutoChessPresentationSettlementMarker;
+        }
+
         private static void ProjectAttributeEvents(
             EntityManager em,
+            Entity eventBus,
             DynamicBuffer<BAttributeChangeEvent> events,
             ref CPresentationOutboxProjectionState projectionState,
             int frame)
@@ -128,7 +148,7 @@ namespace GAS.Runtime
                     Flag = evt.IsBaseValue ? (byte)1 : (byte)0,
                 };
 
-                AppendToRelevantAsc(em, evt.ASC, evt.SourceAsc, presentationEvent);
+                AppendToRelevantAsc(em, eventBus, evt.ASC, evt.SourceAsc, presentationEvent);
             }
 
             projectionState.ProcessedAttributeEventCount = events.Length;
@@ -136,6 +156,7 @@ namespace GAS.Runtime
 
         private static void ProjectCueRequests(
             EntityManager em,
+            Entity eventBus,
             DynamicBuffer<BCueRequest> requests,
             ref CPresentationOutboxProjectionState projectionState,
             int frame)
@@ -160,7 +181,7 @@ namespace GAS.Runtime
                     EventCode = (int)request.CueEvent,
                 };
 
-                AppendToRelevantAsc(em, request.TargetAsc, request.SourceAsc, presentationEvent);
+                AppendToRelevantAsc(em, eventBus, request.TargetAsc, request.SourceAsc, presentationEvent);
             }
 
             projectionState.ProcessedCueRequestCount = requests.Length;
@@ -168,6 +189,7 @@ namespace GAS.Runtime
 
         private static void ProjectTagEvents(
             EntityManager em,
+            Entity eventBus,
             DynamicBuffer<BTagChangeEvent> events,
             ref CPresentationOutboxProjectionState projectionState,
             int frame)
@@ -176,7 +198,7 @@ namespace GAS.Runtime
             for (var i = start; i < events.Length; i++)
             {
                 var evt = events[i];
-                AppendToAsc(em, evt.ASC, new BPresentationEvent
+                AppendToAsc(em, eventBus, evt.ASC, new BPresentationEvent
                 {
                     Kind = EPresentationEventKind.TagChange,
                     Frame = frame,
@@ -191,6 +213,7 @@ namespace GAS.Runtime
 
         private static void ProjectDamageEvents(
             EntityManager em,
+            Entity eventBus,
             DynamicBuffer<BDamageEvent> events,
             ref CPresentationOutboxProjectionState projectionState,
             int frame)
@@ -209,7 +232,7 @@ namespace GAS.Runtime
                     Value = evt.Amount,
                 };
 
-                AppendToRelevantAsc(em, evt.Target, evt.Source, presentationEvent);
+                AppendToRelevantAsc(em, eventBus, evt.Target, evt.Source, presentationEvent);
             }
 
             projectionState.ProcessedDamageEventCount = events.Length;
@@ -222,26 +245,24 @@ namespace GAS.Runtime
 
         private static void AppendToRelevantAsc(
             EntityManager em,
+            Entity eventBus,
             Entity primaryAsc,
             Entity secondaryAsc,
             in BPresentationEvent presentationEvent)
         {
-            AppendToAsc(em, primaryAsc, presentationEvent);
+            AppendToAsc(em, eventBus, primaryAsc, presentationEvent);
 
             if (secondaryAsc != primaryAsc)
-                AppendToAsc(em, secondaryAsc, presentationEvent);
+                AppendToAsc(em, eventBus, secondaryAsc, presentationEvent);
         }
 
-        private static void AppendToAsc(EntityManager em, Entity asc, in BPresentationEvent presentationEvent)
+        private static void AppendToAsc(
+            EntityManager em,
+            Entity eventBus,
+            Entity asc,
+            in BPresentationEvent presentationEvent)
         {
-            if (asc == Entity.Null
-                || !em.Exists(asc)
-                || !em.HasBuffer<BPresentationEvent>(asc))
-            {
-                return;
-            }
-
-            em.GetBuffer<BPresentationEvent>(asc).Add(presentationEvent);
+            EventBusHelper.AppendPresentationEvent(em, eventBus, asc, presentationEvent);
         }
 
         private static int ResolveCurrentFrame(EntityManager em)

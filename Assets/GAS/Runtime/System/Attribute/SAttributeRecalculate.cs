@@ -130,12 +130,11 @@ namespace GAS.Runtime
             if (!em.Exists(eventBusEntity) || !em.HasBuffer<BAttributeChangeEvent>(eventBusEntity))
                 return;
 
-            using var ascEntities = _query.ToEntityArray(Allocator.Temp);
-            for (var i = 0; i < ascEntities.Length; i++)
+            var attributeEvents = em.GetBuffer<BAttributeChangeEvent>(eventBusEntity);
+            foreach (var (attributeBuffer, asc) in SystemAPI.Query<DynamicBuffer<BAttribute>>()
+                         .WithEntityAccess())
             {
-                var asc = ascEntities[i];
-                var attributes = em.GetBuffer<BAttribute>(asc);
-
+                var attributes = attributeBuffer;
                 for (var j = 0; j < attributes.Length; j++)
                 {
                     var attr = attributes[j];
@@ -144,7 +143,7 @@ namespace GAS.Runtime
 
                     if (attr.PreviousCurrentValue != attr.CurrentValue)
                     {
-                        EventBusHelper.EnqueueAttributeChangeEvent(em, eventBusEntity, new BAttributeChangeEvent
+                        attributeEvents.Add(new BAttributeChangeEvent
                         {
                             ASC = asc,
                             AttrSetCode = attr.AttrSetCode,

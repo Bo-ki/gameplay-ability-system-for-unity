@@ -30,6 +30,7 @@ namespace GAS.Runtime
             var em = state.EntityManager;
             var abilities = _query.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             foreach (var ability in abilities)
             {
@@ -54,6 +55,7 @@ namespace GAS.Runtime
                     AbilityRuntimeActions.RequestCostGameplayEffect(ability, em);
                     AbilityRuntimeActions.RequestCooldownGameplayEffect(ability, em);
                     ExecuteActivationEffects(ability, baseInfo.Owner, em);
+                    ExecuteTargetActivationEffects(ability, baseInfo, em);
 
                     if (!em.HasComponent<CAbilityActive>(ability))
                         ecb.AddComponent<CAbilityActive>(ability);
@@ -62,6 +64,16 @@ namespace GAS.Runtime
                     runtime.Timer = 0f;
                     runtime.RemainingFrame = -1;
                     em.SetComponentData(ability, runtime);
+
+                    if (em.HasComponent<CAbilityAutoEndOnCommit>(ability))
+                    {
+                        AbilityRuntimeActions.RequestAbilityEnd(
+                            ability,
+                            em,
+                            EAbilityLifecycleReason.TimelineCompleted,
+                            sourceAbility: ability,
+                            sourceAbilityCode: baseInfo.Code);
+                    }
                 }
 
                 if (em.HasComponent<CAbilityCommitRequest>(ability))
@@ -244,32 +256,109 @@ namespace GAS.Runtime
             if (!em.HasBuffer<BAbilityEffectOnActivate>(ability))
                 return;
 
-            var effects = em.GetBuffer<BAbilityEffectOnActivate>(ability);
+            using var effects = CopyActivationEffects(em, ability);
             for (var i = 0; i < effects.Length; i++)
             {
                 var effectCode = effects[i].EffectCode;
                 if (effectCode <= 0)
                     continue;
 
-                var request = GameplayEffectRequestWriter.Create(
+                var requestData = new CApplyGameplayEffectRequest
+                {
+                    SourceAsc = owner,
+                    SourceAbility = ability,
+                    Instigator = owner,
+                    Causer = ability,
+                    GameplayEffectCode = effectCode,
+                    Level = em.GetComponentData<CAbilityBaseInfo>(ability).Level,
+                };
+                GameplayEffectRequestWriter.ApplyFastOrCreateSingleTargetRequest(
                     em,
-                    new CApplyGameplayEffectRequest
-                    {
-                        SourceAsc = owner,
-                        SourceAbility = ability,
-                        Instigator = owner,
-                        Causer = ability,
-                        GameplayEffectCode = effectCode,
-                        Level = em.GetComponentData<CAbilityBaseInfo>(ability).Level,
-                    },
-                    new CTargetDataHeader
-                    {
-                        SourceAsc = owner,
-                        SourceAbility = ability,
-                        Kind = ETargetDataKind.Self,
-                    });
-                GameplayEffectRequestWriter.AddTarget(em, request, owner);
+                    requestData,
+                    owner,
+                    ETargetDataKind.Self);
             }
+        }
+
+        private static void ExecuteTargetActivationEffects(
+            Entity ability,
+            in CAbilityBaseInfo baseInfo,
+            EntityManager em)
+        {
+            if (!em.HasBuffer<BAbilityTargetEffectOnActivate>(ability))
+                return;
+
+            var target = ResolveMainTarget(em, ability, baseInfo.Owner);
+            if (!IsAvailableAsc(em, target))
+                return;
+
+            using var effects = CopyTargetActivationEffects(em, ability);
+            for (var i = 0; i < effects.Length; i++)
+            {
+                var effectCode = effects[i].EffectCode;
+                if (effectCode <= 0)
+                    continue;
+
+                var targetKind = target == baseInfo.Owner ? ETargetDataKind.Self : ETargetDataKind.Entity;
+                var requestData = new CApplyGameplayEffectRequest
+                {
+                    SourceAsc = baseInfo.Owner,
+                    SourceAbility = ability,
+                    Instigator = baseInfo.Owner,
+                    Causer = ability,
+                    GameplayEffectCode = effectCode,
+                    Level = baseInfo.Level,
+                };
+                GameplayEffectRequestWriter.ApplyFastOrCreateSingleTargetRequest(
+                    em,
+                    requestData,
+                    target,
+                    targetKind,
+                    "AbilityTargetEffectsOnActivateRequest");
+            }
+        }
+
+        private static NativeArray<BAbilityEffectOnActivate> CopyActivationEffects(
+            EntityManager em,
+            Entity ability)
+        {
+            var source = em.GetBuffer<BAbilityEffectOnActivate>(ability);
+            var snapshot = new NativeArray<BAbilityEffectOnActivate>(source.Length, Allocator.Temp);
+            for (var i = 0; i < source.Length; i++)
+                snapshot[i] = source[i];
+
+            return snapshot;
+        }
+
+        private static NativeArray<BAbilityTargetEffectOnActivate> CopyTargetActivationEffects(
+            EntityManager em,
+            Entity ability)
+        {
+            var source = em.GetBuffer<BAbilityTargetEffectOnActivate>(ability);
+            var snapshot = new NativeArray<BAbilityTargetEffectOnActivate>(source.Length, Allocator.Temp);
+            for (var i = 0; i < source.Length; i++)
+                snapshot[i] = source[i];
+
+            return snapshot;
+        }
+
+        private static Entity ResolveMainTarget(EntityManager em, Entity ability, Entity fallbackTarget)
+        {
+            if (em.HasComponent<CAbilityMainTarget>(ability))
+            {
+                var target = em.GetComponentData<CAbilityMainTarget>(ability).TargetAsc;
+                if (IsAvailableAsc(em, target))
+                    return target;
+            }
+
+            return fallbackTarget;
+        }
+
+        private static bool IsAvailableAsc(EntityManager em, Entity asc)
+        {
+            return asc != Entity.Null
+                   && em.Exists(asc)
+                   && !em.HasComponent<CAscDestroying>(asc);
         }
 
         private static void CancelMatchedAbilities(

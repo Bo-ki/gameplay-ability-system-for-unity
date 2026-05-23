@@ -39,11 +39,10 @@ namespace GAS.Runtime
                 return;
             }
 
-            using var drivers = _driverQuery.ToEntityArray(Allocator.Temp);
-            if (drivers.Length == 0)
+            if (_driverQuery.IsEmptyIgnoreFilter)
                 return;
 
-            var driverEntity = drivers[0];
+            var driverEntity = _driverQuery.GetSingletonEntity();
             var driver = em.GetComponentData<CHeadlessAutoChessDriver>(driverEntity);
             var facts = em.GetComponentData<CHeadlessAutoChessPresentationCueMarkerFacts>(driverEntity);
             var currentFrame = ResolveCurrentFrame(em);
@@ -69,56 +68,42 @@ namespace GAS.Runtime
                 facts.LastRound = driver.Round;
             }
 
-            var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
-            var gameplayStart = ClampProcessedCount(facts.ProcessedGameplayEventCount, gameplayEvents.Length);
-            var gameplayEnd = gameplayEvents.Length;
-            using var gameplaySnapshot = EventBusHelper.CopyBufferRange(
-                gameplayEvents,
-                gameplayStart,
-                gameplayEnd,
-                Allocator.Temp);
+            using var gameplayEvents = EventBusHelper.SnapshotBufferRange<BGameplayEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedGameplayEventCount,
+                Allocator.Temp,
+                out _);
+            using var attributeEvents = EventBusHelper.SnapshotBufferRange<BAttributeChangeEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedAttributeEventCount,
+                Allocator.Temp,
+                out var attributeEnd);
+            using var cueRequests = EventBusHelper.SnapshotBufferRange<BCueRequest>(
+                em,
+                eventBusEntity,
+                facts.ProcessedCueRequestCount,
+                Allocator.Temp,
+                out var cueEnd);
+            using var tagEvents = EventBusHelper.SnapshotBufferRange<BTagChangeEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedTagEventCount,
+                Allocator.Temp,
+                out var tagEnd);
+            using var damageEvents = EventBusHelper.SnapshotBufferRange<BDamageEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedDamageEventCount,
+                Allocator.Temp,
+                out var damageEnd);
 
-            var attributeEvents = em.GetBuffer<BAttributeChangeEvent>(eventBusEntity);
-            var attributeStart = ClampProcessedCount(facts.ProcessedAttributeEventCount, attributeEvents.Length);
-            var attributeEnd = attributeEvents.Length;
-            using var attributeSnapshot = EventBusHelper.CopyBufferRange(
-                attributeEvents,
-                attributeStart,
-                attributeEnd,
-                Allocator.Temp);
-
-            var cueRequests = em.GetBuffer<BCueRequest>(eventBusEntity);
-            var cueStart = ClampProcessedCount(facts.ProcessedCueRequestCount, cueRequests.Length);
-            var cueEnd = cueRequests.Length;
-            using var cueSnapshot = EventBusHelper.CopyBufferRange(
-                cueRequests,
-                cueStart,
-                cueEnd,
-                Allocator.Temp);
-
-            var tagEvents = em.GetBuffer<BTagChangeEvent>(eventBusEntity);
-            var tagStart = ClampProcessedCount(facts.ProcessedTagEventCount, tagEvents.Length);
-            var tagEnd = tagEvents.Length;
-            using var tagSnapshot = EventBusHelper.CopyBufferRange(
-                tagEvents,
-                tagStart,
-                tagEnd,
-                Allocator.Temp);
-
-            var damageEvents = em.GetBuffer<BDamageEvent>(eventBusEntity);
-            var damageStart = ClampProcessedCount(facts.ProcessedDamageEventCount, damageEvents.Length);
-            var damageEnd = damageEvents.Length;
-            using var damageSnapshot = EventBusHelper.CopyBufferRange(
-                damageEvents,
-                damageStart,
-                damageEnd,
-                Allocator.Temp);
-
-            ProjectGameplayEvents(em, eventBusEntity, gameplaySnapshot, ref facts);
-            ProjectAttributeEvents(em, eventBusEntity, attributeSnapshot);
-            ProjectCueRequests(em, eventBusEntity, cueSnapshot);
-            ProjectTagEvents(em, eventBusEntity, tagSnapshot);
-            ProjectDamageEvents(em, eventBusEntity, damageSnapshot);
+            ProjectGameplayEvents(em, eventBusEntity, gameplayEvents, 0, gameplayEvents.Length, ref facts);
+            ProjectAttributeEvents(em, eventBusEntity, attributeEvents, 0, attributeEvents.Length);
+            ProjectCueRequests(em, eventBusEntity, cueRequests, 0, cueRequests.Length);
+            ProjectTagEvents(em, eventBusEntity, tagEvents, 0, tagEvents.Length);
+            ProjectDamageEvents(em, eventBusEntity, damageEvents, 0, damageEvents.Length);
 
             facts.ProcessedGameplayEventCount = em.GetBuffer<BGameplayEvent>(eventBusEntity).Length;
             facts.ProcessedAttributeEventCount = attributeEnd;
@@ -197,12 +182,14 @@ namespace GAS.Runtime
         private static void ProjectGameplayEvents(
             EntityManager em,
             Entity eventBusEntity,
-            NativeArray<BGameplayEvent> events,
+            NativeArray<BGameplayEvent> gameplayEvents,
+            int start,
+            int end,
             ref CHeadlessAutoChessPresentationCueMarkerFacts facts)
         {
-            for (var i = 0; i < events.Length; i++)
+            for (var i = start; i < end; i++)
             {
-                var evt = events[i];
+                var evt = gameplayEvents[i];
                 if (IsPresentationMarker(evt.Type))
                     continue;
 
@@ -1232,11 +1219,13 @@ namespace GAS.Runtime
         private static void ProjectAttributeEvents(
             EntityManager em,
             Entity eventBusEntity,
-            NativeArray<BAttributeChangeEvent> events)
+            NativeArray<BAttributeChangeEvent> attributeEvents,
+            int start,
+            int end)
         {
-            for (var i = 0; i < events.Length; i++)
+            for (var i = start; i < end; i++)
             {
-                var evt = events[i];
+                var evt = attributeEvents[i];
                 if (evt.AttrSetCode != HeadlessAutoChessScenario.AttributeSetCombat)
                     continue;
 
@@ -1316,11 +1305,13 @@ namespace GAS.Runtime
         private static void ProjectCueRequests(
             EntityManager em,
             Entity eventBusEntity,
-            NativeArray<BCueRequest> requests)
+            NativeArray<BCueRequest> cueRequests,
+            int start,
+            int end)
         {
-            for (var i = 0; i < requests.Length; i++)
+            for (var i = start; i < end; i++)
             {
-                var request = requests[i];
+                var request = cueRequests[i];
                 EmitCueMarker(
                     em,
                     eventBusEntity,
@@ -1338,11 +1329,13 @@ namespace GAS.Runtime
         private static void ProjectTagEvents(
             EntityManager em,
             Entity eventBusEntity,
-            NativeArray<BTagChangeEvent> events)
+            NativeArray<BTagChangeEvent> tagEvents,
+            int start,
+            int end)
         {
-            for (var i = 0; i < events.Length; i++)
+            for (var i = start; i < end; i++)
             {
-                var evt = events[i];
+                var evt = tagEvents[i];
                 EmitUiMarker(
                     em,
                     eventBusEntity,
@@ -1405,11 +1398,13 @@ namespace GAS.Runtime
         private static void ProjectDamageEvents(
             EntityManager em,
             Entity eventBusEntity,
-            NativeArray<BDamageEvent> events)
+            NativeArray<BDamageEvent> damageEvents,
+            int start,
+            int end)
         {
-            for (var i = 0; i < events.Length; i++)
+            for (var i = start; i < end; i++)
             {
-                var evt = events[i];
+                var evt = damageEvents[i];
                 EmitFloatingTextMarker(
                     em,
                     eventBusEntity,
@@ -1619,9 +1614,37 @@ namespace GAS.Runtime
             Entity gameplayEffect,
             int contextId)
         {
-            EventBusHelper.EnqueueGameplayEvent(em, eventBusEntity, new BGameplayEvent
+            AppendPresentationMarker(
+                em,
+                eventBusEntity,
+                type,
+                markerCode,
+                reasonCode,
+                value,
+                sourceAsc,
+                targetAsc,
+                sourceAbility,
+                gameplayEffect,
+                contextId);
+        }
+
+        private static void AppendPresentationMarker(
+            EntityManager em,
+            Entity eventBusEntity,
+            EGameplayEventType type,
+            HeadlessAutoChessPresentationMarkerCode markerCode,
+            int reasonCode,
+            float value,
+            Entity sourceAsc,
+            Entity targetAsc,
+            Entity sourceAbility,
+            Entity gameplayEffect,
+            int contextId)
+        {
+            var presentationEvent = new BPresentationEvent
             {
-                Type = type,
+                Kind = EPresentationEventKind.GameplayEvent,
+                GameplayEventType = type,
                 SourceAsc = sourceAsc,
                 TargetAsc = targetAsc,
                 SourceAbility = sourceAbility,
@@ -1630,12 +1653,29 @@ namespace GAS.Runtime
                 EventCode = (int)markerCode,
                 ReasonCode = reasonCode,
                 Value = value,
-            });
+            };
+
+            AppendToRelevantAsc(em, eventBusEntity, targetAsc, sourceAsc, presentationEvent);
         }
 
-        private static int ClampProcessedCount(int processedCount, int currentLength)
+        private static void AppendToRelevantAsc(
+            EntityManager em,
+            Entity eventBusEntity,
+            Entity primaryAsc,
+            Entity secondaryAsc,
+            in BPresentationEvent presentationEvent)
         {
-            return processedCount > currentLength ? 0 : processedCount;
+            var owner = primaryAsc != Entity.Null ? primaryAsc : secondaryAsc;
+            AppendToAsc(em, eventBusEntity, owner, presentationEvent);
+        }
+
+        private static void AppendToAsc(
+            EntityManager em,
+            Entity eventBusEntity,
+            Entity asc,
+            in BPresentationEvent presentationEvent)
+        {
+            EventBusHelper.AppendPresentationEvent(em, eventBusEntity, asc, presentationEvent);
         }
 
         private static float GetAttribute(

@@ -14,7 +14,7 @@ namespace GAS.Runtime
         public void OnCreate(ref SystemState state)
         {
             _driverQuery = SystemAPI.QueryBuilder()
-                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessEnrageFacts>()
+                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessEnrageFacts, BHeadlessAutoChessGameplayEffectAppliedFact>()
                 .Build();
             _enrageUnitQuery = SystemAPI.QueryBuilder()
                 .WithAll<CHeadlessAutoChessUnit, CHeadlessAutoChessEnrageRules, CHeadlessAutoChessEnrageState, BAttribute, CTagMask>()
@@ -26,8 +26,6 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency.Complete();
-
             if (!SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity))
                 return;
 
@@ -39,16 +37,17 @@ namespace GAS.Runtime
                 return;
             }
 
-            using var drivers = _driverQuery.ToEntityArray(Allocator.Temp);
-            if (drivers.Length == 0)
+            if (_driverQuery.IsEmptyIgnoreFilter)
                 return;
 
-            var driverEntity = drivers[0];
+            var driverEntity = _driverQuery.GetSingletonEntity();
             var facts = em.GetComponentData<CHeadlessAutoChessEnrageFacts>(driverEntity);
+            var appliedFacts = em.GetBuffer<BHeadlessAutoChessGameplayEffectAppliedFact>(driverEntity);
             var frame = ResolveCurrentFrame(em);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
             ResetProcessedCountsIfFrameChanged(ref facts, frame);
 
-            ProjectEnrageAppliedFacts(em, eventBusEntity, ref facts, frame);
+            ProjectEnrageAppliedFacts(em, eventBusEntity, appliedFacts, ref facts, frame);
             ProjectEnrageTriggers(em, eventBusEntity, ref facts, frame);
 
             em.SetComponentData(driverEntity, facts);
@@ -67,31 +66,31 @@ namespace GAS.Runtime
 
             facts.LastProjectionFrame = frame;
             facts.ProcessedGameplayEventCount = 0;
+            facts.ProcessedGameplayEffectAppliedFactCount = 0;
             facts.ProcessedAttributeEventCount = 0;
         }
 
         private static void ProjectEnrageAppliedFacts(
             EntityManager em,
             Entity eventBusEntity,
+            DynamicBuffer<BHeadlessAutoChessGameplayEffectAppliedFact> appliedFacts,
             ref CHeadlessAutoChessEnrageFacts facts,
             int frame)
         {
-            var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
-            var eventCount = gameplayEvents.Length;
-            var start = facts.ProcessedGameplayEventCount > eventCount
-                ? 0
-                : facts.ProcessedGameplayEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                gameplayEvents,
+            var eventCount = appliedFacts.Length;
+            var start = EventBusHelper.ClampProcessedCount(
+                appliedFacts,
+                facts.ProcessedGameplayEffectAppliedFactCount);
+            using var gameplayEvents = EventBusHelper.CopyBufferRange(
+                appliedFacts,
                 start,
                 eventCount,
                 Allocator.Temp);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < gameplayEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
-                if (evt.Type != EGameplayEventType.GameplayEffectApplied
-                    || evt.TargetAsc == Entity.Null
+                var evt = gameplayEvents[i];
+                if (evt.TargetAsc == Entity.Null
                     || !TryGetEnrageRules(em, evt.TargetAsc, out var rules)
                     || !IsGameplayEffectWithCode(em, evt.GameplayEffect, rules.EnrageGameplayEffectCode))
                 {
@@ -127,10 +126,7 @@ namespace GAS.Runtime
                 });
             }
 
-            facts.ProcessedGameplayEventCount = em.Exists(eventBusEntity)
-                                                && em.HasBuffer<BGameplayEvent>(eventBusEntity)
-                ? em.GetBuffer<BGameplayEvent>(eventBusEntity).Length
-                : eventCount;
+            facts.ProcessedGameplayEffectAppliedFactCount = eventCount;
         }
 
         private static void ProjectEnrageTriggers(
@@ -139,20 +135,16 @@ namespace GAS.Runtime
             ref CHeadlessAutoChessEnrageFacts facts,
             int frame)
         {
-            var attributeEvents = em.GetBuffer<BAttributeChangeEvent>(eventBusEntity);
-            var eventCount = attributeEvents.Length;
-            var start = facts.ProcessedAttributeEventCount > eventCount
-                ? 0
-                : facts.ProcessedAttributeEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                attributeEvents,
-                start,
-                eventCount,
-                Allocator.Temp);
+            using var attributeEvents = EventBusHelper.SnapshotBufferRange<BAttributeChangeEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedAttributeEventCount,
+                Allocator.Temp,
+                out var eventCount);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < attributeEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
+                var evt = attributeEvents[i];
                 if (evt.ASC == Entity.Null
                     || evt.NewValue >= evt.OldValue
                     || evt.NewValue <= 0f
@@ -252,7 +244,7 @@ namespace GAS.Runtime
             if (asc == Entity.Null || gameplayEffectCode <= 0)
                 return;
 
-            var request = GameplayEffectRequestWriter.Create(
+            GameplayEffectRequestWriter.ApplyFastOrCreateSingleTargetRequest(
                 em,
                 new CApplyGameplayEffectRequest
                 {
@@ -262,13 +254,9 @@ namespace GAS.Runtime
                     GameplayEffectCode = gameplayEffectCode,
                     Level = 1,
                 },
-                new CTargetDataHeader
-                {
-                    SourceAsc = asc,
-                    Kind = ETargetDataKind.Self,
-                },
+                asc,
+                ETargetDataKind.Self,
                 namePrefix);
-            GameplayEffectRequestWriter.AddTarget(em, request, asc);
         }
 
         private static bool HasDenseTag(EntityManager em, Entity asc, int denseTagIndex)

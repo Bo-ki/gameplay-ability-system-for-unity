@@ -32,6 +32,9 @@ namespace GAS.Runtime
         public bool HasImmunityTags;
         public TagRequirementMask ImmunityTags;
 
+        public bool HasCueRequestOnApply;
+        public int CueRequestOnApplyCode;
+
         public BlobArray<GEModifierDefinition> Modifiers;
         public BlobArray<GEGrantedAbilityDefinition> GrantedAbilities;
     }
@@ -113,6 +116,7 @@ namespace GAS.Runtime
             CopyPeriod(builder, entityManager, prototype, ref root);
             CopyStacking(builder, entityManager, prototype, ref root);
             CopyTags(entityManager, prototype, ref root);
+            CopyCueRequests(entityManager, prototype, ref root);
             CopyModifiers(builder, entityManager, prototype, ref root.Modifiers);
             CopyGrantedAbilities(builder, entityManager, prototype, ref root.GrantedAbilities);
 
@@ -256,6 +260,22 @@ namespace GAS.Runtime
             for (var i = 0; i < grantedTags.Length; i++)
                 mask.AddTag(grantedTags[i].TagIndex);
             return mask;
+        }
+
+        private static void CopyCueRequests(
+            EntityManager entityManager,
+            Entity prototype,
+            ref GEStaticDefinitionBlob root)
+        {
+            if (!entityManager.HasComponent<CGameplayEffectCueRequestOnApply>(prototype))
+                return;
+
+            var cue = entityManager.GetComponentData<CGameplayEffectCueRequestOnApply>(prototype);
+            if (cue.CueCode <= 0)
+                return;
+
+            root.HasCueRequestOnApply = true;
+            root.CueRequestOnApplyCode = cue.CueCode;
         }
 
         private static void CopyModifiers(

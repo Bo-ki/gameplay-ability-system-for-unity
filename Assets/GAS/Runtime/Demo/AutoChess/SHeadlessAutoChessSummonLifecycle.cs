@@ -14,7 +14,7 @@ namespace GAS.Runtime
         public void OnCreate(ref SystemState state)
         {
             _driverQuery = SystemAPI.QueryBuilder()
-                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessSummonFacts>()
+                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessSummonFacts, BHeadlessAutoChessGameplayEffectAppliedFact, BHeadlessAutoChessUnitDefeatedFact>()
                 .Build();
             _summonQuery = SystemAPI.QueryBuilder()
                 .WithAll<CHeadlessAutoChessUnit, CHeadlessAutoChessSummonedUnit>()
@@ -26,8 +26,6 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency.Complete();
-
             if (!SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity))
                 return;
 
@@ -35,23 +33,28 @@ namespace GAS.Runtime
             if (!em.Exists(eventBusEntity) || !em.HasBuffer<BGameplayEvent>(eventBusEntity))
                 return;
 
-            using var drivers = _driverQuery.ToEntityArray(Allocator.Temp);
-            if (drivers.Length == 0)
+            if (_driverQuery.IsEmptyIgnoreFilter)
                 return;
 
-            var driverEntity = drivers[0];
+            var driverEntity = _driverQuery.GetSingletonEntity();
             var driver = em.GetComponentData<CHeadlessAutoChessDriver>(driverEntity);
             var facts = em.GetComponentData<CHeadlessAutoChessSummonFacts>(driverEntity);
+            var appliedFacts = em.GetBuffer<BHeadlessAutoChessGameplayEffectAppliedFact>(driverEntity);
             var frame = SystemAPI.GetSingleton<GlobalTimer>().Frame;
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
 
             if (facts.LastProjectionFrame != frame)
             {
                 facts.LastProjectionFrame = frame;
                 facts.ProcessedGameplayEventCount = 0;
+                facts.ProcessedGameplayEffectAppliedFactCount = 0;
+                facts.ProcessedUnitDefeatedFactCount = 0;
             }
 
-            ProcessGameplayEvents(em, eventBusEntity, driver, ref facts, frame);
-            ProcessExpiredSummons(em, eventBusEntity, driver, ref facts, frame);
+            ProcessGameplayEffectAppliedFacts(em, eventBusEntity, _summonQuery, driver, appliedFacts, ref facts, frame);
+            var unitDefeatedFacts = em.GetBuffer<BHeadlessAutoChessUnitDefeatedFact>(driverEntity);
+            ProcessUnitDefeatedFacts(em, eventBusEntity, unitDefeatedFacts, ref facts, frame);
+            ProcessExpiredSummons(em, eventBusEntity, _summonQuery, driver, ref facts, frame);
             facts.ActiveSummonCount = CountActiveSummons(em, _summonQuery);
 
             em.SetComponentData(driverEntity, facts);
@@ -61,47 +64,66 @@ namespace GAS.Runtime
         {
         }
 
-        private static void ProcessGameplayEvents(
+        private static void ProcessGameplayEffectAppliedFacts(
             EntityManager em,
             Entity eventBusEntity,
+            EntityQuery summonQuery,
             in CHeadlessAutoChessDriver driver,
+            DynamicBuffer<BHeadlessAutoChessGameplayEffectAppliedFact> appliedFacts,
             ref CHeadlessAutoChessSummonFacts facts,
             int frame)
         {
-            var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
-            var eventCount = gameplayEvents.Length;
-            var start = facts.ProcessedGameplayEventCount > eventCount
-                ? 0
-                : facts.ProcessedGameplayEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                gameplayEvents,
+            var eventCount = appliedFacts.Length;
+            var start = EventBusHelper.ClampProcessedCount(
+                appliedFacts,
+                facts.ProcessedGameplayEffectAppliedFactCount);
+            using var gameplayEvents = EventBusHelper.CopyBufferRange(
+                appliedFacts,
                 start,
                 eventCount,
                 Allocator.Temp);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
-            {
-                var evt = eventSnapshot[i];
-                if (evt.Type == EGameplayEventType.GameplayEffectApplied)
-                {
-                    TrySpawnSummon(em, eventBusEntity, evt, driver, ref facts, frame);
-                    continue;
-                }
+            for (var i = 0; i < gameplayEvents.Length; i++)
+                TrySpawnSummon(em, eventBusEntity, gameplayEvents[i], summonQuery, driver, ref facts, frame);
 
-                if (evt.Type == EGameplayEventType.AutoChessUnitDefeated)
-                    TryDespawnSummon(em, eventBusEntity, evt.TargetAsc, EGameplayEventType.AutoChessSummonDespawned, 2, ref facts, frame);
-            }
+            facts.ProcessedGameplayEffectAppliedFactCount = eventCount;
+        }
 
-            facts.ProcessedGameplayEventCount = em.Exists(eventBusEntity)
-                                                && em.HasBuffer<BGameplayEvent>(eventBusEntity)
-                ? em.GetBuffer<BGameplayEvent>(eventBusEntity).Length
-                : eventCount;
+        private static void ProcessUnitDefeatedFacts(
+            EntityManager em,
+            Entity eventBusEntity,
+            DynamicBuffer<BHeadlessAutoChessUnitDefeatedFact> unitDefeatedFacts,
+            ref CHeadlessAutoChessSummonFacts facts,
+            int frame)
+        {
+            var eventCount = unitDefeatedFacts.Length;
+            var start = EventBusHelper.ClampProcessedCount(
+                unitDefeatedFacts,
+                facts.ProcessedUnitDefeatedFactCount);
+            using var defeatFacts = EventBusHelper.CopyBufferRange(
+                unitDefeatedFacts,
+                start,
+                eventCount,
+                Allocator.Temp);
+
+            for (var i = 0; i < defeatFacts.Length; i++)
+                TryDespawnSummon(
+                    em,
+                    eventBusEntity,
+                    defeatFacts[i].TargetAsc,
+                    EGameplayEventType.AutoChessSummonDespawned,
+                    2,
+                    ref facts,
+                    frame);
+
+            facts.ProcessedUnitDefeatedFactCount = eventCount;
         }
 
         private static void TrySpawnSummon(
             EntityManager em,
             Entity eventBusEntity,
-            in BGameplayEvent evt,
+            in BHeadlessAutoChessGameplayEffectAppliedFact evt,
+            EntityQuery summonQuery,
             in CHeadlessAutoChessDriver driver,
             ref CHeadlessAutoChessSummonFacts facts,
             int frame)
@@ -125,7 +147,7 @@ namespace GAS.Runtime
 
             var ownerUnit = em.GetComponentData<CHeadlessAutoChessUnit>(owner);
             if (ownerUnit.MaxActiveSummons > 0
-                && CountActiveSummonsForOwner(em, owner) >= ownerUnit.MaxActiveSummons)
+                && CountActiveSummonsForOwner(em, summonQuery, owner) >= ownerUnit.MaxActiveSummons)
             {
                 return;
             }
@@ -147,9 +169,10 @@ namespace GAS.Runtime
             });
 
             var summon = AbilitySystemEntityFactory.Create(em);
-            em.SetName(summon, $"AutoChessSummon_{request.SummonedUnitCode}_{serial}");
             var summonUnit = CreateSummonedUnit(ownerUnit, request, serial, driver);
             em.AddComponentData(summon, summonUnit);
+            em.AddComponentData(summon, new CHeadlessAutoChessDamageState());
+            em.AddComponentData(summon, new CHeadlessAutoChessDeathState());
             em.AddComponentData(summon, new CHeadlessAutoChessSummonedUnit
             {
                 OwnerAsc = owner,
@@ -228,7 +251,6 @@ namespace GAS.Runtime
             in CHeadlessAutoChessSummonRequest request)
         {
             var init = em.CreateEntity();
-            em.SetName(init, $"AscInitializeRequest_Summon_{asc.Index}_{init.Index}");
             em.AddComponentData(init, new CAscInitializeRequest
             {
                 ASC = asc,
@@ -299,14 +321,12 @@ namespace GAS.Runtime
         private static void ProcessExpiredSummons(
             EntityManager em,
             Entity eventBusEntity,
+            EntityQuery summonQuery,
             in CHeadlessAutoChessDriver driver,
             ref CHeadlessAutoChessSummonFacts facts,
             int frame)
         {
-            using var summons = em.CreateEntityQuery(
-                    ComponentType.ReadOnly<CHeadlessAutoChessUnit>(),
-                    ComponentType.ReadWrite<CHeadlessAutoChessSummonedUnit>())
-                .ToEntityArray(Allocator.Temp);
+            using var summons = summonQuery.ToEntityArray(Allocator.Temp);
 
             for (var i = 0; i < summons.Length; i++)
             {
@@ -404,7 +424,6 @@ namespace GAS.Runtime
             }
 
             var request = em.CreateEntity();
-            em.SetName(request, $"AscDestroyRequest_Summon_{asc.Index}_{request.Index}");
             em.AddComponentData(request, new CAscDestroyRequest
             {
                 ASC = asc,
@@ -425,12 +444,12 @@ namespace GAS.Runtime
             return count;
         }
 
-        private static int CountActiveSummonsForOwner(EntityManager em, Entity owner)
+        private static int CountActiveSummonsForOwner(
+            EntityManager em,
+            EntityQuery summonQuery,
+            Entity owner)
         {
-            using var query = em.CreateEntityQuery(
-                ComponentType.ReadOnly<CHeadlessAutoChessUnit>(),
-                ComponentType.ReadOnly<CHeadlessAutoChessSummonedUnit>());
-            using var summons = query.ToEntityArray(Allocator.Temp);
+            using var summons = summonQuery.ToEntityArray(Allocator.Temp);
             var count = 0;
             for (var i = 0; i < summons.Length; i++)
             {

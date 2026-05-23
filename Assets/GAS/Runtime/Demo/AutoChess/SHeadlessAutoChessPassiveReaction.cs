@@ -9,14 +9,18 @@ namespace GAS.Runtime
     {
         private EntityQuery _driverQuery;
         private EntityQuery _unitQuery;
+        private EntityQuery _revivePendingUnitQuery;
 
         public void OnCreate(ref SystemState state)
         {
             _driverQuery = SystemAPI.QueryBuilder()
-                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessPassiveReactionFacts>()
+                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessPassiveReactionFacts, BHeadlessAutoChessUnitDefeatedFact>()
                 .Build();
             _unitQuery = SystemAPI.QueryBuilder()
                 .WithAll<CHeadlessAutoChessUnit, BAttribute>()
+                .Build();
+            _revivePendingUnitQuery = SystemAPI.QueryBuilder()
+                .WithAll<CHeadlessAutoChessUnit, CHeadlessAutoChessPassiveState, BAttribute>()
                 .Build();
             state.RequireForUpdate<CGameplayEventBus>();
             state.RequireForUpdate(_driverQuery);
@@ -25,8 +29,6 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency.Complete();
-
             if (!SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity))
                 return;
 
@@ -34,22 +36,24 @@ namespace GAS.Runtime
             if (!em.Exists(eventBusEntity) || !em.HasBuffer<BGameplayEvent>(eventBusEntity))
                 return;
 
-            using var drivers = _driverQuery.ToEntityArray(Allocator.Temp);
-            if (drivers.Length == 0)
+            if (_driverQuery.IsEmptyIgnoreFilter)
                 return;
 
-            var driverEntity = drivers[0];
+            var driverEntity = _driverQuery.GetSingletonEntity();
             var facts = em.GetComponentData<CHeadlessAutoChessPassiveReactionFacts>(driverEntity);
+            var unitDefeatedFacts = em.GetBuffer<BHeadlessAutoChessUnitDefeatedFact>(driverEntity);
             var frame = ResolveCurrentFrame(em);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
 
             if (facts.LastReactionFrame != frame)
             {
                 facts.LastReactionFrame = frame;
                 facts.ProcessedGameplayEventCount = 0;
+                facts.ProcessedUnitDefeatedFactCount = 0;
             }
 
-            ProjectReviveAppliedFacts(em, eventBusEntity, ref facts, frame);
-            ProjectDefeatReactions(em, eventBusEntity, ref facts, frame);
+            ProjectReviveAppliedFacts(em, eventBusEntity, _revivePendingUnitQuery, ref facts, frame);
+            ProjectDefeatReactions(em, eventBusEntity, unitDefeatedFacts, ref facts, frame);
 
             em.SetComponentData(driverEntity, facts);
         }
@@ -57,34 +61,36 @@ namespace GAS.Runtime
         private static void ProjectDefeatReactions(
             EntityManager em,
             Entity eventBusEntity,
+            DynamicBuffer<BHeadlessAutoChessUnitDefeatedFact> unitDefeatedFacts,
             ref CHeadlessAutoChessPassiveReactionFacts facts,
             int frame)
         {
-            var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
-            var eventCount = gameplayEvents.Length;
-            var start = facts.ProcessedGameplayEventCount > eventCount
-                ? 0
-                : facts.ProcessedGameplayEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                gameplayEvents,
+            var eventCount = unitDefeatedFacts.Length;
+            var start = EventBusHelper.ClampProcessedCount(
+                unitDefeatedFacts,
+                facts.ProcessedUnitDefeatedFactCount);
+            using var defeatFacts = EventBusHelper.CopyBufferRange(
+                unitDefeatedFacts,
                 start,
                 eventCount,
                 Allocator.Temp);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < defeatFacts.Length; i++)
             {
-                var evt = eventSnapshot[i];
-                if (evt.Type != EGameplayEventType.AutoChessUnitDefeated)
-                    continue;
-
+                var fact = defeatFacts[i];
+                var evt = new BGameplayEvent
+                {
+                    SourceAsc = fact.SourceAsc,
+                    TargetAsc = fact.TargetAsc,
+                    EventCode = fact.UnitSlot,
+                    ReasonCode = (int)fact.Team,
+                    Value = fact.FinalHealth,
+                };
                 TryGrantKillMana(em, eventBusEntity, evt, frame, ref facts);
                 TryRequestSelfRevive(em, eventBusEntity, evt, frame, ref facts);
             }
 
-            facts.ProcessedGameplayEventCount = em.Exists(eventBusEntity)
-                                                && em.HasBuffer<BGameplayEvent>(eventBusEntity)
-                ? em.GetBuffer<BGameplayEvent>(eventBusEntity).Length
-                : eventCount;
+            facts.ProcessedUnitDefeatedFactCount = eventCount;
         }
 
         private static bool TryGrantKillMana(
@@ -212,14 +218,11 @@ namespace GAS.Runtime
         private static void ProjectReviveAppliedFacts(
             EntityManager em,
             Entity eventBusEntity,
+            EntityQuery revivePendingUnitQuery,
             ref CHeadlessAutoChessPassiveReactionFacts facts,
             int frame)
         {
-            using var query = em.CreateEntityQuery(
-                ComponentType.ReadOnly<CHeadlessAutoChessUnit>(),
-                ComponentType.ReadWrite<CHeadlessAutoChessPassiveState>(),
-                ComponentType.ReadOnly<BAttribute>());
-            using var units = query.ToEntityArray(Allocator.Temp);
+            using var units = revivePendingUnitQuery.ToEntityArray(Allocator.Temp);
 
             for (var i = 0; i < units.Length; i++)
             {
@@ -283,7 +286,8 @@ namespace GAS.Runtime
             int gameplayEffectCode,
             string namePrefix)
         {
-            var request = GameplayEffectRequestWriter.Create(
+            var targetKind = source == target ? ETargetDataKind.Self : ETargetDataKind.Entity;
+            GameplayEffectRequestWriter.ApplyFastOrCreateSingleTargetRequest(
                 em,
                 new CApplyGameplayEffectRequest
                 {
@@ -293,13 +297,9 @@ namespace GAS.Runtime
                     GameplayEffectCode = gameplayEffectCode,
                     Level = 1,
                 },
-                new CTargetDataHeader
-                {
-                    SourceAsc = source,
-                    Kind = source == target ? ETargetDataKind.Self : ETargetDataKind.Entity,
-                },
+                target,
+                targetKind,
                 namePrefix);
-            GameplayEffectRequestWriter.AddTarget(em, request, target);
         }
 
         private static CHeadlessAutoChessPassiveState GetOrCreatePassiveState(

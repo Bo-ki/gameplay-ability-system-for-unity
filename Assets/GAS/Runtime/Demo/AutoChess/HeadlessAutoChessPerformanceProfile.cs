@@ -364,7 +364,7 @@ namespace GAS.Runtime
                     result.Completed,
                     result.Winner,
                     result.Units.Length,
-                    result.TotalTicks,
+                    ResolveMeasuredTickCount(result),
                     result.EventCounts.ReplayEvents,
                     result.EventCounts.StructuredLogEntries,
                     CountPresentationMarkers(result.EventCounts),
@@ -695,6 +695,28 @@ namespace GAS.Runtime
                 .Append("|minTicksPerSecond=")
                 .Append(FormatDouble(options.MinTicksPerSecond))
                 .AppendLine();
+            builder.Append("measurement|scope=ecsRuntimeTickOnly|warmupTickExcluded=")
+                .Append(HeadlessAutoChessScenario.PerformanceWarmupBattleTicks)
+                .AppendLine("|excluded=bootstrap,presentationOutbox,validationExport");
+            builder.Append("groupTiming|ticks=")
+                .Append(scaleValidation.RuntimeTiming.TickCount)
+                .Append("|totalAvgMs=")
+                .Append(FormatDouble(scaleValidation.RuntimeTiming.AverageTotalMilliseconds))
+                .Append("|commandAvgMs=")
+                .Append(FormatDouble(scaleValidation.RuntimeTiming.AverageCommandMilliseconds))
+                .Append("|resetDirtyAvgMs=")
+                .Append(FormatDouble(scaleValidation.RuntimeTiming.AverageResetDirtyMilliseconds))
+                .Append("|tagAvgMs=")
+                .Append(FormatDouble(scaleValidation.RuntimeTiming.AverageTagMilliseconds))
+                .Append("|effectAvgMs=")
+                .Append(FormatDouble(scaleValidation.RuntimeTiming.AverageEffectMilliseconds))
+                .Append("|attributeAvgMs=")
+                .Append(FormatDouble(scaleValidation.RuntimeTiming.AverageAttributeMilliseconds))
+                .Append("|abilityAvgMs=")
+                .Append(FormatDouble(scaleValidation.RuntimeTiming.AverageAbilityMilliseconds))
+                .Append("|cueAvgMs=")
+                .Append(FormatDouble(scaleValidation.RuntimeTiming.AverageCueMilliseconds))
+                .AppendLine();
             builder.Append("exports|summary=")
                 .Append(summaryPath ?? string.Empty)
                 .Append("|scaleSummary=")
@@ -800,6 +822,15 @@ namespace GAS.Runtime
                    + counts.PresentationFloatingTextMarkers
                    + counts.PresentationCueMarkers
                    + counts.PresentationSettlementMarkers;
+        }
+
+        private static int ResolveMeasuredTickCount(in HeadlessAutoChessResult result)
+        {
+            return result.MeasuredTicks > 0
+                ? result.MeasuredTicks
+                : result.BattleTicks > 0
+                    ? result.BattleTicks
+                    : result.TotalTicks;
         }
 
         private static double Percentile(List<double> values, double percentile)

@@ -19,4 +19,13 @@ namespace GAS.Runtime
         public EGameplayEffectLifecycleState PreviousState;
         public int StateStartFrame;
     }
+
+    /// <summary>
+    /// Narrow marker for GE instances that still need the Apply entry system.
+    /// Active/Inhibited duration effects stay alive without being rescanned by SEffectApply.
+    /// </summary>
+    public struct CEffectPendingApply : IComponentData
+    {
+    }
+
 }

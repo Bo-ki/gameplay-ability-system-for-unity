@@ -4,6 +4,10 @@
 
 EX-GAS 2.0 是一个基于 Unity DOTS / ECS 的 Gameplay Ability System 实现。当前主线不再是 1.x 的托管 OOP 运行模型，也不再以 `AbilitySystemCell`、`AbilityLogicBase`、`AbilitySpec`、`GameplayEffectSpec` 作为 Runtime 主入口。旧文档、旧 Demo 说明或历史方案若与本文冲突，以当前代码和本文口径为准。
 
+重要警告：
+
+> 当前仓库仍处于快速迭代和架构重构阶段，不是稳定可直接商用的 GAS Runtime。现有实现已经暴露出明显的 Runtime pipeline、性能曲线、结构变化、Observation 分层和 Debugger 能力问题。本文主要用于同步当前设计方向和工程思路，代码仅供参考，不建议把当前实现当成完成态框架直接接入生产项目。
+
 一句话概括当前架构：
 
 > Ability 产生意图，GameplayEffect 改变状态，Attribute / Tag 承载判定，Cue / Presentation 观察事实；Simulation 权威只存在于 ECS Entity / Component / System 中。
@@ -16,6 +20,9 @@ EX-GAS 2.0 是一个基于 Unity DOTS / ECS 的 Gameplay Ability System 实现�
 - Wiki 文字页：`Assets/GAS/Wiki`。
 - 配置源：`EX_GAS_Config/ProjectConfigTable/exgas_config/Datas`。
 - 迭代讨论目录：`方案讨论/` 是本地中间产物，已通过 `.gitignore` 排除。
+- 不要修改 `Library/PackageCache` 下的包缓存内容；Unity 会自动还原，这类改动不是有效工程修复。
+- 当前重构主线：`T6-CHESS-AM`，目标是重建 GAS ECS Runtime Core pipeline。
+- 当前推荐第一刀：冻结旧 GE lifecycle pipeline 扩张，并补 Runtime Core Debugger baseline，再进入 Effect Command / Spec Stream contract。
 
 ## 架构分层
 
@@ -104,6 +111,61 @@ Runtime facts 与表现分层如下：
 
 重要约束：不要跨结构变化持有 `DynamicBuffer<T>` 或 query buffer 视图。只要处理中会 `CreateEntity`、`AddComponent`、`RemoveComponent` 或 `DestroyEntity`，先 snapshot 要读的范围，再写世界。
 
+## 当前已知问题与重构路线
+
+当前 AutoChess 无头验收已经覆盖较完整业务链路，包括伤害、死亡、被动、羁绊、周期 GE、Shield、Summon、Damage Type / Resistance、装备、净化、Rally、LifeSteal、Poison、Execute、DeathBurst、Enrage、Presentation outbox、Replay、结构化日志和 Luban / SourceGenerator 配置链。但这轮验证也暴露出当前 Runtime Core 仍有严重架构问题。
+
+最新 x50 profile 的关键事实：
+
+- x1 / x10 / x50 非 systemTiming `avgTickMs` 分别约为 `1.658575 / 3.535375 / 13.76954167`。
+- x50 下 `BGameplayEvent` 峰值接近容量：`3910/4096`。
+- x50 下 replay 数量约 `31615`，presentation outbox events 约 `39423`。
+- systemTiming 仅用于热点排序，主要热点集中在 `SEffectApply`、`SApplyGameplayEffectRequest`、`SHeadlessAutoChessPresentationCueMarkerProjection`、`SHeadlessAutoChessDriver`、`SEffectTick` 和多个业务 reaction system。
+
+这些结果说明当前问题不是 Unity ECS 本身无法承载规模，而是当前 GAS Runtime pipeline 仍有错误形态：
+
+1. Instant GE 仍大量走 request entity、runtime GE entity、apply、destroy 的生命周期链路。
+2. `BGameplayEvent / BAttributeChangeEvent / BDamageEvent` 仍被部分业务 reaction 当成高频 simulation 输入，而不是纯 observation projection。
+3. Presentation / Replay / Debug 逻辑完整，但与 core simulation hot path 的计时和数据流隔离不足。
+4. AutoChess Driver 仍有 OOP 回合控制器形态，存在全量快照和多次 O(n) 选择目标的问题。
+5. Runtime Core Debugger 还不够强，缺少 request/spec/delta/fact/entity create/destroy/ECB playback/buffer pressure/cursor lag 等机器可读 counters。
+
+因此当前路线已经从 `T6-CHESS-AL / AL-1` 调整为 `T6-CHESS-AM` 分阶段 Runtime rebuild：
+
+```text
+AM-0 Freeze / Safety Gate
+  冻结旧 GE lifecycle pipeline 扩张
+
+AM-1 Runtime Core Debugger Baseline
+  输出 request / spec / delta / fact / entity lifecycle / buffer pressure counters
+
+AM-2 Effect Command / Spec Stream Contract
+  定义 Effect Command、Instant Spec、Active Effect Mutation 和 phase schedule
+
+AM-3 Instant Spec Evaluation Rebuild
+  simple instant GE 默认不创建 runtime GE entity
+
+AM-4 Attribute Delta / Damage Typed Facts Pipeline
+  AttributeDelta、DamageResolved、AttributeChanged、UnitDefeated 成为 simulation 主输入
+
+AM-5 Active Effect Store Rebuild
+  duration / stack / period / granted tag / granted ability 进入稳定 active store
+
+AM-6 AutoChess Driver / Reaction Read Model
+  actor cursor、team stats、target candidates、board index 替代重复全量扫描
+
+AM-7 Observation / Presentation / Replay Split
+  core simulation tick 与 observation projection tick 分开报告
+
+AM-8 Burst / Jobify / Generated Runtime Glue
+  语义稳定后再 jobify/chunk 化，并生成 static lookup / query glue
+
+AM-9 Scale Gates
+  x50 进入 0.x ms 后，再扩 x100 / x1000 验证结构变化和规模曲线
+```
+
+当前代码应被理解为“业务语义预演 + 架构问题暴露 + 下一阶段重构基线”，而不是性能完成态。
+
 ## Definition 与配置链
 
 配置链仍以 Excel / Luban / JSON / 生成代码为主：
@@ -148,6 +210,8 @@ bash EX_GAS_Config/ProjectConfigTable/exgas_config/gen.sh
 - `GASGeneratedDefinitionRuntimeIntegrationPlan`：把 bake result、runtime query layout plan、structural change plan 合并为 integration contract。
 
 这些 contract 不暴露 `Entity`、`EntityManager`、`EntityQuery`、`BlobAssetReference`、Editor 类型、`XLuban/cfg/SimpleJSON`、spec/context/runtime state。
+
+自动生成输出只作为 Definition Plane artifact。`Assets/DataGenerated/Luban/` 等生成目录不应作为手写 Runtime 源码维护，也不应为了临时编译问题把生成物或 PackageCache 内容纳入主线修复。
 
 ## Editor 与 Authoring
 
@@ -204,4 +268,4 @@ Unity.exe -batchmode -quit -projectPath . -runTests -testPlatform PlayMode -test
 - [Assets/GAS/Wiki/GameplayCue.md](Assets/GAS/Wiki/GameplayCue.md)：Cue / Presentation 边界。
 - [BeanMappingSpec.md](BeanMappingSpec.md)：Bean / Luban / XParam 映射规范。
 - [DemoFrameworkIntroduction.md](DemoFrameworkIntroduction.md)：当前 ECS Demo / 项目接入说明。
-
+- [方案讨论/针对2.0的ECS架构的迭代方案讨论/当前路线/06-当前进度状态.md](方案讨论/针对2.0的ECS架构的迭代方案讨论/当前路线/06-当前进度状态.md)：当前迭代接力状态，本目录已被 `.gitignore` 排除，仅作为本地架构讨论与路线记录。

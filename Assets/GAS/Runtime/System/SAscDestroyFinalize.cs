@@ -29,8 +29,8 @@ namespace GAS.Runtime
         {
             var em = state.EntityManager;
             var ascEntities = _ascQuery.ToEntityArray(Allocator.Temp);
-            var effects = _effectQuery.ToEntityArray(Allocator.Temp);
-            var abilities = _abilityQuery.ToEntityArray(Allocator.Temp);
+            var effects = default(NativeArray<Entity>);
+            var abilities = default(NativeArray<Entity>);
 
             for (var i = 0; i < ascEntities.Length; i++)
             {
@@ -38,15 +38,21 @@ namespace GAS.Runtime
                 if (!em.Exists(asc))
                     continue;
 
-                if (HasReferencingEffect(em, asc, effects) || HasOwnedAbility(em, asc, abilities))
+                if (HasOwnedTargetEffect(em, asc)
+                    || HasReferencingEffect(em, asc, _effectQuery, ref effects)
+                    || HasOwnedAbility(em, asc, _abilityQuery, ref abilities))
+                {
                     continue;
+                }
 
                 EntityHelper.UnbindGameObjectToEntity(asc);
                 em.DestroyEntity(asc);
             }
 
-            abilities.Dispose();
-            effects.Dispose();
+            if (abilities.IsCreated)
+                abilities.Dispose();
+            if (effects.IsCreated)
+                effects.Dispose();
             ascEntities.Dispose();
         }
 
@@ -54,8 +60,31 @@ namespace GAS.Runtime
         {
         }
 
-        private static bool HasReferencingEffect(EntityManager em, Entity asc, NativeArray<Entity> effects)
+        private static bool HasOwnedTargetEffect(EntityManager em, Entity asc)
         {
+            if (!em.HasBuffer<BGameplayEffect>(asc))
+                return false;
+
+            var activeEffects = em.GetBuffer<BGameplayEffect>(asc);
+            for (var i = 0; i < activeEffects.Length; i++)
+            {
+                var effect = activeEffects[i].GameplayEffect;
+                if (effect != Entity.Null && em.Exists(effect))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool HasReferencingEffect(
+            EntityManager em,
+            Entity asc,
+            EntityQuery effectQuery,
+            ref NativeArray<Entity> effects)
+        {
+            if (!effects.IsCreated)
+                effects = effectQuery.ToEntityArray(Allocator.Temp);
+
             for (var i = 0; i < effects.Length; i++)
             {
                 var effect = effects[i];
@@ -70,8 +99,26 @@ namespace GAS.Runtime
             return false;
         }
 
-        private static bool HasOwnedAbility(EntityManager em, Entity asc, NativeArray<Entity> abilities)
+        private static bool HasOwnedAbility(
+            EntityManager em,
+            Entity asc,
+            EntityQuery abilityQuery,
+            ref NativeArray<Entity> abilities)
         {
+            if (em.HasBuffer<BGrantedAbility>(asc))
+            {
+                var grantedAbilities = em.GetBuffer<BGrantedAbility>(asc);
+                for (var i = 0; i < grantedAbilities.Length; i++)
+                {
+                    var ability = grantedAbilities[i].AbilityEntity;
+                    if (ability != Entity.Null && em.Exists(ability))
+                        return true;
+                }
+            }
+
+            if (!abilities.IsCreated)
+                abilities = abilityQuery.ToEntityArray(Allocator.Temp);
+
             for (var i = 0; i < abilities.Length; i++)
             {
                 var ability = abilities[i];

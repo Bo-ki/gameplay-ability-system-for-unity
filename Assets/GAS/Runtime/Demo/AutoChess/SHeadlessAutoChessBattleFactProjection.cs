@@ -13,10 +13,10 @@ namespace GAS.Runtime
         public void OnCreate(ref SystemState state)
         {
             _driverQuery = SystemAPI.QueryBuilder()
-                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessBattleFacts>()
+                .WithAll<CHeadlessAutoChessDriver, CHeadlessAutoChessBattleFacts, BHeadlessAutoChessUnitDefeatedFact>()
                 .Build();
             _unitQuery = SystemAPI.QueryBuilder()
-                .WithAll<CHeadlessAutoChessUnit, BAttribute>()
+                .WithAll<CHeadlessAutoChessUnit, CHeadlessAutoChessDamageState, CHeadlessAutoChessDeathState, BAttribute>()
                 .Build();
             state.RequireForUpdate<CGameplayEventBus>();
             state.RequireForUpdate(_driverQuery);
@@ -25,8 +25,6 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency.Complete();
-
             if (!SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity))
                 return;
 
@@ -38,19 +36,29 @@ namespace GAS.Runtime
                 return;
             }
 
-            using var drivers = _driverQuery.ToEntityArray(Allocator.Temp);
             using var units = _unitQuery.ToEntityArray(Allocator.Temp);
-            if (drivers.Length == 0 || units.Length == 0)
+            if (_driverQuery.IsEmptyIgnoreFilter || units.Length == 0)
                 return;
 
-            var driverEntity = drivers[0];
+            var driverEntity = _driverQuery.GetSingletonEntity();
             var driver = em.GetComponentData<CHeadlessAutoChessDriver>(driverEntity);
             var facts = em.GetComponentData<CHeadlessAutoChessBattleFacts>(driverEntity);
+            var unitDefeatedFacts = em.GetBuffer<BHeadlessAutoChessUnitDefeatedFact>(driverEntity);
             var frame = ResolveCurrentFrame(em);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
 
+            PrepareTypedFactBuffers(unitDefeatedFacts, ref facts, frame);
             ProjectCombatAttributeFacts(em, eventBusEntity, ref facts, frame);
-            ProjectUnitDefeatedFacts(em, eventBusEntity, units, driver, ref facts, frame);
-            ProjectBattleResolvedFact(em, eventBusEntity, driverEntity, units, ref driver, ref facts, frame);
+            var deferBattleResolution = ProjectUnitDefeatedFacts(
+                em,
+                eventBusEntity,
+                unitDefeatedFacts,
+                units,
+                driver,
+                ref facts,
+                frame);
+            if (!deferBattleResolution)
+                ProjectBattleResolvedFact(em, eventBusEntity, driverEntity, units, ref driver, ref facts, frame);
 
             em.SetComponentData(driverEntity, driver);
             em.SetComponentData(driverEntity, facts);
@@ -71,20 +79,16 @@ namespace GAS.Runtime
                 facts.ProcessedAttributeEventCount = 0;
             }
 
-            var attributeEvents = em.GetBuffer<BAttributeChangeEvent>(eventBusEntity);
-            var eventCount = attributeEvents.Length;
-            var start = facts.ProcessedAttributeEventCount > eventCount
-                ? 0
-                : facts.ProcessedAttributeEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                attributeEvents,
-                start,
-                eventCount,
-                Allocator.Temp);
+            using var attributeEvents = EventBusHelper.SnapshotBufferRange<BAttributeChangeEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedAttributeEventCount,
+                Allocator.Temp,
+                out var eventCount);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < attributeEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
+                var evt = attributeEvents[i];
                 if (IsAutoChessHealthDamage(em, evt))
                 {
                     var amount = evt.OldValue - evt.NewValue;
@@ -148,12 +152,24 @@ namespace GAS.Runtime
             facts.ProcessedAttributeEventCount = eventCount;
         }
 
+        private static void PrepareTypedFactBuffers(
+            DynamicBuffer<BHeadlessAutoChessUnitDefeatedFact> unitDefeatedFacts,
+            ref CHeadlessAutoChessBattleFacts facts,
+            int frame)
+        {
+            if (facts.LastTypedFactFrame == frame)
+                return;
+
+            facts.LastTypedFactFrame = frame;
+            unitDefeatedFacts.Clear();
+        }
+
         private static bool IsAutoChessHealthDamage(EntityManager em, in BAttributeChangeEvent evt)
         {
             return evt.ASC != Entity.Null
                    && em.Exists(evt.ASC)
                    && em.HasComponent<CHeadlessAutoChessUnit>(evt.ASC)
-                   && evt.GameplayEffect != Entity.Null
+                   && (evt.GameplayEffect != Entity.Null || evt.EventCode > 0)
                    && evt.AttrSetCode == HeadlessAutoChessScenario.AttributeSetCombat
                    && evt.AttributeCode == HeadlessAutoChessScenario.AttributeHealth
                    && evt.NewValue < evt.OldValue;
@@ -174,7 +190,7 @@ namespace GAS.Runtime
             return evt.ASC != Entity.Null
                    && em.Exists(evt.ASC)
                    && em.HasComponent<CHeadlessAutoChessUnit>(evt.ASC)
-                   && evt.GameplayEffect != Entity.Null
+                   && (evt.GameplayEffect != Entity.Null || evt.EventCode > 0)
                    && evt.AttrSetCode == HeadlessAutoChessScenario.AttributeSetCombat
                    && evt.AttributeCode == HeadlessAutoChessScenario.AttributeShield;
         }
@@ -192,10 +208,7 @@ namespace GAS.Runtime
                 LastDamageAmount = amount,
             };
 
-            if (em.HasComponent<CHeadlessAutoChessDamageState>(evt.ASC))
-                em.SetComponentData(evt.ASC, state);
-            else
-                em.AddComponentData(evt.ASC, state);
+            em.SetComponentData(evt.ASC, state);
         }
 
         private static void EmitShieldFact(
@@ -219,19 +232,20 @@ namespace GAS.Runtime
             });
         }
 
-        private static void ProjectUnitDefeatedFacts(
+        private static bool ProjectUnitDefeatedFacts(
             EntityManager em,
             Entity eventBusEntity,
+            DynamicBuffer<BHeadlessAutoChessUnitDefeatedFact> unitDefeatedFacts,
             NativeArray<Entity> units,
             in CHeadlessAutoChessDriver driver,
             ref CHeadlessAutoChessBattleFacts facts,
             int frame)
         {
+            var deferBattleResolution = false;
             for (var i = 0; i < units.Length; i++)
             {
                 var asc = units[i];
-                if (em.HasComponent<CHeadlessAutoChessDeathState>(asc)
-                    && em.GetComponentData<CHeadlessAutoChessDeathState>(asc).Defeated)
+                if (em.GetComponentData<CHeadlessAutoChessDeathState>(asc).Defeated)
                 {
                     continue;
                 }
@@ -244,9 +258,7 @@ namespace GAS.Runtime
                 if (health > 0f)
                     continue;
 
-                var defeatedBy = em.HasComponent<CHeadlessAutoChessDamageState>(asc)
-                    ? em.GetComponentData<CHeadlessAutoChessDamageState>(asc).LastDamageSource
-                    : Entity.Null;
+                var defeatedBy = em.GetComponentData<CHeadlessAutoChessDamageState>(asc).LastDamageSource;
                 var deathState = new CHeadlessAutoChessDeathState
                 {
                     Defeated = true,
@@ -257,10 +269,7 @@ namespace GAS.Runtime
                     DefeatedBy = defeatedBy,
                 };
 
-                if (em.HasComponent<CHeadlessAutoChessDeathState>(asc))
-                    em.SetComponentData(asc, deathState);
-                else
-                    em.AddComponentData(asc, deathState);
+                em.SetComponentData(asc, deathState);
 
                 facts.UnitDefeatedFactCount++;
                 if (facts.FirstDefeatFrame == 0)
@@ -272,6 +281,18 @@ namespace GAS.Runtime
                 else if (unit.Team == HeadlessAutoChessTeam.Enemy)
                     facts.EnemyDefeatedCount++;
 
+                unitDefeatedFacts.Add(new BHeadlessAutoChessUnitDefeatedFact
+                {
+                    SourceAsc = defeatedBy,
+                    TargetAsc = asc,
+                    UnitSlot = unit.Slot,
+                    Team = unit.Team,
+                    Frame = frame,
+                    Round = driver.Round,
+                    Turn = driver.TurnCount,
+                    FinalHealth = health,
+                });
+
                 EventBusHelper.EnqueueGameplayEvent(em, eventBusEntity, new BGameplayEvent
                 {
                     Type = EGameplayEventType.AutoChessUnitDefeated,
@@ -281,7 +302,12 @@ namespace GAS.Runtime
                     ReasonCode = (int)unit.Team,
                     Value = health,
                 });
+
+                // Death reactions, revive requests, and settlement must not collapse into one frame.
+                deferBattleResolution = true;
             }
+
+            return deferBattleResolution;
         }
 
         private static void ProjectBattleResolvedFact(
@@ -326,8 +352,7 @@ namespace GAS.Runtime
             for (var i = 0; i < units.Length; i++)
             {
                 var unit = em.GetComponentData<CHeadlessAutoChessUnit>(units[i]);
-                var health = GetAttribute(em, units[i], unit.HealthAttrSetCode, unit.HealthAttrCode);
-                if (health <= 0f && !IsRevivePending(em, units[i]))
+                if (!CanStillParticipateInResolution(em, units[i], unit))
                     continue;
 
                 if (unit.Team == HeadlessAutoChessTeam.Player)
@@ -348,6 +373,17 @@ namespace GAS.Runtime
                     ? HeadlessAutoChessTeam.Player
                     : HeadlessAutoChessTeam.Enemy;
             return true;
+        }
+
+        private static bool CanStillParticipateInResolution(
+            EntityManager em,
+            Entity asc,
+            in CHeadlessAutoChessUnit unit)
+        {
+            var health = GetAttribute(em, asc, unit.HealthAttrSetCode, unit.HealthAttrCode);
+            return health > 0f
+                   || IsRevivePending(em, asc)
+                   || CanRequestSelfRevive(em, asc);
         }
 
         private static float GetAttribute(
@@ -376,6 +412,25 @@ namespace GAS.Runtime
                    && em.Exists(asc)
                    && em.HasComponent<CHeadlessAutoChessPassiveState>(asc)
                    && em.GetComponentData<CHeadlessAutoChessPassiveState>(asc).RevivePending;
+        }
+
+        private static bool CanRequestSelfRevive(EntityManager em, Entity asc)
+        {
+            if (asc == Entity.Null
+                || !em.Exists(asc)
+                || !em.HasComponent<CHeadlessAutoChessPassiveRules>(asc))
+            {
+                return false;
+            }
+
+            var rules = em.GetComponentData<CHeadlessAutoChessPassiveRules>(asc);
+            if (rules.ReviveGameplayEffectCode <= 0 || rules.MaxReviveCount <= 0)
+                return false;
+
+            var state = em.HasComponent<CHeadlessAutoChessPassiveState>(asc)
+                ? em.GetComponentData<CHeadlessAutoChessPassiveState>(asc)
+                : default;
+            return !state.RevivePending && state.ReviveCount < rules.MaxReviveCount;
         }
 
         private static int ResolveCurrentFrame(EntityManager em)

@@ -24,12 +24,14 @@ namespace GAS.Runtime
                 .WithAll<CEffectContext, CEffectSpecData, BExecutionCalculationOutputModifierDefinition>()
                 .WithNone<CEffectDestroy>()
                 .Build();
+            state.RequireForUpdate(_outputModifierQuery);
         }
 
         public void OnUpdate(ref SystemState state)
         {
             var em = state.EntityManager;
             var ecb = new EntityCommandBuffer(Allocator.Temp);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             using var effectsWithValues = _valueQuery.ToEntityArray(Allocator.Temp);
             for (var i = 0; i < effectsWithValues.Length; i++)
@@ -69,24 +71,7 @@ namespace GAS.Runtime
 
             EffectMagnitudeResolver.ResolveModifiers(em, ref ecb, ge, context, spec);
             var hasValues = em.HasBuffer<BExecutionCalculationValue>(ge);
-            var values = default(NativeArray<BExecutionCalculationValue>);
-            if (hasValues)
-            {
-                var valueBuffer = em.GetBuffer<BExecutionCalculationValue>(ge);
-                values = new NativeArray<BExecutionCalculationValue>(valueBuffer.Length, Allocator.Temp);
-                for (var i = 0; i < valueBuffer.Length; i++)
-                    values[i] = valueBuffer[i];
-            }
-
-            try
-            {
-                AppendExecutionOutputModifiers(em, ref ecb, ge, context, hasValues, values);
-            }
-            finally
-            {
-                if (values.IsCreated)
-                    values.Dispose();
-            }
+            AppendExecutionOutputModifiers(em, ref ecb, ge, context, hasValues);
 
             if (EffectRuntimeUtility.IsActive(em, ge))
                 EffectRuntimeUtility.SyncRuntimeModifiersFromResolved(em, ge, context);
@@ -97,8 +82,7 @@ namespace GAS.Runtime
             ref EntityCommandBuffer ecb,
             Entity ge,
             in CEffectContext context,
-            bool hasValues,
-            NativeArray<BExecutionCalculationValue> values)
+            bool hasValues)
         {
             if (!em.HasBuffer<BExecutionCalculationOutputModifierDefinition>(ge))
                 return;
@@ -107,33 +91,26 @@ namespace GAS.Runtime
             if (definitionBuffer.Length == 0)
                 return;
 
-            var definitions = new NativeArray<BExecutionCalculationOutputModifierDefinition>(definitionBuffer.Length, Allocator.Temp);
+            var resolvedModifiers = em.HasBuffer<BResolvedModifier>(ge)
+                ? em.GetBuffer<BResolvedModifier>(ge)
+                : AddResolvedModifierBuffer(em, ref ecb, ge);
+            definitionBuffer = em.GetBuffer<BExecutionCalculationOutputModifierDefinition>(ge);
+            var values = hasValues
+                ? em.GetBuffer<BExecutionCalculationValue>(ge)
+                : default;
+
             for (var i = 0; i < definitionBuffer.Length; i++)
-                definitions[i] = definitionBuffer[i];
-
-            try
             {
-                var resolvedModifiers = em.HasBuffer<BResolvedModifier>(ge)
-                    ? em.GetBuffer<BResolvedModifier>(ge)
-                    : AddResolvedModifierBuffer(em, ref ecb, ge);
-
-                for (var i = 0; i < definitions.Length; i++)
+                var definition = definitionBuffer[i];
+                var magnitude = ResolveOutputModifierMagnitude(em, ge, context, hasValues, values, definition);
+                resolvedModifiers.Add(new BResolvedModifier
                 {
-                    var definition = definitions[i];
-                    var magnitude = ResolveOutputModifierMagnitude(em, ge, context, hasValues, values, definition);
-                    resolvedModifiers.Add(new BResolvedModifier
-                    {
-                        AttrSetCode = definition.AttrSetCode,
-                        AttributeCode = definition.AttributeCode,
-                        Op = definition.Op,
-                        Magnitude = magnitude,
-                        SourceEffect = ge,
-                    });
-                }
-            }
-            finally
-            {
-                definitions.Dispose();
+                    AttrSetCode = definition.AttrSetCode,
+                    AttributeCode = definition.AttributeCode,
+                    Op = definition.Op,
+                    Magnitude = magnitude,
+                    SourceEffect = ge,
+                });
             }
         }
 
@@ -142,7 +119,7 @@ namespace GAS.Runtime
             Entity ge,
             in CEffectContext context,
             bool hasValues,
-            NativeArray<BExecutionCalculationValue> values,
+            DynamicBuffer<BExecutionCalculationValue> values,
             in BExecutionCalculationOutputModifierDefinition definition)
         {
             if (hasValues
@@ -161,7 +138,7 @@ namespace GAS.Runtime
         }
 
         private static bool TryGetOutputValue(
-            NativeArray<BExecutionCalculationValue> values,
+            DynamicBuffer<BExecutionCalculationValue> values,
             int outputKey,
             out float value)
         {

@@ -19,4 +19,22 @@ namespace GAS.Runtime
             });
         }
     }
+
+    public struct CGameplayEffectCueRequestOnApply : IComponentData
+    {
+        public int CueCode;
+    }
+
+    public sealed class ConfGameplayEffectCueRequestOnApply : GameplayEffectComponentConfig
+    {
+        public int CueCode;
+
+        public override void LoadToGameplayEffectEntity(Entity ge)
+        {
+            GASManager.EntityManager.AddComponentData(ge, new CGameplayEffectCueRequestOnApply
+            {
+                CueCode = CueCode,
+            });
+        }
+    }
 }

@@ -16,19 +16,37 @@ namespace GAS.Runtime
         public readonly bool ExportLogs;
         public readonly string ExportDirectory;
         public readonly HeadlessAutoChessValidationThresholds ValidationThresholds;
+        public readonly bool CollectSystemTimings;
+        public readonly int UnitScale;
+        public readonly bool SuppressAssertionLog;
+        public readonly bool SuppressTextLogExports;
+        public readonly bool ProjectRawPresentationOutbox;
+
+        public bool CaptureAssertionLog => !SuppressAssertionLog;
+        public bool ExportTextLogs => !SuppressTextLogExports;
 
         public HeadlessAutoChessOptions(
             int maxTicks,
             int postVictoryFlushTicks,
             bool exportLogs = false,
             string exportDirectory = null,
-            HeadlessAutoChessValidationThresholds validationThresholds = default)
+            HeadlessAutoChessValidationThresholds validationThresholds = default,
+            bool collectSystemTimings = false,
+            int unitScale = 1,
+            bool captureAssertionLog = true,
+            bool exportTextLogs = true,
+            bool projectRawPresentationOutbox = false)
         {
             MaxTicks = maxTicks;
             PostVictoryFlushTicks = postVictoryFlushTicks;
             ExportLogs = exportLogs;
             ExportDirectory = exportDirectory;
             ValidationThresholds = validationThresholds;
+            CollectSystemTimings = collectSystemTimings;
+            UnitScale = unitScale;
+            SuppressAssertionLog = !captureAssertionLog;
+            SuppressTextLogExports = !exportTextLogs;
+            ProjectRawPresentationOutbox = projectRawPresentationOutbox;
         }
 
         public HeadlessAutoChessOptions Normalize()
@@ -38,7 +56,12 @@ namespace GAS.Runtime
                 PostVictoryFlushTicks >= 0 ? PostVictoryFlushTicks : 4,
                 ExportLogs,
                 ExportDirectory,
-                ValidationThresholds.Normalize());
+                ValidationThresholds.Normalize(),
+                CollectSystemTimings,
+                UnitScale > 0 ? UnitScale : 1,
+                CaptureAssertionLog,
+                ExportTextLogs,
+                ProjectRawPresentationOutbox);
         }
     }
 
@@ -844,6 +867,204 @@ namespace GAS.Runtime
         }
     }
 
+    public struct HeadlessAutoChessRuntimeTickTiming
+    {
+        public int TickCount;
+        public long TotalTicks;
+        public long CommandTicks;
+        public long ResetDirtyTicks;
+        public long TagTicks;
+        public long EffectTicks;
+        public long AttributeTicks;
+        public long AbilityTicks;
+        public long CueTicks;
+
+        public void Accumulate(in RuntimeTickGroupTiming timing)
+        {
+            TickCount++;
+            TotalTicks += timing.TotalTicks;
+            CommandTicks += timing.CommandTicks;
+            ResetDirtyTicks += timing.ResetDirtyTicks;
+            TagTicks += timing.TagTicks;
+            EffectTicks += timing.EffectTicks;
+            AttributeTicks += timing.AttributeTicks;
+            AbilityTicks += timing.AbilityTicks;
+            CueTicks += timing.CueTicks;
+        }
+
+        public void Accumulate(in HeadlessAutoChessRuntimeTickTiming timing)
+        {
+            TickCount += timing.TickCount;
+            TotalTicks += timing.TotalTicks;
+            CommandTicks += timing.CommandTicks;
+            ResetDirtyTicks += timing.ResetDirtyTicks;
+            TagTicks += timing.TagTicks;
+            EffectTicks += timing.EffectTicks;
+            AttributeTicks += timing.AttributeTicks;
+            AbilityTicks += timing.AbilityTicks;
+            CueTicks += timing.CueTicks;
+        }
+
+        public double AverageTotalMilliseconds => AverageMilliseconds(TotalTicks);
+
+        public double AverageCommandMilliseconds => AverageMilliseconds(CommandTicks);
+
+        public double AverageResetDirtyMilliseconds => AverageMilliseconds(ResetDirtyTicks);
+
+        public double AverageTagMilliseconds => AverageMilliseconds(TagTicks);
+
+        public double AverageEffectMilliseconds => AverageMilliseconds(EffectTicks);
+
+        public double AverageAttributeMilliseconds => AverageMilliseconds(AttributeTicks);
+
+        public double AverageAbilityMilliseconds => AverageMilliseconds(AbilityTicks);
+
+        public double AverageCueMilliseconds => AverageMilliseconds(CueTicks);
+
+        private double AverageMilliseconds(long ticks)
+        {
+            return TickCount > 0
+                ? ticks * 1000d / Stopwatch.Frequency / TickCount
+                : 0d;
+        }
+    }
+
+    public readonly struct RuntimeTickGroupTiming
+    {
+        public readonly long TotalTicks;
+        public readonly long CommandTicks;
+        public readonly long ResetDirtyTicks;
+        public readonly long TagTicks;
+        public readonly long EffectTicks;
+        public readonly long AttributeTicks;
+        public readonly long AbilityTicks;
+        public readonly long CueTicks;
+
+        public RuntimeTickGroupTiming(
+            long totalTicks,
+            long commandTicks,
+            long resetDirtyTicks,
+            long tagTicks,
+            long effectTicks,
+            long attributeTicks,
+            long abilityTicks,
+            long cueTicks)
+        {
+            TotalTicks = totalTicks;
+            CommandTicks = commandTicks;
+            ResetDirtyTicks = resetDirtyTicks;
+            TagTicks = tagTicks;
+            EffectTicks = effectTicks;
+            AttributeTicks = attributeTicks;
+            AbilityTicks = abilityTicks;
+            CueTicks = cueTicks;
+        }
+    }
+
+    public readonly struct HeadlessAutoChessSystemTiming
+    {
+        public readonly string GroupName;
+        public readonly string SystemName;
+        public readonly int CallCount;
+        public readonly long ElapsedTicks;
+        public readonly double TotalMilliseconds;
+        public readonly double AverageMilliseconds;
+
+        public HeadlessAutoChessSystemTiming(
+            string groupName,
+            string systemName,
+            int callCount,
+            long elapsedTicks)
+        {
+            GroupName = groupName ?? string.Empty;
+            SystemName = systemName ?? string.Empty;
+            CallCount = callCount;
+            ElapsedTicks = elapsedTicks;
+            TotalMilliseconds = elapsedTicks * 1000d / Stopwatch.Frequency;
+            AverageMilliseconds = callCount > 0
+                ? TotalMilliseconds / callCount
+                : 0d;
+        }
+    }
+
+    internal sealed class HeadlessAutoChessRuntimeSystemTimingCollector
+    {
+        private readonly Dictionary<string, SystemTimingCounter> _counterByKey = new();
+        private readonly List<SystemTimingCounter> _counters = new();
+        private readonly Dictionary<string, SystemHandle[]> _systemsByGroup = new();
+
+        public void Record(string groupName, string systemName, long elapsedTicks)
+        {
+            var safeGroupName = groupName ?? string.Empty;
+            var safeSystemName = systemName ?? string.Empty;
+            var key = safeGroupName + "|" + safeSystemName;
+
+            if (!_counterByKey.TryGetValue(key, out var counter))
+            {
+                counter = new SystemTimingCounter(safeGroupName, safeSystemName);
+                _counterByKey.Add(key, counter);
+                _counters.Add(counter);
+            }
+
+            counter.CallCount++;
+            counter.ElapsedTicks += elapsedTicks;
+        }
+
+        public SystemHandle[] GetSystems(ComponentSystemGroup group, string groupName)
+        {
+            var safeGroupName = groupName ?? string.Empty;
+            if (_systemsByGroup.TryGetValue(safeGroupName, out var systems))
+                return systems;
+
+            group.SortSystems();
+            using var nativeSystems = group.GetAllSystems(Allocator.Temp);
+            systems = new SystemHandle[nativeSystems.Length];
+            for (var i = 0; i < nativeSystems.Length; i++)
+                systems[i] = nativeSystems[i];
+
+            _systemsByGroup.Add(safeGroupName, systems);
+            return systems;
+        }
+
+        public HeadlessAutoChessSystemTiming[] ToSortedTimings()
+        {
+            if (_counters.Count == 0)
+                return Array.Empty<HeadlessAutoChessSystemTiming>();
+
+            var counters = _counters.ToArray();
+            Array.Sort(
+                counters,
+                (left, right) => right.ElapsedTicks.CompareTo(left.ElapsedTicks));
+
+            var timings = new HeadlessAutoChessSystemTiming[counters.Length];
+            for (var i = 0; i < counters.Length; i++)
+            {
+                var counter = counters[i];
+                timings[i] = new HeadlessAutoChessSystemTiming(
+                    counter.GroupName,
+                    counter.SystemName,
+                    counter.CallCount,
+                    counter.ElapsedTicks);
+            }
+
+            return timings;
+        }
+
+        private sealed class SystemTimingCounter
+        {
+            public readonly string GroupName;
+            public readonly string SystemName;
+            public int CallCount;
+            public long ElapsedTicks;
+
+            public SystemTimingCounter(string groupName, string systemName)
+            {
+                GroupName = groupName;
+                SystemName = systemName;
+            }
+        }
+    }
+
     public readonly struct HeadlessAutoChessResult
     {
         public readonly HeadlessAutoChessScenarioVariant Variant;
@@ -857,6 +1078,7 @@ namespace GAS.Runtime
         public readonly int BoardHeight;
         public readonly int BattleTicks;
         public readonly int TotalTicks;
+        public readonly int MeasuredTicks;
         public readonly int Round;
         public readonly int TurnCount;
         public readonly int DriverIssuedCommands;
@@ -915,6 +1137,8 @@ namespace GAS.Runtime
         public readonly long ElapsedTicks;
         public readonly double ElapsedMilliseconds;
         public readonly double AverageTickMilliseconds;
+        public readonly HeadlessAutoChessRuntimeTickTiming RuntimeTiming;
+        public readonly HeadlessAutoChessSystemTiming[] SystemTimings;
         public readonly HeadlessAutoChessUnitResult[] Units;
         public readonly HeadlessAutoChessEventCounts EventCounts;
         public readonly HeadlessAutoChessPresentationOutboxCounts PresentationOutboxCounts;
@@ -934,6 +1158,7 @@ namespace GAS.Runtime
             int boardHeight,
             int battleTicks,
             int totalTicks,
+            int measuredTicks,
             int round,
             int turnCount,
             int driverIssuedCommands,
@@ -991,6 +1216,8 @@ namespace GAS.Runtime
             int summonDespawnedCount,
             long elapsedTicks,
             double elapsedMilliseconds,
+            in HeadlessAutoChessRuntimeTickTiming runtimeTiming,
+            HeadlessAutoChessSystemTiming[] systemTimings,
             HeadlessAutoChessUnitResult[] units,
             HeadlessAutoChessEventCounts eventCounts,
             HeadlessAutoChessPresentationOutboxCounts presentationOutboxCounts,
@@ -1009,6 +1236,7 @@ namespace GAS.Runtime
             BoardHeight = boardHeight;
             BattleTicks = battleTicks;
             TotalTicks = totalTicks;
+            MeasuredTicks = measuredTicks;
             Round = round;
             TurnCount = turnCount;
             DriverIssuedCommands = driverIssuedCommands;
@@ -1066,7 +1294,15 @@ namespace GAS.Runtime
             SummonDespawnedCount = summonDespawnedCount;
             ElapsedTicks = elapsedTicks;
             ElapsedMilliseconds = elapsedMilliseconds;
-            AverageTickMilliseconds = totalTicks > 0 ? elapsedMilliseconds / totalTicks : 0d;
+            AverageTickMilliseconds = measuredTicks > 0
+                ? elapsedMilliseconds / measuredTicks
+                : battleTicks > 0
+                    ? elapsedMilliseconds / battleTicks
+                    : totalTicks > 0
+                        ? elapsedMilliseconds / totalTicks
+                        : 0d;
+            RuntimeTiming = runtimeTiming;
+            SystemTimings = systemTimings ?? Array.Empty<HeadlessAutoChessSystemTiming>();
             Units = units ?? Array.Empty<HeadlessAutoChessUnitResult>();
             EventCounts = eventCounts;
             PresentationOutboxCounts = presentationOutboxCounts;
@@ -1084,6 +1320,7 @@ namespace GAS.Runtime
     {
         public const int BoardWidth = 6;
         public const int BoardHeight = 3;
+        public const int PerformanceWarmupBattleTicks = 4;
 
         public const int AttributeSetCombat = 9601;
         public const int AttributeHealth = 1;
@@ -1232,19 +1469,25 @@ namespace GAS.Runtime
             HeadlessAutoChessOptions options = default)
         {
             var normalized = options.Normalize();
-            var variantDefinition = GetVariantDefinition(variant);
+            var variantDefinition = CreateRunVariantDefinition(variant, normalized.UnitScale);
             EnsureRuntimeInitialized();
             RegisterTargetCatcher();
             RegisterConfigs();
-            ResetObservationState();
+            ResetObservationState(normalized);
+            ResetRuntimeDebugger(normalized);
 
-            var stopwatch = Stopwatch.StartNew();
-            var state = new ScenarioState(CreateUnits(variantDefinition.Variant));
+            var simulationElapsedTicks = 0L;
+            var measuredTicks = 0;
+            var runtimeTiming = new HeadlessAutoChessRuntimeTickTiming();
+            var systemTimingCollector = normalized.CollectSystemTimings
+                ? new HeadlessAutoChessRuntimeSystemTimingCollector()
+                : null;
+            var state = new ScenarioState(CreateUnits(variantDefinition.Variant, normalized.UnitScale));
 
             try
             {
                 BootstrapUnits(state);
-                TickRuntime();
+                TickRuntimeMeasured();
                 AccumulatePresentationOutbox(state);
 
                 var battleTicks = 0;
@@ -1254,14 +1497,35 @@ namespace GAS.Runtime
 
                 for (var i = 0; i < normalized.MaxTicks; i++)
                 {
-                    TickRuntime();
+                    if (battleTicks >= PerformanceWarmupBattleTicks)
+                    {
+                        var tickTiming = TickRuntimeMeasured(systemTimingCollector);
+                        simulationElapsedTicks += tickTiming.TotalTicks;
+                        runtimeTiming.Accumulate(tickTiming);
+                        RecordRuntimeDiagnostics(tickTiming);
+                        measuredTicks++;
+                    }
+                    else
+                    {
+                        TickRuntimeMeasured();
+                    }
+
                     AccumulatePresentationOutbox(state);
                     totalTicks++;
                     battleTicks++;
                     RefreshUnits(state);
 
-                    if (victoryTick < 0 && TryResolveWinner(state, out winner))
-                        victoryTick = battleTicks;
+                    if (TryResolveWinner(state, out var resolvedWinner))
+                    {
+                        if (victoryTick < 0 || winner != resolvedWinner)
+                            victoryTick = battleTicks;
+                        winner = resolvedWinner;
+                    }
+                    else
+                    {
+                        victoryTick = -1;
+                        winner = HeadlessAutoChessTeam.None;
+                    }
 
                     if (victoryTick >= 0 && battleTicks - victoryTick >= normalized.PostVictoryFlushTicks)
                         break;
@@ -1270,7 +1534,10 @@ namespace GAS.Runtime
                 if (winner == HeadlessAutoChessTeam.None)
                     TryResolveWinner(state, out winner);
 
-                stopwatch.Stop();
+                var systemTimings = systemTimingCollector?.ToSortedTimings() ?? Array.Empty<HeadlessAutoChessSystemTiming>();
+                RecordSystemTimingDiagnostics(systemTimings);
+
+                var simulationElapsedMilliseconds = simulationElapsedTicks * 1000d / Stopwatch.Frequency;
                 return BuildResult(
                     variantDefinition,
                     state,
@@ -1278,13 +1545,17 @@ namespace GAS.Runtime
                     winner,
                     battleTicks,
                     totalTicks,
-                    stopwatch.ElapsedTicks,
-                    stopwatch.Elapsed.TotalMilliseconds,
+                    measuredTicks,
+                    simulationElapsedTicks,
+                    simulationElapsedMilliseconds,
+                    runtimeTiming,
+                    systemTimings,
                     normalized);
             }
             finally
             {
                 CleanupUnits(state);
+                RestoreDefaultObservationOptions();
                 ClearConfigProviders();
             }
         }
@@ -1321,6 +1592,26 @@ namespace GAS.Runtime
             return new HeadlessAutoChessScenarioVariantDefinition(
                 normalized,
                 GetVariantName(normalized),
+                GetDeterministicSeed(normalized),
+                CountUnits(units, HeadlessAutoChessTeam.Player),
+                CountUnits(units, HeadlessAutoChessTeam.Enemy),
+                HeadlessAutoChessTeam.Player);
+        }
+
+        private static HeadlessAutoChessScenarioVariantDefinition CreateRunVariantDefinition(
+            HeadlessAutoChessScenarioVariant variant,
+            int unitScale)
+        {
+            var normalized = NormalizeVariant(variant);
+            var scale = unitScale > 0 ? unitScale : 1;
+            var units = CreateUnits(normalized, scale);
+            var name = GetVariantName(normalized);
+            if (scale > 1)
+                name += "x" + scale.ToString(CultureInfo.InvariantCulture);
+
+            return new HeadlessAutoChessScenarioVariantDefinition(
+                normalized,
+                name,
                 GetDeterministicSeed(normalized),
                 CountUnits(units, HeadlessAutoChessTeam.Player),
                 CountUnits(units, HeadlessAutoChessTeam.Enemy),
@@ -1380,6 +1671,33 @@ namespace GAS.Runtime
                 default:
                     return CreateDefaultUnits();
             }
+        }
+
+        private static UnitDefinition[] CreateUnits(HeadlessAutoChessScenarioVariant variant, int unitScale)
+        {
+            var units = CreateUnits(variant);
+            return unitScale > 1 ? ScaleUnits(units, unitScale) : units;
+        }
+
+        private static UnitDefinition[] ScaleUnits(UnitDefinition[] source, int unitScale)
+        {
+            if (source == null || source.Length == 0 || unitScale <= 1)
+                return source ?? Array.Empty<UnitDefinition>();
+
+            var scaled = new UnitDefinition[source.Length * unitScale];
+            var index = 0;
+            for (var copy = 0; copy < unitScale; copy++)
+            {
+                for (var i = 0; i < source.Length; i++)
+                {
+                    scaled[index] = copy == 0
+                        ? source[i]
+                        : source[i].WithScaleCopy(copy, copy * source.Length);
+                    index++;
+                }
+            }
+
+            return scaled;
         }
 
         private static int CountUnits(
@@ -1834,6 +2152,8 @@ namespace GAS.Runtime
                 ControlTargetPolicy = definition.ControlTargetPolicy,
                 SupportTargetPolicy = definition.SupportTargetPolicy,
             });
+            em.AddComponentData(asc, new CHeadlessAutoChessDamageState());
+            em.AddComponentData(asc, new CHeadlessAutoChessDeathState());
 
             if (definition.SynergyCode > 0)
             {
@@ -2042,7 +2362,7 @@ namespace GAS.Runtime
             if (gameplayEffectCode <= 0)
                 return;
 
-            var request = GameplayEffectRequestWriter.Create(
+            GameplayEffectRequestWriter.ApplyFastOrCreateSingleTargetRequest(
                 em,
                 new CApplyGameplayEffectRequest
                 {
@@ -2052,13 +2372,9 @@ namespace GAS.Runtime
                     GameplayEffectCode = gameplayEffectCode,
                     Level = 1,
                 },
-                new CTargetDataHeader
-                {
-                    SourceAsc = asc,
-                    Kind = ETargetDataKind.Self,
-                },
+                asc,
+                ETargetDataKind.Self,
                 namePrefix);
-            GameplayEffectRequestWriter.AddTarget(em, request, asc);
         }
 
         private static Entity CreateAutoChessDriver()
@@ -2067,6 +2383,8 @@ namespace GAS.Runtime
             var driver = em.CreateEntity();
             em.SetName(driver, "HeadlessAutoChessDriver");
             em.AddBuffer<BPresentationEvent>(driver);
+            em.AddBuffer<BHeadlessAutoChessUnitDefeatedFact>(driver);
+            em.AddBuffer<BHeadlessAutoChessGameplayEffectAppliedFact>(driver);
             em.AddComponentData(driver, new CHeadlessAutoChessDriver
             {
                 Enabled = true,
@@ -2079,6 +2397,11 @@ namespace GAS.Runtime
             em.AddComponentData(driver, new CHeadlessAutoChessBattleFacts
             {
                 LastDamageProjectionFrame = -1,
+                LastTypedFactFrame = -1,
+            });
+            em.AddComponentData(driver, new CHeadlessAutoChessGameplayEffectFacts
+            {
+                LastProjectionFrame = -1,
             });
             em.AddComponentData(driver, new CHeadlessAutoChessPassiveReactionFacts
             {
@@ -2149,7 +2472,7 @@ namespace GAS.Runtime
             for (var i = 0; i < state.Units.Length; i++)
             {
                 var unit = state.Units[i];
-                if (!unit.Alive)
+                if (!unit.CanStillParticipateInResolution)
                     continue;
 
                 if (unit.Definition.Team == HeadlessAutoChessTeam.Player)
@@ -2179,8 +2502,11 @@ namespace GAS.Runtime
             HeadlessAutoChessTeam winner,
             int battleTicks,
             int totalTicks,
+            int measuredTicks,
             long elapsedTicks,
             double elapsedMilliseconds,
+            in HeadlessAutoChessRuntimeTickTiming runtimeTiming,
+            HeadlessAutoChessSystemTiming[] systemTimings,
             in HeadlessAutoChessOptions normalizedOptions)
         {
             RefreshUnits(state);
@@ -2219,20 +2545,27 @@ namespace GAS.Runtime
             var log = em.GetBuffer<BDebugReplayEvent>(GASManager.EntityEventLogSink);
             var sinkState = em.GetComponentData<CGameplayEventLogSink>(GASManager.EntityEventLogSink);
             var snapshot = GasStructuredLogExporter.CreateSnapshot(log, sinkState);
-            var assertionLog = GasStructuredLogExporter.ExportToText(
-                snapshot,
-                GasStructuredLogFormatOptions.AssertionText);
-            var eventCounts = CountEvents(log, snapshot.EntryCount);
+            var diagnosticSnapshot = GasRuntimeDebugger.CreateSnapshot(em, GASManager.EntityRuntimeDebugger);
+            var assertionLog = normalizedOptions.CaptureAssertionLog
+                ? GasStructuredLogExporter.ExportToText(
+                    snapshot,
+                    GasStructuredLogFormatOptions.AssertionText)
+                : string.Empty;
+            var eventCounts = CountEvents(log, snapshot.EntryCount, state.PresentationOutboxCounts);
             var validationReport = BuildValidationReport(
                 variantDefinition,
                 completed,
                 winner,
                 battleTicks,
                 totalTicks,
+                measuredTicks,
                 elapsedMilliseconds,
+                runtimeTiming,
+                systemTimings,
                 eventCounts,
                 state.PresentationOutboxCounts,
                 snapshot,
+                diagnosticSnapshot,
                 assertionLog,
                 normalizedOptions);
 
@@ -2248,6 +2581,7 @@ namespace GAS.Runtime
                 driverStats.BoardHeight,
                 battleTicks,
                 totalTicks,
+                measuredTicks,
                 driverStats.Round,
                 driverStats.TurnCount,
                 driverStats.IssuedCommandCount,
@@ -2305,6 +2639,8 @@ namespace GAS.Runtime
                 summonFacts.SummonDespawnedFactCount,
                 elapsedTicks,
                 elapsedMilliseconds,
+                runtimeTiming,
+                systemTimings,
                 units,
                 eventCounts,
                 state.PresentationOutboxCounts,
@@ -2319,15 +2655,25 @@ namespace GAS.Runtime
             HeadlessAutoChessTeam winner,
             int battleTicks,
             int totalTicks,
+            int measuredTicks,
             double elapsedMilliseconds,
+            in HeadlessAutoChessRuntimeTickTiming runtimeTiming,
+            HeadlessAutoChessSystemTiming[] systemTimings,
             in HeadlessAutoChessEventCounts eventCounts,
             in HeadlessAutoChessPresentationOutboxCounts presentationOutboxCounts,
             in GasStructuredLogExportSnapshot snapshot,
+            in GasRuntimeDiagnosticSnapshot diagnosticSnapshot,
             string assertionLog,
             in HeadlessAutoChessOptions normalizedOptions)
         {
             var thresholds = normalizedOptions.ValidationThresholds.Normalize();
-            var averageTickMilliseconds = totalTicks > 0 ? elapsedMilliseconds / totalTicks : 0d;
+            var averageTickMilliseconds = measuredTicks > 0
+                ? elapsedMilliseconds / measuredTicks
+                : battleTicks > 0
+                    ? elapsedMilliseconds / battleTicks
+                    : totalTicks > 0
+                        ? elapsedMilliseconds / totalTicks
+                        : 0d;
             var failures = new List<string>();
 
             AddFailureIf(failures, !completed, "battle did not complete");
@@ -2346,11 +2692,12 @@ namespace GAS.Runtime
                 "structured log entries did not match replay events");
             AddFailureIf(
                 failures,
-                string.IsNullOrEmpty(assertionLog),
+                normalizedOptions.CaptureAssertionLog && string.IsNullOrEmpty(assertionLog),
                 "assertion log is empty");
             AddFailureIf(
                 failures,
-                !string.IsNullOrEmpty(assertionLog)
+                normalizedOptions.CaptureAssertionLog
+                && !string.IsNullOrEmpty(assertionLog)
                 && !assertionLog.StartsWith("stats|", StringComparison.Ordinal),
                 "assertion log header is missing");
 
@@ -2598,11 +2945,14 @@ namespace GAS.Runtime
                 eventCounts.PresentationSettlementMarkers,
                 thresholds.MinPresentationSettlementMarkers);
             AddMinFailure(failures, "presentationOutboxEvents", presentationOutboxCounts.TotalEvents, 1);
-            AddMinFailure(
-                failures,
-                "presentationOutboxCueRequests",
-                presentationOutboxCounts.CueRequests,
-                thresholds.MinCueRequests);
+            if (normalizedOptions.ProjectRawPresentationOutbox)
+            {
+                AddMinFailure(
+                    failures,
+                    "presentationOutboxCueRequests",
+                    presentationOutboxCounts.CueRequests,
+                    thresholds.MinCueRequests);
+            }
             AddMinFailure(
                 failures,
                 "presentationOutboxUiMarkers",
@@ -3000,23 +3350,33 @@ namespace GAS.Runtime
             if (normalizedOptions.ExportLogs)
             {
                 var exportDirectory = ResolveAutoChessExportDirectory(normalizedOptions.ExportDirectory);
-                assertionLogFile = GasStructuredLogExporter.WriteTextFile(
-                    Path.Combine(exportDirectory, "headless-autochess.assertion.log"),
-                    snapshot,
-                    GasStructuredLogFormatOptions.AssertionText);
-                humanReadableLogFile = GasStructuredLogExporter.WriteTextFile(
-                    Path.Combine(exportDirectory, "headless-autochess.human.log"),
-                    snapshot,
-                    GasStructuredLogFormatOptions.HumanReadable);
+                if (normalizedOptions.ExportTextLogs)
+                {
+                    if (normalizedOptions.CaptureAssertionLog)
+                    {
+                        assertionLogFile = GasStructuredLogExporter.WriteTextFile(
+                            Path.Combine(exportDirectory, "headless-autochess.assertion.log"),
+                            snapshot,
+                            GasStructuredLogFormatOptions.AssertionText);
+                    }
+
+                    humanReadableLogFile = GasStructuredLogExporter.WriteTextFile(
+                        Path.Combine(exportDirectory, "headless-autochess.human.log"),
+                        snapshot,
+                        GasStructuredLogFormatOptions.HumanReadable);
+                }
+
                 summaryPath = Path.Combine(exportDirectory, "headless-autochess.validation.txt");
 
                 AddFailureIf(
                     failures,
-                    assertionLogFile.ByteCount <= 0,
+                    normalizedOptions.ExportTextLogs
+                    && normalizedOptions.CaptureAssertionLog
+                    && assertionLogFile.ByteCount <= 0,
                     "assertion log export was empty");
                 AddFailureIf(
                     failures,
-                    humanReadableLogFile.ByteCount <= 0,
+                    normalizedOptions.ExportTextLogs && humanReadableLogFile.ByteCount <= 0,
                     "human readable log export was empty");
             }
 
@@ -3028,14 +3388,21 @@ namespace GAS.Runtime
                 winner,
                 battleTicks,
                 totalTicks,
+                measuredTicks,
                 elapsedMilliseconds,
                 averageTickMilliseconds,
+                runtimeTiming,
+                systemTimings,
                 eventCounts,
                 presentationOutboxCounts,
                 snapshot,
+                diagnosticSnapshot,
                 assertionLogFile,
                 humanReadableLogFile,
-                summaryPath);
+                summaryPath,
+                normalizedOptions.CaptureAssertionLog,
+                normalizedOptions.ExportTextLogs,
+                normalizedOptions.ProjectRawPresentationOutbox);
             var summaryByteCount = 0L;
             if (normalizedOptions.ExportLogs)
             {
@@ -3074,14 +3441,21 @@ namespace GAS.Runtime
             HeadlessAutoChessTeam winner,
             int battleTicks,
             int totalTicks,
+            int measuredTicks,
             double elapsedMilliseconds,
             double averageTickMilliseconds,
+            in HeadlessAutoChessRuntimeTickTiming runtimeTiming,
+            HeadlessAutoChessSystemTiming[] systemTimings,
             in HeadlessAutoChessEventCounts eventCounts,
             in HeadlessAutoChessPresentationOutboxCounts presentationOutboxCounts,
             in GasStructuredLogExportSnapshot snapshot,
+            in GasRuntimeDiagnosticSnapshot diagnosticSnapshot,
             in GasStructuredLogFileExportResult assertionLogFile,
             in GasStructuredLogFileExportResult humanReadableLogFile,
-            string summaryPath)
+            string summaryPath,
+            bool captureAssertionLog,
+            bool exportTextLogs,
+            bool projectRawPresentationOutbox)
         {
             var builder = new StringBuilder(2048);
             builder.AppendLine("HeadlessAutoChessValidationReport");
@@ -3104,11 +3478,48 @@ namespace GAS.Runtime
                 .Append(battleTicks)
                 .Append("|total=")
                 .Append(totalTicks)
+                .Append("|measured=")
+                .Append(measuredTicks)
                 .Append("|elapsedMs=")
                 .Append(FormatDouble(elapsedMilliseconds))
                 .Append("|avgTickMs=")
                 .Append(FormatDouble(averageTickMilliseconds))
                 .AppendLine();
+            builder.Append("measurement|scope=ecsRuntimeTickOnly|warmupTickExcluded=")
+                .Append(PerformanceWarmupBattleTicks)
+                .AppendLine("|excluded=bootstrap,presentationOutbox,validationExport");
+            builder.Append("measurement|collectSystemTimings=")
+                .Append(systemTimings != null && systemTimings.Length > 0 ? "true" : "false")
+                .Append("|systemTimingRows=")
+                .Append(systemTimings?.Length ?? 0)
+                .Append("|captureAssertionLog=")
+                .Append(captureAssertionLog ? "true" : "false")
+                .Append("|exportTextLogs=")
+                .Append(exportTextLogs ? "true" : "false")
+                .Append("|projectRawPresentationOutbox=")
+                .Append(projectRawPresentationOutbox ? "true" : "false")
+                .AppendLine();
+            builder.Append("groupTiming|ticks=")
+                .Append(runtimeTiming.TickCount)
+                .Append("|totalAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageTotalMilliseconds))
+                .Append("|commandAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageCommandMilliseconds))
+                .Append("|resetDirtyAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageResetDirtyMilliseconds))
+                .Append("|tagAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageTagMilliseconds))
+                .Append("|effectAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageEffectMilliseconds))
+                .Append("|attributeAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageAttributeMilliseconds))
+                .Append("|abilityAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageAbilityMilliseconds))
+                .Append("|cueAvgMs=")
+                .Append(FormatDouble(runtimeTiming.AverageCueMilliseconds))
+                .AppendLine();
+            AppendSystemTimingSummary(builder, systemTimings, 20);
+            AppendRuntimeDiagnosticSummary(builder, diagnosticSnapshot);
             builder.Append("events|replay=")
                 .Append(eventCounts.ReplayEvents)
                 .Append("|structured=")
@@ -3515,9 +3926,178 @@ namespace GAS.Runtime
             return value.ToString("G9", CultureInfo.InvariantCulture);
         }
 
+        private static void AppendSystemTimingSummary(
+            StringBuilder builder,
+            HeadlessAutoChessSystemTiming[] systemTimings,
+            int maxRows)
+        {
+            if (systemTimings == null || systemTimings.Length == 0 || maxRows <= 0)
+                return;
+
+            var totalMilliseconds = 0d;
+            var totalCalls = 0;
+            var sub005 = 0;
+            var sub01 = 0;
+            var sub02 = 0;
+            var over02 = 0;
+            for (var i = 0; i < systemTimings.Length; i++)
+            {
+                var timing = systemTimings[i];
+                totalMilliseconds += timing.TotalMilliseconds;
+                totalCalls += timing.CallCount;
+
+                if (timing.AverageMilliseconds < 0.05d)
+                    sub005++;
+                else if (timing.AverageMilliseconds < 0.1d)
+                    sub01++;
+                else if (timing.AverageMilliseconds < 0.2d)
+                    sub02++;
+                else
+                    over02++;
+            }
+
+            builder.Append("systemTimingDistribution|rows=")
+                .Append(systemTimings.Length)
+                .Append("|calls=")
+                .Append(totalCalls)
+                .Append("|totalMs=")
+                .Append(FormatDouble(totalMilliseconds))
+                .Append("|avgPerRowMs=")
+                .Append(FormatDouble(systemTimings.Length > 0 ? totalMilliseconds / systemTimings.Length : 0d))
+                .Append("|rowsAvgLt005Ms=")
+                .Append(sub005)
+                .Append("|rowsAvgLt01Ms=")
+                .Append(sub01)
+                .Append("|rowsAvgLt02Ms=")
+                .Append(sub02)
+                .Append("|rowsAvgGe02Ms=")
+                .Append(over02)
+                .AppendLine();
+
+            var rows = systemTimings.Length < maxRows ? systemTimings.Length : maxRows;
+            for (var i = 0; i < rows; i++)
+            {
+                var timing = systemTimings[i];
+                builder.Append("systemTiming|rank=")
+                    .Append(i + 1)
+                    .Append("|group=")
+                    .Append(timing.GroupName)
+                    .Append("|system=")
+                    .Append(timing.SystemName)
+                    .Append("|calls=")
+                    .Append(timing.CallCount)
+                    .Append("|totalMs=")
+                    .Append(FormatDouble(timing.TotalMilliseconds))
+                    .Append("|avgMs=")
+                    .Append(FormatDouble(timing.AverageMilliseconds))
+                    .AppendLine();
+            }
+        }
+
+        private static void AppendRuntimeDiagnosticSummary(
+            StringBuilder builder,
+            in GasRuntimeDiagnosticSnapshot diagnosticSnapshot)
+        {
+            var stats = diagnosticSnapshot.Stats;
+            builder.Append("runtimeDiagnostics|events=")
+                .Append(stats.RetainedEventCount)
+                .Append("|dropped=")
+                .Append(stats.DroppedEventCount)
+                .Append("|warnings=")
+                .Append(stats.WarningCount)
+                .Append("|errors=")
+                .Append(stats.ErrorCount)
+                .Append("|slowSystems=")
+                .Append(stats.SlowSystemCount)
+                .Append("|bufferPressureWarnings=")
+                .Append(stats.BufferPressureWarningCount)
+                .AppendLine();
+
+            var peakTick = default(BGasRuntimeDiagnosticEvent);
+            var peakBuffer = default(BGasRuntimeDiagnosticEvent);
+            var hasPeakTick = false;
+            var hasPeakBuffer = false;
+            var events = diagnosticSnapshot.Events ?? Array.Empty<BGasRuntimeDiagnosticEvent>();
+
+            for (var i = 0; i < events.Length; i++)
+            {
+                var evt = events[i];
+                if (evt.Kind == EGasRuntimeDiagnosticKind.TickSummary
+                    && (!hasPeakTick || evt.ElapsedMicroseconds > peakTick.ElapsedMicroseconds))
+                {
+                    peakTick = evt;
+                    hasPeakTick = true;
+                }
+
+                if (evt.Kind == EGasRuntimeDiagnosticKind.BufferPressure
+                    && (!hasPeakBuffer || evt.Ratio > peakBuffer.Ratio))
+                {
+                    peakBuffer = evt;
+                    hasPeakBuffer = true;
+                }
+            }
+
+            if (hasPeakTick || hasPeakBuffer)
+            {
+                builder.Append("runtimeDiagnosticsPeak");
+                if (hasPeakTick)
+                {
+                    builder.Append("|tickFrame=")
+                        .Append(peakTick.Frame)
+                        .Append("|tickUs=")
+                        .Append(peakTick.ElapsedMicroseconds);
+                }
+
+                if (hasPeakBuffer)
+                {
+                    builder.Append("|bufferFrame=")
+                        .Append(peakBuffer.Frame)
+                        .Append("|buffer=")
+                        .Append(peakBuffer.BufferName)
+                        .Append("|bufferCount=")
+                        .Append(peakBuffer.Count)
+                        .Append("|bufferCapacity=")
+                        .Append(peakBuffer.Capacity)
+                        .Append("|bufferRatio=")
+                        .Append(FormatDouble(peakBuffer.Ratio));
+                }
+
+                builder.AppendLine();
+            }
+
+            var slowRank = 1;
+            for (var i = 0; i < events.Length && slowRank <= 8; i++)
+            {
+                var evt = events[i];
+                if (evt.Kind != EGasRuntimeDiagnosticKind.SystemTiming
+                    || evt.Severity < EGasRuntimeDiagnosticSeverity.Warning)
+                {
+                    continue;
+                }
+
+                builder.Append("runtimeSlowSystem|rank=")
+                    .Append(slowRank)
+                    .Append("|group=")
+                    .Append(evt.GroupName)
+                    .Append("|system=")
+                    .Append(evt.SystemName)
+                    .Append("|severity=")
+                    .Append(evt.Severity)
+                    .Append("|avgUs=")
+                    .Append(evt.ElapsedMicroseconds)
+                    .Append("|totalUs=")
+                    .Append(evt.TotalMicroseconds)
+                    .Append("|calls=")
+                    .Append(evt.CallCount)
+                    .AppendLine();
+                slowRank++;
+            }
+        }
+
         private static HeadlessAutoChessEventCounts CountEvents(
             DynamicBuffer<BDebugReplayEvent> replayLog,
-            int structuredLogEntries)
+            int structuredLogEntries,
+            in HeadlessAutoChessPresentationOutboxCounts presentationOutboxCounts)
         {
             var abilityCommitSucceeded = 0;
             var abilityCommitFailed = 0;
@@ -3573,13 +4153,6 @@ namespace GAS.Runtime
             var summonSpawned = 0;
             var summonExpired = 0;
             var summonDespawned = 0;
-            var presentationUiMarkers = 0;
-            var presentationVfxMarkers = 0;
-            var presentationSfxMarkers = 0;
-            var presentationFloatingTextMarkers = 0;
-            var presentationCueMarkers = 0;
-            var presentationSettlementMarkers = 0;
-
             for (var i = 0; i < replayLog.Length; i++)
             {
                 var evt = replayLog[i];
@@ -3735,24 +4308,6 @@ namespace GAS.Runtime
                             case EGameplayEventType.AutoChessSummonDespawned:
                                 summonDespawned++;
                                 break;
-                            case EGameplayEventType.AutoChessPresentationUiMarker:
-                                presentationUiMarkers++;
-                                break;
-                            case EGameplayEventType.AutoChessPresentationVfxMarker:
-                                presentationVfxMarkers++;
-                                break;
-                            case EGameplayEventType.AutoChessPresentationSfxMarker:
-                                presentationSfxMarkers++;
-                                break;
-                            case EGameplayEventType.AutoChessPresentationFloatingTextMarker:
-                                presentationFloatingTextMarkers++;
-                                break;
-                            case EGameplayEventType.AutoChessPresentationCueMarker:
-                                presentationCueMarkers++;
-                                break;
-                            case EGameplayEventType.AutoChessPresentationSettlementMarker:
-                                presentationSettlementMarkers++;
-                                break;
                         }
                         break;
                     case EDebugReplayEventKind.AttributeChange:
@@ -3833,12 +4388,12 @@ namespace GAS.Runtime
                 summonSpawned,
                 summonExpired,
                 summonDespawned,
-                presentationUiMarkers,
-                presentationVfxMarkers,
-                presentationSfxMarkers,
-                presentationFloatingTextMarkers,
-                presentationCueMarkers,
-                presentationSettlementMarkers);
+                presentationOutboxCounts.UiMarkers,
+                presentationOutboxCounts.VfxMarkers,
+                presentationOutboxCounts.SfxMarkers,
+                presentationOutboxCounts.FloatingTextMarkers,
+                presentationOutboxCounts.CueMarkers,
+                presentationOutboxCounts.SettlementMarkers);
         }
 
         private static void AccumulatePresentationOutbox(ScenarioState state)
@@ -3868,14 +4423,149 @@ namespace GAS.Runtime
 
         private static void TickRuntime()
         {
+            TickRuntimeMeasured();
+        }
+
+        private static RuntimeTickGroupTiming TickRuntimeMeasured(
+            HeadlessAutoChessRuntimeSystemTimingCollector systemTimingCollector = null)
+        {
             var world = GASManager.ExWorld;
-            world.GetExistingSystemManaged<GASCommandGroup>().Update();
-            world.GetExistingSystemManaged<GASResetDirtyGroup>().Update();
-            world.GetExistingSystemManaged<GASTagGroup>().Update();
-            world.GetExistingSystemManaged<GASEffectGroup>().Update();
-            world.GetExistingSystemManaged<GASAttributeGroup>().Update();
-            world.GetExistingSystemManaged<GASAbilityGroup>().Update();
-            world.GetExistingSystemManaged<GASCueGroup>().Update();
+            var command = world.GetExistingSystemManaged<GASCommandGroup>();
+            var resetDirty = world.GetExistingSystemManaged<GASResetDirtyGroup>();
+            var tag = world.GetExistingSystemManaged<GASTagGroup>();
+            var effect = world.GetExistingSystemManaged<GASEffectGroup>();
+            var attribute = world.GetExistingSystemManaged<GASAttributeGroup>();
+            var ability = world.GetExistingSystemManaged<GASAbilityGroup>();
+            var cue = world.GetExistingSystemManaged<GASCueGroup>();
+
+            var totalStartTicks = Stopwatch.GetTimestamp();
+            var commandTicks = UpdateGroupMeasured(command, "Command", systemTimingCollector);
+            var resetDirtyTicks = UpdateGroupMeasured(resetDirty, "ResetDirty", systemTimingCollector);
+            var tagTicks = UpdateGroupMeasured(tag, "Tag", systemTimingCollector);
+            var effectTicks = UpdateGroupMeasured(effect, "Effect", systemTimingCollector);
+            var attributeTicks = UpdateGroupMeasured(attribute, "Attribute", systemTimingCollector);
+            var abilityTicks = UpdateGroupMeasured(ability, "Ability", systemTimingCollector);
+            var cueTicks = UpdateGroupMeasured(cue, "Cue", systemTimingCollector);
+            var totalTicks = Stopwatch.GetTimestamp() - totalStartTicks;
+
+            return new RuntimeTickGroupTiming(
+                totalTicks,
+                commandTicks,
+                resetDirtyTicks,
+                tagTicks,
+                effectTicks,
+                attributeTicks,
+                abilityTicks,
+                cueTicks);
+        }
+
+        private static void RecordRuntimeDiagnostics(in RuntimeTickGroupTiming timing)
+        {
+            var em = GASManager.EntityManager;
+            var debugger = GASManager.EntityRuntimeDebugger;
+            if (debugger == Entity.Null || !em.Exists(debugger))
+                return;
+
+            var frame = GASManager.CurrentFrame;
+            GasRuntimeDebugger.RecordTickTiming(
+                em,
+                debugger,
+                frame,
+                timing.TotalTicks,
+                timing.CommandTicks,
+                timing.ResetDirtyTicks,
+                timing.TagTicks,
+                timing.EffectTicks,
+                timing.AttributeTicks,
+                timing.AbilityTicks,
+                timing.CueTicks,
+                Stopwatch.Frequency);
+            GasRuntimeDebugger.RecordEventBusPressure(
+                em,
+                debugger,
+                GASManager.EntityEventBus,
+                frame);
+        }
+
+        private static void RecordSystemTimingDiagnostics(HeadlessAutoChessSystemTiming[] systemTimings)
+        {
+            if (systemTimings == null || systemTimings.Length == 0)
+                return;
+
+            var em = GASManager.EntityManager;
+            var debugger = GASManager.EntityRuntimeDebugger;
+            if (debugger == Entity.Null || !em.Exists(debugger))
+                return;
+
+            var frame = GASManager.CurrentFrame;
+            for (var i = 0; i < systemTimings.Length; i++)
+            {
+                var timing = systemTimings[i];
+                GasRuntimeDebugger.RecordSystemTimingAggregate(
+                    em,
+                    debugger,
+                    frame,
+                    timing.GroupName,
+                    timing.SystemName,
+                    timing.CallCount,
+                    timing.ElapsedTicks,
+                    Stopwatch.Frequency);
+            }
+        }
+
+        private static long UpdateGroupMeasured(
+            ComponentSystemGroup group,
+            string groupName,
+            HeadlessAutoChessRuntimeSystemTimingCollector systemTimingCollector)
+        {
+            var startTicks = Stopwatch.GetTimestamp();
+            if (systemTimingCollector == null)
+            {
+                group.Update();
+            }
+            else
+            {
+                var systems = systemTimingCollector.GetSystems(group, groupName);
+                for (var i = 0; i < systems.Length; i++)
+                    UpdateSystemMeasured(group.World, systems[i], groupName, systemTimingCollector);
+            }
+
+            return Stopwatch.GetTimestamp() - startTicks;
+        }
+
+        private static long UpdateSystemMeasured(
+            World world,
+            SystemHandle system,
+            string groupName,
+            HeadlessAutoChessRuntimeSystemTimingCollector systemTimingCollector)
+        {
+            var systemTypeIndex = world.Unmanaged.GetSystemTypeIndex(system);
+            var systemName = GetShortSystemName(systemTypeIndex);
+            var managedSystem = world.GetExistingSystemManaged(systemTypeIndex);
+            var childGroup = managedSystem as ComponentSystemGroup;
+
+            if (childGroup != null)
+            {
+                var childGroupName = string.IsNullOrEmpty(groupName)
+                    ? systemName
+                    : groupName + "/" + systemName;
+                return UpdateGroupMeasured(childGroup, childGroupName, systemTimingCollector);
+            }
+
+            var startTicks = Stopwatch.GetTimestamp();
+            system.Update(world.Unmanaged);
+            var elapsedTicks = Stopwatch.GetTimestamp() - startTicks;
+            systemTimingCollector.Record(groupName, systemName, elapsedTicks);
+            return elapsedTicks;
+        }
+
+        private static string GetShortSystemName(SystemTypeIndex systemTypeIndex)
+        {
+            var systemName = TypeManager.GetSystemName(systemTypeIndex).ToString();
+            var separatorIndex = systemName.LastIndexOf('.');
+            return separatorIndex >= 0 && separatorIndex + 1 < systemName.Length
+                ? systemName.Substring(separatorIndex + 1)
+                : systemName;
         }
 
         private static float GetAttribute(Entity asc, int attributeCode)
@@ -4025,7 +4715,7 @@ namespace GAS.Runtime
                 : default;
         }
 
-        private static void ResetObservationState()
+        private static void ResetObservationState(in HeadlessAutoChessOptions normalizedOptions)
         {
             var em = GASManager.EntityManager;
             if (em.Exists(GASManager.EntityGlobalTimer))
@@ -4036,11 +4726,19 @@ namespace GAS.Runtime
                 em.SetComponentData(GASManager.EntityEventBus, new CGameplayEventBus());
                 if (em.HasComponent<CPresentationOutboxProjectionState>(GASManager.EntityEventBus))
                     em.SetComponentData(GASManager.EntityEventBus, new CPresentationOutboxProjectionState());
+                if (em.HasComponent<CPresentationOutboxProjectionOptions>(GASManager.EntityEventBus))
+                {
+                    em.SetComponentData(GASManager.EntityEventBus, new CPresentationOutboxProjectionOptions
+                    {
+                        ProjectRawFacts = normalizedOptions.ProjectRawPresentationOutbox ? (byte)1 : (byte)0,
+                    });
+                }
                 ClearBuffer<BDamageEvent>(em, GASManager.EntityEventBus);
                 ClearBuffer<BTagChangeEvent>(em, GASManager.EntityEventBus);
                 ClearBuffer<BGameplayEvent>(em, GASManager.EntityEventBus);
                 ClearBuffer<BAttributeChangeEvent>(em, GASManager.EntityEventBus);
                 ClearBuffer<BCueRequest>(em, GASManager.EntityEventBus);
+                ClearBuffer<BPresentationOutboxOwner>(em, GASManager.EntityEventBus);
             }
 
             if (em.Exists(GASManager.EntityEventLogSink))
@@ -4048,6 +4746,22 @@ namespace GAS.Runtime
                 em.SetComponentData(GASManager.EntityEventLogSink, new CGameplayEventLogSink());
                 ClearBuffer<BDebugReplayEvent>(em, GASManager.EntityEventLogSink);
             }
+        }
+
+        private static void ResetRuntimeDebugger(in HeadlessAutoChessOptions normalizedOptions)
+        {
+            var em = GASManager.EntityManager;
+            var debugger = GASManager.EntityRuntimeDebugger;
+            if (debugger == Entity.Null || !em.Exists(debugger))
+                return;
+
+            GasRuntimeDebugger.Reset(em, debugger);
+            GasRuntimeDebugger.Configure(
+                em,
+                debugger,
+                enabled: true,
+                captureSystemTimings: normalizedOptions.CollectSystemTimings,
+                captureBufferPressure: true);
         }
 
         private static void ClearBuffer<T>(EntityManager em, Entity entity)
@@ -4072,6 +4786,19 @@ namespace GAS.Runtime
 
             for (var i = 0; i < state.Units.Length; i++)
                 DestroyAscRuntime(em, state.Units[i].Facade.Entity);
+        }
+
+        private static void RestoreDefaultObservationOptions()
+        {
+            var em = GASManager.EntityManager;
+            if (em.Exists(GASManager.EntityEventBus)
+                && em.HasComponent<CPresentationOutboxProjectionOptions>(GASManager.EntityEventBus))
+            {
+                em.SetComponentData(GASManager.EntityEventBus, new CPresentationOutboxProjectionOptions
+                {
+                    ProjectRawFacts = 1,
+                });
+            }
         }
 
         private static void DestroyAscRuntime(EntityManager em, Entity asc)
@@ -4282,6 +5009,41 @@ namespace GAS.Runtime
                     initialHealth);
             }
 
+            public UnitDefinition WithScaleCopy(int copyIndex, int turnOrderOffset)
+            {
+                return new UnitDefinition(
+                    Id + "#" + copyIndex.ToString("D4", CultureInfo.InvariantCulture),
+                    Team,
+                    Slot + copyIndex * 100,
+                    BoardX,
+                    (BoardY + copyIndex) % BoardHeight,
+                    TurnOrder + turnOrderOffset,
+                    Health,
+                    Mana,
+                    PrimaryAbilityCode,
+                    ManaAbilityCode,
+                    ManaAbilityThreshold,
+                    PrimaryTargetPolicy,
+                    ManaTargetPolicy,
+                    ControlAbilityCode,
+                    ControlTargetPolicy,
+                    SupportAbilityCode,
+                    SupportTargetPolicy,
+                    SummonAbilityCode,
+                    MaxActiveSummons,
+                    SynergyCode,
+                    SynergyThreshold,
+                    SynergyAllyBuffGameplayEffectCode,
+                    SynergyEnemyDebuffGameplayEffectCode,
+                    KillManaGainGameplayEffectCode,
+                    ReviveGameplayEffectCode,
+                    MaxReviveCount,
+                    ArcaneResistance,
+                    EquipmentGameplayEffectCode,
+                    CounterDamageGameplayEffectCode,
+                    InitialHealth);
+            }
+
             public int[] CreateAbilityCodes()
             {
                 var codes = new List<int>(5);
@@ -4309,9 +5071,20 @@ namespace GAS.Runtime
             public readonly float Shield;
             public readonly float ArcaneResistance;
             public readonly bool Alive;
+            public readonly bool RevivePending;
+            public readonly int ReviveCount;
 
             public UnitRuntime(UnitDefinition definition)
-                : this(definition, default, definition.Health, definition.Mana, 0f, definition.ArcaneResistance, false)
+                : this(
+                    definition,
+                    default,
+                    definition.Health,
+                    definition.Mana,
+                    0f,
+                    definition.ArcaneResistance,
+                    false,
+                    false,
+                    0)
             {
             }
 
@@ -4322,7 +5095,9 @@ namespace GAS.Runtime
                 float mana,
                 float shield,
                 float arcaneResistance,
-                bool alive)
+                bool alive,
+                bool revivePending,
+                int reviveCount)
             {
                 Definition = definition;
                 Facade = facade;
@@ -4331,11 +5106,22 @@ namespace GAS.Runtime
                 Shield = shield;
                 ArcaneResistance = arcaneResistance;
                 Alive = alive;
+                RevivePending = revivePending;
+                ReviveCount = reviveCount;
             }
 
             public UnitRuntime WithFacade(AbilitySystemFacade facade)
             {
-                return new UnitRuntime(Definition, facade, Health, Mana, Shield, ArcaneResistance, true);
+                return new UnitRuntime(
+                    Definition,
+                    facade,
+                    Health,
+                    Mana,
+                    Shield,
+                    ArcaneResistance,
+                    true,
+                    RevivePending,
+                    ReviveCount);
             }
 
             public UnitRuntime Refresh()
@@ -4344,7 +5130,40 @@ namespace GAS.Runtime
                 var mana = GetAttribute(Facade.Entity, AttributeMana);
                 var shield = GetAttribute(Facade.Entity, AttributeShield);
                 var arcaneResistance = GetAttribute(Facade.Entity, AttributeArcaneResistance);
-                return new UnitRuntime(Definition, Facade, health, mana, shield, arcaneResistance, health > 0f);
+                var revivePending = false;
+                var reviveCount = 0;
+                var em = GASManager.EntityManager;
+                if (Facade.Entity != Entity.Null
+                    && em.Exists(Facade.Entity)
+                    && em.HasComponent<CHeadlessAutoChessPassiveState>(Facade.Entity))
+                {
+                    var passiveState = em.GetComponentData<CHeadlessAutoChessPassiveState>(Facade.Entity);
+                    revivePending = passiveState.RevivePending;
+                    reviveCount = passiveState.ReviveCount;
+                }
+
+                return new UnitRuntime(
+                    Definition,
+                    Facade,
+                    health,
+                    mana,
+                    shield,
+                    arcaneResistance,
+                    health > 0f,
+                    revivePending,
+                    reviveCount);
+            }
+
+            public bool CanStillParticipateInResolution
+            {
+                get
+                {
+                    return Alive
+                           || RevivePending
+                           || (Definition.ReviveGameplayEffectCode > 0
+                               && Definition.MaxReviveCount > 0
+                               && ReviveCount < Definition.MaxReviveCount);
+                }
             }
         }
 

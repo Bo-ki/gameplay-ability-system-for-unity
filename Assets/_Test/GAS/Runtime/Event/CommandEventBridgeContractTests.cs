@@ -126,7 +126,7 @@ namespace GAS.Runtime.Tests.Event
                 {
                     CueEvent = EGameplayCueEvent.Play,
                 });
-                _em.GetBuffer<BPresentationEvent>(asc).Add(new BPresentationEvent
+                EventBusHelper.AppendPresentationEvent(_em, eventBus, asc, new BPresentationEvent
                 {
                     Kind = EPresentationEventKind.GameplayEvent,
                     EventCode = 98002,
@@ -146,6 +146,81 @@ namespace GAS.Runtime.Tests.Event
             {
                 _em.SetComponentData(eventBus, previousState);
                 DestroyIfExists(asc);
+            }
+        }
+
+        [Test]
+        public void GameplayEventBatchAppendsAfterStructuralChangeWithoutReusingInvalidatedBuffers()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var previousState = _em.GetComponentData<CGameplayEventBus>(eventBus);
+            var structuralEntity = Entity.Null;
+
+            try
+            {
+                _em.SetComponentData(eventBus, new CGameplayEventBus
+                {
+                    NextSequence = 10,
+                });
+
+                using (EventBusHelper.BeginGameplayEventBatch(_em, eventBus))
+                {
+                    EventBusHelper.EnqueueGameplayEvent(_em, eventBus, new BGameplayEvent
+                    {
+                        Type = EGameplayEventType.GameplayEffectApplied,
+                        EventCode = 98021,
+                    });
+
+                    structuralEntity = _em.CreateEntity();
+                    _em.AddComponentData(structuralEntity, new CApplyGameplayEffectRequest
+                    {
+                        GameplayEffectCode = 98022,
+                    });
+
+                    EventBusHelper.EnqueueAttributeChangeEvent(_em, eventBus, new BAttributeChangeEvent
+                    {
+                        AttrSetCode = 1,
+                        AttributeCode = 2,
+                        OldValue = 3f,
+                        NewValue = 4f,
+                    });
+                    EventBusHelper.EnqueueCueRequest(_em, eventBus, new BCueRequest
+                    {
+                        CueEvent = EGameplayCueEvent.OnApply,
+                    });
+                    EventBusHelper.EnqueueTagChangeEvent(_em, eventBus, new BTagChangeEvent
+                    {
+                        TagIndex = 5,
+                        Added = true,
+                    });
+                    EventBusHelper.EnqueueDamageEvent(_em, eventBus, new BDamageEvent
+                    {
+                        Amount = 6f,
+                    });
+                    EventBusHelper.EnqueueGameplayEvent(_em, eventBus, new BGameplayEvent
+                    {
+                        Type = EGameplayEventType.GameplayEffectRemoved,
+                        EventCode = 98023,
+                    });
+                }
+
+                var gameplayEvents = _em.GetBuffer<BGameplayEvent>(eventBus);
+                Assert.That(gameplayEvents.Length, Is.EqualTo(2));
+                Assert.That(gameplayEvents[0].Sequence, Is.EqualTo(10));
+                Assert.That(gameplayEvents[1].Sequence, Is.EqualTo(11));
+                Assert.That(gameplayEvents[0].EventCode, Is.EqualTo(98021));
+                Assert.That(gameplayEvents[1].EventCode, Is.EqualTo(98023));
+
+                Assert.That(_em.GetComponentData<CGameplayEventBus>(eventBus).NextSequence, Is.EqualTo(12));
+                Assert.That(_em.GetBuffer<BAttributeChangeEvent>(eventBus).Length, Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BCueRequest>(eventBus).Length, Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BTagChangeEvent>(eventBus).Length, Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BDamageEvent>(eventBus).Length, Is.EqualTo(1));
+            }
+            finally
+            {
+                _em.SetComponentData(eventBus, previousState);
+                DestroyIfExists(structuralEntity);
             }
         }
 

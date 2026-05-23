@@ -75,6 +75,7 @@ namespace GAS.Runtime
             typeof(SAttributeThresholdAbilityLifecycleRequest),
             typeof(SAbilityLifecycleRequest),
             typeof(SAbilityStateCleanup),
+            typeof(SHeadlessAutoChessGameplayEffectFactProjection),
             typeof(SHeadlessAutoChessSummonLifecycle),
             typeof(SHeadlessAutoChessPassiveReaction),
             typeof(SHeadlessAutoChessEnrageReaction),

@@ -13,9 +13,20 @@ namespace GAS.Runtime
 
         public void OnCreate(ref SystemState state)
         {
-            _cleanupQuery = SystemAPI.QueryBuilder()
-                .WithAll<CAbilityBaseInfo, CAbilityRuntimeState>()
-                .Build();
+            _cleanupQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<CAbilityBaseInfo>(),
+                    ComponentType.ReadWrite<CAbilityRuntimeState>(),
+                },
+                Any = new[]
+                {
+                    ComponentType.ReadOnly<CAbilityInTryCancel>(),
+                    ComponentType.ReadOnly<CAbilityInTryEnd>(),
+                },
+            });
+            state.RequireForUpdate(_cleanupQuery);
         }
 
         public void OnUpdate(ref SystemState state)
@@ -23,6 +34,7 @@ namespace GAS.Runtime
             var em = state.EntityManager;
             var abilities = _cleanupQuery.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             foreach (var ability in abilities)
             {

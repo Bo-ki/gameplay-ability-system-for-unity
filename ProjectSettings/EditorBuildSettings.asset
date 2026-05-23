@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/GAS/Runtime/Demo/AutoChess/HeadlessAutoChessDemo.unity
+    guid: 9e5dfd0b465f43f797360f9d6287da64
+  - enabled: 1
     path: Assets/DemoForESC/Scene/Init.unity
     guid: edac8363a1c534b4799e555f89a24386
   - enabled: 0

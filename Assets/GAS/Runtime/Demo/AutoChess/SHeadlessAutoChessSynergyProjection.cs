@@ -25,8 +25,6 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency.Complete();
-
             if (!SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity))
                 return;
 
@@ -34,16 +32,16 @@ namespace GAS.Runtime
             if (!em.Exists(eventBusEntity) || !em.HasBuffer<BGameplayEvent>(eventBusEntity))
                 return;
 
-            using var drivers = _driverQuery.ToEntityArray(Allocator.Temp);
             using var units = _unitQuery.ToEntityArray(Allocator.Temp);
-            if (drivers.Length == 0 || units.Length == 0)
+            if (_driverQuery.IsEmptyIgnoreFilter || units.Length == 0)
                 return;
 
-            var driverEntity = drivers[0];
+            var driverEntity = _driverQuery.GetSingletonEntity();
             var driver = em.GetComponentData<CHeadlessAutoChessDriver>(driverEntity);
             var facts = em.GetComponentData<CHeadlessAutoChessSynergyFacts>(driverEntity);
             var synergyState = em.GetComponentData<CHeadlessAutoChessSynergyState>(driverEntity);
             var frame = ResolveCurrentFrame(em);
+            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
 
             if (facts.LastProjectionFrame != frame)
             {
@@ -275,23 +273,33 @@ namespace GAS.Runtime
             Entity eventBusEntity,
             ref CHeadlessAutoChessSynergyFacts facts)
         {
-            var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
-            var eventCount = gameplayEvents.Length;
-            var start = facts.ProcessedGameplayEventCount > eventCount
-                ? 0
-                : facts.ProcessedGameplayEventCount;
-            using var eventSnapshot = EventBusHelper.CopyBufferRange(
-                gameplayEvents,
-                start,
-                eventCount,
+            using var gameplayEvents = EventBusHelper.SnapshotBufferRange<BGameplayEvent>(
+                em,
+                eventBusEntity,
+                facts.ProcessedGameplayEventCount,
+                Allocator.Temp,
+                out var eventCount);
+            using var appliedEffects = new NativeParallelHashSet<Entity>(
+                gameplayEvents.Length,
                 Allocator.Temp);
 
-            for (var i = 0; i < eventSnapshot.Length; i++)
+            for (var i = 0; i < gameplayEvents.Length; i++)
             {
-                var evt = eventSnapshot[i];
+                var evt = gameplayEvents[i];
+                if (evt.Type == EGameplayEventType.GameplayEffectApplied
+                    && evt.GameplayEffect != Entity.Null)
+                {
+                    appliedEffects.Add(evt.GameplayEffect);
+                }
+            }
+
+            for (var i = 0; i < gameplayEvents.Length; i++)
+            {
+                var evt = gameplayEvents[i];
                 if (evt.Type != EGameplayEventType.GameplayEffectInstanced
                     || evt.EventCode != HeadlessAutoChessScenario.GameplayEffectArcaneStormPeriodDamage
-                    || !HasAppliedEvent(eventSnapshot, evt.GameplayEffect))
+                    || evt.GameplayEffect == Entity.Null
+                    || !appliedEffects.Contains(evt.GameplayEffect))
                 {
                     continue;
                 }
@@ -315,26 +323,6 @@ namespace GAS.Runtime
                                                 && em.HasBuffer<BGameplayEvent>(eventBusEntity)
                 ? em.GetBuffer<BGameplayEvent>(eventBusEntity).Length
                 : eventCount;
-        }
-
-        private static bool HasAppliedEvent(
-            NativeArray<BGameplayEvent> gameplayEvents,
-            Entity gameplayEffect)
-        {
-            if (gameplayEffect == Entity.Null)
-                return false;
-
-            for (var i = 0; i < gameplayEvents.Length; i++)
-            {
-                var evt = gameplayEvents[i];
-                if (evt.Type == EGameplayEventType.GameplayEffectApplied
-                    && evt.GameplayEffect == gameplayEffect)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private static void EmitSynergyExpired(
@@ -365,7 +353,8 @@ namespace GAS.Runtime
             if (source == Entity.Null || target == Entity.Null || gameplayEffectCode <= 0)
                 return;
 
-            var request = GameplayEffectRequestWriter.Create(
+            var targetKind = source == target ? ETargetDataKind.Self : ETargetDataKind.Entity;
+            GameplayEffectRequestWriter.ApplyFastOrCreateSingleTargetRequest(
                 em,
                 new CApplyGameplayEffectRequest
                 {
@@ -375,13 +364,9 @@ namespace GAS.Runtime
                     GameplayEffectCode = gameplayEffectCode,
                     Level = 1,
                 },
-                new CTargetDataHeader
-                {
-                    SourceAsc = source,
-                    Kind = source == target ? ETargetDataKind.Self : ETargetDataKind.Entity,
-                },
+                target,
+                targetKind,
                 namePrefix);
-            GameplayEffectRequestWriter.AddTarget(em, request, target);
         }
 
         private static bool TryGetAliveUnit(
