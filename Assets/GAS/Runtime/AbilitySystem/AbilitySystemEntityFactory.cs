@@ -2,7 +2,7 @@ using Unity.Entities;
 
 namespace GAS.Runtime
 {
-    internal static class AbilitySystemEntityFactory
+    public static class AbilitySystemEntityFactory
     {
         private const int AttributeCapacity = 32;
         private const int ActiveModifierCapacity = 32;

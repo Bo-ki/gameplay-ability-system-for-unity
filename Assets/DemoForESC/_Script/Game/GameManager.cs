@@ -1,4 +1,4 @@
-using Cinemachine;
+using Unity.Cinemachine;
 using DemoForESC._Script.UI.View;
 using DemoForESC._Script.UI.ViewModel;
 using EXUI;

@@ -675,7 +675,7 @@ namespace GAS.Runtime
             return GameplayEffectEntityFactory.InstantiateFromPrototype(entityManager, prototype);
         }
 
-        internal static bool TryWarmupRuntimePrototype(
+        public static bool TryWarmupRuntimePrototype(
             EntityManager entityManager,
             int gameplayEffectCode,
             ConfigRegistryReferenceContext context = default)
