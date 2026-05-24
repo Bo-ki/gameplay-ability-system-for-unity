@@ -4,8 +4,177 @@ using Unity.Entities;
 
 namespace GAS.Runtime
 {
+    public enum EGasRuntimeCoreFramePhase : byte
+    {
+        FramePrepare = 0,
+        CommandIngest = 1,
+        SpecEvaluation = 2,
+        ActiveEffectLifecycle = 3,
+        DeltaApply = 4,
+        TypedFactProjection = 5,
+        StructuralPlayback = 6,
+        ObservationProjection = 7,
+    }
+
+    public enum EGasRuntimeCoreStructuralPermission : byte
+    {
+        None = 0,
+        RecordOnly = 1,
+        PlaybackOnly = 2,
+    }
+
+    [Flags]
+    public enum EGasRuntimeCorePhaseAccess : int
+    {
+        None = 0,
+        FrameState = 1 << 0,
+        CommandStream = 1 << 1,
+        SpecStream = 1 << 2,
+        ActiveEffectStore = 1 << 3,
+        AttributeState = 1 << 4,
+        DeltaStream = 1 << 5,
+        FactStream = 1 << 6,
+        StructuralMutation = 1 << 7,
+        Observation = 1 << 8,
+    }
+
+    public readonly struct GASRuntimeCoreFramePhaseContract
+    {
+        public GASRuntimeCoreFramePhaseContract(
+            EGasRuntimeCoreFramePhase phase,
+            Type currentGroupType,
+            EGasRuntimeCorePhaseAccess reads,
+            EGasRuntimeCorePhaseAccess writes,
+            EGasRuntimeCoreStructuralPermission structuralPermission,
+            bool observationBoundary = false,
+            bool contractOnly = true)
+        {
+            Phase = phase;
+            CurrentGroupType = currentGroupType;
+            Reads = reads;
+            Writes = writes;
+            StructuralPermission = structuralPermission;
+            ObservationBoundary = observationBoundary;
+            ContractOnly = contractOnly;
+        }
+
+        public EGasRuntimeCoreFramePhase Phase { get; }
+
+        public Type CurrentGroupType { get; }
+
+        public EGasRuntimeCorePhaseAccess Reads { get; }
+
+        public EGasRuntimeCorePhaseAccess Writes { get; }
+
+        public EGasRuntimeCoreStructuralPermission StructuralPermission { get; }
+
+        public bool ObservationBoundary { get; }
+
+        public bool ContractOnly { get; }
+    }
+
+    public readonly struct GASRuntimeCoreFramePhaseSystemContract
+    {
+        public GASRuntimeCoreFramePhaseSystemContract(
+            Type systemType,
+            EGasRuntimeCoreFramePhase phase,
+            Type currentGroupType,
+            bool contractOnly = true)
+        {
+            SystemType = systemType;
+            Phase = phase;
+            CurrentGroupType = currentGroupType;
+            ContractOnly = contractOnly;
+        }
+
+        public Type SystemType { get; }
+
+        public EGasRuntimeCoreFramePhase Phase { get; }
+
+        public Type CurrentGroupType { get; }
+
+        public bool ContractOnly { get; }
+    }
+
     public static class GASSystemScheduleContract
     {
+        private static readonly GASRuntimeCoreFramePhaseContract[] RuntimeCoreFramePhaseContracts =
+        {
+            new GASRuntimeCoreFramePhaseContract(
+                EGasRuntimeCoreFramePhase.FramePrepare,
+                typeof(GASCommandGroup),
+                EGasRuntimeCorePhaseAccess.FrameState,
+                EGasRuntimeCorePhaseAccess.FrameState,
+                EGasRuntimeCoreStructuralPermission.RecordOnly),
+            new GASRuntimeCoreFramePhaseContract(
+                EGasRuntimeCoreFramePhase.CommandIngest,
+                typeof(GASCommandGroup),
+                EGasRuntimeCorePhaseAccess.FrameState,
+                EGasRuntimeCorePhaseAccess.CommandStream,
+                EGasRuntimeCoreStructuralPermission.None),
+            new GASRuntimeCoreFramePhaseContract(
+                EGasRuntimeCoreFramePhase.SpecEvaluation,
+                typeof(GASCommandGroup),
+                EGasRuntimeCorePhaseAccess.CommandStream,
+                EGasRuntimeCorePhaseAccess.SpecStream,
+                EGasRuntimeCoreStructuralPermission.None),
+            new GASRuntimeCoreFramePhaseContract(
+                EGasRuntimeCoreFramePhase.ActiveEffectLifecycle,
+                typeof(GASEffectGroup),
+                EGasRuntimeCorePhaseAccess.ActiveEffectStore | EGasRuntimeCorePhaseAccess.SpecStream,
+                EGasRuntimeCorePhaseAccess.ActiveEffectStore | EGasRuntimeCorePhaseAccess.StructuralMutation,
+                EGasRuntimeCoreStructuralPermission.RecordOnly),
+            new GASRuntimeCoreFramePhaseContract(
+                EGasRuntimeCoreFramePhase.DeltaApply,
+                typeof(GASAttributeGroup),
+                EGasRuntimeCorePhaseAccess.SpecStream | EGasRuntimeCorePhaseAccess.ActiveEffectStore,
+                EGasRuntimeCorePhaseAccess.AttributeState | EGasRuntimeCorePhaseAccess.DeltaStream,
+                EGasRuntimeCoreStructuralPermission.None),
+            new GASRuntimeCoreFramePhaseContract(
+                EGasRuntimeCoreFramePhase.TypedFactProjection,
+                typeof(GASAttributeGroup),
+                EGasRuntimeCorePhaseAccess.DeltaStream | EGasRuntimeCorePhaseAccess.AttributeState,
+                EGasRuntimeCorePhaseAccess.FactStream,
+                EGasRuntimeCoreStructuralPermission.None),
+            new GASRuntimeCoreFramePhaseContract(
+                EGasRuntimeCoreFramePhase.StructuralPlayback,
+                typeof(GASEffectGroup),
+                EGasRuntimeCorePhaseAccess.StructuralMutation,
+                EGasRuntimeCorePhaseAccess.FrameState,
+                EGasRuntimeCoreStructuralPermission.PlaybackOnly),
+            new GASRuntimeCoreFramePhaseContract(
+                EGasRuntimeCoreFramePhase.ObservationProjection,
+                typeof(GASCueGroup),
+                EGasRuntimeCorePhaseAccess.FactStream | EGasRuntimeCorePhaseAccess.AttributeState,
+                EGasRuntimeCorePhaseAccess.Observation,
+                EGasRuntimeCoreStructuralPermission.None,
+                observationBoundary: true),
+        };
+
+        private static readonly GASRuntimeCoreFramePhaseSystemContract[] RuntimeCoreFramePhaseSystemContracts =
+        {
+            new GASRuntimeCoreFramePhaseSystemContract(
+                typeof(SEffectCommandIngest),
+                EGasRuntimeCoreFramePhase.CommandIngest,
+                typeof(GASCommandGroup)),
+            new GASRuntimeCoreFramePhaseSystemContract(
+                typeof(SInstantEffectSpecBuild),
+                EGasRuntimeCoreFramePhase.SpecEvaluation,
+                typeof(GASCommandGroup)),
+            new GASRuntimeCoreFramePhaseSystemContract(
+                typeof(SActiveEffectMutationApply),
+                EGasRuntimeCoreFramePhase.ActiveEffectLifecycle,
+                typeof(GASCommandGroup)),
+            new GASRuntimeCoreFramePhaseSystemContract(
+                typeof(SAttributeDeltaApply),
+                EGasRuntimeCoreFramePhase.DeltaApply,
+                typeof(GASCommandGroup)),
+            new GASRuntimeCoreFramePhaseSystemContract(
+                typeof(STypedSimulationFactProjection),
+                EGasRuntimeCoreFramePhase.TypedFactProjection,
+                typeof(GASCommandGroup)),
+        };
+
         private static readonly Type[] FixedStepGroupTypes =
         {
             typeof(GASCommandGroup),
@@ -25,13 +194,17 @@ namespace GAS.Runtime
             typeof(SAscInitializeRequest),
             typeof(SAscCommandRequest),
             typeof(SHeadlessAutoBattleDriver),
-            typeof(SHeadlessAutoChessDriver),
             typeof(SAbilityCommandRequest),
             typeof(STryActivateAbility),
             typeof(SAbilityCommit),
             typeof(SAbilityTimelineAction),
             typeof(SAbilityTimelineLifecycleRequest),
             typeof(SRemoveGameplayEffectRequest),
+            typeof(SEffectCommandIngest),
+            typeof(SInstantEffectSpecBuild),
+            typeof(SActiveEffectMutationApply),
+            typeof(SAttributeDeltaApply),
+            typeof(STypedSimulationFactProjection),
             typeof(SAscDestroyRequest),
             typeof(SApplyGameplayEffectRequest),
             typeof(SExecutionCalculation),
@@ -39,10 +212,18 @@ namespace GAS.Runtime
             typeof(SExecutionCalculationOutputModifier),
         };
 
+        private static readonly Type[] EffectCommandSpecStreamTargetSystemTypes =
+        {
+            typeof(SEffectCommandIngest),
+            typeof(SInstantEffectSpecBuild),
+            typeof(SActiveEffectMutationApply),
+            typeof(SAttributeDeltaApply),
+            typeof(STypedSimulationFactProjection),
+        };
+
         private static readonly Type[] ExecutionCalculationExtensionSystemTypes =
         {
             typeof(SHeadlessAutoBattleExecuteCalculation),
-            typeof(SHeadlessAutoChessShieldDamageCalculation),
         };
 
         private static readonly Type[] ResetDirtySystemTypes =
@@ -66,7 +247,6 @@ namespace GAS.Runtime
         {
             typeof(SAttributeRecalculate),
             typeof(SAttributeChangeEventProjection),
-            typeof(SHeadlessAutoChessBattleFactProjection),
         };
 
         private static readonly Type[] AbilitySystemTypes =
@@ -75,23 +255,10 @@ namespace GAS.Runtime
             typeof(SAttributeThresholdAbilityLifecycleRequest),
             typeof(SAbilityLifecycleRequest),
             typeof(SAbilityStateCleanup),
-            typeof(SHeadlessAutoChessGameplayEffectFactProjection),
-            typeof(SHeadlessAutoChessSummonLifecycle),
-            typeof(SHeadlessAutoChessPassiveReaction),
-            typeof(SHeadlessAutoChessEnrageReaction),
-            typeof(SHeadlessAutoChessCounterReaction),
-            typeof(SHeadlessAutoChessCleanseReaction),
-            typeof(SHeadlessAutoChessRallyComboReaction),
-            typeof(SHeadlessAutoChessLifeStealReaction),
-            typeof(SHeadlessAutoChessPoisonReaction),
-            typeof(SHeadlessAutoChessExecuteReaction),
-            typeof(SHeadlessAutoChessDeathBurstReaction),
-            typeof(SHeadlessAutoChessSynergyProjection),
         };
 
         private static readonly Type[] CueSystemTypes =
         {
-            typeof(SHeadlessAutoChessPresentationCueMarkerProjection),
             typeof(SPresentationOutboxProjection),
             typeof(SDebugReplayLogProjection),
             typeof(SCueRequestBridge),
@@ -104,7 +271,16 @@ namespace GAS.Runtime
 
         public static IReadOnlyList<Type> FixedStepGroups => FixedStepGroupTypes;
 
+        public static IReadOnlyList<GASRuntimeCoreFramePhaseContract> RuntimeCoreFramePhases =>
+            RuntimeCoreFramePhaseContracts;
+
+        public static IReadOnlyList<GASRuntimeCoreFramePhaseSystemContract> RuntimeCoreFramePhaseSystems =>
+            RuntimeCoreFramePhaseSystemContracts;
+
         public static IReadOnlyList<Type> CommandSystems => CommandSystemTypes;
+
+        public static IReadOnlyList<Type> EffectCommandSpecStreamTargetSystems =>
+            EffectCommandSpecStreamTargetSystemTypes;
 
         public static IReadOnlyList<Type> ExecutionCalculationExtensionSystems => ExecutionCalculationExtensionSystemTypes;
 
@@ -119,6 +295,24 @@ namespace GAS.Runtime
         public static IReadOnlyList<Type> AbilitySystems => AbilitySystemTypes;
 
         public static IReadOnlyList<Type> CueSystems => CueSystemTypes;
+
+        public static bool TryGetRuntimeCoreFramePhase(
+            Type systemType,
+            out EGasRuntimeCoreFramePhase phase)
+        {
+            for (var i = 0; i < RuntimeCoreFramePhaseSystemContracts.Length; i++)
+            {
+                var contract = RuntimeCoreFramePhaseSystemContracts[i];
+                if (contract.SystemType != systemType)
+                    continue;
+
+                phase = contract.Phase;
+                return true;
+            }
+
+            phase = default;
+            return false;
+        }
 
         public static GASSystemGroups CreateFixedStepGroups(
             World world,

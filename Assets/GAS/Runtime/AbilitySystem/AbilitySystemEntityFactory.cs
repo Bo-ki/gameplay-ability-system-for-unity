@@ -9,6 +9,7 @@ namespace GAS.Runtime
         private const int GrantedAbilityCapacity = 16;
         private const int TagSourceCapacity = 32;
         private const int GameplayEffectCapacity = 32;
+        private const int ActiveEffectSlotInitialCapacity = ActiveEffectStore.InlineSlotCapacity;
         private const int PresentationEventCapacity = 512;
 
         public static Entity Create(EntityManager entityManager)
@@ -37,6 +38,8 @@ namespace GAS.Runtime
             entityManager.AddBuffer<BFixedTagSource>(asc).EnsureCapacity(TagSourceCapacity);
             entityManager.AddBuffer<BTempTagSource>(asc).EnsureCapacity(TagSourceCapacity);
             entityManager.AddBuffer<BGameplayEffect>(asc).EnsureCapacity(GameplayEffectCapacity);
+            entityManager.AddComponentData(asc, ActiveEffectStore.CreateDefault());
+            entityManager.AddBuffer<BActiveEffectSlot>(asc).EnsureCapacity(ActiveEffectSlotInitialCapacity);
             entityManager.AddBuffer<BPresentationEvent>(asc).EnsureCapacity(PresentationEventCapacity);
         }
 
@@ -50,6 +53,8 @@ namespace GAS.Runtime
             commandBuffer.AddBuffer<BFixedTagSource>(asc).EnsureCapacity(TagSourceCapacity);
             commandBuffer.AddBuffer<BTempTagSource>(asc).EnsureCapacity(TagSourceCapacity);
             commandBuffer.AddBuffer<BGameplayEffect>(asc).EnsureCapacity(GameplayEffectCapacity);
+            commandBuffer.AddComponent(asc, ActiveEffectStore.CreateDefault());
+            commandBuffer.AddBuffer<BActiveEffectSlot>(asc).EnsureCapacity(ActiveEffectSlotInitialCapacity);
             commandBuffer.AddBuffer<BPresentationEvent>(asc).EnsureCapacity(PresentationEventCapacity);
         }
     }

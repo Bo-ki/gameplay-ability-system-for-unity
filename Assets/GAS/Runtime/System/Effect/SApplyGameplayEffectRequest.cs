@@ -4,8 +4,12 @@ using Unity.Entities;
 namespace GAS.Runtime
 {
     /// <summary>
-    /// 消费 Ability / 外部命令写入的 GE 施加请求，创建带上下文的 GE instance。
+    /// 消费 Ability / 外部命令写入的旧 GE 施加请求，创建带上下文的 GE instance。
     /// </summary>
+    /// <remarks>
+    /// AM0 冻结门：该系统属于 LegacyInstantEntityLifecycle 待迁移路径。新业务默认应接入
+    /// EffectCommand / InstantEffectSpec / AttributeDelta，而不是继续扩展这里的 direct instant bypass。
+    /// </remarks>
     [UpdateInGroup(typeof(GASCommandGroup))]
     [UpdateAfter(typeof(SAbilityCommit))]
     public partial struct SApplyGameplayEffectRequest : ISystem
@@ -187,7 +191,7 @@ namespace GAS.Runtime
                 return;
 
             var context = CreateContext(em, request, target, targetKind, hasEventBus, eventBusEntity);
-            if (TryApplyFastInstantModifier(
+            if (TryApplyLegacyInstantModifierBypass(
                     em,
                     requestEntity,
                     request,
@@ -236,13 +240,13 @@ namespace GAS.Runtime
             EnqueueEffectInstancedEvent(em, hasEventBus, eventBusEntity, ge, context, request.GameplayEffectCode);
         }
 
-        internal static bool TryApplyFastInstantModifierDirect(
+        internal static bool TryApplyLegacyInstantModifierBypassDirect(
             EntityManager em,
             in CApplyGameplayEffectRequest request,
             Entity target,
             ETargetDataKind targetKind)
         {
-            return TryApplyFastInstantModifierDirect(
+            return TryApplyLegacyInstantModifierBypassDirect(
                 em,
                 request,
                 target,
@@ -251,14 +255,14 @@ namespace GAS.Runtime
                 default);
         }
 
-        internal static bool TryApplyFastInstantModifierDirect(
+        internal static bool TryApplyLegacyInstantModifierBypassDirect(
             EntityManager em,
             in CApplyGameplayEffectRequest request,
             Entity target,
             ETargetDataKind targetKind,
             in BSetByCallerValue setByCallerValue)
         {
-            return TryApplyFastInstantModifierDirect(
+            return TryApplyLegacyInstantModifierBypassDirect(
                 em,
                 request,
                 target,
@@ -267,7 +271,7 @@ namespace GAS.Runtime
                 setByCallerValue);
         }
 
-        private static bool TryApplyFastInstantModifierDirect(
+        private static bool TryApplyLegacyInstantModifierBypassDirect(
             EntityManager em,
             in CApplyGameplayEffectRequest request,
             Entity target,
@@ -286,7 +290,7 @@ namespace GAS.Runtime
                 return false;
             }
 
-            if (!TryPrepareFastInstantModifiers(
+            if (!TryPrepareLegacyInstantModifierBypass(
                     em,
                     Entity.Null,
                     request,
@@ -300,7 +304,7 @@ namespace GAS.Runtime
 
             var context = CreateContext(em, request, target, targetKind, eventBusEntity);
             ref var definition = ref blob.Value;
-            ApplyPreparedFastInstantModifiers(
+            ApplyPreparedLegacyInstantModifierBypass(
                 em,
                 request,
                 context,
@@ -333,7 +337,7 @@ namespace GAS.Runtime
             };
         }
 
-        private static bool TryApplyFastInstantModifier(
+        private static bool TryApplyLegacyInstantModifierBypass(
             EntityManager em,
             Entity requestEntity,
             in CApplyGameplayEffectRequest request,
@@ -343,7 +347,7 @@ namespace GAS.Runtime
             bool hasDirectSetByCaller,
             in BSetByCallerValue directSetByCaller)
         {
-            if (!TryPrepareFastInstantModifiers(
+            if (!TryPrepareLegacyInstantModifierBypass(
                     em,
                     requestEntity,
                     request,
@@ -356,7 +360,7 @@ namespace GAS.Runtime
             }
 
             ref var definition = ref blob.Value;
-            ApplyPreparedFastInstantModifiers(
+            ApplyPreparedLegacyInstantModifierBypass(
                 em,
                 request,
                 context,
@@ -368,7 +372,7 @@ namespace GAS.Runtime
             return true;
         }
 
-        private static bool TryPrepareFastInstantModifiers(
+        private static bool TryPrepareLegacyInstantModifierBypass(
             EntityManager em,
             Entity requestEntity,
             in CApplyGameplayEffectRequest request,
@@ -393,19 +397,19 @@ namespace GAS.Runtime
             }
 
             ref var definition = ref blob.Value;
-            if (!CanApplyFastInstantModifiers(ref definition))
+            if (!CanApplyLegacyInstantModifierBypass(ref definition))
                 return false;
 
             for (var i = 0; i < definition.Modifiers.Length; i++)
             {
-                if (!CanResolveFastModifierMagnitude(in definition.Modifiers[i]))
+                if (!CanResolveLegacyInstantMagnitude(in definition.Modifiers[i]))
                     return false;
             }
 
             return true;
         }
 
-        private static void ApplyPreparedFastInstantModifiers(
+        private static void ApplyPreparedLegacyInstantModifierBypass(
             EntityManager em,
             in CApplyGameplayEffectRequest request,
             in CEffectContext context,
@@ -422,8 +426,8 @@ namespace GAS.Runtime
                 Entity.Null,
                 context,
                 request.GameplayEffectCode);
-            EnqueueFastCueRequestOnApply(em, eventBusEntity, context, ref definition);
-            ApplyFastInstantModifiers(
+            EnqueueLegacyInstantCueRequestOnApply(em, eventBusEntity, context, ref definition);
+            ApplyLegacyInstantModifiers(
                 em,
                 eventBusEntity,
                 context,
@@ -432,10 +436,10 @@ namespace GAS.Runtime
                 hasDirectSetByCaller,
                 directSetByCaller,
                 request.GameplayEffectCode);
-            EnqueueFastGameplayEffectAppliedEvent(em, eventBusEntity, context, request.GameplayEffectCode);
+            EnqueueLegacyInstantGameplayEffectAppliedEvent(em, eventBusEntity, context, request.GameplayEffectCode);
         }
 
-        private static bool CanApplyFastInstantModifiers(ref GEStaticDefinitionBlob definition)
+        private static bool CanApplyLegacyInstantModifierBypass(ref GEStaticDefinitionBlob definition)
         {
             if (definition.HasDuration
                 || definition.HasPeriod
@@ -453,20 +457,20 @@ namespace GAS.Runtime
 
             for (var i = 0; i < definition.Modifiers.Length; i++)
             {
-                if (!CanResolveFastModifierMagnitude(in definition.Modifiers[i]))
+                if (!CanResolveLegacyInstantMagnitude(in definition.Modifiers[i]))
                     return false;
             }
 
             return true;
         }
 
-        private static bool CanResolveFastModifierMagnitude(in GEModifierDefinition modifier)
+        private static bool CanResolveLegacyInstantMagnitude(in GEModifierDefinition modifier)
         {
             return modifier.MagnitudeSource == EMagnitudeSource.Constant
                    || modifier.MagnitudeSource == EMagnitudeSource.SetByCaller;
         }
 
-        private static bool TryResolveFastModifierMagnitude(
+        private static bool TryResolveLegacyInstantMagnitude(
             EntityManager em,
             Entity requestEntity,
             bool hasDirectSetByCaller,
@@ -477,7 +481,7 @@ namespace GAS.Runtime
             switch (modifier.MagnitudeSource)
             {
                 case EMagnitudeSource.Constant:
-                    magnitude = ApplyFastMagnitudeTransform(modifier.Magnitude, in modifier);
+                    magnitude = ApplyLegacyInstantMagnitudeTransform(modifier.Magnitude, in modifier);
                     return true;
                 case EMagnitudeSource.SetByCaller:
                     var value = modifier.FallbackMagnitude;
@@ -495,7 +499,7 @@ namespace GAS.Runtime
                         value = requestValue;
                     }
 
-                    magnitude = ApplyFastMagnitudeTransform(value, in modifier);
+                    magnitude = ApplyLegacyInstantMagnitudeTransform(value, in modifier);
                     return true;
                 default:
                     magnitude = 0f;
@@ -503,13 +507,13 @@ namespace GAS.Runtime
             }
         }
 
-        private static float ApplyFastMagnitudeTransform(float rawMagnitude, in GEModifierDefinition modifier)
+        private static float ApplyLegacyInstantMagnitudeTransform(float rawMagnitude, in GEModifierDefinition modifier)
         {
             var coefficient = modifier.Coefficient == 0f ? 1f : modifier.Coefficient;
             return ((rawMagnitude + modifier.PreAdd) * coefficient) + modifier.PostAdd;
         }
 
-        private static void ApplyFastInstantModifiers(
+        private static void ApplyLegacyInstantModifiers(
             EntityManager em,
             Entity eventBusEntity,
             in CEffectContext context,
@@ -528,7 +532,7 @@ namespace GAS.Runtime
             for (var i = 0; i < definition.Modifiers.Length; i++)
             {
                 var modifier = definition.Modifiers[i];
-                if (!TryResolveFastModifierMagnitude(
+                if (!TryResolveLegacyInstantMagnitude(
                     em,
                     requestEntity,
                     hasDirectSetByCaller,
@@ -582,7 +586,7 @@ namespace GAS.Runtime
             }
         }
 
-        private static void EnqueueFastCueRequestOnApply(
+        private static void EnqueueLegacyInstantCueRequestOnApply(
             EntityManager em,
             Entity eventBusEntity,
             in CEffectContext context,
@@ -616,7 +620,7 @@ namespace GAS.Runtime
             });
         }
 
-        private static void EnqueueFastGameplayEffectAppliedEvent(
+        private static void EnqueueLegacyInstantGameplayEffectAppliedEvent(
             EntityManager em,
             Entity eventBusEntity,
             in CEffectContext context,

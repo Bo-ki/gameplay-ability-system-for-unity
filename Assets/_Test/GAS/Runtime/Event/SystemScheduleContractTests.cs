@@ -67,7 +67,6 @@ namespace GAS.Runtime.Tests.Event
             var commandSystems = GASSystemScheduleContract.CommandSystems;
 
             Assert.That(IndexOf<SHeadlessAutoBattleDriver>(commandSystems), Is.LessThan(IndexOf<SAbilityCommandRequest>(commandSystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessDriver>(commandSystems), Is.LessThan(IndexOf<SAbilityCommandRequest>(commandSystems)));
             Assert.That(IndexOf<STryActivateAbility>(commandSystems), Is.LessThan(IndexOf<SAbilityCommit>(commandSystems)));
             Assert.That(IndexOf<SAbilityCommit>(commandSystems), Is.LessThan(IndexOf<SAbilityTimelineAction>(commandSystems)));
             Assert.That(IndexOf<SAbilityCommit>(commandSystems), Is.LessThan(IndexOf<SApplyGameplayEffectRequest>(commandSystems)));
@@ -92,7 +91,6 @@ namespace GAS.Runtime.Tests.Event
             Assert.That(IndexOf<SExecutionCalculation>(commandSystems), Is.LessThan(IndexOf<GASExecutionCalculationExtensionGroup>(commandSystems)));
             Assert.That(IndexOf<GASExecutionCalculationExtensionGroup>(commandSystems), Is.LessThan(IndexOf<SExecutionCalculationOutputModifier>(commandSystems)));
             Assert.That(IndexOf<SHeadlessAutoBattleExecuteCalculation>(extensionSystems), Is.GreaterThanOrEqualTo(0));
-            Assert.That(IndexOf<SHeadlessAutoChessShieldDamageCalculation>(extensionSystems), Is.GreaterThanOrEqualTo(0));
         }
 
         [Test]
@@ -103,35 +101,118 @@ namespace GAS.Runtime.Tests.Event
             Assert.That(IndexOf<SAbilityTick>(abilitySystems), Is.LessThan(IndexOf<SAttributeThresholdAbilityLifecycleRequest>(abilitySystems)));
             Assert.That(IndexOf<SAttributeThresholdAbilityLifecycleRequest>(abilitySystems), Is.LessThan(IndexOf<SAbilityLifecycleRequest>(abilitySystems)));
             Assert.That(IndexOf<SAbilityLifecycleRequest>(abilitySystems), Is.LessThan(IndexOf<SAbilityStateCleanup>(abilitySystems)));
-            Assert.That(IndexOf<SAbilityStateCleanup>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessGameplayEffectFactProjection>(abilitySystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessGameplayEffectFactProjection>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessSummonLifecycle>(abilitySystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessSummonLifecycle>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessPassiveReaction>(abilitySystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessPassiveReaction>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessEnrageReaction>(abilitySystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessEnrageReaction>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessCounterReaction>(abilitySystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessCounterReaction>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessCleanseReaction>(abilitySystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessCleanseReaction>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessRallyComboReaction>(abilitySystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessRallyComboReaction>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessLifeStealReaction>(abilitySystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessLifeStealReaction>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessPoisonReaction>(abilitySystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessPoisonReaction>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessExecuteReaction>(abilitySystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessExecuteReaction>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessDeathBurstReaction>(abilitySystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessDeathBurstReaction>(abilitySystems), Is.LessThan(IndexOf<SHeadlessAutoChessSynergyProjection>(abilitySystems)));
         }
 
         [Test]
-        public void AutoChessBattleFactProjectionRunsAfterAttributeChangeProjection()
+        public void GasRuntimeScheduleContractDoesNotOwnAutoChessDemoSystems()
         {
-            var attributeSystems = GASSystemScheduleContract.AttributeSystems;
-
-            Assert.That(IndexOf<SAttributeChangeEventProjection>(attributeSystems), Is.LessThan(IndexOf<SHeadlessAutoChessBattleFactProjection>(attributeSystems)));
+            AssertNoScheduleOverlap(
+                HeadlessAutoChessRuntimeSystemBootstrap.CommandSystems,
+                GASSystemScheduleContract.CommandSystems,
+                nameof(GASCommandGroup));
+            AssertNoScheduleOverlap(
+                HeadlessAutoChessRuntimeSystemBootstrap.ExecutionCalculationExtensionSystems,
+                GASSystemScheduleContract.ExecutionCalculationExtensionSystems,
+                nameof(GASExecutionCalculationExtensionGroup));
+            AssertNoScheduleOverlap(
+                HeadlessAutoChessRuntimeSystemBootstrap.AttributeSystems,
+                GASSystemScheduleContract.AttributeSystems,
+                nameof(GASAttributeGroup));
+            AssertNoScheduleOverlap(
+                HeadlessAutoChessRuntimeSystemBootstrap.AbilitySystems,
+                GASSystemScheduleContract.AbilitySystems,
+                nameof(GASAbilityGroup));
+            AssertNoScheduleOverlap(
+                HeadlessAutoChessRuntimeSystemBootstrap.CueSystems,
+                GASSystemScheduleContract.CueSystems,
+                nameof(GASCueGroup));
         }
 
         [Test]
-        public void HeadlessPresentationMarkersRunBeforeOutboxAndReplayLog()
+        public void RuntimeCoreFrameBackbonePhasesFollowContractOrder()
         {
-            var cueSystems = GASSystemScheduleContract.CueSystems;
+            var phases = GASSystemScheduleContract.RuntimeCoreFramePhases;
+            var expected = new[]
+            {
+                EGasRuntimeCoreFramePhase.FramePrepare,
+                EGasRuntimeCoreFramePhase.CommandIngest,
+                EGasRuntimeCoreFramePhase.SpecEvaluation,
+                EGasRuntimeCoreFramePhase.ActiveEffectLifecycle,
+                EGasRuntimeCoreFramePhase.DeltaApply,
+                EGasRuntimeCoreFramePhase.TypedFactProjection,
+                EGasRuntimeCoreFramePhase.StructuralPlayback,
+                EGasRuntimeCoreFramePhase.ObservationProjection,
+            };
 
-            Assert.That(IndexOf<SHeadlessAutoChessPresentationCueMarkerProjection>(cueSystems), Is.LessThan(IndexOf<SPresentationOutboxProjection>(cueSystems)));
-            Assert.That(IndexOf<SHeadlessAutoChessPresentationCueMarkerProjection>(cueSystems), Is.LessThan(IndexOf<SDebugReplayLogProjection>(cueSystems)));
+            Assert.That(phases.Count, Is.EqualTo(expected.Length));
+            for (var i = 0; i < expected.Length; i++)
+            {
+                Assert.That(
+                    phases[i].Phase,
+                    Is.EqualTo(expected[i]),
+                    "Runtime Core frame backbone phase order must stay stable.");
+                Assert.That(
+                    phases[i].ContractOnly,
+                    Is.True,
+                    "AM2B-A is a contract-first phase backbone and must not pretend all systems have moved.");
+            }
+        }
+
+        [Test]
+        public void RuntimeCoreFrameBackboneDeclaresStructuralPermissions()
+        {
+            var phases = GASSystemScheduleContract.RuntimeCoreFramePhases;
+            var playbackPhaseCount = 0;
+
+            for (var i = 0; i < phases.Count; i++)
+            {
+                var phase = phases[i];
+                if (phase.StructuralPermission == EGasRuntimeCoreStructuralPermission.PlaybackOnly)
+                    playbackPhaseCount++;
+
+                if (phase.Phase == EGasRuntimeCoreFramePhase.StructuralPlayback)
+                {
+                    Assert.That(phase.StructuralPermission, Is.EqualTo(EGasRuntimeCoreStructuralPermission.PlaybackOnly));
+                    Assert.That((phase.Reads & EGasRuntimeCorePhaseAccess.StructuralMutation) != 0, Is.True);
+                    continue;
+                }
+
+                Assert.That(
+                    phase.StructuralPermission,
+                    Is.Not.EqualTo(EGasRuntimeCoreStructuralPermission.PlaybackOnly),
+                    phase.Phase + " must not be a structural playback gate.");
+            }
+
+            Assert.That(playbackPhaseCount, Is.EqualTo(1));
+
+            var observation = GetPhaseContract(EGasRuntimeCoreFramePhase.ObservationProjection);
+            Assert.That(observation.ObservationBoundary, Is.True);
+            Assert.That(observation.StructuralPermission, Is.EqualTo(EGasRuntimeCoreStructuralPermission.None));
+        }
+
+        [Test]
+        public void EffectCommandSpecStreamSystemsMapToRuntimeCoreBackbonePhases()
+        {
+            var streamSystems = GASSystemScheduleContract.EffectCommandSpecStreamTargetSystems;
+            var expectedPhases = new[]
+            {
+                EGasRuntimeCoreFramePhase.CommandIngest,
+                EGasRuntimeCoreFramePhase.SpecEvaluation,
+                EGasRuntimeCoreFramePhase.ActiveEffectLifecycle,
+                EGasRuntimeCoreFramePhase.DeltaApply,
+                EGasRuntimeCoreFramePhase.TypedFactProjection,
+            };
+
+            Assert.That(streamSystems.Count, Is.EqualTo(expectedPhases.Length));
+            for (var i = 0; i < streamSystems.Count; i++)
+            {
+                Assert.That(
+                    GASSystemScheduleContract.TryGetRuntimeCoreFramePhase(streamSystems[i], out var phase),
+                    Is.True,
+                    streamSystems[i].Name + " must be mapped to the Runtime Core frame backbone.");
+                Assert.That(phase, Is.EqualTo(expectedPhases[i]));
+                Assert.That(IndexOfPhase(phase), Is.EqualTo(i + 1));
+            }
         }
 
         private static void AssertSystemOrder(
@@ -142,9 +223,17 @@ namespace GAS.Runtime.Tests.Event
             group.SortSystems();
 
             using var systems = group.GetAllSystems(Allocator.Temp);
-            var actual = new int[systems.Length];
+            var expectedSet = new HashSet<int>();
+            for (var i = 0; i < expectedTypes.Count; i++)
+                expectedSet.Add(TypeManager.GetSystemTypeIndex(expectedTypes[i]).Index);
+
+            var actual = new List<int>(expectedTypes.Count);
             for (var i = 0; i < systems.Length; i++)
-                actual[i] = GASManager.ExWorld.Unmanaged.GetSystemTypeIndex(systems[i]).Index;
+            {
+                var systemTypeIndex = GASManager.ExWorld.Unmanaged.GetSystemTypeIndex(systems[i]).Index;
+                if (expectedSet.Contains(systemTypeIndex))
+                    actual.Add(systemTypeIndex);
+            }
 
             var expected = new int[expectedTypes.Count];
             for (var i = 0; i < expectedTypes.Count; i++)
@@ -153,7 +242,62 @@ namespace GAS.Runtime.Tests.Event
             Assert.That(
                 actual,
                 Is.EqualTo(expected),
-                groupName + " order must match GASSystemScheduleContract.");
+                groupName + " core order must match GASSystemScheduleContract.");
+        }
+
+        private static void AssertNoScheduleOverlap(
+            IReadOnlyList<Type> extensionTypes,
+            IReadOnlyList<Type> coreTypes,
+            string groupName)
+        {
+            var offenders = new List<string>();
+            for (var i = 0; i < extensionTypes.Count; i++)
+            {
+                if (Contains(coreTypes, extensionTypes[i]))
+                    offenders.Add(extensionTypes[i].Name);
+            }
+
+            Assert.That(
+                offenders,
+                Is.Empty,
+                groupName + " core schedule must not own AutoChess demo systems.");
+        }
+
+        private static bool Contains(IReadOnlyList<Type> systemTypes, Type target)
+        {
+            for (var i = 0; i < systemTypes.Count; i++)
+            {
+                if (systemTypes[i] == target)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static GASRuntimeCoreFramePhaseContract GetPhaseContract(EGasRuntimeCoreFramePhase phase)
+        {
+            var phases = GASSystemScheduleContract.RuntimeCoreFramePhases;
+            for (var i = 0; i < phases.Count; i++)
+            {
+                if (phases[i].Phase == phase)
+                    return phases[i];
+            }
+
+            Assert.Fail("Runtime Core frame phase " + phase + " was not found.");
+            return default;
+        }
+
+        private static int IndexOfPhase(EGasRuntimeCoreFramePhase phase)
+        {
+            var phases = GASSystemScheduleContract.RuntimeCoreFramePhases;
+            for (var i = 0; i < phases.Count; i++)
+            {
+                if (phases[i].Phase == phase)
+                    return i;
+            }
+
+            Assert.Fail("Runtime Core frame phase " + phase + " was not found.");
+            return -1;
         }
 
         private static int IndexOf<TSystem>(IReadOnlyList<Type> systemTypes)

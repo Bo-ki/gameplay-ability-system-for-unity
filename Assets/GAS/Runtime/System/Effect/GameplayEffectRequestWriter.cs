@@ -41,27 +41,27 @@ namespace GAS.Runtime
             targets.Add(new BTargetEntity { TargetAsc = targetAsc });
         }
 
-        public static bool TryApplyFastInstantModifier(
+        public static bool TryApplyLegacyInstantModifierBypass(
             EntityManager em,
             in CApplyGameplayEffectRequest request,
             Entity targetAsc,
             ETargetDataKind targetDataKind)
         {
-            return SApplyGameplayEffectRequest.TryApplyFastInstantModifierDirect(
+            return SApplyGameplayEffectRequest.TryApplyLegacyInstantModifierBypassDirect(
                 em,
                 request,
                 targetAsc,
                 targetDataKind);
         }
 
-        public static bool TryApplyFastInstantModifier(
+        public static bool TryApplyLegacyInstantModifierBypass(
             EntityManager em,
             in CApplyGameplayEffectRequest request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
             in BSetByCallerValue setByCallerValue)
         {
-            return SApplyGameplayEffectRequest.TryApplyFastInstantModifierDirect(
+            return SApplyGameplayEffectRequest.TryApplyLegacyInstantModifierBypassDirect(
                 em,
                 request,
                 targetAsc,
@@ -69,14 +69,14 @@ namespace GAS.Runtime
                 setByCallerValue);
         }
 
-        public static Entity ApplyFastOrCreateSingleTargetRequest(
+        public static Entity ApplyLegacyInstantBypassOrCreateSingleTargetRequest(
             EntityManager em,
             in CApplyGameplayEffectRequest request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
             string namePrefix = "ApplyGERequest")
         {
-            if (TryApplyFastInstantModifier(em, request, targetAsc, targetDataKind))
+            if (TryApplyLegacyInstantModifierBypass(em, request, targetAsc, targetDataKind))
                 return Entity.Null;
 
             var requestEntity = Create(
@@ -93,7 +93,31 @@ namespace GAS.Runtime
             return requestEntity;
         }
 
-        public static Entity ApplyFastOrCreateSingleTargetRequest(
+        public static Entity AppendSimpleInstantCommandOrCreateSingleTargetRequest(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind,
+            string namePrefix = "ApplyGERequest")
+        {
+            if (TryAppendSimpleInstantCommand(em, request, targetAsc, targetDataKind, null))
+                return Entity.Null;
+
+            var requestEntity = Create(
+                em,
+                request,
+                new CTargetDataHeader
+                {
+                    SourceAsc = request.SourceAsc,
+                    SourceAbility = request.SourceAbility,
+                    Kind = targetDataKind,
+                },
+                namePrefix);
+            AddTarget(em, requestEntity, targetAsc);
+            return requestEntity;
+        }
+
+        public static Entity ApplyLegacyInstantBypassOrCreateSingleTargetRequest(
             EntityManager em,
             in CApplyGameplayEffectRequest request,
             Entity targetAsc,
@@ -102,10 +126,10 @@ namespace GAS.Runtime
             string namePrefix = "ApplyGERequest")
         {
             var canUseSetByCaller = setByCallerValue.Key > 0;
-            var appliedFast = canUseSetByCaller
-                ? TryApplyFastInstantModifier(em, request, targetAsc, targetDataKind, setByCallerValue)
-                : TryApplyFastInstantModifier(em, request, targetAsc, targetDataKind);
-            if (appliedFast)
+            var appliedLegacy = canUseSetByCaller
+                ? TryApplyLegacyInstantModifierBypass(em, request, targetAsc, targetDataKind, setByCallerValue)
+                : TryApplyLegacyInstantModifierBypass(em, request, targetAsc, targetDataKind);
+            if (appliedLegacy)
                 return Entity.Null;
 
             var requestEntity = Create(
@@ -125,6 +149,67 @@ namespace GAS.Runtime
 
             em.AddBuffer<BSetByCallerValue>(requestEntity).Add(setByCallerValue);
             return requestEntity;
+        }
+
+        public static Entity AppendSimpleInstantCommandOrCreateSingleTargetRequest(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind,
+            in BSetByCallerValue setByCallerValue,
+            string namePrefix = "ApplyGERequest")
+        {
+            var canUseSetByCaller = setByCallerValue.Key > 0;
+            var setByCallerValues = canUseSetByCaller
+                ? new[] { setByCallerValue }
+                : null;
+
+            if (TryAppendSimpleInstantCommand(em, request, targetAsc, targetDataKind, setByCallerValues))
+                return Entity.Null;
+
+            var requestEntity = Create(
+                em,
+                request,
+                new CTargetDataHeader
+                {
+                    SourceAsc = request.SourceAsc,
+                    SourceAbility = request.SourceAbility,
+                    Kind = targetDataKind,
+                },
+                namePrefix);
+            AddTarget(em, requestEntity, targetAsc);
+
+            if (!canUseSetByCaller)
+                return requestEntity;
+
+            em.AddBuffer<BSetByCallerValue>(requestEntity).Add(setByCallerValue);
+            return requestEntity;
+        }
+
+        public static bool TryAppendSimpleInstantCommand(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind,
+            IReadOnlyList<BSetByCallerValue> setByCallerValues)
+        {
+            if (targetAsc == Entity.Null)
+                return false;
+
+            var command = EffectCommandSpecStream.ToCommand(
+                request,
+                targetAsc,
+                targetDataKind,
+                ResolveCommandSource(in request));
+
+            if (command.Kind != EEffectCommandKind.Instant
+                || !EffectCommandSpecStreamPhaseUtility.CanBuildSimpleInstantSpec(em, in command))
+            {
+                return false;
+            }
+
+            EffectCommandSpecStream.AppendCommand(em, command, setByCallerValues);
+            return true;
         }
 
         public static void AddTarget(ref EntityCommandBuffer ecb, Entity requestEntity, Entity targetAsc)
@@ -176,6 +261,13 @@ namespace GAS.Runtime
             var values = ecb.AddBuffer<BSetByCallerValue>(requestEntity);
             for (var i = 0; i < setByCallerValues.Length; i++)
                 values.Add(setByCallerValues[i]);
+        }
+
+        private static EEffectCommandSource ResolveCommandSource(in CApplyGameplayEffectRequest request)
+        {
+            return request.SourceAbility != Entity.Null
+                ? EEffectCommandSource.Ability
+                : EEffectCommandSource.RuntimeBoundary;
         }
     }
 }

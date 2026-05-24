@@ -9,6 +9,10 @@ namespace GAS.Runtime
         public static void PlaybackAndReset(ref EntityCommandBuffer ecb, EntityManager em)
         {
             ecb.Playback(em);
+            GasRuntimeDebugger.RecordRuntimeCoreEcbPlayback(
+                em,
+                GasRuntimeDebugger.ResolveCurrentFrame(em),
+                EGasRuntimeDiagnosticModule.Effect);
             ecb.Dispose();
             ecb = new EntityCommandBuffer(Allocator.Temp);
         }
@@ -132,6 +136,18 @@ namespace GAS.Runtime
                 return;
 
             SetLifecycle(em, ref ecb, ge, EGameplayEffectLifecycleState.PendingRemove, currentFrame);
+            if (em.HasComponent<CEffectContext>(ge) && em.HasComponent<CDurationRuntime>(ge))
+            {
+                var context = em.GetComponentData<CEffectContext>(ge);
+                var duration = em.GetComponentData<CDurationRuntime>(ge);
+                ActiveEffectStore.TryUpsertDurationEffect(
+                    em,
+                    ge,
+                    context,
+                    duration,
+                    EActiveEffectSlotState.PendingRemove,
+                    currentFrame);
+            }
 
             if (!em.HasComponent<CEffectDestroy>(ge))
                 ecb.AddComponent<CEffectDestroy>(ge);
@@ -395,7 +411,7 @@ namespace GAS.Runtime
                 ParentContextId = context.ContextId,
             };
 
-            if (TryApplyDerivedFastInstant(em, sourceEffect, request, context.TargetAsc, targetKind))
+            if (TryApplyDerivedLegacyInstantBypass(em, sourceEffect, request, context.TargetAsc, targetKind))
                 return Entity.Null;
 
             var requestEntity = GameplayEffectRequestWriter.Create(
@@ -414,7 +430,7 @@ namespace GAS.Runtime
             return requestEntity;
         }
 
-        private static bool TryApplyDerivedFastInstant(
+        private static bool TryApplyDerivedLegacyInstantBypass(
             EntityManager em,
             Entity sourceEffect,
             in CApplyGameplayEffectRequest request,
@@ -425,7 +441,7 @@ namespace GAS.Runtime
                 || !em.Exists(sourceEffect)
                 || !em.HasBuffer<BSetByCallerValue>(sourceEffect))
             {
-                return GameplayEffectRequestWriter.TryApplyFastInstantModifier(
+                return GameplayEffectRequestWriter.TryApplyLegacyInstantModifierBypass(
                     em,
                     request,
                     target,
@@ -435,7 +451,7 @@ namespace GAS.Runtime
             var values = em.GetBuffer<BSetByCallerValue>(sourceEffect);
             if (values.Length == 0)
             {
-                return GameplayEffectRequestWriter.TryApplyFastInstantModifier(
+                return GameplayEffectRequestWriter.TryApplyLegacyInstantModifierBypass(
                     em,
                     request,
                     target,
@@ -443,7 +459,7 @@ namespace GAS.Runtime
             }
 
             return values.Length == 1
-                   && GameplayEffectRequestWriter.TryApplyFastInstantModifier(
+                   && GameplayEffectRequestWriter.TryApplyLegacyInstantModifierBypass(
                        em,
                        request,
                        target,
@@ -651,6 +667,13 @@ namespace GAS.Runtime
             SetLifecycle(em, ref ecb, ge, EGameplayEffectLifecycleState.Active, currentFrame);
 
             SetPeriodStartTime(em, ref ecb, ge, currentFrame);
+            ActiveEffectStore.TryUpsertDurationEffect(
+                em,
+                ge,
+                context,
+                duration,
+                EActiveEffectSlotState.Active,
+                currentFrame);
 
             EnqueueCueRequests<CCueOnActivate>(em, ge, context.TargetAsc, EGameplayCueEvent.OnActivate);
             EnqueueCueRequests<CCueOnTick>(em, ge, context.TargetAsc, EGameplayCueEvent.OnTick);
@@ -688,6 +711,13 @@ namespace GAS.Runtime
             duration.LastActiveTime = currentFrame;
             duration.RemainingTime = duration.ResolvedDuration;
             SetLifecycle(em, ref ecb, ge, EGameplayEffectLifecycleState.Inhibited, currentFrame);
+            ActiveEffectStore.TryUpsertDurationEffect(
+                em,
+                ge,
+                context,
+                duration,
+                EActiveEffectSlotState.Inhibited,
+                currentFrame);
 
             EnqueueGameplayEvent(em, ge, context, EGameplayEventType.GameplayEffectApplied);
             EnqueueGameplayEvent(
@@ -743,6 +773,13 @@ namespace GAS.Runtime
             duration.Active = false;
             ecb.SetComponent(ge, duration);
             SetLifecycle(em, ref ecb, ge, EGameplayEffectLifecycleState.Inhibited, currentFrame);
+            ActiveEffectStore.TryUpsertDurationEffect(
+                em,
+                ge,
+                context,
+                duration,
+                EActiveEffectSlotState.Inhibited,
+                currentFrame);
             EnqueueGameplayEvent(
                 em,
                 ge,
@@ -792,6 +829,13 @@ namespace GAS.Runtime
 
             ecb.SetComponent(ge, duration);
             SetLifecycle(em, ref ecb, ge, EGameplayEffectLifecycleState.Active, currentFrame);
+            ActiveEffectStore.TryUpsertDurationEffect(
+                em,
+                ge,
+                context,
+                duration,
+                EActiveEffectSlotState.Active,
+                currentFrame);
             EnqueueGameplayEvent(
                 em,
                 ge,
@@ -885,6 +929,9 @@ namespace GAS.Runtime
                     EffectMagnitudeResolver.ResolveModifiers(em, ge, effectContext, spec);
                 }
             }
+
+            if (changed && em.HasComponent<CEffectContext>(ge))
+                ActiveEffectStore.TryRefreshStackCount(em, ge, em.GetComponentData<CEffectContext>(ge), stackCount);
 
             if (!changed || !em.HasComponent<CEffectContext>(ge) || !IsApplied(em, ge))
                 return;
@@ -1049,6 +1096,8 @@ namespace GAS.Runtime
             duration.LastActiveTime = currentFrame;
             duration.RemainingTime = duration.ResolvedDuration;
             ecb.SetComponent(ge, duration);
+            if (em.HasComponent<CEffectContext>(ge))
+                ActiveEffectStore.TryRefreshDuration(em, ge, em.GetComponentData<CEffectContext>(ge), duration);
         }
 
         private static void CreateOverflowRequests(EntityManager em, Entity ge, in CEffectContext context)
@@ -1755,6 +1804,7 @@ namespace GAS.Runtime
                     effects.RemoveAt(i);
             }
 
+            ActiveEffectStore.TryRemove(em, ge, context);
             EnqueueGameplayEvent(em, ge, context, EGameplayEventType.GameplayEffectRemoved);
         }
 

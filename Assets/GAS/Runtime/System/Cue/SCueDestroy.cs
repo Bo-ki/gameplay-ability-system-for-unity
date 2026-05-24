@@ -28,6 +28,10 @@ namespace GAS.Runtime
                 ecb.DestroyEntity(cueEntity);
             }
             ecb.Playback(state.EntityManager);
+            GasRuntimeDebugger.RecordRuntimeCoreEcbPlayback(
+                state.EntityManager,
+                GasRuntimeDebugger.ResolveCurrentFrame(state.EntityManager),
+                EGasRuntimeDiagnosticModule.Cue);
             ecb.Dispose();
         }
 

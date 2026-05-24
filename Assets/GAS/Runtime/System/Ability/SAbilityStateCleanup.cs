@@ -84,6 +84,10 @@ namespace GAS.Runtime
             }
 
             ecb.Playback(em);
+            GasRuntimeDebugger.RecordRuntimeCoreEcbPlayback(
+                em,
+                GasRuntimeDebugger.ResolveCurrentFrame(em),
+                EGasRuntimeDiagnosticModule.Ability);
             ecb.Dispose();
             abilities.Dispose();
         }

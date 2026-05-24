@@ -19,6 +19,8 @@ namespace GAS.Runtime
         TagMaskRuntime = 11,
         ObservationReplayAndOutbox = 12,
         ManagedCuePresentation = 13,
+        GameplayEffectCommandSpecStream = 14,
+        ActiveEffectStore = 15,
     }
 
     public enum GASRuntimeLayoutDomain
@@ -42,6 +44,7 @@ namespace GAS.Runtime
         Request = 4,
         EventBus = 5,
         ManagedPresentation = 6,
+        RuntimeCoreStream = 7,
     }
 
     public enum GASRuntimeLayoutDecision
@@ -51,6 +54,7 @@ namespace GAS.Runtime
         NeedsEcbMigration = 2,
         ObservationOnly = 3,
         ManagedPresentationBoundary = 4,
+        TargetContract = 5,
     }
 
     [Flags]
@@ -69,6 +73,9 @@ namespace GAS.Runtime
         StructuralChanges = 1 << 9,
         ReadsDefinitionData = 1 << 10,
         WritesSimulationState = 1 << 11,
+        CommandDataBacked = 1 << 12,
+        NoPerHitStructuralChange = 1 << 13,
+        RuntimeCoreStream = 1 << 14,
     }
 
     [Flags]
@@ -82,6 +89,8 @@ namespace GAS.Runtime
         CrossEntityLookup = 1 << 4,
         DynamicBufferMutation = 1 << 5,
         DefinitionRuntimeBoundary = 1 << 6,
+        RuntimeCoreStreamBoundary = 1 << 7,
+        HighFrequencyCommandDataBoundary = 1 << 8,
     }
 
     public enum GASRuntimeLayoutComponentSlot
@@ -121,6 +130,15 @@ namespace GAS.Runtime
         DebugReplayLog = 32,
         ManagedCueComponent = 33,
         CueEnableableState = 34,
+        EffectCommandStreamOwner = 35,
+        EffectCommandBuffer = 36,
+        EffectCommandSetByCallerBuffer = 37,
+        InstantEffectSpecBuffer = 38,
+        AttributeDeltaBuffer = 39,
+        ActiveEffectMutationBuffer = 40,
+        TypedSimulationFactBuffer = 41,
+        ActiveEffectStore = 42,
+        ActiveEffectSlotBuffer = 43,
     }
 
     public readonly struct GASRuntimeQueryLayoutEntry
@@ -335,6 +353,8 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.ActiveModifierBuffer,
                         GASRuntimeLayoutComponentSlot.GrantedAbilityBuffer,
                         GASRuntimeLayoutComponentSlot.GameplayEffectBuffer,
+                        GASRuntimeLayoutComponentSlot.ActiveEffectStore,
+                        GASRuntimeLayoutComponentSlot.ActiveEffectSlotBuffer,
                     },
                     typeof(SASCCreate),
                     typeof(SAscInitializeRequest),
@@ -441,6 +461,63 @@ namespace GAS.Runtime
                     },
                     typeof(SAbilityTimelineAction),
                     typeof(SAbilityTimelineLifecycleRequest)),
+                Entry(
+                    GASRuntimeQueryLayoutEntryId.GameplayEffectCommandSpecStream,
+                    GASRuntimeLayoutDomain.GameplayEffect,
+                    GASRuntimeEntityKind.RuntimeCoreStream,
+                    GASRuntimeLayoutCapability.QueryBased
+                    | GASRuntimeLayoutCapability.JobCandidate
+                    | GASRuntimeLayoutCapability.BurstCandidate
+                    | GASRuntimeLayoutCapability.CommandDataBacked
+                    | GASRuntimeLayoutCapability.NoPerHitStructuralChange
+                    | GASRuntimeLayoutCapability.RuntimeCoreStream
+                    | GASRuntimeLayoutCapability.WritesSimulationState,
+                    GASRuntimeLayoutBoundary.DynamicBufferMutation
+                    | GASRuntimeLayoutBoundary.RuntimeCoreStreamBoundary
+                    | GASRuntimeLayoutBoundary.HighFrequencyCommandDataBoundary,
+                    GASRuntimeLayoutDecision.TargetContract,
+                    new[]
+                    {
+                        GASRuntimeLayoutComponentSlot.EffectCommandStreamOwner,
+                        GASRuntimeLayoutComponentSlot.EffectCommandBuffer,
+                        GASRuntimeLayoutComponentSlot.InstantEffectSpecBuffer,
+                        GASRuntimeLayoutComponentSlot.AttributeDeltaBuffer,
+                        GASRuntimeLayoutComponentSlot.TypedSimulationFactBuffer,
+                    },
+                    new[]
+                    {
+                        GASRuntimeLayoutComponentSlot.EffectCommandSetByCallerBuffer,
+                        GASRuntimeLayoutComponentSlot.ActiveEffectMutationBuffer,
+                    },
+                    typeof(SEffectCommandIngest),
+                    typeof(SInstantEffectSpecBuild),
+                    typeof(SActiveEffectMutationApply),
+                    typeof(SAttributeDeltaApply),
+                    typeof(STypedSimulationFactProjection)),
+                Entry(
+                    GASRuntimeQueryLayoutEntryId.ActiveEffectStore,
+                    GASRuntimeLayoutDomain.GameplayEffect,
+                    GASRuntimeEntityKind.AbilitySystemComponent,
+                    GASRuntimeLayoutCapability.QueryBased
+                    | GASRuntimeLayoutCapability.JobCandidate
+                    | GASRuntimeLayoutCapability.BurstCandidate
+                    | GASRuntimeLayoutCapability.GeneratedArchetypeCandidate
+                    | GASRuntimeLayoutCapability.NoPerHitStructuralChange
+                    | GASRuntimeLayoutCapability.WritesSimulationState,
+                    GASRuntimeLayoutBoundary.DynamicBufferMutation,
+                    GASRuntimeLayoutDecision.TargetContract,
+                    new[]
+                    {
+                        GASRuntimeLayoutComponentSlot.ActiveEffectStore,
+                        GASRuntimeLayoutComponentSlot.ActiveEffectSlotBuffer,
+                    },
+                    new[]
+                    {
+                        GASRuntimeLayoutComponentSlot.GameplayEffectBuffer,
+                        GASRuntimeLayoutComponentSlot.ActiveModifierBuffer,
+                        GASRuntimeLayoutComponentSlot.GrantedAbilityBuffer,
+                    },
+                    Array.Empty<Type>()),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.GameplayEffectApplyRequest,
                     GASRuntimeLayoutDomain.GameplayEffect,
@@ -606,7 +683,6 @@ namespace GAS.Runtime
                     },
                     Array.Empty<GASRuntimeLayoutComponentSlot>(),
                     typeof(SEventBusClear),
-                    typeof(SHeadlessAutoChessPresentationCueMarkerProjection),
                     typeof(SPresentationOutboxProjection),
                     typeof(SDebugReplayLogProjection)),
                 Entry(

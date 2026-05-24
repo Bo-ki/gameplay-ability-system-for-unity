@@ -13,7 +13,7 @@ namespace GAS.Editor
     [InitializeOnLoad]
     internal static class HeadlessAutoChessEditorSceneRunRequest
     {
-        private const string ScenePath = "Assets/GAS/Runtime/Demo/AutoChess/HeadlessAutoChessDemo.unity";
+        private const string ScenePath = "Assets/AutoChessDemo/Presentation/Scenes/HeadlessAutoChessDemo.unity";
         private const string FlagPath = "Temp/HeadlessAutoChessEditorSceneRun.flag";
         private const string OptionsPath = "Temp/HeadlessAutoChessEditorSceneRun.options";
 

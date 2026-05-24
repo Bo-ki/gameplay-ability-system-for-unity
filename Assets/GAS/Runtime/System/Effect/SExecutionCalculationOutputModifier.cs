@@ -46,6 +46,10 @@ namespace GAS.Runtime
             }
 
             ecb.Playback(em);
+            GasRuntimeDebugger.RecordRuntimeCoreEcbPlayback(
+                em,
+                GasRuntimeDebugger.ResolveCurrentFrame(em),
+                EGasRuntimeDiagnosticModule.Effect);
             ecb.Dispose();
         }
 
@@ -204,6 +208,10 @@ namespace GAS.Runtime
         private static void PlaybackAndReset(ref EntityCommandBuffer ecb, EntityManager em)
         {
             ecb.Playback(em);
+            GasRuntimeDebugger.RecordRuntimeCoreEcbPlayback(
+                em,
+                GasRuntimeDebugger.ResolveCurrentFrame(em),
+                EGasRuntimeDiagnosticModule.Effect);
             ecb.Dispose();
             ecb = new EntityCommandBuffer(Allocator.Temp);
         }

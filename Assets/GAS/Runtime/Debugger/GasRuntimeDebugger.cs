@@ -12,6 +12,7 @@ namespace GAS.Runtime
         SystemTiming = 2,
         BufferPressure = 3,
         StructuralChange = 4,
+        RuntimeCoreCounters = 5,
     }
 
     public enum EGasRuntimeDiagnosticSeverity : byte
@@ -49,6 +50,39 @@ namespace GAS.Runtime
         public int SlowSystemMicroseconds;
         public int BufferPressureWarningPermille;
         public int BufferPressureErrorPermille;
+        public int RuntimeCoreRequestCount;
+        public int RuntimeCoreSpecCount;
+        public int RuntimeCoreDeltaCount;
+        public int RuntimeCoreFactCount;
+        public int RuntimeCoreCueCount;
+        public int RuntimeCorePresentationCount;
+        public int RuntimeCoreEntityCreateCount;
+        public int RuntimeCoreEntityDestroyCount;
+        public int RuntimeCoreEcbPlaybackCount;
+        public int RuntimeCorePeakActiveEffectEntityCount;
+        public int RuntimeCorePeakApplyRequestEntityCount;
+        public int RuntimeCorePeakEventBusBufferLength;
+        public int RuntimeCorePeakPresentationCursorLag;
+        public int RuntimeCorePeakReplayCursorLag;
+        public int RuntimeCoreActiveEffectStoreOwnerCount;
+        public int RuntimeCoreActiveEffectSlotCount;
+        public int RuntimeCoreActiveEffectSlotCapacity;
+        public int RuntimeCoreActiveEffectSlotPendingApplyCount;
+        public int RuntimeCoreActiveEffectSlotActiveCount;
+        public int RuntimeCoreActiveEffectSlotInhibitedCount;
+        public int RuntimeCoreActiveEffectSlotPendingRemoveCount;
+        public int RuntimeCoreActiveEffectSlotLegacyBackedCount;
+        public int RuntimeCoreActiveEffectSlotExternalizedOwnerCount;
+        public int RuntimeCoreQueryBudget;
+        public int RuntimeCoreFilteredQueryBudget;
+        public int RuntimeCoreUnfilteredQueryBudget;
+        public int RuntimeCoreLookupUpdateBudget;
+        public int RuntimeCoreRandomLookupBudget;
+        public int RuntimeCoreSyncQueryBudget;
+        public int RuntimeCoreHelperTempQueryRiskCount;
+        public int RuntimeCoreDependencyWaitRiskCount;
+        public int RuntimeCoreWorldUpdateAllocatorOwnerCount;
+        public int RuntimeCoreRewindableAllocatorCandidateCount;
     }
 
     public struct BGasRuntimeDiagnosticEvent : IBufferElementData
@@ -69,6 +103,33 @@ namespace GAS.Runtime
         public int Capacity;
         public int ValueA;
         public int ValueB;
+        public int EntityCreateCount;
+        public int EntityDestroyCount;
+        public int EcbPlaybackCount;
+        public int ActiveEffectEntityCount;
+        public int ApplyRequestEntityCount;
+        public int EventBusBufferLength;
+        public int PresentationCursorLag;
+        public int ReplayCursorLag;
+        public int ActiveEffectStoreOwnerCount;
+        public int ActiveEffectSlotCount;
+        public int ActiveEffectSlotCapacity;
+        public int ActiveEffectSlotPendingApplyCount;
+        public int ActiveEffectSlotActiveCount;
+        public int ActiveEffectSlotInhibitedCount;
+        public int ActiveEffectSlotPendingRemoveCount;
+        public int ActiveEffectSlotLegacyBackedCount;
+        public int ActiveEffectSlotExternalizedOwnerCount;
+        public int QueryBudget;
+        public int FilteredQueryBudget;
+        public int UnfilteredQueryBudget;
+        public int LookupUpdateBudget;
+        public int RandomLookupBudget;
+        public int SyncQueryBudget;
+        public int HelperTempQueryRiskCount;
+        public int DependencyWaitRiskCount;
+        public int WorldUpdateAllocatorOwnerCount;
+        public int RewindableAllocatorCandidateCount;
         public float Ratio;
     }
 
@@ -104,16 +165,126 @@ namespace GAS.Runtime
         }
     }
 
+    public readonly struct GasRuntimeCoreDiagnosticCounters
+    {
+        public readonly int RequestCount;
+        public readonly int SpecCount;
+        public readonly int DeltaCount;
+        public readonly int FactCount;
+        public readonly int CueCount;
+        public readonly int PresentationCount;
+        public readonly int EntityCreateCount;
+        public readonly int EntityDestroyCount;
+        public readonly int EcbPlaybackCount;
+        public readonly int PeakActiveEffectEntityCount;
+        public readonly int PeakApplyRequestEntityCount;
+        public readonly int PeakEventBusBufferLength;
+        public readonly int PeakPresentationCursorLag;
+        public readonly int PeakReplayCursorLag;
+        public readonly int ActiveEffectStoreOwnerCount;
+        public readonly int ActiveEffectSlotCount;
+        public readonly int ActiveEffectSlotCapacity;
+        public readonly int ActiveEffectSlotPendingApplyCount;
+        public readonly int ActiveEffectSlotActiveCount;
+        public readonly int ActiveEffectSlotInhibitedCount;
+        public readonly int ActiveEffectSlotPendingRemoveCount;
+        public readonly int ActiveEffectSlotLegacyBackedCount;
+        public readonly int ActiveEffectSlotExternalizedOwnerCount;
+        public readonly int QueryBudget;
+        public readonly int FilteredQueryBudget;
+        public readonly int UnfilteredQueryBudget;
+        public readonly int LookupUpdateBudget;
+        public readonly int RandomLookupBudget;
+        public readonly int SyncQueryBudget;
+        public readonly int HelperTempQueryRiskCount;
+        public readonly int DependencyWaitRiskCount;
+        public readonly int WorldUpdateAllocatorOwnerCount;
+        public readonly int RewindableAllocatorCandidateCount;
+
+        public GasRuntimeCoreDiagnosticCounters(
+            int requestCount,
+            int specCount,
+            int deltaCount,
+            int factCount,
+            int cueCount,
+            int presentationCount,
+            int entityCreateCount,
+            int entityDestroyCount,
+            int ecbPlaybackCount,
+            int peakActiveEffectEntityCount,
+            int peakApplyRequestEntityCount,
+            int peakEventBusBufferLength,
+            int peakPresentationCursorLag,
+            int peakReplayCursorLag,
+            int activeEffectStoreOwnerCount = 0,
+            int activeEffectSlotCount = 0,
+            int activeEffectSlotCapacity = 0,
+            int activeEffectSlotPendingApplyCount = 0,
+            int activeEffectSlotActiveCount = 0,
+            int activeEffectSlotInhibitedCount = 0,
+            int activeEffectSlotPendingRemoveCount = 0,
+            int activeEffectSlotLegacyBackedCount = 0,
+            int activeEffectSlotExternalizedOwnerCount = 0,
+            int queryBudget = 0,
+            int filteredQueryBudget = 0,
+            int unfilteredQueryBudget = 0,
+            int lookupUpdateBudget = 0,
+            int randomLookupBudget = 0,
+            int syncQueryBudget = 0,
+            int helperTempQueryRiskCount = 0,
+            int dependencyWaitRiskCount = 0,
+            int worldUpdateAllocatorOwnerCount = 0,
+            int rewindableAllocatorCandidateCount = 0)
+        {
+            RequestCount = requestCount;
+            SpecCount = specCount;
+            DeltaCount = deltaCount;
+            FactCount = factCount;
+            CueCount = cueCount;
+            PresentationCount = presentationCount;
+            EntityCreateCount = entityCreateCount;
+            EntityDestroyCount = entityDestroyCount;
+            EcbPlaybackCount = ecbPlaybackCount;
+            PeakActiveEffectEntityCount = peakActiveEffectEntityCount;
+            PeakApplyRequestEntityCount = peakApplyRequestEntityCount;
+            PeakEventBusBufferLength = peakEventBusBufferLength;
+            PeakPresentationCursorLag = peakPresentationCursorLag;
+            PeakReplayCursorLag = peakReplayCursorLag;
+            ActiveEffectStoreOwnerCount = activeEffectStoreOwnerCount;
+            ActiveEffectSlotCount = activeEffectSlotCount;
+            ActiveEffectSlotCapacity = activeEffectSlotCapacity;
+            ActiveEffectSlotPendingApplyCount = activeEffectSlotPendingApplyCount;
+            ActiveEffectSlotActiveCount = activeEffectSlotActiveCount;
+            ActiveEffectSlotInhibitedCount = activeEffectSlotInhibitedCount;
+            ActiveEffectSlotPendingRemoveCount = activeEffectSlotPendingRemoveCount;
+            ActiveEffectSlotLegacyBackedCount = activeEffectSlotLegacyBackedCount;
+            ActiveEffectSlotExternalizedOwnerCount = activeEffectSlotExternalizedOwnerCount;
+            QueryBudget = queryBudget;
+            FilteredQueryBudget = filteredQueryBudget;
+            UnfilteredQueryBudget = unfilteredQueryBudget;
+            LookupUpdateBudget = lookupUpdateBudget;
+            RandomLookupBudget = randomLookupBudget;
+            SyncQueryBudget = syncQueryBudget;
+            HelperTempQueryRiskCount = helperTempQueryRiskCount;
+            DependencyWaitRiskCount = dependencyWaitRiskCount;
+            WorldUpdateAllocatorOwnerCount = worldUpdateAllocatorOwnerCount;
+            RewindableAllocatorCandidateCount = rewindableAllocatorCandidateCount;
+        }
+    }
+
     public readonly struct GasRuntimeDiagnosticSnapshot
     {
         public readonly GasRuntimeDiagnosticStats Stats;
+        public readonly GasRuntimeCoreDiagnosticCounters CoreCounters;
         public readonly BGasRuntimeDiagnosticEvent[] Events;
 
         public GasRuntimeDiagnosticSnapshot(
             in GasRuntimeDiagnosticStats stats,
+            in GasRuntimeCoreDiagnosticCounters coreCounters,
             BGasRuntimeDiagnosticEvent[] events)
         {
             Stats = stats;
+            CoreCounters = coreCounters;
             Events = events ?? Array.Empty<BGasRuntimeDiagnosticEvent>();
         }
 
@@ -161,6 +332,39 @@ namespace GAS.Runtime
             state.NextSequence = 0;
             state.FirstRetainedSequence = 0;
             state.DroppedEventCount = 0;
+            state.RuntimeCoreRequestCount = 0;
+            state.RuntimeCoreSpecCount = 0;
+            state.RuntimeCoreDeltaCount = 0;
+            state.RuntimeCoreFactCount = 0;
+            state.RuntimeCoreCueCount = 0;
+            state.RuntimeCorePresentationCount = 0;
+            state.RuntimeCoreEntityCreateCount = 0;
+            state.RuntimeCoreEntityDestroyCount = 0;
+            state.RuntimeCoreEcbPlaybackCount = 0;
+            state.RuntimeCorePeakActiveEffectEntityCount = 0;
+            state.RuntimeCorePeakApplyRequestEntityCount = 0;
+            state.RuntimeCorePeakEventBusBufferLength = 0;
+            state.RuntimeCorePeakPresentationCursorLag = 0;
+            state.RuntimeCorePeakReplayCursorLag = 0;
+            state.RuntimeCoreActiveEffectStoreOwnerCount = 0;
+            state.RuntimeCoreActiveEffectSlotCount = 0;
+            state.RuntimeCoreActiveEffectSlotCapacity = 0;
+            state.RuntimeCoreActiveEffectSlotPendingApplyCount = 0;
+            state.RuntimeCoreActiveEffectSlotActiveCount = 0;
+            state.RuntimeCoreActiveEffectSlotInhibitedCount = 0;
+            state.RuntimeCoreActiveEffectSlotPendingRemoveCount = 0;
+            state.RuntimeCoreActiveEffectSlotLegacyBackedCount = 0;
+            state.RuntimeCoreActiveEffectSlotExternalizedOwnerCount = 0;
+            state.RuntimeCoreQueryBudget = 0;
+            state.RuntimeCoreFilteredQueryBudget = 0;
+            state.RuntimeCoreUnfilteredQueryBudget = 0;
+            state.RuntimeCoreLookupUpdateBudget = 0;
+            state.RuntimeCoreRandomLookupBudget = 0;
+            state.RuntimeCoreSyncQueryBudget = 0;
+            state.RuntimeCoreHelperTempQueryRiskCount = 0;
+            state.RuntimeCoreDependencyWaitRiskCount = 0;
+            state.RuntimeCoreWorldUpdateAllocatorOwnerCount = 0;
+            state.RuntimeCoreRewindableAllocatorCandidateCount = 0;
             em.SetComponentData(debuggerEntity, state);
             em.GetBuffer<BGasRuntimeDiagnosticEvent>(debuggerEntity).Clear();
         }
@@ -263,6 +467,372 @@ namespace GAS.Runtime
             em.SetComponentData(debuggerEntity, state);
         }
 
+        public static void RecordRuntimeCoreCounters(
+            EntityManager em,
+            Entity debuggerEntity,
+            int frame,
+            in GasRuntimeCoreDiagnosticCounters counters)
+        {
+            RecordRuntimeCoreCounters(
+                em,
+                debuggerEntity,
+                frame,
+                counters.RequestCount,
+                counters.SpecCount,
+                counters.DeltaCount,
+                counters.FactCount,
+                counters.CueCount,
+                counters.PresentationCount,
+                counters.EntityCreateCount,
+                counters.EntityDestroyCount,
+                counters.EcbPlaybackCount,
+                counters.PeakActiveEffectEntityCount,
+                counters.PeakApplyRequestEntityCount,
+                counters.PeakEventBusBufferLength,
+                counters.PeakPresentationCursorLag,
+                counters.PeakReplayCursorLag,
+                counters.ActiveEffectStoreOwnerCount,
+                counters.ActiveEffectSlotCount,
+                counters.ActiveEffectSlotCapacity,
+                counters.ActiveEffectSlotPendingApplyCount,
+                counters.ActiveEffectSlotActiveCount,
+                counters.ActiveEffectSlotInhibitedCount,
+                counters.ActiveEffectSlotPendingRemoveCount,
+                counters.ActiveEffectSlotLegacyBackedCount,
+                counters.ActiveEffectSlotExternalizedOwnerCount,
+                counters.QueryBudget,
+                counters.FilteredQueryBudget,
+                counters.UnfilteredQueryBudget,
+                counters.LookupUpdateBudget,
+                counters.RandomLookupBudget,
+                counters.SyncQueryBudget,
+                counters.HelperTempQueryRiskCount,
+                counters.DependencyWaitRiskCount,
+                counters.WorldUpdateAllocatorOwnerCount,
+                counters.RewindableAllocatorCandidateCount);
+        }
+
+        public static GasRuntimeCoreDiagnosticCounters CollectRuntimeCoreCounters(
+            EntityManager em,
+            Entity eventBusEntity,
+            Entity eventLogSinkEntity)
+        {
+            var requestEntityCount = CountEntitiesWith<CApplyGameplayEffectRequest>(em)
+                                     + CountEntitiesWith<CRemoveGameplayEffectRequest>(em)
+                                     + CountEntitiesWith<CAbilityCommandRequest>(em)
+                                     + CountEntitiesWith<CAscCommandRequest>(em)
+                                     + CountEntitiesWith<CAscInitializeRequest>(em)
+                                     + CountEntitiesWith<CAscDestroyRequest>(em);
+            var activeEffectEntityCount = Math.Max(
+                CountEntitiesWith<CEffectSpecData>(em),
+                CountEntitiesWith<CEffectLifecycle>(em));
+            var applyRequestEntityCount = CountEntitiesWith<CApplyGameplayEffectRequest>(em);
+            var destroyMarkerCount = CountEntitiesWith<CEffectDestroy>(em)
+                                     + CountEntitiesWith<CRemoveGameplayEffectRequest>(em)
+                                     + CountEntitiesWith<CAscDestroyRequest>(em);
+
+            ReadEventBusCounters(
+                em,
+                eventBusEntity,
+                out var gameplayEventCount,
+                out var attributeChangeCount,
+                out var cueRequestCount,
+                out var tagChangeCount,
+                out var damageEventCount,
+                out var gameplayRequestFactCount,
+                out var gameplayEffectInstancedCount,
+                out var gameplayEffectRemovedCount);
+            ReadEffectCommandSpecStreamCounters(
+                em,
+                out var effectCommandCount,
+                out var instantSpecCount,
+                out var attributeDeltaCount,
+                out var typedFactCount);
+            ReadActiveEffectStoreCounters(
+                em,
+                out var activeEffectStoreOwnerCount,
+                out var activeEffectSlotCount,
+                out var activeEffectSlotCapacity,
+                out var activeEffectSlotPendingApplyCount,
+                out var activeEffectSlotActiveCount,
+                out var activeEffectSlotInhibitedCount,
+                out var activeEffectSlotPendingRemoveCount,
+                out var activeEffectSlotLegacyBackedCount,
+                out var activeEffectSlotExternalizedOwnerCount);
+
+            var factCount = gameplayEventCount
+                            + attributeChangeCount
+                            + cueRequestCount
+                            + tagChangeCount
+                            + damageEventCount
+                            + typedFactCount;
+            var deltaCount = attributeChangeCount + tagChangeCount + damageEventCount + attributeDeltaCount;
+            var streamBufferPeak = Math.Max(
+                Math.Max(effectCommandCount, instantSpecCount),
+                Math.Max(attributeDeltaCount, typedFactCount));
+            var presentationCount = CountPresentationOutboxEvents(em, eventBusEntity);
+            var currentFrame = ResolveCurrentFrame(em);
+            var presentationCursorLag = CalculatePresentationCursorLag(
+                em,
+                eventBusEntity,
+                currentFrame,
+                gameplayEventCount,
+                attributeChangeCount,
+                cueRequestCount,
+                tagChangeCount,
+                damageEventCount);
+            var replayCursorLag = CalculateReplayCursorLag(
+                em,
+                eventLogSinkEntity,
+                currentFrame,
+                gameplayEventCount,
+                attributeChangeCount,
+                cueRequestCount,
+                tagChangeCount,
+                damageEventCount);
+            var frameBudget = GASRuntimeFrameBudgetPlanner.CreateCurrent();
+
+            return new GasRuntimeCoreDiagnosticCounters(
+                requestEntityCount + gameplayRequestFactCount + effectCommandCount,
+                gameplayEffectInstancedCount + instantSpecCount,
+                deltaCount,
+                factCount,
+                cueRequestCount,
+                presentationCount,
+                requestEntityCount + gameplayEffectInstancedCount,
+                destroyMarkerCount + gameplayEffectRemovedCount,
+                0,
+                activeEffectEntityCount,
+                applyRequestEntityCount,
+                Math.Max(factCount, streamBufferPeak),
+                presentationCursorLag,
+                replayCursorLag,
+                activeEffectStoreOwnerCount,
+                activeEffectSlotCount,
+                activeEffectSlotCapacity,
+                activeEffectSlotPendingApplyCount,
+                activeEffectSlotActiveCount,
+                activeEffectSlotInhibitedCount,
+                activeEffectSlotPendingRemoveCount,
+                activeEffectSlotLegacyBackedCount,
+                activeEffectSlotExternalizedOwnerCount,
+                frameBudget.TotalQueryBudget,
+                frameBudget.TotalFilteredQueryBudget,
+                frameBudget.TotalUnfilteredQueryBudget,
+                frameBudget.TotalLookupUpdateBudget,
+                frameBudget.TotalRandomLookupBudget,
+                frameBudget.TotalSyncQueryBudget,
+                frameBudget.HelperTempQueryRiskCount,
+                frameBudget.DependencyWaitRiskCount,
+                frameBudget.WorldUpdateAllocatorOwnerCount,
+                frameBudget.RewindableAllocatorCandidateCount);
+        }
+
+        public static void CollectAndRecordRuntimeCoreCounters(
+            EntityManager em,
+            Entity debuggerEntity,
+            int frame,
+            Entity eventBusEntity,
+            Entity eventLogSinkEntity)
+        {
+            var counters = CollectRuntimeCoreCounters(em, eventBusEntity, eventLogSinkEntity);
+            RecordRuntimeCoreCounters(em, debuggerEntity, frame, counters);
+        }
+
+        public static void RecordRuntimeCoreEcbPlayback(
+            EntityManager em,
+            int frame,
+            EGasRuntimeDiagnosticModule module,
+            int playbackCount = 1)
+        {
+            if (!GASManager.IsInitialized || !GASManager.EntityManager.Equals(em))
+                return;
+
+            RecordRuntimeCoreEcbPlayback(
+                em,
+                GASManager.EntityRuntimeDebugger,
+                frame,
+                module,
+                playbackCount);
+        }
+
+        public static void RecordRuntimeCoreEcbPlayback(
+            EntityManager em,
+            Entity debuggerEntity,
+            int frame,
+            EGasRuntimeDiagnosticModule module,
+            int playbackCount = 1)
+        {
+            if (playbackCount <= 0 || !TryGetWritableLog(em, debuggerEntity, out var state, out var log))
+                return;
+
+            state.RuntimeCoreEcbPlaybackCount += playbackCount;
+            Append(
+                log,
+                ref state,
+                new BGasRuntimeDiagnosticEvent
+                {
+                    Frame = frame,
+                    Kind = EGasRuntimeDiagnosticKind.StructuralChange,
+                    Severity = EGasRuntimeDiagnosticSeverity.Trace,
+                    Module = module,
+                    EcbPlaybackCount = playbackCount,
+                    Count = playbackCount,
+                });
+
+            ApplyRetention(log, ref state);
+            em.SetComponentData(debuggerEntity, state);
+        }
+
+        public static int ResolveCurrentFrame(EntityManager em)
+        {
+            if (GASManager.IsInitialized && GASManager.EntityManager.Equals(em))
+            {
+                var globalTimer = GASManager.EntityGlobalTimer;
+                if (globalTimer != Entity.Null
+                    && em.Exists(globalTimer)
+                    && em.HasComponent<GlobalTimer>(globalTimer))
+                {
+                    return em.GetComponentData<GlobalTimer>(globalTimer).Frame;
+                }
+            }
+
+            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<GlobalTimer>());
+            return query.CalculateEntityCount() == 1
+                ? query.GetSingleton<GlobalTimer>().Frame
+                : 0;
+        }
+
+        public static void RecordRuntimeCoreCounters(
+            EntityManager em,
+            Entity debuggerEntity,
+            int frame,
+            int requestCount,
+            int specCount,
+            int deltaCount,
+            int factCount,
+            int cueCount,
+            int presentationCount,
+            int entityCreateCount,
+            int entityDestroyCount,
+            int ecbPlaybackCount,
+            int activeEffectEntityCount,
+            int applyRequestEntityCount,
+            int eventBusBufferLength = 0,
+            int presentationCursorLag = 0,
+            int replayCursorLag = 0,
+            int activeEffectStoreOwnerCount = 0,
+            int activeEffectSlotCount = 0,
+            int activeEffectSlotCapacity = 0,
+            int activeEffectSlotPendingApplyCount = 0,
+            int activeEffectSlotActiveCount = 0,
+            int activeEffectSlotInhibitedCount = 0,
+            int activeEffectSlotPendingRemoveCount = 0,
+            int activeEffectSlotLegacyBackedCount = 0,
+            int activeEffectSlotExternalizedOwnerCount = 0,
+            int queryBudget = 0,
+            int filteredQueryBudget = 0,
+            int unfilteredQueryBudget = 0,
+            int lookupUpdateBudget = 0,
+            int randomLookupBudget = 0,
+            int syncQueryBudget = 0,
+            int helperTempQueryRiskCount = 0,
+            int dependencyWaitRiskCount = 0,
+            int worldUpdateAllocatorOwnerCount = 0,
+            int rewindableAllocatorCandidateCount = 0)
+        {
+            if (!TryGetWritableLog(em, debuggerEntity, out var state, out var log))
+                return;
+
+            state.RuntimeCoreRequestCount += requestCount;
+            state.RuntimeCoreSpecCount += specCount;
+            state.RuntimeCoreDeltaCount += deltaCount;
+            state.RuntimeCoreFactCount += factCount;
+            state.RuntimeCoreCueCount += cueCount;
+            state.RuntimeCorePresentationCount += presentationCount;
+            state.RuntimeCoreEntityCreateCount += entityCreateCount;
+            state.RuntimeCoreEntityDestroyCount += entityDestroyCount;
+            state.RuntimeCoreEcbPlaybackCount += ecbPlaybackCount;
+            if (activeEffectEntityCount > state.RuntimeCorePeakActiveEffectEntityCount)
+                state.RuntimeCorePeakActiveEffectEntityCount = activeEffectEntityCount;
+            if (applyRequestEntityCount > state.RuntimeCorePeakApplyRequestEntityCount)
+                state.RuntimeCorePeakApplyRequestEntityCount = applyRequestEntityCount;
+            if (eventBusBufferLength > state.RuntimeCorePeakEventBusBufferLength)
+                state.RuntimeCorePeakEventBusBufferLength = eventBusBufferLength;
+            if (presentationCursorLag > state.RuntimeCorePeakPresentationCursorLag)
+                state.RuntimeCorePeakPresentationCursorLag = presentationCursorLag;
+            if (replayCursorLag > state.RuntimeCorePeakReplayCursorLag)
+                state.RuntimeCorePeakReplayCursorLag = replayCursorLag;
+            state.RuntimeCoreActiveEffectStoreOwnerCount = activeEffectStoreOwnerCount;
+            state.RuntimeCoreActiveEffectSlotCount = activeEffectSlotCount;
+            state.RuntimeCoreActiveEffectSlotCapacity = activeEffectSlotCapacity;
+            state.RuntimeCoreActiveEffectSlotPendingApplyCount = activeEffectSlotPendingApplyCount;
+            state.RuntimeCoreActiveEffectSlotActiveCount = activeEffectSlotActiveCount;
+            state.RuntimeCoreActiveEffectSlotInhibitedCount = activeEffectSlotInhibitedCount;
+            state.RuntimeCoreActiveEffectSlotPendingRemoveCount = activeEffectSlotPendingRemoveCount;
+            state.RuntimeCoreActiveEffectSlotLegacyBackedCount = activeEffectSlotLegacyBackedCount;
+            state.RuntimeCoreActiveEffectSlotExternalizedOwnerCount = activeEffectSlotExternalizedOwnerCount;
+            state.RuntimeCoreQueryBudget = queryBudget;
+            state.RuntimeCoreFilteredQueryBudget = filteredQueryBudget;
+            state.RuntimeCoreUnfilteredQueryBudget = unfilteredQueryBudget;
+            state.RuntimeCoreLookupUpdateBudget = lookupUpdateBudget;
+            state.RuntimeCoreRandomLookupBudget = randomLookupBudget;
+            state.RuntimeCoreSyncQueryBudget = syncQueryBudget;
+            state.RuntimeCoreHelperTempQueryRiskCount = helperTempQueryRiskCount;
+            state.RuntimeCoreDependencyWaitRiskCount = dependencyWaitRiskCount;
+            state.RuntimeCoreWorldUpdateAllocatorOwnerCount = worldUpdateAllocatorOwnerCount;
+            state.RuntimeCoreRewindableAllocatorCandidateCount = rewindableAllocatorCandidateCount;
+
+            Append(
+                log,
+                ref state,
+                new BGasRuntimeDiagnosticEvent
+                {
+                    Frame = frame,
+                    Kind = EGasRuntimeDiagnosticKind.RuntimeCoreCounters,
+                    Severity = EGasRuntimeDiagnosticSeverity.Trace,
+                    Module = EGasRuntimeDiagnosticModule.Runtime,
+                    GroupName = "RuntimeCore",
+                    Count = requestCount,
+                    ValueA = specCount,
+                    ValueB = deltaCount,
+                    Capacity = factCount,
+                    CallCount = cueCount,
+                    TotalMicroseconds = presentationCount,
+                    ElapsedMicroseconds = activeEffectEntityCount,
+                    EntityCreateCount = entityCreateCount,
+                    EntityDestroyCount = entityDestroyCount,
+                    EcbPlaybackCount = ecbPlaybackCount,
+                    ActiveEffectEntityCount = activeEffectEntityCount,
+                    ApplyRequestEntityCount = applyRequestEntityCount,
+                    EventBusBufferLength = eventBusBufferLength,
+                    PresentationCursorLag = presentationCursorLag,
+                    ReplayCursorLag = replayCursorLag,
+                    ActiveEffectStoreOwnerCount = activeEffectStoreOwnerCount,
+                    ActiveEffectSlotCount = activeEffectSlotCount,
+                    ActiveEffectSlotCapacity = activeEffectSlotCapacity,
+                    ActiveEffectSlotPendingApplyCount = activeEffectSlotPendingApplyCount,
+                    ActiveEffectSlotActiveCount = activeEffectSlotActiveCount,
+                    ActiveEffectSlotInhibitedCount = activeEffectSlotInhibitedCount,
+                    ActiveEffectSlotPendingRemoveCount = activeEffectSlotPendingRemoveCount,
+                    ActiveEffectSlotLegacyBackedCount = activeEffectSlotLegacyBackedCount,
+                    ActiveEffectSlotExternalizedOwnerCount = activeEffectSlotExternalizedOwnerCount,
+                    QueryBudget = queryBudget,
+                    FilteredQueryBudget = filteredQueryBudget,
+                    UnfilteredQueryBudget = unfilteredQueryBudget,
+                    LookupUpdateBudget = lookupUpdateBudget,
+                    RandomLookupBudget = randomLookupBudget,
+                    SyncQueryBudget = syncQueryBudget,
+                    HelperTempQueryRiskCount = helperTempQueryRiskCount,
+                    DependencyWaitRiskCount = dependencyWaitRiskCount,
+                    WorldUpdateAllocatorOwnerCount = worldUpdateAllocatorOwnerCount,
+                    RewindableAllocatorCandidateCount = rewindableAllocatorCandidateCount,
+                });
+
+            ApplyRetention(log, ref state);
+            em.SetComponentData(debuggerEntity, state);
+        }
+
         public static void RecordEventBusPressure(
             EntityManager em,
             Entity debuggerEntity,
@@ -292,6 +862,7 @@ namespace GAS.Runtime
             {
                 return new GasRuntimeDiagnosticSnapshot(
                     new GasRuntimeDiagnosticStats(0, 0, 0, 0, 0, 0, 0, 0),
+                    new GasRuntimeCoreDiagnosticCounters(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
                     Array.Empty<BGasRuntimeDiagnosticEvent>());
             }
 
@@ -333,6 +904,40 @@ namespace GAS.Runtime
                     errorCount,
                     slowSystemCount,
                     bufferPressureWarningCount),
+                new GasRuntimeCoreDiagnosticCounters(
+                    state.RuntimeCoreRequestCount,
+                    state.RuntimeCoreSpecCount,
+                    state.RuntimeCoreDeltaCount,
+                    state.RuntimeCoreFactCount,
+                    state.RuntimeCoreCueCount,
+                    state.RuntimeCorePresentationCount,
+                    state.RuntimeCoreEntityCreateCount,
+                    state.RuntimeCoreEntityDestroyCount,
+                    state.RuntimeCoreEcbPlaybackCount,
+                    state.RuntimeCorePeakActiveEffectEntityCount,
+                    state.RuntimeCorePeakApplyRequestEntityCount,
+                    state.RuntimeCorePeakEventBusBufferLength,
+                    state.RuntimeCorePeakPresentationCursorLag,
+                    state.RuntimeCorePeakReplayCursorLag,
+                    state.RuntimeCoreActiveEffectStoreOwnerCount,
+                    state.RuntimeCoreActiveEffectSlotCount,
+                    state.RuntimeCoreActiveEffectSlotCapacity,
+                    state.RuntimeCoreActiveEffectSlotPendingApplyCount,
+                    state.RuntimeCoreActiveEffectSlotActiveCount,
+                    state.RuntimeCoreActiveEffectSlotInhibitedCount,
+                    state.RuntimeCoreActiveEffectSlotPendingRemoveCount,
+                    state.RuntimeCoreActiveEffectSlotLegacyBackedCount,
+                    state.RuntimeCoreActiveEffectSlotExternalizedOwnerCount,
+                    state.RuntimeCoreQueryBudget,
+                    state.RuntimeCoreFilteredQueryBudget,
+                    state.RuntimeCoreUnfilteredQueryBudget,
+                    state.RuntimeCoreLookupUpdateBudget,
+                    state.RuntimeCoreRandomLookupBudget,
+                    state.RuntimeCoreSyncQueryBudget,
+                    state.RuntimeCoreHelperTempQueryRiskCount,
+                    state.RuntimeCoreDependencyWaitRiskCount,
+                    state.RuntimeCoreWorldUpdateAllocatorOwnerCount,
+                    state.RuntimeCoreRewindableAllocatorCandidateCount),
                 events);
         }
 
@@ -353,6 +958,7 @@ namespace GAS.Runtime
                 .Append("|bufferPressureWarnings=")
                 .Append(stats.BufferPressureWarningCount)
                 .AppendLine();
+            AppendRuntimeCoreCounters(builder, snapshot.CoreCounters);
 
             var events = snapshot.Events ?? Array.Empty<BGasRuntimeDiagnosticEvent>();
             var count = maxEvents > 0 && maxEvents < events.Length ? maxEvents : events.Length;
@@ -368,6 +974,264 @@ namespace GAS.Runtime
                    && em.Exists(debuggerEntity)
                    && em.HasComponent<CGasRuntimeDebugger>(debuggerEntity)
                    && em.HasBuffer<BGasRuntimeDiagnosticEvent>(debuggerEntity);
+        }
+
+        private static int CountEntitiesWith<T>(EntityManager em)
+            where T : unmanaged, IComponentData
+        {
+            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<T>());
+            return query.CalculateEntityCount();
+        }
+
+        private static void ReadEventBusCounters(
+            EntityManager em,
+            Entity eventBusEntity,
+            out int gameplayEventCount,
+            out int attributeChangeCount,
+            out int cueRequestCount,
+            out int tagChangeCount,
+            out int damageEventCount,
+            out int gameplayRequestFactCount,
+            out int gameplayEffectInstancedCount,
+            out int gameplayEffectRemovedCount)
+        {
+            gameplayEventCount = 0;
+            attributeChangeCount = 0;
+            cueRequestCount = 0;
+            tagChangeCount = 0;
+            damageEventCount = 0;
+            gameplayRequestFactCount = 0;
+            gameplayEffectInstancedCount = 0;
+            gameplayEffectRemovedCount = 0;
+
+            if (eventBusEntity == Entity.Null || !em.Exists(eventBusEntity))
+                return;
+
+            if (em.HasBuffer<BGameplayEvent>(eventBusEntity))
+            {
+                var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
+                gameplayEventCount = gameplayEvents.Length;
+                for (var i = 0; i < gameplayEvents.Length; i++)
+                {
+                    var type = gameplayEvents[i].Type;
+                    if (GameplayFactClassifier.Classify(type).Category == EGameplayFactCategory.Request)
+                        gameplayRequestFactCount++;
+                    if (type == EGameplayEventType.GameplayEffectInstanced)
+                        gameplayEffectInstancedCount++;
+                    else if (type == EGameplayEventType.GameplayEffectRemoved)
+                        gameplayEffectRemovedCount++;
+                }
+            }
+
+            attributeChangeCount = GetBufferLength<BAttributeChangeEvent>(em, eventBusEntity);
+            cueRequestCount = GetBufferLength<BCueRequest>(em, eventBusEntity);
+            tagChangeCount = GetBufferLength<BTagChangeEvent>(em, eventBusEntity);
+            damageEventCount = GetBufferLength<BDamageEvent>(em, eventBusEntity);
+        }
+
+        private static void ReadEffectCommandSpecStreamCounters(
+            EntityManager em,
+            out int effectCommandCount,
+            out int instantSpecCount,
+            out int attributeDeltaCount,
+            out int typedFactCount)
+        {
+            effectCommandCount = 0;
+            instantSpecCount = 0;
+            attributeDeltaCount = 0;
+            typedFactCount = 0;
+
+            if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity))
+                return;
+
+            effectCommandCount = GetBufferLength<BEffectCommand>(em, streamEntity);
+            instantSpecCount = GetBufferLength<BInstantEffectSpec>(em, streamEntity);
+            attributeDeltaCount = GetBufferLength<BAttributeDelta>(em, streamEntity);
+            typedFactCount = GetBufferLength<BTypedSimulationFact>(em, streamEntity);
+        }
+
+        private static void ReadActiveEffectStoreCounters(
+            EntityManager em,
+            out int ownerCount,
+            out int slotCount,
+            out int slotCapacity,
+            out int pendingApplyCount,
+            out int activeCount,
+            out int inhibitedCount,
+            out int pendingRemoveCount,
+            out int legacyBackedCount,
+            out int externalizedOwnerCount)
+        {
+            ownerCount = 0;
+            slotCount = 0;
+            slotCapacity = 0;
+            pendingApplyCount = 0;
+            activeCount = 0;
+            inhibitedCount = 0;
+            pendingRemoveCount = 0;
+            legacyBackedCount = 0;
+            externalizedOwnerCount = 0;
+
+            using var query = em.CreateEntityQuery(
+                ComponentType.ReadOnly<CActiveEffectStore>(),
+                ComponentType.ReadOnly<BActiveEffectSlot>());
+            using var owners = query.ToEntityArray(Allocator.Temp);
+            ownerCount = owners.Length;
+
+            for (var ownerIndex = 0; ownerIndex < owners.Length; ownerIndex++)
+            {
+                var slots = em.GetBuffer<BActiveEffectSlot>(owners[ownerIndex]);
+                slotCount += slots.Length;
+                slotCapacity += slots.Capacity;
+                if (slots.Capacity > ActiveEffectStore.InlineSlotCapacity)
+                    externalizedOwnerCount++;
+
+                for (var slotIndex = 0; slotIndex < slots.Length; slotIndex++)
+                {
+                    var slot = slots[slotIndex];
+                    switch (slot.State)
+                    {
+                        case EActiveEffectSlotState.PendingApply:
+                            pendingApplyCount++;
+                            break;
+                        case EActiveEffectSlotState.Active:
+                            activeCount++;
+                            break;
+                        case EActiveEffectSlotState.Inhibited:
+                            inhibitedCount++;
+                            break;
+                        case EActiveEffectSlotState.PendingRemove:
+                            pendingRemoveCount++;
+                            break;
+                    }
+
+                    if ((slot.Flags & (int)EActiveEffectSlotFlags.LegacyEntityBacked) != 0)
+                        legacyBackedCount++;
+                }
+            }
+        }
+
+        private static int GetBufferLength<T>(EntityManager em, Entity entity)
+            where T : unmanaged, IBufferElementData
+        {
+            return entity != Entity.Null && em.Exists(entity) && em.HasBuffer<T>(entity)
+                ? em.GetBuffer<T>(entity).Length
+                : 0;
+        }
+
+        private static int CountPresentationOutboxEvents(EntityManager em, Entity eventBusEntity)
+        {
+            if (eventBusEntity != Entity.Null
+                && em.Exists(eventBusEntity)
+                && em.HasBuffer<BPresentationOutboxOwner>(eventBusEntity))
+            {
+                var owners = em.GetBuffer<BPresentationOutboxOwner>(eventBusEntity);
+                var count = 0;
+                for (var i = 0; i < owners.Length; i++)
+                {
+                    var asc = owners[i].ASC;
+                    if (asc != Entity.Null && em.Exists(asc) && em.HasBuffer<BPresentationEvent>(asc))
+                        count += em.GetBuffer<BPresentationEvent>(asc).Length;
+                }
+
+                return count;
+            }
+
+            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<BPresentationEvent>());
+            using var entities = query.ToEntityArray(Allocator.Temp);
+            var fallbackCount = 0;
+            for (var i = 0; i < entities.Length; i++)
+                fallbackCount += em.GetBuffer<BPresentationEvent>(entities[i]).Length;
+
+            return fallbackCount;
+        }
+
+        private static int CalculatePresentationCursorLag(
+            EntityManager em,
+            Entity eventBusEntity,
+            int currentFrame,
+            int gameplayEventCount,
+            int attributeChangeCount,
+            int cueRequestCount,
+            int tagChangeCount,
+            int damageEventCount)
+        {
+            if (eventBusEntity == Entity.Null
+                || !em.Exists(eventBusEntity)
+                || !em.HasComponent<CPresentationOutboxProjectionState>(eventBusEntity))
+            {
+                return 0;
+            }
+
+            var projectionState = em.GetComponentData<CPresentationOutboxProjectionState>(eventBusEntity);
+            var sameFrame = projectionState.LastProjectedFrame == currentFrame;
+            return SumCursorLag(
+                gameplayEventCount,
+                sameFrame ? projectionState.ProcessedGameplayEventCount : 0,
+                attributeChangeCount,
+                sameFrame ? projectionState.ProcessedAttributeEventCount : 0,
+                cueRequestCount,
+                sameFrame ? projectionState.ProcessedCueRequestCount : 0,
+                tagChangeCount,
+                sameFrame ? projectionState.ProcessedTagEventCount : 0,
+                damageEventCount,
+                sameFrame ? projectionState.ProcessedDamageEventCount : 0);
+        }
+
+        private static int CalculateReplayCursorLag(
+            EntityManager em,
+            Entity eventLogSinkEntity,
+            int currentFrame,
+            int gameplayEventCount,
+            int attributeChangeCount,
+            int cueRequestCount,
+            int tagChangeCount,
+            int damageEventCount)
+        {
+            if (eventLogSinkEntity == Entity.Null
+                || !em.Exists(eventLogSinkEntity)
+                || !em.HasComponent<CGameplayEventLogSink>(eventLogSinkEntity))
+            {
+                return 0;
+            }
+
+            var sinkState = em.GetComponentData<CGameplayEventLogSink>(eventLogSinkEntity);
+            var sameFrame = sinkState.LastProjectedFrame == currentFrame;
+            return SumCursorLag(
+                gameplayEventCount,
+                sameFrame ? sinkState.ProcessedGameplayEventCount : 0,
+                attributeChangeCount,
+                sameFrame ? sinkState.ProcessedAttributeEventCount : 0,
+                cueRequestCount,
+                sameFrame ? sinkState.ProcessedCueRequestCount : 0,
+                tagChangeCount,
+                sameFrame ? sinkState.ProcessedTagEventCount : 0,
+                damageEventCount,
+                sameFrame ? sinkState.ProcessedDamageEventCount : 0);
+        }
+
+        private static int SumCursorLag(
+            int gameplayEventCount,
+            int processedGameplayEventCount,
+            int attributeChangeCount,
+            int processedAttributeChangeCount,
+            int cueRequestCount,
+            int processedCueRequestCount,
+            int tagChangeCount,
+            int processedTagChangeCount,
+            int damageEventCount,
+            int processedDamageEventCount)
+        {
+            return PositiveLag(gameplayEventCount, processedGameplayEventCount)
+                   + PositiveLag(attributeChangeCount, processedAttributeChangeCount)
+                   + PositiveLag(cueRequestCount, processedCueRequestCount)
+                   + PositiveLag(tagChangeCount, processedTagChangeCount)
+                   + PositiveLag(damageEventCount, processedDamageEventCount);
+        }
+
+        private static int PositiveLag(int count, int processedCount)
+        {
+            return processedCount < count ? count - processedCount : 0;
         }
 
         private static bool TryGetWritableLog(
@@ -557,6 +1421,84 @@ namespace GAS.Runtime
                 builder.Append("|system=").Append(evt.SystemName);
             if (evt.BufferName.Length > 0)
                 builder.Append("|buffer=").Append(evt.BufferName);
+            if (evt.Kind == EGasRuntimeDiagnosticKind.RuntimeCoreCounters)
+            {
+                builder.Append("|requests=")
+                    .Append(evt.Count)
+                    .Append("|specs=")
+                    .Append(evt.ValueA)
+                    .Append("|deltas=")
+                    .Append(evt.ValueB)
+                    .Append("|facts=")
+                    .Append(evt.Capacity)
+                    .Append("|cues=")
+                    .Append(evt.CallCount)
+                    .Append("|presentation=")
+                    .Append(evt.TotalMicroseconds)
+                    .Append("|entityCreates=")
+                    .Append(evt.EntityCreateCount)
+                    .Append("|entityDestroys=")
+                    .Append(evt.EntityDestroyCount)
+                    .Append("|ecbPlaybacks=")
+                    .Append(evt.EcbPlaybackCount)
+                    .Append("|activeEffectEntities=")
+                    .Append(evt.ActiveEffectEntityCount)
+                    .Append("|applyRequestEntities=")
+                    .Append(evt.ApplyRequestEntityCount)
+                    .Append("|eventBusBufferLength=")
+                    .Append(evt.EventBusBufferLength)
+                    .Append("|presentationCursorLag=")
+                    .Append(evt.PresentationCursorLag)
+                    .Append("|replayCursorLag=")
+                    .Append(evt.ReplayCursorLag)
+                    .Append("|activeEffectStoreOwners=")
+                    .Append(evt.ActiveEffectStoreOwnerCount)
+                    .Append("|activeEffectSlots=")
+                    .Append(evt.ActiveEffectSlotCount)
+                    .Append("|activeEffectSlotCapacity=")
+                    .Append(evt.ActiveEffectSlotCapacity)
+                    .Append("|activeEffectSlotPendingApply=")
+                    .Append(evt.ActiveEffectSlotPendingApplyCount)
+                    .Append("|activeEffectSlotActive=")
+                    .Append(evt.ActiveEffectSlotActiveCount)
+                    .Append("|activeEffectSlotInhibited=")
+                    .Append(evt.ActiveEffectSlotInhibitedCount)
+                    .Append("|activeEffectSlotPendingRemove=")
+                    .Append(evt.ActiveEffectSlotPendingRemoveCount)
+                    .Append("|activeEffectSlotLegacyBacked=")
+                    .Append(evt.ActiveEffectSlotLegacyBackedCount)
+                    .Append("|activeEffectSlotExternalizedOwners=")
+                    .Append(evt.ActiveEffectSlotExternalizedOwnerCount)
+                    .Append("|queryBudget=")
+                    .Append(evt.QueryBudget)
+                    .Append("|filteredQueryBudget=")
+                    .Append(evt.FilteredQueryBudget)
+                    .Append("|unfilteredQueryBudget=")
+                    .Append(evt.UnfilteredQueryBudget)
+                    .Append("|lookupUpdateBudget=")
+                    .Append(evt.LookupUpdateBudget)
+                    .Append("|randomLookupBudget=")
+                    .Append(evt.RandomLookupBudget)
+                    .Append("|syncQueryBudget=")
+                    .Append(evt.SyncQueryBudget)
+                    .Append("|helperTempQueryRisks=")
+                    .Append(evt.HelperTempQueryRiskCount)
+                    .Append("|dependencyWaitRisks=")
+                    .Append(evt.DependencyWaitRiskCount)
+                    .Append("|worldUpdateAllocatorOwners=")
+                    .Append(evt.WorldUpdateAllocatorOwnerCount)
+                    .Append("|rewindableAllocatorCandidates=")
+                    .Append(evt.RewindableAllocatorCandidateCount);
+                builder.AppendLine();
+                return;
+            }
+            if (evt.Kind == EGasRuntimeDiagnosticKind.StructuralChange)
+            {
+                if (evt.EcbPlaybackCount != 0)
+                    builder.Append("|ecbPlaybacks=").Append(evt.EcbPlaybackCount);
+                builder.AppendLine();
+                return;
+            }
             if (evt.ElapsedMicroseconds != 0)
                 builder.Append("|elapsedUs=").Append(evt.ElapsedMicroseconds);
             if (evt.TotalMicroseconds != 0)
@@ -574,6 +1516,82 @@ namespace GAS.Runtime
             }
 
             builder.AppendLine();
+        }
+
+        private static void AppendRuntimeCoreCounters(
+            StringBuilder builder,
+            in GasRuntimeCoreDiagnosticCounters counters)
+        {
+            builder.Append("runtimeCoreCounters|requests=")
+                .Append(counters.RequestCount)
+                .Append("|specs=")
+                .Append(counters.SpecCount)
+                .Append("|deltas=")
+                .Append(counters.DeltaCount)
+                .Append("|facts=")
+                .Append(counters.FactCount)
+                .Append("|cues=")
+                .Append(counters.CueCount)
+                .Append("|presentation=")
+                .Append(counters.PresentationCount)
+                .Append("|entityCreates=")
+                .Append(counters.EntityCreateCount)
+                .Append("|entityDestroys=")
+                .Append(counters.EntityDestroyCount)
+                .Append("|ecbPlaybacks=")
+                .Append(counters.EcbPlaybackCount)
+                .AppendLine();
+            builder.Append("runtimeCoreCountersPeak|activeEffectEntities=")
+                .Append(counters.PeakActiveEffectEntityCount)
+                .Append("|applyRequestEntities=")
+                .Append(counters.PeakApplyRequestEntityCount)
+                .Append("|eventBusBufferLength=")
+                .Append(counters.PeakEventBusBufferLength)
+                .Append("|presentationCursorLag=")
+                .Append(counters.PeakPresentationCursorLag)
+                .Append("|replayCursorLag=")
+                .Append(counters.PeakReplayCursorLag)
+                .AppendLine();
+            builder.Append("runtimeCoreActiveEffectStore|owners=")
+                .Append(counters.ActiveEffectStoreOwnerCount)
+                .Append("|slots=")
+                .Append(counters.ActiveEffectSlotCount)
+                .Append("|capacity=")
+                .Append(counters.ActiveEffectSlotCapacity)
+                .Append("|pendingApply=")
+                .Append(counters.ActiveEffectSlotPendingApplyCount)
+                .Append("|active=")
+                .Append(counters.ActiveEffectSlotActiveCount)
+                .Append("|inhibited=")
+                .Append(counters.ActiveEffectSlotInhibitedCount)
+                .Append("|pendingRemove=")
+                .Append(counters.ActiveEffectSlotPendingRemoveCount)
+                .Append("|legacyBacked=")
+                .Append(counters.ActiveEffectSlotLegacyBackedCount)
+                .Append("|externalizedOwners=")
+                .Append(counters.ActiveEffectSlotExternalizedOwnerCount)
+                .AppendLine();
+            builder.Append("runtimeCoreFrameBudget|queryBudget=")
+                .Append(counters.QueryBudget)
+                .Append("|filteredQueryBudget=")
+                .Append(counters.FilteredQueryBudget)
+                .Append("|unfilteredQueryBudget=")
+                .Append(counters.UnfilteredQueryBudget)
+                .Append("|lookupUpdateBudget=")
+                .Append(counters.LookupUpdateBudget)
+                .Append("|randomLookupBudget=")
+                .Append(counters.RandomLookupBudget)
+                .Append("|syncQueryBudget=")
+                .Append(counters.SyncQueryBudget)
+                .Append("|helperTempQueryRisks=")
+                .Append(counters.HelperTempQueryRiskCount)
+                .Append("|dependencyWaitRisks=")
+                .Append(counters.DependencyWaitRiskCount)
+                .Append("|worldUpdateAllocatorOwners=")
+                .Append(counters.WorldUpdateAllocatorOwnerCount)
+                .Append("|rewindableAllocatorCandidates=")
+                .Append(counters.RewindableAllocatorCandidateCount)
+                .AppendLine();
         }
     }
 }

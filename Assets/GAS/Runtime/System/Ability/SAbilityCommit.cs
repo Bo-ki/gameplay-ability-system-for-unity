@@ -81,6 +81,10 @@ namespace GAS.Runtime
             }
 
             ecb.Playback(em);
+            GasRuntimeDebugger.RecordRuntimeCoreEcbPlayback(
+                em,
+                GasRuntimeDebugger.ResolveCurrentFrame(em),
+                EGasRuntimeDiagnosticModule.Ability);
             ecb.Dispose();
             abilities.Dispose();
         }
@@ -272,7 +276,7 @@ namespace GAS.Runtime
                     GameplayEffectCode = effectCode,
                     Level = em.GetComponentData<CAbilityBaseInfo>(ability).Level,
                 };
-                GameplayEffectRequestWriter.ApplyFastOrCreateSingleTargetRequest(
+                GameplayEffectRequestWriter.AppendSimpleInstantCommandOrCreateSingleTargetRequest(
                     em,
                     requestData,
                     owner,
@@ -309,7 +313,7 @@ namespace GAS.Runtime
                     GameplayEffectCode = effectCode,
                     Level = baseInfo.Level,
                 };
-                GameplayEffectRequestWriter.ApplyFastOrCreateSingleTargetRequest(
+                GameplayEffectRequestWriter.AppendSimpleInstantCommandOrCreateSingleTargetRequest(
                     em,
                     requestData,
                     target,

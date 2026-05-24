@@ -68,6 +68,23 @@ namespace GAS.Runtime.Tests.Event
         }
 
         [Test]
+        public void CurrentLayoutMarksActiveEffectStoreAsOwnerLocalTargetContract()
+        {
+            var plan = GASRuntimeQueryLayoutPlanner.CreateCurrent();
+
+            Assert.That(
+                plan.TryFind(GASRuntimeQueryLayoutEntryId.ActiveEffectStore, out var store),
+                Is.True);
+            Assert.That(store.EntityKind, Is.EqualTo(GASRuntimeEntityKind.AbilitySystemComponent));
+            Assert.That(store.Decision, Is.EqualTo(GASRuntimeLayoutDecision.TargetContract));
+            Assert.That(store.HasRequiredSlot(GASRuntimeLayoutComponentSlot.ActiveEffectStore), Is.True);
+            Assert.That(store.HasRequiredSlot(GASRuntimeLayoutComponentSlot.ActiveEffectSlotBuffer), Is.True);
+            Assert.That(store.HasCapability(GASRuntimeLayoutCapability.NoPerHitStructuralChange), Is.True);
+            Assert.That(store.HasBoundary(GASRuntimeLayoutBoundary.DynamicBufferMutation), Is.True);
+            Assert.That(store.HasBoundary(GASRuntimeLayoutBoundary.StructuralEntityManagerHotspot), Is.False);
+        }
+
+        [Test]
         public void LayoutPlanSystemTypesArePartOfExplicitGasSchedule()
         {
             var scheduled = new HashSet<Type>();
