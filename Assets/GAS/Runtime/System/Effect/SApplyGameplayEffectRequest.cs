@@ -32,36 +32,41 @@ namespace GAS.Runtime
             var currentFrame = SystemAPI.GetSingleton<GlobalTimer>().Frame;
             var requests = _query.ToEntityArray(Allocator.Temp);
             var hasEventBus = SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity);
-            using var gameplayEventBatch = hasEventBus
+            var eventBusWriter = hasEventBus
                 ? EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity)
                 : default;
 
-            foreach (var requestEntity in requests)
+            try
             {
-                if (!em.Exists(requestEntity) || !em.HasComponent<CApplyGameplayEffectRequest>(requestEntity))
-                    continue;
-
-                var request = em.GetComponentData<CApplyGameplayEffectRequest>(requestEntity);
-                if (IsUnavailableAsc(em, request.SourceAsc))
+                foreach (var requestEntity in requests)
                 {
+                    if (!em.Exists(requestEntity) || !em.HasComponent<CApplyGameplayEffectRequest>(requestEntity))
+                        continue;
+
+                    var request = em.GetComponentData<CApplyGameplayEffectRequest>(requestEntity);
+                    if (IsUnavailableAsc(em, request.SourceAsc))
+                    {
+                        em.DestroyEntity(requestEntity);
+                        continue;
+                    }
+
+                    var targetKind = GetTargetDataKind(em, requestEntity);
+                    ProcessTargets(
+                        em,
+                        requestEntity,
+                        request,
+                        targetKind,
+                        currentFrame,
+                        ref eventBusWriter);
+
                     em.DestroyEntity(requestEntity);
-                    continue;
                 }
-
-                var targetKind = GetTargetDataKind(em, requestEntity);
-                ProcessTargets(
-                    em,
-                    requestEntity,
-                    request,
-                    targetKind,
-                    currentFrame,
-                    hasEventBus,
-                    eventBusEntity);
-
-                em.DestroyEntity(requestEntity);
             }
-
-            requests.Dispose();
+            finally
+            {
+                eventBusWriter.Dispose();
+                requests.Dispose();
+            }
         }
 
         private CEffectContext CreateContext(
@@ -69,11 +74,10 @@ namespace GAS.Runtime
             in CApplyGameplayEffectRequest request,
             Entity targetAsc,
             ETargetDataKind targetKind,
-            bool hasEventBus,
-            Entity eventBusEntity)
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
         {
-            var contextId = hasEventBus
-                ? EventBusHelper.AllocateGameplayEffectContextId(em, eventBusEntity)
+            var contextId = eventBusWriter.IsCreated
+                ? EventBusHelper.AllocateGameplayEffectContextId(ref eventBusWriter)
                 : AllocateLocalContextId();
 
             return new CEffectContext
@@ -104,8 +108,7 @@ namespace GAS.Runtime
             in CApplyGameplayEffectRequest request,
             ETargetDataKind targetKind,
             int currentFrame,
-            bool hasEventBus,
-            Entity eventBusEntity)
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
         {
             if (!em.HasBuffer<BTargetEntity>(requestEntity))
             {
@@ -116,8 +119,7 @@ namespace GAS.Runtime
                     targetKind,
                     request.SourceAsc,
                     currentFrame,
-                    hasEventBus,
-                    eventBusEntity);
+                    ref eventBusWriter);
                 return;
             }
 
@@ -131,8 +133,7 @@ namespace GAS.Runtime
                     targetKind,
                     request.SourceAsc,
                     currentFrame,
-                    hasEventBus,
-                    eventBusEntity);
+                    ref eventBusWriter);
                 return;
             }
 
@@ -147,8 +148,7 @@ namespace GAS.Runtime
                     targetKind,
                     target,
                     currentFrame,
-                    hasEventBus,
-                    eventBusEntity);
+                    ref eventBusWriter);
                 return;
             }
 
@@ -167,8 +167,7 @@ namespace GAS.Runtime
                         targetKind,
                         targetSnapshot[i],
                         currentFrame,
-                        hasEventBus,
-                        eventBusEntity);
+                        ref eventBusWriter);
                 }
             }
             finally
@@ -184,20 +183,18 @@ namespace GAS.Runtime
             ETargetDataKind targetKind,
             Entity target,
             int currentFrame,
-            bool hasEventBus,
-            Entity eventBusEntity)
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
         {
             if (target == Entity.Null || IsUnavailableAsc(em, target))
                 return;
 
-            var context = CreateContext(em, request, target, targetKind, hasEventBus, eventBusEntity);
+            var context = CreateContext(em, request, target, targetKind, ref eventBusWriter);
             if (TryApplyLegacyInstantModifierBypass(
                     em,
                     requestEntity,
                     request,
                     context,
-                    hasEventBus,
-                    eventBusEntity,
+                    ref eventBusWriter,
                     false,
                     default))
             {
@@ -236,8 +233,8 @@ namespace GAS.Runtime
 
             CopySetByCallerValuesToEffect(em, requestEntity, ge);
             CopyTargetDataSummaryToEffect(em, requestEntity, ge);
-            EffectMagnitudeResolver.ResolveModifiers(em, ge, context, spec);
-            EnqueueEffectInstancedEvent(em, hasEventBus, eventBusEntity, ge, context, request.GameplayEffectCode);
+            EffectMagnitudeResolver.ResolveModifiers(em, ge, context, spec, ref eventBusWriter);
+            EnqueueEffectInstancedEvent(ref eventBusWriter, ge, context, request.GameplayEffectCode);
         }
 
         internal static bool TryApplyLegacyInstantModifierBypassDirect(
@@ -302,26 +299,36 @@ namespace GAS.Runtime
                 return false;
             }
 
-            var context = CreateContext(em, request, target, targetKind, eventBusEntity);
-            ref var definition = ref blob.Value;
-            ApplyPreparedLegacyInstantModifierBypass(
-                em,
-                request,
-                context,
-                eventBusEntity,
-                ref definition,
-                Entity.Null,
-                hasDirectSetByCaller,
-                directSetByCaller);
-            return true;
+            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
+            if (!eventBusWriter.IsCreated)
+                return false;
+
+            try
+            {
+                var context = CreateDirectContext(request, target, targetKind, ref eventBusWriter);
+                ref var definition = ref blob.Value;
+                ApplyPreparedLegacyInstantModifierBypass(
+                    em,
+                    request,
+                    context,
+                    ref eventBusWriter,
+                    ref definition,
+                    Entity.Null,
+                    hasDirectSetByCaller,
+                    directSetByCaller);
+                return true;
+            }
+            finally
+            {
+                eventBusWriter.Dispose();
+            }
         }
 
-        private static CEffectContext CreateContext(
-            EntityManager em,
+        private static CEffectContext CreateDirectContext(
             in CApplyGameplayEffectRequest request,
             Entity targetAsc,
             ETargetDataKind targetKind,
-            Entity eventBusEntity)
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
         {
             return new CEffectContext
             {
@@ -331,7 +338,7 @@ namespace GAS.Runtime
                 SourceEffect = request.SourceEffect,
                 Instigator = request.Instigator != Entity.Null ? request.Instigator : request.SourceAsc,
                 Causer = request.Causer != Entity.Null ? request.Causer : request.SourceAbility,
-                ContextId = EventBusHelper.AllocateGameplayEffectContextId(em, eventBusEntity),
+                ContextId = EventBusHelper.AllocateGameplayEffectContextId(ref eventBusWriter),
                 ParentContextId = request.ParentContextId,
                 TargetDataKind = targetKind,
             };
@@ -342,8 +349,7 @@ namespace GAS.Runtime
             Entity requestEntity,
             in CApplyGameplayEffectRequest request,
             in CEffectContext context,
-            bool hasEventBus,
-            Entity eventBusEntity,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
             bool hasDirectSetByCaller,
             in BSetByCallerValue directSetByCaller)
         {
@@ -351,7 +357,7 @@ namespace GAS.Runtime
                     em,
                     requestEntity,
                     request,
-                    hasEventBus,
+                    eventBusWriter.IsCreated,
                     hasDirectSetByCaller,
                     directSetByCaller,
                     out var blob))
@@ -364,7 +370,7 @@ namespace GAS.Runtime
                 em,
                 request,
                 context,
-                eventBusEntity,
+                ref eventBusWriter,
                 ref definition,
                 requestEntity,
                 hasDirectSetByCaller,
@@ -413,30 +419,28 @@ namespace GAS.Runtime
             EntityManager em,
             in CApplyGameplayEffectRequest request,
             in CEffectContext context,
-            Entity eventBusEntity,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
             ref GEStaticDefinitionBlob definition,
             Entity requestEntity,
             bool hasDirectSetByCaller,
             in BSetByCallerValue directSetByCaller)
         {
             EnqueueEffectInstancedEvent(
-                em,
-                true,
-                eventBusEntity,
+                ref eventBusWriter,
                 Entity.Null,
                 context,
                 request.GameplayEffectCode);
-            EnqueueLegacyInstantCueRequestOnApply(em, eventBusEntity, context, ref definition);
+            EnqueueLegacyInstantCueRequestOnApply(ref eventBusWriter, context, ref definition);
             ApplyLegacyInstantModifiers(
                 em,
-                eventBusEntity,
+                ref eventBusWriter,
                 context,
                 ref definition,
                 requestEntity,
                 hasDirectSetByCaller,
                 directSetByCaller,
                 request.GameplayEffectCode);
-            EnqueueLegacyInstantGameplayEffectAppliedEvent(em, eventBusEntity, context, request.GameplayEffectCode);
+            EnqueueLegacyInstantGameplayEffectAppliedEvent(ref eventBusWriter, context, request.GameplayEffectCode);
         }
 
         private static bool CanApplyLegacyInstantModifierBypass(ref GEStaticDefinitionBlob definition)
@@ -515,7 +519,7 @@ namespace GAS.Runtime
 
         private static void ApplyLegacyInstantModifiers(
             EntityManager em,
-            Entity eventBusEntity,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
             in CEffectContext context,
             ref GEStaticDefinitionBlob definition,
             Entity requestEntity,
@@ -566,7 +570,7 @@ namespace GAS.Runtime
                         attribute.CurrentValueChangePending = true;
                     }
 
-                    EventBusHelper.EnqueueAttributeChangeEvent(em, eventBusEntity, new BAttributeChangeEvent
+                    eventBusWriter.EnqueueAttributeChangeEvent(new BAttributeChangeEvent
                     {
                         ASC = target,
                         SourceAsc = context.SourceAsc,
@@ -587,15 +591,14 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueLegacyInstantCueRequestOnApply(
-            EntityManager em,
-            Entity eventBusEntity,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
             in CEffectContext context,
             ref GEStaticDefinitionBlob definition)
         {
             if (!definition.HasCueRequestOnApply)
                 return;
 
-            EventBusHelper.EnqueueCueRequest(em, eventBusEntity, new BCueRequest
+            eventBusWriter.EnqueueCueRequest(new BCueRequest
             {
                 TargetAsc = context.TargetAsc,
                 SourceAsc = context.SourceAsc,
@@ -608,7 +611,7 @@ namespace GAS.Runtime
                 CueEvent = EGameplayCueEvent.OnApply,
             });
 
-            EventBusHelper.EnqueueGameplayEvent(em, eventBusEntity, new BGameplayEvent
+            eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
             {
                 Type = EGameplayEventType.CueRequested,
                 SourceAsc = context.SourceAsc,
@@ -621,12 +624,11 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueLegacyInstantGameplayEffectAppliedEvent(
-            EntityManager em,
-            Entity eventBusEntity,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
             in CEffectContext context,
             int gameplayEffectCode)
         {
-            EventBusHelper.EnqueueGameplayEvent(em, eventBusEntity, new BGameplayEvent
+            eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
             {
                 Type = EGameplayEventType.GameplayEffectApplied,
                 SourceAsc = context.SourceAsc,
@@ -840,17 +842,15 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueEffectInstancedEvent(
-            EntityManager em,
-            bool hasEventBus,
-            Entity eventBusEntity,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
             Entity ge,
             in CEffectContext context,
             int effectCode)
         {
-            if (!hasEventBus)
+            if (!eventBusWriter.IsCreated)
                 return;
 
-            EventBusHelper.EnqueueGameplayEvent(em, eventBusEntity, new BGameplayEvent
+            eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
             {
                 Type = EGameplayEventType.GameplayEffectInstanced,
                 SourceAsc = context.SourceAsc,

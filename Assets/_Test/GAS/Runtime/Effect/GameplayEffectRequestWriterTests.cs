@@ -276,7 +276,149 @@ namespace GAS.Runtime.Tests.Effect
         }
 
         [Test]
-        public void AppendSimpleInstantCommandOrCreateSingleTargetRequestFallsBackWhenCueProjectionIsRequired()
+        public void AppendSimpleInstantCommandsOrCreateTargetListRequestWritesCommandPerTarget()
+        {
+            const int effectCode = 12013;
+            const int attrSetCode = 10;
+            const int attributeCode = 23;
+            var source = _em.CreateEntity();
+            var targetA = _em.CreateEntity();
+            var targetB = _em.CreateEntity();
+
+            GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(id =>
+                id == effectCode
+                    ? new GameplayEffectConfig(new GameplayEffectComponentConfig[]
+                    {
+                        new ConfModifierConfig
+                        {
+                            ModifierSettings = new[]
+                            {
+                                new ModifierDefinitionSetting
+                                {
+                                    AttrSetCode = attrSetCode,
+                                    AttrCode = attributeCode,
+                                    Operation = EModifierOp.Subtract,
+                                    Magnitude = 9f,
+                                },
+                            },
+                        },
+                    })
+                    : null);
+
+            try
+            {
+                AddAttribute(targetA, attrSetCode, attributeCode, 100f);
+                AddAttribute(targetB, attrSetCode, attributeCode, 80f);
+
+                var request = GameplayEffectRequestWriter.AppendSimpleInstantCommandsOrCreateTargetListRequest(
+                    _em,
+                    new CApplyGameplayEffectRequest
+                    {
+                        SourceAsc = source,
+                        Instigator = source,
+                        Causer = source,
+                        GameplayEffectCode = effectCode,
+                        Level = 2,
+                    },
+                    new[] { targetA, targetB },
+                    ETargetDataKind.EntityList,
+                    "EffectCommandMultiTarget");
+
+                Assert.That(request, Is.EqualTo(Entity.Null));
+                Assert.That(CountApplyRequestsByCode(effectCode), Is.EqualTo(0));
+                Assert.That(CountRuntimeEffectSpecsByCode(effectCode), Is.EqualTo(0));
+
+                var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+                var commands = _em.GetBuffer<BEffectCommand>(streamEntity);
+                Assert.That(commands.Length, Is.EqualTo(2));
+                Assert.That(commands[0].TargetAsc, Is.EqualTo(targetA));
+                Assert.That(commands[1].TargetAsc, Is.EqualTo(targetB));
+                Assert.That(commands[0].TargetDataKind, Is.EqualTo(ETargetDataKind.EntityList));
+                Assert.That(commands[1].TargetDataKind, Is.EqualTo(ETargetDataKind.EntityList));
+
+                RunCommandGroup();
+
+                var specs = _em.GetBuffer<BInstantEffectSpec>(streamEntity);
+                var deltas = _em.GetBuffer<BAttributeDelta>(streamEntity);
+                var facts = _em.GetBuffer<BTypedSimulationFact>(streamEntity);
+
+                Assert.That(specs.Length, Is.EqualTo(2));
+                Assert.That(deltas.Length, Is.EqualTo(2));
+                Assert.That(facts.Length, Is.EqualTo(2));
+                Assert.That(_em.GetBuffer<BAttribute>(targetA)[0].BaseValue, Is.EqualTo(91f));
+                Assert.That(_em.GetBuffer<BAttribute>(targetB)[0].BaseValue, Is.EqualTo(71f));
+                Assert.That(CountApplyRequestsByCode(effectCode), Is.EqualTo(0));
+                Assert.That(CountRuntimeEffectSpecsByCode(effectCode), Is.EqualTo(0));
+            }
+            finally
+            {
+                DestroyIfExists(targetB);
+                DestroyIfExists(targetA);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void AppendSimpleInstantCommandsOrCreateTargetListRequestFallsBackWithoutPartialCommands()
+        {
+            const int effectCode = 12014;
+            var source = _em.CreateEntity();
+            var targetA = _em.CreateEntity();
+            var targetB = _em.CreateEntity();
+            var request = Entity.Null;
+
+            GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(id =>
+                id == effectCode
+                    ? new GameplayEffectConfig(new GameplayEffectComponentConfig[]
+                    {
+                        new ConfDuration
+                        {
+                            duration = 2,
+                            timeUnit = TimeUnit.Frame,
+                        },
+                    })
+                    : null);
+
+            try
+            {
+                request = GameplayEffectRequestWriter.AppendSimpleInstantCommandsOrCreateTargetListRequest(
+                    _em,
+                    new CApplyGameplayEffectRequest
+                    {
+                        SourceAsc = source,
+                        GameplayEffectCode = effectCode,
+                        Level = 1,
+                    },
+                    new[] { targetA, targetB },
+                    ETargetDataKind.EntityList,
+                    "EffectCommandMultiTargetFallback");
+
+                Assert.That(request, Is.Not.EqualTo(Entity.Null));
+                Assert.That(CountApplyRequestsByCode(effectCode), Is.EqualTo(1));
+
+                var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+                Assert.That(_em.GetBuffer<BEffectCommand>(streamEntity).Length, Is.EqualTo(0));
+
+                var header = _em.GetComponentData<CTargetDataHeader>(request);
+                Assert.That(header.SourceAsc, Is.EqualTo(source));
+                Assert.That(header.Kind, Is.EqualTo(ETargetDataKind.EntityList));
+
+                var targets = _em.GetBuffer<BTargetEntity>(request);
+                Assert.That(targets.Length, Is.EqualTo(2));
+                Assert.That(targets[0].TargetAsc, Is.EqualTo(targetA));
+                Assert.That(targets[1].TargetAsc, Is.EqualTo(targetB));
+            }
+            finally
+            {
+                DestroyIfExists(request);
+                DestroyIfExists(targetB);
+                DestroyIfExists(targetA);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void AppendSimpleInstantCommandOrCreateSingleTargetRequestProjectsCueOnApplyFromStream()
         {
             const int effectCode = 12012;
             const int attrSetCode = 10;
@@ -284,7 +426,6 @@ namespace GAS.Runtime.Tests.Effect
             const int cueCode = 3002;
             var source = _em.CreateEntity();
             var target = _em.CreateEntity();
-            var request = Entity.Null;
 
             GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(id =>
                 id == effectCode
@@ -312,7 +453,15 @@ namespace GAS.Runtime.Tests.Effect
 
             try
             {
-                request = GameplayEffectRequestWriter.AppendSimpleInstantCommandOrCreateSingleTargetRequest(
+                _em.AddBuffer<BAttribute>(target).Add(new BAttribute
+                {
+                    AttrSetCode = attrSetCode,
+                    Code = attributeCode,
+                    BaseValue = 100f,
+                    CurrentValue = 100f,
+                });
+
+                var request = GameplayEffectRequestWriter.AppendSimpleInstantCommandOrCreateSingleTargetRequest(
                     _em,
                     new CApplyGameplayEffectRequest
                     {
@@ -324,20 +473,49 @@ namespace GAS.Runtime.Tests.Effect
                     },
                     target,
                     ETargetDataKind.Entity,
-                    "CueFallback");
+                    "CueProjection");
 
-                Assert.That(request, Is.Not.EqualTo(Entity.Null));
-                Assert.That(_em.HasComponent<CApplyGameplayEffectRequest>(request), Is.True);
-                Assert.That(_em.GetComponentData<CApplyGameplayEffectRequest>(request).GameplayEffectCode, Is.EqualTo(effectCode));
+                Assert.That(request, Is.EqualTo(Entity.Null));
+                Assert.That(CountApplyRequestsByCode(effectCode), Is.EqualTo(0));
+                Assert.That(CountRuntimeEffectSpecsByCode(effectCode), Is.EqualTo(0));
 
                 var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
-                Assert.That(_em.GetBuffer<BEffectCommand>(streamEntity).Length, Is.EqualTo(0));
-                Assert.That(_em.GetBuffer<BTargetEntity>(request).Length, Is.EqualTo(1));
-                Assert.That(_em.GetBuffer<BTargetEntity>(request)[0].TargetAsc, Is.EqualTo(target));
+                var commands = _em.GetBuffer<BEffectCommand>(streamEntity);
+                Assert.That(commands.Length, Is.EqualTo(1));
+                Assert.That(commands[0].GameplayEffectCode, Is.EqualTo(effectCode));
+                Assert.That(commands[0].TargetAsc, Is.EqualTo(target));
+
+                RunCommandGroup();
+
+                var specs = _em.GetBuffer<BInstantEffectSpec>(streamEntity);
+                var deltas = _em.GetBuffer<BAttributeDelta>(streamEntity);
+                var facts = _em.GetBuffer<BTypedSimulationFact>(streamEntity);
+                var cueRequests = _em.GetBuffer<BCueRequest>(GASManager.EntityEventBus);
+                var gameplayEvents = _em.GetBuffer<BGameplayEvent>(GASManager.EntityEventBus);
+                var attribute = _em.GetBuffer<BAttribute>(target)[0];
+
+                Assert.That(specs.Length, Is.EqualTo(1));
+                Assert.That(specs[0].CueRequestOnApplyCode, Is.EqualTo(cueCode));
+                Assert.That(deltas.Length, Is.EqualTo(1));
+                Assert.That(facts.Length, Is.EqualTo(1));
+                Assert.That(attribute.BaseValue, Is.EqualTo(88f));
+                Assert.That(cueRequests.Length, Is.EqualTo(1));
+                Assert.That(cueRequests[0].TargetAsc, Is.EqualTo(target));
+                Assert.That(cueRequests[0].SourceAsc, Is.EqualTo(source));
+                Assert.That(cueRequests[0].CueEvent, Is.EqualTo(EGameplayCueEvent.OnApply));
+                Assert.That(
+                    ContainsGameplayEvent(
+                        gameplayEvents,
+                        EGameplayEventType.CueRequested,
+                        (int)EGameplayCueEvent.OnApply,
+                        cueCode,
+                        specs[0].ContextId),
+                    Is.True);
+                Assert.That(CountApplyRequestsByCode(effectCode), Is.EqualTo(0));
+                Assert.That(CountRuntimeEffectSpecsByCode(effectCode), Is.EqualTo(0));
             }
             finally
             {
-                DestroyIfExists(request);
                 DestroyIfExists(target);
                 DestroyIfExists(source);
             }
@@ -426,10 +604,16 @@ namespace GAS.Runtime.Tests.Effect
                 Assert.That(cueRequests[0].CueEvent, Is.EqualTo(EGameplayCueEvent.OnApply));
 
                 var gameplayEvents = _em.GetBuffer<BGameplayEvent>(eventBus);
+                Assert.That(gameplayEvents.Length, Is.EqualTo(3));
+                Assert.That(gameplayEvents[0].Sequence, Is.EqualTo(30));
+                Assert.That(gameplayEvents[1].Sequence, Is.EqualTo(31));
+                Assert.That(gameplayEvents[2].Sequence, Is.EqualTo(32));
                 Assert.That(ContainsGameplayEvent(gameplayEvents, EGameplayEventType.GameplayEffectInstanced, effectCode, 7), Is.True);
                 Assert.That(ContainsGameplayEvent(gameplayEvents, EGameplayEventType.CueRequested, (int)EGameplayCueEvent.OnApply, 7), Is.True);
                 Assert.That(ContainsGameplayEvent(gameplayEvents, EGameplayEventType.GameplayEffectApplied, effectCode, 7), Is.True);
-                Assert.That(_em.GetComponentData<CGameplayEventBus>(eventBus).NextContextId, Is.EqualTo(8));
+                var eventBusState = _em.GetComponentData<CGameplayEventBus>(eventBus);
+                Assert.That(eventBusState.NextContextId, Is.EqualTo(8));
+                Assert.That(eventBusState.NextSequence, Is.EqualTo(33));
             }
             finally
             {
@@ -443,6 +627,18 @@ namespace GAS.Runtime.Tests.Effect
         {
             if (entity != Entity.Null && _em.Exists(entity))
                 _em.DestroyEntity(entity);
+        }
+
+        private void AddAttribute(Entity target, int attrSetCode, int attributeCode, float value)
+        {
+            _em.AddBuffer<BAttribute>(target).Add(new BAttribute
+            {
+                AttrSetCode = attrSetCode,
+                Code = attributeCode,
+                BaseValue = value,
+                CurrentValue = value,
+                PreviousCurrentValue = value,
+            });
         }
 
         private void ClearTransientEventBuffers()
@@ -519,6 +715,28 @@ namespace GAS.Runtime.Tests.Effect
                 var evt = events[i];
                 if (evt.Type == type
                     && evt.EventCode == eventCode
+                    && evt.ContextId == contextId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsGameplayEvent(
+            DynamicBuffer<BGameplayEvent> events,
+            EGameplayEventType type,
+            int eventCode,
+            int reasonCode,
+            int contextId)
+        {
+            for (var i = 0; i < events.Length; i++)
+            {
+                var evt = events[i];
+                if (evt.Type == type
+                    && evt.EventCode == eventCode
+                    && evt.ReasonCode == reasonCode
                     && evt.ContextId == contextId)
                 {
                     return true;

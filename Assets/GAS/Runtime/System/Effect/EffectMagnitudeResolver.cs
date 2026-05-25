@@ -41,6 +41,48 @@ namespace GAS.Runtime
 
         public static void ResolveModifiers(
             EntityManager em,
+            Entity ge,
+            in CEffectContext context,
+            in CEffectSpecData spec,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
+        {
+            if (!em.HasBuffer<BModifierConfig>(ge))
+            {
+                if (em.HasBuffer<BResolvedModifier>(ge))
+                    em.GetBuffer<BResolvedModifier>(ge).Clear();
+
+                return;
+            }
+
+            EnsureResolverBuffers(em, ge);
+
+            var configBuffer = em.GetBuffer<BModifierConfig>(ge);
+            var resolvedModifiers = em.GetBuffer<BResolvedModifier>(ge);
+            resolvedModifiers.Clear();
+            for (var i = 0; i < configBuffer.Length; i++)
+            {
+                var config = configBuffer[i];
+                var magnitude = ResolveMagnitude(
+                    em,
+                    ge,
+                    i,
+                    config.Magnitude,
+                    context,
+                    spec,
+                    ref eventBusWriter);
+                resolvedModifiers.Add(new BResolvedModifier
+                {
+                    AttrSetCode = config.AttrSetCode,
+                    AttributeCode = config.AttributeCode,
+                    Op = config.Op,
+                    Magnitude = magnitude,
+                    SourceEffect = ge,
+                });
+            }
+        }
+
+        public static void ResolveModifiers(
+            EntityManager em,
             ref EntityCommandBuffer ecb,
             Entity ge,
             in CEffectContext context,
@@ -168,6 +210,57 @@ namespace GAS.Runtime
                     definition.Key,
                     definition.FallbackMagnitude,
                     context),
+                EMagnitudeSource.StackCount => ResolveStackCount(spec),
+                _ => constantMagnitude,
+            };
+
+            var coefficient = definition.Coefficient == 0 ? 1f : definition.Coefficient;
+            return ((rawMagnitude + definition.PreAdd) * coefficient) + definition.PostAdd;
+        }
+
+        private static float ResolveMagnitude(
+            EntityManager em,
+            Entity ge,
+            int modifierIndex,
+            float constantMagnitude,
+            in CEffectContext context,
+            in CEffectSpecData spec,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
+        {
+            if (!TryGetMagnitudeDefinition(em, ge, modifierIndex, out var definition))
+                return constantMagnitude;
+
+            var rawMagnitude = definition.Source switch
+            {
+                EMagnitudeSource.Constant => constantMagnitude,
+                EMagnitudeSource.SetByCaller => ResolveSetByCaller(em, ge, definition.Key, definition.FallbackMagnitude),
+                EMagnitudeSource.SourceAttribute => ResolveAttributeCapture(
+                    em,
+                    ge,
+                    modifierIndex,
+                    EMagnitudeSource.SourceAttribute,
+                    context.SourceAsc,
+                    definition.AttributeSetCode,
+                    definition.AttributeCode,
+                    definition.CaptureTiming,
+                    definition.FallbackMagnitude),
+                EMagnitudeSource.TargetAttribute => ResolveAttributeCapture(
+                    em,
+                    ge,
+                    modifierIndex,
+                    EMagnitudeSource.TargetAttribute,
+                    context.TargetAsc,
+                    definition.AttributeSetCode,
+                    definition.AttributeCode,
+                    definition.CaptureTiming,
+                    definition.FallbackMagnitude),
+                EMagnitudeSource.ExecutionCalculation => ResolveExecutionCalculation(
+                    em,
+                    ge,
+                    definition.Key,
+                    definition.FallbackMagnitude,
+                    context,
+                    ref eventBusWriter),
                 EMagnitudeSource.StackCount => ResolveStackCount(spec),
                 _ => constantMagnitude,
             };
@@ -314,6 +407,43 @@ namespace GAS.Runtime
             }
 
             EnqueueMagnitudeFact(em, ge, context, EGameplayEventType.ExecutionCalculationOutputMissing, key, fallbackMagnitude);
+            return fallbackMagnitude;
+        }
+
+        private static float ResolveExecutionCalculation(
+            EntityManager em,
+            Entity ge,
+            int key,
+            float fallbackMagnitude,
+            in CEffectContext context,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
+        {
+            if (!em.HasBuffer<BExecutionCalculationValue>(ge))
+            {
+                EnqueueMagnitudeFact(
+                    ref eventBusWriter,
+                    ge,
+                    context,
+                    EGameplayEventType.ExecutionCalculationOutputMissing,
+                    key,
+                    fallbackMagnitude);
+                return fallbackMagnitude;
+            }
+
+            var values = em.GetBuffer<BExecutionCalculationValue>(ge);
+            for (var i = 0; i < values.Length; i++)
+            {
+                if (values[i].Key == key)
+                    return values[i].Value;
+            }
+
+            EnqueueMagnitudeFact(
+                ref eventBusWriter,
+                ge,
+                context,
+                EGameplayEventType.ExecutionCalculationOutputMissing,
+                key,
+                fallbackMagnitude);
             return fallbackMagnitude;
         }
 
@@ -559,6 +689,30 @@ namespace GAS.Runtime
             float value)
         {
             EventBusHelper.EnqueueGameplayEvent(em, GASManager.EntityEventBus, new BGameplayEvent
+            {
+                Type = type,
+                SourceAsc = context.SourceAsc,
+                TargetAsc = context.TargetAsc,
+                SourceAbility = context.SourceAbility,
+                GameplayEffect = ge,
+                ContextId = context.ContextId,
+                EventCode = eventCode,
+                Value = value,
+            });
+        }
+
+        private static void EnqueueMagnitudeFact(
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
+            Entity ge,
+            in CEffectContext context,
+            EGameplayEventType type,
+            int eventCode,
+            float value)
+        {
+            if (!eventBusWriter.IsCreated)
+                return;
+
+            eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
             {
                 Type = type,
                 SourceAsc = context.SourceAsc,

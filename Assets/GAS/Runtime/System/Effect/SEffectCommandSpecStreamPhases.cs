@@ -42,11 +42,12 @@ namespace GAS.Runtime
             {
                 var command = commands[i];
                 if (command.Kind != EEffectCommandKind.Instant
-                    || !CanBuildSimpleInstantSpec(em, in command))
+                    || !TryGetSimpleInstantDefinition(em, in command, out var blob))
                 {
                     continue;
                 }
 
+                ref var definition = ref blob.Value;
                 var spec = new BInstantEffectSpec
                 {
                     Sequence = Allocate(ref stream.NextSpecSequence),
@@ -59,6 +60,9 @@ namespace GAS.Runtime
                     Instigator = command.Instigator,
                     Causer = command.Causer,
                     GameplayEffectCode = command.GameplayEffectCode,
+                    CueRequestOnApplyCode = definition.HasCueRequestOnApply
+                        ? definition.CueRequestOnApplyCode
+                        : 0,
                     Level = command.Level,
                     StackCount = 1,
                     DurationFrameOverride = command.DurationFrameOverride,
@@ -169,6 +173,179 @@ namespace GAS.Runtime
     }
 
     [UpdateInGroup(typeof(GASCommandGroup))]
+    [UpdateAfter(typeof(STypedSimulationFactProjection))]
+    [UpdateBefore(typeof(SAscDestroyRequest))]
+    public partial struct STypedSimulationFactEventBridge : ISystem
+    {
+        public void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<CEffectCommandSpecStream>();
+            state.RequireForUpdate<CGameplayEventBus>();
+        }
+
+        public void OnUpdate(ref SystemState state)
+        {
+            if (!SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity))
+                return;
+
+            var em = state.EntityManager;
+            if (!em.Exists(eventBusEntity) || !em.HasBuffer<BAttributeChangeEvent>(eventBusEntity))
+                return;
+
+            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
+            if (!eventBusWriter.IsCreated)
+                return;
+
+            var streamEntity = SystemAPI.GetSingletonEntity<CEffectCommandSpecStream>();
+            EffectCommandSpecStream.EnsureBuffers(em, streamEntity);
+
+            var stream = em.GetComponentData<CEffectCommandSpecStream>(streamEntity);
+            var facts = em.GetBuffer<BTypedSimulationFact>(streamEntity);
+
+            try
+            {
+                var start = ClampCursor(stream.EventBridgeFactCursor, facts.Length);
+                for (var i = start; i < facts.Length; i++)
+                {
+                    var fact = facts[i];
+                    if (fact.Domain != EGameplayFactDomain.Attribute
+                        || fact.EventType != EGameplayEventType.AttributeBaseValueChanged
+                        || fact.TargetAsc == Entity.Null)
+                    {
+                        continue;
+                    }
+
+                    eventBusWriter.EnqueueAttributeChangeEvent(new BAttributeChangeEvent
+                    {
+                        ASC = fact.TargetAsc,
+                        SourceAsc = fact.SourceAsc,
+                        SourceAbility = fact.SourceAbility,
+                        GameplayEffect = fact.SourceEffect,
+                        SourceFactSequence = fact.Sequence,
+                        EventCode = fact.GameplayEffectCode,
+                        AttrSetCode = fact.AttrSetCode,
+                        AttributeCode = fact.AttributeCode,
+                        OldValue = fact.OldValue,
+                        NewValue = fact.NewValue,
+                        ContextId = fact.ContextId,
+                        IsBaseValue = true,
+                    });
+                }
+
+                stream.EventBridgeFactCursor = facts.Length;
+                em.SetComponentData(streamEntity, stream);
+            }
+            finally
+            {
+                eventBusWriter.Dispose();
+            }
+        }
+    }
+
+    [UpdateInGroup(typeof(GASCommandGroup))]
+    [UpdateAfter(typeof(STypedSimulationFactEventBridge))]
+    [UpdateBefore(typeof(SAscDestroyRequest))]
+    public partial struct SInstantEffectCueRequestProjection : ISystem
+    {
+        public void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<CEffectCommandSpecStream>();
+            state.RequireForUpdate<CGameplayEventBus>();
+        }
+
+        public void OnUpdate(ref SystemState state)
+        {
+            if (!SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var eventBusEntity))
+                return;
+
+            var em = state.EntityManager;
+            if (!em.Exists(eventBusEntity) || !em.HasComponent<CGameplayEventBus>(eventBusEntity))
+                return;
+
+            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
+            if (!eventBusWriter.IsCreated)
+                return;
+
+            var streamEntity = SystemAPI.GetSingletonEntity<CEffectCommandSpecStream>();
+            EffectCommandSpecStream.EnsureBuffers(em, streamEntity);
+
+            var stream = em.GetComponentData<CEffectCommandSpecStream>(streamEntity);
+            var specs = em.GetBuffer<BInstantEffectSpec>(streamEntity);
+            var facts = em.GetBuffer<BTypedSimulationFact>(streamEntity);
+
+            try
+            {
+                var start = ClampCursor(stream.CueProjectionSpecCursor, specs.Length);
+                for (var i = start; i < specs.Length; i++)
+                {
+                    var spec = specs[i];
+                    if (spec.CueRequestOnApplyCode <= 0
+                        || spec.TargetAsc == Entity.Null)
+                    {
+                        continue;
+                    }
+
+                    var factSequence = Allocate(ref stream.NextFactSequence);
+                    facts.Add(new BTypedSimulationFact
+                    {
+                        Sequence = factSequence,
+                        SourceCommandSequence = spec.SourceCommandSequence,
+                        SourceSpecSequence = spec.Sequence,
+                        Frame = spec.Frame,
+                        EventType = EGameplayEventType.CueRequested,
+                        Domain = EGameplayFactDomain.Cue,
+                        Category = EGameplayFactCategory.Request,
+                        Severity = EGameplayFactSeverity.Info,
+                        SourceAsc = spec.SourceAsc,
+                        TargetAsc = spec.TargetAsc,
+                        SourceAbility = spec.SourceAbility,
+                        SourceEffect = spec.SourceEffect,
+                        GameplayEffectCode = spec.GameplayEffectCode,
+                        ContextId = spec.ContextId,
+                        ParentContextId = spec.ParentContextId,
+                        EventCode = (int)EGameplayCueEvent.OnApply,
+                        ReasonCode = spec.CueRequestOnApplyCode,
+                    });
+
+                    eventBusWriter.EnqueueCueRequest(new BCueRequest
+                    {
+                        TargetAsc = spec.TargetAsc,
+                        SourceAsc = spec.SourceAsc,
+                        SourceAbility = spec.SourceAbility,
+                        GameplayEffect = Entity.Null,
+                        SourceEntity = spec.SourceAbility,
+                        SourceType = CueSourceType.GameplayEffect,
+                        CueEntity = Entity.Null,
+                        SourceFactSequence = factSequence,
+                        ContextId = spec.ContextId,
+                        ReasonCode = spec.CueRequestOnApplyCode,
+                        CueEvent = EGameplayCueEvent.OnApply,
+                    });
+
+                    eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
+                    {
+                        SourceFactSequence = factSequence,
+                        Type = EGameplayEventType.CueRequested,
+                        SourceAsc = spec.SourceAsc,
+                        TargetAsc = spec.TargetAsc,
+                        SourceAbility = spec.SourceAbility,
+                        ContextId = spec.ContextId,
+                        EventCode = (int)EGameplayCueEvent.OnApply,
+                        ReasonCode = spec.CueRequestOnApplyCode,
+                    });
+                }
+
+                stream.CueProjectionSpecCursor = specs.Length;
+                em.SetComponentData(streamEntity, stream);
+            }
+            finally
+            {
+                eventBusWriter.Dispose();
+            }
+        }
+    }
+
+    [UpdateInGroup(typeof(GASCommandGroup))]
     [UpdateAfter(typeof(SInstantEffectSpecBuild))]
     public partial struct SActiveEffectMutationApply : ISystem
     {
@@ -194,6 +371,14 @@ namespace GAS.Runtime
             EntityManager em,
             in BEffectCommand command)
         {
+            return TryGetSimpleInstantDefinition(em, in command, out _);
+        }
+
+        public static bool TryGetSimpleInstantDefinition(
+            EntityManager em,
+            in BEffectCommand command,
+            out BlobAssetReference<GEStaticDefinitionBlob> blob)
+        {
             if (command.GameplayEffectCode <= 0
                 || command.TargetAsc == Entity.Null
                 || IsUnavailableAsc(em, command.SourceAsc)
@@ -201,12 +386,13 @@ namespace GAS.Runtime
                 || !GameplayEffectConfigRegistry.TryGetOrCreateStaticDefinitionBlob(
                     em,
                     command.GameplayEffectCode,
-                    out var blob,
+                    out blob,
                     new ConfigRegistryReferenceContext(
                         ConfigRegistryConfigKind.GameplayEffect,
                         command.GameplayEffectCode,
                         ConfigRegistryReferenceKind.ApplyGameplayEffectRequest)))
             {
+                blob = default;
                 return false;
             }
 
@@ -223,7 +409,6 @@ namespace GAS.Runtime
                 || definition.HasOngoingRequiredTags
                 || definition.HasRemoveGameplayEffectsWithTags
                 || definition.HasImmunityTags
-                || definition.HasCueRequestOnApply
                 || !definition.GrantedTags.IsEmpty
                 || definition.GrantedAbilities.Length != 0
                 || definition.Modifiers.Length == 0)
