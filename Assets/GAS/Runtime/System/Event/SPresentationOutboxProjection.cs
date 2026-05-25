@@ -35,9 +35,21 @@ namespace GAS.Runtime
             if (em.GetComponentData<CPresentationOutboxProjectionOptions>(eventBus).ProjectRawFacts == 0)
                 return;
 
-            var currentFrame = ResolveCurrentFrame(em);
+            var currentFrame = GASRuntimeFrameContext.ResolveCurrentFrame(em);
             var projectionState = em.GetComponentData<CPresentationOutboxProjectionState>(eventBus);
             ResetProcessedCountsIfFrameChanged(ref projectionState, currentFrame);
+
+            if (SystemAPI.TryGetSingletonEntity<CEffectCommandSpecStream>(out var streamEntity)
+                && em.Exists(streamEntity)
+                && em.HasBuffer<BTypedSimulationFact>(streamEntity))
+            {
+                ProjectTypedSimulationFacts(
+                    em,
+                    eventBus,
+                    em.GetBuffer<BTypedSimulationFact>(streamEntity),
+                    ref projectionState,
+                    currentFrame);
+            }
 
             if (em.HasBuffer<BGameplayEvent>(eventBus))
                 ProjectGameplayEvents(em, eventBus, em.GetBuffer<BGameplayEvent>(eventBus), ref projectionState, currentFrame);
@@ -70,6 +82,148 @@ namespace GAS.Runtime
             projectionState.ProcessedCueRequestCount = 0;
             projectionState.ProcessedTagEventCount = 0;
             projectionState.ProcessedDamageEventCount = 0;
+            projectionState.ProcessedTypedFactCount = 0;
+        }
+
+        private static void ProjectTypedSimulationFacts(
+            EntityManager em,
+            Entity eventBus,
+            DynamicBuffer<BTypedSimulationFact> facts,
+            ref CPresentationOutboxProjectionState projectionState,
+            int fallbackFrame)
+        {
+            for (var i = 0; i < facts.Length; i++)
+            {
+                var fact = facts[i];
+                if (fact.Sequence <= 0
+                    || fact.Sequence <= projectionState.LastProjectedTypedFactSequence)
+                {
+                    continue;
+                }
+
+                if (!TryCreateTypedPresentationEvent(in fact, fallbackFrame, out var presentationEvent))
+                    continue;
+
+                AppendToRelevantAsc(em, eventBus, fact.TargetAsc, fact.SourceAsc, presentationEvent);
+                if (fact.Sequence > projectionState.LastProjectedTypedFactSequence)
+                    projectionState.LastProjectedTypedFactSequence = fact.Sequence;
+            }
+
+            projectionState.ProcessedTypedFactCount = facts.Length;
+        }
+
+        private static bool TryCreateTypedPresentationEvent(
+            in BTypedSimulationFact fact,
+            int fallbackFrame,
+            out BPresentationEvent presentationEvent)
+        {
+            presentationEvent = default;
+
+            if (fact.TargetAsc == Entity.Null)
+            {
+                return false;
+            }
+
+            if (fact.Domain == EGameplayFactDomain.Attribute
+                && fact.EventType == EGameplayEventType.AttributeBaseValueChanged)
+            {
+                presentationEvent = new BPresentationEvent
+                {
+                    Kind = EPresentationEventKind.AttributeChange,
+                    Frame = fact.Frame != 0 ? fact.Frame : fallbackFrame,
+                    Sequence = fact.Sequence,
+                    SourceAsc = fact.SourceAsc,
+                    TargetAsc = fact.TargetAsc,
+                    SourceAbility = fact.SourceAbility,
+                    GameplayEffect = fact.SourceEffect,
+                    ContextId = fact.ContextId,
+                    EventCode = fact.GameplayEffectCode,
+                    AttrSetCode = fact.AttrSetCode,
+                    AttributeCode = fact.AttributeCode,
+                    Value = fact.Value,
+                    OldValue = fact.OldValue,
+                    NewValue = fact.NewValue,
+                    Flag = 1,
+                };
+                return true;
+            }
+
+            if (fact.Domain == EGameplayFactDomain.Cue
+                && fact.EventType == EGameplayEventType.CueRequested)
+            {
+                presentationEvent = new BPresentationEvent
+                {
+                    Kind = EPresentationEventKind.CueRequest,
+                    Frame = fact.Frame != 0 ? fact.Frame : fallbackFrame,
+                    Sequence = fact.Sequence,
+                    GameplayEventType = fact.EventType,
+                    CueEvent = (EGameplayCueEvent)fact.EventCode,
+                    SourceAsc = fact.SourceAsc,
+                    TargetAsc = fact.TargetAsc,
+                    SourceAbility = fact.SourceAbility,
+                    GameplayEffect = fact.SourceEffect,
+                    SourceEntity = fact.SourceAbility,
+                    CueSourceType = CueSourceType.GameplayEffect,
+                    ContextId = fact.ContextId,
+                    EventCode = fact.EventCode,
+                    ReasonCode = fact.ReasonCode,
+                    Flag = 1,
+                };
+                return true;
+            }
+
+            if (fact.Domain == EGameplayFactDomain.Damage)
+            {
+                presentationEvent = new BPresentationEvent
+                {
+                    Kind = EPresentationEventKind.Damage,
+                    Frame = fact.Frame != 0 ? fact.Frame : fallbackFrame,
+                    Sequence = fact.Sequence,
+                    GameplayEventType = fact.EventType,
+                    SourceAsc = fact.SourceAsc,
+                    TargetAsc = fact.TargetAsc,
+                    SourceAbility = fact.SourceAbility,
+                    GameplayEffect = fact.SourceEffect,
+                    ContextId = fact.ContextId,
+                    EventCode = ResolveGameplayEventCode(in fact),
+                    ReasonCode = fact.ReasonCode,
+                    AttrSetCode = fact.AttrSetCode,
+                    AttributeCode = fact.AttributeCode,
+                    DamageAmount = fact.Value,
+                    Value = fact.Value,
+                    Flag = 1,
+                };
+                return true;
+            }
+
+            if (!IsPresentationMarker(fact.EventType)
+                && fact.Domain != EGameplayFactDomain.Unknown)
+            {
+                presentationEvent = new BPresentationEvent
+                {
+                    Kind = EPresentationEventKind.GameplayEvent,
+                    Frame = fact.Frame != 0 ? fact.Frame : fallbackFrame,
+                    Sequence = fact.Sequence,
+                    GameplayEventType = fact.EventType,
+                    SourceAsc = fact.SourceAsc,
+                    TargetAsc = fact.TargetAsc,
+                    SourceAbility = fact.SourceAbility,
+                    GameplayEffect = fact.SourceEffect,
+                    ContextId = fact.ContextId,
+                    EventCode = ResolveGameplayEventCode(in fact),
+                    ReasonCode = fact.ReasonCode,
+                    Value = fact.Value,
+                    Flag = 1,
+                };
+                return true;
+            }
+
+            return false;
+        }
+
+        private static int ResolveGameplayEventCode(in BTypedSimulationFact fact)
+        {
+            return fact.EventCode != 0 ? fact.EventCode : fact.GameplayEffectCode;
         }
 
         private static void ProjectGameplayEvents(
@@ -83,6 +237,13 @@ namespace GAS.Runtime
             for (var i = start; i < events.Length; i++)
             {
                 var evt = events[i];
+                if (ShouldSkipMirroredTypedFact(
+                        evt.SourceFactSequence,
+                        projectionState.LastProjectedTypedFactSequence))
+                {
+                    continue;
+                }
+
                 if (IsPresentationMarker(evt.Type))
                     continue;
 
@@ -131,6 +292,13 @@ namespace GAS.Runtime
             for (var i = start; i < events.Length; i++)
             {
                 var evt = events[i];
+                if (ShouldSkipMirroredTypedFact(
+                        evt.SourceFactSequence,
+                        projectionState.LastProjectedTypedFactSequence))
+                {
+                    continue;
+                }
+
                 var presentationEvent = new BPresentationEvent
                 {
                     Kind = EPresentationEventKind.AttributeChange,
@@ -154,6 +322,14 @@ namespace GAS.Runtime
             projectionState.ProcessedAttributeEventCount = events.Length;
         }
 
+        private static bool ShouldSkipMirroredTypedFact(
+            int sourceFactSequence,
+            int lastProjectedTypedFactSequence)
+        {
+            return sourceFactSequence > 0
+                   && lastProjectedTypedFactSequence >= sourceFactSequence;
+        }
+
         private static void ProjectCueRequests(
             EntityManager em,
             Entity eventBus,
@@ -165,10 +341,18 @@ namespace GAS.Runtime
             for (var i = start; i < requests.Length; i++)
             {
                 var request = requests[i];
+                if (ShouldSkipMirroredTypedFact(
+                        request.SourceFactSequence,
+                        projectionState.LastProjectedTypedFactSequence))
+                {
+                    continue;
+                }
+
                 var presentationEvent = new BPresentationEvent
                 {
                     Kind = EPresentationEventKind.CueRequest,
                     Frame = frame,
+                    Sequence = request.SourceFactSequence,
                     CueEvent = request.CueEvent,
                     SourceAsc = request.SourceAsc,
                     TargetAsc = request.TargetAsc,
@@ -179,6 +363,7 @@ namespace GAS.Runtime
                     CueSourceType = request.SourceType,
                     ContextId = request.ContextId,
                     EventCode = (int)request.CueEvent,
+                    ReasonCode = request.ReasonCode,
                 };
 
                 AppendToRelevantAsc(em, eventBus, request.TargetAsc, request.SourceAsc, presentationEvent);
@@ -222,10 +407,18 @@ namespace GAS.Runtime
             for (var i = start; i < events.Length; i++)
             {
                 var evt = events[i];
+                if (ShouldSkipMirroredTypedFact(
+                        evt.SourceFactSequence,
+                        projectionState.LastProjectedTypedFactSequence))
+                {
+                    continue;
+                }
+
                 var presentationEvent = new BPresentationEvent
                 {
                     Kind = EPresentationEventKind.Damage,
                     Frame = frame,
+                    Sequence = evt.SourceFactSequence,
                     SourceAsc = evt.Source,
                     TargetAsc = evt.Target,
                     DamageAmount = evt.Amount,
@@ -263,20 +456,6 @@ namespace GAS.Runtime
             in BPresentationEvent presentationEvent)
         {
             EventBusHelper.AppendPresentationEvent(em, eventBus, asc, presentationEvent);
-        }
-
-        private static int ResolveCurrentFrame(EntityManager em)
-        {
-            var globalTimer = GASManager.EntityGlobalTimer;
-            if (globalTimer != Entity.Null
-                && em.Exists(globalTimer)
-                && em.HasComponent<GlobalTimer>(globalTimer))
-            {
-                return em.GetComponentData<GlobalTimer>(globalTimer).Frame;
-            }
-
-            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<GlobalTimer>());
-            return query.IsEmptyIgnoreFilter ? 0 : query.GetSingleton<GlobalTimer>().Frame;
         }
 
         public void OnDestroy(ref SystemState state)

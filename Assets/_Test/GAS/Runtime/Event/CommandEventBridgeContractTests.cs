@@ -163,9 +163,9 @@ namespace GAS.Runtime.Tests.Event
                     NextSequence = 10,
                 });
 
-                using (EventBusHelper.BeginGameplayEventBatch(_em, eventBus))
+                using (var writer = EventBusHelper.BeginGameplayEventBatch(_em, eventBus))
                 {
-                    EventBusHelper.EnqueueGameplayEvent(_em, eventBus, new BGameplayEvent
+                    writer.EnqueueGameplayEvent(new BGameplayEvent
                     {
                         Type = EGameplayEventType.GameplayEffectApplied,
                         EventCode = 98021,
@@ -177,27 +177,27 @@ namespace GAS.Runtime.Tests.Event
                         GameplayEffectCode = 98022,
                     });
 
-                    EventBusHelper.EnqueueAttributeChangeEvent(_em, eventBus, new BAttributeChangeEvent
+                    writer.EnqueueAttributeChangeEvent(new BAttributeChangeEvent
                     {
                         AttrSetCode = 1,
                         AttributeCode = 2,
                         OldValue = 3f,
                         NewValue = 4f,
                     });
-                    EventBusHelper.EnqueueCueRequest(_em, eventBus, new BCueRequest
+                    writer.EnqueueCueRequest(new BCueRequest
                     {
                         CueEvent = EGameplayCueEvent.OnApply,
                     });
-                    EventBusHelper.EnqueueTagChangeEvent(_em, eventBus, new BTagChangeEvent
+                    writer.EnqueueTagChangeEvent(new BTagChangeEvent
                     {
                         TagIndex = 5,
                         Added = true,
                     });
-                    EventBusHelper.EnqueueDamageEvent(_em, eventBus, new BDamageEvent
+                    writer.EnqueueDamageEvent(new BDamageEvent
                     {
                         Amount = 6f,
                     });
-                    EventBusHelper.EnqueueGameplayEvent(_em, eventBus, new BGameplayEvent
+                    writer.EnqueueGameplayEvent(new BGameplayEvent
                     {
                         Type = EGameplayEventType.GameplayEffectRemoved,
                         EventCode = 98023,
@@ -221,6 +221,46 @@ namespace GAS.Runtime.Tests.Event
             {
                 _em.SetComponentData(eventBus, previousState);
                 DestroyIfExists(structuralEntity);
+            }
+        }
+
+        [Test]
+        public void GameplayEventBusWriterAllocatesContextAndFlushesEventBusState()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var previousState = _em.GetComponentData<CGameplayEventBus>(eventBus);
+
+            try
+            {
+                _em.SetComponentData(eventBus, new CGameplayEventBus
+                {
+                    NextSequence = 20,
+                    NextContextId = 4,
+                });
+
+                using (var writer = EventBusHelper.BeginGameplayEventBatch(_em, eventBus))
+                {
+                    Assert.That(writer.AllocateGameplayEffectContextId(), Is.EqualTo(4));
+                    Assert.That(writer.AllocateGameplayEffectContextId(), Is.EqualTo(5));
+                    writer.EnqueueGameplayEvent(new BGameplayEvent
+                    {
+                        Type = EGameplayEventType.GameplayEffectRequested,
+                        EventCode = 98031,
+                    });
+                }
+
+                var eventBusState = _em.GetComponentData<CGameplayEventBus>(eventBus);
+                Assert.That(eventBusState.NextContextId, Is.EqualTo(6));
+                Assert.That(eventBusState.NextSequence, Is.EqualTo(21));
+
+                var gameplayEvents = _em.GetBuffer<BGameplayEvent>(eventBus);
+                Assert.That(gameplayEvents.Length, Is.EqualTo(1));
+                Assert.That(gameplayEvents[0].Sequence, Is.EqualTo(20));
+                Assert.That(gameplayEvents[0].EventCode, Is.EqualTo(98031));
+            }
+            finally
+            {
+                _em.SetComponentData(eventBus, previousState);
             }
         }
 
@@ -392,6 +432,15 @@ namespace GAS.Runtime.Tests.Event
                 EGameplayFactDomain.Tag,
                 EGameplayFactCategory.StateChange,
                 EGameplayFactSeverity.Info);
+
+            AssertClassification(
+                GameplayFactClassifier.Classify(new BDebugReplayEvent
+                {
+                    Kind = EDebugReplayEventKind.Damage,
+                }),
+                EGameplayFactDomain.Damage,
+                EGameplayFactCategory.StateChange,
+                EGameplayFactSeverity.Info);
         }
 
         [Test]
@@ -466,6 +515,19 @@ namespace GAS.Runtime.Tests.Event
             Assert.That(tagChange.FactCategory, Is.EqualTo(EGameplayFactCategory.StateChange));
             Assert.That(tagChange.TagIndex, Is.EqualTo(44));
             Assert.That(tagChange.Flag, Is.EqualTo(1));
+
+            var damage = GasStructuredLogView.FromDamage(new BDamageEvent
+            {
+                Source = request.SourceAsc,
+                Target = request.TargetAsc,
+                Amount = 17f,
+            });
+
+            Assert.That(damage.Module, Is.EqualTo(EGasStructuredLogModule.Damage));
+            Assert.That(damage.FactDomain, Is.EqualTo(EGameplayFactDomain.Damage));
+            Assert.That(damage.FactCategory, Is.EqualTo(EGameplayFactCategory.StateChange));
+            Assert.That(damage.DamageAmount, Is.EqualTo(17f));
+            Assert.That(damage.Value, Is.EqualTo(17f));
 
             Assert.That(
                 typeof(IComponentData).IsAssignableFrom(typeof(GasStructuredLogEntry)),
@@ -577,6 +639,563 @@ namespace GAS.Runtime.Tests.Event
             finally
             {
                 DestroyIfExists(cue);
+                DestroyIfExists(effect);
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void CueGroupProjectsTypedAttributeFactsToPerAscPresentationOutboxWithoutLegacyAttributeEvent()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var source = AbilitySystemFacade.Create().Entity;
+            var target = AbilitySystemFacade.Create().Entity;
+            var ability = _em.CreateEntity();
+            var effect = _em.CreateEntity();
+
+            try
+            {
+                AppendTypedAttributeFact(
+                    sequence: 51,
+                    source,
+                    target,
+                    ability,
+                    effect,
+                    effectCode: 98030,
+                    attrSetCode: 6,
+                    attributeCode: 7,
+                    oldValue: 8f,
+                    newValue: 9f);
+
+                UpdateCueGroup();
+
+                var targetOutbox = _em.GetBuffer<BPresentationEvent>(target);
+                Assert.That(ContainsPresentationAttributeEvent(targetOutbox, 6, 7, 8f, 9f), Is.True);
+                Assert.That(CountPresentationAttributeEvents(targetOutbox, 6, 7, 8f, 9f), Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BAttributeChangeEvent>(eventBus).Length, Is.EqualTo(0));
+
+                var projectionState = _em.GetComponentData<CPresentationOutboxProjectionState>(eventBus);
+                Assert.That(projectionState.ProcessedTypedFactCount, Is.EqualTo(1));
+                Assert.That(projectionState.LastProjectedTypedFactSequence, Is.EqualTo(51));
+            }
+            finally
+            {
+                DestroyIfExists(effect);
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void CueGroupAppendsTypedAttributeFactsToPersistentDebugReplaySinkWithoutLegacyAttributeEvent()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var logSink = GASManager.EntityEventLogSink;
+            var source = AbilitySystemFacade.Create().Entity;
+            var target = AbilitySystemFacade.Create().Entity;
+            var ability = _em.CreateEntity();
+            var effect = _em.CreateEntity();
+
+            try
+            {
+                AppendTypedAttributeFact(
+                    sequence: 61,
+                    source,
+                    target,
+                    ability,
+                    effect,
+                    effectCode: 98031,
+                    attrSetCode: 10,
+                    attributeCode: 11,
+                    oldValue: 12f,
+                    newValue: 13f);
+
+                UpdateCueGroup();
+
+                var log = _em.GetBuffer<BDebugReplayEvent>(logSink);
+                Assert.That(ContainsDebugReplayAttributeEvent(log, 10, 11, 12f, 13f), Is.True);
+                Assert.That(CountDebugReplayAttributeEvents(log, 10, 11, 12f, 13f), Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BAttributeChangeEvent>(eventBus).Length, Is.EqualTo(0));
+
+                var sinkState = _em.GetComponentData<CGameplayEventLogSink>(logSink);
+                Assert.That(sinkState.ProcessedTypedFactCount, Is.EqualTo(1));
+                Assert.That(sinkState.LastProjectedTypedFactSequence, Is.EqualTo(61));
+            }
+            finally
+            {
+                DestroyIfExists(effect);
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void TypedFactNativeProjectionSkipsLegacyBridgeDuplicate()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var logSink = GASManager.EntityEventLogSink;
+            var source = AbilitySystemFacade.Create().Entity;
+            var target = AbilitySystemFacade.Create().Entity;
+            var ability = _em.CreateEntity();
+            var effect = _em.CreateEntity();
+
+            try
+            {
+                AppendTypedAttributeFact(
+                    sequence: 71,
+                    source,
+                    target,
+                    ability,
+                    effect,
+                    effectCode: 98032,
+                    attrSetCode: 14,
+                    attributeCode: 15,
+                    oldValue: 16f,
+                    newValue: 17f);
+
+                _em.GetBuffer<BAttributeChangeEvent>(eventBus).Add(new BAttributeChangeEvent
+                {
+                    ASC = target,
+                    SourceAsc = source,
+                    SourceAbility = ability,
+                    GameplayEffect = effect,
+                    SourceFactSequence = 71,
+                    EventCode = 98032,
+                    AttrSetCode = 14,
+                    AttributeCode = 15,
+                    OldValue = 16f,
+                    NewValue = 17f,
+                    IsBaseValue = true,
+                });
+
+                UpdateCueGroup();
+
+                var targetOutbox = _em.GetBuffer<BPresentationEvent>(target);
+                Assert.That(CountPresentationAttributeEvents(targetOutbox, 14, 15, 16f, 17f), Is.EqualTo(1));
+
+                var log = _em.GetBuffer<BDebugReplayEvent>(logSink);
+                Assert.That(CountDebugReplayAttributeEvents(log, 14, 15, 16f, 17f), Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BAttributeChangeEvent>(eventBus).Length, Is.EqualTo(1));
+            }
+            finally
+            {
+                DestroyIfExists(effect);
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void CueGroupProjectsTypedCueFactsToPerAscPresentationOutboxWithoutLegacyCueRequest()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var source = AbilitySystemFacade.Create().Entity;
+            var target = AbilitySystemFacade.Create().Entity;
+            var ability = _em.CreateEntity();
+            const int cueCode = 98040;
+
+            try
+            {
+                AppendTypedCueFact(81, source, target, ability, cueCode);
+
+                UpdateCueGroup();
+
+                var targetOutbox = _em.GetBuffer<BPresentationEvent>(target);
+                Assert.That(
+                    CountPresentationCueEvents(
+                        targetOutbox,
+                        EGameplayCueEvent.OnApply,
+                        Entity.Null,
+                        cueCode),
+                    Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BCueRequest>(eventBus).Length, Is.EqualTo(0));
+                Assert.That(_em.GetBuffer<BGameplayEvent>(eventBus).Length, Is.EqualTo(0));
+
+                var projectionState = _em.GetComponentData<CPresentationOutboxProjectionState>(eventBus);
+                Assert.That(projectionState.ProcessedTypedFactCount, Is.EqualTo(1));
+                Assert.That(projectionState.LastProjectedTypedFactSequence, Is.EqualTo(81));
+            }
+            finally
+            {
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void CueGroupAppendsTypedCueFactsToPersistentDebugReplaySinkWithoutLegacyCueRequest()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var logSink = GASManager.EntityEventLogSink;
+            var source = AbilitySystemFacade.Create().Entity;
+            var target = AbilitySystemFacade.Create().Entity;
+            var ability = _em.CreateEntity();
+            const int cueCode = 98041;
+
+            try
+            {
+                AppendTypedCueFact(82, source, target, ability, cueCode);
+
+                UpdateCueGroup();
+
+                var log = _em.GetBuffer<BDebugReplayEvent>(logSink);
+                Assert.That(
+                    CountDebugReplayCueEvents(
+                        log,
+                        EGameplayCueEvent.OnApply,
+                        Entity.Null,
+                        cueCode),
+                    Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BCueRequest>(eventBus).Length, Is.EqualTo(0));
+
+                var sinkState = _em.GetComponentData<CGameplayEventLogSink>(logSink);
+                Assert.That(sinkState.ProcessedTypedFactCount, Is.EqualTo(1));
+                Assert.That(sinkState.LastProjectedTypedFactSequence, Is.EqualTo(82));
+            }
+            finally
+            {
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void TypedCueFactNativeProjectionSkipsLegacyCueDuplicate()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var logSink = GASManager.EntityEventLogSink;
+            var source = AbilitySystemFacade.Create().Entity;
+            var target = AbilitySystemFacade.Create().Entity;
+            var ability = _em.CreateEntity();
+            const int cueCode = 98042;
+
+            try
+            {
+                AppendTypedCueFact(83, source, target, ability, cueCode);
+
+                _em.GetBuffer<BCueRequest>(eventBus).Add(new BCueRequest
+                {
+                    TargetAsc = target,
+                    SourceAsc = source,
+                    SourceAbility = ability,
+                    SourceEntity = ability,
+                    SourceType = CueSourceType.GameplayEffect,
+                    SourceFactSequence = 83,
+                    ReasonCode = cueCode,
+                    CueEvent = EGameplayCueEvent.OnApply,
+                });
+
+                _em.GetBuffer<BGameplayEvent>(eventBus).Add(new BGameplayEvent
+                {
+                    SourceFactSequence = 83,
+                    Type = EGameplayEventType.CueRequested,
+                    SourceAsc = source,
+                    TargetAsc = target,
+                    SourceAbility = ability,
+                    EventCode = (int)EGameplayCueEvent.OnApply,
+                    ReasonCode = cueCode,
+                });
+
+                UpdateCueGroup();
+
+                var targetOutbox = _em.GetBuffer<BPresentationEvent>(target);
+                Assert.That(
+                    CountPresentationCueEvents(
+                        targetOutbox,
+                        EGameplayCueEvent.OnApply,
+                        Entity.Null,
+                        cueCode),
+                    Is.EqualTo(1));
+
+                var log = _em.GetBuffer<BDebugReplayEvent>(logSink);
+                Assert.That(
+                    CountDebugReplayCueEvents(
+                        log,
+                        EGameplayCueEvent.OnApply,
+                        Entity.Null,
+                        cueCode),
+                    Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BCueRequest>(eventBus).Length, Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BGameplayEvent>(eventBus).Length, Is.EqualTo(1));
+            }
+            finally
+            {
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void CueGroupProjectsTypedGameplayFactsToPerAscPresentationOutboxWithoutLegacyGameplayEvent()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var source = AbilitySystemFacade.Create().Entity;
+            var target = AbilitySystemFacade.Create().Entity;
+            var ability = _em.CreateEntity();
+            var effect = _em.CreateEntity();
+            const int eventCode = 98050;
+
+            try
+            {
+                AppendTypedGameplayFact(
+                    sequence: 91,
+                    source,
+                    target,
+                    ability,
+                    effect,
+                    EGameplayEventType.GameplayEffectApplied,
+                    EGameplayFactDomain.GameplayEffect,
+                    eventCode,
+                    value: 12f);
+
+                UpdateCueGroup();
+
+                var targetOutbox = _em.GetBuffer<BPresentationEvent>(target);
+                Assert.That(ContainsPresentationGameplayEvent(targetOutbox, eventCode, 91, effect), Is.True);
+                Assert.That(CountPresentationEventsByCode(targetOutbox, eventCode), Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BGameplayEvent>(eventBus).Length, Is.EqualTo(0));
+
+                var projectionState = _em.GetComponentData<CPresentationOutboxProjectionState>(eventBus);
+                Assert.That(projectionState.ProcessedTypedFactCount, Is.EqualTo(1));
+                Assert.That(projectionState.LastProjectedTypedFactSequence, Is.EqualTo(91));
+            }
+            finally
+            {
+                DestroyIfExists(effect);
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void CueGroupAppendsTypedGameplayFactsToPersistentDebugReplaySinkWithoutLegacyGameplayEvent()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var logSink = GASManager.EntityEventLogSink;
+            var source = AbilitySystemFacade.Create().Entity;
+            var target = AbilitySystemFacade.Create().Entity;
+            var ability = _em.CreateEntity();
+            var effect = _em.CreateEntity();
+            const int eventCode = 98051;
+
+            try
+            {
+                AppendTypedGameplayFact(
+                    sequence: 92,
+                    source,
+                    target,
+                    ability,
+                    effect,
+                    EGameplayEventType.GameplayEffectApplied,
+                    EGameplayFactDomain.GameplayEffect,
+                    eventCode,
+                    value: 13f);
+
+                UpdateCueGroup();
+
+                var log = _em.GetBuffer<BDebugReplayEvent>(logSink);
+                Assert.That(ContainsDebugReplayGameplayEvent(log, eventCode, 92, effect), Is.True);
+                Assert.That(CountDebugReplayEventsByCode(log, eventCode), Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BGameplayEvent>(eventBus).Length, Is.EqualTo(0));
+
+                var sinkState = _em.GetComponentData<CGameplayEventLogSink>(logSink);
+                Assert.That(sinkState.ProcessedTypedFactCount, Is.EqualTo(1));
+                Assert.That(sinkState.LastProjectedTypedFactSequence, Is.EqualTo(92));
+            }
+            finally
+            {
+                DestroyIfExists(effect);
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void TypedGameplayFactNativeProjectionSkipsLegacyGameplayEventDuplicate()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var logSink = GASManager.EntityEventLogSink;
+            var source = AbilitySystemFacade.Create().Entity;
+            var target = AbilitySystemFacade.Create().Entity;
+            var ability = _em.CreateEntity();
+            var effect = _em.CreateEntity();
+            const int eventCode = 98052;
+
+            try
+            {
+                AppendTypedGameplayFact(
+                    sequence: 93,
+                    source,
+                    target,
+                    ability,
+                    effect,
+                    EGameplayEventType.GameplayEffectApplied,
+                    EGameplayFactDomain.GameplayEffect,
+                    eventCode,
+                    value: 14f);
+
+                _em.GetBuffer<BGameplayEvent>(eventBus).Add(new BGameplayEvent
+                {
+                    SourceFactSequence = 93,
+                    Type = EGameplayEventType.GameplayEffectApplied,
+                    SourceAsc = source,
+                    TargetAsc = target,
+                    SourceAbility = ability,
+                    GameplayEffect = effect,
+                    EventCode = eventCode,
+                    Value = 14f,
+                });
+
+                UpdateCueGroup();
+
+                var targetOutbox = _em.GetBuffer<BPresentationEvent>(target);
+                Assert.That(CountPresentationEventsByCode(targetOutbox, eventCode), Is.EqualTo(1));
+
+                var log = _em.GetBuffer<BDebugReplayEvent>(logSink);
+                Assert.That(CountDebugReplayEventsByCode(log, eventCode), Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BGameplayEvent>(eventBus).Length, Is.EqualTo(1));
+            }
+            finally
+            {
+                DestroyIfExists(effect);
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void CueGroupProjectsTypedDamageFactsToPerAscPresentationOutboxWithoutLegacyDamageEvent()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var source = AbilitySystemFacade.Create().Entity;
+            var target = AbilitySystemFacade.Create().Entity;
+            var ability = _em.CreateEntity();
+            var effect = _em.CreateEntity();
+
+            try
+            {
+                AppendTypedDamageFact(
+                    sequence: 101,
+                    source,
+                    target,
+                    ability,
+                    effect,
+                    EGameplayEventType.AutoChessCounterDamageApplied,
+                    eventCode: 98060,
+                    amount: 25f);
+
+                UpdateCueGroup();
+
+                var targetOutbox = _em.GetBuffer<BPresentationEvent>(target);
+                Assert.That(CountPresentationDamageEvents(targetOutbox, source, target, 25f), Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BDamageEvent>(eventBus).Length, Is.EqualTo(0));
+
+                var projectionState = _em.GetComponentData<CPresentationOutboxProjectionState>(eventBus);
+                Assert.That(projectionState.ProcessedTypedFactCount, Is.EqualTo(1));
+                Assert.That(projectionState.LastProjectedTypedFactSequence, Is.EqualTo(101));
+            }
+            finally
+            {
+                DestroyIfExists(effect);
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void CueGroupAppendsTypedDamageFactsToPersistentDebugReplaySinkWithoutLegacyDamageEvent()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var logSink = GASManager.EntityEventLogSink;
+            var source = AbilitySystemFacade.Create().Entity;
+            var target = AbilitySystemFacade.Create().Entity;
+            var ability = _em.CreateEntity();
+            var effect = _em.CreateEntity();
+
+            try
+            {
+                AppendTypedDamageFact(
+                    sequence: 102,
+                    source,
+                    target,
+                    ability,
+                    effect,
+                    EGameplayEventType.AutoChessCounterDamageApplied,
+                    eventCode: 98061,
+                    amount: 26f);
+
+                UpdateCueGroup();
+
+                var log = _em.GetBuffer<BDebugReplayEvent>(logSink);
+                Assert.That(CountDebugReplayDamageEvents(log, source, target, 26f), Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BDamageEvent>(eventBus).Length, Is.EqualTo(0));
+
+                var sinkState = _em.GetComponentData<CGameplayEventLogSink>(logSink);
+                Assert.That(sinkState.ProcessedTypedFactCount, Is.EqualTo(1));
+                Assert.That(sinkState.LastProjectedTypedFactSequence, Is.EqualTo(102));
+            }
+            finally
+            {
+                DestroyIfExists(effect);
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
+                DestroyIfExists(source);
+            }
+        }
+
+        [Test]
+        public void TypedDamageFactNativeProjectionSkipsLegacyDamageEventDuplicate()
+        {
+            var eventBus = GASManager.EntityEventBus;
+            var logSink = GASManager.EntityEventLogSink;
+            var source = AbilitySystemFacade.Create().Entity;
+            var target = AbilitySystemFacade.Create().Entity;
+            var ability = _em.CreateEntity();
+            var effect = _em.CreateEntity();
+
+            try
+            {
+                AppendTypedDamageFact(
+                    sequence: 103,
+                    source,
+                    target,
+                    ability,
+                    effect,
+                    EGameplayEventType.AutoChessCounterDamageApplied,
+                    eventCode: 98062,
+                    amount: 27f);
+
+                _em.GetBuffer<BDamageEvent>(eventBus).Add(new BDamageEvent
+                {
+                    SourceFactSequence = 103,
+                    Source = source,
+                    Target = target,
+                    Amount = 27f,
+                });
+
+                UpdateCueGroup();
+
+                var targetOutbox = _em.GetBuffer<BPresentationEvent>(target);
+                Assert.That(CountPresentationDamageEvents(targetOutbox, source, target, 27f), Is.EqualTo(1));
+
+                var log = _em.GetBuffer<BDebugReplayEvent>(logSink);
+                Assert.That(CountDebugReplayDamageEvents(log, source, target, 27f), Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BDamageEvent>(eventBus).Length, Is.EqualTo(1));
+            }
+            finally
+            {
                 DestroyIfExists(effect);
                 DestroyIfExists(ability);
                 DestroyIfExists(target);
@@ -1008,6 +1627,9 @@ namespace GAS.Runtime.Tests.Event
             if (_em.HasComponent<CPresentationOutboxProjectionState>(GASManager.EntityEventBus))
                 _em.SetComponentData(GASManager.EntityEventBus, new CPresentationOutboxProjectionState());
 
+            if (EffectCommandSpecStream.TryGetSingleton(_em, out var streamEntity))
+                EffectCommandSpecStream.ClearFrameLocalData(_em, streamEntity, 0);
+
             using var query = _em.CreateEntityQuery(ComponentType.ReadWrite<BPresentationEvent>());
             using var entities = query.ToEntityArray(Allocator.Temp);
             for (var i = 0; i < entities.Length; i++)
@@ -1086,6 +1708,132 @@ namespace GAS.Runtime.Tests.Event
                 Source = source,
                 Target = target,
                 Amount = 25f,
+            });
+        }
+
+        private void AppendTypedAttributeFact(
+            int sequence,
+            Entity source,
+            Entity target,
+            Entity ability,
+            Entity effect,
+            int effectCode,
+            int attrSetCode,
+            int attributeCode,
+            float oldValue,
+            float newValue)
+        {
+            var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+            _em.GetBuffer<BTypedSimulationFact>(streamEntity).Add(new BTypedSimulationFact
+            {
+                Sequence = sequence,
+                Frame = 321,
+                EventType = EGameplayEventType.AttributeBaseValueChanged,
+                Domain = EGameplayFactDomain.Attribute,
+                Category = EGameplayFactCategory.StateChange,
+                Severity = EGameplayFactSeverity.Info,
+                SourceAsc = source,
+                TargetAsc = target,
+                SourceAbility = ability,
+                SourceEffect = effect,
+                GameplayEffectCode = effectCode,
+                ContextId = 4400 + sequence,
+                AttrSetCode = attrSetCode,
+                AttributeCode = attributeCode,
+                Value = newValue - oldValue,
+                OldValue = oldValue,
+                NewValue = newValue,
+            });
+        }
+
+        private void AppendTypedCueFact(
+            int sequence,
+            Entity source,
+            Entity target,
+            Entity ability,
+            int cueCode)
+        {
+            var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+            _em.GetBuffer<BTypedSimulationFact>(streamEntity).Add(new BTypedSimulationFact
+            {
+                Sequence = sequence,
+                Frame = 321,
+                EventType = EGameplayEventType.CueRequested,
+                Domain = EGameplayFactDomain.Cue,
+                Category = EGameplayFactCategory.Request,
+                Severity = EGameplayFactSeverity.Info,
+                SourceAsc = source,
+                TargetAsc = target,
+                SourceAbility = ability,
+                ContextId = 4400 + sequence,
+                EventCode = (int)EGameplayCueEvent.OnApply,
+                ReasonCode = cueCode,
+            });
+        }
+
+        private void AppendTypedGameplayFact(
+            int sequence,
+            Entity source,
+            Entity target,
+            Entity ability,
+            Entity effect,
+            EGameplayEventType eventType,
+            EGameplayFactDomain domain,
+            int eventCode,
+            int reasonCode = 0,
+            float value = 0f)
+        {
+            var classification = GameplayFactClassifier.Classify(eventType);
+            var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+            _em.GetBuffer<BTypedSimulationFact>(streamEntity).Add(new BTypedSimulationFact
+            {
+                Sequence = sequence,
+                Frame = 321,
+                EventType = eventType,
+                Domain = domain,
+                Category = classification.Category,
+                Severity = classification.Severity,
+                SourceAsc = source,
+                TargetAsc = target,
+                SourceAbility = ability,
+                SourceEffect = effect,
+                GameplayEffectCode = eventCode,
+                ContextId = 4400 + sequence,
+                EventCode = eventCode,
+                ReasonCode = reasonCode,
+                Value = value,
+            });
+        }
+
+        private void AppendTypedDamageFact(
+            int sequence,
+            Entity source,
+            Entity target,
+            Entity ability,
+            Entity effect,
+            EGameplayEventType eventType,
+            int eventCode,
+            float amount,
+            int reasonCode = 0)
+        {
+            var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+            _em.GetBuffer<BTypedSimulationFact>(streamEntity).Add(new BTypedSimulationFact
+            {
+                Sequence = sequence,
+                Frame = 321,
+                EventType = eventType,
+                Domain = EGameplayFactDomain.Damage,
+                Category = EGameplayFactCategory.StateChange,
+                Severity = EGameplayFactSeverity.Info,
+                SourceAsc = source,
+                TargetAsc = target,
+                SourceAbility = ability,
+                SourceEffect = effect,
+                GameplayEffectCode = eventCode,
+                ContextId = 4400 + sequence,
+                EventCode = eventCode,
+                ReasonCode = reasonCode,
+                Value = amount,
             });
         }
 
@@ -1189,6 +1937,30 @@ namespace GAS.Runtime.Tests.Event
             return false;
         }
 
+        private static int CountPresentationAttributeEvents(
+            DynamicBuffer<BPresentationEvent> events,
+            int attrSetCode,
+            int attributeCode,
+            float oldValue,
+            float newValue)
+        {
+            var count = 0;
+            for (var i = 0; i < events.Length; i++)
+            {
+                var evt = events[i];
+                if (evt.Kind == EPresentationEventKind.AttributeChange
+                    && evt.AttrSetCode == attrSetCode
+                    && evt.AttributeCode == attributeCode
+                    && evt.OldValue == oldValue
+                    && evt.NewValue == newValue)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
         private static bool ContainsPresentationCueEvent(
             DynamicBuffer<BPresentationEvent> events,
             EGameplayCueEvent cueEvent,
@@ -1206,6 +1978,50 @@ namespace GAS.Runtime.Tests.Event
             }
 
             return false;
+        }
+
+        private static int CountPresentationCueEvents(
+            DynamicBuffer<BPresentationEvent> events,
+            EGameplayCueEvent cueEvent,
+            Entity cueEntity,
+            int reasonCode)
+        {
+            var count = 0;
+            for (var i = 0; i < events.Length; i++)
+            {
+                var evt = events[i];
+                if (evt.Kind == EPresentationEventKind.CueRequest
+                    && evt.CueEvent == cueEvent
+                    && evt.CueEntity == cueEntity
+                    && evt.ReasonCode == reasonCode)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static int CountPresentationDamageEvents(
+            DynamicBuffer<BPresentationEvent> events,
+            Entity source,
+            Entity target,
+            float amount)
+        {
+            var count = 0;
+            for (var i = 0; i < events.Length; i++)
+            {
+                var evt = events[i];
+                if (evt.Kind == EPresentationEventKind.Damage
+                    && evt.SourceAsc == source
+                    && evt.TargetAsc == target
+                    && evt.DamageAmount == amount)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static void AssertClassification(
@@ -1356,6 +2172,30 @@ namespace GAS.Runtime.Tests.Event
             return false;
         }
 
+        private static int CountDebugReplayAttributeEvents(
+            DynamicBuffer<BDebugReplayEvent> events,
+            int attrSetCode,
+            int attributeCode,
+            float oldValue,
+            float newValue)
+        {
+            var count = 0;
+            for (var i = 0; i < events.Length; i++)
+            {
+                var evt = events[i];
+                if (evt.Kind == EDebugReplayEventKind.AttributeChange
+                    && evt.AttrSetCode == attrSetCode
+                    && evt.AttributeCode == attributeCode
+                    && evt.OldValue == oldValue
+                    && evt.NewValue == newValue)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
         private static bool ContainsDebugReplayCueEvent(
             DynamicBuffer<BDebugReplayEvent> events,
             EGameplayCueEvent cueEvent,
@@ -1373,6 +2213,28 @@ namespace GAS.Runtime.Tests.Event
             }
 
             return false;
+        }
+
+        private static int CountDebugReplayCueEvents(
+            DynamicBuffer<BDebugReplayEvent> events,
+            EGameplayCueEvent cueEvent,
+            Entity cueEntity,
+            int reasonCode)
+        {
+            var count = 0;
+            for (var i = 0; i < events.Length; i++)
+            {
+                var evt = events[i];
+                if (evt.Kind == EDebugReplayEventKind.CueRequest
+                    && evt.CueEvent == cueEvent
+                    && evt.CueEntity == cueEntity
+                    && evt.ReasonCode == reasonCode)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static bool ContainsDebugReplayTagEvent(
@@ -1413,6 +2275,28 @@ namespace GAS.Runtime.Tests.Event
             }
 
             return false;
+        }
+
+        private static int CountDebugReplayDamageEvents(
+            DynamicBuffer<BDebugReplayEvent> events,
+            Entity source,
+            Entity target,
+            float amount)
+        {
+            var count = 0;
+            for (var i = 0; i < events.Length; i++)
+            {
+                var evt = events[i];
+                if (evt.Kind == EDebugReplayEventKind.Damage
+                    && evt.SourceAsc == source
+                    && evt.TargetAsc == target
+                    && evt.DamageAmount == amount)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static int CountDebugReplayEventsByCode(

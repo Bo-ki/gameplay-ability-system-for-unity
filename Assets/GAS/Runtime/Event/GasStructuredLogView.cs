@@ -22,6 +22,7 @@ namespace GAS.Runtime
         RuntimeBoundary = 7,
         Config = 8,
         Presentation = 9,
+        Damage = 10,
     }
 
     public readonly struct GasStructuredLogEntry
@@ -246,6 +247,7 @@ namespace GAS.Runtime
                 EGameplayFactDomain.ExecutionCalculation => EGasStructuredLogModule.ExecutionCalculation,
                 EGameplayFactDomain.RuntimeBoundary => EGasStructuredLogModule.RuntimeBoundary,
                 EGameplayFactDomain.Presentation => EGasStructuredLogModule.Presentation,
+                EGameplayFactDomain.Damage => EGasStructuredLogModule.Damage,
                 _ => EGasStructuredLogModule.Unknown,
             };
         }

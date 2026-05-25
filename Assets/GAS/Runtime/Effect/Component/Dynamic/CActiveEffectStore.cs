@@ -183,6 +183,27 @@ namespace GAS.Runtime
             return true;
         }
 
+        public static bool TryRefreshPeriodFrame(
+            EntityManager em,
+            Entity effectEntity,
+            in CEffectContext context,
+            int currentFrame)
+        {
+            if (!TryGetStore(em, context.TargetAsc, out var store, out var slots))
+                return false;
+
+            var index = FindSlot(slots, effectEntity);
+            if (index < 0)
+                return false;
+
+            var slot = slots[index];
+            slot.PeriodFrame = ResolvePeriodFrame(em, effectEntity);
+            slot.LastPeriodFrame = currentFrame;
+            slots[index] = slot;
+            em.SetComponentData(context.TargetAsc, store);
+            return true;
+        }
+
         public static bool TryRemove(
             EntityManager em,
             Entity effectEntity,

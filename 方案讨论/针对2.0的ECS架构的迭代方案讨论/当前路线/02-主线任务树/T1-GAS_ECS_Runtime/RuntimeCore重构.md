@@ -25,14 +25,15 @@
 1. `01-目标态架构共识/03-RuntimeCore管线Spec.md`
 2. `01-目标态架构共识/04-EffectCommand-SpecStream-AttributeDeltaSpec.md`
 3. `01-目标态架构共识/05-ActiveEffectStoreSpec.md`
-4. `UnityDOTS官方文档参考/README.md`
-5. `UnityDOTS官方文档参考/主题/01-Entities系统与World.md`
-6. `UnityDOTS官方文档参考/主题/90-规则编号索引.md`
-7. `UnityDOTS官方文档参考/README.md`
-8. `UnityDOTS官方文档参考/主题/20-GASRuntimeCore-API选型基线.md`
-9. `UnityDOTS官方文档参考/主题/12-官方案例模式.md`
-10. `UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md`
-11. `01-目标态架构共识/90-目标态不变量.md`
+4. `01-目标态架构共识/10B-AutoChess完整业务案例设计Spec.md`
+5. `UnityDOTS官方文档参考/README.md`
+6. `UnityDOTS官方文档参考/主题/01-Entities系统与World.md`
+7. `UnityDOTS官方文档参考/主题/90-规则编号索引.md`
+8. `UnityDOTS官方文档参考/README.md`
+9. `UnityDOTS官方文档参考/主题/20-GASRuntimeCore-API选型基线.md`
+10. `UnityDOTS官方文档参考/主题/12-官方案例模式.md`
+11. `UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md`
+12. `01-目标态架构共识/90-目标态不变量.md`
 
 ## 历史方案参考
 
@@ -46,7 +47,7 @@
 
 ## 当前状态
 
-进行中。当前优先级已从冻结旧路径扩张、建立 EffectCommand / SpecStream / AttributeDelta 契约和 simple instant evaluation 新主链迁移，推进到 ActiveEffectStore owner-local store 第一刀，并已补齐 owner-local slot 的 Debugger pressure / state distribution baseline。基于 Unity DOTS 官方参考复审，AM3 / AM5 当前只能视为局部 proof 小闭环；继续扩张前必须先进入 [RuntimeCoreFrameBackbone.md](RuntimeCoreFrameBackbone.md)，按 `AM2B-A -> AM2B-F` 连续任务链补齐 DOTS 原生帧骨架、结构变化屏障和 Debugger evidence gate。
+进行中。当前优先级已从冻结旧路径扩张、建立 EffectCommand / SpecStream / AttributeDelta 契约和 simple instant evaluation 新主链迁移，推进到 ActiveEffectStore owner-local store 第一刀、owner-local slot Debugger pressure / state distribution baseline，以及 AM5 period / overflow simple instant derived command proof。基于 Unity DOTS 官方参考复审，AM3 / AM5 当前只能视为局部 proof 小闭环；继续扩张前必须先进入 [RuntimeCoreFrameBackbone.md](RuntimeCoreFrameBackbone.md)。目前 AM2B-A 已完成 phase contract，AM2B-B 已完成 frame budget contract，AM2B-C 已完成 stream owner / deterministic merge contract，AM2B-D 已完成 structural playback gate contract，AM2B-E 已完成 debugger evidence gate contract，AM2B-F 已完成 AM3 / AM5 rebind handoff；当前 AM3 已迁入 activation simple single-target producer、ability cost self producer、Timeline ApplyEffects single-target 与 multi-target simple instant producer，并已用 `EffectCommandSpecStream.CommandWriter` 收缩 multi-target command fan-out 的 per-command frame query，`ResolveCurrentFrame` 的 5 处重复实现已收口到 `GASRuntimeFrameContext`，且 `GASRuntimeFrameContext` fallback query 已删除；attribute typed fact observation bridge、Cue-on-Apply projection、attribute / cue / generic gameplay / damage typed fact native Presentation / Replay consumer 也已接入，AM5 已让 period / overflow simple instant child GE 复用 command/spec/delta/fact 主链；下一步仍在 frame backbone 约束下收缩剩余 simple instant producer、业务 reaction typed fact consumer、全局临时 EntityQuery、真实 frame owner、真实 parallel fan-in / deterministic merge、granted cleanup 和 store-driven lifecycle 缺口。01 目标态架构共识全目录 DOTS 合规审查（AM-1K）已完成，18 个 Spec 内部一致性基线已建立；10B AutoChess 完整业务案例设计（AM-1J）已可作为 T6 验收的目标态设计预演。
 
 ## 非目标
 
@@ -95,17 +96,17 @@
 
 | 任务ID | 任务名 | 状态 | 目标 Spec |
 |---|---|---|---|
-| T1-RuntimeCore-AM0 | GAS ECS Runtime - Runtime Core 重构 - Freeze Safety Gate | 已完成（Unity验证待补跑） | `01/03 RuntimeCore`, `01/04 EffectCommand` |
-| T1-RuntimeCore-AM1 | GAS ECS Runtime - Runtime Core 重构 - Unity Entities 机制校准 | 已完成（Unity验证待补跑） | `UnityDOTS官方文档参考/主题/01`, `UnityDOTS官方文档参考/主题/90` |
-| T1-RuntimeCore-AM1B | GAS ECS Runtime - Runtime Core 重构 - Unity DOTS API 选型修正 | 已完成（文档校准） | `UnityDOTS官方文档参考/主题/20` |
-| T1-RuntimeCore-AM1C | GAS ECS Runtime - Runtime Core 重构 - DOTS API 深读反推 Runtime Core | 已完成（文档校准） | `01/03 RuntimeCore`, `01/04 EffectCommand`, `01/05 ActiveEffectStore`, `UnityDOTS官方文档参考/主题/20` |
-| T1-RuntimeCore-AM1D | GAS ECS Runtime - Runtime Core 重构 - Unity DOTS 官方案例反推 Runtime Core | 已完成（文档校准） | `UnityDOTS官方文档参考/主题/90`, `UnityDOTS官方文档参考/主题/12` |
-| T1-RuntimeCore-AM1E | GAS ECS Runtime - Runtime Core 重构 - Unity DOTS 官方文档参考体系主题化与流程闭环 | 已完成（文档校准） | `UnityDOTS官方文档参考`, `UnityDOTS官方文档参考/主题/21`, `03/06`, `03/07` |
-| T1-RuntimeCore-AM1G | GAS ECS Runtime - Runtime Core 重构 - Unity Physics / Entities Graphics 新包覆盖 | 已完成（文档校准） | `UnityDOTS官方文档参考`, `UnityDOTS官方文档参考/主题/90`, `UnityDOTS官方文档参考/主题/20`, `UnityDOTS官方文档参考/主题/21` |
-| T1-RuntimeCore-AM2 | GAS ECS Runtime - Runtime Core 重构 - EffectCommand 与 SpecStream 契约 | 已完成（Unity验证待补跑） | `01/04 EffectCommand` |
-| T1-RuntimeCore-AM2B | GAS ECS Runtime - Runtime Core 重构 - Runtime Core Frame Backbone | 任务链入口（不直接领取；当前领取 `GAS ECS Runtime - Runtime Core Frame Backbone - Frame Arena 与 Query Budget`） | `01/03 RuntimeCore`, `UnityDOTS官方文档参考/主题/01/02/03/04/06/09/10/20/21` |
-| T1-RuntimeCore-AM3 | GAS ECS Runtime - Runtime Core 重构 - Instant Spec Evaluation 迁移 | 进行中（activation simple single-target producer 已接入 stream；继续扩张前需完成 AM2B） | `01/04 EffectCommand` |
-| T1-RuntimeCore-AM5 | GAS ECS Runtime - Runtime Core 重构 - Active Effect Store 重建 | 进行中（owner-local store 第一刀与 Debugger slot pressure baseline 已落地；继续扩张前需完成 AM2B） | `01/05 ActiveEffectStore` |
+| T1-RuntimeCore-AM0 | GAS ECS Runtime - Runtime Core 重构 - Freeze Safety Gate | 契约已确立 | `01/03 RuntimeCore`, `01/04 EffectCommand` |
+| T1-RuntimeCore-AM1 | GAS ECS Runtime - Runtime Core 重构 - Unity Entities 机制校准 | 契约已确立 | `UnityDOTS官方文档参考/主题/01`, `UnityDOTS官方文档参考/主题/90` |
+| T1-RuntimeCore-AM1B | GAS ECS Runtime - Runtime Core 重构 - Unity DOTS API 选型修正 | 已完成 | `UnityDOTS官方文档参考/主题/20` |
+| T1-RuntimeCore-AM1C | GAS ECS Runtime - Runtime Core 重构 - DOTS API 深读反推 Runtime Core | 已完成 | `01/03 RuntimeCore`, `01/04 EffectCommand`, `01/05 ActiveEffectStore`, `UnityDOTS官方文档参考/主题/20` |
+| T1-RuntimeCore-AM1D | GAS ECS Runtime - Runtime Core 重构 - Unity DOTS 官方案例反推 Runtime Core | 已完成 | `UnityDOTS官方文档参考/主题/90`, `UnityDOTS官方文档参考/主题/12` |
+| T1-RuntimeCore-AM1E | GAS ECS Runtime - Runtime Core 重构 - Unity DOTS 官方文档参考体系主题化与流程闭环 | 已完成 | `UnityDOTS官方文档参考`, `UnityDOTS官方文档参考/主题/21`, `04-当前进度状态/迭代摘要反哺流程规范` |
+| T1-RuntimeCore-AM1G | GAS ECS Runtime - Runtime Core 重构 - Unity Physics / Entities Graphics 新包覆盖 | 已完成 | `UnityDOTS官方文档参考`, `UnityDOTS官方文档参考/主题/90`, `UnityDOTS官方文档参考/主题/20`, `UnityDOTS官方文档参考/主题/21` |
+| T1-RuntimeCore-AM2 | GAS ECS Runtime - Runtime Core 重构 - EffectCommand 与 SpecStream 契约 | 契约已确立 | `01/04 EffectCommand` |
+| T1-RuntimeCore-AM2B | GAS ECS Runtime - Runtime Core 重构 - Runtime Core Frame Backbone | 已完成任务链（AM2B-A -> AM2B-F contract-first / rebind handoff；不再直接领取） | `01/03 RuntimeCore`, `UnityDOTS官方文档参考/主题/01/02/03/04/06/09/10/20/21` |
+| T1-RuntimeCore-AM3 | GAS ECS Runtime - Runtime Core 重构 - Instant Spec Evaluation 迁移 | 推荐优先（Timeline ApplyEffects multi-target simple instant fan-out、attribute / cue / generic gameplay / damage typed fact native Presentation / Replay consumer 已接入；基于 AM2B rebind contract 继续迁移剩余 simple instant producer、业务 reaction typed fact consumer 和 parallel fan-in 缺口） | `01/04 EffectCommand` |
+| T1-RuntimeCore-AM5 | GAS ECS Runtime - Runtime Core 重构 - Active Effect Store 重建 | 进行中（owner-local store 第一刀、Debugger slot pressure baseline、period / overflow simple instant derived command proof 已落地；后续扩张必须复用 AM2B rebind contract） | `01/05 ActiveEffectStore` |
 
 ## 三级任务：Runtime Core Frame Backbone
 
@@ -117,7 +118,7 @@
 
 维护入口：[RuntimeCoreFrameBackbone.md](RuntimeCoreFrameBackbone.md)
 
-领取规则：本节点只保留任务链总上下文，不再作为单个粗任务领取。`GAS ECS Runtime - Runtime Core Frame Backbone - Schedule / Phase Contract`（任务ID：`T1-RuntimeCore-AM2B-A`）已完成 contract-first；当前推荐领取 `GAS ECS Runtime - Runtime Core Frame Backbone - Frame Arena 与 Query Budget`（任务ID：`T1-RuntimeCore-AM2B-B`）。
+领取规则：本节点只保留任务链总上下文，不再作为单个粗任务领取。`GAS ECS Runtime - Runtime Core Frame Backbone - Schedule / Phase Contract`（任务ID：`T1-RuntimeCore-AM2B-A`）已完成 contract-first；`GAS ECS Runtime - Runtime Core Frame Backbone - Frame Arena 与 Query Budget`（任务ID：`T1-RuntimeCore-AM2B-B`）已完成 contract-first / budget-first；`GAS ECS Runtime - Runtime Core Frame Backbone - Stream Owner 与 Deterministic Merge`（任务ID：`T1-RuntimeCore-AM2B-C`）已完成 contract-first；`GAS ECS Runtime - Runtime Core Frame Backbone - Structural Playback Gate`（任务ID：`T1-RuntimeCore-AM2B-D`）已完成 contract-first；`GAS ECS Runtime - Runtime Core Frame Backbone - Debugger Evidence Gate`（任务ID：`T1-RuntimeCore-AM2B-E`）已完成 contract-first / debugger evidence gate；`GAS ECS Runtime - Runtime Core Frame Backbone - AM3 / AM5 Rebind 与交还验证`（任务ID：`T1-RuntimeCore-AM2B-F`）已完成 contract-first / rebind handoff。当前推荐领取 `GAS ECS Runtime - Runtime Core 重构 - Instant Spec Evaluation 迁移`（任务ID：`T1-RuntimeCore-AM3`）。
 
 当前问题：
 
@@ -233,7 +234,7 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 
 任务ID：`T1-RuntimeCore-AM1D`
 
-状态：`已完成（文档校准）`
+状态：`已完成`
 
 任务名：`GAS ECS Runtime - Runtime Core 重构 - Unity DOTS 官方案例反推 Runtime Core`
 
@@ -292,7 +293,7 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 
 任务ID：`T1-RuntimeCore-AM1E`
 
-状态：`已完成（文档校准）`
+状态：`已完成`
 
 任务名：`GAS ECS Runtime - Runtime Core 重构 - Unity DOTS 官方文档参考体系主题化与流程闭环`
 
@@ -309,8 +310,8 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 3. `UnityDOTS官方文档参考/README.md`
 4. `UnityDOTS官方文档参考/主题/90-规则编号索引.md`
 5. `UnityDOTS官方文档参考/主题/20-GASRuntimeCore-API选型基线.md`
-6. `03-文档治理规范/06-迭代摘要反哺流程规范.md`
-7. `03-文档治理规范/07-Agent行动报告规范.md`
+6. `04-当前进度状态/迭代摘要反哺流程规范.md`
+7. `Agent行动报告规范.md`
 
 目标 / 目的：
 
@@ -330,7 +331,7 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 1. `UnityDOTS官方文档参考/README.md`
 2. `UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md`
 3. `UnityDOTS官方文档参考` 相关单主题文档
-4. `03-文档治理规范/02/03/06/07`
+4. `02-主线任务树/任务树规范 + 01-目标态架构共识/Spec规范 + 04-当前进度状态/迭代摘要反哺流程规范 + Agent行动报告规范`
 5. 本支线任务树和当前进度状态。
 
 执行细则：
@@ -356,7 +357,7 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 
 任务ID：`T1-RuntimeCore-AM1`
 
-状态：`候选`
+状态：`契约已确立`
 
 任务名：`GAS ECS Runtime - Runtime Core 重构 - Unity Entities 机制校准`
 
@@ -403,7 +404,7 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 
 执行细则：
 
-1. 执行前必须按 `03-文档治理规范/07-Agent行动报告规范.md` 输出行动报告。
+1. 执行前必须按 `Agent行动报告规范.md` 输出行动报告。
 2. 所有 Runtime Core 任务都必须说明使用的 SystemGroup、job 形态、结构变化边界和 Debugger counters。
 3. 不得把 Unity change filter 当实体级 gameplay event 语义。
 4. request entity 只作为边界低频入口，不作为 high-frequency instant GE 默认承载。
@@ -425,7 +426,7 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 交还内容：
 
 1. 更新 `04-当前进度状态/迭代摘要.md`。
-2. 如发现 Spec 缺口，按 `06-迭代摘要反哺流程规范.md` 反哺到 `01` 或 `00`。
+2. 如发现 Spec 缺口，按 `04-当前进度状态/迭代摘要反哺流程规范.md` 反哺到 `01` 或 `00`。
 
 ## 三级任务：EffectCommand 与 SpecStream 契约
 
@@ -512,7 +513,7 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 
 任务ID：`T1-RuntimeCore-AM3`
 
-状态：`进行中（activation simple single-target producer 已接入 stream，Unity验证待补跑）`
+状态：`推荐优先（Timeline ApplyEffects multi-target simple instant fan-out、attribute / cue / generic gameplay / damage typed fact native Presentation / Replay consumer 已接入；基于 AM2B rebind contract 继续迁移剩余 simple instant producer、业务 reaction typed fact consumer 和 parallel fan-in 缺口，Unity验证待补跑）`
 
 任务名：`GAS ECS Runtime - Runtime Core 重构 - Instant Spec Evaluation 迁移`
 
@@ -536,6 +537,8 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 1. `00-当前架构事实/核心问题诊断/ISSUE-001-GE生命周期管线过重.md`
 2. `00-当前架构事实/核心问题诊断/ISSUE-004-结构变化边界脆弱.md`
 3. `00-当前架构事实/核心问题诊断/ISSUE-008-目标态Spec尚未充分UnityEntities机制化.md`
+4. `00-当前架构事实/核心问题诊断/ISSUE-009-RuntimeCoreFrameBackbone缺失.md`
+5. `Assets/GAS/Runtime/System/SystemGroup/GASRuntimeFrameBackboneRebindContract.cs`
 
 目标 / 目的：
 
@@ -543,6 +546,7 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 2. simple instant modifier 能在新 stream 内解析 constant / SetByCaller magnitude，并直接更新目标 ASC attribute。
 3. attribute 写入同时产生 `BAttributeDelta`，再投影为 `BTypedSimulationFact`。
 4. direct command 主链不创建 `CApplyGameplayEffectRequest`，也不创建 `CEffectSpecData` / `CEffectLifecycle` runtime GE entity。
+5. attribute typed fact 至少能投影到旧观察链路和 Presentation / Replay native consumer，保证迁移期可观察 AM3 simple instant attribute fact 且避免同源重复投影。
 
 非目标：
 
@@ -557,32 +561,63 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 2. `Assets/GAS/Runtime/System/Effect/SEffectCommandSpecStreamPhases.cs`
 3. `Assets/GAS/Runtime/System/Effect/GameplayEffectRequestWriter.cs`
 4. `Assets/GAS/Runtime/System/Ability/SAbilityCommit.cs`
-5. `Assets/_Test/GAS/Runtime/Effect/EffectCommandSpecStreamContractTests.cs`
-6. `Assets/_Test/GAS/Runtime/Effect/GameplayEffectRequestWriterTests.cs`
-7. 相关任务树、目标态 Spec、当前事实和验证摘要。
+5. `Assets/GAS/Runtime/Ability/AbilityRuntimeActions.cs`
+6. `Assets/GAS/Runtime/Ability/TimelineAbility/TimelineApplyEffectsProducer.cs`
+7. `Assets/_Test/GAS/Runtime/Effect/EffectCommandSpecStreamContractTests.cs`
+8. `Assets/_Test/GAS/Runtime/Effect/GameplayEffectRequestWriterTests.cs`
+9. `Assets/_Test/GAS/Runtime/Ability/AbilityRuntimeActionsTests.cs`
+10. `Assets/_Test/GAS/Runtime/Ability/TimelineApplyEffectsProducerTests.cs`
+11. `Assets/_Test/GAS/Runtime/Ability/AbilityTimelineActionSystemTests.cs`
+12. 相关任务树、目标态 Spec、当前事实和验证摘要。
 
 执行细则：
 
-1. SystemGroup：继续挂在 `GASCommandGroup`，phase 顺序为 `SEffectCommandIngest -> SInstantEffectSpecBuild -> SActiveEffectMutationApply -> SAttributeDeltaApply -> STypedSimulationFactProjection`。
+1. SystemGroup：必须按 AM2B phase contract 绑定到 `CommandIngest / SpecEvaluation / DeltaApply / TypedFactProjection`；当前真实系统仍挂在旧 `GASCommandGroup`，但行动报告必须说明是否继续作为 contract-first 迁移或是否搬迁真实 group。
 2. ISystem / job 形态：当前先用 `ISystem` 主线程 EntityManager 路径证明语义；后续 AM5 / Burst 优化再拆 job 化。
-3. 结构变化边界：direct command 主链不做 per-hit request entity / runtime GE entity create-destroy；stream singleton 初次创建属于低频 bootstrap。
-4. DynamicBuffer：当前以 singleton owner 上的 `BEffectCommand` / `BInstantEffectSpec` / `BAttributeDelta` / `BTypedSimulationFact` 承载 frame-local 主链数据。
-5. Debugger：AM2 counters 已优先读取 command/spec/delta/fact stream；AM3 继续让这些 buffer 成为 simple instant 主链证据源。
-6. API 选型：本任务必须先说明 AM3 是否继续使用 singleton DynamicBuffer、是否切到 `NativeStream` / per-owner buffer、是否需要 ECB `AppendToBuffer`，并给出拒绝其他候选 API 的理由。
-7. 适用规则：`SYS-01`, `SYS-04`, `SC-01`, `BUF-01`, `BUF-02`, `BUF-03`, `BUF-04`, `DBG-01`, `DEF-01`, `DEF-02`, `QRY-01`, `SEL-01`, `SEL-02`, `SEL-09`。
+3. 结构变化边界：direct command 主链不做 per-hit request entity / runtime GE entity create-destroy；如涉及 structural mutation request，必须 route 到 AM2B-D structural playback gate，不得绕过 `GasStructuralPlaybackSystemGroup` 契约。
+4. DynamicBuffer：当前以 singleton owner 上的 `BEffectCommand` / `BInstantEffectSpec` / `BAttributeDelta` / `BTypedSimulationFact` 承载 frame-local 主链数据，但 AM2B-F 已要求不得把 singleton DynamicBuffer 描述为 scale-ready。
+5. Debugger：AM2B-E counters / AM2B-F rebind contract 是 AM3 交还证据源；AM3 必须说明 frame budget、stream owner、deterministic merge、structural gate 和 Debugger evidence gate 如何被复用。
+6. Command 四分层：本任务行动报告必须区分 Boundary request、Core frame command、parallel fan-in stream、structural mutation request，并说明当前迁移 producer 属于哪一类。
+7. API 选型：本任务必须先说明 AM3 是否继续使用 singleton DynamicBuffer、是否切到 `NativeStream` / per-owner buffer、是否需要 ECB `AppendToBuffer`，并给出拒绝其他候选 API 的理由。
+8. 适用规则：`SYS-01`, `SYS-04`, `SC-01`, `BUF-01`, `BUF-02`, `BUF-03`, `BUF-04`, `DBG-01`, `DEF-01`, `DEF-02`, `QRY-01`, `SEL-01`, `SEL-02`, `SEL-09`。
 
 本轮 AM3 进展：
 
-1. `CEffectCommandSpecStream` 增加 spec build、active mutation、delta apply、fact projection 消费游标，并提供 frame-local buffer 清理。
+1. `CEffectCommandSpecStream` 增加 spec build、active mutation、delta apply、fact projection、event bridge 和 cue projection 消费游标，并提供 frame-local buffer 清理。
 2. `AppendCommand` 补齐 frame、target fallback、context / sequence 和 SetByCaller range 写入。
 3. `SInstantEffectSpecBuild` 已能消费 direct instant command，按 simple instant definition 生成 `BInstantEffectSpec`。
 4. `SAttributeDeltaApply` 已能解析 constant / SetByCaller magnitude，更新目标 `BAttribute`，并写入 `BAttributeDelta`。
 5. `STypedSimulationFactProjection` 已能把 attribute delta 投影为 `BTypedSimulationFact`。
 6. 新增 AM3 行为测试覆盖 constant modifier、SetByCaller magnitude、spec sequence 回写、attribute 更新、delta/fact 生成，以及不创建 request/runtime GE entity。
 7. `GameplayEffectRequestWriter` 新增 `AppendSimpleInstantCommandOrCreateSingleTargetRequest` / `TryAppendSimpleInstantCommand`，simple instant 命中时写入 `BEffectCommand` stream，未命中时保留旧 request fallback。
-8. `SAbilityCommit` 的 activation self / target simple single-target producer 已改为优先写入 `EffectCommand` stream；cost / cooldown 仍保留旧 request 路径，等待后续独立迁移。
-9. `CanApplySimpleInstantSpec` 明确排除 Cue-on-Apply，避免 AM3 尚未实现 cue projection 时吞掉表现 / 业务 cue 语义。
-10. 新增 request writer 行为测试覆盖 activation producer 写入 stream 和 cue-on-apply fallback。
+8. `SAbilityCommit` 的 activation self / target simple single-target producer 已改为优先写入 `EffectCommand` stream。
+9. `CanApplySimpleInstantSpec` 已允许 simple instant Cue-on-Apply；`SInstantEffectSpecBuild` 把 `CGameplayEffectCueRequestOnApply.CueCode` 写入 `BInstantEffectSpec.CueRequestOnApplyCode`。
+10. 新增 `SInstantEffectCueRequestProjection`，在 `STypedSimulationFactEventBridge` 后按 `CueProjectionSpecCursor` 增量投影旧 `BCueRequest` / `BGameplayEvent(CueRequested)`。
+11. `AbilityRuntimeActions.RequestCostGameplayEffect` 已改为优先通过 `AppendSimpleInstantCommandOrCreateSingleTargetRequest` 写入 self `BEffectCommand`；simple instant cost 不再创建 `CApplyGameplayEffectRequest` 和 runtime GE entity。
+12. cost GE 若需要 Duration / Period / Stack、Tag requirements、Granted state 或其它复杂语义，仍回落旧 request entity；simple instant Cue-on-Apply 已走 stream + projection；`RequestCooldownGameplayEffect` 保持旧 request 路径，等待 AM5 / ActiveEffectStore 生命周期迁移。
+13. `AbilityRuntimeActionsTests` 已覆盖 cost self simple instant command、cue-on-apply stream projection、cost 通过 `GASCommandGroup` 生成 spec / delta / typed fact，以及 ability commit 成功时 cost 直接扣减 attribute、不再产生 cost runtime GE entity。
+14. `TimelineApplyEffectsProducer` 的 single-target `ApplyEffects` 已改为优先写入 `BEffectCommand`；命中 AM3 simple instant 条件时返回 `Entity.Null`，不向 `createdRequests` 暴露 request entity。
+15. `GameplayEffectRequestWriter` 已新增 multi-target all-or-fallback writer；Timeline ApplyEffects 多目标 simple instant 会按目标 fan-out 为多条 `BEffectCommand`，复杂 Duration / Period / Stack、Tag requirements、Granted state 和其它复杂语义仍由旧 request 管线承接。
+16. `TimelineApplyEffectsProducerTests` 与 `AbilityTimelineActionSystemTests` 已覆盖 CatchSelf / CatchTarget single-target simple instant 写 stream、multi-target simple instant fan-out、Cue-on-Apply projection，以及 `GASCommandGroup` 内同帧生成 spec / delta / typed fact 并直接更新目标 attribute。
+17. `STypedSimulationFactEventBridge` 已接入 `GASCommandGroup`，在 `STypedSimulationFactProjection` 后按 `EventBridgeFactCursor` 增量消费 `BTypedSimulationFact(AttributeBaseValueChanged)` 并投影旧 `BAttributeChangeEvent`，复用现有 Presentation / Replay observation 链。
+18. `EffectCommandSpecStreamContractTests` 覆盖 bridge / cue projection cursor、调度契约、layout entry，以及 direct simple instant command 经 `GASCommandGroup` 只投影一次 attribute event / cue request。
+19. `GameplayEffectRequestWriterTests` 已把旧 cue fallback 用例迁移为 stream + projection 断言，确保 simple instant Cue-on-Apply 不再创建 `CApplyGameplayEffectRequest` / runtime GE entity。
+20. `SPresentationOutboxProjection` / `SDebugReplayLogProjection` 已直接消费 `BTypedSimulationFact(AttributeBaseValueChanged)`，无 legacy `BAttributeChangeEvent` 时也能输出 Presentation / Replay attribute change。
+21. `BAttributeChangeEvent.SourceFactSequence` 已标记 legacy bridge 来源 fact，Presentation / Replay native consumer 会跳过同源 legacy duplicate。
+22. `GASRuntimeQueryLayoutPlan` 的 `ObservationReplayAndOutbox` entry 已显式声明 optional `TypedSimulationFactBuffer`，把 AM3 typed fact native observation consumer 纳入 query layout 证据。
+23. `BTypedSimulationFact(CueRequested)` 已承载 simple instant Cue-on-Apply，`EventCode` 表示 `EGameplayCueEvent.OnApply`，`ReasonCode` 表示 `CueRequestOnApplyCode`。
+24. `SPresentationOutboxProjection` / `SDebugReplayLogProjection` 已直接读取 `BTypedSimulationFact(CueRequested)` 并投影 `BPresentationEvent(CueRequest)` / `BDebugReplayEvent(CueRequest)`，旧 `BCueRequest` / `BGameplayEvent(CueRequested)` 通过 `SourceFactSequence` 跳过同源重复投影。
+25. `CommandEventBridgeContractTests` 已覆盖无 legacy cue request 时 Presentation / Replay 仍能观察 cue fact，以及 legacy cue duplicate skip；`EffectCommandSpecStreamContractTests` 已覆盖 instant command cue fact 与 legacy bridge 的 `SourceFactSequence` 关联。
+26. `SPresentationOutboxProjection` / `SDebugReplayLogProjection` 已对 attribute / cue 之外的 typed gameplay fact 提供 generic fallback，输出 `BPresentationEvent(GameplayEvent)` / `BDebugReplayEvent(GameplayEvent)`。
+27. Generic typed gameplay fact 的 `EventCode` 优先使用 `BTypedSimulationFact.EventCode`，否则回退 `GameplayEffectCode`；同源 legacy `BGameplayEvent` 通过 `SourceFactSequence` 跳过，避免 Observation 重复投影。
+28. `CommandEventBridgeContractTests` 已覆盖无 legacy gameplay event 时 Presentation / Replay 仍能观察 generic typed gameplay fact，以及 legacy gameplay event duplicate skip。
+29. Damage typed fact 已能直接投影为 Presentation / Replay Damage 输出；旧 `BDamageEvent` 通过 `SourceFactSequence` 跳过同源重复投影。
+30. `GameplayEffectRequestWriterTests` 已覆盖 multi-target simple instant fan-out 生成 2 条 command / spec / delta / typed fact，并覆盖复杂 GE fallback 时不产生 partial command。
+31. `RuntimeCoreFreezeSafetyGateTests` 已锁定 `TryAppendSimpleInstantCommands` / `AppendSimpleInstantCommandsOrCreateTargetListRequest`，防止 simple instant 多目标默认回退 legacy lifecycle。
+32. `EffectCommandSpecStream.CommandWriter` 已接入 `TryAppendSimpleInstantCommands`：all-or-fallback 预检成功后只解析一次 stream entity / current frame / command buffer / SetByCaller buffer，再批量 append 并一次 flush stream counters。该路径只收缩 multi-target simple instant producer 的 per-command query 放大；单条 `AppendCommand` 的 `TryGetSingleton` 仍按 `ISSUE-011` 后续处理。
+33. `ResolveCurrentFrame` 的 5 处重复实现已收口到 `GASRuntimeFrameContext`：`GasRuntimeDebugger.ResolveCurrentFrame` 保留兼容 wrapper，`EventBusHelper`、`SPresentationOutboxProjection`、`SDebugReplayLogProjection`、`EffectCommandSpecStream` 改为调用统一 helper；`GASRuntimeFrameContext` fallback `GlobalTimer` 临时 query 已删除，当前 frame 仍由 `GASManager.EntityGlobalTimer` known-owner main-thread read 提供，EventBus / Debugger / Presentation / Replay 其它 query 仍未闭合。
+
+已完成轮次（11轮 AM3 行动报告）已迁出到 `迭代记录/`。各轮原始内容（API选型表、官方文档覆盖检查、GAS概念校准、Command四分层、官方案例对照、PackageCache证据）保留在 git 历史中。
 
 验收标准：
 
@@ -590,7 +625,9 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 2. target attribute base/current 值按 modifier 更新，并保留 dirty / previous current value 标记。
 3. SetByCaller magnitude 能从 command stream range 解析，且 `BEffectCommandSetByCallerValue.SpecSequence` 回写到生成 spec。
 4. 同 effect code 不产生 `CApplyGameplayEffectRequest`，也不产生 runtime `CEffectSpecData` / `CEffectLifecycle`。
-5. Unity Runtime tests 可运行时通过；如 LicensingClient 阻塞，记录 return code 和关键日志。
+5. attribute typed fact 能投影到旧 `BAttributeChangeEvent`，重复更新不重复投影同一 fact。
+6. simple instant Cue-on-Apply 能投影到旧 `BCueRequest` / `BGameplayEvent(CueRequested)`，重复更新不重复投影同一 spec。
+7. Unity Runtime tests 可运行时通过；如 LicensingClient 阻塞，记录 return code 和关键日志。
 
 测试链路：
 
@@ -605,7 +642,7 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 
 任务ID：`T1-RuntimeCore-AM5`
 
-状态：`进行中（owner-local store 第一刀已落地，Unity验证待补跑）`
+状态：`进行中（owner-local store 第一刀、Debugger slot pressure baseline、period / overflow simple instant derived command proof 已落地；后续扩张必须复用 AM2B rebind contract，Unity验证待补跑）`
 
 任务名：`GAS ECS Runtime - Runtime Core 重构 - Active Effect Store 重建`
 
@@ -629,11 +666,13 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 1. `00-当前架构事实/核心问题诊断/ISSUE-001-GE生命周期管线过重.md`
 2. `00-当前架构事实/核心问题诊断/ISSUE-004-结构变化边界脆弱.md`
 3. `00-当前架构事实/当前未闭合点.md`
+4. `00-当前架构事实/核心问题诊断/ISSUE-009-RuntimeCoreFrameBackbone缺失.md`
+5. `Assets/GAS/Runtime/System/SystemGroup/GASRuntimeFrameBackboneRebindContract.cs`
 
 目标 / 目的：
 
 1. 先建立 `OwnerLocalStore`：ASC owner 上的 `CActiveEffectStore` + `BActiveEffectSlot` 是当前第一落点。
-2. duration runtime GE entity 生命周期可以镜像到 owner slot，后续再逐步迁移 period due、stack mutation、granted cleanup 和 store-driven lifecycle。
+2. duration runtime GE entity 生命周期可以镜像到 owner slot；period due / overflow simple instant child GE 优先派生为 EffectCommand，后续再逐步迁移复杂 active child GE、stack mutation、granted cleanup 和 store-driven lifecycle。
 3. hot path 缺少 store 时必须返回失败，不允许 helper 隐式创建组件或 buffer。
 4. Query layout / contract tests 必须能审查 ActiveEffectStore 是 owner-local target contract，而不是结构变化热点。
 
@@ -649,20 +688,27 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 1. `Assets/GAS/Runtime/Effect/Component/Dynamic/CActiveEffectStore.cs`
 2. `Assets/GAS/Runtime/AbilitySystem/AbilitySystemEntityFactory.cs`
 3. `Assets/GAS/Runtime/System/Effect/EffectRuntimeUtility.cs`
-4. `Assets/GAS/Runtime/System/SystemGroup/GASRuntimeQueryLayoutPlan.cs`
-5. `Assets/GAS/Runtime/Debugger/GasRuntimeDebugger.cs`
-6. `Assets/_Test/GAS/Runtime/Effect/ActiveEffectStoreTests.cs`
-7. `Assets/_Test/GAS/Runtime/Event/RuntimeQueryLayoutPlanTests.cs`
-8. `Assets/_Test/GAS/Runtime/Debugger/GasRuntimeDebuggerTests.cs`
+4. `Assets/GAS/Runtime/System/Effect/GameplayEffectRequestWriter.cs`
+5. `Assets/GAS/Runtime/System/Effect/SEffectTick.cs`
+6. `Assets/GAS/Runtime/Effect/Component/Dynamic/CEffectCommandSpecStream.cs`
+7. `Assets/GAS/Runtime/System/SystemGroup/GASRuntimeQueryLayoutPlan.cs`
+8. `Assets/GAS/Runtime/Debugger/GasRuntimeDebugger.cs`
+9. `Assets/_Test/GAS/Runtime/Effect/ActiveEffectStoreTests.cs`
+10. `Assets/_Test/GAS/Runtime/Effect/StackingRuntimeTests.cs`
+11. `Assets/_Test/GAS/Runtime/Event/RuntimeQueryLayoutPlanTests.cs`
+12. `Assets/_Test/GAS/Runtime/Debugger/GasRuntimeDebuggerTests.cs`
 
 执行细则：
 
-1. Store 第一刀只采用 `OwnerLocalStore`，即 ASC `DynamicBuffer` slot；stable active effect entity、Cleanup Component、Chunk Component 进入后续小闭环评估。
+1. Store 第一刀只采用 `OwnerLocalStore`，即 ASC `DynamicBuffer` slot；stable active effect entity、Cleanup Component、Chunk Component 进入后续小闭环评估，且不得把 legacy-backed owner-local mirror 描述为 scale-ready。
 2. `BActiveEffectSlot` 只镜像跨帧状态摘要和 owner/source/context，不把 definition 与 runtime timer 混写。
 3. `PendingApply / Active / Inhibited / PendingRemove` 先用 enum state 表达，避免普通状态切换触发 archetype churn。
 4. helper 不负责补 `CActiveEffectStore` 或 `BActiveEffectSlot`，结构创建只允许 ASC factory / 低频 bootstrap 处理。
-5. 后续 AM5 小闭环应优先处理 period due -> `EffectCommand`、granted tag / ability cleanup path 和 store-driven lifecycle 收缩；slot pressure Debugger baseline 已补，compact / cleanup / chunk skip 指标随对应 store 层继续扩展。
-6. 适用规则：`BUF-01`, `BUF-02`, `BUF-04`, `BUF-07`, `ECB-02`, `SC-01`, `QRY-06`, `SEL-21`, `SEL-22`, `SEL-28`, `DBG-09`。
+5. AM5 行动报告必须区分 OwnerLocalStore、GlobalIndexedStore、LifecycleCleanupStore、ChunkSkipIndex 四类 store surface，并说明当前任务继续扩展哪一层和为何不是其他三类。
+6. cleanup / grant / remove 相关结构变化必须 route 到 AM2B-D structural playback gate；ActiveEffectLifecycle 只记录 mutation intent，StructuralPlayback 统一 playback。
+7. period due / overflow simple instant child GE 已进入 `EffectCommand` proof 主链；复杂 child GE、granted tag / ability cleanup path 和 store-driven lifecycle 收缩仍是后续 AM5 小闭环。
+8. slot pressure Debugger baseline 已补，compact / cleanup / chunk skip 指标随对应 store 层继续扩展。
+9. 适用规则：`SYS-02`, `SYS-03`, `SYS-04`, `QRY-01`, `SC-01`, `ECB-01`, `ECB-03`, `BUF-01`, `BUF-02`, `BUF-04`, `NAT-02`, `NAT-03`, `FSM-02`, `FSM-06`, `PRF-01`, `PRF-02`, `PRF-05`, `PRF-10`, `PRF-13`, `PRF-14`, `SEL-01`, `SEL-02`, `SEL-04`, `SEL-05`, `ODF-01`, `ODF-02`, `ODF-07`, `ODF-09`, `ODF-10`, `ODF-11`。
 
 本轮 AM5 进展：
 
@@ -672,6 +718,11 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 4. Query layout 新增 `ActiveEffectStore` entry，标记 `TargetContract`、`NoPerHitStructuralChange` 和 `DynamicBufferMutation`。
 5. 新增测试覆盖 store 创建、hot path 不补结构变化、duration lifecycle mirror 和 query layout contract。
 6. RuntimeCoreDebugger 已输出 owner-local store owners、slot count、capacity、state distribution、legacy-backed 和 externalized owner baseline。
+7. `EffectRuntimeUtility.CreateDerivedApplyRequest` 对 period / overflow 派生 GE 先尝试写 simple instant `BEffectCommand`；失败才创建旧 request。
+8. `GameplayEffectRequestWriter` 支持指定 `EEffectCommandSource`，并允许从派生 runtime GE 的 `BSetByCallerValue` 复制 SetByCaller range。
+9. `EEffectCommandSource` 新增 `Overflow`，period / overflow 派生命令可被 Debugger / battle hash 后续区分来源。
+10. `ActiveEffectStore.TryRefreshPeriodFrame` 会在 period cursor 更新后刷新 owner-local slot 的 `PeriodFrame` / `LastPeriodFrame`。
+11. `StackingRuntimeTests` 覆盖 period simple instant child GE 写 command、复制 SetByCaller、同步 slot cursor，并经 command group 生成 spec / delta / typed fact。
 
 验收标准：
 
@@ -680,22 +731,24 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 3. 缺少 store 的目标不会在 hot path 被自动补结构变化。
 4. Query layout 明确 ActiveEffectStore 不属于 `StructuralEntityManagerHotspot`。
 5. Debugger 能输出 owner-local slot pressure 和 legacy mirror 证据。
-6. Unity Runtime tests 可运行时通过；如 LicensingClient 阻塞，记录 return code 和关键日志。
+6. period due simple instant child GE 不创建 apply request / runtime child GE entity，能进入 `BEffectCommand -> BInstantEffectSpec -> BAttributeDelta -> BTypedSimulationFact`。
+7. Unity Runtime tests 可运行时通过；如 LicensingClient 阻塞，记录 return code 和关键日志。
 
 测试链路：
 
 1. `git diff --check`
 2. `rg -n "GameplayEffectRequestWriter\." Assets/AutoChessDemo -g "*.cs"`
 3. `rg -n "TryApplyFastInstantModifier|ApplyFastOrCreateSingleTargetRequest|FastInstant|FastDirect" Assets/GAS/Runtime Assets/AutoChessDemo Assets/_Test/GAS/Runtime -g "*.cs"`
-4. Runtime EditMode tests；如 Unity LicensingClient 阻塞，记录为环境阻塞。
-5. 辅助 dotnet 近似编译只允许临时纳入 Unity 生成 csproj 缺失的新文件，完成后必须还原 csproj。
-6. 若辅助 runtime tests 编译被 AutoChessDemo 迁移残留挡住，只记录边界，不在 AM5 中修复 AutoChessDemo。
+4. `rg -n "PeriodSimpleInstantDerivedEffectWritesEffectCommandAndUpdatesStoreCursor|TryRefreshPeriodFrame|EEffectCommandSource\\.Overflow|TryAppendDerivedEffectCommand" Assets/GAS/Runtime Assets/_Test/GAS/Runtime`
+5. Runtime EditMode tests；如 Unity LicensingClient 阻塞，记录为环境阻塞。
+6. 辅助 dotnet 近似编译只允许临时纳入 Unity 生成 csproj 缺失的新文件，完成后必须还原 csproj。
+7. 若辅助 runtime tests 编译被 AutoChessDemo 迁移残留挡住，只记录边界，不在 AM5 中修复 AutoChessDemo。
 
 ## 三级任务：Freeze Safety Gate
 
 任务ID：`T1-RuntimeCore-AM0`
 
-状态：`已完成（Unity验证待补跑）`
+状态：`契约已确立`
 
 任务名：`GAS ECS Runtime - Runtime Core 重构 - Freeze Safety Gate`
 
@@ -767,6 +820,3 @@ AM3 / AM5 后续功能扩张前，必须先完成 `T1-RuntimeCore-AM2B Runtime C
 3. 新增 `GameplayEffectLegacyBridge` 作为公开 migration-only 桥接，避免 Demo assembly 直接访问 Runtime internal writer，同时不把它塑造成目标态新入口。
 4. 新增 `RuntimeCoreFreezeSafetyGateTests`，用契约测试锁定旧路径冻结和目标态 `EffectCommand / InstantEffectSpec / AttributeDelta / TypedSimulationFact` 术语。
 5. `git diff --check` 通过；Unity Runtime tests 因 LicensingClient IPC 超时退出，未进入编译阶段。
-
-
-

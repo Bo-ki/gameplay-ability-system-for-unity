@@ -136,6 +136,123 @@ namespace GAS.Runtime.Tests.Event
         }
 
         [Test]
+        public void StructuralPlaybackGateDeclaresUniqueContractOnlyGate()
+        {
+            var plan = GASRuntimeStructuralPlaybackGatePlanner.CreateCurrent();
+
+            Assert.That(plan.Gate.GateId, Is.EqualTo(GASRuntimeStructuralPlaybackGateId.RuntimeCoreHotPath));
+            Assert.That(plan.Gate.GroupType, Is.EqualTo(typeof(GasStructuralPlaybackSystemGroup)));
+            Assert.That(plan.Gate.EndEcbSystemType, Is.EqualTo(typeof(GasEndStructuralEcbSystem)));
+            Assert.That(plan.Gate.Phase, Is.EqualTo(EGasRuntimeCoreFramePhase.StructuralPlayback));
+            Assert.That(
+                plan.Gate.StructuralPermission,
+                Is.EqualTo(EGasRuntimeCoreStructuralPermission.PlaybackOnly));
+            Assert.That(plan.Gate.UniqueHotPathGate, Is.True);
+            Assert.That(plan.Gate.ContractOnly, Is.True);
+            Assert.That(plan.Gate.HasEvidence(GASRuntimeStructuralPlaybackEvidence.UniqueHotPathGate), Is.True);
+            Assert.That(plan.Gate.HasEvidence(GASRuntimeStructuralPlaybackEvidence.EcbPlaybackCount), Is.True);
+            Assert.That(plan.Gate.HasEvidence(GASRuntimeStructuralPlaybackEvidence.EcbCommandCount), Is.True);
+            Assert.That(plan.RequiredStructuralPlaybackCount, Is.GreaterThanOrEqualTo(6));
+            Assert.That(plan.DebuggerGateEvidenceCount, Is.EqualTo(plan.RequiredStructuralPlaybackCount));
+
+            var phase = GetPhaseContract(EGasRuntimeCoreFramePhase.StructuralPlayback);
+            Assert.That(phase.CurrentGroupType, Is.EqualTo(typeof(GasStructuralPlaybackSystemGroup)));
+            Assert.That(phase.StructuralPermission, Is.EqualTo(EGasRuntimeCoreStructuralPermission.PlaybackOnly));
+        }
+
+        [Test]
+        public void StructuralPlaybackGateRoutesSimulationStructuralEntriesToSinglePlaybackPhase()
+        {
+            var structural = GASRuntimeStructuralChangePlanner.CreateCurrent();
+            var playback = GASRuntimeStructuralPlaybackGatePlanner.CreateCurrent(structural);
+
+            for (var i = 0; i < structural.Entries.Count; i++)
+            {
+                var entry = structural.Entries[i];
+                if (!entry.IsSimulationMigrationCandidate || !HasStructuralPlaybackOperation(entry))
+                    continue;
+
+                Assert.That(playback.TryFind(entry.EntryId, out var route), Is.True);
+                Assert.That(route.RequiresStructuralPlayback, Is.True, entry.EntryId.ToString());
+                Assert.That(route.RoutesToStructuralPlaybackGate, Is.True, entry.EntryId.ToString());
+                Assert.That(route.RecordPhase, Is.Not.EqualTo(EGasRuntimeCoreFramePhase.StructuralPlayback));
+                Assert.That(route.PlaybackPhase, Is.EqualTo(EGasRuntimeCoreFramePhase.StructuralPlayback));
+                Assert.That(route.DirectEntityManagerAllowed, Is.False);
+                Assert.That(route.HasPolicy(GASRuntimeStructuralPlaybackPolicy.EcbCommandBuffer), Is.True);
+                Assert.That(route.HasEvidence(GASRuntimeStructuralPlaybackEvidence.RecordOnlySourcePhase), Is.True);
+                Assert.That(route.HasEvidence(GASRuntimeStructuralPlaybackEvidence.PlaybackOnlyGatePhase), Is.True);
+                Assert.That(route.HasEvidence(GASRuntimeStructuralPlaybackEvidence.DebuggerGateTag), Is.True);
+                Assert.That(route.HasEvidence(GASRuntimeStructuralPlaybackEvidence.LocalPlaybackMigration), Is.True);
+            }
+        }
+
+        [Test]
+        public void StructuralPlaybackGateProvidesBulkCleanupAndDirtyPolicies()
+        {
+            var plan = GASRuntimeStructuralPlaybackGatePlanner.CreateCurrent();
+
+            Assert.That(
+                plan.TryFind(GASRuntimeStructuralChangeEntryId.GameplayEffectActiveRuntimeMutation, out var active),
+                Is.True);
+            Assert.That(active.HasPolicy(GASRuntimeStructuralPlaybackPolicy.EcbCommandBuffer), Is.True);
+            Assert.That(active.HasPolicy(GASRuntimeStructuralPlaybackPolicy.EntityQueryBulkCandidate), Is.True);
+            Assert.That(active.HasPolicy(GASRuntimeStructuralPlaybackPolicy.ComponentTypeSetBulkCandidate), Is.True);
+            Assert.That(active.HasPolicy(GASRuntimeStructuralPlaybackPolicy.CleanupComponentCandidate), Is.True);
+            Assert.That(active.HasPolicy(GASRuntimeStructuralPlaybackPolicy.EnableablePreferred), Is.True);
+            Assert.That(active.HasEvidence(GASRuntimeStructuralPlaybackEvidence.BulkQueryPolicy), Is.True);
+            Assert.That(active.HasEvidence(GASRuntimeStructuralPlaybackEvidence.CleanupPolicy), Is.True);
+
+            Assert.That(
+                plan.TryFind(GASRuntimeStructuralChangeEntryId.GameplayEffectApplyRequestConsumption, out var apply),
+                Is.True);
+            Assert.That(apply.HasPolicy(GASRuntimeStructuralPlaybackPolicy.EntityQueryBulkCandidate), Is.True);
+            Assert.That(apply.HasPolicy(GASRuntimeStructuralPlaybackPolicy.ComponentTypeSetBulkCandidate), Is.True);
+            Assert.That(apply.HasPolicy(GASRuntimeStructuralPlaybackPolicy.CleanupComponentCandidate), Is.True);
+
+            Assert.That(
+                plan.TryFind(GASRuntimeStructuralChangeEntryId.AbilityLifecycleCleanup, out var abilityCleanup),
+                Is.True);
+            Assert.That(abilityCleanup.HasPolicy(GASRuntimeStructuralPlaybackPolicy.CleanupComponentCandidate), Is.True);
+
+            Assert.That(
+                plan.TryFind(GASRuntimeStructuralChangeEntryId.AttributeDirtyRecalculate, out var attributeDirty),
+                Is.True);
+            Assert.That(attributeDirty.RequiresStructuralPlayback, Is.False);
+            Assert.That(
+                attributeDirty.Status,
+                Is.EqualTo(GASRuntimeStructuralPlaybackRouteStatus.DirtyPipelineNoPlayback));
+            Assert.That(
+                attributeDirty.HasPolicy(GASRuntimeStructuralPlaybackPolicy.DirtyPipelineNoStructuralChange),
+                Is.True);
+        }
+
+        [Test]
+        public void StructuralPlaybackGateKeepsObservationAndManagedPresentationOutOfHotPathGate()
+        {
+            var plan = GASRuntimeStructuralPlaybackGatePlanner.CreateCurrent();
+
+            Assert.That(
+                plan.TryFind(GASRuntimeStructuralChangeEntryId.ObservationProjectionBoundary, out var observation),
+                Is.True);
+            Assert.That(observation.RequiresStructuralPlayback, Is.False);
+            Assert.That(observation.GateId, Is.EqualTo(GASRuntimeStructuralPlaybackGateId.None));
+            Assert.That(
+                observation.Status,
+                Is.EqualTo(GASRuntimeStructuralPlaybackRouteStatus.ObservationBoundaryNoPlayback));
+            Assert.That(observation.HasPolicy(GASRuntimeStructuralPlaybackPolicy.ObservationNoPlayback), Is.True);
+
+            Assert.That(
+                plan.TryFind(GASRuntimeStructuralChangeEntryId.ManagedCuePresentationBoundary, out var managed),
+                Is.True);
+            Assert.That(managed.RequiresStructuralPlayback, Is.False);
+            Assert.That(managed.GateId, Is.EqualTo(GASRuntimeStructuralPlaybackGateId.None));
+            Assert.That(
+                managed.Status,
+                Is.EqualTo(GASRuntimeStructuralPlaybackRouteStatus.ManagedBoundaryNoPlayback));
+            Assert.That(managed.HasPolicy(GASRuntimeStructuralPlaybackPolicy.ManagedBoundaryOnly), Is.True);
+        }
+
+        [Test]
         public void EcbFirstRuntimeSystemsUseLocalPlaybackForSameTickSemantics()
         {
             AssertUsesLocalEcb(
@@ -361,9 +478,17 @@ namespace GAS.Runtime.Tests.Event
                 typeof(GASRuntimeStructuralBoundary),
                 typeof(GASRuntimeDirtyPipelineSignal),
                 typeof(GASRuntimeEnableableScope),
+                typeof(GASRuntimeStructuralPlaybackGateId),
+                typeof(GASRuntimeStructuralPlaybackRouteStatus),
+                typeof(GASRuntimeStructuralPlaybackPolicy),
+                typeof(GASRuntimeStructuralPlaybackEvidence),
                 typeof(GASRuntimeStructuralChangeEntry),
                 typeof(GASRuntimeStructuralChangePlan),
                 typeof(GASRuntimeStructuralChangePlanner),
+                typeof(GASRuntimeStructuralPlaybackGateContract),
+                typeof(GASRuntimeStructuralPlaybackRouteEntry),
+                typeof(GASRuntimeStructuralPlaybackGatePlan),
+                typeof(GASRuntimeStructuralPlaybackGatePlanner),
             };
             var forbiddenTypeNames = new[]
             {
@@ -394,6 +519,28 @@ namespace GAS.Runtime.Tests.Event
                         AssertNoForbiddenTypeName(type, parameter.ParameterType, forbiddenTypeNames);
                 }
             }
+        }
+
+        private static GASRuntimeCoreFramePhaseContract GetPhaseContract(EGasRuntimeCoreFramePhase phase)
+        {
+            var phases = GASSystemScheduleContract.RuntimeCoreFramePhases;
+            for (var i = 0; i < phases.Count; i++)
+            {
+                if (phases[i].Phase == phase)
+                    return phases[i];
+            }
+
+            Assert.Fail("Missing phase contract " + phase);
+            return default;
+        }
+
+        private static bool HasStructuralPlaybackOperation(GASRuntimeStructuralChangeEntry entry)
+        {
+            return entry.HasOperation(GASRuntimeStructuralOperation.CreateEntity)
+                   || entry.HasOperation(GASRuntimeStructuralOperation.DestroyEntity)
+                   || entry.HasOperation(GASRuntimeStructuralOperation.AddComponent)
+                   || entry.HasOperation(GASRuntimeStructuralOperation.RemoveComponent)
+                   || entry.HasOperation(GASRuntimeStructuralOperation.AddBuffer);
         }
 
         private static void AssertDirtyCandidate(

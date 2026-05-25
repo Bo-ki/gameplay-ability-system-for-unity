@@ -19,6 +19,7 @@ namespace GAS.Runtime
     /// </summary>
     public struct BDamageEvent : IBufferElementData
     {
+        public int SourceFactSequence;
         public Entity Target;
         public Entity Source;
         public float Amount;
@@ -126,6 +127,7 @@ namespace GAS.Runtime
         ExecutionCalculation = 6,
         RuntimeBoundary = 7,
         Presentation = 8,
+        Damage = 9,
     }
 
     public enum EGameplayFactCategory : byte
@@ -272,7 +274,7 @@ namespace GAS.Runtime
                 EDebugReplayEventKind.AttributeChange => StateChange(EGameplayFactDomain.Attribute),
                 EDebugReplayEventKind.CueRequest => Request(EGameplayFactDomain.Cue),
                 EDebugReplayEventKind.TagChange => StateChange(EGameplayFactDomain.Tag),
-                EDebugReplayEventKind.Damage => StateChange(EGameplayFactDomain.Attribute),
+                EDebugReplayEventKind.Damage => StateChange(EGameplayFactDomain.Damage),
                 _ => new GameplayFactClassification(
                     EGameplayFactDomain.Unknown,
                     EGameplayFactCategory.Unknown,
@@ -341,6 +343,7 @@ namespace GAS.Runtime
     {
         public int Frame;
         public int Sequence;
+        public int SourceFactSequence;
         public EGameplayEventType Type;
         public Entity SourceAsc;
         public Entity TargetAsc;
@@ -363,6 +366,7 @@ namespace GAS.Runtime
         public Entity SourceAsc;
         public Entity SourceAbility;
         public Entity GameplayEffect;
+        public int SourceFactSequence;
         public int EventCode;
         public int AttrSetCode;
         public int AttributeCode;
@@ -384,7 +388,9 @@ namespace GAS.Runtime
         public Entity SourceEntity;
         public CueSourceType SourceType;
         public Entity CueEntity;
+        public int SourceFactSequence;
         public int ContextId;
+        public int ReasonCode;
         public EGameplayCueEvent CueEvent;
     }
 
@@ -451,6 +457,8 @@ namespace GAS.Runtime
         public int ProcessedCueRequestCount;
         public int ProcessedTagEventCount;
         public int ProcessedDamageEventCount;
+        public int ProcessedTypedFactCount;
+        public int LastProjectedTypedFactSequence;
     }
 
     /// <summary>
@@ -487,6 +495,8 @@ namespace GAS.Runtime
         public int ProcessedCueRequestCount;
         public int ProcessedTagEventCount;
         public int ProcessedDamageEventCount;
+        public int ProcessedTypedFactCount;
+        public int LastProjectedTypedFactSequence;
     }
 
     /// <summary>

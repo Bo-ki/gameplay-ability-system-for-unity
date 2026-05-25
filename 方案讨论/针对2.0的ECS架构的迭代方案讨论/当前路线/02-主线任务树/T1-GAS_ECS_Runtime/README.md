@@ -21,15 +21,16 @@
 2. `01-目标态架构共识/03-RuntimeCore管线Spec.md`
 3. `01-目标态架构共识/04-EffectCommand-SpecStream-AttributeDeltaSpec.md`
 4. `01-目标态架构共识/05-ActiveEffectStoreSpec.md`
-5. `01-目标态架构共识/12-命名规范Spec.md`
-6. `UnityDOTS官方文档参考/README.md`
-7. `UnityDOTS官方文档参考/主题/01-Entities系统与World.md`
-8. `UnityDOTS官方文档参考/主题/90-规则编号索引.md`
-9. `UnityDOTS官方文档参考/README.md`
-10. `UnityDOTS官方文档参考/主题/20-GASRuntimeCore-API选型基线.md`
-11. `UnityDOTS官方文档参考/主题/12-官方案例模式.md`
-12. `UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md`
-13. `01-目标态架构共识/90-目标态不变量.md`
+5. `01-目标态架构共识/10B-AutoChess完整业务案例设计Spec.md`
+6. `01-目标态架构共识/12-命名规范Spec.md`
+7. `UnityDOTS官方文档参考/README.md`
+8. `UnityDOTS官方文档参考/主题/01-Entities系统与World.md`
+9. `UnityDOTS官方文档参考/主题/90-规则编号索引.md`
+10. `UnityDOTS官方文档参考/README.md`
+11. `UnityDOTS官方文档参考/主题/20-GASRuntimeCore-API选型基线.md`
+12. `UnityDOTS官方文档参考/主题/12-官方案例模式.md`
+13. `UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md`
+14. `01-目标态架构共识/90-目标态不变量.md`
 
 ## 历史方案参考
 
@@ -87,11 +88,8 @@
 | 支线 | 文档 | 状态 |
 |---|---|---|
 | Runtime Core 重构 | [RuntimeCore重构.md](RuntimeCore重构.md) | 进行中 |
-| Runtime Core Frame Backbone | [RuntimeCoreFrameBackbone.md](RuntimeCoreFrameBackbone.md) | 推荐优先，当前领取 `GAS ECS Runtime - Runtime Core Frame Backbone - Frame Arena 与 Query Budget`（任务ID：`T1-RuntimeCore-AM2B-B`） |
+| Runtime Core Frame Backbone | [RuntimeCoreFrameBackbone.md](RuntimeCoreFrameBackbone.md) | 已完成 AM2B-A -> AM2B-F contract-first / rebind handoff；当前继续 RuntimeCore AM3 / AM5 缺口迁移，activation simple producer、ability cost self producer、Timeline ApplyEffects single-target / multi-target simple instant producer 与 AM5 period / overflow simple instant derived command 已迁入 stream |
 
 ## 交还规则
 
 交还 Runtime 任务时必须同步 `00-当前架构事实/核心问题诊断.md`、相关 `01` Spec、当前支线状态和验证证据。
-
-
-

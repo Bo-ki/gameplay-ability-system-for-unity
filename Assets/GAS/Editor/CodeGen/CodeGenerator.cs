@@ -408,6 +408,18 @@ namespace GAS.Editor
             writer.WriteLine("}");
         }
         
+        [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成 BlobSchema + BlobBuilder")]
+        public static void GenerateGlueBlobSchema()
+        {
+            GasBlobSchemaGenerator.GenerateBlobSchemaAndBuilder();
+        }
+
+        [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成 StaticLookup")]
+        public static void GenerateGlueStaticLookup()
+        {
+            GasStaticLookupGenerator.GenerateStaticLookup();
+        }
+
         /// <summary>
         ///  生成所有GAS相关代码
         /// </summary>
@@ -424,6 +436,31 @@ namespace GAS.Editor
             GenerateCueCode();
             GenerateLubanExtension();
             GenerateLauncher();
+
+            // Phase 1-5: Luban → DOTS 胶水代码生成（按依赖顺序）
+            GenerateGlueBlobSchema();
+            GenerateGlueStaticLookup();
+            GenerateGlueBakers();
+            GenerateGlueComponentTypeSets();
+            GenerateGlueQueryLayouts();
+        }
+
+        [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成 Baker + BakingSystem")]
+        public static void GenerateGlueBakers()
+        {
+            GasBakerBakingSystemGenerator.GenerateBakersAndBakingSystem();
+        }
+
+        [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成 ComponentTypeSet")]
+        public static void GenerateGlueComponentTypeSets()
+        {
+            GasComponentTypeSetGenerator.GenerateComponentTypeSets();
+        }
+
+        [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成 QueryLayout")]
+        public static void GenerateGlueQueryLayouts()
+        {
+            GasQueryLayoutGenerator.GenerateQueryLayouts();
         }
     }
 }

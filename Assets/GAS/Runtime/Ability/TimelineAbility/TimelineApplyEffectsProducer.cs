@@ -89,29 +89,26 @@ namespace GAS.Runtime
                 if (effectCode <= 0)
                     continue;
 
-                var request = GameplayEffectRequestWriter.Create(
+                var requestData = new CApplyGameplayEffectRequest
+                {
+                    SourceAsc = baseInfo.Owner,
+                    SourceAbility = ability,
+                    Instigator = baseInfo.Owner,
+                    Causer = ability,
+                    GameplayEffectCode = effectCode,
+                    Level = baseInfo.Level,
+                };
+
+                var request = GameplayEffectRequestWriter.AppendSimpleInstantCommandsOrCreateTargetListRequest(
                     entityManager,
-                    new CApplyGameplayEffectRequest
-                    {
-                        SourceAsc = baseInfo.Owner,
-                        SourceAbility = ability,
-                        Instigator = baseInfo.Owner,
-                        Causer = ability,
-                        GameplayEffectCode = effectCode,
-                        Level = baseInfo.Level,
-                    },
-                    new CTargetDataHeader
-                    {
-                        SourceAsc = baseInfo.Owner,
-                        SourceAbility = ability,
-                        Kind = targetKind,
-                    },
+                    requestData,
+                    validTargets,
+                    targetKind,
                     "TimelineApplyEffectsRequest");
 
-                for (var targetIndex = 0; targetIndex < validTargets.Count; targetIndex++)
-                    GameplayEffectRequestWriter.AddTarget(entityManager, request, validTargets[targetIndex]);
+                if (request != Entity.Null)
+                    createdRequests?.Add(request);
 
-                createdRequests?.Add(request);
                 createdCount++;
             }
 

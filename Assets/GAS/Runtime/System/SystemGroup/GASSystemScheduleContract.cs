@@ -138,7 +138,7 @@ namespace GAS.Runtime
                 EGasRuntimeCoreStructuralPermission.None),
             new GASRuntimeCoreFramePhaseContract(
                 EGasRuntimeCoreFramePhase.StructuralPlayback,
-                typeof(GASEffectGroup),
+                typeof(GasStructuralPlaybackSystemGroup),
                 EGasRuntimeCorePhaseAccess.StructuralMutation,
                 EGasRuntimeCorePhaseAccess.FrameState,
                 EGasRuntimeCoreStructuralPermission.PlaybackOnly),
@@ -173,6 +173,18 @@ namespace GAS.Runtime
                 typeof(STypedSimulationFactProjection),
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
                 typeof(GASCommandGroup)),
+            new GASRuntimeCoreFramePhaseSystemContract(
+                typeof(STypedSimulationFactEventBridge),
+                EGasRuntimeCoreFramePhase.TypedFactProjection,
+                typeof(GASCommandGroup)),
+            new GASRuntimeCoreFramePhaseSystemContract(
+                typeof(SInstantEffectCueRequestProjection),
+                EGasRuntimeCoreFramePhase.TypedFactProjection,
+                typeof(GASCommandGroup)),
+            new GASRuntimeCoreFramePhaseSystemContract(
+                typeof(SRuntimeCoreDebuggerCounters),
+                EGasRuntimeCoreFramePhase.ObservationProjection,
+                typeof(GASCueGroup)),
         };
 
         private static readonly Type[] FixedStepGroupTypes =
@@ -205,6 +217,8 @@ namespace GAS.Runtime
             typeof(SActiveEffectMutationApply),
             typeof(SAttributeDeltaApply),
             typeof(STypedSimulationFactProjection),
+            typeof(STypedSimulationFactEventBridge),
+            typeof(SInstantEffectCueRequestProjection),
             typeof(SAscDestroyRequest),
             typeof(SApplyGameplayEffectRequest),
             typeof(SExecutionCalculation),
@@ -261,6 +275,7 @@ namespace GAS.Runtime
         {
             typeof(SPresentationOutboxProjection),
             typeof(SDebugReplayLogProjection),
+            typeof(SRuntimeCoreDebuggerCounters),
             typeof(SCueRequestBridge),
             typeof(SCueStart),
             typeof(SCueTick),

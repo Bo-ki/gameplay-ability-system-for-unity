@@ -22,6 +22,7 @@ namespace GAS.Runtime.Tests
         {
             _em = GASManager.EntityManager;
             ClearApplyRequests();
+            ClearEffectCommandStream();
             ClearGameplayEvents();
         }
 
@@ -37,6 +38,7 @@ namespace GAS.Runtime.Tests
 
             _entities.Clear();
             ClearApplyRequests();
+            ClearEffectCommandStream();
             ClearGameplayEvents();
         }
 
@@ -457,6 +459,147 @@ namespace GAS.Runtime.Tests
 
                 var periodRuntime = _em.GetComponentData<CPeriodRuntime>(effect);
                 Assert.That(periodRuntime.StartTime, Is.EqualTo(100));
+            }
+            finally
+            {
+                GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(null);
+                RestoreFrame(previousTimer);
+            }
+        }
+
+        [Test]
+        public void PeriodSimpleInstantDerivedEffectWritesEffectCommandAndUpdatesStoreCursor()
+        {
+            const int sourceEffectCode = 93023;
+            const int periodEffectCode = 93024;
+            const int attrSetCode = 19;
+            const int attributeCode = 29;
+            const int magnitudeKey = 7001;
+            var previousTimer = SetFrame(100);
+
+            GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(id =>
+            {
+                if (id == sourceEffectCode)
+                    return CreatePeriodDefinitionConfig(periodEffectCode);
+
+                return id == periodEffectCode
+                    ? CreateSetByCallerModifierConfig(attrSetCode, attributeCode, magnitudeKey)
+                    : null;
+            });
+
+            try
+            {
+                var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+                EffectCommandSpecStream.ClearFrameLocalData(_em, streamEntity, 0);
+
+                var source = CreateEntity();
+                var target = AbilitySystemEntityFactory.Create(_em);
+                _entities.Add(target);
+                _em.GetBuffer<BAttribute>(target).Add(new BAttribute
+                {
+                    AttrSetCode = attrSetCode,
+                    Code = attributeCode,
+                    BaseValue = 100f,
+                    CurrentValue = 100f,
+                    PreviousCurrentValue = 100f,
+                });
+
+                var effect = GameplayEffectConfigRegistry.CreateRuntimeEffectInstance(_em, sourceEffectCode);
+                _entities.Add(effect);
+                Assert.That(effect, Is.Not.EqualTo(Entity.Null));
+
+                var context = new CEffectContext
+                {
+                    SourceAsc = source,
+                    TargetAsc = target,
+                    Instigator = source,
+                    ContextId = 9323,
+                };
+                var duration = new CDurationRuntime
+                {
+                    ResolvedDuration = 1000,
+                    ResolvedTimeUnit = TimeUnit.Frame,
+                    Active = true,
+                    ActiveTime = 0,
+                    RemainingTime = 1000,
+                };
+
+                _em.AddComponentData(effect, context);
+                _em.AddComponentData(effect, new CEffectSpecData
+                {
+                    GameplayEffectCode = sourceEffectCode,
+                    Level = 4,
+                    StackCount = 1,
+                });
+                _em.AddComponentData(effect, new CEffectLifecycle
+                {
+                    State = EGameplayEffectLifecycleState.Active,
+                    PreviousState = EGameplayEffectLifecycleState.Active,
+                    StateStartFrame = 1,
+                });
+                _em.SetComponentData(effect, duration);
+                _em.SetComponentData(effect, new CPeriodRuntime
+                {
+                    StartTime = 90,
+                });
+                _em.AddBuffer<BSetByCallerValue>(effect).Add(new BSetByCallerValue
+                {
+                    Key = magnitudeKey,
+                    Value = 6f,
+                });
+                _em.GetBuffer<BGameplayEffect>(target).Add(new BGameplayEffect { GameplayEffect = effect });
+                Assert.That(
+                    ActiveEffectStore.TryUpsertDurationEffect(
+                        _em,
+                        effect,
+                        context,
+                        duration,
+                        EActiveEffectSlotState.Active,
+                        currentFrame: 90),
+                    Is.True);
+
+                RunEffectGroup();
+
+                Assert.That(CountApplyRequests(periodEffectCode), Is.EqualTo(0));
+                Assert.That(CountEffectsByCode(periodEffectCode), Is.EqualTo(0));
+
+                var commands = _em.GetBuffer<BEffectCommand>(streamEntity);
+                var setByCallers = _em.GetBuffer<BEffectCommandSetByCallerValue>(streamEntity);
+                Assert.That(commands.Length, Is.EqualTo(1));
+                Assert.That(commands[0].Source, Is.EqualTo(EEffectCommandSource.Period));
+                Assert.That(commands[0].SourceAsc, Is.EqualTo(source));
+                Assert.That(commands[0].TargetAsc, Is.EqualTo(target));
+                Assert.That(commands[0].SourceEffect, Is.EqualTo(effect));
+                Assert.That(commands[0].GameplayEffectCode, Is.EqualTo(periodEffectCode));
+                Assert.That(commands[0].Level, Is.EqualTo(4));
+                Assert.That(commands[0].ParentContextId, Is.EqualTo(context.ContextId));
+                Assert.That(commands[0].SetByCallerCount, Is.EqualTo(1));
+                Assert.That(setByCallers.Length, Is.EqualTo(1));
+                Assert.That(setByCallers[0].CommandSequence, Is.EqualTo(commands[0].Sequence));
+                Assert.That(setByCallers[0].Key, Is.EqualTo(magnitudeKey));
+                Assert.That(setByCallers[0].Value, Is.EqualTo(6f));
+
+                Assert.That(_em.GetComponentData<CPeriodRuntime>(effect).StartTime, Is.EqualTo(100));
+                var slots = _em.GetBuffer<BActiveEffectSlot>(target);
+                Assert.That(slots.Length, Is.EqualTo(1));
+                Assert.That(slots[0].LastPeriodFrame, Is.EqualTo(100));
+
+                RunCommandGroup();
+
+                var specs = _em.GetBuffer<BInstantEffectSpec>(streamEntity);
+                var deltas = _em.GetBuffer<BAttributeDelta>(streamEntity);
+                var facts = _em.GetBuffer<BTypedSimulationFact>(streamEntity);
+                var attribute = _em.GetBuffer<BAttribute>(target)[0];
+                Assert.That(specs.Length, Is.EqualTo(1));
+                Assert.That(deltas.Length, Is.EqualTo(1));
+                Assert.That(facts.Length, Is.EqualTo(1));
+                Assert.That(setByCallers[0].SpecSequence, Is.EqualTo(specs[0].Sequence));
+                Assert.That(deltas[0].Magnitude, Is.EqualTo(18f));
+                Assert.That(attribute.BaseValue, Is.EqualTo(118f));
+                Assert.That(attribute.CurrentValue, Is.EqualTo(118f));
+                Assert.That(facts[0].SourceDeltaSequence, Is.EqualTo(deltas[0].Sequence));
+                Assert.That(CountApplyRequests(periodEffectCode), Is.EqualTo(0));
+                Assert.That(CountEffectsByCode(periodEffectCode), Is.EqualTo(0));
             }
             finally
             {
@@ -1108,6 +1251,45 @@ namespace GAS.Runtime.Tests
             });
         }
 
+        private static GameplayEffectConfig CreateSetByCallerModifierConfig(
+            int attrSetCode,
+            int attributeCode,
+            int magnitudeKey)
+        {
+            return new GameplayEffectConfig(new GameplayEffectComponentConfig[]
+            {
+                new ConfModifierConfig
+                {
+                    ModifierSettings = new[]
+                    {
+                        new ModifierDefinitionSetting
+                        {
+                            AttrSetCode = attrSetCode,
+                            AttrCode = attributeCode,
+                            Operation = EModifierOp.Add,
+                            Magnitude = 0f,
+                        },
+                    },
+                },
+                new MagnitudeDefinitionConfig
+                {
+                    Definitions = new[]
+                    {
+                        new BMagnitudeDefinition
+                        {
+                            ModifierIndex = 0,
+                            Source = EMagnitudeSource.SetByCaller,
+                            Key = magnitudeKey,
+                            FallbackMagnitude = 2f,
+                            Coefficient = 2f,
+                            PreAdd = 1f,
+                            PostAdd = 4f,
+                        },
+                    },
+                },
+            });
+        }
+
         private Entity CreateEntity()
         {
             var entity = _em.CreateEntity();
@@ -1136,6 +1318,12 @@ namespace GAS.Runtime.Tests
                 if (_em.Exists(requests[i]))
                     _em.DestroyEntity(requests[i]);
             }
+        }
+
+        private void ClearEffectCommandStream()
+        {
+            if (EffectCommandSpecStream.TryGetSingleton(_em, out var streamEntity))
+                EffectCommandSpecStream.ClearFrameLocalData(_em, streamEntity, 0);
         }
 
         private GlobalTimer SetFrame(int frame)
@@ -1307,6 +1495,25 @@ namespace GAS.Runtime.Tests
             {
                 if (events[i].Type == type)
                     Assert.Fail($"Did not expect gameplay event {type}.");
+            }
+        }
+
+        private sealed class MagnitudeDefinitionConfig : GameplayEffectComponentConfig
+        {
+            public BMagnitudeDefinition[] Definitions;
+
+            public override void LoadToGameplayEffectEntity(Entity ge)
+            {
+                var buffer = _entityManager.HasBuffer<BMagnitudeDefinition>(ge)
+                    ? _entityManager.GetBuffer<BMagnitudeDefinition>(ge)
+                    : _entityManager.AddBuffer<BMagnitudeDefinition>(ge);
+                buffer.Clear();
+
+                if (Definitions == null)
+                    return;
+
+                for (var i = 0; i < Definitions.Length; i++)
+                    buffer.Add(Definitions[i]);
             }
         }
 

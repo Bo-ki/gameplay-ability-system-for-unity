@@ -26,7 +26,6 @@ namespace GAS.Runtime
             var currentFrame = SystemAPI.GetSingleton<GlobalTimer>().Frame;
             var effects = _effectQuery.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
             var hasPendingStructuralChanges = false;
 
             foreach (var ge in effects)

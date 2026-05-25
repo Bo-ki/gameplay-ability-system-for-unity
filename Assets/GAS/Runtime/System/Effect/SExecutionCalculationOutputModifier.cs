@@ -31,7 +31,6 @@ namespace GAS.Runtime
         {
             var em = state.EntityManager;
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             using var effectsWithValues = _valueQuery.ToEntityArray(Allocator.Temp);
             for (var i = 0; i < effectsWithValues.Length; i++)

@@ -21,39 +21,195 @@ namespace GAS.Runtime.Tests.Ability
         {
             _em = GASManager.EntityManager;
             ConfigRegistryDiagnostics.Clear();
-            ClearGameplayEvents();
+            ClearTransientEventBuffers();
+            ClearEffectCommandStream();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            ClearTransientEventBuffers();
+            ClearEffectCommandStream();
         }
 
         [Test]
-        public void RequestCostGameplayEffectWritesSelfApplyRequest()
+        public void RequestCostGameplayEffectWritesSimpleInstantSelfCommand()
         {
-            var owner = _em.CreateEntity();
+            const int costEffectCode = 3002;
+            const int attrSetCode = 10;
+            const int attributeCode = 20;
+
+            var owner = CreateStandardAsc();
             var ability = CreateAbility(owner, level: 4);
             var request = Entity.Null;
 
             try
             {
+                _em.GetBuffer<BAttribute>(owner).Add(new BAttribute
+                {
+                    AttrSetCode = attrSetCode,
+                    Code = attributeCode,
+                    BaseValue = 100,
+                    CurrentValue = 100,
+                });
                 _em.AddComponentData(ability, new CAbilityCost
                 {
-                    GameplayEffectCode = 3002,
+                    GameplayEffectCode = costEffectCode,
                 });
 
+                GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(id =>
+                    id == costEffectCode
+                        ? new GameplayEffectConfig(new GameplayEffectComponentConfig[]
+                        {
+                            new ConfModifierConfig
+                            {
+                                ModifierSettings = new[]
+                                {
+                                    new ModifierDefinitionSetting
+                                    {
+                                        AttrSetCode = attrSetCode,
+                                        AttrCode = attributeCode,
+                                        Operation = EModifierOp.Subtract,
+                                        Magnitude = 25,
+                                    },
+                                },
+                            },
+                        })
+                        : null);
+
                 request = AbilityRuntimeActions.RequestCostGameplayEffect(ability, _em);
-                Assert.That(request, Is.Not.EqualTo(Entity.Null));
+                Assert.That(request, Is.EqualTo(Entity.Null));
+                Assert.That(CountApplyRequestsByCode(costEffectCode), Is.EqualTo(0));
+                Assert.That(FindEffectByCode(costEffectCode), Is.EqualTo(Entity.Null));
 
-                var effectRequest = _em.GetComponentData<CApplyGameplayEffectRequest>(request);
-                Assert.That(effectRequest.GameplayEffectCode, Is.EqualTo(3002));
-                Assert.That(effectRequest.SourceAsc, Is.EqualTo(owner));
-                Assert.That(effectRequest.SourceAbility, Is.EqualTo(ability));
-                Assert.That(effectRequest.Instigator, Is.EqualTo(owner));
-                Assert.That(effectRequest.Causer, Is.EqualTo(ability));
-                Assert.That(effectRequest.Level, Is.EqualTo(4));
-                Assert.That(effectRequest.DurationFrameOverride, Is.EqualTo(0));
+                var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+                var commands = _em.GetBuffer<BEffectCommand>(streamEntity);
+                Assert.That(commands.Length, Is.EqualTo(1));
 
-                AssertSelfTarget(request, owner, ability);
+                var command = commands[0];
+                Assert.That(command.Kind, Is.EqualTo(EEffectCommandKind.Instant));
+                Assert.That(command.Source, Is.EqualTo(EEffectCommandSource.Ability));
+                Assert.That(command.GameplayEffectCode, Is.EqualTo(costEffectCode));
+                Assert.That(command.SourceAsc, Is.EqualTo(owner));
+                Assert.That(command.TargetAsc, Is.EqualTo(owner));
+                Assert.That(command.SourceAbility, Is.EqualTo(ability));
+                Assert.That(command.Instigator, Is.EqualTo(owner));
+                Assert.That(command.Causer, Is.EqualTo(ability));
+                Assert.That(command.Level, Is.EqualTo(4));
+                Assert.That(command.DurationFrameOverride, Is.EqualTo(0));
+                Assert.That(command.TargetDataKind, Is.EqualTo(ETargetDataKind.Self));
+
+                var attribute = _em.GetBuffer<BAttribute>(owner)[0];
+                Assert.That(attribute.BaseValue, Is.EqualTo(100));
+                Assert.That(attribute.CurrentValue, Is.EqualTo(100));
             }
             finally
             {
+                GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(null);
+                DestroyIfExists(request);
+                DestroyIfExists(ability);
+                DestroyIfExists(owner);
+            }
+        }
+
+        [Test]
+        public void RequestCostGameplayEffectWritesSelfCommandAndProjectsCueOnApply()
+        {
+            const int costEffectCode = 3003;
+            const int attrSetCode = 10;
+            const int attributeCode = 21;
+            const int cueCode = 31;
+
+            var owner = CreateStandardAsc();
+            var ability = CreateAbility(owner, level: 4);
+            var request = Entity.Null;
+
+            try
+            {
+                _em.GetBuffer<BAttribute>(owner).Add(new BAttribute
+                {
+                    AttrSetCode = attrSetCode,
+                    Code = attributeCode,
+                    BaseValue = 100,
+                    CurrentValue = 100,
+                });
+                _em.AddComponentData(ability, new CAbilityCost
+                {
+                    GameplayEffectCode = costEffectCode,
+                });
+
+                GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(id =>
+                    id == costEffectCode
+                        ? new GameplayEffectConfig(new GameplayEffectComponentConfig[]
+                        {
+                            new ConfModifierConfig
+                            {
+                                ModifierSettings = new[]
+                                {
+                                    new ModifierDefinitionSetting
+                                    {
+                                        AttrSetCode = attrSetCode,
+                                        AttrCode = attributeCode,
+                                        Operation = EModifierOp.Subtract,
+                                        Magnitude = 25,
+                                    },
+                                },
+                            },
+                            new ConfGameplayEffectCueRequestOnApply
+                            {
+                                CueCode = cueCode,
+                            },
+                        })
+                        : null);
+
+                request = AbilityRuntimeActions.RequestCostGameplayEffect(ability, _em);
+                Assert.That(request, Is.EqualTo(Entity.Null));
+                Assert.That(CountApplyRequestsByCode(costEffectCode), Is.EqualTo(0));
+                Assert.That(FindEffectByCode(costEffectCode), Is.EqualTo(Entity.Null));
+
+                var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+                var commands = _em.GetBuffer<BEffectCommand>(streamEntity);
+                Assert.That(commands.Length, Is.EqualTo(1));
+                Assert.That(commands[0].GameplayEffectCode, Is.EqualTo(costEffectCode));
+                Assert.That(commands[0].SourceAsc, Is.EqualTo(owner));
+                Assert.That(commands[0].TargetAsc, Is.EqualTo(owner));
+                Assert.That(commands[0].SourceAbility, Is.EqualTo(ability));
+                Assert.That(commands[0].TargetDataKind, Is.EqualTo(ETargetDataKind.Self));
+
+                RunCommandGroup();
+
+                var specs = _em.GetBuffer<BInstantEffectSpec>(streamEntity);
+                var deltas = _em.GetBuffer<BAttributeDelta>(streamEntity);
+                var facts = _em.GetBuffer<BTypedSimulationFact>(streamEntity);
+                var cueRequests = _em.GetBuffer<BCueRequest>(GASManager.EntityEventBus);
+                var gameplayEvents = _em.GetBuffer<BGameplayEvent>(GASManager.EntityEventBus);
+                var attribute = _em.GetBuffer<BAttribute>(owner)[0];
+
+                Assert.That(specs.Length, Is.EqualTo(1));
+                Assert.That(specs[0].CueRequestOnApplyCode, Is.EqualTo(cueCode));
+                Assert.That(deltas.Length, Is.EqualTo(1));
+                Assert.That(facts.Length, Is.EqualTo(1));
+                Assert.That(attribute.BaseValue, Is.EqualTo(75));
+                Assert.That(attribute.CurrentValue, Is.EqualTo(75));
+                Assert.That(cueRequests.Length, Is.EqualTo(1));
+                Assert.That(cueRequests[0].TargetAsc, Is.EqualTo(owner));
+                Assert.That(cueRequests[0].SourceAsc, Is.EqualTo(owner));
+                Assert.That(cueRequests[0].SourceAbility, Is.EqualTo(ability));
+                Assert.That(cueRequests[0].CueEvent, Is.EqualTo(EGameplayCueEvent.OnApply));
+                Assert.That(
+                    ContainsGameplayEvent(
+                        gameplayEvents,
+                        EGameplayEventType.CueRequested,
+                        (int)EGameplayCueEvent.OnApply,
+                        cueCode,
+                        specs[0].ContextId),
+                    Is.True);
+                Assert.That(CountApplyRequestsByCode(costEffectCode), Is.EqualTo(0));
+                Assert.That(FindEffectByCode(costEffectCode), Is.EqualTo(Entity.Null));
+            }
+            finally
+            {
+                GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(null);
                 DestroyIfExists(request);
                 DestroyIfExists(ability);
                 DestroyIfExists(owner);
@@ -166,7 +322,7 @@ namespace GAS.Runtime.Tests.Ability
         }
 
         [Test]
-        public void CostGameplayEffectRequestAppliesInstantModifierThroughEffectLifecycle()
+        public void RequestCostGameplayEffectAppliesSimpleInstantThroughEffectCommandStream()
         {
             const int costEffectCode = 94001;
             const int attrSetCode = 10;
@@ -212,25 +368,58 @@ namespace GAS.Runtime.Tests.Ability
                         : null);
 
                 request = AbilityRuntimeActions.RequestCostGameplayEffect(ability, _em);
-                Assert.That(request, Is.Not.EqualTo(Entity.Null));
+                Assert.That(request, Is.EqualTo(Entity.Null));
+                Assert.That(CountApplyRequestsByCode(costEffectCode), Is.EqualTo(0));
 
                 RunCommandGroup();
-                RunEffectGroup();
 
-                Assert.That(_em.Exists(request), Is.False);
+                Assert.That(CountApplyRequestsByCode(costEffectCode), Is.EqualTo(0));
+                Assert.That(FindEffectByCode(costEffectCode), Is.EqualTo(Entity.Null));
 
+                var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+                var commands = _em.GetBuffer<BEffectCommand>(streamEntity);
+                var specs = _em.GetBuffer<BInstantEffectSpec>(streamEntity);
+                var deltas = _em.GetBuffer<BAttributeDelta>(streamEntity);
+                var facts = _em.GetBuffer<BTypedSimulationFact>(streamEntity);
                 var attribute = _em.GetBuffer<BAttribute>(owner)[0];
+
+                Assert.That(commands.Length, Is.EqualTo(1));
+                Assert.That(specs.Length, Is.EqualTo(1));
+                Assert.That(deltas.Length, Is.EqualTo(1));
+                Assert.That(facts.Length, Is.EqualTo(1));
                 Assert.That(attribute.BaseValue, Is.EqualTo(75));
                 Assert.That(attribute.CurrentValue, Is.EqualTo(75));
                 Assert.That(attribute.Dirty, Is.True);
 
-                var attributeEvent = FindAttributeChangeEvent(owner, attrSetCode, attributeCode);
-                Assert.That(attributeEvent.ASC, Is.EqualTo(owner));
-                Assert.That(attributeEvent.SourceAsc, Is.EqualTo(owner));
-                Assert.That(attributeEvent.SourceAbility, Is.EqualTo(ability));
-                Assert.That(attributeEvent.OldValue, Is.EqualTo(100));
-                Assert.That(attributeEvent.NewValue, Is.EqualTo(75));
-                Assert.That(attributeEvent.IsBaseValue, Is.True);
+                var spec = specs[0];
+                var delta = deltas[0];
+                var fact = facts[0];
+                Assert.That(spec.SourceCommandSequence, Is.EqualTo(commands[0].Sequence));
+                Assert.That(spec.GameplayEffectCode, Is.EqualTo(costEffectCode));
+                Assert.That(spec.SourceAsc, Is.EqualTo(owner));
+                Assert.That(spec.TargetAsc, Is.EqualTo(owner));
+                Assert.That(spec.SourceAbility, Is.EqualTo(ability));
+                Assert.That(delta.SourceCommandSequence, Is.EqualTo(commands[0].Sequence));
+                Assert.That(delta.SourceSpecSequence, Is.EqualTo(spec.Sequence));
+                Assert.That(delta.GameplayEffectCode, Is.EqualTo(costEffectCode));
+                Assert.That(delta.TargetAsc, Is.EqualTo(owner));
+                Assert.That(delta.SourceAbility, Is.EqualTo(ability));
+                Assert.That(delta.AttrSetCode, Is.EqualTo(attrSetCode));
+                Assert.That(delta.AttributeCode, Is.EqualTo(attributeCode));
+                Assert.That(delta.Op, Is.EqualTo(EModifierOp.Subtract));
+                Assert.That(delta.ValueKind, Is.EqualTo(EAttributeDeltaValueKind.BaseValue));
+                Assert.That(delta.Magnitude, Is.EqualTo(25));
+                Assert.That(delta.OldValue, Is.EqualTo(100));
+                Assert.That(delta.NewValue, Is.EqualTo(75));
+                Assert.That(fact.SourceCommandSequence, Is.EqualTo(commands[0].Sequence));
+                Assert.That(fact.SourceSpecSequence, Is.EqualTo(spec.Sequence));
+                Assert.That(fact.SourceDeltaSequence, Is.EqualTo(delta.Sequence));
+                Assert.That(fact.EventType, Is.EqualTo(EGameplayEventType.AttributeBaseValueChanged));
+                Assert.That(fact.Domain, Is.EqualTo(EGameplayFactDomain.Attribute));
+                Assert.That(fact.Category, Is.EqualTo(EGameplayFactCategory.StateChange));
+                Assert.That(fact.GameplayEffectCode, Is.EqualTo(costEffectCode));
+                Assert.That(fact.OldValue, Is.EqualTo(100));
+                Assert.That(fact.NewValue, Is.EqualTo(75));
             }
             finally
             {
@@ -415,11 +604,17 @@ namespace GAS.Runtime.Tests.Ability
                     AbilityActivationResult.Success);
 
                 var attribute = _em.GetBuffer<BAttribute>(owner)[0];
-                Assert.That(attribute.BaseValue, Is.EqualTo(100));
-                Assert.That(attribute.CurrentValue, Is.EqualTo(100));
+                Assert.That(attribute.BaseValue, Is.EqualTo(75));
+                Assert.That(attribute.CurrentValue, Is.EqualTo(75));
                 Assert.That(_em.GetComponentData<CTagMask>(owner).HasTag(cooldownTagIndex), Is.False);
 
-                AssertPendingEffect(costEffectCode, owner, ability, expectedDuration: null);
+                Assert.That(FindEffectByCode(costEffectCode), Is.EqualTo(Entity.Null));
+                Assert.That(CountApplyRequestsByCode(costEffectCode), Is.EqualTo(0));
+                var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+                Assert.That(_em.GetBuffer<BEffectCommand>(streamEntity).Length, Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BInstantEffectSpec>(streamEntity).Length, Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BAttributeDelta>(streamEntity).Length, Is.EqualTo(1));
+                Assert.That(_em.GetBuffer<BTypedSimulationFact>(streamEntity).Length, Is.EqualTo(1));
                 AssertPendingEffect(cooldownEffectCode, owner, ability, expectedDuration: 30);
                 AssertPendingEffect(activationEffectCode, owner, ability, expectedDuration: null);
             }
@@ -1773,24 +1968,6 @@ namespace GAS.Runtime.Tests.Ability
             }
         }
 
-        private BAttributeChangeEvent FindAttributeChangeEvent(Entity asc, int attrSetCode, int attributeCode)
-        {
-            var events = _em.GetBuffer<BAttributeChangeEvent>(GASManager.EntityEventBus);
-            for (var i = 0; i < events.Length; i++)
-            {
-                var evt = events[i];
-                if (evt.ASC == asc
-                    && evt.AttrSetCode == attrSetCode
-                    && evt.AttributeCode == attributeCode)
-                {
-                    return evt;
-                }
-            }
-
-            Assert.Fail("Expected attribute change event was not found.");
-            return default;
-        }
-
         private void AssertAbilityCommitEvent(
             EGameplayEventType type,
             Entity ability,
@@ -1834,13 +2011,52 @@ namespace GAS.Runtime.Tests.Ability
             return default;
         }
 
-        private void ClearGameplayEvents()
+        private static bool ContainsGameplayEvent(
+            DynamicBuffer<BGameplayEvent> events,
+            EGameplayEventType type,
+            int eventCode,
+            int reasonCode,
+            int contextId)
         {
-            if (_em.Exists(GASManager.EntityEventBus)
-                && _em.HasBuffer<BGameplayEvent>(GASManager.EntityEventBus))
+            for (var i = 0; i < events.Length; i++)
             {
-                _em.GetBuffer<BGameplayEvent>(GASManager.EntityEventBus).Clear();
+                var evt = events[i];
+                if (evt.Type == type
+                    && evt.EventCode == eventCode
+                    && evt.ReasonCode == reasonCode
+                    && evt.ContextId == contextId)
+                {
+                    return true;
+                }
             }
+
+            return false;
+        }
+
+        private void ClearTransientEventBuffers()
+        {
+            if (!_em.Exists(GASManager.EntityEventBus))
+                return;
+
+            if (_em.HasBuffer<BDamageEvent>(GASManager.EntityEventBus))
+                _em.GetBuffer<BDamageEvent>(GASManager.EntityEventBus).Clear();
+            if (_em.HasBuffer<BTagChangeEvent>(GASManager.EntityEventBus))
+                _em.GetBuffer<BTagChangeEvent>(GASManager.EntityEventBus).Clear();
+            if (_em.HasBuffer<BGameplayEvent>(GASManager.EntityEventBus))
+                _em.GetBuffer<BGameplayEvent>(GASManager.EntityEventBus).Clear();
+            if (_em.HasBuffer<BAttributeChangeEvent>(GASManager.EntityEventBus))
+                _em.GetBuffer<BAttributeChangeEvent>(GASManager.EntityEventBus).Clear();
+            if (_em.HasBuffer<BCueRequest>(GASManager.EntityEventBus))
+                _em.GetBuffer<BCueRequest>(GASManager.EntityEventBus).Clear();
+        }
+
+        private void ClearEffectCommandStream()
+        {
+            if (_em == default)
+                return;
+
+            if (EffectCommandSpecStream.TryGetSingleton(_em, out var streamEntity))
+                EffectCommandSpecStream.ClearFrameLocalData(_em, streamEntity, 0);
         }
 
         private bool HasTagChangeEvent(Entity asc, int tagIndex, bool added)
@@ -1866,6 +2082,20 @@ namespace GAS.Runtime.Tests.Ability
         {
             using var query = _em.CreateEntityQuery(componentType);
             return query.CalculateEntityCount();
+        }
+
+        private int CountApplyRequestsByCode(int gameplayEffectCode)
+        {
+            using var query = _em.CreateEntityQuery(ComponentType.ReadOnly<CApplyGameplayEffectRequest>());
+            using var requests = query.ToEntityArray(Allocator.Temp);
+            var count = 0;
+            for (var i = 0; i < requests.Length; i++)
+            {
+                if (_em.GetComponentData<CApplyGameplayEffectRequest>(requests[i]).GameplayEffectCode == gameplayEffectCode)
+                    count++;
+            }
+
+            return count;
         }
 
         private void RunCommandGroup()

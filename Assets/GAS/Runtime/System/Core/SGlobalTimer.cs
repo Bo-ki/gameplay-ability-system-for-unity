@@ -8,9 +8,9 @@ namespace GAS.Runtime
         public int Frame;
         public int Turn;
     }
-        
+
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))] 
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     //[UpdateAfter(typeof(GASManagerInputSystem))]
     public partial struct SGlobalTimer : ISystem
     {
@@ -32,6 +32,40 @@ namespace GAS.Runtime
         public void OnDestroy(ref SystemState state)
         {
 
+        }
+    }
+
+    public static class GASRuntimeFrameContext
+    {
+        public static int ResolveCurrentFrame(EntityManager em)
+        {
+            return TryResolveCurrentFrame(em, out var frame) ? frame : 0;
+        }
+
+        public static bool TryResolveCurrentFrame(EntityManager em, out int frame)
+        {
+            return TryResolveKnownGlobalTimer(em, out frame);
+        }
+
+        private static bool TryResolveKnownGlobalTimer(EntityManager em, out int frame)
+        {
+            if (!GASManager.IsInitialized || !GASManager.EntityManager.Equals(em))
+            {
+                frame = 0;
+                return false;
+            }
+
+            var globalTimer = GASManager.EntityGlobalTimer;
+            if (globalTimer != Entity.Null
+                && em.Exists(globalTimer)
+                && em.HasComponent<GlobalTimer>(globalTimer))
+            {
+                frame = em.GetComponentData<GlobalTimer>(globalTimer).Frame;
+                return true;
+            }
+
+            frame = 0;
+            return false;
         }
     }
 }

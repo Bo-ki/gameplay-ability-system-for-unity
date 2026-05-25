@@ -31,7 +31,13 @@ namespace GAS.Runtime
                 return Entity.Null;
 
             var cost = entityManager.GetComponentData<CAbilityCost>(ability);
-            return CreateSelfGameplayEffectRequest(entityManager, ability, baseInfo, cost.GameplayEffectCode, durationFrameOverride: 0);
+            return AppendSimpleInstantSelfCommandOrCreateRequest(
+                entityManager,
+                ability,
+                baseInfo,
+                cost.GameplayEffectCode,
+                durationFrameOverride: 0,
+                "AbilityCostRequest");
         }
 
         public static Entity RequestCooldownGameplayEffect(Entity ability)
@@ -197,6 +203,41 @@ namespace GAS.Runtime
                 });
             GameplayEffectRequestWriter.AddTarget(entityManager, request, baseInfo.Owner);
             return request;
+        }
+
+        private static Entity AppendSimpleInstantSelfCommandOrCreateRequest(
+            EntityManager entityManager,
+            Entity ability,
+            in CAbilityBaseInfo baseInfo,
+            int gameplayEffectCode,
+            int durationFrameOverride,
+            string namePrefix)
+        {
+            if (gameplayEffectCode <= 0
+                || baseInfo.Owner == Entity.Null
+                || !entityManager.Exists(baseInfo.Owner)
+                || entityManager.HasComponent<CAscDestroying>(baseInfo.Owner))
+            {
+                return Entity.Null;
+            }
+
+            var request = new CApplyGameplayEffectRequest
+            {
+                SourceAsc = baseInfo.Owner,
+                SourceAbility = ability,
+                Instigator = baseInfo.Owner,
+                Causer = ability,
+                GameplayEffectCode = gameplayEffectCode,
+                Level = baseInfo.Level,
+                DurationFrameOverride = durationFrameOverride,
+            };
+
+            return GameplayEffectRequestWriter.AppendSimpleInstantCommandOrCreateSingleTargetRequest(
+                entityManager,
+                request,
+                baseInfo.Owner,
+                ETargetDataKind.Self,
+                namePrefix);
         }
 
         private static int ResolveSourceAbilityCode(

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
@@ -19,6 +18,7 @@ namespace GAS.Runtime
         Passive = 4,
         RuntimeBoundary = 5,
         LegacyRequestBridge = 6,
+        Overflow = 7,
     }
 
     public enum EActiveEffectMutationKind : byte
@@ -50,6 +50,8 @@ namespace GAS.Runtime
         public int ActiveMutationCommandCursor;
         public int DeltaApplySpecCursor;
         public int FactProjectionDeltaCursor;
+        public int EventBridgeFactCursor;
+        public int CueProjectionSpecCursor;
     }
 
     [InternalBufferCapacity(64)]
@@ -98,6 +100,7 @@ namespace GAS.Runtime
         public Entity Instigator;
         public Entity Causer;
         public int GameplayEffectCode;
+        public int CueRequestOnApplyCode;
         public int Level;
         public int StackCount;
         public int DurationFrameOverride;
@@ -173,6 +176,7 @@ namespace GAS.Runtime
         public int GameplayEffectCode;
         public int ContextId;
         public int ParentContextId;
+        public int EventCode;
         public int AttrSetCode;
         public int AttributeCode;
         public int ReasonCode;
@@ -184,6 +188,126 @@ namespace GAS.Runtime
     public static class EffectCommandSpecStream
     {
         public const int CurrentVersion = 1;
+
+        private static bool _hasCachedStreamOwner;
+        private static EntityManager _cachedEntityManager;
+        private static Entity _cachedStreamEntity;
+
+        public struct CommandWriter
+        {
+            private EntityManager _em;
+            private Entity _streamEntity;
+            private CEffectCommandSpecStream _stream;
+            private DynamicBuffer<BEffectCommand> _commands;
+            private DynamicBuffer<BEffectCommandSetByCallerValue> _setByCallerBuffer;
+            private int _currentFrame;
+            private bool _isCreated;
+
+            internal CommandWriter(
+                EntityManager em,
+                Entity streamEntity,
+                CEffectCommandSpecStream stream,
+                DynamicBuffer<BEffectCommand> commands,
+                DynamicBuffer<BEffectCommandSetByCallerValue> setByCallerBuffer,
+                int currentFrame)
+            {
+                _em = em;
+                _streamEntity = streamEntity;
+                _stream = stream;
+                _commands = commands;
+                _setByCallerBuffer = setByCallerBuffer;
+                _currentFrame = currentFrame;
+                _isCreated = true;
+            }
+
+            public bool IsCreated => _isCreated;
+            public Entity StreamEntity => _streamEntity;
+            public int CurrentFrame => _currentFrame;
+
+            public BEffectCommand AppendCommand(in BEffectCommand command)
+            {
+                return AppendCommand(command, null);
+            }
+
+            public BEffectCommand AppendCommand(
+                in BEffectCommand command,
+                IReadOnlyList<BSetByCallerValue> setByCallerValues)
+            {
+                if (!_isCreated)
+                    return default;
+
+                var resolved = PrepareCommand(
+                    ref _stream,
+                    _setByCallerBuffer,
+                    command,
+                    setByCallerValues?.Count ?? 0,
+                    _currentFrame);
+
+                if (setByCallerValues != null)
+                {
+                    for (var i = 0; i < setByCallerValues.Count; i++)
+                    {
+                        var value = setByCallerValues[i];
+                        _setByCallerBuffer.Add(new BEffectCommandSetByCallerValue
+                        {
+                            CommandSequence = resolved.Sequence,
+                            SpecSequence = 0,
+                            Key = value.Key,
+                            Value = value.Value,
+                        });
+                    }
+                }
+
+                _commands.Add(resolved);
+                return resolved;
+            }
+
+            public BEffectCommand AppendCommand(
+                in BEffectCommand command,
+                DynamicBuffer<BSetByCallerValue> setByCallerValues)
+            {
+                if (!_isCreated)
+                    return default;
+
+                var setByCallerCount = setByCallerValues.IsCreated ? setByCallerValues.Length : 0;
+                var resolved = PrepareCommand(
+                    ref _stream,
+                    _setByCallerBuffer,
+                    command,
+                    setByCallerCount,
+                    _currentFrame);
+
+                if (setByCallerValues.IsCreated)
+                {
+                    for (var i = 0; i < setByCallerValues.Length; i++)
+                    {
+                        var value = setByCallerValues[i];
+                        _setByCallerBuffer.Add(new BEffectCommandSetByCallerValue
+                        {
+                            CommandSequence = resolved.Sequence,
+                            SpecSequence = 0,
+                            Key = value.Key,
+                            Value = value.Value,
+                        });
+                    }
+                }
+
+                _commands.Add(resolved);
+                return resolved;
+            }
+
+            public void Flush()
+            {
+                if (!_isCreated
+                    || _streamEntity == Entity.Null
+                    || !_em.Exists(_streamEntity))
+                {
+                    return;
+                }
+
+                _em.SetComponentData(_streamEntity, _stream);
+            }
+        }
 
         public static Entity EnsureSingleton(EntityManager em)
         {
@@ -204,21 +328,23 @@ namespace GAS.Runtime
                 NextFactSequence = 1,
             });
             EnsureBuffers(em, streamEntity);
+            RegisterKnownSingleton(em, streamEntity);
             return streamEntity;
         }
 
         public static bool TryGetSingleton(EntityManager em, out Entity streamEntity)
         {
-            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<CEffectCommandSpecStream>());
-            if (query.CalculateEntityCount() <= 0)
-            {
-                streamEntity = Entity.Null;
-                return false;
-            }
+            return TryResolveKnownSingleton(em, out streamEntity);
+        }
 
-            using var entities = query.ToEntityArray(Allocator.Temp);
-            streamEntity = entities.Length > 0 ? entities[0] : Entity.Null;
-            return streamEntity != Entity.Null;
+        public static void RegisterKnownSingleton(EntityManager em, Entity streamEntity)
+        {
+            if (!IsValidStreamOwner(em, streamEntity))
+                return;
+
+            _cachedEntityManager = em;
+            _cachedStreamEntity = streamEntity;
+            _hasCachedStreamOwner = true;
         }
 
         public static void EnsureBuffers(EntityManager em, Entity streamEntity)
@@ -240,6 +366,98 @@ namespace GAS.Runtime
                 em.AddBuffer<BTypedSimulationFact>(streamEntity);
         }
 
+        private static bool TryResolveKnownSingleton(EntityManager em, out Entity streamEntity)
+        {
+            if (TryResolveCachedSingleton(em, out streamEntity))
+                return true;
+
+            if (TryResolveGasManagerSingleton(em, out streamEntity))
+                return true;
+
+            streamEntity = Entity.Null;
+            return false;
+        }
+
+        private static bool TryResolveCachedSingleton(EntityManager em, out Entity streamEntity)
+        {
+            if (!_hasCachedStreamOwner || !_cachedEntityManager.Equals(em))
+            {
+                streamEntity = Entity.Null;
+                return false;
+            }
+
+            if (IsValidStreamOwner(em, _cachedStreamEntity))
+            {
+                streamEntity = _cachedStreamEntity;
+                return true;
+            }
+
+            _hasCachedStreamOwner = false;
+            _cachedStreamEntity = Entity.Null;
+            streamEntity = Entity.Null;
+            return false;
+        }
+
+        private static bool TryResolveGasManagerSingleton(EntityManager em, out Entity streamEntity)
+        {
+            if (!GASManager.IsInitialized || !GASManager.EntityManager.Equals(em))
+            {
+                streamEntity = Entity.Null;
+                return false;
+            }
+
+            streamEntity = GASManager.EntityEffectCommandSpecStream;
+            if (!IsValidStreamOwner(em, streamEntity))
+            {
+                streamEntity = Entity.Null;
+                return false;
+            }
+
+            RegisterKnownSingleton(em, streamEntity);
+            return true;
+        }
+
+        private static bool IsValidStreamOwner(EntityManager em, Entity streamEntity)
+        {
+            return streamEntity != Entity.Null
+                   && em.Exists(streamEntity)
+                   && em.HasComponent<CEffectCommandSpecStream>(streamEntity);
+        }
+
+        public static CommandWriter BeginCommandWriter(EntityManager em)
+        {
+            var streamEntity = EnsureSingleton(em);
+            return BeginCommandWriter(em, streamEntity, GASRuntimeFrameContext.ResolveCurrentFrame(em));
+        }
+
+        public static CommandWriter BeginCommandWriter(EntityManager em, int currentFrame)
+        {
+            var streamEntity = EnsureSingleton(em);
+            return BeginCommandWriter(em, streamEntity, currentFrame);
+        }
+
+        public static CommandWriter BeginCommandWriter(
+            EntityManager em,
+            Entity streamEntity,
+            int currentFrame)
+        {
+            if (streamEntity == Entity.Null || !em.Exists(streamEntity))
+                streamEntity = EnsureSingleton(em);
+            else
+                EnsureBuffers(em, streamEntity);
+
+            var stream = em.GetComponentData<CEffectCommandSpecStream>(streamEntity);
+            var commands = em.GetBuffer<BEffectCommand>(streamEntity);
+            var setByCallerBuffer = em.GetBuffer<BEffectCommandSetByCallerValue>(streamEntity);
+            return new CommandWriter(
+                em,
+                streamEntity,
+                stream,
+                commands,
+                setByCallerBuffer,
+                currentFrame);
+        }
+
         public static BEffectCommand AppendCommand(EntityManager em, in BEffectCommand command)
         {
             return AppendCommand(em, command, null);
@@ -250,45 +468,20 @@ namespace GAS.Runtime
             in BEffectCommand command,
             IReadOnlyList<BSetByCallerValue> setByCallerValues)
         {
-            var streamEntity = EnsureSingleton(em);
-            var stream = em.GetComponentData<CEffectCommandSpecStream>(streamEntity);
-            var commands = em.GetBuffer<BEffectCommand>(streamEntity);
-            var setByCallerBuffer = em.GetBuffer<BEffectCommandSetByCallerValue>(streamEntity);
+            var writer = BeginCommandWriter(em);
+            var resolved = writer.AppendCommand(command, setByCallerValues);
+            writer.Flush();
+            return resolved;
+        }
 
-            var resolved = command;
-            if (resolved.Sequence <= 0)
-                resolved.Sequence = Allocate(ref stream.NextCommandSequence);
-            if (resolved.Frame <= 0)
-                resolved.Frame = ResolveCurrentFrame(em);
-            if (resolved.ContextId <= 0)
-                resolved.ContextId = Allocate(ref stream.NextContextId);
-            if (resolved.TargetAsc == Entity.Null)
-                resolved.TargetAsc = resolved.SourceAsc;
-            if (resolved.Instigator == Entity.Null)
-                resolved.Instigator = resolved.SourceAsc;
-            if (resolved.Causer == Entity.Null)
-                resolved.Causer = resolved.SourceAbility;
-
-            resolved.SetByCallerStart = setByCallerBuffer.Length;
-            resolved.SetByCallerCount = setByCallerValues?.Count ?? 0;
-
-            if (setByCallerValues != null)
-            {
-                for (var i = 0; i < setByCallerValues.Count; i++)
-                {
-                    var value = setByCallerValues[i];
-                    setByCallerBuffer.Add(new BEffectCommandSetByCallerValue
-                    {
-                        CommandSequence = resolved.Sequence,
-                        SpecSequence = 0,
-                        Key = value.Key,
-                        Value = value.Value,
-                    });
-                }
-            }
-
-            commands.Add(resolved);
-            em.SetComponentData(streamEntity, stream);
+        public static BEffectCommand AppendCommand(
+            EntityManager em,
+            in BEffectCommand command,
+            DynamicBuffer<BSetByCallerValue> setByCallerValues)
+        {
+            var writer = BeginCommandWriter(em);
+            var resolved = writer.AppendCommand(command, setByCallerValues);
+            writer.Flush();
             return resolved;
         }
 
@@ -311,6 +504,8 @@ namespace GAS.Runtime
             stream.ActiveMutationCommandCursor = 0;
             stream.DeltaApplySpecCursor = 0;
             stream.FactProjectionDeltaCursor = 0;
+            stream.EventBridgeFactCursor = 0;
+            stream.CueProjectionSpecCursor = 0;
             em.SetComponentData(streamEntity, stream);
         }
 
@@ -362,17 +557,31 @@ namespace GAS.Runtime
             return next++;
         }
 
-        private static int ResolveCurrentFrame(EntityManager em)
+        private static BEffectCommand PrepareCommand(
+            ref CEffectCommandSpecStream stream,
+            DynamicBuffer<BEffectCommandSetByCallerValue> setByCallerBuffer,
+            in BEffectCommand command,
+            int setByCallerCount,
+            int currentFrame)
         {
-            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<GlobalTimer>());
-            if (query.CalculateEntityCount() <= 0)
-                return 0;
+            var resolved = command;
+            if (resolved.Sequence <= 0)
+                resolved.Sequence = Allocate(ref stream.NextCommandSequence);
+            if (resolved.Frame <= 0)
+                resolved.Frame = currentFrame;
+            if (resolved.ContextId <= 0)
+                resolved.ContextId = Allocate(ref stream.NextContextId);
+            if (resolved.TargetAsc == Entity.Null)
+                resolved.TargetAsc = resolved.SourceAsc;
+            if (resolved.Instigator == Entity.Null)
+                resolved.Instigator = resolved.SourceAsc;
+            if (resolved.Causer == Entity.Null)
+                resolved.Causer = resolved.SourceAbility;
 
-            using var entities = query.ToEntityArray(Allocator.Temp);
-            if (entities.Length == 0)
-                return 0;
-
-            return em.GetComponentData<GlobalTimer>(entities[0]).Frame;
+            resolved.SetByCallerStart = setByCallerBuffer.Length;
+            resolved.SetByCallerCount = setByCallerCount;
+            return resolved;
         }
+
     }
 }

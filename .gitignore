@@ -97,5 +97,9 @@ __pycache__.meta
 *.py[cod]
 *$py.class
 
-# Local architecture discussion drafts / iteration notes
-/方案讨论/
+# Local architecture discussion: track governance docs, ignore historical/iterative records
+/方案讨论/针对2.0的ECS架构的迭代方案讨论/当前路线/历史方案参考/
+/方案讨论/针对2.0的ECS架构的迭代方案讨论/当前路线/迭代记录/
+/方案讨论/针对2.0的ECS架构的迭代方案讨论/迭代记录/
+/方案讨论/针对2.0的ECS架构的迭代方案讨论/README.md
+/方案讨论/针对2.0的ECS架构的迭代方案讨论/当前ECS实现GAS概念审查.md

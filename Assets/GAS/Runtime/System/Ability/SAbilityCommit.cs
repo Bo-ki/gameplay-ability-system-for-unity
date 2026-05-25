@@ -30,54 +30,65 @@ namespace GAS.Runtime
             var em = state.EntityManager;
             var abilities = _query.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            var gameplayEventWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
-            foreach (var ability in abilities)
+            try
             {
-                var baseInfo = em.GetComponentData<CAbilityBaseInfo>(ability);
-                var runtime = em.GetComponentData<CAbilityRuntimeState>(ability);
-                var configRef = em.GetComponentData<CAbilityConfig>(ability).Config;
-
-                var commit = configRef.IsCreated
-                    ? TryCommitAbility(ability, baseInfo.Owner, runtime, ref configRef.Value, em)
-                    : CommitFailure(AbilityActivationResult.FailOtherReason);
-
-                EnqueueAbilityCommitFact(em, ability, baseInfo, commit);
-                if (commit.Result == AbilityActivationResult.FailBlockedByActiveAbility)
+                foreach (var ability in abilities)
                 {
-                    EnqueueAbilityBlockedByActiveAbilityFact(em, ability, baseInfo, commit.RelatedAbilityCode);
-                }
+                    var baseInfo = em.GetComponentData<CAbilityBaseInfo>(ability);
+                    var runtime = em.GetComponentData<CAbilityRuntimeState>(ability);
+                    var configRef = em.GetComponentData<CAbilityConfig>(ability).Config;
 
-                if (commit.Result == AbilityActivationResult.Success)
-                {
-                    ApplyActivationOwnedTags(ability, baseInfo.Owner, ref configRef.Value, em);
-                    CancelMatchedAbilities(ability, baseInfo, ref configRef.Value, em);
-                    AbilityRuntimeActions.RequestCostGameplayEffect(ability, em);
-                    AbilityRuntimeActions.RequestCooldownGameplayEffect(ability, em);
-                    ExecuteActivationEffects(ability, baseInfo.Owner, em);
-                    ExecuteTargetActivationEffects(ability, baseInfo, em);
+                    var commit = configRef.IsCreated
+                        ? TryCommitAbility(ability, baseInfo.Owner, runtime, ref configRef.Value, em)
+                        : CommitFailure(AbilityActivationResult.FailOtherReason);
 
-                    if (!em.HasComponent<CAbilityActive>(ability))
-                        ecb.AddComponent<CAbilityActive>(ability);
-
-                    runtime.Phase = EAbilityPhase.Active;
-                    runtime.Timer = 0f;
-                    runtime.RemainingFrame = -1;
-                    em.SetComponentData(ability, runtime);
-
-                    if (em.HasComponent<CAbilityAutoEndOnCommit>(ability))
+                    EnqueueAbilityCommitFact(ref gameplayEventWriter, ability, baseInfo, commit);
+                    if (commit.Result == AbilityActivationResult.FailBlockedByActiveAbility)
                     {
-                        AbilityRuntimeActions.RequestAbilityEnd(
+                        EnqueueAbilityBlockedByActiveAbilityFact(
+                            ref gameplayEventWriter,
                             ability,
-                            em,
-                            EAbilityLifecycleReason.TimelineCompleted,
-                            sourceAbility: ability,
-                            sourceAbilityCode: baseInfo.Code);
+                            baseInfo,
+                            commit.RelatedAbilityCode);
                     }
-                }
 
-                if (em.HasComponent<CAbilityCommitRequest>(ability))
-                    ecb.RemoveComponent<CAbilityCommitRequest>(ability);
+                    if (commit.Result == AbilityActivationResult.Success)
+                    {
+                        ApplyActivationOwnedTags(ability, baseInfo.Owner, ref configRef.Value, em);
+                        CancelMatchedAbilities(ability, baseInfo, ref configRef.Value, em);
+                        AbilityRuntimeActions.RequestCostGameplayEffect(ability, em);
+                        AbilityRuntimeActions.RequestCooldownGameplayEffect(ability, em);
+                        ExecuteActivationEffects(ability, baseInfo.Owner, em);
+                        ExecuteTargetActivationEffects(ability, baseInfo, em);
+
+                        if (!em.HasComponent<CAbilityActive>(ability))
+                            ecb.AddComponent<CAbilityActive>(ability);
+
+                        runtime.Phase = EAbilityPhase.Active;
+                        runtime.Timer = 0f;
+                        runtime.RemainingFrame = -1;
+                        em.SetComponentData(ability, runtime);
+
+                        if (em.HasComponent<CAbilityAutoEndOnCommit>(ability))
+                        {
+                            AbilityRuntimeActions.RequestAbilityEnd(
+                                ability,
+                                em,
+                                EAbilityLifecycleReason.TimelineCompleted,
+                                sourceAbility: ability,
+                                sourceAbilityCode: baseInfo.Code);
+                        }
+                    }
+
+                    if (em.HasComponent<CAbilityCommitRequest>(ability))
+                        ecb.RemoveComponent<CAbilityCommitRequest>(ability);
+                }
+            }
+            finally
+            {
+                gameplayEventWriter.Dispose();
             }
 
             ecb.Playback(em);
@@ -427,12 +438,12 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueAbilityCommitFact(
-            EntityManager em,
+            ref EventBusHelper.GameplayEventBusWriter writer,
             Entity ability,
             in CAbilityBaseInfo baseInfo,
             in AbilityCommitEvaluation commit)
         {
-            EventBusHelper.EnqueueGameplayEvent(em, GASManager.EntityEventBus, new BGameplayEvent
+            writer.EnqueueGameplayEvent(new BGameplayEvent
             {
                 Type = commit.Result == AbilityActivationResult.Success
                     ? EGameplayEventType.AbilityCommitSucceeded
@@ -449,12 +460,12 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueAbilityBlockedByActiveAbilityFact(
-            EntityManager em,
+            ref EventBusHelper.GameplayEventBusWriter writer,
             Entity ability,
             in CAbilityBaseInfo baseInfo,
             int blockerAbilityCode)
         {
-            EventBusHelper.EnqueueGameplayEvent(em, GASManager.EntityEventBus, new BGameplayEvent
+            writer.EnqueueGameplayEvent(new BGameplayEvent
             {
                 Type = EGameplayEventType.AbilityActivationBlockedByAbility,
                 SourceAsc = baseInfo.Owner,

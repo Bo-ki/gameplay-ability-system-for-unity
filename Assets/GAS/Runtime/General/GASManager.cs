@@ -24,6 +24,8 @@ namespace GAS.Runtime
 
         public static Entity EntityGlobalTimer { get; private set; }
 
+        public static Entity EntityEffectCommandSpecStream { get; private set; }
+
         public static GlobalTimer GetGlobalTimer()
         {
             return EntityManager.GetComponentData<GlobalTimer>(EntityGlobalTimer);
@@ -48,6 +50,7 @@ namespace GAS.Runtime
             EntityManager = ExWorld.EntityManager;
             CreateSystems();
             EntityGlobalTimer = ExWorld.EntityManager.CreateSingleton<GlobalTimer>();
+            EntityEffectCommandSpecStream = EffectCommandSpecStream.EnsureSingleton(EntityManager);
             CreateEventBusSingleton();
             CreateEventLogSinkSingleton();
             CreateRuntimeDebuggerSingleton();

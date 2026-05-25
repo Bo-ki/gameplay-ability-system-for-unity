@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Entities;
 
@@ -381,8 +382,29 @@ namespace GAS.Runtime
             in CEffectContext context,
             int gameplayEffectCode)
         {
+            return CreateDerivedApplyRequest(
+                em,
+                sourceEffect,
+                context,
+                gameplayEffectCode,
+                EEffectCommandSource.Period);
+        }
+
+        public static Entity CreateDerivedApplyRequest(
+            EntityManager em,
+            Entity sourceEffect,
+            in CEffectContext context,
+            int gameplayEffectCode,
+            EEffectCommandSource commandSource)
+        {
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            var request = CreateDerivedApplyRequest(em, ref ecb, sourceEffect, context, gameplayEffectCode);
+            var request = CreateDerivedApplyRequest(
+                em,
+                ref ecb,
+                sourceEffect,
+                context,
+                gameplayEffectCode,
+                commandSource);
             ecb.Playback(em);
             ecb.Dispose();
             return request;
@@ -394,6 +416,23 @@ namespace GAS.Runtime
             Entity sourceEffect,
             in CEffectContext context,
             int gameplayEffectCode)
+        {
+            return CreateDerivedApplyRequest(
+                em,
+                ref ecb,
+                sourceEffect,
+                context,
+                gameplayEffectCode,
+                EEffectCommandSource.Period);
+        }
+
+        public static Entity CreateDerivedApplyRequest(
+            EntityManager em,
+            ref EntityCommandBuffer ecb,
+            Entity sourceEffect,
+            in CEffectContext context,
+            int gameplayEffectCode,
+            EEffectCommandSource commandSource)
         {
             if (gameplayEffectCode <= 0)
                 return Entity.Null;
@@ -411,8 +450,16 @@ namespace GAS.Runtime
                 ParentContextId = context.ContextId,
             };
 
-            if (TryApplyDerivedLegacyInstantBypass(em, sourceEffect, request, context.TargetAsc, targetKind))
+            if (TryAppendDerivedEffectCommand(
+                    em,
+                    sourceEffect,
+                    request,
+                    context.TargetAsc,
+                    targetKind,
+                    commandSource))
+            {
                 return Entity.Null;
+            }
 
             var requestEntity = GameplayEffectRequestWriter.Create(
                 ref ecb,
@@ -430,41 +477,46 @@ namespace GAS.Runtime
             return requestEntity;
         }
 
-        private static bool TryApplyDerivedLegacyInstantBypass(
+        private static bool TryAppendDerivedEffectCommand(
             EntityManager em,
             Entity sourceEffect,
             in CApplyGameplayEffectRequest request,
             Entity target,
-            ETargetDataKind targetKind)
+            ETargetDataKind targetKind,
+            EEffectCommandSource commandSource)
         {
             if (sourceEffect == Entity.Null
                 || !em.Exists(sourceEffect)
                 || !em.HasBuffer<BSetByCallerValue>(sourceEffect))
             {
-                return GameplayEffectRequestWriter.TryApplyLegacyInstantModifierBypass(
+                return GameplayEffectRequestWriter.TryAppendSimpleInstantCommand(
                     em,
                     request,
                     target,
-                    targetKind);
+                    targetKind,
+                    (IReadOnlyList<BSetByCallerValue>)null,
+                    commandSource);
             }
 
             var values = em.GetBuffer<BSetByCallerValue>(sourceEffect);
             if (values.Length == 0)
             {
-                return GameplayEffectRequestWriter.TryApplyLegacyInstantModifierBypass(
+                return GameplayEffectRequestWriter.TryAppendSimpleInstantCommand(
                     em,
                     request,
                     target,
-                    targetKind);
+                    targetKind,
+                    (IReadOnlyList<BSetByCallerValue>)null,
+                    commandSource);
             }
 
-            return values.Length == 1
-                   && GameplayEffectRequestWriter.TryApplyLegacyInstantModifierBypass(
-                       em,
-                       request,
-                       target,
-                       targetKind,
-                       values[0]);
+            return GameplayEffectRequestWriter.TryAppendSimpleInstantCommand(
+                em,
+                request,
+                target,
+                targetKind,
+                values,
+                commandSource);
         }
 
         private static int ResolveSourceEffectLevel(EntityManager em, Entity sourceEffect)
@@ -1024,6 +1076,9 @@ namespace GAS.Runtime
             {
                 ecb.AddComponent(ge, new CPeriodRuntime { StartTime = currentFrame });
             }
+
+            if (em.HasComponent<CEffectContext>(ge))
+                ActiveEffectStore.TryRefreshPeriodFrame(em, ge, em.GetComponentData<CEffectContext>(ge), currentFrame);
         }
 
         public static void HandleDurationExpired(
@@ -1122,7 +1177,15 @@ namespace GAS.Runtime
                 return;
 
             for (var i = 0; i < definition.OverflowEffectCodes.Length; i++)
-                CreateDerivedApplyRequest(em, ref ecb, ge, context, definition.OverflowEffectCodes[i]);
+            {
+                CreateDerivedApplyRequest(
+                    em,
+                    ref ecb,
+                    ge,
+                    context,
+                    definition.OverflowEffectCodes[i],
+                    EEffectCommandSource.Overflow);
+            }
         }
 
         private static void EnqueueStackEvent(

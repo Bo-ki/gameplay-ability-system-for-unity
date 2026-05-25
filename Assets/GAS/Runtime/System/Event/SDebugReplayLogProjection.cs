@@ -35,10 +35,21 @@ namespace GAS.Runtime
             }
 
             var sinkState = em.GetComponentData<CGameplayEventLogSink>(logSink);
-            var currentFrame = ResolveCurrentFrame(em);
+            var currentFrame = GASRuntimeFrameContext.ResolveCurrentFrame(em);
             ResetProcessedCountsIfFrameChanged(ref sinkState, currentFrame);
 
             var log = em.GetBuffer<BDebugReplayEvent>(logSink);
+
+            if (SystemAPI.TryGetSingletonEntity<CEffectCommandSpecStream>(out var streamEntity)
+                && em.Exists(streamEntity)
+                && em.HasBuffer<BTypedSimulationFact>(streamEntity))
+            {
+                ProjectTypedSimulationFacts(
+                    em.GetBuffer<BTypedSimulationFact>(streamEntity),
+                    log,
+                    ref sinkState,
+                    currentFrame);
+            }
 
             if (em.HasBuffer<BGameplayEvent>(eventBus))
                 ProjectGameplayEvents(em.GetBuffer<BGameplayEvent>(eventBus), log, ref sinkState, currentFrame);
@@ -70,6 +81,147 @@ namespace GAS.Runtime
             sinkState.ProcessedCueRequestCount = 0;
             sinkState.ProcessedTagEventCount = 0;
             sinkState.ProcessedDamageEventCount = 0;
+            sinkState.ProcessedTypedFactCount = 0;
+        }
+
+        private static void ProjectTypedSimulationFacts(
+            DynamicBuffer<BTypedSimulationFact> facts,
+            DynamicBuffer<BDebugReplayEvent> log,
+            ref CGameplayEventLogSink sinkState,
+            int fallbackFrame)
+        {
+            for (var i = 0; i < facts.Length; i++)
+            {
+                var fact = facts[i];
+                if (fact.Sequence <= 0
+                    || fact.Sequence <= sinkState.LastProjectedTypedFactSequence)
+                {
+                    continue;
+                }
+
+                if (!TryCreateTypedReplayEvent(in fact, fallbackFrame, out var replayEvent))
+                    continue;
+
+                log.Add(CreateLogEvent(ref sinkState, replayEvent));
+                if (fact.Sequence > sinkState.LastProjectedTypedFactSequence)
+                    sinkState.LastProjectedTypedFactSequence = fact.Sequence;
+            }
+
+            sinkState.ProcessedTypedFactCount = facts.Length;
+        }
+
+        private static bool TryCreateTypedReplayEvent(
+            in BTypedSimulationFact fact,
+            int fallbackFrame,
+            out BDebugReplayEvent replayEvent)
+        {
+            replayEvent = default;
+
+            if (fact.TargetAsc == Entity.Null)
+            {
+                return false;
+            }
+
+            if (fact.Domain == EGameplayFactDomain.Attribute
+                && fact.EventType == EGameplayEventType.AttributeBaseValueChanged)
+            {
+                replayEvent = new BDebugReplayEvent
+                {
+                    Kind = EDebugReplayEventKind.AttributeChange,
+                    Frame = fact.Frame != 0 ? fact.Frame : fallbackFrame,
+                    Sequence = fact.Sequence,
+                    SourceAsc = fact.SourceAsc,
+                    TargetAsc = fact.TargetAsc,
+                    SourceAbility = fact.SourceAbility,
+                    GameplayEffect = fact.SourceEffect,
+                    ContextId = fact.ContextId,
+                    EventCode = fact.GameplayEffectCode,
+                    AttrSetCode = fact.AttrSetCode,
+                    AttributeCode = fact.AttributeCode,
+                    Value = fact.Value,
+                    OldValue = fact.OldValue,
+                    NewValue = fact.NewValue,
+                    Flag = 1,
+                };
+                return true;
+            }
+
+            if (fact.Domain == EGameplayFactDomain.Cue
+                && fact.EventType == EGameplayEventType.CueRequested)
+            {
+                replayEvent = new BDebugReplayEvent
+                {
+                    Kind = EDebugReplayEventKind.CueRequest,
+                    Frame = fact.Frame != 0 ? fact.Frame : fallbackFrame,
+                    Sequence = fact.Sequence,
+                    GameplayEventType = fact.EventType,
+                    CueEvent = (EGameplayCueEvent)fact.EventCode,
+                    SourceAsc = fact.SourceAsc,
+                    TargetAsc = fact.TargetAsc,
+                    SourceAbility = fact.SourceAbility,
+                    GameplayEffect = fact.SourceEffect,
+                    SourceEntity = fact.SourceAbility,
+                    CueSourceType = CueSourceType.GameplayEffect,
+                    ContextId = fact.ContextId,
+                    EventCode = fact.EventCode,
+                    ReasonCode = fact.ReasonCode,
+                    Flag = 1,
+                };
+                return true;
+            }
+
+            if (fact.Domain == EGameplayFactDomain.Damage)
+            {
+                replayEvent = new BDebugReplayEvent
+                {
+                    Kind = EDebugReplayEventKind.Damage,
+                    Frame = fact.Frame != 0 ? fact.Frame : fallbackFrame,
+                    Sequence = fact.Sequence,
+                    GameplayEventType = fact.EventType,
+                    SourceAsc = fact.SourceAsc,
+                    TargetAsc = fact.TargetAsc,
+                    SourceAbility = fact.SourceAbility,
+                    GameplayEffect = fact.SourceEffect,
+                    ContextId = fact.ContextId,
+                    EventCode = ResolveGameplayEventCode(in fact),
+                    ReasonCode = fact.ReasonCode,
+                    AttrSetCode = fact.AttrSetCode,
+                    AttributeCode = fact.AttributeCode,
+                    DamageAmount = fact.Value,
+                    Value = fact.Value,
+                    Flag = 1,
+                };
+                return true;
+            }
+
+            if (!IsPresentationMarker(fact.EventType)
+                && fact.Domain != EGameplayFactDomain.Unknown)
+            {
+                replayEvent = new BDebugReplayEvent
+                {
+                    Kind = EDebugReplayEventKind.GameplayEvent,
+                    Frame = fact.Frame != 0 ? fact.Frame : fallbackFrame,
+                    Sequence = fact.Sequence,
+                    GameplayEventType = fact.EventType,
+                    SourceAsc = fact.SourceAsc,
+                    TargetAsc = fact.TargetAsc,
+                    SourceAbility = fact.SourceAbility,
+                    GameplayEffect = fact.SourceEffect,
+                    ContextId = fact.ContextId,
+                    EventCode = ResolveGameplayEventCode(in fact),
+                    ReasonCode = fact.ReasonCode,
+                    Value = fact.Value,
+                    Flag = 1,
+                };
+                return true;
+            }
+
+            return false;
+        }
+
+        private static int ResolveGameplayEventCode(in BTypedSimulationFact fact)
+        {
+            return fact.EventCode != 0 ? fact.EventCode : fact.GameplayEffectCode;
         }
 
         private static void ProjectGameplayEvents(
@@ -82,6 +234,13 @@ namespace GAS.Runtime
             for (var i = start; i < events.Length; i++)
             {
                 var evt = events[i];
+                if (ShouldSkipMirroredTypedFact(
+                        evt.SourceFactSequence,
+                        sinkState.LastProjectedTypedFactSequence))
+                {
+                    continue;
+                }
+
                 if (IsPresentationMarker(evt.Type))
                     continue;
 
@@ -127,6 +286,13 @@ namespace GAS.Runtime
             for (var i = start; i < events.Length; i++)
             {
                 var evt = events[i];
+                if (ShouldSkipMirroredTypedFact(
+                        evt.SourceFactSequence,
+                        sinkState.LastProjectedTypedFactSequence))
+                {
+                    continue;
+                }
+
                 log.Add(CreateLogEvent(ref sinkState, new BDebugReplayEvent
                 {
                     Kind = EDebugReplayEventKind.AttributeChange,
@@ -148,6 +314,14 @@ namespace GAS.Runtime
             sinkState.ProcessedAttributeEventCount = events.Length;
         }
 
+        private static bool ShouldSkipMirroredTypedFact(
+            int sourceFactSequence,
+            int lastProjectedTypedFactSequence)
+        {
+            return sourceFactSequence > 0
+                   && lastProjectedTypedFactSequence >= sourceFactSequence;
+        }
+
         private static void ProjectCueRequests(
             DynamicBuffer<BCueRequest> requests,
             DynamicBuffer<BDebugReplayEvent> log,
@@ -158,10 +332,18 @@ namespace GAS.Runtime
             for (var i = start; i < requests.Length; i++)
             {
                 var request = requests[i];
+                if (ShouldSkipMirroredTypedFact(
+                        request.SourceFactSequence,
+                        sinkState.LastProjectedTypedFactSequence))
+                {
+                    continue;
+                }
+
                 log.Add(CreateLogEvent(ref sinkState, new BDebugReplayEvent
                 {
                     Kind = EDebugReplayEventKind.CueRequest,
                     Frame = frame,
+                    Sequence = request.SourceFactSequence,
                     CueEvent = request.CueEvent,
                     SourceAsc = request.SourceAsc,
                     TargetAsc = request.TargetAsc,
@@ -172,6 +354,7 @@ namespace GAS.Runtime
                     CueSourceType = request.SourceType,
                     ContextId = request.ContextId,
                     EventCode = (int)request.CueEvent,
+                    ReasonCode = request.ReasonCode,
                 }));
             }
 
@@ -211,10 +394,18 @@ namespace GAS.Runtime
             for (var i = start; i < events.Length; i++)
             {
                 var evt = events[i];
+                if (ShouldSkipMirroredTypedFact(
+                        evt.SourceFactSequence,
+                        sinkState.LastProjectedTypedFactSequence))
+                {
+                    continue;
+                }
+
                 log.Add(CreateLogEvent(ref sinkState, new BDebugReplayEvent
                 {
                     Kind = EDebugReplayEventKind.Damage,
                     Frame = frame,
+                    Sequence = evt.SourceFactSequence,
                     SourceAsc = evt.Source,
                     TargetAsc = evt.Target,
                     DamageAmount = evt.Amount,
@@ -237,20 +428,6 @@ namespace GAS.Runtime
             evt.LogIndex = sinkState.NextLogIndex;
             sinkState.NextLogIndex++;
             return evt;
-        }
-
-        private static int ResolveCurrentFrame(EntityManager em)
-        {
-            var globalTimer = GASManager.EntityGlobalTimer;
-            if (globalTimer != Entity.Null
-                && em.Exists(globalTimer)
-                && em.HasComponent<GlobalTimer>(globalTimer))
-            {
-                return em.GetComponentData<GlobalTimer>(globalTimer).Frame;
-            }
-
-            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<GlobalTimer>());
-            return query.IsEmptyIgnoreFilter ? 0 : query.GetSingleton<GlobalTimer>().Frame;
         }
 
         public void OnDestroy(ref SystemState state)

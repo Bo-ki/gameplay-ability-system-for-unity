@@ -8,7 +8,7 @@ namespace GAS.Runtime
         None = 0,
         RuntimeCoreFramePrepare = 1,
         EffectCommandSpecStreamSingleton = 2,
-        EffectCommandSpecStreamCurrentFrame = 3,
+        RuntimeFrameContextCurrentFrame = 3,
         RuntimeDebuggerCurrentFrame = 4,
         RuntimeDebuggerEntityCounterQueries = 5,
         RuntimeDebuggerActiveEffectStoreCounters = 6,
@@ -267,55 +267,29 @@ namespace GAS.Runtime
                     EGasRuntimeFrameBudgetEntryId.EffectCommandSpecStreamSingleton,
                     EGasRuntimeCoreFramePhase.FramePrepare,
                     GASRuntimeQueryLayoutEntryId.GameplayEffectCommandSpecStream,
-                    queryBudget: 1,
+                    queryBudget: 0,
                     filteredQueryBudget: 0,
-                    unfilteredQueryBudget: 1,
+                    unfilteredQueryBudget: 0,
                     lookupUpdateBudget: 0,
                     randomLookupBudget: 0,
-                    syncQueryBudget: 1,
-                    EGasRuntimeFrameAllocatorOwner.TempMainThreadScratch,
-                    EGasRuntimeFrameDependencyBudget.SyncQueryMayWait,
-                    EGasRuntimeFrameBudgetRisk.QueryContract
-                    | EGasRuntimeFrameBudgetRisk.HelperTempQueryRisk
-                    | EGasRuntimeFrameBudgetRisk.SyncQuery
-                    | EGasRuntimeFrameBudgetRisk.ToEntityArrayTemp
-                    | EGasRuntimeFrameBudgetRisk.MainThreadOnly
+                    syncQueryBudget: 0,
+                    EGasRuntimeFrameAllocatorOwner.NoNativeAllocation,
+                    EGasRuntimeFrameDependencyBudget.ReadOnlyMainThread,
+                    EGasRuntimeFrameBudgetRisk.MainThreadOnly
                     | EGasRuntimeFrameBudgetRisk.DependencyWaitRisk),
                 Entry(
-                    EGasRuntimeFrameBudgetEntryId.EffectCommandSpecStreamCurrentFrame,
+                    EGasRuntimeFrameBudgetEntryId.RuntimeFrameContextCurrentFrame,
                     EGasRuntimeCoreFramePhase.FramePrepare,
                     GASRuntimeQueryLayoutEntryId.None,
-                    queryBudget: 1,
+                    queryBudget: 0,
                     filteredQueryBudget: 0,
-                    unfilteredQueryBudget: 1,
+                    unfilteredQueryBudget: 0,
                     lookupUpdateBudget: 0,
                     randomLookupBudget: 0,
-                    syncQueryBudget: 1,
-                    EGasRuntimeFrameAllocatorOwner.TempMainThreadScratch,
-                    EGasRuntimeFrameDependencyBudget.SyncQueryMayWait,
-                    EGasRuntimeFrameBudgetRisk.QueryContract
-                    | EGasRuntimeFrameBudgetRisk.HelperTempQueryRisk
-                    | EGasRuntimeFrameBudgetRisk.SyncQuery
-                    | EGasRuntimeFrameBudgetRisk.ToEntityArrayTemp
-                    | EGasRuntimeFrameBudgetRisk.MainThreadOnly
-                    | EGasRuntimeFrameBudgetRisk.DependencyWaitRisk),
-                Entry(
-                    EGasRuntimeFrameBudgetEntryId.RuntimeDebuggerCurrentFrame,
-                    EGasRuntimeCoreFramePhase.ObservationProjection,
-                    GASRuntimeQueryLayoutEntryId.ObservationReplayAndOutbox,
-                    queryBudget: 1,
-                    filteredQueryBudget: 0,
-                    unfilteredQueryBudget: 1,
-                    lookupUpdateBudget: 0,
-                    randomLookupBudget: 0,
-                    syncQueryBudget: 1,
+                    syncQueryBudget: 0,
                     EGasRuntimeFrameAllocatorOwner.NoNativeAllocation,
-                    EGasRuntimeFrameDependencyBudget.DebuggerObservationOnly,
-                    EGasRuntimeFrameBudgetRisk.QueryContract
-                    | EGasRuntimeFrameBudgetRisk.HelperTempQueryRisk
-                    | EGasRuntimeFrameBudgetRisk.SyncQuery
-                    | EGasRuntimeFrameBudgetRisk.MainThreadOnly
-                    | EGasRuntimeFrameBudgetRisk.DebuggerObservation
+                    EGasRuntimeFrameDependencyBudget.ReadOnlyMainThread,
+                    EGasRuntimeFrameBudgetRisk.MainThreadOnly
                     | EGasRuntimeFrameBudgetRisk.DependencyWaitRisk),
                 Entry(
                     EGasRuntimeFrameBudgetEntryId.RuntimeDebuggerEntityCounterQueries,
@@ -369,40 +343,6 @@ namespace GAS.Runtime
                     | EGasRuntimeFrameBudgetRisk.ToEntityArrayTemp
                     | EGasRuntimeFrameBudgetRisk.MainThreadOnly
                     | EGasRuntimeFrameBudgetRisk.DebuggerObservation
-                    | EGasRuntimeFrameBudgetRisk.DependencyWaitRisk),
-                Entry(
-                    EGasRuntimeFrameBudgetEntryId.PresentationOutboxProjectionCurrentFrame,
-                    EGasRuntimeCoreFramePhase.ObservationProjection,
-                    GASRuntimeQueryLayoutEntryId.ObservationReplayAndOutbox,
-                    queryBudget: 1,
-                    filteredQueryBudget: 0,
-                    unfilteredQueryBudget: 1,
-                    lookupUpdateBudget: 0,
-                    randomLookupBudget: 0,
-                    syncQueryBudget: 1,
-                    EGasRuntimeFrameAllocatorOwner.NoNativeAllocation,
-                    EGasRuntimeFrameDependencyBudget.SyncQueryMayWait,
-                    EGasRuntimeFrameBudgetRisk.QueryContract
-                    | EGasRuntimeFrameBudgetRisk.HelperTempQueryRisk
-                    | EGasRuntimeFrameBudgetRisk.SyncQuery
-                    | EGasRuntimeFrameBudgetRisk.MainThreadOnly
-                    | EGasRuntimeFrameBudgetRisk.DependencyWaitRisk),
-                Entry(
-                    EGasRuntimeFrameBudgetEntryId.DebugReplayLogProjectionCurrentFrame,
-                    EGasRuntimeCoreFramePhase.ObservationProjection,
-                    GASRuntimeQueryLayoutEntryId.ObservationReplayAndOutbox,
-                    queryBudget: 1,
-                    filteredQueryBudget: 0,
-                    unfilteredQueryBudget: 1,
-                    lookupUpdateBudget: 0,
-                    randomLookupBudget: 0,
-                    syncQueryBudget: 1,
-                    EGasRuntimeFrameAllocatorOwner.NoNativeAllocation,
-                    EGasRuntimeFrameDependencyBudget.SyncQueryMayWait,
-                    EGasRuntimeFrameBudgetRisk.QueryContract
-                    | EGasRuntimeFrameBudgetRisk.HelperTempQueryRisk
-                    | EGasRuntimeFrameBudgetRisk.SyncQuery
-                    | EGasRuntimeFrameBudgetRisk.MainThreadOnly
                     | EGasRuntimeFrameBudgetRisk.DependencyWaitRisk),
                 Entry(
                     EGasRuntimeFrameBudgetEntryId.AttributeRecalculateModifierLookup,

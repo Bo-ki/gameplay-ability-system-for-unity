@@ -58,7 +58,9 @@ namespace GAS.Runtime.Tests.Effect
             Assert.That(methodNames, Does.Not.Contain("TryApplyFastInstantModifier"));
             Assert.That(methodNames, Does.Not.Contain("ApplyFastOrCreateSingleTargetRequest"));
             Assert.That(methodNames, Does.Contain("TryAppendSimpleInstantCommand"));
+            Assert.That(methodNames, Does.Contain("TryAppendSimpleInstantCommands"));
             Assert.That(methodNames, Does.Contain("AppendSimpleInstantCommandOrCreateSingleTargetRequest"));
+            Assert.That(methodNames, Does.Contain("AppendSimpleInstantCommandsOrCreateTargetListRequest"));
             Assert.That(methodNames, Does.Contain("TryApplyLegacyInstantModifierBypass"));
             Assert.That(methodNames, Does.Contain("ApplyLegacyInstantBypassOrCreateSingleTargetRequest"));
         }

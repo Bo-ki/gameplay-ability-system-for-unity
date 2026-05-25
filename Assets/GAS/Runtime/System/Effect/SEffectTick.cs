@@ -27,7 +27,6 @@ namespace GAS.Runtime
             var currentFrame = SystemAPI.GetSingleton<GlobalTimer>().Frame;
             var effects = _activeDurationQuery.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             foreach (var ge in effects)
             {
@@ -147,6 +146,9 @@ namespace GAS.Runtime
             {
                 ecb.AddComponent(ge, new CPeriodRuntime { StartTime = currentFrame });
             }
+
+            if (em.HasComponent<CEffectContext>(ge))
+                ActiveEffectStore.TryRefreshPeriodFrame(em, ge, em.GetComponentData<CEffectContext>(ge), currentFrame);
         }
 
         private static void TickInactiveDuration(

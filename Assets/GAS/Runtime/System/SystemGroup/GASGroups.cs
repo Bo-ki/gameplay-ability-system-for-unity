@@ -74,6 +74,20 @@ namespace GAS.Runtime
     {
     }
 
+    [DisableAutoCreation]
+    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateAfter(typeof(GASAbilityGroup))]
+    [UpdateBefore(typeof(GASCueGroup))]
+    public partial class GasStructuralPlaybackSystemGroup : ComponentSystemGroup
+    {
+    }
+
+    [DisableAutoCreation]
+    [UpdateInGroup(typeof(GasStructuralPlaybackSystemGroup), OrderLast = true)]
+    public partial class GasEndStructuralEcbSystem : EntityCommandBufferSystem
+    {
+    }
+
     /// <summary>
     /// 表现层组：消费当前 tick 的 ECS 事实事件，驱动 Cue / GameObject / UI 边界。
     /// Simulation runtime 不应反向依赖本组的托管表现对象。

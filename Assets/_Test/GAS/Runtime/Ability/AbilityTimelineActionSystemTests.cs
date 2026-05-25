@@ -24,6 +24,7 @@ namespace GAS.Runtime.Tests.Ability
             TargetCatcherHelper.RegisterTargetCatcher(nameof(CatchSelf), typeof(CatchSelf), typeof(XParamNone));
             TargetCatcherHelper.RegisterTargetCatcher(nameof(CatchTarget), typeof(CatchTarget), typeof(XParamNone));
             CueHelper.RegisterCue(nameof(RecordingCue), typeof(RecordingCue), typeof(XParamNone));
+            ClearEffectCommandStream();
         }
 
         [TearDown]
@@ -32,6 +33,7 @@ namespace GAS.Runtime.Tests.Ability
             TimelineAbilityConfigRegistry.RegisterGetConfigByIDFunc(null);
             GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(null);
             GameplayCueConfigRegistry.RegisterGetConfigByIDFunc(null);
+            ClearEffectCommandStream();
         }
 
         [Test]
@@ -72,6 +74,83 @@ namespace GAS.Runtime.Tests.Ability
             {
                 DestroyIfExists(effect);
                 DestroyIfExists(ability);
+                DestroyIfExists(owner);
+            }
+        }
+
+        [Test]
+        public void TimelineApplyEffectsAppliesSimpleInstantThroughEffectCommandStream()
+        {
+            const int timelineId = 71101;
+            const int effectCode = 61101;
+            const int attrSetCode = 20;
+            const int attributeCode = 30;
+
+            var owner = _em.CreateEntity();
+            var target = CreateAscWithAttribute(attrSetCode, attributeCode, 100f);
+            var ability = CreateActiveTimelineAbility(owner, timelineId, level: 4);
+
+            try
+            {
+                _em.AddComponentData(ability, new CAbilityMainTarget { TargetAsc = target });
+                RegisterTimeline(CreateTimeline(timelineId, lifeTime: 30, manualEnd: false,
+                    CreateApplyEffectsClip(startFrame: 0, effectCode, nameof(CatchTarget))));
+                RegisterEffect(effectCode, new ConfModifierConfig
+                {
+                    ModifierSettings = new[]
+                    {
+                        new ModifierDefinitionSetting
+                        {
+                            AttrSetCode = attrSetCode,
+                            AttrCode = attributeCode,
+                            Operation = EModifierOp.Subtract,
+                            Magnitude = 18f,
+                        },
+                    },
+                });
+
+                UpdateCommandGroup();
+
+                Assert.That(FindEffectByCode(effectCode), Is.EqualTo(Entity.Null));
+                Assert.That(CountApplyRequestsByCode(effectCode), Is.EqualTo(0));
+
+                var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+                var commands = _em.GetBuffer<BEffectCommand>(streamEntity);
+                var specs = _em.GetBuffer<BInstantEffectSpec>(streamEntity);
+                var deltas = _em.GetBuffer<BAttributeDelta>(streamEntity);
+                var facts = _em.GetBuffer<BTypedSimulationFact>(streamEntity);
+                var attribute = _em.GetBuffer<BAttribute>(target)[0];
+
+                Assert.That(commands.Length, Is.EqualTo(1));
+                Assert.That(specs.Length, Is.EqualTo(1));
+                Assert.That(deltas.Length, Is.EqualTo(1));
+                Assert.That(facts.Length, Is.EqualTo(1));
+                Assert.That(attribute.BaseValue, Is.EqualTo(82f));
+                Assert.That(attribute.CurrentValue, Is.EqualTo(82f));
+
+                Assert.That(commands[0].SourceAsc, Is.EqualTo(owner));
+                Assert.That(commands[0].TargetAsc, Is.EqualTo(target));
+                Assert.That(commands[0].SourceAbility, Is.EqualTo(ability));
+                Assert.That(commands[0].GameplayEffectCode, Is.EqualTo(effectCode));
+                Assert.That(commands[0].Level, Is.EqualTo(4));
+                Assert.That(commands[0].TargetDataKind, Is.EqualTo(ETargetDataKind.Entity));
+                Assert.That(specs[0].SourceCommandSequence, Is.EqualTo(commands[0].Sequence));
+                Assert.That(deltas[0].SourceSpecSequence, Is.EqualTo(specs[0].Sequence));
+                Assert.That(deltas[0].TargetAsc, Is.EqualTo(target));
+                Assert.That(deltas[0].SourceAbility, Is.EqualTo(ability));
+                Assert.That(deltas[0].OldValue, Is.EqualTo(100f));
+                Assert.That(deltas[0].NewValue, Is.EqualTo(82f));
+                Assert.That(facts[0].SourceDeltaSequence, Is.EqualTo(deltas[0].Sequence));
+                Assert.That(facts[0].EventType, Is.EqualTo(EGameplayEventType.AttributeBaseValueChanged));
+
+                var timelineRuntime = _em.GetComponentData<CAbilityTimelineRuntime>(ability);
+                Assert.That(timelineRuntime.TimelineId, Is.EqualTo(timelineId));
+                Assert.That(timelineRuntime.LastDispatchedElapsedFrame, Is.EqualTo(0));
+            }
+            finally
+            {
+                DestroyIfExists(ability);
+                DestroyIfExists(target);
                 DestroyIfExists(owner);
             }
         }
@@ -402,6 +481,19 @@ namespace GAS.Runtime.Tests.Ability
             return ability;
         }
 
+        private Entity CreateAscWithAttribute(int attrSetCode, int attributeCode, float value)
+        {
+            var asc = _em.CreateEntity();
+            _em.AddBuffer<BAttribute>(asc).Add(new BAttribute
+            {
+                AttrSetCode = attrSetCode,
+                Code = attributeCode,
+                BaseValue = value,
+                CurrentValue = value,
+            });
+            return asc;
+        }
+
         private static XParamTimeline CreateTimeline(
             int timelineId,
             int lifeTime,
@@ -518,6 +610,20 @@ namespace GAS.Runtime.Tests.Ability
             return Entity.Null;
         }
 
+        private int CountApplyRequestsByCode(int gameplayEffectCode)
+        {
+            using var query = _em.CreateEntityQuery(ComponentType.ReadOnly<CApplyGameplayEffectRequest>());
+            using var requests = query.ToEntityArray(Allocator.Temp);
+            var count = 0;
+            for (var i = 0; i < requests.Length; i++)
+            {
+                if (_em.GetComponentData<CApplyGameplayEffectRequest>(requests[i]).GameplayEffectCode == gameplayEffectCode)
+                    count++;
+            }
+
+            return count;
+        }
+
         private BCueRequest FindCueRequest(EGameplayCueEvent cueEvent)
         {
             var requests = _em.GetBuffer<BCueRequest>(GASManager.EntityEventBus);
@@ -534,6 +640,15 @@ namespace GAS.Runtime.Tests.Ability
         {
             if (entity != Entity.Null && _em.Exists(entity))
                 _em.DestroyEntity(entity);
+        }
+
+        private void ClearEffectCommandStream()
+        {
+            if (_em == default)
+                return;
+
+            if (EffectCommandSpecStream.TryGetSingleton(_em, out var streamEntity))
+                EffectCommandSpecStream.ClearFrameLocalData(_em, streamEntity, 0);
         }
 
         private sealed class RecordingCue : GameplayCueBase

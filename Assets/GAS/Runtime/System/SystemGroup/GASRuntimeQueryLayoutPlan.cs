@@ -493,7 +493,9 @@ namespace GAS.Runtime
                     typeof(SInstantEffectSpecBuild),
                     typeof(SActiveEffectMutationApply),
                     typeof(SAttributeDeltaApply),
-                    typeof(STypedSimulationFactProjection)),
+                    typeof(STypedSimulationFactProjection),
+                    typeof(STypedSimulationFactEventBridge),
+                    typeof(SInstantEffectCueRequestProjection)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.ActiveEffectStore,
                     GASRuntimeLayoutDomain.GameplayEffect,
@@ -681,7 +683,10 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.PresentationOutbox,
                         GASRuntimeLayoutComponentSlot.DebugReplayLog,
                     },
-                    Array.Empty<GASRuntimeLayoutComponentSlot>(),
+                    new[]
+                    {
+                        GASRuntimeLayoutComponentSlot.TypedSimulationFactBuffer,
+                    },
                     typeof(SEventBusClear),
                     typeof(SPresentationOutboxProjection),
                     typeof(SDebugReplayLogProjection)),

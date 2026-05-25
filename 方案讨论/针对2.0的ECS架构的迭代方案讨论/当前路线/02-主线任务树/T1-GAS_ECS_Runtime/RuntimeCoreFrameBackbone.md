@@ -66,11 +66,11 @@
 | 顺序 | 任务ID | 任务名 | 状态 | 交付物 |
 |---|---|---|---|---|
 | 1 | T1-RuntimeCore-AM2B-A | GAS ECS Runtime - Runtime Core Frame Backbone - Schedule / Phase Contract | 已完成（contract-first，Unity验证待补跑） | SystemGroup / phase contract 与测试 |
-| 2 | T1-RuntimeCore-AM2B-B | GAS ECS Runtime - Runtime Core Frame Backbone - Frame Arena 与 Query Budget | 推荐优先 | query / lookup / allocator / dependency budget |
-| 3 | T1-RuntimeCore-AM2B-C | GAS ECS Runtime - Runtime Core Frame Backbone - Stream Owner 与 Deterministic Merge | 候选 | stream owner 表、clear/write/read/merge phase |
-| 4 | T1-RuntimeCore-AM2B-D | GAS ECS Runtime - Runtime Core Frame Backbone - Structural Playback Gate | 候选 | 唯一结构变化屏障、ECB / bulk query policy |
-| 5 | T1-RuntimeCore-AM2B-E | GAS ECS Runtime - Runtime Core Frame Backbone - Debugger Evidence Gate | 候选 | frame backbone counters 与 Profiler / Journaling 对照口径 |
-| 6 | T1-RuntimeCore-AM2B-F | GAS ECS Runtime - Runtime Core Frame Backbone - AM3 / AM5 Rebind 与交还验证 | 候选 | AM3 / AM5 任务重绑定、验收摘要和后续入口 |
+| 2 | T1-RuntimeCore-AM2B-B | GAS ECS Runtime - Runtime Core Frame Backbone - Frame Arena 与 Query Budget | 已完成（contract-first / budget-first，Unity验证待补跑） | query / lookup / allocator / dependency budget |
+| 3 | T1-RuntimeCore-AM2B-C | GAS ECS Runtime - Runtime Core Frame Backbone - Stream Owner 与 Deterministic Merge | 已完成（contract-first，Unity验证待补跑） | stream owner 表、clear/write/read/merge phase |
+| 4 | T1-RuntimeCore-AM2B-D | GAS ECS Runtime - Runtime Core Frame Backbone - Structural Playback Gate | 已完成（contract-first，Unity验证待补跑） | 唯一结构变化屏障、ECB / bulk query policy |
+| 5 | T1-RuntimeCore-AM2B-E | GAS ECS Runtime - Runtime Core Frame Backbone - Debugger Evidence Gate | 已完成（contract-first / debugger evidence gate，Unity验证待补跑） | frame backbone counters 与 Profiler / Journaling 对照口径 |
+| 6 | T1-RuntimeCore-AM2B-F | GAS ECS Runtime - Runtime Core Frame Backbone - AM3 / AM5 Rebind 与交还验证 | 已完成（contract-first / rebind handoff，Unity验证待补跑） | AM3 / AM5 任务重绑定、验收摘要和后续入口 |
 
 ## 官方文档覆盖矩阵
 
@@ -85,7 +85,7 @@
 
 ## 任务领取总规则
 
-1. 当前只推荐领取 `GAS ECS Runtime - Runtime Core Frame Backbone - Frame Arena 与 Query Budget`（任务ID：`T1-RuntimeCore-AM2B-B`）。
+1. 当前只推荐继续领取 `GAS ECS Runtime - Runtime Core 重构 - Instant Spec Evaluation 迁移`（任务ID：`T1-RuntimeCore-AM3`）；activation simple producer、ability cost self producer 与 Timeline ApplyEffects single-target simple instant producer 已接入 stream，后续先处理剩余 simple instant producer / typed fact consumer 缺口的 Runtime Core frame backbone 绑定和 API 选型复核。
 2. 后续任务必须按顺序领取；除非当前窗口明确调整，不跳过前置任务。
 3. 每个任务行动报告都必须引用 `ISSUE-009`，并说明本任务解决 ISSUE-009 的哪一段。
 4. 每个任务交还后必须更新 `04-当前进度状态/迭代摘要.md`，若改变当前事实则更新 `00-当前架构事实/核心问题诊断/ISSUE-009-RuntimeCoreFrameBackbone缺失.md`。
@@ -102,7 +102,7 @@
 | AM2B-C | AM2B-D | Stream / store owner、clear / write / read / merge phase 和 deterministic merge policy 已明确 |
 | AM2B-D | AM2B-E | 结构变化入口收敛到唯一 playback gate；ECB / bulk query policy 有证据；旧分散结构变化点有迁移计划 |
 | AM2B-E | AM2B-F | Debugger 能观测 frame backbone 的 phase、query、stream、structural 和 overhead 证据，且具备关闭口径 |
-| AM2B-F | AM3 / AM5 / AM4 或 AutoChess 验收 | AM3 / AM5 已重绑定新骨架；如果 Runtime Core 主链证据闭合，则回到 AutoChess 做业务验收，否则进入 AM4 或继续 Runtime Core 缺口任务 |
+| AM2B-F | AM3 | AM3 / AM5 已重绑定新骨架；Runtime Core 仍缺真实功能迁移、真实 SystemGroup 搬迁和 Profiler / Journaling 运行时证据，因此先进入 AM3 而不是回到 AutoChess 验收 |
 
 如果某一节点未通过验收，只更新该节点的失败证据，不提升下一节点。若必须跳过节点，必须在本文件、`04-当前进度状态/当前窗口.md` 和 `00-当前架构事实/核心问题诊断/ISSUE-009-RuntimeCoreFrameBackbone缺失.md` 写清跳过原因和风险。
 
@@ -152,7 +152,7 @@ API 选型：
 
 1. 存在可检索的 Runtime Core backbone phase contract。
 2. 测试能验证 phase 顺序和结构变化权限。
-3. `RuntimeCore重构.md` 和当前窗口仍指向 `GAS ECS Runtime - Runtime Core Frame Backbone - Frame Arena 与 Query Budget`（任务ID：`T1-RuntimeCore-AM2B-B`）作为下一任务。
+3. AM2B-A 交还时 `RuntimeCore重构.md` 和当前窗口已指向 `GAS ECS Runtime - Runtime Core Frame Backbone - Frame Arena 与 Query Budget`（任务ID：`T1-RuntimeCore-AM2B-B`）作为下一任务；当前已由 AM2B-B 完成后推进到 AM2B-C。
 
 测试链路：
 
@@ -172,21 +172,21 @@ API 选型：
 2. 每个 phase 已声明读写访问口径、结构变化权限和 observation boundary；当前只有 `StructuralPlayback` 允许 `PlaybackOnly`，`FramePrepare / ActiveEffectLifecycle` 仅允许记录结构变化意图。
 3. `EffectCommandSpecStreamTargetSystems` 已映射到 Runtime Core backbone phase：ingest、spec build、active mutation、delta apply、typed fact projection。
 4. 新增 `SystemScheduleContractTests` 覆盖 phase 顺序、结构变化权限和 AM2 stream system -> phase 映射。
-5. 当前仍是 contract-first：真实 `ComponentSystemGroup` 搬迁、query / allocator budget、stream owner、deterministic merge 和 structural playback gate 继续由 AM2B-B 到 AM2B-F 承接。
+5. 当前仍是 contract-first：query / lookup / allocator / dependency budget 已由 AM2B-B 建立显式 contract，stream owner / deterministic merge 已由 AM2B-C 建立显式 contract，structural playback gate 已由 AM2B-D 建立显式 contract，Debugger evidence gate 已由 AM2B-E 接入，AM3 / AM5 rebind handoff 已由 AM2B-F 闭合；真实 `ComponentSystemGroup` 搬迁和功能迁移继续由 AM3 / AM5 后续任务承接。
 
 ## 三级任务：Frame Arena 与 Query Budget
 
 任务ID：`T1-RuntimeCore-AM2B-B`
 
-状态：`候选`
+状态：`已完成（contract-first / budget-first，Unity验证待补跑）`
 
 任务名：`GAS ECS Runtime - Runtime Core Frame Backbone - Frame Arena 与 Query Budget`
 
 当前问题：
 
-1. `EffectCommandSpecStream.TryGetSingleton` 和 `ResolveCurrentFrame` 仍有 helper 级临时 query。
-2. 当前 Debugger 不输出 query count、lookup update count、dependency wait。
-3. Runtime Core 没有统一的 frame arena owner。
+1. `EffectCommandSpecStream.TryGetSingleton` 和 `ResolveCurrentFrame` 仍有 helper 级临时 query，但 AM2B-B 已把它们写入 frame budget risk contract，后续迁移不再依赖隐式知识。
+2. Debugger 已输出 query / lookup / allocator / dependency budget 字段；AM2B-E 已建立 Profiler / Journaling 对照口径，AM2B-F 已把 AM3 / AM5 后续任务重绑定到该证据门，真实采样数据仍留给 AM3 / AM5 之后的运行时验证。
+3. Runtime Core 已有 frame arena owner contract；真实 `GasRuntimeFramePrepareSystemGroup` / allocator 生命周期落地仍留给后续节点。
 
 目标 / 目的：
 
@@ -228,11 +228,20 @@ API 选型：
 1. `git diff --check`
 2. `rg -n "QueryBudget|LookupBudget|AllocatorOwner|DependencyBudget|WorldUpdateAllocator|Rewindable" Assets/GAS/Runtime Assets/_Test/GAS/Runtime`
 
+本轮 AM2B-B 进展：
+
+1. 新增 `GASRuntimeFrameBudgetContract`，以 contract-first / budget-first 方式声明 Runtime Core 当前 query / lookup / allocator / dependency 预算。
+2. 预算表覆盖 FramePrepare owner、`EffectCommandSpecStream` helper query、Runtime Debugger counter query、Presentation / Replay projection current-frame query，以及 `SAttributeRecalculate` 的 `BufferLookup<BActiveModifier>`。
+3. `EGasRuntimeFrameBudgetRisk` 已显式标记 helper temp query、sync query、dependency wait、ToEntityArray temp、random lookup、Debugger observation、WorldUpdateAllocator / RewindableAllocator candidate 等风险。
+4. `GasRuntimeDebugger` 已将 frame budget totals 接入 `GasRuntimeCoreDiagnosticCounters`、diagnostic event、snapshot 和 `runtimeCoreFrameBudget|...` 文本导出。
+5. 新增 `RuntimeFrameBudgetContractTests`，覆盖 frame arena owner、budget totals、helper temp query risk、AM2B-A phase 映射，以及 contract 不暴露 Unity runtime handle / EntityManager / EntityQuery 等运行时对象。
+6. 本轮没有迁移所有 helper，也没有创建真实 `GasRuntimeFramePrepareSystemGroup`；AM2B-C 已完成 stream owner、clear/write/read/merge phase 和 deterministic merge policy contract，当时下一步进入 AM2B-D 处理 structural playback gate，当前 AM2B-D 已完成 contract-first 并推进到 AM2B-E。
+
 ## 三级任务：Stream Owner 与 Deterministic Merge
 
 任务ID：`T1-RuntimeCore-AM2B-C`
 
-状态：`候选`
+状态：`已完成（contract-first，Unity验证待补跑）`
 
 任务名：`GAS ECS Runtime - Runtime Core Frame Backbone - Stream Owner 与 Deterministic Merge`
 
@@ -272,11 +281,20 @@ API 选型：
 1. `git diff --check`
 2. `rg -n "StreamOwner|DeterministicMerge|ProofOnly|NativeStream|MergePolicy" Assets/GAS/Runtime Assets/_Test/GAS/Runtime`
 
+本轮 AM2B-C 进展：
+
+1. 新增 `GASRuntimeFrameStreamOwnerContract`，定义 Runtime Core frame stream owner plan，覆盖 `EffectCommand`、`EffectCommandSetByCaller`、`InstantEffectSpec`、`ActiveEffectMutation`、`AttributeDelta` 和 `TypedSimulationFact` 六类 stream。
+2. 当前 `EffectCommandSpecStream` 六个 buffer slot 均被标记为 `SingletonDynamicBuffer` + `MigrationCarrier`，不再被描述为 scale-ready；目标承载按访问模式分别指向 `PerThreadNativeStream`、`OwnerLocalDynamicBuffer` 或 command range auxiliary buffer。
+3. 每个 stream owner entry 已声明 clear / write / read / merge phase、internal buffer capacity、deterministic merge policy、sort key、battle hash 输入和重新选型触发条件。
+4. 重新选型触发覆盖 x50 buffer pressure、x1000 scale gate、buffer externalized、parallel producer、merge cost 主导 spec evaluation 和 battle hash instability。
+5. 新增 `RuntimeStreamOwnerContractTests`，覆盖 migration carrier 标记、NativeStream / owner-local candidate、deterministic merge policy、phase / layout 映射、六个 EffectCommandSpecStream buffer slot 覆盖，以及 contract 不暴露 Unity runtime handle / generated / editor 类型。
+6. 本轮不切换真实 NativeStream，不重写 producer / job，也不把 Debug telemetry 或 Presentation marker 纳入 gameplay deterministic merge；AM2B-D 已补 structural playback gate contract，AM2B-E 已补 Debugger evidence gate 口径，AM2B-F 已补 AM3 / AM5 rebind handoff，真实运行时证据继续留给 AM3 / AM5 后续功能迁移闭合。
+
 ## 三级任务：Structural Playback Gate
 
 任务ID：`T1-RuntimeCore-AM2B-D`
 
-状态：`候选`
+状态：`已完成（contract-first，Unity验证待补跑）`
 
 任务名：`GAS ECS Runtime - Runtime Core Frame Backbone - Structural Playback Gate`
 
@@ -310,11 +328,20 @@ API 选型：
 1. `git diff --check`
 2. `rg -n "StructuralPlayback|RuntimeStructuralChange|ComponentTypeSet|AtPlayback|Cleanup" Assets/GAS/Runtime Assets/_Test/GAS/Runtime`
 
+本轮 AM2B-D 进展：
+
+1. 新增 `GasStructuralPlaybackSystemGroup` 与 `GasEndStructuralEcbSystem` 作为 Runtime Core hot path 的唯一 structural playback gate type anchor；当前仍是 contract target，尚未接入真实 group creation。
+2. 将 `GASSystemScheduleContract` 的 `StructuralPlayback` phase 指向 `GasStructuralPlaybackSystemGroup`，让 phase contract 和后续任务引用同一结构变化屏障。
+3. 新增 `GASRuntimeStructuralPlaybackGateContract`，把 simulation structural entries 统一 route 到 `StructuralPlayback` phase，并声明 `ContractOnly`、`EcbCommandBuffer`、`EntityQueryBulkCandidate`、`ComponentTypeSetBulkCandidate`、`CleanupComponentCandidate`、`EnableablePreferred`、`DirtyPipelineNoStructuralChange`、`ObservationNoPlayback` 和 `ManagedBoundaryOnly` policy。
+4. 明确 observation / managed presentation 不进入 hot path gate；dirty-only entries 不要求 structural playback；direct `EntityManager` 在 route contract 中保持 false。
+5. `GasRuntimeDebugger` 新增 `RecordRuntimeCoreStructuralPlaybackGate`，并在 structural event 文本中输出 `ecbCommands` 与 `bulkQueries` 字段，作为 AM2B-E 接入 Debugger evidence gate 的入口。
+6. 新增 / 扩展 `RuntimeStructuralChangePlanTests` 与 `GasRuntimeDebuggerTests`，覆盖唯一 gate、simulation structural route、bulk / cleanup / dirty policy、observation / managed boundary 排除和 debugger gate tag。
+
 ## 三级任务：Debugger Evidence Gate
 
 任务ID：`T1-RuntimeCore-AM2B-E`
 
-状态：`候选`
+状态：`已完成（contract-first / debugger evidence gate，Unity验证待补跑）`
 
 任务名：`GAS ECS Runtime - Runtime Core Frame Backbone - Debugger Evidence Gate`
 
@@ -347,11 +374,20 @@ API 选型：
 1. `git diff --check`
 2. `rg -n "FrameBackbone|QueryCount|LookupUpdate|AllocatorOwner|DependencyWait|MergeCost|StructuralPlayback" Assets/GAS/Runtime Assets/_Test/GAS/Runtime Assets/AutoChessDemo`
 
+本轮 AM2B-E 进展：
+
+1. 新增 `GASRuntimeDebuggerEvidenceGateContract`，以 contract-first 方式聚合 AM2B-A 到 AM2B-D 的 phase、frame budget、stream owner、deterministic merge、structural playback、Profiler / Journaling 对照、cost split、overhead budget、disable policy 和 Burst warmup policy。
+2. `GasRuntimeDebugger` 新增 `RuntimeCoreFrameBackbone` diagnostic kind、`GasRuntimeFrameBackboneDiagnosticCounters`、snapshot counters、frame backbone event 字段和文本导出。
+3. `RecordRuntimeCoreStructuralPlaybackGate` 现在同时累计 frame backbone 的 recorded structural playback、ECB command 和 bulk query counters，供后续 evidence snapshot 复用。
+4. 新增 `RecordCurrentRuntimeCoreFrameBackboneEvidence` / `RecordRuntimeCoreFrameBackboneEvidence`，将当前 gate plan 写入 Debugger，并输出 `runtimeCoreFrameBackbone|...`、`runtimeCoreFrameBackboneEvidence|...`、`runtimeCoreCostSplit|...` 和 `runtimeCoreDebuggerOverhead|...`。
+5. 扩展 `GasRuntimeDebuggerTests`，覆盖 structural gate counters 进入 frame backbone snapshot，以及 Debugger evidence gate 的 phase、query、lookup、stream、deterministic merge、structural、Profiler / Journaling、cost split、overhead、disable policy 和 hot path managed string 口径。
+6. 本轮仍不自动读取真实 Unity Profiler / Entities Journaling 数据，不迁移真实 SystemGroup creation，不推进 AutoChess 业务拆分；AM2B-F 已负责把 AM3 / AM5 后续任务重绑定到新 backbone，并决定返回 AutoChess 验收前还缺哪些 Runtime Core 任务。
+
 ## 三级任务：AM3 / AM5 Rebind 与交还验证
 
 任务ID：`T1-RuntimeCore-AM2B-F`
 
-状态：`候选`
+状态：`已完成（contract-first / rebind handoff，Unity验证待补跑）`
 
 任务名：`GAS ECS Runtime - Runtime Core Frame Backbone - AM3 / AM5 Rebind 与交还验证`
 
@@ -384,3 +420,12 @@ API 选型：
 
 1. `git diff --check`
 2. `rg -n "AM2B|Runtime Core Frame Backbone|AM3|AM5|当前推荐领取" "方案讨论/针对2.0的ECS架构的迭代方案讨论/当前路线"`
+
+本轮 AM2B-F 进展：
+
+1. 新增 `GASRuntimeFrameBackboneRebindContract`，以 contract-first 方式登记 AM3 / AM5 后续任务必须复用的 AM2B-A 到 AM2B-E 证据：phase contract、frame budget、stream owner、deterministic merge、structural playback gate、Debugger evidence gate、API 选型表、官方文档覆盖和不推进 AutoChess 业务变更。
+2. AM3 entry 已绑定 `CommandIngest / SpecEvaluation / DeltaApply / TypedFactProjection`，覆盖 `EffectCommand / EffectCommandSetByCaller / InstantEffectSpec / AttributeDelta / TypedSimulationFact`，并强制行动报告区分 Boundary request、Core frame command、parallel fan-in stream、structural mutation request 四类 command。
+3. AM5 entry 已绑定 `ActiveEffectLifecycle / DeltaApply / StructuralPlayback`，覆盖 `EffectCommand / ActiveEffectMutation / AttributeDelta / TypedSimulationFact`，并强制行动报告区分 OwnerLocalStore、GlobalIndexedStore、LifecycleCleanupStore、ChunkSkipIndex 四类 store surface。
+4. 新增 `RuntimeFrameBackboneRebindContractTests`，验证 AM2B evidence 完整、AM3 / AM5 rebind entry、AM3 四类 command、AM5 四类 store surface、禁止提前回到 AutoChess 业务路线，以及 contract 不暴露 Unity runtime handle / editor / generated 类型。
+5. 当前下一推荐任务仍为 `GAS ECS Runtime - Runtime Core 重构 - Instant Spec Evaluation 迁移`（任务ID：`T1-RuntimeCore-AM3`）。理由：AM3 已有 activation simple single-target producer、ability cost self producer 与 Timeline ApplyEffects single-target simple instant producer proof，剩余 simple instant producer / typed fact consumer 缺口迁移面小于 AM5 store 生命周期重建，适合作为 Runtime Core backbone 后的第一条功能链路验证。
+6. AM2B-F 不迁移真实 `NativeStream`、不创建真实 `GasRuntimeFramePrepareSystemGroup`、不搬迁真实 structural playback runtime health、不继续推进 AutoChess；这些留给 AM3 / AM5 / 后续 Runtime Core 缺口任务和最终 AutoChess 验收闭合。

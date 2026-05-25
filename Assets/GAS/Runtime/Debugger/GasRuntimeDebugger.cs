@@ -13,6 +13,7 @@ namespace GAS.Runtime
         BufferPressure = 3,
         StructuralChange = 4,
         RuntimeCoreCounters = 5,
+        RuntimeCoreFrameBackbone = 6,
     }
 
     public enum EGasRuntimeDiagnosticSeverity : byte
@@ -83,6 +84,34 @@ namespace GAS.Runtime
         public int RuntimeCoreDependencyWaitRiskCount;
         public int RuntimeCoreWorldUpdateAllocatorOwnerCount;
         public int RuntimeCoreRewindableAllocatorCandidateCount;
+        public int RuntimeCoreFrameBackbonePhaseCount;
+        public int RuntimeCoreFrameBackboneContractOnlyPhaseCount;
+        public int RuntimeCoreFrameBackboneStreamCount;
+        public int RuntimeCoreFrameBackboneMigrationCarrierCount;
+        public int RuntimeCoreFrameBackboneNativeStreamCandidateCount;
+        public int RuntimeCoreFrameBackboneOwnerLocalBufferCandidateCount;
+        public int RuntimeCoreFrameBackboneBattleHashStreamCount;
+        public int RuntimeCoreFrameBackboneDeterministicMergePolicyCount;
+        public int RuntimeCoreFrameBackboneMergeCostMeasuredCount;
+        public int RuntimeCoreFrameBackboneMergeCostMicroseconds;
+        public int RuntimeCoreFrameBackboneRequiredStructuralPlaybackCount;
+        public int RuntimeCoreFrameBackboneRecordedStructuralPlaybackCount;
+        public int RuntimeCoreFrameBackboneEcbCommandCount;
+        public int RuntimeCoreFrameBackboneBulkQueryCount;
+        public int RuntimeCoreFrameBackboneProfilerMarkerCount;
+        public int RuntimeCoreFrameBackboneJournalingMarkerCount;
+        public int RuntimeCoreFrameBackboneCoreCostGroupCount;
+        public int RuntimeCoreFrameBackbonePhysicsCostGroupCount;
+        public int RuntimeCoreFrameBackboneRenderCostGroupCount;
+        public int RuntimeCoreFrameBackboneRunnerCostGroupCount;
+        public int RuntimeCoreFrameBackbonePhysicsDisabledReasonCount;
+        public int RuntimeCoreFrameBackboneRenderDisabledReasonCount;
+        public int RuntimeCoreFrameBackboneDebuggerOverheadBudgetMicroseconds;
+        public int RuntimeCoreFrameBackboneSamplingInterval;
+        public int RuntimeCoreFrameBackboneDisablePolicyCount;
+        public int RuntimeCoreFrameBackboneBurstWarmupPolicyCount;
+        public int RuntimeCoreFrameBackboneHotPathManagedStringCount;
+        public int RuntimeCoreFrameBackboneEvidenceMask;
     }
 
     public struct BGasRuntimeDiagnosticEvent : IBufferElementData
@@ -130,6 +159,34 @@ namespace GAS.Runtime
         public int DependencyWaitRiskCount;
         public int WorldUpdateAllocatorOwnerCount;
         public int RewindableAllocatorCandidateCount;
+        public int FrameBackbonePhaseCount;
+        public int FrameBackboneContractOnlyPhaseCount;
+        public int FrameBackboneStreamCount;
+        public int FrameBackboneMigrationCarrierCount;
+        public int FrameBackboneNativeStreamCandidateCount;
+        public int FrameBackboneOwnerLocalBufferCandidateCount;
+        public int FrameBackboneBattleHashStreamCount;
+        public int FrameBackboneDeterministicMergePolicyCount;
+        public int FrameBackboneMergeCostMeasuredCount;
+        public int FrameBackboneMergeCostMicroseconds;
+        public int FrameBackboneRequiredStructuralPlaybackCount;
+        public int FrameBackboneRecordedStructuralPlaybackCount;
+        public int FrameBackboneEcbCommandCount;
+        public int FrameBackboneBulkQueryCount;
+        public int FrameBackboneProfilerMarkerCount;
+        public int FrameBackboneJournalingMarkerCount;
+        public int FrameBackboneCoreCostGroupCount;
+        public int FrameBackbonePhysicsCostGroupCount;
+        public int FrameBackboneRenderCostGroupCount;
+        public int FrameBackboneRunnerCostGroupCount;
+        public int FrameBackbonePhysicsDisabledReasonCount;
+        public int FrameBackboneRenderDisabledReasonCount;
+        public int FrameBackboneDebuggerOverheadBudgetMicroseconds;
+        public int FrameBackboneSamplingInterval;
+        public int FrameBackboneDisablePolicyCount;
+        public int FrameBackboneBurstWarmupPolicyCount;
+        public int FrameBackboneHotPathManagedStringCount;
+        public int FrameBackboneEvidenceMask;
         public float Ratio;
     }
 
@@ -272,19 +329,375 @@ namespace GAS.Runtime
         }
     }
 
+    public struct GasRuntimeCoreCounterQueries : IDisposable
+    {
+        private readonly bool _ownsQueries;
+
+        public GasRuntimeCoreCounterQueries(
+            EntityQuery applyGameplayEffectRequests,
+            EntityQuery removeGameplayEffectRequests,
+            EntityQuery abilityCommandRequests,
+            EntityQuery ascCommandRequests,
+            EntityQuery ascInitializeRequests,
+            EntityQuery ascDestroyRequests,
+            EntityQuery effectSpecs,
+            EntityQuery effectLifecycles,
+            EntityQuery effectDestroys,
+            EntityQuery activeEffectStores,
+            EntityQuery presentationOutboxes,
+            bool ownsQueries)
+        {
+            ApplyGameplayEffectRequests = applyGameplayEffectRequests;
+            RemoveGameplayEffectRequests = removeGameplayEffectRequests;
+            AbilityCommandRequests = abilityCommandRequests;
+            AscCommandRequests = ascCommandRequests;
+            AscInitializeRequests = ascInitializeRequests;
+            AscDestroyRequests = ascDestroyRequests;
+            EffectSpecs = effectSpecs;
+            EffectLifecycles = effectLifecycles;
+            EffectDestroys = effectDestroys;
+            ActiveEffectStores = activeEffectStores;
+            PresentationOutboxes = presentationOutboxes;
+            _ownsQueries = ownsQueries;
+        }
+
+        public EntityQuery ApplyGameplayEffectRequests { get; }
+
+        public EntityQuery RemoveGameplayEffectRequests { get; }
+
+        public EntityQuery AbilityCommandRequests { get; }
+
+        public EntityQuery AscCommandRequests { get; }
+
+        public EntityQuery AscInitializeRequests { get; }
+
+        public EntityQuery AscDestroyRequests { get; }
+
+        public EntityQuery EffectSpecs { get; }
+
+        public EntityQuery EffectLifecycles { get; }
+
+        public EntityQuery EffectDestroys { get; }
+
+        public EntityQuery ActiveEffectStores { get; }
+
+        public EntityQuery PresentationOutboxes { get; }
+
+        public static GasRuntimeCoreCounterQueries CreateOwned(EntityManager em)
+        {
+            return new GasRuntimeCoreCounterQueries(
+                CreateOwnedQuery<CApplyGameplayEffectRequest>(em),
+                CreateOwnedQuery<CRemoveGameplayEffectRequest>(em),
+                CreateOwnedQuery<CAbilityCommandRequest>(em),
+                CreateOwnedQuery<CAscCommandRequest>(em),
+                CreateOwnedQuery<CAscInitializeRequest>(em),
+                CreateOwnedQuery<CAscDestroyRequest>(em),
+                CreateOwnedQuery<CEffectSpecData>(em),
+                CreateOwnedQuery<CEffectLifecycle>(em),
+                CreateOwnedQuery<CEffectDestroy>(em),
+                em.CreateEntityQuery(new EntityQueryDesc
+                {
+                    All = new[]
+                    {
+                        ComponentType.ReadOnly<CActiveEffectStore>(),
+                        ComponentType.ReadOnly<BActiveEffectSlot>(),
+                    },
+                }),
+                CreateOwnedQuery<BPresentationEvent>(em),
+                ownsQueries: true);
+        }
+
+        public static GasRuntimeCoreCounterQueries Create(ref SystemState state)
+        {
+            return new GasRuntimeCoreCounterQueries(
+                CreateSystemQuery<CApplyGameplayEffectRequest>(ref state),
+                CreateSystemQuery<CRemoveGameplayEffectRequest>(ref state),
+                CreateSystemQuery<CAbilityCommandRequest>(ref state),
+                CreateSystemQuery<CAscCommandRequest>(ref state),
+                CreateSystemQuery<CAscInitializeRequest>(ref state),
+                CreateSystemQuery<CAscDestroyRequest>(ref state),
+                CreateSystemQuery<CEffectSpecData>(ref state),
+                CreateSystemQuery<CEffectLifecycle>(ref state),
+                CreateSystemQuery<CEffectDestroy>(ref state),
+                state.GetEntityQuery(new EntityQueryDesc
+                {
+                    All = new[]
+                    {
+                        ComponentType.ReadOnly<CActiveEffectStore>(),
+                        ComponentType.ReadOnly<BActiveEffectSlot>(),
+                    },
+                }),
+                CreateSystemQuery<BPresentationEvent>(ref state),
+                ownsQueries: false);
+        }
+
+        public int CountRequestEntities()
+        {
+            return Count(ApplyGameplayEffectRequests)
+                   + Count(RemoveGameplayEffectRequests)
+                   + Count(AbilityCommandRequests)
+                   + Count(AscCommandRequests)
+                   + Count(AscInitializeRequests)
+                   + Count(AscDestroyRequests);
+        }
+
+        public int CountActiveEffectEntities()
+        {
+            return Math.Max(Count(EffectSpecs), Count(EffectLifecycles));
+        }
+
+        public int CountApplyRequestEntities()
+        {
+            return Count(ApplyGameplayEffectRequests);
+        }
+
+        public int CountDestroyMarkers()
+        {
+            return Count(EffectDestroys)
+                   + Count(RemoveGameplayEffectRequests)
+                   + Count(AscDestroyRequests);
+        }
+
+        public void Dispose()
+        {
+            if (!_ownsQueries)
+                return;
+
+            ApplyGameplayEffectRequests.Dispose();
+            RemoveGameplayEffectRequests.Dispose();
+            AbilityCommandRequests.Dispose();
+            AscCommandRequests.Dispose();
+            AscInitializeRequests.Dispose();
+            AscDestroyRequests.Dispose();
+            EffectSpecs.Dispose();
+            EffectLifecycles.Dispose();
+            EffectDestroys.Dispose();
+            ActiveEffectStores.Dispose();
+            PresentationOutboxes.Dispose();
+        }
+
+        private static EntityQuery CreateOwnedQuery<T>(EntityManager em)
+        {
+            return em.CreateEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<T>(),
+                },
+            });
+        }
+
+        private static EntityQuery CreateSystemQuery<T>(ref SystemState state)
+        {
+            return state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<T>(),
+                },
+            });
+        }
+
+        private static int Count(EntityQuery query)
+        {
+            return query.CalculateEntityCount();
+        }
+    }
+
+    public readonly struct GasRuntimeFrameBackboneDiagnosticCounters
+    {
+        public readonly int PhaseCount;
+        public readonly int ContractOnlyPhaseCount;
+        public readonly int QueryBudget;
+        public readonly int FilteredQueryBudget;
+        public readonly int UnfilteredQueryBudget;
+        public readonly int LookupUpdateBudget;
+        public readonly int RandomLookupBudget;
+        public readonly int SyncQueryBudget;
+        public readonly int DependencyWaitRiskCount;
+        public readonly int WorldUpdateAllocatorOwnerCount;
+        public readonly int RewindableAllocatorCandidateCount;
+        public readonly int StreamCount;
+        public readonly int MigrationCarrierCount;
+        public readonly int NativeStreamCandidateCount;
+        public readonly int OwnerLocalBufferCandidateCount;
+        public readonly int BattleHashStreamCount;
+        public readonly int DeterministicMergePolicyCount;
+        public readonly int MergeCostMeasuredCount;
+        public readonly int MergeCostMicroseconds;
+        public readonly int RequiredStructuralPlaybackCount;
+        public readonly int RecordedStructuralPlaybackCount;
+        public readonly int EcbCommandCount;
+        public readonly int BulkQueryCount;
+        public readonly int ProfilerMarkerCount;
+        public readonly int JournalingMarkerCount;
+        public readonly int CoreCostGroupCount;
+        public readonly int PhysicsCostGroupCount;
+        public readonly int RenderCostGroupCount;
+        public readonly int RunnerCostGroupCount;
+        public readonly int PhysicsDisabledReasonCount;
+        public readonly int RenderDisabledReasonCount;
+        public readonly int DebuggerOverheadBudgetMicroseconds;
+        public readonly int SamplingInterval;
+        public readonly int DisablePolicyCount;
+        public readonly int BurstWarmupPolicyCount;
+        public readonly int HotPathManagedStringCount;
+        public readonly int EvidenceMask;
+
+        public static GasRuntimeFrameBackboneDiagnosticCounters Empty => default;
+
+        public GasRuntimeFrameBackboneDiagnosticCounters(
+            int phaseCount,
+            int contractOnlyPhaseCount,
+            int queryBudget,
+            int filteredQueryBudget,
+            int unfilteredQueryBudget,
+            int lookupUpdateBudget,
+            int randomLookupBudget,
+            int syncQueryBudget,
+            int dependencyWaitRiskCount,
+            int worldUpdateAllocatorOwnerCount,
+            int rewindableAllocatorCandidateCount,
+            int streamCount,
+            int migrationCarrierCount,
+            int nativeStreamCandidateCount,
+            int ownerLocalBufferCandidateCount,
+            int battleHashStreamCount,
+            int deterministicMergePolicyCount,
+            int mergeCostMeasuredCount,
+            int mergeCostMicroseconds,
+            int requiredStructuralPlaybackCount,
+            int recordedStructuralPlaybackCount,
+            int ecbCommandCount,
+            int bulkQueryCount,
+            int profilerMarkerCount,
+            int journalingMarkerCount,
+            int coreCostGroupCount,
+            int physicsCostGroupCount,
+            int renderCostGroupCount,
+            int runnerCostGroupCount,
+            int physicsDisabledReasonCount,
+            int renderDisabledReasonCount,
+            int debuggerOverheadBudgetMicroseconds,
+            int samplingInterval,
+            int disablePolicyCount,
+            int burstWarmupPolicyCount,
+            int hotPathManagedStringCount,
+            int evidenceMask)
+        {
+            PhaseCount = phaseCount;
+            ContractOnlyPhaseCount = contractOnlyPhaseCount;
+            QueryBudget = queryBudget;
+            FilteredQueryBudget = filteredQueryBudget;
+            UnfilteredQueryBudget = unfilteredQueryBudget;
+            LookupUpdateBudget = lookupUpdateBudget;
+            RandomLookupBudget = randomLookupBudget;
+            SyncQueryBudget = syncQueryBudget;
+            DependencyWaitRiskCount = dependencyWaitRiskCount;
+            WorldUpdateAllocatorOwnerCount = worldUpdateAllocatorOwnerCount;
+            RewindableAllocatorCandidateCount = rewindableAllocatorCandidateCount;
+            StreamCount = streamCount;
+            MigrationCarrierCount = migrationCarrierCount;
+            NativeStreamCandidateCount = nativeStreamCandidateCount;
+            OwnerLocalBufferCandidateCount = ownerLocalBufferCandidateCount;
+            BattleHashStreamCount = battleHashStreamCount;
+            DeterministicMergePolicyCount = deterministicMergePolicyCount;
+            MergeCostMeasuredCount = mergeCostMeasuredCount;
+            MergeCostMicroseconds = mergeCostMicroseconds;
+            RequiredStructuralPlaybackCount = requiredStructuralPlaybackCount;
+            RecordedStructuralPlaybackCount = recordedStructuralPlaybackCount;
+            EcbCommandCount = ecbCommandCount;
+            BulkQueryCount = bulkQueryCount;
+            ProfilerMarkerCount = profilerMarkerCount;
+            JournalingMarkerCount = journalingMarkerCount;
+            CoreCostGroupCount = coreCostGroupCount;
+            PhysicsCostGroupCount = physicsCostGroupCount;
+            RenderCostGroupCount = renderCostGroupCount;
+            RunnerCostGroupCount = runnerCostGroupCount;
+            PhysicsDisabledReasonCount = physicsDisabledReasonCount;
+            RenderDisabledReasonCount = renderDisabledReasonCount;
+            DebuggerOverheadBudgetMicroseconds = debuggerOverheadBudgetMicroseconds;
+            SamplingInterval = samplingInterval;
+            DisablePolicyCount = disablePolicyCount;
+            BurstWarmupPolicyCount = burstWarmupPolicyCount;
+            HotPathManagedStringCount = hotPathManagedStringCount;
+            EvidenceMask = evidenceMask;
+        }
+
+        public GasRuntimeFrameBackboneDiagnosticCounters(
+            in GASRuntimeDebuggerEvidenceGatePlan plan,
+            int recordedStructuralPlaybackCount = 0,
+            int ecbCommandCount = 0,
+            int bulkQueryCount = 0)
+        {
+            PhaseCount = plan.PhaseCount;
+            ContractOnlyPhaseCount = plan.ContractOnlyPhaseCount;
+            QueryBudget = plan.QueryBudget;
+            FilteredQueryBudget = plan.FilteredQueryBudget;
+            UnfilteredQueryBudget = plan.UnfilteredQueryBudget;
+            LookupUpdateBudget = plan.LookupUpdateBudget;
+            RandomLookupBudget = plan.RandomLookupBudget;
+            SyncQueryBudget = plan.SyncQueryBudget;
+            DependencyWaitRiskCount = plan.DependencyWaitRiskCount;
+            WorldUpdateAllocatorOwnerCount = plan.WorldUpdateAllocatorOwnerCount;
+            RewindableAllocatorCandidateCount = plan.RewindableAllocatorCandidateCount;
+            StreamCount = plan.StreamCount;
+            MigrationCarrierCount = plan.MigrationCarrierCount;
+            NativeStreamCandidateCount = plan.NativeStreamCandidateCount;
+            OwnerLocalBufferCandidateCount = plan.OwnerLocalBufferCandidateCount;
+            BattleHashStreamCount = plan.BattleHashStreamCount;
+            DeterministicMergePolicyCount = plan.DeterministicMergePolicyCount;
+            MergeCostMeasuredCount = plan.MergeCostMeasuredCount;
+            MergeCostMicroseconds = plan.MergeCostMicroseconds;
+            RequiredStructuralPlaybackCount = plan.RequiredStructuralPlaybackCount;
+            RecordedStructuralPlaybackCount = recordedStructuralPlaybackCount;
+            EcbCommandCount = ecbCommandCount;
+            BulkQueryCount = bulkQueryCount;
+            ProfilerMarkerCount = plan.ProfilerMarkerCount;
+            JournalingMarkerCount = plan.JournalingMarkerCount;
+            CoreCostGroupCount = plan.CoreCostGroupCount;
+            PhysicsCostGroupCount = plan.PhysicsCostGroupCount;
+            RenderCostGroupCount = plan.RenderCostGroupCount;
+            RunnerCostGroupCount = plan.RunnerCostGroupCount;
+            PhysicsDisabledReasonCount = plan.PhysicsDisabledReasonCount;
+            RenderDisabledReasonCount = plan.RenderDisabledReasonCount;
+            DebuggerOverheadBudgetMicroseconds = plan.Gate.OverheadBudgetMicroseconds;
+            SamplingInterval = plan.Gate.SamplingInterval;
+            DisablePolicyCount = plan.DisablePolicyCount;
+            BurstWarmupPolicyCount = plan.BurstWarmupPolicyCount;
+            HotPathManagedStringCount = plan.HotPathManagedStringCount;
+            EvidenceMask = (int)plan.Gate.Coverage;
+        }
+    }
+
     public readonly struct GasRuntimeDiagnosticSnapshot
     {
         public readonly GasRuntimeDiagnosticStats Stats;
         public readonly GasRuntimeCoreDiagnosticCounters CoreCounters;
+        public readonly GasRuntimeFrameBackboneDiagnosticCounters FrameBackboneCounters;
         public readonly BGasRuntimeDiagnosticEvent[] Events;
 
         public GasRuntimeDiagnosticSnapshot(
             in GasRuntimeDiagnosticStats stats,
             in GasRuntimeCoreDiagnosticCounters coreCounters,
             BGasRuntimeDiagnosticEvent[] events)
+            : this(
+                stats,
+                coreCounters,
+                GasRuntimeFrameBackboneDiagnosticCounters.Empty,
+                events)
+        {
+        }
+
+        public GasRuntimeDiagnosticSnapshot(
+            in GasRuntimeDiagnosticStats stats,
+            in GasRuntimeCoreDiagnosticCounters coreCounters,
+            in GasRuntimeFrameBackboneDiagnosticCounters frameBackboneCounters,
+            BGasRuntimeDiagnosticEvent[] events)
         {
             Stats = stats;
             CoreCounters = coreCounters;
+            FrameBackboneCounters = frameBackboneCounters;
             Events = events ?? Array.Empty<BGasRuntimeDiagnosticEvent>();
         }
 
@@ -365,6 +778,34 @@ namespace GAS.Runtime
             state.RuntimeCoreDependencyWaitRiskCount = 0;
             state.RuntimeCoreWorldUpdateAllocatorOwnerCount = 0;
             state.RuntimeCoreRewindableAllocatorCandidateCount = 0;
+            state.RuntimeCoreFrameBackbonePhaseCount = 0;
+            state.RuntimeCoreFrameBackboneContractOnlyPhaseCount = 0;
+            state.RuntimeCoreFrameBackboneStreamCount = 0;
+            state.RuntimeCoreFrameBackboneMigrationCarrierCount = 0;
+            state.RuntimeCoreFrameBackboneNativeStreamCandidateCount = 0;
+            state.RuntimeCoreFrameBackboneOwnerLocalBufferCandidateCount = 0;
+            state.RuntimeCoreFrameBackboneBattleHashStreamCount = 0;
+            state.RuntimeCoreFrameBackboneDeterministicMergePolicyCount = 0;
+            state.RuntimeCoreFrameBackboneMergeCostMeasuredCount = 0;
+            state.RuntimeCoreFrameBackboneMergeCostMicroseconds = 0;
+            state.RuntimeCoreFrameBackboneRequiredStructuralPlaybackCount = 0;
+            state.RuntimeCoreFrameBackboneRecordedStructuralPlaybackCount = 0;
+            state.RuntimeCoreFrameBackboneEcbCommandCount = 0;
+            state.RuntimeCoreFrameBackboneBulkQueryCount = 0;
+            state.RuntimeCoreFrameBackboneProfilerMarkerCount = 0;
+            state.RuntimeCoreFrameBackboneJournalingMarkerCount = 0;
+            state.RuntimeCoreFrameBackboneCoreCostGroupCount = 0;
+            state.RuntimeCoreFrameBackbonePhysicsCostGroupCount = 0;
+            state.RuntimeCoreFrameBackboneRenderCostGroupCount = 0;
+            state.RuntimeCoreFrameBackboneRunnerCostGroupCount = 0;
+            state.RuntimeCoreFrameBackbonePhysicsDisabledReasonCount = 0;
+            state.RuntimeCoreFrameBackboneRenderDisabledReasonCount = 0;
+            state.RuntimeCoreFrameBackboneDebuggerOverheadBudgetMicroseconds = 0;
+            state.RuntimeCoreFrameBackboneSamplingInterval = 0;
+            state.RuntimeCoreFrameBackboneDisablePolicyCount = 0;
+            state.RuntimeCoreFrameBackboneBurstWarmupPolicyCount = 0;
+            state.RuntimeCoreFrameBackboneHotPathManagedStringCount = 0;
+            state.RuntimeCoreFrameBackboneEvidenceMask = 0;
             em.SetComponentData(debuggerEntity, state);
             em.GetBuffer<BGasRuntimeDiagnosticEvent>(debuggerEntity).Clear();
         }
@@ -517,19 +958,20 @@ namespace GAS.Runtime
             Entity eventBusEntity,
             Entity eventLogSinkEntity)
         {
-            var requestEntityCount = CountEntitiesWith<CApplyGameplayEffectRequest>(em)
-                                     + CountEntitiesWith<CRemoveGameplayEffectRequest>(em)
-                                     + CountEntitiesWith<CAbilityCommandRequest>(em)
-                                     + CountEntitiesWith<CAscCommandRequest>(em)
-                                     + CountEntitiesWith<CAscInitializeRequest>(em)
-                                     + CountEntitiesWith<CAscDestroyRequest>(em);
-            var activeEffectEntityCount = Math.Max(
-                CountEntitiesWith<CEffectSpecData>(em),
-                CountEntitiesWith<CEffectLifecycle>(em));
-            var applyRequestEntityCount = CountEntitiesWith<CApplyGameplayEffectRequest>(em);
-            var destroyMarkerCount = CountEntitiesWith<CEffectDestroy>(em)
-                                     + CountEntitiesWith<CRemoveGameplayEffectRequest>(em)
-                                     + CountEntitiesWith<CAscDestroyRequest>(em);
+            using var queries = GasRuntimeCoreCounterQueries.CreateOwned(em);
+            return CollectRuntimeCoreCounters(em, eventBusEntity, eventLogSinkEntity, queries);
+        }
+
+        public static GasRuntimeCoreDiagnosticCounters CollectRuntimeCoreCounters(
+            EntityManager em,
+            Entity eventBusEntity,
+            Entity eventLogSinkEntity,
+            in GasRuntimeCoreCounterQueries queries)
+        {
+            var requestEntityCount = queries.CountRequestEntities();
+            var activeEffectEntityCount = queries.CountActiveEffectEntities();
+            var applyRequestEntityCount = queries.CountApplyRequestEntities();
+            var destroyMarkerCount = queries.CountDestroyMarkers();
 
             ReadEventBusCounters(
                 em,
@@ -550,6 +992,7 @@ namespace GAS.Runtime
                 out var typedFactCount);
             ReadActiveEffectStoreCounters(
                 em,
+                queries.ActiveEffectStores,
                 out var activeEffectStoreOwnerCount,
                 out var activeEffectSlotCount,
                 out var activeEffectSlotCapacity,
@@ -570,7 +1013,7 @@ namespace GAS.Runtime
             var streamBufferPeak = Math.Max(
                 Math.Max(effectCommandCount, instantSpecCount),
                 Math.Max(attributeDeltaCount, typedFactCount));
-            var presentationCount = CountPresentationOutboxEvents(em, eventBusEntity);
+            var presentationCount = CountPresentationOutboxEvents(em, eventBusEntity, queries.PresentationOutboxes);
             var currentFrame = ResolveCurrentFrame(em);
             var presentationCursorLag = CalculatePresentationCursorLag(
                 em,
@@ -639,6 +1082,18 @@ namespace GAS.Runtime
             RecordRuntimeCoreCounters(em, debuggerEntity, frame, counters);
         }
 
+        public static void CollectAndRecordRuntimeCoreCounters(
+            EntityManager em,
+            Entity debuggerEntity,
+            int frame,
+            Entity eventBusEntity,
+            Entity eventLogSinkEntity,
+            in GasRuntimeCoreCounterQueries queries)
+        {
+            var counters = CollectRuntimeCoreCounters(em, eventBusEntity, eventLogSinkEntity, queries);
+            RecordRuntimeCoreCounters(em, debuggerEntity, frame, counters);
+        }
+
         public static void RecordRuntimeCoreEcbPlayback(
             EntityManager em,
             int frame,
@@ -684,23 +1139,130 @@ namespace GAS.Runtime
             em.SetComponentData(debuggerEntity, state);
         }
 
-        public static int ResolveCurrentFrame(EntityManager em)
+        public static void RecordRuntimeCoreStructuralPlaybackGate(
+            EntityManager em,
+            Entity debuggerEntity,
+            int frame,
+            EGasRuntimeDiagnosticModule module,
+            int playbackCount = 1,
+            int ecbCommandCount = 0,
+            int bulkQueryCount = 0)
         {
-            if (GASManager.IsInitialized && GASManager.EntityManager.Equals(em))
+            if ((playbackCount <= 0 && ecbCommandCount <= 0 && bulkQueryCount <= 0)
+                || !TryGetWritableLog(em, debuggerEntity, out var state, out var log))
             {
-                var globalTimer = GASManager.EntityGlobalTimer;
-                if (globalTimer != Entity.Null
-                    && em.Exists(globalTimer)
-                    && em.HasComponent<GlobalTimer>(globalTimer))
-                {
-                    return em.GetComponentData<GlobalTimer>(globalTimer).Frame;
-                }
+                return;
             }
 
-            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<GlobalTimer>());
-            return query.CalculateEntityCount() == 1
-                ? query.GetSingleton<GlobalTimer>().Frame
-                : 0;
+            if (playbackCount > 0)
+                state.RuntimeCoreEcbPlaybackCount += playbackCount;
+            if (playbackCount > 0)
+                state.RuntimeCoreFrameBackboneRecordedStructuralPlaybackCount += playbackCount;
+            if (ecbCommandCount > 0)
+                state.RuntimeCoreFrameBackboneEcbCommandCount += ecbCommandCount;
+            if (bulkQueryCount > 0)
+                state.RuntimeCoreFrameBackboneBulkQueryCount += bulkQueryCount;
+
+            Append(
+                log,
+                ref state,
+                new BGasRuntimeDiagnosticEvent
+                {
+                    Frame = frame,
+                    Kind = EGasRuntimeDiagnosticKind.StructuralChange,
+                    Severity = EGasRuntimeDiagnosticSeverity.Trace,
+                    Module = module,
+                    GroupName = GASRuntimeStructuralPlaybackGateNames.DebuggerGroupName,
+                    EcbPlaybackCount = playbackCount,
+                    ValueA = ecbCommandCount,
+                    ValueB = bulkQueryCount,
+                });
+
+            ApplyRetention(log, ref state);
+            em.SetComponentData(debuggerEntity, state);
+        }
+
+        public static void RecordCurrentRuntimeCoreFrameBackboneEvidence(
+            EntityManager em,
+            Entity debuggerEntity,
+            int frame)
+        {
+            var plan = GASRuntimeDebuggerEvidenceGatePlanner.CreateCurrent();
+            RecordRuntimeCoreFrameBackboneEvidence(em, debuggerEntity, frame, plan);
+        }
+
+        public static void RecordRuntimeCoreFrameBackboneEvidence(
+            EntityManager em,
+            Entity debuggerEntity,
+            int frame,
+            in GASRuntimeDebuggerEvidenceGatePlan plan)
+        {
+            if (!TryGetWritableLog(em, debuggerEntity, out var state, out var log))
+                return;
+
+            var counters = new GasRuntimeFrameBackboneDiagnosticCounters(
+                plan,
+                state.RuntimeCoreFrameBackboneRecordedStructuralPlaybackCount,
+                state.RuntimeCoreFrameBackboneEcbCommandCount,
+                state.RuntimeCoreFrameBackboneBulkQueryCount);
+            ApplyRuntimeCoreFrameBackboneCounters(ref state, counters);
+
+            Append(
+                log,
+                ref state,
+                new BGasRuntimeDiagnosticEvent
+                {
+                    Frame = frame,
+                    Kind = EGasRuntimeDiagnosticKind.RuntimeCoreFrameBackbone,
+                    Severity = EGasRuntimeDiagnosticSeverity.Trace,
+                    Module = EGasRuntimeDiagnosticModule.Runtime,
+                    GroupName = GASRuntimeDebuggerEvidenceGateNames.DebuggerGroupName,
+                    FrameBackbonePhaseCount = counters.PhaseCount,
+                    FrameBackboneContractOnlyPhaseCount = counters.ContractOnlyPhaseCount,
+                    QueryBudget = counters.QueryBudget,
+                    FilteredQueryBudget = counters.FilteredQueryBudget,
+                    UnfilteredQueryBudget = counters.UnfilteredQueryBudget,
+                    LookupUpdateBudget = counters.LookupUpdateBudget,
+                    RandomLookupBudget = counters.RandomLookupBudget,
+                    SyncQueryBudget = counters.SyncQueryBudget,
+                    DependencyWaitRiskCount = counters.DependencyWaitRiskCount,
+                    WorldUpdateAllocatorOwnerCount = counters.WorldUpdateAllocatorOwnerCount,
+                    RewindableAllocatorCandidateCount = counters.RewindableAllocatorCandidateCount,
+                    FrameBackboneStreamCount = counters.StreamCount,
+                    FrameBackboneMigrationCarrierCount = counters.MigrationCarrierCount,
+                    FrameBackboneNativeStreamCandidateCount = counters.NativeStreamCandidateCount,
+                    FrameBackboneOwnerLocalBufferCandidateCount = counters.OwnerLocalBufferCandidateCount,
+                    FrameBackboneBattleHashStreamCount = counters.BattleHashStreamCount,
+                    FrameBackboneDeterministicMergePolicyCount = counters.DeterministicMergePolicyCount,
+                    FrameBackboneMergeCostMeasuredCount = counters.MergeCostMeasuredCount,
+                    FrameBackboneMergeCostMicroseconds = counters.MergeCostMicroseconds,
+                    FrameBackboneRequiredStructuralPlaybackCount = counters.RequiredStructuralPlaybackCount,
+                    FrameBackboneRecordedStructuralPlaybackCount = counters.RecordedStructuralPlaybackCount,
+                    FrameBackboneEcbCommandCount = counters.EcbCommandCount,
+                    FrameBackboneBulkQueryCount = counters.BulkQueryCount,
+                    FrameBackboneProfilerMarkerCount = counters.ProfilerMarkerCount,
+                    FrameBackboneJournalingMarkerCount = counters.JournalingMarkerCount,
+                    FrameBackboneCoreCostGroupCount = counters.CoreCostGroupCount,
+                    FrameBackbonePhysicsCostGroupCount = counters.PhysicsCostGroupCount,
+                    FrameBackboneRenderCostGroupCount = counters.RenderCostGroupCount,
+                    FrameBackboneRunnerCostGroupCount = counters.RunnerCostGroupCount,
+                    FrameBackbonePhysicsDisabledReasonCount = counters.PhysicsDisabledReasonCount,
+                    FrameBackboneRenderDisabledReasonCount = counters.RenderDisabledReasonCount,
+                    FrameBackboneDebuggerOverheadBudgetMicroseconds = counters.DebuggerOverheadBudgetMicroseconds,
+                    FrameBackboneSamplingInterval = counters.SamplingInterval,
+                    FrameBackboneDisablePolicyCount = counters.DisablePolicyCount,
+                    FrameBackboneBurstWarmupPolicyCount = counters.BurstWarmupPolicyCount,
+                    FrameBackboneHotPathManagedStringCount = counters.HotPathManagedStringCount,
+                    FrameBackboneEvidenceMask = counters.EvidenceMask,
+                });
+
+            ApplyRetention(log, ref state);
+            em.SetComponentData(debuggerEntity, state);
+        }
+
+        public static int ResolveCurrentFrame(EntityManager em)
+        {
+            return GASRuntimeFrameContext.ResolveCurrentFrame(em);
         }
 
         public static void RecordRuntimeCoreCounters(
@@ -856,6 +1418,93 @@ namespace GAS.Runtime
             em.SetComponentData(debuggerEntity, state);
         }
 
+        private static void ApplyRuntimeCoreFrameBackboneCounters(
+            ref CGasRuntimeDebugger state,
+            in GasRuntimeFrameBackboneDiagnosticCounters counters)
+        {
+            state.RuntimeCoreQueryBudget = counters.QueryBudget;
+            state.RuntimeCoreFilteredQueryBudget = counters.FilteredQueryBudget;
+            state.RuntimeCoreUnfilteredQueryBudget = counters.UnfilteredQueryBudget;
+            state.RuntimeCoreLookupUpdateBudget = counters.LookupUpdateBudget;
+            state.RuntimeCoreRandomLookupBudget = counters.RandomLookupBudget;
+            state.RuntimeCoreSyncQueryBudget = counters.SyncQueryBudget;
+            state.RuntimeCoreDependencyWaitRiskCount = counters.DependencyWaitRiskCount;
+            state.RuntimeCoreWorldUpdateAllocatorOwnerCount = counters.WorldUpdateAllocatorOwnerCount;
+            state.RuntimeCoreRewindableAllocatorCandidateCount = counters.RewindableAllocatorCandidateCount;
+            state.RuntimeCoreFrameBackbonePhaseCount = counters.PhaseCount;
+            state.RuntimeCoreFrameBackboneContractOnlyPhaseCount = counters.ContractOnlyPhaseCount;
+            state.RuntimeCoreFrameBackboneStreamCount = counters.StreamCount;
+            state.RuntimeCoreFrameBackboneMigrationCarrierCount = counters.MigrationCarrierCount;
+            state.RuntimeCoreFrameBackboneNativeStreamCandidateCount = counters.NativeStreamCandidateCount;
+            state.RuntimeCoreFrameBackboneOwnerLocalBufferCandidateCount = counters.OwnerLocalBufferCandidateCount;
+            state.RuntimeCoreFrameBackboneBattleHashStreamCount = counters.BattleHashStreamCount;
+            state.RuntimeCoreFrameBackboneDeterministicMergePolicyCount = counters.DeterministicMergePolicyCount;
+            state.RuntimeCoreFrameBackboneMergeCostMeasuredCount = counters.MergeCostMeasuredCount;
+            state.RuntimeCoreFrameBackboneMergeCostMicroseconds = counters.MergeCostMicroseconds;
+            state.RuntimeCoreFrameBackboneRequiredStructuralPlaybackCount = counters.RequiredStructuralPlaybackCount;
+            state.RuntimeCoreFrameBackboneRecordedStructuralPlaybackCount = counters.RecordedStructuralPlaybackCount;
+            state.RuntimeCoreFrameBackboneEcbCommandCount = counters.EcbCommandCount;
+            state.RuntimeCoreFrameBackboneBulkQueryCount = counters.BulkQueryCount;
+            state.RuntimeCoreFrameBackboneProfilerMarkerCount = counters.ProfilerMarkerCount;
+            state.RuntimeCoreFrameBackboneJournalingMarkerCount = counters.JournalingMarkerCount;
+            state.RuntimeCoreFrameBackboneCoreCostGroupCount = counters.CoreCostGroupCount;
+            state.RuntimeCoreFrameBackbonePhysicsCostGroupCount = counters.PhysicsCostGroupCount;
+            state.RuntimeCoreFrameBackboneRenderCostGroupCount = counters.RenderCostGroupCount;
+            state.RuntimeCoreFrameBackboneRunnerCostGroupCount = counters.RunnerCostGroupCount;
+            state.RuntimeCoreFrameBackbonePhysicsDisabledReasonCount = counters.PhysicsDisabledReasonCount;
+            state.RuntimeCoreFrameBackboneRenderDisabledReasonCount = counters.RenderDisabledReasonCount;
+            state.RuntimeCoreFrameBackboneDebuggerOverheadBudgetMicroseconds =
+                counters.DebuggerOverheadBudgetMicroseconds;
+            state.RuntimeCoreFrameBackboneSamplingInterval = counters.SamplingInterval;
+            state.RuntimeCoreFrameBackboneDisablePolicyCount = counters.DisablePolicyCount;
+            state.RuntimeCoreFrameBackboneBurstWarmupPolicyCount = counters.BurstWarmupPolicyCount;
+            state.RuntimeCoreFrameBackboneHotPathManagedStringCount = counters.HotPathManagedStringCount;
+            state.RuntimeCoreFrameBackboneEvidenceMask = counters.EvidenceMask;
+        }
+
+        private static GasRuntimeFrameBackboneDiagnosticCounters CreateFrameBackboneCounters(
+            in CGasRuntimeDebugger state)
+        {
+            return new GasRuntimeFrameBackboneDiagnosticCounters(
+                state.RuntimeCoreFrameBackbonePhaseCount,
+                state.RuntimeCoreFrameBackboneContractOnlyPhaseCount,
+                state.RuntimeCoreQueryBudget,
+                state.RuntimeCoreFilteredQueryBudget,
+                state.RuntimeCoreUnfilteredQueryBudget,
+                state.RuntimeCoreLookupUpdateBudget,
+                state.RuntimeCoreRandomLookupBudget,
+                state.RuntimeCoreSyncQueryBudget,
+                state.RuntimeCoreDependencyWaitRiskCount,
+                state.RuntimeCoreWorldUpdateAllocatorOwnerCount,
+                state.RuntimeCoreRewindableAllocatorCandidateCount,
+                state.RuntimeCoreFrameBackboneStreamCount,
+                state.RuntimeCoreFrameBackboneMigrationCarrierCount,
+                state.RuntimeCoreFrameBackboneNativeStreamCandidateCount,
+                state.RuntimeCoreFrameBackboneOwnerLocalBufferCandidateCount,
+                state.RuntimeCoreFrameBackboneBattleHashStreamCount,
+                state.RuntimeCoreFrameBackboneDeterministicMergePolicyCount,
+                state.RuntimeCoreFrameBackboneMergeCostMeasuredCount,
+                state.RuntimeCoreFrameBackboneMergeCostMicroseconds,
+                state.RuntimeCoreFrameBackboneRequiredStructuralPlaybackCount,
+                state.RuntimeCoreFrameBackboneRecordedStructuralPlaybackCount,
+                state.RuntimeCoreFrameBackboneEcbCommandCount,
+                state.RuntimeCoreFrameBackboneBulkQueryCount,
+                state.RuntimeCoreFrameBackboneProfilerMarkerCount,
+                state.RuntimeCoreFrameBackboneJournalingMarkerCount,
+                state.RuntimeCoreFrameBackboneCoreCostGroupCount,
+                state.RuntimeCoreFrameBackbonePhysicsCostGroupCount,
+                state.RuntimeCoreFrameBackboneRenderCostGroupCount,
+                state.RuntimeCoreFrameBackboneRunnerCostGroupCount,
+                state.RuntimeCoreFrameBackbonePhysicsDisabledReasonCount,
+                state.RuntimeCoreFrameBackboneRenderDisabledReasonCount,
+                state.RuntimeCoreFrameBackboneDebuggerOverheadBudgetMicroseconds,
+                state.RuntimeCoreFrameBackboneSamplingInterval,
+                state.RuntimeCoreFrameBackboneDisablePolicyCount,
+                state.RuntimeCoreFrameBackboneBurstWarmupPolicyCount,
+                state.RuntimeCoreFrameBackboneHotPathManagedStringCount,
+                state.RuntimeCoreFrameBackboneEvidenceMask);
+        }
+
         public static GasRuntimeDiagnosticSnapshot CreateSnapshot(EntityManager em, Entity debuggerEntity)
         {
             if (!CanUse(em, debuggerEntity))
@@ -938,6 +1587,7 @@ namespace GAS.Runtime
                     state.RuntimeCoreDependencyWaitRiskCount,
                     state.RuntimeCoreWorldUpdateAllocatorOwnerCount,
                     state.RuntimeCoreRewindableAllocatorCandidateCount),
+                CreateFrameBackboneCounters(state),
                 events);
         }
 
@@ -959,6 +1609,7 @@ namespace GAS.Runtime
                 .Append(stats.BufferPressureWarningCount)
                 .AppendLine();
             AppendRuntimeCoreCounters(builder, snapshot.CoreCounters);
+            AppendRuntimeCoreFrameBackboneCounters(builder, snapshot.FrameBackboneCounters);
 
             var events = snapshot.Events ?? Array.Empty<BGasRuntimeDiagnosticEvent>();
             var count = maxEvents > 0 && maxEvents < events.Length ? maxEvents : events.Length;
@@ -974,13 +1625,6 @@ namespace GAS.Runtime
                    && em.Exists(debuggerEntity)
                    && em.HasComponent<CGasRuntimeDebugger>(debuggerEntity)
                    && em.HasBuffer<BGasRuntimeDiagnosticEvent>(debuggerEntity);
-        }
-
-        private static int CountEntitiesWith<T>(EntityManager em)
-            where T : unmanaged, IComponentData
-        {
-            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<T>());
-            return query.CalculateEntityCount();
         }
 
         private static void ReadEventBusCounters(
@@ -1052,6 +1696,7 @@ namespace GAS.Runtime
 
         private static void ReadActiveEffectStoreCounters(
             EntityManager em,
+            EntityQuery activeEffectStoreQuery,
             out int ownerCount,
             out int slotCount,
             out int slotCapacity,
@@ -1072,10 +1717,7 @@ namespace GAS.Runtime
             legacyBackedCount = 0;
             externalizedOwnerCount = 0;
 
-            using var query = em.CreateEntityQuery(
-                ComponentType.ReadOnly<CActiveEffectStore>(),
-                ComponentType.ReadOnly<BActiveEffectSlot>());
-            using var owners = query.ToEntityArray(Allocator.Temp);
+            using var owners = activeEffectStoreQuery.ToEntityArray(Allocator.Temp);
             ownerCount = owners.Length;
 
             for (var ownerIndex = 0; ownerIndex < owners.Length; ownerIndex++)
@@ -1119,7 +1761,10 @@ namespace GAS.Runtime
                 : 0;
         }
 
-        private static int CountPresentationOutboxEvents(EntityManager em, Entity eventBusEntity)
+        private static int CountPresentationOutboxEvents(
+            EntityManager em,
+            Entity eventBusEntity,
+            EntityQuery presentationOutboxQuery)
         {
             if (eventBusEntity != Entity.Null
                 && em.Exists(eventBusEntity)
@@ -1137,8 +1782,7 @@ namespace GAS.Runtime
                 return count;
             }
 
-            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<BPresentationEvent>());
-            using var entities = query.ToEntityArray(Allocator.Temp);
+            using var entities = presentationOutboxQuery.ToEntityArray(Allocator.Temp);
             var fallbackCount = 0;
             for (var i = 0; i < entities.Length; i++)
                 fallbackCount += em.GetBuffer<BPresentationEvent>(entities[i]).Length;
@@ -1492,10 +2136,71 @@ namespace GAS.Runtime
                 builder.AppendLine();
                 return;
             }
+            if (evt.Kind == EGasRuntimeDiagnosticKind.RuntimeCoreFrameBackbone)
+            {
+                builder.Append("|phases=")
+                    .Append(evt.FrameBackbonePhaseCount)
+                    .Append("|contractOnlyPhases=")
+                    .Append(evt.FrameBackboneContractOnlyPhaseCount)
+                    .Append("|queryBudget=")
+                    .Append(evt.QueryBudget)
+                    .Append("|lookupUpdateBudget=")
+                    .Append(evt.LookupUpdateBudget)
+                    .Append("|dependencyWaitRisks=")
+                    .Append(evt.DependencyWaitRiskCount)
+                    .Append("|streams=")
+                    .Append(evt.FrameBackboneStreamCount)
+                    .Append("|migrationCarriers=")
+                    .Append(evt.FrameBackboneMigrationCarrierCount)
+                    .Append("|nativeStreamCandidates=")
+                    .Append(evt.FrameBackboneNativeStreamCandidateCount)
+                    .Append("|battleHashStreams=")
+                    .Append(evt.FrameBackboneBattleHashStreamCount)
+                    .Append("|deterministicMergePolicies=")
+                    .Append(evt.FrameBackboneDeterministicMergePolicyCount)
+                    .Append("|mergeCostUs=")
+                    .Append(evt.FrameBackboneMergeCostMicroseconds)
+                    .Append("|mergeCostMeasured=")
+                    .Append(evt.FrameBackboneMergeCostMeasuredCount)
+                    .Append("|requiredStructuralPlaybacks=")
+                    .Append(evt.FrameBackboneRequiredStructuralPlaybackCount)
+                    .Append("|recordedStructuralPlaybacks=")
+                    .Append(evt.FrameBackboneRecordedStructuralPlaybackCount)
+                    .Append("|ecbCommands=")
+                    .Append(evt.FrameBackboneEcbCommandCount)
+                    .Append("|bulkQueries=")
+                    .Append(evt.FrameBackboneBulkQueryCount)
+                    .Append("|profilerMarkers=")
+                    .Append(evt.FrameBackboneProfilerMarkerCount)
+                    .Append("|journalingMarkers=")
+                    .Append(evt.FrameBackboneJournalingMarkerCount)
+                    .Append("|coreCostGroups=")
+                    .Append(evt.FrameBackboneCoreCostGroupCount)
+                    .Append("|physicsCostGroups=")
+                    .Append(evt.FrameBackbonePhysicsCostGroupCount)
+                    .Append("|renderCostGroups=")
+                    .Append(evt.FrameBackboneRenderCostGroupCount)
+                    .Append("|runnerCostGroups=")
+                    .Append(evt.FrameBackboneRunnerCostGroupCount)
+                    .Append("|overheadBudgetUs=")
+                    .Append(evt.FrameBackboneDebuggerOverheadBudgetMicroseconds)
+                    .Append("|samplingInterval=")
+                    .Append(evt.FrameBackboneSamplingInterval)
+                    .Append("|disablePolicy=")
+                    .Append(evt.FrameBackboneDisablePolicyCount)
+                    .Append("|hotPathManagedStrings=")
+                    .Append(evt.FrameBackboneHotPathManagedStringCount);
+                builder.AppendLine();
+                return;
+            }
             if (evt.Kind == EGasRuntimeDiagnosticKind.StructuralChange)
             {
                 if (evt.EcbPlaybackCount != 0)
                     builder.Append("|ecbPlaybacks=").Append(evt.EcbPlaybackCount);
+                if (evt.ValueA != 0)
+                    builder.Append("|ecbCommands=").Append(evt.ValueA);
+                if (evt.ValueB != 0)
+                    builder.Append("|bulkQueries=").Append(evt.ValueB);
                 builder.AppendLine();
                 return;
             }
@@ -1591,6 +2296,93 @@ namespace GAS.Runtime
                 .Append(counters.WorldUpdateAllocatorOwnerCount)
                 .Append("|rewindableAllocatorCandidates=")
                 .Append(counters.RewindableAllocatorCandidateCount)
+                .AppendLine();
+        }
+
+        private static void AppendRuntimeCoreFrameBackboneCounters(
+            StringBuilder builder,
+            in GasRuntimeFrameBackboneDiagnosticCounters counters)
+        {
+            builder.Append("runtimeCoreFrameBackbone|phases=")
+                .Append(counters.PhaseCount)
+                .Append("|contractOnlyPhases=")
+                .Append(counters.ContractOnlyPhaseCount)
+                .Append("|queryBudget=")
+                .Append(counters.QueryBudget)
+                .Append("|filteredQueryBudget=")
+                .Append(counters.FilteredQueryBudget)
+                .Append("|unfilteredQueryBudget=")
+                .Append(counters.UnfilteredQueryBudget)
+                .Append("|lookupUpdateBudget=")
+                .Append(counters.LookupUpdateBudget)
+                .Append("|randomLookupBudget=")
+                .Append(counters.RandomLookupBudget)
+                .Append("|syncQueryBudget=")
+                .Append(counters.SyncQueryBudget)
+                .Append("|dependencyWaitRisks=")
+                .Append(counters.DependencyWaitRiskCount)
+                .Append("|allocatorOwners=")
+                .Append(counters.WorldUpdateAllocatorOwnerCount)
+                .Append("|rewindableAllocatorCandidates=")
+                .Append(counters.RewindableAllocatorCandidateCount)
+                .Append("|streams=")
+                .Append(counters.StreamCount)
+                .Append("|migrationCarriers=")
+                .Append(counters.MigrationCarrierCount)
+                .Append("|nativeStreamCandidates=")
+                .Append(counters.NativeStreamCandidateCount)
+                .Append("|ownerLocalBufferCandidates=")
+                .Append(counters.OwnerLocalBufferCandidateCount)
+                .Append("|battleHashStreams=")
+                .Append(counters.BattleHashStreamCount)
+                .Append("|deterministicMergePolicies=")
+                .Append(counters.DeterministicMergePolicyCount)
+                .Append("|mergeCostUs=")
+                .Append(counters.MergeCostMicroseconds)
+                .Append("|mergeCostMeasured=")
+                .Append(counters.MergeCostMeasuredCount)
+                .Append("|requiredStructuralPlaybacks=")
+                .Append(counters.RequiredStructuralPlaybackCount)
+                .Append("|recordedStructuralPlaybacks=")
+                .Append(counters.RecordedStructuralPlaybackCount)
+                .Append("|ecbCommands=")
+                .Append(counters.EcbCommandCount)
+                .Append("|bulkQueries=")
+                .Append(counters.BulkQueryCount)
+                .AppendLine();
+
+            builder.Append("runtimeCoreFrameBackboneEvidence|profilerMarkers=")
+                .Append(counters.ProfilerMarkerCount)
+                .Append("|journalingMarkers=")
+                .Append(counters.JournalingMarkerCount)
+                .Append("|evidenceMask=")
+                .Append(counters.EvidenceMask)
+                .Append("|burstWarmupPolicy=")
+                .Append(counters.BurstWarmupPolicyCount)
+                .AppendLine();
+
+            builder.Append("runtimeCoreCostSplit|core=")
+                .Append(counters.CoreCostGroupCount)
+                .Append("|physics=")
+                .Append(counters.PhysicsCostGroupCount)
+                .Append("|render=")
+                .Append(counters.RenderCostGroupCount)
+                .Append("|runner=")
+                .Append(counters.RunnerCostGroupCount)
+                .Append("|physicsDisabledReasons=")
+                .Append(counters.PhysicsDisabledReasonCount)
+                .Append("|renderDisabledReasons=")
+                .Append(counters.RenderDisabledReasonCount)
+                .AppendLine();
+
+            builder.Append("runtimeCoreDebuggerOverhead|samplingInterval=")
+                .Append(counters.SamplingInterval)
+                .Append("|overheadBudgetUs=")
+                .Append(counters.DebuggerOverheadBudgetMicroseconds)
+                .Append("|disablePolicy=")
+                .Append(counters.DisablePolicyCount)
+                .Append("|hotPathManagedStrings=")
+                .Append(counters.HotPathManagedStringCount)
                 .AppendLine();
         }
     }

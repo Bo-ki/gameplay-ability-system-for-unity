@@ -34,7 +34,7 @@ namespace GAS.Runtime
             var em = state.EntityManager;
             var abilities = _cleanupQuery.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            using var gameplayEventBatch = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            using var gameplayEventWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             foreach (var ability in abilities)
             {
@@ -65,7 +65,7 @@ namespace GAS.Runtime
                 runtime.RemainingFrame = 0;
                 ecb.SetComponent(ability, runtime);
 
-                EventBusHelper.EnqueueGameplayEvent(em, GASManager.EntityEventBus, new BGameplayEvent
+                gameplayEventWriter.EnqueueGameplayEvent(new BGameplayEvent
                 {
                     Type = shouldCancel ? EGameplayEventType.AbilityCanceled : EGameplayEventType.AbilityEnded,
                     SourceAsc = owner,
