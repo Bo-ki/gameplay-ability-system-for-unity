@@ -58,6 +58,11 @@ namespace GAS.Runtime
 
         public bool TryGetAttributeValue(int attrSetCode, int attrCode, out float value)
         {
+            return TryGetAttributeCurrentValue(attrSetCode, attrCode, out value);
+        }
+
+        public bool TryGetAttributeCurrentValue(int attrSetCode, int attrCode, out float value)
+        {
             var em = GASManager.EntityManager;
             if (!em.Exists(_entity) || !em.HasBuffer<BAttribute>(_entity))
             {

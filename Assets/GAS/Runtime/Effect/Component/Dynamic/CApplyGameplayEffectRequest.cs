@@ -2,7 +2,7 @@ using Unity.Entities;
 
 namespace GAS.Runtime
 {
-    public struct CApplyGameplayEffectRequest
+    public struct CApplyGameplayEffectRequest : IComponentData
     {
         public Entity SourceAsc;
         public Entity SourceAbility;

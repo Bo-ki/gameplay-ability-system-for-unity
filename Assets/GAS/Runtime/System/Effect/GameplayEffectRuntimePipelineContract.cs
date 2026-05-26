@@ -102,6 +102,8 @@ namespace GAS.Runtime
                 "ActiveEffectStore / AttributeDelta / TypedSimulationFact"),
         };
 
+        public static bool IsLegacyInstantEntityLifecycleFrozen => true;
+
         public static IReadOnlyList<GameplayEffectRuntimePipelineContractEntry> All => Entries;
 
         public static bool AllowsNewFeatureExpansion(GameplayEffectRuntimePipelineKind kind)

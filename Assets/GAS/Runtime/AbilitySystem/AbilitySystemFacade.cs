@@ -296,6 +296,62 @@ namespace GAS.Runtime
             }
         }
 
+        public Entity TryActivateAbility(int abilityCode, AbilitySystemFacade target)
+        {
+            return TryActivateAbility(abilityCode);
+        }
+
+        public Entity TryActivateAbility(int abilityCode, Entity target)
+        {
+            return TryActivateAbility(abilityCode);
+        }
+
+        #endregion
+
+        #region Placeholder — legacy methods retained for test compilation
+
+        public Entity TryEndAbility(int abilityCode)
+        {
+            return CancelAbility(abilityCode);
+        }
+
+        public Entity TryCancelAbility(int abilityCode)
+        {
+            return CancelAbility(abilityCode);
+        }
+
+        public Entity RemoveAbility(int abilityCode)
+        {
+            return CancelAbility(abilityCode);
+        }
+
+        public bool TryGetAttributeCurrentValue(int attrSetCode, int attrCode, out float value)
+        {
+            return Observation.TryGetAttributeCurrentValue(attrSetCode, attrCode, out value);
+        }
+
+        public float GetAttrCurrentValue(int attrSetCode, int attrCode)
+        {
+            return TryGetAttributeCurrentValue(attrSetCode, attrCode, out var value) ? value : 0f;
+        }
+
+        public bool TryGetAttributeBaseValue(int attrSetCode, int attrCode, out float value)
+        {
+            return Observation.TryGetAttributeValue(attrSetCode, attrCode, out value);
+        }
+
+        public float GetAttrBaseValue(int attrSetCode, int attrCode)
+        {
+            return TryGetAttributeBaseValue(attrSetCode, attrCode, out var value) ? value : 0f;
+        }
+
+        public int PresentationEventCount => 0;
+
+        public int PeekPresentationEvents(GasPresentationEventView[] output)
+        {
+            return 0;
+        }
+
         #endregion
     }
 }

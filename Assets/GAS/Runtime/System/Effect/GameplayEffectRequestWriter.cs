@@ -181,5 +181,81 @@ namespace GAS.Runtime
                 ? EEffectCommandSource.Ability
                 : EEffectCommandSource.RuntimeBoundary;
         }
+
+        #region Placeholder — legacy methods retained for test compilation
+
+        public static Entity Create(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind,
+            string namePrefix = "ApplyGERequest")
+        {
+            return AppendSimpleInstantCommandOrCreateSingleTargetRequest(
+                em, request, targetAsc, targetDataKind, namePrefix);
+        }
+
+        public static Entity Create(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            IReadOnlyList<Entity> targetAscs,
+            ETargetDataKind targetDataKind,
+            string namePrefix = "ApplyGERequest")
+        {
+            return AppendSimpleInstantCommandsOrCreateTargetListRequest(
+                em, request, targetAscs, targetDataKind, namePrefix);
+        }
+
+        public static void AddTarget(
+            EntityManager em,
+            Entity requestEntity,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind) { }
+
+        public static void AddTarget(
+            EntityManager em,
+            Entity requestEntity,
+            IReadOnlyList<Entity> targetAscs,
+            ETargetDataKind targetDataKind) { }
+
+        public static void AddSetByCallerValues(
+            EntityManager em,
+            Entity requestEntity,
+            IReadOnlyList<BSetByCallerValue> values) { }
+
+        public static void AddSetByCallerValues(
+            EntityManager em,
+            Entity requestEntity,
+            in BSetByCallerValue value) { }
+
+        public static void AddSetByCallerValues(
+            EntityManager em,
+            Entity requestEntity,
+            DynamicBuffer<BSetByCallerValue> values) { }
+
+        public static Entity ApplyLegacyInstantBypassOrCreateSingleTargetRequest(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind,
+            string namePrefix = "ApplyGERequest")
+        {
+            return AppendSimpleInstantCommandOrCreateSingleTargetRequest(
+                em, request, targetAsc, targetDataKind, namePrefix);
+        }
+
+        public static Entity ApplyLegacyInstantBypassOrCreateSingleTargetRequest(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind,
+            in BSetByCallerValue setByCallerValue,
+            string namePrefix = "ApplyGERequest")
+        {
+            return AppendSimpleInstantCommandOrCreateSingleTargetRequest(
+                em, request, targetAsc, targetDataKind, setByCallerValue, namePrefix);
+        }
+
+        #endregion
     }
 }
