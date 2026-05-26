@@ -9,7 +9,7 @@
 ```mermaid
 flowchart LR
     TypedFacts["Typed Simulation Facts"] --> FactStream["GameplayFactStream\nframe facts / read cursor"]
-    TypedFacts --> Presentation["BPresentationEvent\ncurrent frame outbox"]
+    TypedFacts --> Presentation["PresentationEventBuffer\ncurrent frame outbox"]
     TypedFacts --> Replay["BDebugReplayEvent\npersistent sink"]
     Replay --> StructuredLog["Structured Log Export"]
     Presentation --> Bridge["PresentationOutboxBridge"]
@@ -53,12 +53,12 @@ EntityQuery change filter 只能作为 chunk 级优化，不能当作实体级�
 
 ## AM-3 当前落点
 
-1. Attribute typed fact 已能从 `BTypedSimulationFact(AttributeBaseValueChanged)` 直接投影为 `BPresentationEvent(AttributeChange)` 和 `BDebugReplayEvent(AttributeChange)`。
-2. Cue typed fact 已能从 `BTypedSimulationFact(CueRequested)` 直接投影为 `BPresentationEvent(CueRequest)` 和 `BDebugReplayEvent(CueRequest)`。
-3. Generic typed gameplay fact 已能从 `BTypedSimulationFact` 直接投影为 `BPresentationEvent(GameplayEvent)` 和 `BDebugReplayEvent(GameplayEvent)`；`EventCode` 优先使用 fact 的 `EventCode`，否则回退 `GameplayEffectCode`。
-4. Damage typed fact 已能从 `BTypedSimulationFact(Damage)` 直接投影为 `BPresentationEvent(Damage)` 和 `BDebugReplayEvent(Damage)`，并进入 structured log 的 Damage module。
-5. `STypedSimulationFactEventBridge` 仍保留为 legacy `BAttributeChangeEvent` 出口；`SInstantEffectCueRequestProjection` 仍保留 legacy `BCueRequest` / `BGameplayEvent(CueRequested)` 出口；generic legacy `BGameplayEvent` 与 legacy `BDamageEvent` 仍是迁移期出口。这些出口通过 `SourceFactSequence` 标记来源 fact，Presentation / Replay native consumer 已投影同一 fact 时会跳过同源 legacy duplicate。
-6. 当前承载仍是 `CEffectCommandSpecStream` singleton DynamicBuffer proof-only；当 x50 / x1000 profile 出现 fact scan cost、outbox count > fact count、global buffer pressure、buffer spill、cursor lag 或 deterministic merge 风险时，应重新评估 owner-local fact buffer、`NativeStream` / per-thread stream + merge 或 sampling sink。
+1. Attribute typed fact 已能从 `GameplayEventBuffer(AttributeBaseValueChanged)` 直接投影为 `PresentationEventBuffer(AttributeChange)` 和 `BDebugReplayEvent(AttributeChange)`。
+2. Cue typed fact 已能从 `GameplayEventBuffer(CueRequested)` 直接投影为 `PresentationEventBuffer(CueRequest)` 和 `BDebugReplayEvent(CueRequest)`。
+3. Generic typed gameplay fact 已能从 `GameplayEventBuffer` 直接投影为 `PresentationEventBuffer(GameplayEvent)` 和 `BDebugReplayEvent(GameplayEvent)`；`EventCode` 优先使用 fact 的 `EventCode`，否则回退 `GameplayEffectCode`。
+4. Damage typed fact 已能从 `GameplayEventBuffer(Damage)` 直接投影为 `PresentationEventBuffer(Damage)` 和 `BDebugReplayEvent(Damage)`，并进入 structured log 的 Damage module。
+5. `GameplayEventLegacyBridgeSystem` 仍保留为 legacy `BAttributeChangeEvent` 出口；`CueRequestProjectionSystem` 仍保留 legacy `BCueRequest` / `BGameplayEvent(CueRequested)` 出口；generic legacy `BGameplayEvent` 与 legacy `BDamageEvent` 仍是迁移期出口。这些出口通过 `SourceFactSequence` 标记来源 fact，Presentation / Replay native consumer 已投影同一 fact 时会跳过同源 legacy duplicate。
+6. 当前承载仍是 `GEStreamOwnerComponent` singleton DynamicBuffer proof-only；当 x50 / x1000 profile 出现 fact scan cost、outbox count > fact count、global buffer pressure、buffer spill、cursor lag 或 deterministic merge 风险时，应重新评估 owner-local fact buffer、`NativeStream` / per-thread stream + merge 或 sampling sink。
 7. 业务 reaction 和 broader CoreReactionFact consumer 尚未完成 native consumer 迁移；`CGameplayEventBus` 仍是迁移期全局出口，不能视为目标态 Core reaction 主输入。
 
 ## DOTS 深读后的观察链路修正

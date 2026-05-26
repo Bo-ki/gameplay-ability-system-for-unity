@@ -24,10 +24,10 @@
 
 | Component | Type | 用途 |
 |---|---|---|
-| `CFrameArenaState` | `IComponentData` | RewindableAllocator handle、current frame index、previous frame timing |
-| `CFrameArenaOwner` | `IComponentData` | 标记此 entity 为 frame arena owner（用于 query target） |
+| `FrameArenaStateComponent` | `IComponentData` | RewindableAllocator handle、current frame index、previous frame timing |
+| `FrameArenaOwnerComponent` | `IComponentData` | 标记此 entity 为 frame arena owner（用于 query target） |
 
-**不含 Buffer。** Arena allocator 是 NativeContainer（在 `CFrameArenaState` 中 by ref），非 DynamicBuffer。
+**不含 Buffer。** Arena allocator 是 NativeContainer（在 `FrameArenaStateComponent` 中 by ref），非 DynamicBuffer。
 
 ---
 
@@ -43,13 +43,13 @@
 
 | Component | Type | InternalBufferCapacity | 每帧操作 | 说明 |
 |---|---|---|---|---|
-| `CEffectCommandStreamOwner` | `IComponentData` | — | 更新 version/sequence | stream 元数据 |
-| `BEffectCommand` | `IBufferElementData` | 256 | **clear → write → read → clear** | 本帧命令 |
-| `BEffectCommandSetByCallerValue` | `IBufferElementData` | 256 | clear → write → read → clear | SetByCaller 附属数据 |
-| `BInstantEffectSpec` | `IBufferElementData` | 256 | clear → write → read → clear | 即时 GE spec |
-| `BAttributeDelta` | `IBufferElementData` | 512 | clear → write → read → clear | 属性变更 |
-| `BActiveEffectMutation` | `IBufferElementData` | 128 | clear → write → read → clear | 激活效果变更 |
-| `BTypedSimulationFact` | `IBufferElementData` | 256 | clear → write → read → clear | 类型化事实 |
+| `GEStreamOwnerComponent` | `IComponentData` | — | 更新 version/sequence | stream 元数据 |
+| `GEEffectCommandBuffer` | `IBufferElementData` | 256 | **clear → write → read → clear** | 本帧命令 |
+| `GESetByCallerValueBuffer` | `IBufferElementData` | 256 | clear → write → read → clear | SetByCaller 附属数据 |
+| `GEEffectSpecBuffer` | `IBufferElementData` | 256 | clear → write → read → clear | 即时 GE spec |
+| `AttributeModifierBuffer` | `IBufferElementData` | 512 | clear → write → read → clear | 属性变更 |
+| `ActiveEffectMutationBuffer` | `IBufferElementData` | 128 | clear → write → read → clear | 激活效果变更 |
+| `GameplayEventBuffer` | `IBufferElementData` | 256 | clear → write → read → clear | 类型化事实 |
 
 **关键约束：**
 - 全部 Buffer 为 frame-local，帧末必须清空
@@ -80,17 +80,17 @@ AM4+: 切换到 per-owner (ASC) DynamicBuffer 或 NativeStream fan-in
 
 | Component | Type | Per-Entity Size | Enableable? | 用途 |
 |---|---|---|---|---|
-| `CAscOwner` | `IComponentData` | ~8 bytes | 否 | ASC 身份标识（PlayerId, TeamId） |
-| `BAttribute` (属性统称，每个属性一个独立 IComponentData) | `IComponentData` | ~16 bytes × N_attrs | 否 | **每种属性一个独立的 component type**（如 `BHealth`, `BMana`），非一个 component 含所有属性。`B` 前缀为属性数据域例外，不改变其 `IComponentData` 类型 |
-| `CTagMask` | `IComponentData` | ~8 bytes | 否 | 当前 granted tag 的 bitmask（不是 tag component！） |
-| `CActiveEffectStore` | `IComponentData` | ~4 bytes | 否 | active effect store 版本标记 |
-| `BActiveEffectSlot` | `IBufferElementData` | ~64 bytes/slot | — | **核心跨帧存储**；每个 slot 记录一个 active effect 的状态 |
+| `ASCIdentityComponent` | `IComponentData` | ~8 bytes | 否 | ASC 身份标识（PlayerId, TeamId） |
+| `AttributeComponent` (属性统称，每个属性一个独立 IComponentData) | `IComponentData` | ~16 bytes × N_attrs | 否 | **每种属性一个独立的 component type**（如 `HealthAttribute`, `ManaAttribute`）。属性 component 统一使用 `[属性名]Attribute` 命名（`IComponentData`），`Buffer` 后缀严格保留给 `IBufferElementData` |
+| `TagMaskComponent` | `IComponentData` | ~8 bytes | 否 | 当前 granted tag 的 bitmask（不是 tag component！） |
+| `ASCActiveEffectsComponent` | `IComponentData` | ~4 bytes | 否 | active effect store 版本标记 |
+| `ActiveGameplayEffectBuffer` | `IBufferElementData` | ~64 bytes/slot | — | **核心跨帧存储**；每个 slot 记录一个 active effect 的状态 |
 
-**`BActiveEffectSlot` 结构：**
+**`ActiveGameplayEffectBuffer` 结构：**
 
 ```csharp
 [InternalBufferCapacity(8)]  // 8 slots × 64 bytes = 512 bytes inline
-public struct BActiveEffectSlot : IBufferElementData
+public struct ActiveGameplayEffectBuffer : IBufferElementData
 {
     public int EffectCode;           // 4 bytes — definition reference
     public int StackCount;           // 4 bytes
@@ -107,10 +107,10 @@ public struct BActiveEffectSlot : IBufferElementData
 
 **属性为何拆成多个 Component Type：**
 
-`BHealth`、`BMana` 各自一个 `IComponentData` 而非一个 `BAttribute[32]` 数组：
-- **Query 精确性**：`WithAll<BHealth>` 只匹配有 health 的 entity，不需要遍历所有 entity 检查 attribute code
+`HealthAttribute`、`ManaAttribute` 各自一个 `IComponentData` 而非一个属性数组：
+- **Query 精确性**：`WithAll<HealthAttribute>` 只匹配有 health 的 entity，不需要遍历所有 entity 检查 attribute code
 - **Cache 优化**：Attribute Delta Apply 只读/写变化的属性 component，无关属性不受影响
-- **Job 依赖精确性**：写 `BHealth` 的 job 不会 block 读 `BMana` 的 job
+- **Job 依赖精确性**：写 `HealthAttribute` 的 job 不会 block 读 `ManaAttribute` 的 job
 
 **Tag 为何用 Bitmask 而非 Tag Component：**
 
@@ -120,9 +120,40 @@ public struct BActiveEffectSlot : IBufferElementData
 反模式: BGrantedTag_Stun, BGrantedTag_Slow, BGrantedTag_Bleed, ...
         → 10 个 tag component → 最多 2^10 = 1024 种 archetype
 
-正确:   CTagMask (uint64 bitmask) → 最多 64 个 tag 用 1 个 component
+正确:   TagMaskComponent (uint64 bitmask) → 最多 64 个 tag 用 1 个 component
         → 1 个 component type → 不增加 archetype 排列数
 ```
+
+---
+
+### Entity 3b: Ability Entity（能力运行时实例）
+
+| 属性 | 值 |
+|---|---|
+| 数量 | **P（每个 ASC 的每个 granted ability 一个）** |
+| 目标 P（x1） | ~10-50 |
+| 目标 P（x50） | ~300-500 |
+| 生命周期 | Ability grant → revoke |
+| 创建方式 | Structural Playback ECB（低频） |
+
+**Component 布局：**
+
+| Component | Type | 用途 |
+|---|---|---|
+| `AbilityStateComponent` | `IComponentData` | ability code, current state (Ready/Active/Cooldown/Ending), activation frame |
+| `AbilityActiveTag` | `IEnableableComponent` | 标记 ability 当前是否可用（grant/revoke 时 toggle） |
+| `AbilityActivatingTag` | `IEnableableComponent` | 标记 ability 正在尝试激活中（防止同帧重复激活） |
+| `TargetDataBuffer` | `IBufferElementData` | 目标解析结果列表（每个 target entity 一个 entry） |
+
+**与 ASC Entity 的关系：**
+- Ability Entity 通过 `AbilityStateComponent.SourceAsc` 指向 owning ASC
+- Ability Entity 可独立 query，不增加 ASC Entity 的 archetype 复杂度
+- `AbilityActiveTag` 被 revoke 后 entity 进入 Structural Playback 销毁队列
+
+**关键约束：**
+- Ability Entity 是 ASC Entity 的独立子 entity，不是 ASC 上的 component
+- Ability 的激活/冷却/结束等高频状态切换通过 enableable toggle + enum state，不触发结构变化
+- 目标解析结果 `TargetDataBuffer` 是 frame-local buffer，消费者（EffectCommand 生成）读取后清空
 
 ---
 
@@ -141,7 +172,7 @@ public struct BActiveEffectSlot : IBufferElementData
 
 | Request 类型 | Component | 说明 |
 |---|---|---|
-| Ability 激活 | `CAbilityCommandRequest` + source/target/ability code | 玩家/AI 发起的能力使用意图 |
+| Ability 激活 | `AbilityCommandRequest` + source/target/ability code | 玩家/AI 发起的能力使用意图 |
 | Effect 施加（legacy） | `CApplyGameplayEffectRequest` | **迁移期残留，目标态逐步缩减** |
 
 **关键约束：**
@@ -164,12 +195,12 @@ public struct BActiveEffectSlot : IBufferElementData
 
 | Component | Type | Enableable? | 用途 |
 |---|---|---|---|
-| `CActiveEffectState` | `IComponentData` | 否 | remaining time, stack count, flags |
-| `CEffectOwner` | `IComponentData` | 否 | 指向 owning ASC entity |
-| `CEffectActive` | `IEnableableComponent` | **是** | active/inhibited 标记 |
-| `CPeriodDue` | `IEnableableComponent` | **是** | period tick 到期 |
+| `GEActiveEffectStateComponent` | `IComponentData` | 否 | remaining time, stack count, flags |
+| `GEEffectOwnerComponent` | `IComponentData` | 否 | 指向 owning ASC entity |
+| `GEActiveEffectTag` | `IEnableableComponent` | **是** | active/inhibited 标记 |
+| `PeriodDueTag` | `IEnableableComponent` | **是** | period tick 到期 |
 
-**注意：** 此方案增加 entity 数量和 archetype。仅在 `BActiveEffectSlot` slot 数量不足（如超过 32 slot/ASC）或需要跨 ASC query 时考虑。
+**注意：** 此方案增加 entity 数量和 archetype。仅在 `ActiveGameplayEffectBuffer` slot 数量不足（如超过 32 slot/ASC）或需要跨 ASC query 时考虑。
 
 ---
 
@@ -191,43 +222,47 @@ public struct BActiveEffectSlot : IBufferElementData
 
 | Component | 挂载 Entity | 大小估计 | 说明 |
 |---|---|---|---|
-| `CFrameArenaState` | FrameArenaSingleton | ~32 bytes | allocator handle + frame index |
-| `CFrameArenaOwner` | FrameArenaSingleton | ~4 bytes | owner 标记 |
-| `CEffectCommandStreamOwner` | EffectCommandStreamOwner | ~16 bytes | version, sequence |
-| `CAscOwner` | ASC Entity | ~8 bytes | PlayerId, TeamId |
-| `CAttribute` (每种属性一个 type) | ASC Entity | ~16 bytes/type | CurrentValue, BaseValue, Bonus |
-| `CTagMask` | ASC Entity | ~8 bytes | granted tag bitmask |
-| `CActiveEffectStore` | ASC Entity | ~4 bytes | store version marker |
-| `CAbilityCommandRequest` | Request Entity | ~32 bytes | ability code, source, target |
-| `CEffectOwner` | Active Effect Entity (可选) | ~8 bytes | owning ASC ref |
+| `FrameArenaStateComponent` | FrameArenaSingleton | ~32 bytes | allocator handle + frame index |
+| `FrameArenaOwnerComponent` | FrameArenaSingleton | ~4 bytes | owner 标记 |
+| `GEStreamOwnerComponent` | EffectCommandStreamOwner | ~16 bytes | version, sequence |
+| `ASCIdentityComponent` | ASC Entity | ~8 bytes | PlayerId, TeamId |
+| `AttributeComponent` (每种属性一个 type) | ASC Entity | ~16 bytes/type | CurrentValue, BaseValue, Bonus |
+| `TagMaskComponent` | ASC Entity | ~8 bytes | granted tag bitmask |
+| `ASCActiveEffectsComponent` | ASC Entity | ~4 bytes | store version marker |
+| `AbilityCommandRequest` | Request Entity | ~32 bytes | ability code, source, target |
+| `TargetAcquisitionComponent` | Ability Entity / ASC Entity | ~16 bytes | target selection mode, filter params |
+| `GEEffectOwnerComponent` | Active Effect Entity (可选) | ~8 bytes | owning ASC ref |
 
 ### IBufferElementData
 
 | Buffer Element | 挂载 Entity | InternalBufferCapacity | 每元素大小 |
 |---|---|---|---|
-| `BEffectCommand` | EffectCommandStreamOwner | 256 | ~32 bytes |
-| `BEffectCommandSetByCallerValue` | EffectCommandStreamOwner | 256 | ~16 bytes |
-| `BInstantEffectSpec` | EffectCommandStreamOwner | 256 | ~48 bytes |
-| `BAttributeDelta` | EffectCommandStreamOwner | 512 | ~24 bytes |
-| `BActiveEffectMutation` | EffectCommandStreamOwner | 128 | ~32 bytes |
-| `BTypedSimulationFact` | EffectCommandStreamOwner | 256 | ~32 bytes |
-| `BActiveEffectSlot` | ASC Entity | 8 | ~64 bytes |
+| `GEEffectCommandBuffer` | EffectCommandStreamOwner | 256 | ~32 bytes |
+| `GESetByCallerValueBuffer` | EffectCommandStreamOwner | 256 | ~16 bytes |
+| `GEEffectSpecBuffer` | EffectCommandStreamOwner | 256 | ~48 bytes |
+| `AttributeModifierBuffer` | EffectCommandStreamOwner | 512 | ~24 bytes |
+| `ActiveEffectMutationBuffer` | EffectCommandStreamOwner | 128 | ~32 bytes |
+| `GameplayEventBuffer` | EffectCommandStreamOwner | 256 | ~32 bytes |
+| `ActiveGameplayEffectBuffer` | ASC Entity | 8 | ~64 bytes |
+| `TargetDataBuffer` | Ability Entity / ASC Entity | 16 | ~8 bytes |
+
+> **注：** `TargetDataBuffer` 承载 Ability 目标解析后的 target entity 列表。每个 target 对应一个 entry。若 target 数量超过 `InternalBufferCapacity`，spill 监控同 `ActiveGameplayEffectBuffer` 策略。
 
 ### IEnableableComponent
 
 | Component | 挂载 Entity | Toggle 频率 | Toggle Phase |
 |---|---|---|---|
-| `CAbilityActive` | ASC Entity | 低频（grant/revoke） | StructuralPlayback |
-| `CEffectSlotActive` | ASC Entity（per-slot 用 flags 替代，不实际创建此 component） | 高频（每帧可能切换） | ActiveLifecycle |
+| `AbilityActiveTag` | ASC Entity | 低频（grant/revoke） | StructuralPlayback |
+| `PeriodDueTag` | ASC Entity | 每帧（period tick 到期时置位） | ActiveLifecycle |
 
-**设计决定：** Per-slot active/inhibited 标记通过 `BActiveEffectSlot.Flags` 的 bit 表示，不使用独立的 enableable component。这样可以避免每个 slot 一个 component type 的 archetype 爆炸。Chunk 级跳过通过 `ChunkComponent` 实现。
+> **注：** Per-slot active/inhibited 标记通过 `ActiveGameplayEffectBuffer.Flags` 的 bit 表示，不使用独立的 enableable component。这样可以避免每个 slot 一个 component type 的 archetype 爆炸。Chunk 级跳过通过 `ChunkComponent` 实现。原 `CEffectSlotActive` 已废弃移除。
 
 ### ChunkComponent
 
 | Component | 挂载 Chunk（entity 所在 chunk） | 用途 |
 |---|---|---|
-| `ChunkAllIdle` | 所有 ASC entity 都是 idle 的 chunk | chunk 级跳过 |
-| `ChunkNoActiveEffects` | 无任何 ASC entity 有 active effect 的 chunk | chunk 级跳过 |
+| `AllIdleChunkComponent` | 所有 ASC entity 都是 idle 的 chunk | chunk 级跳过 |
+| `NoActiveEffectsChunkComponent` | 无任何 ASC entity 有 active effect 的 chunk | chunk 级跳过 |
 
 ### 明确禁止的 Component 类型
 
@@ -246,15 +281,16 @@ public struct BActiveEffectSlot : IBufferElementData
 
 | Buffer | InternalBufferCapacity | 内联字节 | 逻辑上限 | Spill 告警 | 说明 |
 |---|---|---|---|---|---|
-| `BEffectCommand` | 256 | ~8 KB | 1024 | > 50% | frame-local |
-| `BEffectCommandSetByCallerValue` | 256 | ~4 KB | 512 | > 50% | frame-local |
-| `BInstantEffectSpec` | 256 | ~12 KB | 1024 | > 50% | frame-local |
-| `BAttributeDelta` | 512 | ~12 KB | 2048 | > 50% | frame-local |
-| `BActiveEffectMutation` | 128 | ~4 KB | 512 | > 50% | frame-local |
-| `BTypedSimulationFact` | 256 | ~8 KB | 1024 | > 50% | frame-local |
-| `BActiveEffectSlot` | 8 | ~512 bytes | 64 slots | spill（溢出）或 > 32 slots | **跨帧存储** |
+| `GEEffectCommandBuffer` | 256 | ~8 KB | 1024 | > 50% | frame-local |
+| `GESetByCallerValueBuffer` | 256 | ~4 KB | 512 | > 50% | frame-local |
+| `GEEffectSpecBuffer` | 256 | ~12 KB | 1024 | > 50% | frame-local |
+| `AttributeModifierBuffer` | 512 | ~12 KB | 2048 | > 50% | frame-local |
+| `ActiveEffectMutationBuffer` | 128 | ~4 KB | 512 | > 50% | frame-local |
+| `GameplayEventBuffer` | 256 | ~8 KB | 1024 | > 50% | frame-local |
+| `ActiveGameplayEffectBuffer` | 8 | ~512 bytes | 64 slots | spill（溢出）或 > 32 slots | **跨帧存储** |
+| `TargetDataBuffer` | 16 | ~128 bytes | 32 targets | > 50% | frame-local，Ability 目标解析结果 |
 
-**`BActiveEffectSlot` 超限策略：**
+**`ActiveGameplayEffectBuffer` 超限策略：**
 - < 8 slot → chunk inline，fast
 - 8-32 slot → externalized，每访问多一次间接跳转
 - > 32 slot → 考虑 GlobalIndexedStore（stable entity）方案
@@ -269,6 +305,7 @@ public struct BActiveEffectSlot : IBufferElementData
 | FrameArenaSingleton | World init | FramePrepare | 所有 phase | World dispose |
 | EffectCommandStreamOwner | World init | CommandIngest, SpecEval, DeltaApply, ActiveLifecycle, TypedFact | SpecEval, DeltaApply, TypedFact, StructuralPlayback, Observation | World dispose |
 | ASC Entity | StructuralPlayback | ActiveLifecycle, DeltaApply, StructuralPlayback | 所有 phase | StructuralPlayback |
+| Ability Entity | StructuralPlayback（grant） | CommandIngest, StructuralPlayback | CommandIngest, SpecEval, TypedFact | StructuralPlayback（revoke） |
 | Request Entity | Boundary ECB (Application Shell) | CommandIngest（消费） | CommandIngest | StructuralPlayback |
 | Active Effect Entity（可选） | StructuralPlayback | ActiveLifecycle | ActiveLifecycle, DeltaApply | StructuralPlayback |
 
@@ -278,7 +315,7 @@ public struct BActiveEffectSlot : IBufferElementData
 
 1. 物理 archetype 数量目标 < 10，告警 > 20。
 2. 所有 Component 必须明确类型（Data/Buffer/Enableable/Chunk），不能以"ECS component"笼统称呼。
-3. Tag 状态通过 bitmask（`CTagMask`）表达，不使用独立 tag component。
+3. Tag 状态通过 bitmask（`TagMaskComponent`）表达，不使用独立 tag component。
 4. 每个 DynamicBuffer 必须有 `InternalBufferCapacity` 声明和 spill 监控。
 5. Per-ASC 数据挂 ASC entity，frame-local 数据挂 stream owner（proof 阶段）→ per-owner（scale 阶段）。
 6. 不使用 Prefab 承载 GE/Ability 定义（用 BlobAsset + static table）。

@@ -1,6 +1,6 @@
 # EX Gameplay Ability System For Unity 2.0
 
-更新时间：2026-05-23
+更新时间：2026-05-26
 
 EX-GAS 2.0 是一个基于 Unity DOTS / ECS 的 Gameplay Ability System 实现。当前主线不再是 1.x 的托管 OOP 运行模型，也不再以 `AbilitySystemCell`、`AbilityLogicBase`、`AbilitySpec`、`GameplayEffectSpec` 作为 Runtime 主入口。旧文档、旧 Demo 说明或历史方案若与本文冲突，以当前代码和本文口径为准。
 
@@ -21,8 +21,7 @@ EX-GAS 2.0 是一个基于 Unity DOTS / ECS 的 Gameplay Ability System 实现�
 - 配置源：`EX_GAS_Config/ProjectConfigTable/exgas_config/Datas`。
 - 迭代讨论目录：`方案讨论/` 是本地中间产物，已通过 `.gitignore` 排除。
 - 不要修改 `Library/PackageCache` 下的包缓存内容；Unity 会自动还原，这类改动不是有效工程修复。
-- 当前重构主线：`T6-CHESS-AM`，目标是重建 GAS ECS Runtime Core pipeline。
-- 当前推荐第一刀：冻结旧 GE lifecycle pipeline 扩张，并补 Runtime Core Debugger baseline，再进入 Effect Command / Spec Stream contract。
+- 当前重构主线：`T6-CHESS-AM`，AM-0 到 AM-4 已完成，旧 GE entity lifecycle pipeline 已删除，EffectCommandSpecStream 成为唯一 GE 写入路径。
 
 ## 架构分层
 
@@ -65,8 +64,8 @@ GameObject 层只作为绑定壳：
 | ASC 初始化 | `CAscInitializeRequest` | `SAscInitializeRequest` |
 | ASC 命令 | `CAscCommandRequest` | `SAscCommandRequest` |
 | Ability 命令 | `CAbilityCommandRequest` | `SAbilityCommandRequest` |
-| GE 施加 | `CApplyGameplayEffectRequest` + target / SetByCaller buffers | `SApplyGameplayEffectRequest` |
-| GE 移除 | `CRemoveGameplayEffectRequest` | `SRemoveGameplayEffectRequest` |
+| GE 施加 | `BEffectCommand` (via `GameplayEffectRequestWriter.TryAppendSimpleInstantCommand`) | `SEffectCommandIngest` → Spec → Delta → Fact |
+| GE 移除 | 当前 no-op（旧管线已删除，新管线 ActiveEffectStore 待 AM-5 实现） | — |
 | ASC 销毁 | `CAscDestroyRequest` | `SAscDestroyRequest` |
 
 便捷方法如 `TryActivateAbility`、`RequestGameplayEffectToSelf`、`AddFixedTag`、`SetAttrBaseValue` 仍存在，但它们的语义是“写 request”，不是立即修改玩法状态。
@@ -88,14 +87,23 @@ GameObject 层只作为绑定壳：
 
 ### GameplayEffect
 
-当前 GE 施加链路：
+当前 GE 施加链路（EffectCommandSpecStream pipeline，AM-2/AM-3 阶段完成）：
 
-1. `CApplyGameplayEffectRequest` 承载 `SourceAsc`、`SourceAbility`、`SourceEffect`、`Instigator`、`Causer`、`GameplayEffectCode`、`Level`、`ParentContextId`、`DurationFrameOverride`。
-2. 目标集合走 `CTargetDataHeader` + `BTargetEntity`，不塞进 request component。
-3. SetByCaller 走 `BSetByCallerValue`，可挂在 request 或 GE runtime instance 上。
-4. `SApplyGameplayEffectRequest` 消费 request 后创建 runtime GE entity，并写入 `CEffectContext`、`CEffectSpecData`、`CEffectLifecycle`。
-5. `SEffectApply`、`SOngoingTagRequirements`、`SEffectTick`、`SEffectRemove` 推进 apply、inhibit、period、duration、stacking、remove 和 fact 输出。
-6. Attribute 改动由 GE modifier / execution calculation 进入 `SAttributeRecalculate`，再投影成 attribute / damage facts。
+1. `GameplayEffectRequestWriter.TryAppendSimpleInstantCommand` 将 GE 请求转为 `BEffectCommand`，写入 singleton stream entity 的 `DynamicBuffer<BEffectCommand>`。
+2. `SEffectCommandIngest` 消费 `BEffectCommand`，展开为 `BInstantEffectSpec`（instant modifier）或 `BActiveEffectMutation`（duration/stack/period，待 AM-5 实现）。
+3. `SEffectSpecEvaluation` 对 `BInstantEffectSpec` 执行 modifier magnitude 计算，输出 `BAttributeDelta` 到 `SAttributeRecalculate`。
+4. `SEffectTypedFactProjection` 从 `BAttributeDelta` 投影为 `BTypedSimulationFact`（attribute changed / damage resolved / unit defeated 等 typed fact）。
+5. 结构变化（entity create/destroy/add/remove component）统一在 `SEffectStructuralPlayback` 中通过 ECB playback 执行。
+
+关键架构决策：
+
+- Instant GE 不再创建 runtime GE entity，全程走 command → spec → delta → fact 流。
+- 零 `ToEntityArray`，零碎片化 ECB，全部使用 cursor 驱动的索引 for 循环。
+- `GameplayEffectRuntimePipelineContract` 定义 pipeline kind/status/restrictions，合约层保证调度顺序。
+- 旧 `CApplyGameplayEffectRequest` IComponentData 已降级为数据载体 struct，不再直接产生 entity。
+- `SApplyGameplayEffectRequest` / `SEffectApply` / `SOngoingTagRequirements` / `SRemoveGameplayEffectRequest` 已删除。
+- `SEffectTick` / `SEffectRemove` / `SEffectFinalDestroy` / `SExecutionCalculation` 已桩化为空 ISystem，待 AM-5 重新实现。
+- Duration / Period / Stacking 效果暂不可用，待 AM-5 ActiveEffectStore 重建。
 
 `GEStaticDefinitionBlob` 和 registry summary 是 GE definition 的读取边界。Prototype / static Blob / generated bake contract 不保存 runtime spec、context、stack count、剩余 duration 或 Attribute current value。
 
@@ -115,41 +123,41 @@ Runtime facts 与表现分层如下：
 
 当前 AutoChess 无头验收已经覆盖较完整业务链路，包括伤害、死亡、被动、羁绊、周期 GE、Shield、Summon、Damage Type / Resistance、装备、净化、Rally、LifeSteal、Poison、Execute、DeathBurst、Enrage、Presentation outbox、Replay、结构化日志和 Luban / SourceGenerator 配置链。但这轮验证也暴露出当前 Runtime Core 仍有严重架构问题。
 
-最新 x50 profile 的关键事实：
+旧 x50 profile 关键事实（基于已删除的旧管线，保留作为历史基线参考）：
 
 - x1 / x10 / x50 非 systemTiming `avgTickMs` 分别约为 `1.658575 / 3.535375 / 13.76954167`。
-- x50 下 `BGameplayEvent` 峰值接近容量：`3910/4096`。
-- x50 下 replay 数量约 `31615`，presentation outbox events 约 `39423`。
-- systemTiming 仅用于热点排序，主要热点集中在 `SEffectApply`、`SApplyGameplayEffectRequest`、`SHeadlessAutoChessPresentationCueMarkerProjection`、`SHeadlessAutoChessDriver`、`SEffectTick` 和多个业务 reaction system。
+- 主要热点集中在 `SEffectApply`、`SApplyGameplayEffectRequest`、`SHeadlessAutoChessPresentationCueMarkerProjection`、`SHeadlessAutoChessDriver`、`SEffectTick` 和多个业务 reaction system。
+- 旧管线使用 request entity → runtime GE entity → lifecycle → destroy 链路，存在大量 ToEntityArray + ECB 碎片化。
 
-这些结果说明当前问题不是 Unity ECS 本身无法承载规模，而是当前 GAS Runtime pipeline 仍有错误形态：
+这些问题通过 AM-0 到 AM-4 已修复的架构问题：
 
-1. Instant GE 仍大量走 request entity、runtime GE entity、apply、destroy 的生命周期链路。
-2. `BGameplayEvent / BAttributeChangeEvent / BDamageEvent` 仍被部分业务 reaction 当成高频 simulation 输入，而不是纯 observation projection。
-3. Presentation / Replay / Debug 逻辑完整，但与 core simulation hot path 的计时和数据流隔离不足。
-4. AutoChess Driver 仍有 OOP 回合控制器形态，存在全量快照和多次 O(n) 选择目标的问题。
-5. Runtime Core Debugger 还不够强，缺少 request/spec/delta/fact/entity create/destroy/ECB playback/buffer pressure/cursor lag 等机器可读 counters。
+1. ~~Instant GE 仍大量走 request entity、runtime GE entity、apply、destroy 的生命周期链路。~~ **已修复**：Instant GE 全程走 command → spec → delta → fact 流，不创建 runtime GE entity。
+2. `BGameplayEvent / BAttributeChangeEvent / BDamageEvent` 仍被部分业务 reaction 当成高频 simulation 输入，而不是纯 observation projection。（待 AM-7 解决）
+3. Presentation / Replay / Debug 逻辑完整，但与 core simulation hot path 的计时和数据流隔离不足。（待 AM-7 解决）
+4. AutoChess Driver 仍有 OOP 回合控制器形态，存在全量快照和多次 O(n) 选择目标的问题。（待 AM-6 解决）
+5. Runtime Core Debugger 还不够强，缺少 request/spec/delta/fact/entity create/destroy/ECB playback/buffer pressure/cursor lag 等机器可读 counters。（AM-1 部分完成）
 
-因此当前路线已经从 `T6-CHESS-AL / AL-1` 调整为 `T6-CHESS-AM` 分阶段 Runtime rebuild：
+当前路线 `T6-CHESS-AM` 分阶段 Runtime rebuild 进度：
 
 ```text
-AM-0 Freeze / Safety Gate
-  冻结旧 GE lifecycle pipeline 扩张
+AM-0 Freeze / Safety Gate                                    [DONE]
+  冻结并删除旧 GE lifecycle pipeline（~7000 行代码移除）
 
-AM-1 Runtime Core Debugger Baseline
+AM-1 Runtime Core Debugger Baseline                          [PARTIAL]
   输出 request / spec / delta / fact / entity lifecycle / buffer pressure counters
 
-AM-2 Effect Command / Spec Stream Contract
-  定义 Effect Command、Instant Spec、Active Effect Mutation 和 phase schedule
+AM-2 Effect Command / Spec Stream Contract                   [DONE]
+  定义 Effect Command、Instant Spec、Active Effect Mutation 和 8-phase schedule
 
-AM-3 Instant Spec Evaluation Rebuild
-  simple instant GE 默认不创建 runtime GE entity
+AM-3 Instant Spec Evaluation Rebuild                         [DONE]
+  simple instant GE 默认不创建 runtime GE entity，走 cursor 驱动索引 for 循环
 
-AM-4 Attribute Delta / Damage Typed Facts Pipeline
-  AttributeDelta、DamageResolved、AttributeChanged、UnitDefeated 成为 simulation 主输入
+AM-4 Attribute Delta / Damage Typed Facts Pipeline           [DONE]
+  BAttributeDelta、BTypedSimulationFact 成为 simulation 主输出
 
-AM-5 Active Effect Store Rebuild
+AM-5 Active Effect Store Rebuild                             [NEXT]
   duration / stack / period / granted tag / granted ability 进入稳定 active store
+  当前 SEffectTick/SEffectRemove/SEffectFinalDestroy 已桩化，待重新实现
 
 AM-6 AutoChess Driver / Reaction Read Model
   actor cursor、team stats、target candidates、board index 替代重复全量扫描
@@ -164,7 +172,7 @@ AM-9 Scale Gates
   x50 进入 0.x ms 后，再扩 x100 / x1000 验证结构变化和规模曲线
 ```
 
-当前代码应被理解为“业务语义预演 + 架构问题暴露 + 下一阶段重构基线”，而不是性能完成态。
+当前代码应被理解为”AM-0~4 完成后的新基线，AM-5 为下一阶段目标”。
 
 ## Definition 与配置链
 
@@ -228,9 +236,9 @@ bash EX_GAS_Config/ProjectConfigTable/exgas_config/gen.sh
 
 当前 Demo 验证重点是 headless ECS Runtime，而不是旧 MonoBehaviour 业务框架。
 
-- `Assets/GAS/Runtime/Demo/AutoBattle`：较小的无头战斗样板。
-- `Assets/GAS/Runtime/Demo/AutoChess`：自走棋 Runtime 验收链，覆盖 generated definition source、Luban / SourceGenerator row contract、scale / determinism / performance、presentation outbox、typed facts、复杂 GE / Attribute / Tag / Ability 链路。
-- `Assets/_Test/GAS/Runtime/AutoChess`：命令行验收入口与契约测试。
+- `Assets/GAS/Runtime/Demo/AutoBattle`：较小的无头战斗样板。当前计算系统（`SExecutionCalculation`、`SHeadlessAutoBattleExecuteCalculation`）已桩化，自动战斗伤害暂不可用，待 AM-5 重新实现。
+- `Assets/GAS/Runtime/Demo/AutoChess`：自走棋 Runtime 验收链。AutoChess 业务 reaction / scenario 系统文件已在 `4193d414` 清理中删除（保留 11 个设计良好的模块待重建），对应测试文件已在 AM-0 阶段清理。
+- `Assets/_Test/GAS/Runtime/AutoChess`：已删除，AutoChess 测试待 Demo 重建后恢复。
 
 常用构建验证：
 
@@ -256,7 +264,7 @@ Unity.exe -batchmode -quit -projectPath . -runTests -testPlatform PlayMode -test
 | ASC 是托管 `AbilitySystemCell` | ASC 权威是 Entity；GameObject 只通过 `AbilitySystemBinding` 绑定 |
 | 外部直接调用托管对象修改状态 | 外部创建 request entity，ECS system 消费 |
 | Ability 通过 `AbilityLogicBase` 回调执行 | Ability 行为数据化，ECS system 推进 |
-| GE 通过 `GameplayEffectSpec` OOP 包装施加 | GE apply request 生成 runtime GE entity 和 spec/context component |
+| GE 通过 `GameplayEffectSpec` OOP 包装施加 | Instant GE 走 BEffectCommand → Spec → Delta → Fact 流，不创建 runtime GE entity |
 | Cue / log / event center 可驱动 gameplay | Cue / presentation / replay / log 只读派生，不决定 gameplay |
 | 新系统靠自动发现进入调度 | 新系统必须进入 `GASSystemScheduleContract` |
 

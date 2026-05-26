@@ -126,7 +126,7 @@ AutoChessDemo 的配置必须服务“精链路”，不能靠堆机制证明完
 
 **生成物**：`XTagBit.Stunned = 1UL << 0`, `XTagBit.Slowed = 1UL << 1`, ... 常量 + `TagCheck.HasTag()/HasAnyTag()/IsStunnedOrFrozen()` static helpers。
 
-**关键约束**：CTagMask 是 uint64，最多 64 个 tag。当前 13 个 tag 远未触及上限。每个 tag 不创建独立 IComponentData tag component（遵守不变量 32）。
+**关键约束**：TagMaskComponent 是 uint64，最多 64 个 tag。当前 13 个 tag 远未触及上限。每个 tag 不创建独立 IComponentData tag component（遵守不变量 32）。
 
 ### autochess.unit.xlsx（单位配置）
 

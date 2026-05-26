@@ -45,14 +45,14 @@ flowchart TD
 
     subgraph SimGroup
         BeginSimECB["BeginSimulationEntityCommandBufferSystem"]
-        GasFramePrepare["GasRuntimeFramePrepareSystemGroup\n[UpdateBefore: GasCommandIngest]"]
-        GasCommandIngest["GasCommandIngestSystemGroup"]
-        GasSpecEval["GasSpecEvaluationSystemGroup"]
-        GasActiveLifecycle["GasActiveEffectLifecycleSystemGroup"]
-        GasDeltaApply["GasDeltaApplySystemGroup"]
-        GasTypedFact["GasTypedFactProjectionSystemGroup"]
-        GasStructural["GasStructuralPlaybackSystemGroup\n[UpdateAfter: GasTypedFact, UpdateBefore: GasObservation]"]
-        GasObservation["GasObservationProjectionSystemGroup"]
+        GasFramePrepare["GASFramePrepareSystemGroup\n[UpdateBefore: GASCommandIngest]"]
+        GasCommandIngest["GASCommandIngestSystemGroup"]
+        GasSpecEval["GASSpecEvaluationSystemGroup"]
+        GasActiveLifecycle["GASActiveEffectLifecycleSystemGroup"]
+        GasDeltaApply["GASDeltaApplySystemGroup"]
+        GasTypedFact["GASGameplayEventProjectionSystemGroup"]
+        GasStructural["GASStructuralPlaybackSystemGroup\n[UpdateAfter: GASGameplayEventProjection, UpdateBefore: GASObservation]"]
+        GasObservation["GASObservationProjectionSystemGroup"]
         EndSimECB["EndSimulationEntityCommandBufferSystem"]
     end
 
@@ -71,32 +71,32 @@ flowchart TD
 
 | SystemGroup | 父 Group | UpdateOrder 约束 | 职责 | 结构变化 |
 |---|---|---|---|---|
-| `GasRuntimeFramePrepareSystemGroup` | `SimulationSystemGroup` | `UpdateBefore: GasCommandIngestSystemGroup` | 预创建所有 query、lookup、type handle；初始化 frame scratch allocator | **禁止** |
-| `GasCommandIngestSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GasRuntimeFramePrepare` | 翻译 Boundary request → Core EffectCommand | 只读外部 request；不直接 playback |
-| `GasSpecEvaluationSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GasCommandIngest` | Build InstantEffectSpec；解析 magnitude/execution | **禁止** |
-| `GasActiveEffectLifecycleSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GasSpecEvaluation` | Tick duration/period/stack；enableable toggle | **禁止**直接结构变化；允许 enableable toggle |
-| `GasDeltaApplySystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GasActiveEffectLifecycle` | Apply AttributeDelta/TagDelta；deterministic reduce | **禁止** |
-| `GasTypedFactProjectionSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GasDeltaApply` | 从 delta 投影 typed simulation facts | **禁止** |
-| `GasStructuralPlaybackSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GasTypedFact, UpdateBefore: GasObservation` | **唯一 hot path 结构变化屏障** | **唯一允许**（仅限 ECB playback） |
-| `GasObservationProjectionSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GasStructuralPlayback` | 只读投影 → outbox / replay / debugger | **禁止**（不反写 simulation） |
+| `GASFramePrepareSystemGroup` | `SimulationSystemGroup` | `UpdateBefore: GASCommandIngestSystemGroup` | 预创建所有 query、lookup、type handle；初始化 frame scratch allocator | **禁止** |
+| `GASCommandIngestSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GasRuntimeFramePrepare` | 翻译 Boundary request → Core EffectCommand | 只读外部 request；不直接 playback |
+| `GASSpecEvaluationSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GASCommandIngest` | Build InstantEffectSpec；解析 magnitude/execution | **禁止** |
+| `GASActiveEffectLifecycleSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GASSpecEvaluation` | Tick duration/period/stack；enableable toggle | **禁止**直接结构变化；允许 enableable toggle |
+| `GASDeltaApplySystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GASActiveEffectLifecycle` | Apply AttributeDelta/TagDelta；deterministic reduce | **禁止** |
+| `GASGameplayEventProjectionSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GASDeltaApply` | 从 delta 投影 typed simulation facts | **禁止** |
+| `GASStructuralPlaybackSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GASGameplayEventProjection, UpdateBefore: GASObservation` | **唯一 hot path 结构变化屏障** | **唯一允许**（仅限 ECB playback） |
+| `GASObservationProjectionSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GASStructuralPlayback` | 只读投影 → outbox / replay / debugger | **禁止**（不反写 simulation） |
 
 ### ECB System 摆放
 
 ```mermaid
 flowchart LR
-    subgraph GasStructuralPlaybackSystemGroup
-        BeginGasStructuralECB["BeginGasStructuralECBSystem\n(playback = OrderFirst)"]
+    subgraph GASStructuralPlaybackSystemGroup
+        BeginGasStructuralECB["BeginGASStructuralECBSystem\n(playback = OrderFirst)"]
         GasStructuralSystems["... structural mutation systems ..."]
-        EndGasStructuralECB["EndGasStructuralECBSystem\n(playback = OrderLast)"]
+        EndGasStructuralECB["EndGASStructuralECBSystem\n(playback = OrderLast)"]
     end
 ```
 
 **规则：**
-1. `BeginGasStructuralECBSystem` — 在 Structural Group 最前面 playback。用于需要在 Delta Apply 和 Typed Fact 之前完成的结构变化（如 spawn entity）。
-2. `EndGasStructuralECBSystem` — 在 Structural Group 最后面 playback。用于 cleanup、destroy、grant/remove 等"帧尾清理"。
-3. Core hot path systems（Spec/Delta/Lifecycle）的 job 使用 `EndGasStructuralECB` 记录结构变化意图。
+1. `BeginGASStructuralECBSystem` — 在 Structural Group 最前面 playback。用于需要在 Delta Apply 和 Typed Fact 之前完成的结构变化（如 spawn entity）。
+2. `EndGASStructuralECBSystem` — 在 Structural Group 最后面 playback。用于 cleanup、destroy、grant/remove 等"帧尾清理"。
+3. Core hot path systems（Spec/Delta/Lifecycle）的 job 使用 `EndGASStructuralECBSystem` 记录结构变化意图。
 4. **不使用** Unity 默认的 `BeginSimulationEntityCommandBufferSystem` / `EndSimulationEntityCommandBufferSystem` —— 因为它们的 playback 位置在 Simulation 首尾，而我们需要的 playback 在 Typed Fact 之后、Observation 之前。
-5. 中间 structural mutation systems 必须通过 `[UpdateAfter(typeof(BeginGasStructuralECBSystem))]` + `[UpdateBefore(typeof(EndGasStructuralECBSystem))]` 显式声明调度约束（符合不变量 7），或嵌套在 `GasStructuralPlaybackSystemGroup` 的子 SystemGroup 中保证顺序。
+5. 中间 structural mutation systems 必须通过 `[UpdateAfter(typeof(BeginGASStructuralECBSystem))]` + `[UpdateBefore(typeof(EndGASStructuralECBSystem))]` 显式声明调度约束（符合不变量 7），或嵌套在 `GASStructuralPlaybackSystemGroup` 的子 SystemGroup 中保证顺序。
 
 ---
 
@@ -146,7 +146,7 @@ sequenceDiagram
     participant Facts
     participant Observation
 
-    CommandGateway->>AbilitySystem: CAbilityCommandRequest
+    CommandGateway->>AbilitySystem: AbilityCommandRequest
     AbilitySystem->>EffectCommand: Emit EffectCommand
     EffectCommand->>SpecEval: Build InstantEffectSpec
     SpecEval->>AttributeDelta: Emit AttributeDelta
@@ -175,20 +175,25 @@ sequenceDiagram
 
 | Component | FramePrepare | CommandIngest | SpecEval | ActiveLifecycle | DeltaApply | TypedFact | StructuralPlayback | Observation |
 |---|---|---|---|---|---|---|---|---|
-| `BAttribute` (per-ASC, 占位符) [(1)](#attr-footnote) | — | — | R | — | **RW** | R | — | R |
-| `BAttributeDelta` (per-target buffer) | — | — | — | — | **W** | R | — | — |
-| `BEffectCommand` (stream) | — | **W** | R | — | — | — | — | — |
-| `BInstantEffectSpec` (stream) | — | — | **W** | — | R | — | — | — |
-| `BActiveEffectMutation` (stream) | — | — | — | **W** | R | — | — | — |
-| `BActiveEffectSlot` (per-ASC buffer) | — | — | — | **RW** | R | R | — | — |
-| `BTypedSimulationFact` (stream) | — | — | — | — | — | **W** | — | R |
-| `BPresentationEvent` (outbox) | — | — | — | — | — | — | — | **W** |
-| `CActiveEffectStore` (per-ASC) | — | — | — | R | — | — | R | — |
-| `CTagMask` (per-ASC) | — | — | — | R | **RW** | R | — | R |
+| `AttributeComponent` (per-ASC, IComponentData, 每种属性一个独立type) [(1)](#attr-footnote) | — | — | R | — | **RW** | R | — | R |
+| `AttributeModifierBuffer` (per-target buffer) | — | — | — | — | **W** | R | — | — |
+| `GEEffectCommandBuffer` (stream) | — | **W** | R | — | — | — | — | — |
+| `GEEffectSpecBuffer` (stream) | — | — | **W** | — | R | — | — | — |
+| `ActiveEffectMutationBuffer` (stream) | — | — | — | **W** | R | — | — | — |
+| `ActiveGameplayEffectBuffer` (per-ASC buffer) | — | — | — | **RW** | R | R | — | — |
+| `GameplayEventBuffer` (stream) | — | — | — | — | — | **W** | — | R |
+| `PresentationEventBuffer` (outbox) | — | — | — | — | — | — | — | **W** |
+| `ASCActiveEffectsComponent` (per-ASC) | — | — | — | R | — | — | R | — |
+| `TagMaskComponent` (per-ASC) | — | — | — | R | **RW** | R | — | R |
+| `AbilityStateComponent` [(2)](#ability-footnote) | — | **R** | — | R | — | — | **RW** | — |
+| `AbilityActiveTag` (enableable) [(2)](#ability-footnote) | — | **R**（只读filter） | — | — | — | — | **toggle** | — |
+| `TargetDataBuffer` [(2)](#ability-footnote) | — | **W** | R（consumer 读取target list 生成 command） | — | — | — | — | — |
 
 **符号：** R = 只读、W = 只写、RW = 读写、— = 不访问
 
-> <a id="attr-footnote">(1)</a> `BAttribute` 是占位符，实际实现为 per-attribute-type 的多个独立 `IComponentData`（如 `BHealth`, `BMana`, `BStrength`）。每种属性一个 component type 保证 Query 精确性和 Job 依赖精确性，见 `13-EntityComponent物理布局Spec.md` 行84。本矩阵使用统称以保持可读性。
+> <a id="attr-footnote">(1)</a> `AttributeComponent` 是占位符，实际实现为 per-attribute-type 的多个独立 `IComponentData`（如 `HealthAttribute`, `ManaAttribute`, `StrengthAttribute`）。每种属性一个 component type 保证 Query 精确性和 Job 依赖精确性，见 `13-EntityComponent物理布局Spec.md` 行84。本矩阵使用统称以保持可读性。命名遵循 `[属性名]Attribute` 格式（`IComponentData`），`Buffer` 后缀严格保留给 `IBufferElementData`。
+>
+> <a id="ability-footnote">(2)</a> Ability 相关 component 挂载在独立的 Ability Entity 上（非 ASC Entity），见 `13-EntityComponent物理布局Spec.md` Entity 3b。`AbilityStateComponent` 在 CommandIngest 被读取以校验 ability 可用性，在 StructuralPlayback 被 grant/revoke。`AbilityActiveTag` 是 enableable，grant/revoke 时 toggle。`TargetDataBuffer` 由目标解析系统写入，由 EffectCommand 生成系统消费。
 
 ### 数据 Component（定义/查找 — 只读）
 
@@ -201,28 +206,29 @@ sequenceDiagram
 
 | Enableable Component | 挂载 Entity | 切换 Phase | 切换频率 |
 |---|---|---|---|
-| `CAbilityActive` | ASC entity | ActiveLifecycle | 低频（ability grant/revoke） |
-| `CEffectSlotActive` **(已废弃，改用 BActiveEffectSlot.Flags bit)** | — | ActiveLifecycle | —（见 `13-EntityComponent物理布局Spec.md` 行221-223） |
-| `CPeriodDue` (per-slot) | ASC entity | ActiveLifecycle | 每帧（period tick 到期时置位） |
+| `AbilityActiveTag` | ASC entity | ActiveLifecycle / StructuralPlayback | 低频（ability grant/revoke） |
+| `PeriodDueTag` (per-slot) | ASC entity | ActiveLifecycle | 每帧（period tick 到期时置位） |
+
+> **注：** Per-slot active/inhibited 标记使用 `ActiveGameplayEffectBuffer.Flags` bitmask（见 `13-EntityComponent物理布局Spec.md` 行221-223），不创建独立的 `CEffectSlotActive` enableable component。
 
 ### Chunk Component（chunk 级标记）
 
 | Chunk Component | 使用目的 | 设置 Phase | 消费 Phase |
 |---|---|---|---|
-| `ChunkAllIdle` | 标记整个 chunk 的 ASC 所有 slot 都是 idle → 跳过整个 chunk | ActiveLifecycle | SpecEval, DeltaApply |
-| `ChunkNoActiveEffects` | 标记整个 chunk 的 ASC 无 active effect | ActiveLifecycle | DeltaApply, TypedFact |
+| `AllIdleChunkComponent` | 标记整个 chunk 的 ASC 所有 slot 都是 idle → 跳过整个 chunk | ActiveLifecycle | SpecEval, DeltaApply |
+| `NoActiveEffectsChunkComponent` | 标记整个 chunk 的 ASC 无 active effect | ActiveLifecycle | DeltaApply, TypedFact |
 
 ### 结构变化权限矩阵
 
 | 操作 | 仅在 | 方式 |
 |---|---|---|
-| `CreateEntity` | `GasStructuralPlaybackSystemGroup` | ECB playback |
-| `DestroyEntity` | `GasStructuralPlaybackSystemGroup` | ECB playback |
-| `AddComponent<T>` | `GasStructuralPlaybackSystemGroup` | ECB playback 或 EntityQuery bulk |
-| `RemoveComponent<T>` | `GasStructuralPlaybackSystemGroup` | ECB playback 或 EntityQuery bulk |
-| `SetComponentEnabled<T>` | `GasActiveEffectLifecycleSystemGroup` 或 `GasStructuralPlaybackSystemGroup` | IJobEntity `EnabledRefRW` 或 ECB |
+| `CreateEntity` | `GASStructuralPlaybackSystemGroup` | ECB playback |
+| `DestroyEntity` | `GASStructuralPlaybackSystemGroup` | ECB playback |
+| `AddComponent<T>` | `GASStructuralPlaybackSystemGroup` | ECB playback 或 EntityQuery bulk |
+| `RemoveComponent<T>` | `GASStructuralPlaybackSystemGroup` | ECB playback 或 EntityQuery bulk |
+| `SetComponentEnabled<T>` | `GASActiveEffectLifecycleSystemGroup` 或 `GASStructuralPlaybackSystemGroup` | IJobEntity `EnabledRefRW` 或 ECB |
 | `DynamicBuffer.Add/Remove` | 各 owning phase | 直接操作（不触发结构变化） |
-| `DynamicBuffer` 首次添加 | `GasStructuralPlaybackSystemGroup` | ECB `AddComponent<T>` |
+| `DynamicBuffer` 首次添加 | `GASStructuralPlaybackSystemGroup` | ECB `AddComponent<T>` |
 
 ---
 
@@ -230,66 +236,64 @@ sequenceDiagram
 
 ### 定位
 
-`GasRuntimeFramePrepareSystemGroup` 不是"一个初始化 System"，而是 Runtime Core 每帧的**公共基础设施层**。它为后续所有 phase 预创建和缓存 ECS 查询结构，避免各 phase 临时创建 query/lookup 导致不可归因的 sync point 和 allocator 碎片。
+`GASFramePrepareSystemGroup` 不是"一个初始化 System"，而是 Runtime Core 每帧的**公共基础设施层**。它为后续所有 phase 预创建和缓存 ECS lookup/allocator 结构，避免各 phase 临时创建 lookup 或分配 scratch 内存导致不可归因的 sync point 和 allocator 碎片。EntityQuery 由各 ISystem 通过 `SystemState.GetEntityQuery` 自行管理（`PRF-33`），不进入 Frame Arena。
 
-### Frame Arena 的四个职责
+### Frame Arena 的三个职责
 
 ```
-GasRuntimeFramePrepareSystemGroup（帧首执行一次）
+GASFramePrepareSystemGroup（帧首执行一次）
 │
-├── 1. Query Registry
-│     预创建所有 EntityQuery，缓存到 SystemState 或 singleton
-│     后续 phase 的 ISystem 从 registry 取 query，不临时 Build
-│
-├── 2. Lookup / TypeHandle Registry
+├── 1. Lookup / TypeHandle Registry
 │     每帧刷新所有 ComponentLookup / BufferLookup / ComponentTypeHandle
 │     因为结构变化后所有 handle 失效
 │     后续 phase 的 job 从 registry 取 lookup，不自行创建
 │
-├── 3. Frame Scratch Allocator
+├── 2. Frame Scratch Allocator
 │     分配本帧 scratch：RewindableAllocator 或 WorldUpdateAllocator
 │     所有 Temp/TempJob 分配从此 allocator 派生
 │     帧末 Arena Teardown 统一 rewind/dispose
 │
-└── 4. Dependency Budget
+└── 3. Dependency Budget
 │     收集上帧 Dependency 链长度、enableable wait 次数
 │     与 budget 对比，超标时输出 Debugger 告警
 ```
+
+> **注：EntityQuery 不进入 Frame Arena 集中管理。** 各 ISystem 在自己的 `OnCreate` 中通过 `SystemState.GetEntityQuery` 创建 query（符合 `PRF-33`），SystemState 自动维护 query 有效性。Frame Arena 只集中管理跨 system 共享的资源：lookup handle、scratch allocator 和 dependency budget。Query 的数量和匹配 archetype 由 Debugger 归因统计，不依赖集中 registry。
 
 ### Arena 物理实现的两种候选
 
 | 方案 | 描述 | 适用 |
 |---|---|---|
-| **A: Singleton Registry** | 所有 query/lookup 存在一个 singleton entity 的 DynamicBuffer 或 component 上；FramePrepare System 每帧刷新 | 简单、易诊断；适合当前规模 |
-| **B: SystemState 缓存** | 每个 ISystem 在自己的 `OnCreate` 创建 query，在 `OnUpdate` 开始通过 `SystemState.RequireForUpdate` 自动刷新 | ECS 官方推荐模式；适合 system 数量较少时 |
+| **A: Singleton Registry** | 所有 query/lookup 存在一个 singleton entity 的 DynamicBuffer 或 component 上；FramePrepare System 每帧刷新 | 简单、易诊断；但 query 集中管理违反 `PRF-33`，仅限 proof |
+| **B: SystemState 缓存** | 每个 ISystem 在自己的 `OnCreate` 创建 query（`SystemState.GetEntityQuery`），SystemState 自动维护；Frame Arena 仅集中管理 scratch allocator + lookup refresh + dependency budget | ECS 官方推荐模式；query 由安全系统追踪 |
 
-**目标态选择：优先方案 B**（SystemState 缓存），因为它是 ECS 官方推荐的 query 管理方式。但需要额外创建 Frame Arena 的 scratch allocator singleton（方案 A 的一部分）作为 allocator owner。
+**目标态选择：方案 B**（SystemState 缓存 + Frame Arena 管理 allocator/lookup）。EntityQuery 由各 ISystem 自行管理，Frame Arena 负责跨 system 共享的 scratch allocator、lookup handle 刷新和 dependency budget。两方案不再混合。
 
 ### Arena Allocator 生命周期
 
 ```
 帧首 Arena Setup:
   1. RewindableAllocator.Rewind()          ← 清空上帧 scratch
-  2. 刷新所有 EntityQuery                   ← 结构变化后可能新增 archetype
-  3. 刷新所有 ComponentLookup / BufferLookup
-  4. 重新获取 ComponentTypeHandle           ← 每个 system 自动获取
+  2. 刷新所有 ComponentLookup / BufferLookup（handle 在结构变化后失效）
+  3. 各 ISystem 通过 SystemState 自动获取 ComponentTypeHandle
 
   ↓ 后续 phase 使用 Arena allocator 分配 Temp/TempJob 数据 ↓
+  ↓ 各 ISystem 通过自身 SystemState 管理的 EntityQuery 匹配 entity ↓
 
 帧尾 Arena Teardown (在 Observation 之后):
-  5. 确认所有 TempJob 已 Dispose
-  6. RewindableAllocator.Rewind()           ← 回收本帧 scratch
-  7. 输出 Arena 使用指标到 Debugger
+  4. 确认所有 TempJob 已 Dispose
+  5. RewindableAllocator.Rewind()           ← 回收本帧 scratch
+  6. 输出 Arena 使用指标到 Debugger
 ```
 
 ### Arena 指标（Debugger 必须输出）
 
 | 指标 | 说明 | 告警阈值 |
 |---|---|---|
-| `arena.queryCount` | 本帧预创建的 EntityQuery 数 | > 20（考虑合并） |
-| `arena.lookupRefreshCount` | 本帧刷新的 lookup 数 | > 30（考虑减少 system） |
+| `arena.lookupRefreshCount` | 本帧 Arena 刷新的 lookup 数 | > 30（考虑减少 system） |
 | `arena.scratchAllocUsed` | Arena allocator 峰值使用量 | > 1 MB（检查泄漏） |
 | `arena.tempJobLeakCount` | 未 Dispose 的 TempJob 数 | > 0（硬错误） |
+| `arena.systemQueryCount` | 全帧各 ISystem 持有的 EntityQuery 总数（由 Debugger 归因统计） | > 20（评估 query 合并） |
 
 ---
 
@@ -299,14 +303,14 @@ Runtime Core phase 必须落到 Unity Entities SystemGroup，而不是只停留�
 
 | Phase | 目标 SystemGroup | 默认实现 | 结构变化权限 |
 |---|---|---|---|
-| Frame Arena / Query Preparation | `GasRuntimeFramePrepareSystemGroup` | `ISystem` 更新 query / lookup / type handle，准备 `WorldUpdateAllocator` / group allocator scratch | 禁止 |
-| Command Ingest | `GasCommandIngestSystemGroup` | `ISystem` + command buffer / DynamicBuffer ingest | 读取边界 request；不直接 playback |
-| Spec Evaluation | `GasSpecEvaluationSystemGroup` | `ISystem` + `IJobEntity` / `IJobChunk` | 禁止 |
-| Delta Apply | `GasDeltaApplySystemGroup` | `ISystem` + parallel delta apply job | 禁止 |
-| Active Effect Lifecycle | `GasActiveEffectLifecycleSystemGroup` | stable slot / enableable / DynamicBuffer | 禁止直接结构变化 |
-| Typed Fact Projection | `GasTypedFactProjectionSystemGroup` | typed fact buffer / enableable fact marker | 禁止 |
-| Structural Playback | `GasStructuralPlaybackSystemGroup` | ECB playback | 唯一 hot path structural boundary |
-| Observation Projection | `GasObservationProjectionSystemGroup` | read-only projection job / boundary sink | 不反写 simulation |
+| Frame Arena / Query Preparation | `GASFramePrepareSystemGroup` | `ISystem` 更新 query / lookup / type handle，准备 `WorldUpdateAllocator` / group allocator scratch | 禁止 |
+| Command Ingest | `GASCommandIngestSystemGroup` | `ISystem` + command buffer / DynamicBuffer ingest | 读取边界 request；不直接 playback |
+| Spec Evaluation | `GASSpecEvaluationSystemGroup` | `ISystem` + `IJobEntity` / `IJobChunk` | 禁止 |
+| Delta Apply | `GASDeltaApplySystemGroup` | `ISystem` + parallel delta apply job | 禁止 |
+| Active Effect Lifecycle | `GASActiveEffectLifecycleSystemGroup` | stable slot / enableable / DynamicBuffer | 禁止直接结构变化 |
+| Typed Fact Projection | `GASGameplayEventProjectionSystemGroup` | typed fact buffer / enableable fact marker | 禁止 |
+| Structural Playback | `GASStructuralPlaybackSystemGroup` | ECB playback | 唯一 hot path structural boundary |
+| Observation Projection | `GASObservationProjectionSystemGroup` | read-only projection job / boundary sink | 不反写 simulation |
 
 详细规则见 `UnityDOTS官方文档参考/主题/01-Entities系统与World.md`、`UnityDOTS官方文档参考/主题/90-规则编号索引.md`、`UnityDOTS官方文档参考/主题/20-GASRuntimeCore-API选型基线.md` 和 `UnityDOTS官方文档参考/主题/12-官方案例模式.md`。
 
@@ -362,14 +366,14 @@ flowchart TD
 
 ### 并行机会
 
-- `BuildSpecs` 和 `TickSlots` **可以并行**（读不同 component 集：Spec 读 `BEffectCommand`；Lifecycle 读 `BActiveEffectSlot`）
+- `BuildSpecs` 和 `TickSlots` **可以并行**（读不同 component 集：Spec 读 `GEEffectCommandBuffer`；Lifecycle 读 `ActiveGameplayEffectBuffer`）
 - `ApplyDeltas` 必须等待两者都完成（`CombineDependencies`）
 
 ### Sync Point 预算
 
 | Sync Point 来源 | 位置 | 触发条件 | 目标预算（60fps = 16.67ms） |
 |---|---|---|---|
-| ECB playback | `GasStructuralPlaybackSystemGroup` | 每帧 1 次（结构变化合并） | < 1.0ms |
+| ECB playback | `GASStructuralPlaybackSystemGroup` | 每帧 1 次（结构变化合并） | < 1.0ms |
 | Enableable-filtered query（如有） | 使用同步 query 的 phase | 写 enableable 的 job 未完成 + 同步 query | **目标：0 次** — 全部使用 `IgnoreFilter` 或异步 query |
 | `SystemAPI.Query` foreach | 禁止在 hot path | — | **0 次** |
 | **总计** | | | **< 1.0ms，1 个 sync point** |
@@ -417,10 +421,9 @@ Runtime Core phase 不等于固定 API。后续实现前必须按下表完成 AP
 
 | Enableable Component | 挂载 Entity | Toggle Phase | Toggle 方式 | 消费 Query 的 IgnoreFilter? |
 |---|---|---|---|---|
-| `CEffectSlotActive` | ASC entity（per-slot 标记用 bitmask + enableable） | `GasActiveEffectLifecycleSystemGroup` | `EnabledRefRW` in IJobEntity | 否 — 消费者只处理 active slot |
-| `CPeriodDue` | ASC entity | `GasActiveEffectLifecycleSystemGroup` | `EnabledRefRW` | 否 — 消费者只处理到期的 |
-| `CAbilityActive` | ASC entity | `GasStructuralPlaybackSystemGroup`（grant/revoke 时通过 ECB） | ECB `SetComponentEnabled` | 否 |
-| `CFactReady`（optional） | fact stream | `GasTypedFactProjectionSystemGroup` | `EnabledRefRW` | 消费者用 `IgnoreFilter` 或异步 query |
+| `PeriodDueTag` | ASC entity | `GASActiveEffectLifecycleSystemGroup` | `EnabledRefRW` | 否 — 消费者只处理到期的 |
+| `AbilityActiveTag` | ASC entity | `GASStructuralPlaybackSystemGroup`（grant/revoke 时通过 ECB） | ECB `SetComponentEnabled` | 否 |
+| `FactReadyTag`（optional） | fact stream | `GASGameplayEventProjectionSystemGroup` | `EnabledRefRW` | 消费者用 `IgnoreFilter` 或异步 query |
 
 ### Query IgnoreFilter 策略
 
@@ -447,9 +450,9 @@ Debugger 必须报告：
 
 | Chunk Component | 目的 | 设置 Phase | 设置条件 | 消费 Phase |
 |---|---|---|---|---|
-| `ChunkAllIdle` | 整个 chunk 的 ASC 的所有 effect slot 都是 idle | `GasActiveEffectLifecycleSystemGroup` | 遍历 chunk 确认所有 slot 状态 | `GasSpecEvaluationSystemGroup`、`GasDeltaApplySystemGroup` — 跳过整个 chunk |
-| `ChunkNoActiveEffects` | 整个 chunk 的 ASC 无 active effect | `GasActiveEffectLifecycleSystemGroup` | 遍历 chunk 确认无 active | `GasDeltaApplySystemGroup`、`GasTypedFactProjectionSystemGroup` |
-| `ChunkPeriodDue`（可选） | 整个 chunk 的 ASC 的 period due 状态统一 | `GasActiveEffectLifecycleSystemGroup` | 按 period 时长分组 ASC 到不同 chunk | `GasSpecEvaluationSystemGroup` |
+| `AllIdleChunkComponent` | 整个 chunk 的 ASC 的所有 effect slot 都是 idle | `GASActiveEffectLifecycleSystemGroup` | 遍历 chunk 确认所有 slot 状态 | `GASSpecEvaluationSystemGroup`、`GASDeltaApplySystemGroup` — 跳过整个 chunk |
+| `NoActiveEffectsChunkComponent` | 整个 chunk 的 ASC 无 active effect | `GASActiveEffectLifecycleSystemGroup` | 遍历 chunk 确认无 active | `GASDeltaApplySystemGroup`、`GASGameplayEventProjectionSystemGroup` |
+| `PeriodDueChunkComponent`（可选） | 整个 chunk 的 ASC 的 period due 状态统一 | `GASActiveEffectLifecycleSystemGroup` | 按 period 时长分组 ASC 到不同 chunk | `GASSpecEvaluationSystemGroup` |
 
 ### Chunk Skip 实现模式
 
@@ -458,14 +461,38 @@ Debugger 必须报告：
 public void Execute(in ArchetypeChunk chunk, ...)
 {
     // 检查 chunk component — 如果整个 chunk idle 则跳过
-    if (chunk.Has<ChunkAllIdle>())
+    if (chunk.Has<AllIdleChunkComponent>())
         return;  // 零 entity 遍历成本
 
     // ... 正常遍历
 }
 ```
 
-**注意：** Chunk Component 是优化，不是正确性依赖。如果 DataApply 依赖 ChunkNoActiveEffects 跳过，但 ActiveLifecycle 忘记更新该标记，会导致逻辑错误而非 crash。因此 Chunk Component 的使用必须有 Debugger 验证（`chunkSkipCount` vs `entityProcessedCount` 一致性检查）。
+**注意：** Chunk Component 是优化，不是正确性依赖。如果 DeltaApply 依赖 NoActiveEffectsChunkComponent 跳过，但 ActiveLifecycle 忘记更新该标记，会导致逻辑错误而非 crash。因此 Chunk Component 的使用必须有 Debugger 验证。
+
+### Chunk Component 一致性验证算法
+
+Debugger 在 `GASObservationProjectionSystemGroup` 中执行轻量级采样验证（不阻塞 hot path）：
+
+1. **采样策略**：每 N 帧（N=60，约 1 秒一次）随机选取 10% 的 chunk，对其中的全部 entity 做全量状态扫描。
+2. **验证逻辑**：
+   ```
+   for each sampled chunk:
+       if chunk.Has<AllIdleChunkComponent>():
+           // 验证：该 chunk 中不应有任何 active slot
+           for each entity in chunk:
+               for each slot in ActiveGameplayEffectBuffer:
+                   if slot.Flags & Active: → 报告 "AllIdleChunkComponent 错误标记"
+       if chunk.Has<NoActiveEffectsChunkComponent>():
+           // 验证：该 chunk 中不应有任何 active effect
+           for each entity in chunk:
+               if HasAnyActiveSlot(entity): → 报告 "NoActiveEffectsChunkComponent 错误标记"
+   ```
+3. **输出指标**：
+   - `chunkComponentMismatchCount` — 标记与实际状态不一致的 chunk 数
+   - **若 > 0 → P0 告警**（逻辑错误，可能导致 entity 被错误跳过）
+   - `chunkSkipSavings` — chunk skip 实际节省的处理量（skipped entities / total entities）
+4. **降级策略**：若 `chunkComponentMismatchCount > 0`，消费者 phase 应在该帧自动 fallback 到 per-entity 检查（忽略 Chunk Component），并向 Debugger 输出降级事件。
 
 ---
 
@@ -473,12 +500,12 @@ public void Execute(in ArchetypeChunk chunk, ...)
 
 `Frame Arena / Query Preparation` 不是可选优化阶段，而是 Runtime Core 后续功能迁移的前置骨架。继续扩展 `Instant Spec Evaluation`、`Active Effect Store`、`Typed Fact Projection` 或 Debugger 之前，必须先完成 `Runtime Core Frame Backbone`：
 
-1. SystemGroup：建立 `GasRuntimeFramePrepareSystemGroup`、各 Runtime Core phase group 和 `GasStructuralPlaybackSystemGroup` 的显式顺序。
+1. SystemGroup：建立 `GASFramePrepareSystemGroup`、各 Runtime Core phase group 和 `GASStructuralPlaybackSystemGroup` 的显式顺序。
 2. Frame owner：每类 command / spec / delta / fact / active mutation stream 都必须声明 owner、clear phase、writer phase、reader phase 和 merge phase。
 3. Query / lookup budget：每帧 query 数、lookup update 数、random lookup 数、filtered / unfiltered query 数和 enableable wait 必须可统计。
 4. Allocator / dependency budget：每帧 scratch allocator、`WorldUpdateAllocator` / `RewindableAllocator` 使用者、job dependency wait 和 manual NativeContainer dependency 必须可归因。
 5. Determinism：并行 fan-in 必须声明 sort key、partition、merge order、battle hash 或等价 deterministic output policy。
-6. Structural playback：hot path 结构变化只允许进入 `GasStructuralPlaybackSystemGroup`，并输出 playback count、ECB command count、bulk query count 和 origin system。
+6. Structural playback：hot path 结构变化只允许进入 `GASStructuralPlaybackSystemGroup`，并输出 playback count、ECB command count、bulk query count 和 origin system。
 7. Debug evidence：Debugger 至少输出 frame backbone counters；性能结论必须能和 Profiler / Entities Journaling / Burst Inspector 证据对照。
 
 该顺序不新增架构层级，只规定 Runtime Core 的实现前置条件。AM3 / AM5 可以保留当前已落地的小闭环，但继续扩张前必须先补齐该 backbone。
@@ -506,8 +533,73 @@ public void Execute(in ArchetypeChunk chunk, ...)
 4. `Structural Playback` 是唯一热路径结构变化语义屏障；大批量同类结构变化优先 EntityQuery bulk / `ComponentTypeSet`，job 内发现的少量变化才进入 ECB。
 5. `Observation Projection` 不再承担 Debugger 全量日志；只投影必要 outbox / replay / sampled sink，性能分析由 Debugger counters 与 Unity Profiler / Journaling 对照完成。
 6. AutoChess 无头验收若使用隔离 world 或固定 tick，应明确 world time / `ICustomBootstrap` / manual runner，不隐式依赖 Editor frame delta。
-7. **新增：** Enableable toggle 集中在 `GasActiveEffectLifecycleSystemGroup`；其他 phase 对 enableable component 只有只读访问。不允许在 Spec Evaluation 或 Delta Apply 中做 enableable toggle。
-8. **新增：** Chunk Component 由 `GasActiveEffectLifecycleSystemGroup` 维护；消费者 phase 的 IJobChunk 在 `Execute` 开头检查 Chunk Component 决定是否跳过整个 chunk。
+7. **新增：** Enableable toggle 集中在 `GASActiveEffectLifecycleSystemGroup`；其他 phase 对 enableable component 只有只读访问。不允许在 Spec Evaluation 或 Delta Apply 中做 enableable toggle。
+8. **新增：** Chunk Component 由 `GASActiveEffectLifecycleSystemGroup` 维护；消费者 phase 的 IJobChunk 在 `Execute` 开头检查 Chunk Component 决定是否跳过整个 chunk。
+
+---
+
+## 附录：System 清单
+
+以下为 Runtime Core 各 SystemGroup 中已落地和计划中的 ISystem 类名清单，提供从 Spec phase 到具体代码的 traceability。
+
+### GASFramePrepareSystemGroup
+
+| System | 状态 | 职责 |
+|---|---|---|
+| `GASFrameArenaSetupSystem` | 计划中 | 帧首刷新 lookup handle、rewind scratch allocator、输出 dependency budget |
+
+### GASCommandIngestSystemGroup
+
+| System | 状态 | 职责 |
+|---|---|---|
+| `AbilityCommandIngestSystem` | 计划中 | 消费 Boundary ability request → 写入 `AbilityCommandRequest` 消费 |
+| `GEEffectCommandIngestSystem` | 已落地 | 翻译 Boundary request + ability output → `GEEffectCommandBuffer` |
+| `PeriodOverflowCommandDeriveSystem` | 已落地 | period due / stack overflow → 派生 `GEEffectCommandBuffer(Source=Period/Overflow)` |
+
+### GASSpecEvaluationSystemGroup
+
+| System | 状态 | 职责 |
+|---|---|---|
+| `GEEffectSpecBuildSystem` | 已落地 | `GEEffectCommandBuffer` + GE definition → `GEEffectSpecBuffer` |
+| `ActiveEffectMutationApplySystem` | 已落地 | duration/stack/period 命令 → `ActiveEffectMutationBuffer`（AM5 store 迁移中） |
+
+### GASActiveEffectLifecycleSystemGroup
+
+| System | 状态 | 职责 |
+|---|---|---|
+| `ActiveEffectTickSystem` | 已落地（部分迁入 AM5） | duration tick、period accumulator、expire 检测 |
+| `ActiveEffectSlotSyncSystem` | 已落地 | 旧 runtime GE entity 状态 → `ActiveGameplayEffectBuffer` 镜像同步 |
+| `ChunkComponentMaintainSystem` | 计划中 | 维护 `AllIdleChunkComponent` / `NoActiveEffectsChunkComponent` 标记 |
+
+### GASDeltaApplySystemGroup
+
+| System | 状态 | 职责 |
+|---|---|---|
+| `AttributeModifierApplySystem` | 已落地 | `GEEffectSpecBuffer` → `AttributeModifierBuffer` → `AttributeComponent` 写入 |
+
+### GASGameplayEventProjectionSystemGroup
+
+| System | 状态 | 职责 |
+|---|---|---|
+| `GameplayEventProjectionSystem` | 已落地 | `AttributeModifierBuffer` → `GameplayEventBuffer` |
+| `CueRequestProjectionSystem` | 已落地 | `GEEffectSpecBuffer.CueRequestOnApplyCode` → `GameplayEventBuffer(CueRequested)` |
+| `GameplayEventLegacyBridgeSystem` | 已落地（迁移期） | 旧 `BAttributeChangeEvent` / `BCueRequest` / `BGameplayEvent` 兼容出口 |
+
+### GASStructuralPlaybackSystemGroup
+
+| System | 状态 | 职责 |
+|---|---|---|
+| `BeginGASStructuralECBSystem` | 计划中 | ECB playback（OrderFirst）— spawn entity、grant ability |
+| `EndGASStructuralECBSystem` | 计划中 | ECB playback（OrderLast）— destroy、cleanup、revoke ability |
+| `FrameEndCleanupSystem` | 计划中 | frame-local buffer 清空、stream counter 重置 |
+
+### GASObservationProjectionSystemGroup
+
+| System | 状态 | 职责 |
+|---|---|---|
+| `PresentationOutboxSystem` | 已落地 | `GameplayEventBuffer` → `PresentationEventBuffer` |
+| `ReplayLogSystem` | 已落地 | `GameplayEventBuffer` → `BDebugReplayEvent` |
+| `DiagnosticsSnapshotSystem` | 已落地（AM1 baseline） | Debugger counters → `RuntimeDiagnosticsSnapshot` |
 
 ---
 

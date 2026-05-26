@@ -25,6 +25,18 @@
 ## 关联 ADR / 方案来源
 ```
 
+## 关键术语区分
+
+本 Spec 体系中 "Spec" 一词有三重含义，必须在术语表中显式区分：
+
+| 术语 | 英文全称 | 含义 | 使用语境 |
+|---|---|---|---|
+| **Spec 文档** | Specification Document | 设计规范文档，定义目标态、契约和不变量 | 文件名和文档标题：`03-RuntimeCore管线Spec.md` |
+| **运行时 Spec 数据** | Runtime Effect Spec | GE 施加时携带的规格数据（level、SetByCaller、context 等） | 代码/数据：`GEEffectSpecBuffer`、`InstantEffectSpec` |
+| **Spec 阶段** | Spec Evaluation Phase | 管线中解析运行时 Spec 数据的 phase | 架构管线：`GASSpecEvaluationSystemGroup`、`SpecStream` |
+
+在 Spec 文档正文中使用 "Spec" 一词时，首次出现应标注所属含义。在代码和实现任务中，"Spec" 默认指运行时 Spec 数据。
+
 ## 图表要求
 
 目标态 Spec 必须提供软件工程常用图表。图表源码优先使用 Mermaid 写入 Markdown。

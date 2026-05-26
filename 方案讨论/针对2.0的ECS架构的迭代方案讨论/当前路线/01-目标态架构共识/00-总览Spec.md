@@ -26,6 +26,22 @@ flowchart TD
 | Layer 3 | GAS 运行时核心层 | GAS 权威状态、规则计算、phase/stream、typed facts |
 | Layer 4 | 定义与生成层 | Luban、SourceGenerator、静态定义、BakePlan、validation |
 
+## AM 阶段编号定义
+
+本路线使用 AM（Architecture Milestone）作为目标态演进的阶段标记。每个 AM 代表一个可验收的架构里程碑，不表示简单的功能迭代。
+
+| AM 编号 | 名称 | 目标 | 关键交付 |
+|---|---|---|---|
+| **AM0** | Frame Backbone | 建立 SystemGroup / Frame Arena / Query / Lookup / Allocator / Dependency / Structural Playback / Debugger evidence 的统一骨架 | DOTS Backbone First 验收通过 |
+| **AM1** | Diagnostics Baseline | Runtime Core Debugger 完成 counters / timing / buffer pressure / sync point 采样 | Debugger summary 可与 Profiler/Journaling 对照 |
+| **AM2** | EffectCommand Contract | EffectCommand / SpecStream / AttributeDelta 契约落地，完成 AM1→AM2 的 stream owner 迁移 | simple instant GE 不创建 runtime entity |
+| **AM3** | Instant Spec Evaluation | Instant GE 全链路迁入 command→spec→delta→fact 主链 | 所有 simple instant producer 迁入；旧 request fallback 仅余复杂 GE |
+| **AM4** | Scale-Ready Stream | 全局 singleton DynamicBuffer 迁移到 per-owner / NativeStream，parallel fan-in 确定性闭合 | buffer pressure 达标；battle hash 稳定 |
+| **AM5** | Active Effect Store | Duration/Stack/Period/Granted 的 store-driven lifecycle 闭合 | 全部 duration GE 迁入 store；复杂 child GE 闭合 |
+| **AM6+** | Full GAS Closure | TargetData / EffectContext / MagnitudeEvaluation / GameplayEvent 全部闭合 | ECS GAS 完整语义闭环 |
+
+AM 编号只表示目标态递进顺序，不代表严格的前置依赖。例如 AM3（Instant Spec）和 AM5（Active Store）可以部分并行推进，但共享的 backbone（AM0）和 contract（AM2）必须先完成。
+
 ## 核心结论
 
 1. Gameplay 权威只存在于 ECS 数据和显式 System 调度中。（`SYS-01`）
@@ -46,9 +62,9 @@ flowchart TD
 
 四层架构只定义工程职责边界，不替代 Unity DOTS 的执行机制。Runtime Core 进入更多功能迁移前，必须先拥有可验收的 frame backbone：
 
-1. `GasRuntimeFramePrepareSystemGroup` 统一准备 query、lookup、type handle、frame scratch、allocator 和 dependency budget。
+1. `GASFramePrepareSystemGroup` 统一准备 query、lookup、type handle、frame scratch、allocator 和 dependency budget。
 2. command / spec / delta / fact / active mutation stream 必须声明 frame owner、clear phase、merge policy、deterministic ordering 和重新选型触发条件。
-3. `GasStructuralPlaybackSystemGroup` 是 hot path 唯一结构变化屏障；其他 phase 禁止直接做 `EntityManager` 结构变化。
+3. `GASStructuralPlaybackSystemGroup` 是 hot path 唯一结构变化屏障；其他 phase 禁止直接做 `EntityManager` 结构变化。
 4. Runtime Core Debugger 必须输出 frame backbone counters，并能与 Unity Profiler / Entities Journaling / Burst evidence 对照。
 5. AM3 / AM5 后续任务只能在该 backbone 上扩展，不允许继续把旧 lifecycle mirror 当作目标态主线。
 

@@ -11,8 +11,9 @@
 | ASC | Entity + ASC components / buffers | Simulation |
 | Ability | Ability entity + runtime state + command request | Simulation |
 | GameplayEffect | Effect command / instant spec / active effect store | Simulation |
-| Attribute | Attribute value buffer + delta stream | Simulation |
+| Attribute | per-attribute-type IComponentData + delta buffer stream | Simulation |
 | GameplayTag | Dense tag mask / requirement query | Simulation / Definition |
+| TargetData | Target selection request / result buffer | Simulation / Boundary |
 | GameplayCue | Cue request + presentation marker | Observation / Presentation |
 | EffectContext | Runtime context metadata | Simulation |
 | Spec | Instant spec stream / active mutation stream | Simulation |
@@ -24,12 +25,12 @@
 classDiagram
     class AbilitySystemComponent {
         Entity AscEntity
-        BAttribute attributes
-        CTagMask tags
+        AttributeComponent attributes
+        TagMaskComponent tags
     }
     class AbilityRuntime {
-        CAbilityRuntimeState state
-        CAbilityCommandRequest command
+        AbilityStateComponent state
+        AbilityCommandRequest command
     }
     class EffectRuntime {
         EffectCommand command
@@ -40,6 +41,10 @@ classDiagram
         AttributeDelta delta
         AttributeChangedFact fact
     }
+    class TargetData {
+        TargetAcquisitionComponent request
+        TargetDataBuffer resultBuffer
+    }
     class Observation {
         GameplayFact fact
         PresentationEvent outbox
@@ -47,6 +52,8 @@ classDiagram
     }
 
     AbilitySystemComponent "1" --> "*" AbilityRuntime
+    AbilityRuntime --> TargetData : resolves targets
+    TargetData --> EffectRuntime : provides target set
     AbilityRuntime --> EffectRuntime : emits command
     EffectRuntime --> AttributeRuntime : produces delta
     AttributeRuntime --> Observation : projects facts
@@ -54,10 +61,11 @@ classDiagram
 
 ## 不变量
 
-1. Ability 产生意图，不直接写 Attribute。
-2. GameplayEffect 改变状态，但 instant effect 不应默认创建 runtime GE entity。
-3. Attribute / Tag 是判定和聚合结果，不是 OOP callback 入口。
-4. Cue / Presentation 观察事实，不决定 gameplay。
+1. Ability 产生意图并解析目标，不直接写 Attribute。
+2. TargetData 承载目标选择结果，从 Ability 流入 EffectCommand，每个 target 可独立产生 effect 实例。
+3. GameplayEffect 改变状态，但 instant effect 不应默认创建 runtime GE entity。
+4. Attribute / Tag 是判定和聚合结果，不是 OOP callback 入口。
+5. Cue / Presentation 观察事实，不决定 gameplay。
 ## 历史方案定位
 
 1. Ability / Effect / Attribute / Tag 作为 ECS Core 的概念切分来自 `../历史方案参考/方案11.md:20-43`。

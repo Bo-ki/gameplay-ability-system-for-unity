@@ -98,7 +98,7 @@ public struct UnitConfigBlob
     public float BaseMANA;
     public float BaseManaRegen;
 
-    // 羁绊 tag bit（用于 SynergyDetect 的 CTagMask 查询）
+    // 羁绊 tag bit（用于 SynergyDetect 的 TagMaskComponent 查询）
     public uint SynergyBits;     // bit 0=Frost, bit 1=Shadow, bit 2=Light
 }
 
@@ -160,58 +160,58 @@ public struct CChessCombat : IComponentData
 // ============================================================
 // [Layer 3: GAS Runtime Core — ASC Entity 挂载]
 // 每种属性一个 IComponentData type
-// Query: WithAll<BHealth> 只匹配有 health 的 entity
-// Job 依赖: 写 BHealth 不会阻塞读 BMana 的 job
+// Query: WithAll<HealthAttribute> 只匹配有 health 的 entity
+// Job 依赖: 写 HealthAttribute 不会阻塞读 ManaAttribute 的 job
 // ============================================================
 
-public struct BHealth : IComponentData
+public struct HealthAttribute : IComponentData
 {
     public float CurrentValue;
     public float BaseValue;      // 星级 * 配置白值
     public float BonusValue;     // GE 累积 bonus（add/multiply/override 结算后）
 }
 
-public struct BMaxHealth : IComponentData
+public struct MaxHealthAttribute : IComponentData
 {
     public float CurrentValue;
     public float BaseValue;
 }
 
-public struct BAttack : IComponentData
-{
-    public float CurrentValue;
-    public float BaseValue;
-    public float BonusValue;
-}
-
-public struct BDefense : IComponentData
+public struct AttackAttribute : IComponentData
 {
     public float CurrentValue;
     public float BaseValue;
     public float BonusValue;
 }
 
-public struct BAttackSpeed : IComponentData
+public struct DefenseAttribute : IComponentData
 {
     public float CurrentValue;
     public float BaseValue;
     public float BonusValue;
 }
 
-public struct BMana : IComponentData
+public struct AttackSpeedAttribute : IComponentData
 {
     public float CurrentValue;
     public float BaseValue;
     public float BonusValue;
 }
 
-public struct BMaxMana : IComponentData
+public struct ManaAttribute : IComponentData
+{
+    public float CurrentValue;
+    public float BaseValue;
+    public float BonusValue;
+}
+
+public struct MaxManaAttribute : IComponentData
 {
     public float CurrentValue;
     public float BaseValue;
 }
 
-public struct BManaRegen : IComponentData
+public struct ManaRegenAttribute : IComponentData
 {
     public float CurrentValue;
     public float BaseValue;
@@ -243,8 +243,8 @@ public static class XAttr
 public static class AttrAccessor
 {
     [BurstCompile]
-    public static float GetCurrentValue(int attrCode, in BHealth hp, in BAttack atk, in BDefense def,
-        in BAttackSpeed aspd, in BMana mana, in BManaRegen regen)
+    public static float GetCurrentValue(int attrCode, in HealthAttribute hp, in AttackAttribute atk, in DefenseAttribute def,
+        in AttackSpeedAttribute aspd, in ManaAttribute mana, in ManaRegenAttribute regen)
     {
         return attrCode switch
         {
@@ -259,8 +259,8 @@ public static class AttrAccessor
     }
 
     [BurstCompile]
-    public static void SetCurrentValue(int attrCode, ref BHealth hp, ref BAttack atk, ref BDefense def,
-        ref BAttackSpeed aspd, ref BMana mana, ref BManaRegen regen, float value)
+    public static void SetCurrentValue(int attrCode, ref HealthAttribute hp, ref AttackAttribute atk, ref DefenseAttribute def,
+        ref AttackSpeedAttribute aspd, ref ManaAttribute mana, ref ManaRegenAttribute regen, float value)
     {
         switch (attrCode)
         {
@@ -280,7 +280,7 @@ public static class AttrAccessor
 
 ### 4.1 Tag Luban 配置（`autochess.tag.xlsx`）
 
-按照不变量 32：Tag 状态通过 bitmask（`CTagMask`）表达，不使用独立 tag component。
+按照不变量 32：Tag 状态通过 bitmask（`TagMaskComponent`）表达，不使用独立 tag component。
 
 | TagId | Name | Category | BitIndex | Description |
 |-------|------|----------|----------|-------------|
@@ -349,7 +349,7 @@ public static class TagCheck
 | 3004 | 圣光治疗 | Active | 40 | 240 (4s@60fps) | LowestHPAlly | 1 | 4.0 | 5006 | — | Stunned,Frozen |
 | 0 | 普攻 | PassiveAuto | 0 | — | NearestEnemy | 1 | 按职业 | 4001 | — | Stunned,Frozen |
 
-**普攻是 default ability**：每个棋子都有，不占 AbilityId 槽位。普攻通过 `CAttackAbilityData` component 配置其伤害 GE 和攻击范围。
+**普攻是 default ability**：每个棋子都有，不占 AbilityId 槽位。普攻通过 `AttackAbilityDataComponent` component 配置其伤害 GE 和攻击范围。
 
 ### 5.2 技能 BlobAsset 结构
 
@@ -375,7 +375,7 @@ public struct AbilityDefBlob
 }
 
 // ASC Entity 上挂载的 Ability 运行时数据
-public struct CAbilityState : IComponentData
+public struct AbilityStateComponent : IComponentData
 {
     public int AbilityId;
     public float CooldownRemaining;   // 剩余冷却帧数，0 时可释放
@@ -624,10 +624,10 @@ public static class MmcEvaluator
     public static float Evaluate(
         byte mmcTypeId,
         float baseMagnitude,
-        in BAttack srcAtk, in BHealth srcHp, in BDefense srcDef,
-        in BAttackSpeed srcAspd, in BMana srcMana,
-        in BAttack tgtAtk, in BHealth tgtHp, in BDefense tgtDef,
-        in BAttackSpeed tgtAspd, in BMana tgtMana)
+        in AttackAttribute srcAtk, in HealthAttribute srcHp, in DefenseAttribute srcDef,
+        in AttackSpeedAttribute srcAspd, in ManaAttribute srcMana,
+        in AttackAttribute tgtAtk, in HealthAttribute tgtHp, in DefenseAttribute tgtDef,
+        in AttackSpeedAttribute tgtAspd, in ManaAttribute tgtMana)
     {
         return mmcTypeId switch
         {
@@ -656,7 +656,7 @@ public static class MmcEvaluator
 
 ### 7.2 羁绊 System 设计
 
-羁绊检测通过 typed fact reaction 驱动，不通过全局 EventBus 扫描。每帧在 `GasTypedFactProjectionSystemGroup` 中检测羁绊条件变化，产出 `BTypedSimulationFact`，后续 phase 消费 fact 进行 GE 施加或 modifier 调整。
+羁绊检测通过 typed fact reaction 驱动，不通过全局 EventBus 扫描。每帧在 `GASGameplayEventProjectionSystemGroup` 中检测羁绊条件变化，产出 `GameplayEventBuffer`，后续 phase 消费 fact 进行 GE 施加或 modifier 调整。
 
 ```csharp
 // ============================================================
@@ -668,9 +668,9 @@ public static class MmcEvaluator
 // 原因: 羁绊检测每帧遍历所有存活单位，hot path 主线程 foreach 不可接受
 // ============================================================
 
-[UpdateInGroup(typeof(GasTypedFactProjectionSystemGroup))]
+[UpdateInGroup(typeof(GASGameplayEventProjectionSystemGroup))]
 [BurstCompile]
-public partial struct SSynergyDetectSystem : ISystem
+public partial struct GameplayEventSynergyDetectSystem : ISystem
 {
     private EntityQuery _aliveUnitsQuery;
 
@@ -678,8 +678,8 @@ public partial struct SSynergyDetectSystem : ISystem
     public void OnCreate(ref SystemState state)
     {
         _aliveUnitsQuery = state.GetEntityQuery(
-            ComponentType.ReadOnly<CAscOwner>(),
-            ComponentType.ReadOnly<CTagMask>());
+            ComponentType.ReadOnly<ASCIdentityComponent>(),
+            ComponentType.ReadOnly<TagMaskComponent>());
         state.RequireForUpdate(_aliveUnitsQuery);
     }
 
@@ -701,13 +701,13 @@ public partial struct SSynergyDetectSystem : ISystem
         counts.Dispose();
 
         // 产出 typed fact — 通过 structural phase ECB
-        var ecb = SystemAPI.GetSingleton<EndGasStructuralECBSystem.Singleton>()
+        var ecb = SystemAPI.GetSingleton<EndGASStructuralECBSystem.Singleton>()
             .CreateCommandBuffer(state.WorldUnmanaged);
-        var streamEntity = SystemAPI.GetSingletonEntity<CEffectCommandStreamOwner>();
+        var streamEntity = SystemAPI.GetSingletonEntity<GEStreamOwnerComponent>();
 
         if (frostCount >= 3)
         {
-            ecb.AppendToBuffer(streamEntity, new BTypedSimulationFact
+            ecb.AppendToBuffer(streamEntity, new GameplayEventBuffer
             {
                 FactCode = FactCode.SynergyFrostActivated,
                 Frame = (int)(SystemAPI.Time.ElapsedTime * 60),
@@ -716,7 +716,7 @@ public partial struct SSynergyDetectSystem : ISystem
         }
         else
         {
-            ecb.AppendToBuffer(streamEntity, new BTypedSimulationFact
+            ecb.AppendToBuffer(streamEntity, new GameplayEventBuffer
             {
                 FactCode = FactCode.SynergyFrostDeactivated,
                 Frame = (int)(SystemAPI.Time.ElapsedTime * 60),
@@ -735,7 +735,7 @@ public partial struct SynergyCountJob : IJobEntity
     [NativeDisableParallelForRestriction]
     public NativeArray<int> Counts; // [0]=frost, [1]=priest
 
-    public void Execute(in CAscOwner owner, in CTagMask tagMask)
+    public void Execute(in ASCIdentityComponent owner, in TagMaskComponent tagMask)
     {
         if (TagCheck.IsDead(tagMask.Value)) return;
 
@@ -783,14 +783,14 @@ public static class FactCode
 // --- Singleton Tag: Stream Owner ---
 // 标记流式命令缓冲区的宿主 entity（唯一单例）
 // 类型: Data (IComponentData, singleton)
-public struct CEffectCommandStreamOwner : IComponentData
+public struct GEStreamOwnerComponent : IComponentData
 {
     // 无字段 — 仅用作 singleton tag marker
 }
 
 // --- Command Request (Boundary → Core) ---
 // 类型: Data (IComponentData) — request entity 上的 command payload
-public struct CAbilityCommandRequest : IComponentData
+public struct AbilityCommandRequest : IComponentData
 {
     public int AbilityId;
     public Entity SourceAsc;       // 释放者 ASC entity
@@ -800,16 +800,16 @@ public struct CAbilityCommandRequest : IComponentData
 
 // --- ASC Owner (来源标记) ---
 // 类型: Data (IComponentData) — 挂载在 ASC entity 上，标记所属 player/AI
-public struct CAscOwner : IComponentData
+public struct ASCIdentityComponent : IComponentData
 {
     public int PlayerId;           // 0=己方, 1=敌方
     public int CampId;
 }
 
 // --- Active Effect Store 标记 ---
-// 类型: Data (IComponentData) — 标记此 entity 持有 BActiveEffectSlot buffer
-// 用于 Query 过滤: WithAll<CActiveEffectStore> 只匹配持有 active effect 的 entity
-public struct CActiveEffectStore : IComponentData
+// 类型: Data (IComponentData) — 标记此 entity 持有 ActiveGameplayEffectBuffer buffer
+// 用于 Query 过滤: WithAll<ASCActiveEffectsComponent> 只匹配持有 active effect 的 entity
+public struct ASCActiveEffectsComponent : IComponentData
 {
     // 无字段 — query marker，配合 Chunk Component 实现 chunk 级跳过
 }
@@ -875,11 +875,11 @@ public struct UnitLookupBlob
 // DynamicBuffer 定义（按不变量 33: 必须声明 InternalBufferCapacity）
 // ============================================================
 
-// BEffectCommand: CommandIngest 产出 → SpecEvaluation 消费
+// GEEffectCommandBuffer: CommandIngest 产出 → SpecEvaluation 消费
 // 每帧清空，最大容量受 AoE + 多 ability 并发限制
 // 容量: x1 精链路 ≤ 32, InternalBufferCapacity = 64
 [InternalBufferCapacity(64)]
-public struct BEffectCommand : IBufferElementData
+public struct GEEffectCommandBuffer : IBufferElementData
 {
     public int EffectCode;
     public Entity SourceAsc;
@@ -887,11 +887,11 @@ public struct BEffectCommand : IBufferElementData
     public int ContextId;         // AbilityId 或 0(=普攻)
 }
 
-// BInstantEffectSpec: SpecEval 产出 → DeltaApply 消费
-// 每帧清空，数量 ≤ BEffectCommand.Length
+// GEEffectSpecBuffer: SpecEval 产出 → DeltaApply 消费
+// 每帧清空，数量 ≤ GEEffectCommandBuffer.Length
 // 容量: x1 ≤ 32, InternalBufferCapacity = 64
 [InternalBufferCapacity(64)]
-public struct BInstantEffectSpec : IBufferElementData
+public struct GEEffectSpecBuffer : IBufferElementData
 {
     public int EffectCode;
     public int ContextId;
@@ -899,11 +899,11 @@ public struct BInstantEffectSpec : IBufferElementData
     public Entity TargetAsc;
 }
 
-// BActiveEffectMutation: SpecEval 产出 → ActiveEffectLifecycle 消费
-// 每帧清空，数量 ≤ BEffectCommand 中 Duration 类型数量
+// ActiveEffectMutationBuffer: SpecEval 产出 → ActiveEffectLifecycle 消费
+// 每帧清空，数量 ≤ GEEffectCommandBuffer 中 Duration 类型数量
 // 容量: x1 ≤ 16, InternalBufferCapacity = 32
 [InternalBufferCapacity(32)]
-public struct BActiveEffectMutation : IBufferElementData
+public struct ActiveEffectMutationBuffer : IBufferElementData
 {
     public int EffectCode;
     public Entity SourceAsc;
@@ -915,12 +915,12 @@ public struct BActiveEffectMutation : IBufferElementData
     public int ContextId;
 }
 
-// BActiveEffectSlot: ActiveEffectLifecycle RW, 挂载在目标 ASC entity
+// ActiveGameplayEffectBuffer: ActiveEffectLifecycle RW, 挂载在目标 ASC entity
 // 持续存在直到 GE 到期, x1 规模 ≤ 8 slots/entity
 // 容量: 每 entity 最多约 8-16 个 active slot
 // InternalBufferCapacity = 8 (slot 数少，优先 inline 存储)
 [InternalBufferCapacity(8)]
-public struct BActiveEffectSlot : IBufferElementData
+public struct ActiveGameplayEffectBuffer : IBufferElementData
 {
     public int EffectCode;
     public byte StackCount;       // 最大 255
@@ -933,11 +933,11 @@ public struct BActiveEffectSlot : IBufferElementData
     public byte Flags;            // EffectSlotFlags bitmask
 }
 
-// BAttributeDelta: DeltaApply / Period 产出 → TypedFact 消费 + 属性重算
+// AttributeModifierBuffer: DeltaApply / Period 产出 → TypedFact 消费 + 属性重算
 // 每帧清空，数量受 active slot period tick + instant spec 限制
 // 容量: x1 ≤ 64, InternalBufferCapacity = 64
 [InternalBufferCapacity(64)]
-public struct BAttributeDelta : IBufferElementData
+public struct AttributeModifierBuffer : IBufferElementData
 {
     public int AttributeCode;     // XAttr constant
     public float Delta;           // 正=增加, 负=减少
@@ -945,11 +945,11 @@ public struct BAttributeDelta : IBufferElementData
     public int SourceEffectCode;
 }
 
-// BTypedSimulationFact: 所有 System 产出 → Observation 消费
+// GameplayEventBuffer: 所有 System 产出 → Observation 消费
 // 同时写入 replay buffer，不参与 gameplay 决策
 // 容量: 大缓冲区, InternalBufferCapacity = 128
 [InternalBufferCapacity(128)]
-public struct BTypedSimulationFact : IBufferElementData
+public struct GameplayEventBuffer : IBufferElementData
 {
     public int FactCode;
     public int Frame;
@@ -959,11 +959,11 @@ public struct BTypedSimulationFact : IBufferElementData
     public float Value;
 }
 
-// BPresentationEvent: Death/CE 产出 → Boundary outbox
+// PresentationEventBuffer: Death/CE 产出 → Boundary outbox
 // Cue 不决定 gameplay (不变量 6)
 // 容量: InternalBufferCapacity = 32
 [InternalBufferCapacity(32)]
-public struct BPresentationEvent : IBufferElementData
+public struct PresentationEventBuffer : IBufferElementData
 {
     public int CueCode;
     public Entity SourceAsc;
@@ -985,18 +985,18 @@ public static class CueCode
 }
 
 // ============================================================
-// EndGasStructuralECBSystem: 结构变化唯一播放点
+// EndGASStructuralECBSystem: 结构变化唯一播放点
 // 符合不变量 21: hot path 禁止直接结构变化
 // 符合 ECB-01: ECB 集中延迟到指定 SystemGroup 播放
 // ============================================================
-[UpdateInGroup(typeof(GasStructuralPlaybackSystemGroup))]
-public partial struct EndGasStructuralECBSystem : ISystem
+[UpdateInGroup(typeof(GASStructuralPlaybackSystemGroup))]
+public partial struct EndGASStructuralECBSystem : ISystem
 {
-    // Singleton component 标记，其他 System 通过 SystemAPI.GetSingleton<EndGasStructuralECBSystem.Singleton>()
+    // Singleton component 标记，其他 System 通过 SystemAPI.GetSingleton<EndGASStructuralECBSystem.Singleton>()
     // 获取 ECB 构造器
     public struct Singleton : IComponentData
     {
-        // 由 BeginGasStructuralECBSystem 创建，EndGasStructuralECBSystem 播放并销毁
+        // 由 BeginGASStructuralECBSystem 创建，EndGASStructuralECBSystem 播放并销毁
         internal EntityCommandBuffer.Singleton EcbSingleton;
     }
 
@@ -1004,13 +1004,13 @@ public partial struct EndGasStructuralECBSystem : ISystem
     public void OnUpdate(ref SystemState state)
     {
         // 播放所有本 SystemGroup 内收集的 ECB 命令
-        // 实际实现依赖 BeginGasStructuralECBSystem 创建的 singleton ECB
+        // 实际实现依赖 BeginGASStructuralECBSystem 创建的 singleton ECB
     }
 }
 
 // Chunk Component: chunk 级跳过优化（不变量 37 的前置条件）
 // 当 chunk 内所有 entity 都没有 active effect slot 时标记
-public struct ChunkNoActiveEffects : IComponentData
+public struct NoActiveEffectsChunkComponent : IComponentData
 {
     // 无字段 — chunk component marker
 }
@@ -1022,30 +1022,30 @@ public struct ChunkNoActiveEffects : IComponentData
 
 ## 八、核心 System 实现
 
-### 8.1 普攻 System（GasSpecEvaluationSystemGroup）
+### 8.1 普攻 System（GASSpecEvaluationSystemGroup）
 
 ```csharp
 // ============================================================
-// [Layer 3: GAS Runtime Core — GasSpecEvaluationSystemGroup]
+// [Layer 3: GAS Runtime Core — GASSpecEvaluationSystemGroup]
 // 普攻 System：冷却计时 → 选敌 → 发射 Instant GE command
 // ============================================================
 
-[UpdateInGroup(typeof(GasSpecEvaluationSystemGroup))]
+[UpdateInGroup(typeof(GASSpecEvaluationSystemGroup))]
 [BurstCompile]
-public partial struct SAutoAttackSystem : ISystem
+public partial struct GEAutoAttackSystem : ISystem
 {
     [BurstCompile]
     public void OnCreate(ref SystemState state)
     {
         state.RequireForUpdate<CChessCombat>();
-        state.RequireForUpdate<CEffectCommandStreamOwner>();
+        state.RequireForUpdate<GEStreamOwnerComponent>();
     }
 
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
     {
-        var streamEntity = SystemAPI.GetSingletonEntity<CEffectCommandStreamOwner>();
-        var ecb = SystemAPI.GetSingleton<EndGasStructuralECBSystem.Singleton>()
+        var streamEntity = SystemAPI.GetSingletonEntity<GEStreamOwnerComponent>();
+        var ecb = SystemAPI.GetSingleton<EndGASStructuralECBSystem.Singleton>()
             .CreateCommandBuffer(state.WorldUnmanaged);
 
         // 1. 法力自然回复
@@ -1055,7 +1055,7 @@ public partial struct SAutoAttackSystem : ISystem
         };
         state.Dependency = manaRegenJob.ScheduleParallel(state.Dependency);
 
-        // 2. 普攻冷却 tick + 攻击检测 → 发射 BEffectCommand
+        // 2. 普攻冷却 tick + 攻击检测 → 发射 GEEffectCommandBuffer
         var attackJob = new AutoAttackTickJob
         {
             DeltaTime = SystemAPI.Time.DeltaTime,
@@ -1072,10 +1072,10 @@ public partial struct ManaRegenTickJob : IJobEntity
     public float DeltaTime;
 
     public void Execute(
-        ref BMana mana,
-        in BMaxMana maxMana,
-        in BManaRegen regen,
-        in CTagMask tagMask)
+        ref ManaAttribute mana,
+        in MaxManaAttribute maxMana,
+        in ManaRegenAttribute regen,
+        in TagMaskComponent tagMask)
     {
         if (TagCheck.IsDead(tagMask.Value)) return;
         mana.CurrentValue = math.min(mana.CurrentValue + regen.CurrentValue * DeltaTime, maxMana.CurrentValue);
@@ -1094,10 +1094,10 @@ public partial struct AutoAttackTickJob : IJobEntity
         Entity attacker,
         ref CChessCombat combat,
         in CChessUnit unit,
-        in CTagMask tagMask,
-        in BAttack atk,
-        in BAttackSpeed aspd,
-        in BHealth hp)
+        in TagMaskComponent tagMask,
+        in AttackAttribute atk,
+        in AttackSpeedAttribute aspd,
+        in HealthAttribute hp)
     {
         if (!unit.IsAlive) return;
         if (TagCheck.IsStunnedOrFrozen(tagMask.Value)) return;
@@ -1111,7 +1111,7 @@ public partial struct AutoAttackTickJob : IJobEntity
 
             // 发射普攻 EffectCommand (GE 4001 = 普攻伤害)
             // SourceAsc = 攻击者自身(entity), TargetAsc = 当前目标
-            ECB.AppendToBuffer(chunkIndex, StreamEntity, new BEffectCommand
+            ECB.AppendToBuffer(chunkIndex, StreamEntity, new GEEffectCommandBuffer
             {
                 EffectCode = 4001,
                 SourceAsc = attacker,
@@ -1123,21 +1123,21 @@ public partial struct AutoAttackTickJob : IJobEntity
 }
 ```
 
-### 8.2 技能激活 System（GasCommandIngestSystemGroup）
+### 8.2 技能激活 System（GASCommandIngestSystemGroup）
 
 ```csharp
 // ============================================================
-// [Layer 3: GAS Runtime Core — GasCommandIngestSystemGroup]
+// [Layer 3: GAS Runtime Core — GASCommandIngestSystemGroup]
 // 技能激活检查：法力足够 + 冷却完毕 + 未眩晕/冰冻 → 发射 EffectCommand
 //
 // CASE-02 (IJobEntity) — 拒绝 CASE-01 (SystemAPI.Query)
 // 原因: CommandIngest 是每帧必走的 hot path，x50+ 下 request 数可能很高
-// ECB: 使用 GasStructuralPlaybackSystemGroup ECB (EndGasStructuralECB) 统一播放
+// ECB: 使用 GASStructuralPlaybackSystemGroup ECB (EndGasStructuralECB) 统一播放
 // ============================================================
 
-[UpdateInGroup(typeof(GasCommandIngestSystemGroup))]
+[UpdateInGroup(typeof(GASCommandIngestSystemGroup))]
 [BurstCompile]
-public partial struct SAbilityActivationSystem : ISystem
+public partial struct AbilityActivationSystem : ISystem
 {
     private EntityQuery _requestQuery;
 
@@ -1145,19 +1145,19 @@ public partial struct SAbilityActivationSystem : ISystem
     public void OnCreate(ref SystemState state)
     {
         _requestQuery = state.GetEntityQuery(
-            ComponentType.ReadOnly<CAbilityCommandRequest>(),
-            ComponentType.ReadOnly<CAscOwner>(),
-            ComponentType.ReadOnly<CTagMask>(),
-            ComponentType.ReadWrite<CAbilityState>());
+            ComponentType.ReadOnly<AbilityCommandRequest>(),
+            ComponentType.ReadOnly<ASCIdentityComponent>(),
+            ComponentType.ReadOnly<TagMaskComponent>(),
+            ComponentType.ReadWrite<AbilityStateComponent>());
         state.RequireForUpdate(_requestQuery);
     }
 
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
     {
-        var streamEntity = SystemAPI.GetSingletonEntity<CEffectCommandStreamOwner>();
+        var streamEntity = SystemAPI.GetSingletonEntity<GEStreamOwnerComponent>();
         var abilityLookup = SystemAPI.GetSingleton<GAStaticLookup>(); // Ability lookup 单例（BlobAsset 表）
-        var ecb = SystemAPI.GetSingleton<EndGasStructuralECBSystem.Singleton>()
+        var ecb = SystemAPI.GetSingleton<EndGASStructuralECBSystem.Singleton>()
             .CreateCommandBuffer(state.WorldUnmanaged);
 
         var ingestJob = new AbilityActivationIngestJob
@@ -1180,10 +1180,10 @@ public partial struct AbilityActivationIngestJob : IJobEntity
     public void Execute(
         [EntityIndexInChunk] int chunkIndex,
         Entity entity,
-        in CAbilityCommandRequest request,
-        in CAscOwner owner,
-        in CTagMask tagMask,
-        ref CAbilityState ability)
+        in AbilityCommandRequest request,
+        in ASCIdentityComponent owner,
+        in TagMaskComponent tagMask,
+        ref AbilityStateComponent ability)
     {
         // 检查自身是否眩晕/冰冻
         if (TagCheck.IsStunnedOrFrozen(tagMask.Value))
@@ -1208,7 +1208,7 @@ public partial struct AbilityActivationIngestJob : IJobEntity
         ability.CooldownRemaining = def.CooldownFrames;
 
         // 发射 EffectCommand — 使用 ECB ParallelWriter + Entity 作为 sortKey
-        ECB.AppendToBuffer(chunkIndex, StreamEntity, new BEffectCommand
+        ECB.AppendToBuffer(chunkIndex, StreamEntity, new GEEffectCommandBuffer
         {
             EffectCode = def.EffectIdPrimary,
             SourceAsc = entity,
@@ -1218,7 +1218,7 @@ public partial struct AbilityActivationIngestJob : IJobEntity
 
         if (def.EffectIdSecondary != 0)
         {
-            ECB.AppendToBuffer(chunkIndex, StreamEntity, new BEffectCommand
+            ECB.AppendToBuffer(chunkIndex, StreamEntity, new GEEffectCommandBuffer
             {
                 EffectCode = def.EffectIdSecondary,
                 SourceAsc = entity,
@@ -1233,47 +1233,47 @@ public partial struct AbilityActivationIngestJob : IJobEntity
 }
 ```
 
-### 8.3 Spec Evaluation System（GasSpecEvaluationSystemGroup）
+### 8.3 Spec Evaluation System（GASSpecEvaluationSystemGroup）
 
 ```csharp
 // ============================================================
-// [Layer 3: GAS Runtime Core — GasSpecEvaluationSystemGroup]
-// Spec Evaluation: 读取 BEffectCommand → 查 GE BlobAsset → 分别产出:
-//   Instant GE → BInstantEffectSpec (→ DeltaApply 消费)
-//   Duration GE → BActiveEffectMutation (→ ActiveEffectLifecycle 消费)
+// [Layer 3: GAS Runtime Core — GASSpecEvaluationSystemGroup]
+// Spec Evaluation: 读取 GEEffectCommandBuffer → 查 GE BlobAsset → 分别产出:
+//   Instant GE → GEEffectSpecBuffer (→ DeltaApply 消费)
+//   Duration GE → ActiveEffectMutationBuffer (→ ActiveEffectLifecycle 消费)
 //
 // CASE-02 (IJobEntity) — 拒绝 CASE-01 (SystemAPI.Query foreach)
-// 原因: BEffectCommand 数量在 AoE 场景可达数十，主线程 foreach + 多次 Buffer.Add
+// 原因: GEEffectCommandBuffer 数量在 AoE 场景可达数十，主线程 foreach + 多次 Buffer.Add
 //       产生多重 sync point，应以 job 批量转换
-// 实现: 主线程将 BEffectCommand 拷贝为 NativeArray → SpecEvalJob 并行消费
-//       → 结果分别写入 BInstantEffectSpec / BActiveEffectMutation buffer
-// ECB: buffer 写入通过 structural phase ECB (EndGasStructuralECBSystem)
+// 实现: 主线程将 GEEffectCommandBuffer 拷贝为 NativeArray → SpecEvalJob 并行消费
+//       → 结果分别写入 GEEffectSpecBuffer / ActiveEffectMutationBuffer buffer
+// ECB: buffer 写入通过 structural phase ECB (EndGASStructuralECBSystem)
 // ============================================================
 
-[UpdateInGroup(typeof(GasSpecEvaluationSystemGroup))]
+[UpdateInGroup(typeof(GASSpecEvaluationSystemGroup))]
 [BurstCompile]
-public partial struct SSpecEvaluationSystem : ISystem
+public partial struct GESpecEvaluationSystem : ISystem
 {
     [BurstCompile]
     public void OnCreate(ref SystemState state)
     {
-        state.RequireForUpdate<CEffectCommandStreamOwner>();
+        state.RequireForUpdate<GEStreamOwnerComponent>();
     }
 
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
     {
-        var streamEntity = SystemAPI.GetSingletonEntity<CEffectCommandStreamOwner>();
+        var streamEntity = SystemAPI.GetSingletonEntity<GEStreamOwnerComponent>();
         var geLookup = SystemAPI.GetSingleton<GAStaticLookup>();
 
         // 读取本帧 commands → NativeArray（一次 sync point）
-        var commandsBuf = SystemAPI.GetBuffer<BEffectCommand>(streamEntity);
+        var commandsBuf = SystemAPI.GetBuffer<GEEffectCommandBuffer>(streamEntity);
         if (commandsBuf.IsEmpty) return;
 
-        var commands = new NativeArray<BEffectCommand>(commandsBuf.Length, Allocator.TempJob);
+        var commands = new NativeArray<GEEffectCommandBuffer>(commandsBuf.Length, Allocator.TempJob);
         for (int i = 0; i < commandsBuf.Length; i++) commands[i] = commandsBuf[i];
 
-        var ecb = SystemAPI.GetSingleton<EndGasStructuralECBSystem.Singleton>()
+        var ecb = SystemAPI.GetSingleton<EndGASStructuralECBSystem.Singleton>()
             .CreateCommandBuffer(state.WorldUnmanaged);
 
         var evalJob = new SpecEvalJob
@@ -1291,7 +1291,7 @@ public partial struct SSpecEvaluationSystem : ISystem
 [BurstCompile]
 public struct SpecEvalJob : IJobParallelFor
 {
-    [ReadOnly] public NativeArray<BEffectCommand> Commands;
+    [ReadOnly] public NativeArray<GEEffectCommandBuffer> Commands;
     [ReadOnly] public GAStaticLookup GeLookup;
     public EntityCommandBuffer.ParallelWriter ECB;
     public Entity StreamEntity;
@@ -1308,7 +1308,7 @@ public struct SpecEvalJob : IJobParallelFor
         switch (ge.GeType)
         {
             case GEType.Instant:
-                ECB.AppendToBuffer(sortKey, StreamEntity, new BInstantEffectSpec
+                ECB.AppendToBuffer(sortKey, StreamEntity, new GEEffectSpecBuffer
                 {
                     EffectCode = ge.GeId,
                     ContextId = cmd.ContextId,
@@ -1318,7 +1318,7 @@ public struct SpecEvalJob : IJobParallelFor
                 break;
 
             case GEType.Duration:
-                ECB.AppendToBuffer(sortKey, StreamEntity, new BActiveEffectMutation
+                ECB.AppendToBuffer(sortKey, StreamEntity, new ActiveEffectMutationBuffer
                 {
                     EffectCode = ge.GeId,
                     SourceAsc = cmd.SourceAsc,
@@ -1335,40 +1335,40 @@ public struct SpecEvalJob : IJobParallelFor
 }
 ```
 
-### 8.4 Delta Apply System（GasDeltaApplySystemGroup）
+### 8.4 Delta Apply System（GASDeltaApplySystemGroup）
 
 ```csharp
 // ============================================================
-// [Layer 3: GAS Runtime Core — GasDeltaApplySystemGroup]
+// [Layer 3: GAS Runtime Core — GASDeltaApplySystemGroup]
 // InstantEffectSpec → 计算 modifier magnitude → 直接修改目标 ASC 属性
-// 写 BAttributeDelta buffer 供 TypedFact 消费
+// 写 AttributeModifierBuffer buffer 供 TypedFact 消费
 //
 // CASE-03 (IJobChunk) — 批处理 InstantSpec 按 target ASC 分组
 // 拒绝: 主线程 for 循环 + SystemAPI.GetComponent/SetComponent (同步 sync point)
 // ============================================================
 
-[UpdateInGroup(typeof(GasDeltaApplySystemGroup))]
+[UpdateInGroup(typeof(GASDeltaApplySystemGroup))]
 [BurstCompile]
-public partial struct SInstantSpecApplySystem : ISystem
+public partial struct AttributeModifierApplySystem : ISystem
 {
     [BurstCompile]
     public void OnCreate(ref SystemState state)
     {
-        state.RequireForUpdate<CEffectCommandStreamOwner>();
+        state.RequireForUpdate<GEStreamOwnerComponent>();
     }
 
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
     {
-        var streamEntity = SystemAPI.GetSingletonEntity<CEffectCommandStreamOwner>();
+        var streamEntity = SystemAPI.GetSingletonEntity<GEStreamOwnerComponent>();
         var geLookup = SystemAPI.GetSingleton<GAStaticLookup>();
 
         // 读取本帧 instant specs，转换为 NativeArray 供 job 消费
-        var specs = SystemAPI.GetBuffer<BInstantEffectSpec>(streamEntity);
+        var specs = SystemAPI.GetBuffer<GEEffectSpecBuffer>(streamEntity);
         if (specs.IsEmpty) return;
 
         // 使用 NativeArray 拷贝 specs（IJobEntity 不能直接读 singleton buffer）
-        var specsCopy = new NativeArray<BInstantEffectSpec>(specs.Length, Allocator.TempJob);
+        var specsCopy = new NativeArray<GEEffectSpecBuffer>(specs.Length, Allocator.TempJob);
         for (int i = 0; i < specs.Length; i++) specsCopy[i] = specs[i];
 
         var applyJob = new ApplyInstantSpecsJob
@@ -1387,17 +1387,17 @@ public partial struct SInstantSpecApplySystem : ISystem
 [BurstCompile]
 public partial struct ApplyInstantSpecsJob : IJobEntity
 {
-    [ReadOnly] public NativeArray<BInstantEffectSpec> Specs;
+    [ReadOnly] public NativeArray<GEEffectSpecBuffer> Specs;
     [ReadOnly] public GAStaticLookup GeLookup;
     public float DeltaTime;
 
     // 遍历所有目标 ASC entity
     public void Execute(
         Entity targetEntity,
-        ref BHealth hp,
-        ref BAttack atk,
-        ref BDefense def,
-        ref BAttackSpeed aspd)
+        ref HealthAttribute hp,
+        ref AttackAttribute atk,
+        ref DefenseAttribute def,
+        ref AttackSpeedAttribute aspd)
     {
         // 查找作用于此 entity 的 spec
         for (int i = 0; i < Specs.Length; i++)
@@ -1437,26 +1437,26 @@ public partial struct ApplyInstantSpecsJob : IJobEntity
 }
 ```
 
-### 8.5 Active Effect Lifecycle System（GasActiveEffectLifecycleSystemGroup）
+### 8.5 Active Effect Lifecycle System（GASGASActiveEffectLifecycleSystemGroup）
 
 ```csharp
 // ============================================================
-// [Layer 3: GAS Runtime Core — GasActiveEffectLifecycleSystemGroup]
+// [Layer 3: GAS Runtime Core — GASGASActiveEffectLifecycleSystemGroup]
 // Duration GE 生命周期管理，分两个阶段：
 //   阶段1: ApplyActiveEffectMutationsJob (IJobEntity)
-//     处理 BActiveEffectMutation → 创建/刷新 BActiveEffectSlot + 授予 tag
+//     处理 ActiveEffectMutationBuffer → 创建/刷新 ActiveGameplayEffectBuffer + 授予 tag
 //     拒绝: 主线程 foreach + SystemAPI.GetBuffer (sync point per mutation)
 //   阶段2: TickActiveSlotsJob (IJobEntity)
 //     Duration tick → Period trigger → 到期标记
 //     拒绝: EntityIndexInQuery (P1-04), ElementAt ref 语义错误,
 //           DeltaBuffer[0] 覆写, geBlob = default
-// ECB: 所有 ECB 通过 EndGasStructuralECBSystem 统一播放
-// Enableable toggle: CEffectSlotActive 在本 SystemGroup 内执行
+// ECB: 所有 ECB 通过 EndGASStructuralECBSystem 统一播放
+// Enableable toggle: GEActiveEffectTag 在本 SystemGroup 内执行
 // ============================================================
 
-[UpdateInGroup(typeof(GasActiveEffectLifecycleSystemGroup))]
+[UpdateInGroup(typeof(GASGASActiveEffectLifecycleSystemGroup))]
 [BurstCompile]
-public partial struct SActiveEffectLifecycleSystem : ISystem
+public partial struct ActiveEffectLifecycleSystem : ISystem
 {
     private EntityQuery _mutationQuery;
     private EntityQuery _activeSlotQuery;
@@ -1464,12 +1464,12 @@ public partial struct SActiveEffectLifecycleSystem : ISystem
     [BurstCompile]
     public void OnCreate(ref SystemState state)
     {
-        // mutation buffer 在 CEffectCommandStreamOwner singleton 上
-        state.RequireForUpdate<CEffectCommandStreamOwner>();
-        // active slot query：所有挂有 BActiveEffectSlot 的 entity
+        // mutation buffer 在 GEStreamOwnerComponent singleton 上
+        state.RequireForUpdate<GEStreamOwnerComponent>();
+        // active slot query：所有挂有 ActiveGameplayEffectBuffer 的 entity
         _activeSlotQuery = state.GetEntityQuery(
-            ComponentType.ReadWrite<BActiveEffectSlot>(),
-            ComponentType.ReadWrite<CTagMask>());
+            ComponentType.ReadWrite<ActiveGameplayEffectBuffer>(),
+            ComponentType.ReadWrite<TagMaskComponent>());
         state.RequireForUpdate(_activeSlotQuery);
     }
 
@@ -1477,20 +1477,20 @@ public partial struct SActiveEffectLifecycleSystem : ISystem
     public void OnUpdate(ref SystemState state)
     {
         var deltaTime = SystemAPI.Time.DeltaTime;
-        var streamEntity = SystemAPI.GetSingletonEntity<CEffectCommandStreamOwner>();
+        var streamEntity = SystemAPI.GetSingletonEntity<GEStreamOwnerComponent>();
         var geLookup = SystemAPI.GetSingleton<GAStaticLookup>();
 
         // Structural phase ECB — apply 和 tick 两个阶段共用
-        var structEcb = SystemAPI.GetSingleton<EndGasStructuralECBSystem.Singleton>()
+        var structEcb = SystemAPI.GetSingleton<EndGASStructuralECBSystem.Singleton>()
             .CreateCommandBuffer(state.WorldUnmanaged);
 
         // 阶段1: Apply mutations → 创建/刷新 slot + 授予 tag
-        var mutationsBuf = SystemAPI.GetBuffer<BActiveEffectMutation>(streamEntity);
+        var mutationsBuf = SystemAPI.GetBuffer<ActiveEffectMutationBuffer>(streamEntity);
         JobHandle applyHandle = state.Dependency;
 
         if (!mutationsBuf.IsEmpty)
         {
-            var mutations = new NativeArray<BActiveEffectMutation>(mutationsBuf.Length, Allocator.TempJob);
+            var mutations = new NativeArray<ActiveEffectMutationBuffer>(mutationsBuf.Length, Allocator.TempJob);
             for (int i = 0; i < mutationsBuf.Length; i++) mutations[i] = mutationsBuf[i];
 
             var applyJob = new ApplyActiveEffectMutationsJob
@@ -1530,23 +1530,23 @@ public enum EffectSlotFlags : byte
 }
 
 // ============================================================
-// 阶段1 Job: 处理 BActiveEffectMutation
+// 阶段1 Job: 处理 ActiveEffectMutationBuffer
 // 遍历 mutation NativeArray → 对每个 target ASC 进行 slot 增/改/tag授予
 // ============================================================
 [BurstCompile]
 public partial struct ApplyActiveEffectMutationsJob : IJobEntity
 {
-    [ReadOnly] public NativeArray<BActiveEffectMutation> Mutations;
+    [ReadOnly] public NativeArray<ActiveEffectMutationBuffer> Mutations;
     [ReadOnly] public GAStaticLookup GeLookup;
     public EntityCommandBuffer.ParallelWriter ECB;
     public Entity StreamEntity;
 
-    // 遍历所有持有 CActiveEffectStore 的 target entity
+    // 遍历所有持有 ASCActiveEffectsComponent 的 target entity
     public void Execute(
         [EntityIndexInChunk] int chunkIndex,
         Entity targetEntity,
-        ref DynamicBuffer<BActiveEffectSlot> slots,
-        ref CTagMask tagMask)
+        ref DynamicBuffer<ActiveGameplayEffectBuffer> slots,
+        ref TagMaskComponent tagMask)
     {
         for (int m = 0; m < Mutations.Length; m++)
         {
@@ -1569,7 +1569,7 @@ public partial struct ApplyActiveEffectMutationsJob : IJobEntity
             if (mutation.StackLimit > 0 && existingStacks >= mutation.StackLimit)
             {
                 ECB.AppendToBuffer(chunkIndex, StreamEntity,
-                    new BTypedSimulationFact
+                    new GameplayEventBuffer
                     {
                         FactCode = FactCode.StackOverflow,
                         Frame = (int)(UnityEngine.Time.time * 60),
@@ -1593,7 +1593,7 @@ public partial struct ApplyActiveEffectMutationsJob : IJobEntity
                 // 新 slot（通过 ECB AppendToBuffer 在 structural phase 执行）
                 // 注意: DynamicBuffer.Add 是立即结构变化，此处为示意
                 // 实际实现应用 ECB 延后 append
-                slots.Add(new BActiveEffectSlot
+                slots.Add(new ActiveGameplayEffectBuffer
                 {
                     EffectCode = mutation.EffectCode,
                     StackCount = 1,
@@ -1639,8 +1639,8 @@ public partial struct TickActiveSlotsJob : IJobEntity
 
     public void Execute(
         [EntityIndexInChunk] int chunkIndex,
-        ref DynamicBuffer<BActiveEffectSlot> slots,
-        ref CTagMask tagMask)
+        ref DynamicBuffer<ActiveGameplayEffectBuffer> slots,
+        ref TagMaskComponent tagMask)
     {
         // 注意: 从后往前遍历以支持 RemoveAt
         // DynamicBuffer 的 [i] 索引器在 Burst 下返回 ref 可直接修改
@@ -1670,7 +1670,7 @@ public partial struct TickActiveSlotsJob : IJobEntity
 
                 // 记录 expire fact → ECB AppendToBuffer
                 ECB.AppendToBuffer(chunkIndex, StreamEntity,
-                    new BTypedSimulationFact
+                    new GameplayEventBuffer
                     {
                         FactCode = FactCode.EffectExpired,
                         SourceEffectCode = slot.EffectCode,
@@ -1701,7 +1701,7 @@ public partial struct TickActiveSlotsJob : IJobEntity
                     float magnitude = mod.BaseMagnitude * slot.StackCount;
 
                     ECB.AppendToBuffer(chunkIndex, StreamEntity,
-                        new BAttributeDelta
+                        new AttributeModifierBuffer
                         {
                             AttributeCode = mod.AttrCode,
                             Delta = -magnitude, // Minus = 负数 delta
@@ -1715,21 +1715,21 @@ public partial struct TickActiveSlotsJob : IJobEntity
 }
 ```
 
-### 8.6 死亡检测 System（GasTypedFactProjectionSystemGroup）
+### 8.6 死亡检测 System（GASGameplayEventProjectionSystemGroup）
 
 ```csharp
 // ============================================================
-// [Layer 3: GAS Runtime Core — GasTypedFactProjectionSystemGroup]
+// [Layer 3: GAS Runtime Core — GASGameplayEventProjectionSystemGroup]
 // 死亡检测：HP ≤ 0 → 写入 Death fact → StructuralPlayback 清理
 //
 // CASE-02 (IJobEntity) — 拒绝 CASE-01 (SystemAPI.Query foreach)
 // 原因: 每帧遍历所有存活 ASC，hot path 主线程遍历不可接受
-// ECB: 使用 GasStructuralPlaybackSystemGroup ECB
+// ECB: 使用 GASStructuralPlaybackSystemGroup ECB
 // ============================================================
 
-[UpdateInGroup(typeof(GasTypedFactProjectionSystemGroup))]
+[UpdateInGroup(typeof(GASGameplayEventProjectionSystemGroup))]
 [BurstCompile]
-public partial struct SDeathCheckSystem : ISystem
+public partial struct GameplayEventDeathCheckSystem : ISystem
 {
     private EntityQuery _aliveQuery;
 
@@ -1737,8 +1737,8 @@ public partial struct SDeathCheckSystem : ISystem
     public void OnCreate(ref SystemState state)
     {
         _aliveQuery = state.GetEntityQuery(
-            ComponentType.ReadOnly<BHealth>(),
-            ComponentType.ReadWrite<CTagMask>(),
+            ComponentType.ReadOnly<HealthAttribute>(),
+            ComponentType.ReadWrite<TagMaskComponent>(),
             ComponentType.ReadWrite<CChessUnit>());
         state.RequireForUpdate(_aliveQuery);
     }
@@ -1746,8 +1746,8 @@ public partial struct SDeathCheckSystem : ISystem
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
     {
-        var streamEntity = SystemAPI.GetSingletonEntity<CEffectCommandStreamOwner>();
-        var ecb = SystemAPI.GetSingleton<EndGasStructuralECBSystem.Singleton>()
+        var streamEntity = SystemAPI.GetSingletonEntity<GEStreamOwnerComponent>();
+        var ecb = SystemAPI.GetSingleton<EndGASStructuralECBSystem.Singleton>()
             .CreateCommandBuffer(state.WorldUnmanaged);
         var currentFrame = (int)(SystemAPI.Time.ElapsedTime * 60);
 
@@ -1771,8 +1771,8 @@ public partial struct DeathCheckJob : IJobEntity
     public void Execute(
         [EntityIndexInChunk] int chunkIndex,
         Entity asc,
-        in BHealth hp,
-        ref CTagMask tagMask,
+        in HealthAttribute hp,
+        ref TagMaskComponent tagMask,
         ref CChessUnit unit)
     {
         if (!unit.IsAlive) return;
@@ -1784,7 +1784,7 @@ public partial struct DeathCheckJob : IJobEntity
 
         // 产出 Death fact
         ECB.AppendToBuffer(chunkIndex, StreamEntity,
-            new BTypedSimulationFact
+            new GameplayEventBuffer
             {
                 FactCode = FactCode.DeathOccurred,
                 Frame = CurrentFrame,
@@ -1793,7 +1793,7 @@ public partial struct DeathCheckJob : IJobEntity
 
         // 产出 Cue marker（表现层消费）
         ECB.AppendToBuffer(chunkIndex, StreamEntity,
-            new BPresentationEvent
+            new PresentationEventBuffer
             {
                 CueCode = CueCode.DeathVFX,
                 SourceAsc = asc,
@@ -1821,57 +1821,57 @@ public partial struct DeathCheckJob : IJobEntity
 ```mermaid
 sequenceDiagram
     participant AI as AI/Boundary
-    participant Ingest as GasCommandIngest
-    participant Spec as GasSpecEvaluation
-    participant Lifecycle as GasActiveEffectLifecycle
-    participant Delta as GasDeltaApply
-    participant Fact as GasTypedFactProjection
-    participant Obs as GasObservation
+    participant Ingest as GASCommandIngest
+    participant Spec as GASSpecEvaluation
+    participant Lifecycle as GASActiveEffectLifecycle
+    participant Delta as GASDeltaApply
+    participant Fact as GASGameplayEventProjection
+    participant Obs as GASObservation
 
     Note over AI: 剑士法力达到40，冷却完毕，选敌重装剑士
-    AI->>Ingest: CAbilityCommandRequest<br/>{Source=剑士, Target=重装, AbilityId=3001}
+    AI->>Ingest: AbilityCommandRequest<br/>{Source=剑士, Target=重装, AbilityId=3001}
 
-    Note over Ingest: SAbilityActivationSystem<br/>检查法力(40≥40✓)<br/>检查冷却(0≤0✓)<br/>检查自身tag(无眩晕✓)
-    Ingest->>Ingest: 扣法力: BMana.CurrentValue -= 40<br/>设冷却: CAbilityState.CooldownRemaining = 180
-    Ingest->>Spec: BEffectCommand{EffectCode=5001 盾击伤害}<br/>BEffectCommand{EffectCode=5002 眩晕}
+    Note over Ingest: AbilityActivationSystem<br/>检查法力(40≥40✓)<br/>检查冷却(0≤0✓)<br/>检查自身tag(无眩晕✓)
+    Ingest->>Ingest: 扣法力: ManaAttribute.CurrentValue -= 40<br/>设冷却: AbilityStateComponent.CooldownRemaining = 180
+    Ingest->>Spec: GEEffectCommandBuffer{EffectCode=5001 盾击伤害}<br/>GEEffectCommandBuffer{EffectCode=5002 眩晕}
 
-    Note over Spec: SSpecEvaluationSystem<br/>查 GE BlobAsset: 5001=Instant, 5002=Duration
-    Spec->>Spec: BInstantEffectSpec{EffectCode=5001, Target=重装}
-    Spec->>Lifecycle: BActiveEffectMutation{EffectCode=5002, Duration=120f, StackLimit=0}
+    Note over Spec: GESpecEvaluationSystem<br/>查 GE BlobAsset: 5001=Instant, 5002=Duration
+    Spec->>Spec: GEEffectSpecBuffer{EffectCode=5001, Target=重装}
+    Spec->>Lifecycle: ActiveEffectMutationBuffer{EffectCode=5002, Duration=120f, StackLimit=0}
 
-    Note over Lifecycle: SActiveEffectLifecycleSystem<br/>处理 mutation: 创建 BActiveEffectSlot
-    Lifecycle->>Lifecycle: BActiveEffectSlot.Add<br/>{EffectCode=5002, RemainingDuration=120f, Flags=Active}
-    Lifecycle->>Lifecycle: CTagMask.Value |= Stunned bit
-    Lifecycle->>Lifecycle: BAttributeDelta{AttrCode=ASPD, Delta=0, Op=Override}
+    Note over Lifecycle: ActiveEffectLifecycleSystem<br/>处理 mutation: 创建 ActiveGameplayEffectBuffer
+    Lifecycle->>Lifecycle: ActiveGameplayEffectBuffer.Add<br/>{EffectCode=5002, RemainingDuration=120f, Flags=Active}
+    Lifecycle->>Lifecycle: TagMaskComponent.Value |= Stunned bit
+    Lifecycle->>Lifecycle: AttributeModifierBuffer{AttrCode=ASPD, Delta=0, Op=Override}
 
-    Note over Delta: SInstantSpecApplySystem<br/>计算盾击伤害: ATK*0.8 = 120*0.8 = 96
-    Delta->>Delta: BHealth.CurrentValue -= 96<br/>BHealth(重装): 1800 → 1704
-    Delta->>Fact: BAttributeDelta{AttrCode=HP, Delta=-96, Target=重装}
+    Note over Delta: AttributeModifierApplySystem<br/>计算盾击伤害: ATK*0.8 = 120*0.8 = 96
+    Delta->>Delta: HealthAttribute.CurrentValue -= 96<br/>HealthAttribute(重装): 1800 → 1704
+    Delta->>Fact: AttributeModifierBuffer{AttrCode=HP, Delta=-96, Target=重装}
 
-    Note over Fact: SDeathCheckSystem<br/>HP=1704 > 0, 未死亡
-    Fact->>Obs: BTypedSimulationFact{FactCode=DamageResolved}<br/>BPresentationEvent{CueCode=ShieldBashVFX}
+    Note over Fact: GameplayEventDeathCheckSystem<br/>HP=1704 > 0, 未死亡
+    Fact->>Obs: GameplayEventBuffer{FactCode=DamageResolved}<br/>PresentationEventBuffer{CueCode=ShieldBashVFX}
 
     Note over Lifecycle,Tick: 后续每帧 TickActiveSlotsJob<br/>RemainingDuration -= dt<br/>ASPD 维持 Override=0（眩晕中）
 
     Note over Lifecycle,Tick+120f: 眩晕到期
-    Lifecycle->>Lifecycle: BActiveEffectSlot.Flags |= PendingRemove
-    Lifecycle->>Lifecycle: CTagMask.Value &= ~Stunned bit
+    Lifecycle->>Lifecycle: ActiveGameplayEffectBuffer.Flags |= PendingRemove
+    Lifecycle->>Lifecycle: TagMaskComponent.Value &= ~Stunned bit
     Lifecycle->>Lifecycle: 移除 slot
-    Lifecycle->>Fact: BTypedSimulationFact{FactCode=EffectExpired}
+    Lifecycle->>Fact: GameplayEventBuffer{FactCode=EffectExpired}
 
     Note over Delta: 眩晕结束后下一帧 DeltaApply 恢复 ASPD
-    Delta->>Delta: BAttackSpeed.CurrentValue = BaseValue + Bonus<br/>重装剑士 ASPD: 0 → 90
+    Delta->>Delta: AttackSpeedAttribute.CurrentValue = BaseValue + Bonus<br/>重装剑士 ASPD: 0 → 90
 ```
 
 **关键数据流步骤：**
 
 ```
-1. CAbilityCommandRequest → 消耗法力、设置冷却
-2. BEffectCommand ×2 → 分别产出 InstantSpec 和 ActiveEffectMutation
-3. Instant GE (5001): MMC ATK*0.8 = 96 → BHealth.CurrentValue -= 96
-4. Duration GE (5002): BActiveEffectSlot.Add → CTagMask |= Stunned → ASPD Override=0
+1. AbilityCommandRequest → 消耗法力、设置冷却
+2. GEEffectCommandBuffer ×2 → 分别产出 InstantSpec 和 ActiveEffectMutation
+3. Instant GE (5001): MMC ATK*0.8 = 96 → HealthAttribute.CurrentValue -= 96
+4. Duration GE (5002): ActiveGameplayEffectBuffer.Add → TagMaskComponent |= Stunned → ASPD Override=0
 5. Duration tick: 每帧 RemainingDuration -= dt，ASPD 保持 0
-6. 到期: PendingRemove → CTagMask &= ~Stunned → 下一帧 ASPD 恢复
+6. 到期: PendingRemove → TagMaskComponent &= ~Stunned → 下一帧 ASPD 恢复
 7. 整个链路产出: DamageResolved fact + EffectExpired fact + ShieldBashVFX cue
 ```
 
@@ -1888,38 +1888,38 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant AI as AI/Boundary
-    participant Ingest as GasCommandIngest
-    participant Spec as GasSpecEvaluation
-    participant Delta as GasDeltaApply
-    participant Lifecycle as GasActiveEffectLifecycle
-    participant Fact as GasTypedFactProjection
-    participant Obs as GasObservation
+    participant Ingest as GASCommandIngest
+    participant Spec as GASSpecEvaluation
+    participant Delta as GASDeltaApply
+    participant Lifecycle as GASActiveEffectLifecycle
+    participant Fact as GASGameplayEventProjection
+    participant Obs as GASObservation
 
     Note over AI: 冰霜女巫法力达到80，冷却完毕，选最近的3个敌人
-    AI->>Ingest: CAbilityCommandRequest<br/>{Source=冰霜女巫, Targets=[重装,烈焰,暗影], AbilityId=3002}
+    AI->>Ingest: AbilityCommandRequest<br/>{Source=冰霜女巫, Targets=[重装,烈焰,暗影], AbilityId=3002}
 
-    Note over Ingest: SAbilityActivationSystem<br/>法力80≥80✓, 冷却0✓, 未眩晕✓
-    Ingest->>Ingest: BMana.CurrentValue -= 80<br/>CAbilityState.CooldownRemaining = 300
-    Ingest->>Spec: 3 × BEffectCommand{EffectCode=5003 冰霜新星伤害}<br/>3 × BEffectCommand{EffectCode=5004 冰霜减速}
+    Note over Ingest: AbilityActivationSystem<br/>法力80≥80✓, 冷却0✓, 未眩晕✓
+    Ingest->>Ingest: ManaAttribute.CurrentValue -= 80<br/>AbilityStateComponent.CooldownRemaining = 300
+    Ingest->>Spec: 3 × GEEffectCommandBuffer{EffectCode=5003 冰霜新星伤害}<br/>3 × GEEffectCommandBuffer{EffectCode=5004 冰霜减速}
 
-    Note over Spec: SSpecEvaluationSystem<br/>5003 = Instant (AoE damage)<br/>5004 = Duration 3s (slow)
+    Note over Spec: GESpecEvaluationSystem<br/>5003 = Instant (AoE damage)<br/>5004 = Duration 3s (slow)
 
-    Spec->>Delta: 3 × BInstantEffectSpec{EffectCode=5003, Target=各敌人}
-    Spec->>Lifecycle: 3 × BActiveEffectMutation{EffectCode=5004, Duration=180f}
+    Spec->>Delta: 3 × GEEffectSpecBuffer{EffectCode=5003, Target=各敌人}
+    Spec->>Lifecycle: 3 × ActiveEffectMutationBuffer{EffectCode=5004, Duration=180f}
 
-    Note over Delta: SInstantSpecApplySystem<br/>计算伤害: MagicPower*1.5 - TargetDEF*0.3<br/>冰霜女巫 MagicPower=200
+    Note over Delta: AttributeModifierApplySystem<br/>计算伤害: MagicPower*1.5 - TargetDEF*0.3<br/>冰霜女巫 MagicPower=200
 
     rect rgb(240, 248, 255)
-        Note over Delta: 对重装剑士: 200*1.5 - 80*0.3 = 300 - 24 = 276<br/>BHealth: 1704 → 1428
-        Note over Delta: 对烈焰法师: 200*1.5 - 25*0.3 = 300 - 7.5 = 293<br/>BHealth: 850 → 557
-        Note over Delta: 对暗影刺客: 200*1.5 - 25*0.3 = 300 - 7.5 = 293<br/>BHealth: 900 → 607
+        Note over Delta: 对重装剑士: 200*1.5 - 80*0.3 = 300 - 24 = 276<br/>HealthAttribute: 1704 → 1428
+        Note over Delta: 对烈焰法师: 200*1.5 - 25*0.3 = 300 - 7.5 = 293<br/>HealthAttribute: 850 → 557
+        Note over Delta: 对暗影刺客: 200*1.5 - 25*0.3 = 300 - 7.5 = 293<br/>HealthAttribute: 900 → 607
     end
 
-    Delta->>Fact: 3 × BAttributeDelta{AttrCode=HP, Delta=-276/-293/-293}
+    Delta->>Fact: 3 × AttributeModifierBuffer{AttrCode=HP, Delta=-276/-293/-293}
 
-    Note over Lifecycle: SActiveEffectLifecycleSystem<br/>3个目标的 ASPD *= 0.7 (slow)
-    Lifecycle->>Lifecycle: 3 × BActiveEffectSlot.Add{EffectCode=5004, RemainingDuration=180f}<br/>3 × CTagMask.Value |= Slowed bit
-    Lifecycle->>Delta: 3 × BAttributeDelta{AttrCode=ASPD, Delta=×0.7, Op=Multiply}
+    Note over Lifecycle: ActiveEffectLifecycleSystem<br/>3个目标的 ASPD *= 0.7 (slow)
+    Lifecycle->>Lifecycle: 3 × ActiveGameplayEffectBuffer.Add{EffectCode=5004, RemainingDuration=180f}<br/>3 × TagMaskComponent.Value |= Slowed bit
+    Lifecycle->>Delta: 3 × AttributeModifierBuffer{AttrCode=ASPD, Delta=×0.7, Op=Multiply}
 
     Note over Fact: 产出 TypedFact
     Fact->>Obs: 3 × DamageResolved fact<br/>3 × SlowedApplied fact<br/>3 × CueMarker(IceNovaVFX)
@@ -1928,13 +1928,13 @@ sequenceDiagram
 **关键数据流步骤：**
 
 ```
-1. CAbilityCommandRequest → 扣 80 法力 → 冷却 300f
-2. 3×BEffectCommand(5003) → 3×BInstantEffectSpec → SInstantSpecApplySystem
+1. AbilityCommandRequest → 扣 80 法力 → 冷却 300f
+2. 3×GEEffectCommandBuffer(5003) → 3×GEEffectSpecBuffer → AttributeModifierApplySystem
 3. 每个目标独立计算 MMC: MagicPower*1.5 - TargetDEF*0.3
-4. 伤害写入 3 个 BHealth component（不同 entity，Job 可并行）
-5. 3×BEffectCommand(5004) → 3×BActiveEffectMutation → 3×BActiveEffectSlot
-6. 3×CTagMask |= Slowed → 3×AttackSpeed *= 0.7
-7. 180f 后 slow 到期 → 3×CTagMask &= ~Slowed → ASPD 恢复
+4. 伤害写入 3 个 HealthAttribute component（不同 entity，Job 可并行）
+5. 3×GEEffectCommandBuffer(5004) → 3×ActiveEffectMutationBuffer → 3×ActiveGameplayEffectBuffer
+6. 3×TagMaskComponent |= Slowed → 3×AttackSpeed *= 0.7
+7. 180f 后 slow 到期 → 3×TagMaskComponent &= ~Slowed → ASPD 恢复
 ```
 
 ### 走查 C：刺客"毒刃"叠加 2 层触发中毒爆发
@@ -1950,53 +1950,53 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant AI as AI/Boundary
-    participant Ingest as GasCommandIngest
-    participant Spec as GasSpecEvaluation
-    participant Lifecycle as GasActiveEffectLifecycle
-    participant Delta as GasDeltaApply
-    participant Fact as GasTypedFactProjection
+    participant Ingest as GASCommandIngest
+    participant Spec as GASSpecEvaluation
+    participant Lifecycle as GASActiveEffectLifecycle
+    participant Delta as GASDeltaApply
+    participant Fact as GASGameplayEventProjection
 
     Note over AI: T=0s: 暗影刺客法力60，释放毒刃→重装剑士
-    AI->>Ingest: CAbilityCommandRequest{Source=暗影刺客, Target=重装, AbilityId=3003}
+    AI->>Ingest: AbilityCommandRequest{Source=暗影刺客, Target=重装, AbilityId=3003}
 
-    Ingest->>Ingest: BMana -= 60, Cooldown = 120f
-    Ingest->>Spec: BEffectCommand{EffectCode=5005 毒刃}
+    Ingest->>Ingest: ManaAttribute -= 60, Cooldown = 120f
+    Ingest->>Spec: GEEffectCommandBuffer{EffectCode=5005 毒刃}
 
-    Spec->>Lifecycle: BActiveEffectMutation{EffectCode=5005, Duration=240f, Period=60f, StackLimit=3}
+    Spec->>Lifecycle: ActiveEffectMutationBuffer{EffectCode=5005, Duration=240f, Period=60f, StackLimit=3}
 
     Note over Lifecycle: 第1层毒刃：新增 slot
-    Lifecycle->>Lifecycle: BActiveEffectSlot.Add<br/>{EffectCode=5005, StackCount=1, RemainingDuration=240f}<br/>CTagMask.Value |= Poisoned bit
+    Lifecycle->>Lifecycle: ActiveGameplayEffectBuffer.Add<br/>{EffectCode=5005, StackCount=1, RemainingDuration=240f}<br/>TagMaskComponent.Value |= Poisoned bit
 
     rect rgb(255, 248, 240)
         Note over Lifecycle: T=1s: 第1次 Period Tick<br/>ATK*0.3 * StackCount = 180*0.3 * 1 = 54
-        Lifecycle->>Delta: BAttributeDelta{AttrCode=HP, Delta=-54}
+        Lifecycle->>Delta: AttributeModifierBuffer{AttrCode=HP, Delta=-54}
     end
 
     Note over AI: T=1.5s: 暗影刺客冷却完毕，再次释放毒刃→同一目标
-    AI->>Ingest: CAbilityCommandRequest{Source=暗影刺客, Target=重装, AbilityId=3003}
+    AI->>Ingest: AbilityCommandRequest{Source=暗影刺客, Target=重装, AbilityId=3003}
 
-    Ingest->>Ingest: BMana -= 60, Cooldown = 120f
-    Ingest->>Spec: BEffectCommand{EffectCode=5005 毒刃}
+    Ingest->>Ingest: ManaAttribute -= 60, Cooldown = 120f
+    Ingest->>Spec: GEEffectCommandBuffer{EffectCode=5005 毒刃}
 
-    Spec->>Lifecycle: BActiveEffectMutation{EffectCode=5005, SourceAggregate}
+    Spec->>Lifecycle: ActiveEffectMutationBuffer{EffectCode=5005, SourceAggregate}
 
     Note over Lifecycle: 第2层叠加：找到已有 slot{EffectCode=5005}<br/>StackCount: 1→2, RemainingDuration 刷新为 240f
-    Lifecycle->>Lifecycle: BActiveEffectSlot[0].StackCount = 2<br/>BActiveEffectSlot[0].RemainingDuration = 240f
+    Lifecycle->>Lifecycle: ActiveGameplayEffectBuffer[0].StackCount = 2<br/>ActiveGameplayEffectBuffer[0].RemainingDuration = 240f
 
     rect rgb(255, 248, 240)
         Note over Lifecycle: T=2s: Period Tick（叠加后）<br/>ATK*0.3 * 2 = 108
-        Lifecycle->>Delta: BAttributeDelta{AttrCode=HP, Delta=-108}
+        Lifecycle->>Delta: AttributeModifierBuffer{AttrCode=HP, Delta=-108}
         Note over Lifecycle: T=3s: Period Tick<br/>ATK*0.3 * 2 = 108
-        Lifecycle->>Delta: BAttributeDelta{AttrCode=HP, Delta=-108}
+        Lifecycle->>Delta: AttributeModifierBuffer{AttrCode=HP, Delta=-108}
         Note over Lifecycle: T=4s: 最后第4次 Period Tick<br/>ATK*0.3 * 2 = 108
-        Lifecycle->>Delta: BAttributeDelta{AttrCode=HP, Delta=-108}
+        Lifecycle->>Delta: AttributeModifierBuffer{AttrCode=HP, Delta=-108}
     end
 
     Note over Lifecycle: T=4s: Duration 到期
-    Lifecycle->>Lifecycle: BActiveEffectSlot.Flags |= PendingRemove<br/>CTagMask.Value &= ~Poisoned bit<br/>移除 slot
+    Lifecycle->>Lifecycle: ActiveGameplayEffectBuffer.Flags |= PendingRemove<br/>TagMaskComponent.Value &= ~Poisoned bit<br/>移除 slot
 
     Note over Fact: 汇总产出
-    Fact->>Fact: PoisonDOT 总计: 54 + 108×3 = 378 伤害<br/>BTypedSimulationFact{EffectApplied, EffectExpired, StackChanged}
+    Fact->>Fact: PoisonDOT 总计: 54 + 108×3 = 378 伤害<br/>GameplayEventBuffer{EffectApplied, EffectExpired, StackChanged}
 ```
 
 **如果叠加到第3层（stack overflow 场景）：**
@@ -2008,7 +2008,7 @@ StackCount: 2→3, Duration 刷新为 240f
 
 T=3.5s: 刺客第4次释放毒刃（假设无限法力）
 检查: StackLimit=3, existingStacks=3 ≥ 3 → Stack Overflow!
-产出: BTypedSimulationFact{FactCode=StackOverflow}
+产出: GameplayEventBuffer{FactCode=StackOverflow}
 不创建新 slot，不刷新 duration，不增加 StackCount
 ```
 
@@ -2018,41 +2018,41 @@ T=3.5s: 刺客第4次释放毒刃（假设无限法力）
 
 ```mermaid
 flowchart TD
-    subgraph FramePrepare["GasRuntimeFramePrepareSystemGroup"]
+    subgraph FramePrepare["GASFramePrepareSystemGroup"]
         RefreshQuery["Refresh Query/Lookup/TypeHandle"]
         ArenaSetup["Frame Scratch Allocator Setup"]
     end
 
-    subgraph CommandIngest["GasCommandIngestSystemGroup"]
-        IngestRequest["SAbilityActivationSystem<br/>W: BEffectCommand<br/>W: BMana, CAbilityState<br/>R: CTagMask, CAscOwner"]
+    subgraph CommandIngest["GASCommandIngestSystemGroup"]
+        IngestRequest["AbilityActivationSystem<br/>W: GEEffectCommandBuffer<br/>W: ManaAttribute, AbilityStateComponent<br/>R: TagMaskComponent, ASCIdentityComponent"]
     end
 
-    subgraph SpecEval["GasSpecEvaluationSystemGroup"]
-        AutoAttack["SAutoAttackSystem<br/>W: BEffectCommand<br/>R: BAttack, BAttackSpeed, CTagMask"]
-        SpecEvalSys["SSpecEvaluationSystem<br/>W: BInstantEffectSpec, BActiveEffectMutation<br/>R: BEffectCommand, GE BlobAsset"]
+    subgraph SpecEval["GASSpecEvaluationSystemGroup"]
+        AutoAttack["GEAutoAttackSystem<br/>W: GEEffectCommandBuffer<br/>R: AttackAttribute, AttackSpeedAttribute, TagMaskComponent"]
+        SpecEvalSys["GESpecEvaluationSystem<br/>W: GEEffectSpecBuffer, ActiveEffectMutationBuffer<br/>R: GEEffectCommandBuffer, GE BlobAsset"]
     end
 
-    subgraph ActiveLifecycle["GasActiveEffectLifecycleSystemGroup"]
-        LifecycleSys["SActiveEffectLifecycleSystem<br/>RW: BActiveEffectSlot, CTagMask<br/>W: BAttributeDelta<br/>R: BActiveEffectMutation<br/>Toggle: Enableable CEffectSlotActive"]
+    subgraph ActiveLifecycle["GASGASActiveEffectLifecycleSystemGroup"]
+        LifecycleSys["ActiveEffectLifecycleSystem<br/>RW: ActiveGameplayEffectBuffer, TagMaskComponent<br/>W: AttributeModifierBuffer<br/>R: ActiveEffectMutationBuffer<br/>Toggle: Enableable GEActiveEffectTag"]
     end
 
-    subgraph DeltaApply["GasDeltaApplySystemGroup"]
-        InstantApply["SInstantSpecApplySystem<br/>RW: BHealth, BAttack, BDefense, BAttackSpeed<br/>W: BAttributeDelta<br/>R: BInstantEffectSpec, GE BlobAsset"]
+    subgraph DeltaApply["GASDeltaApplySystemGroup"]
+        InstantApply["AttributeModifierApplySystem<br/>RW: HealthAttribute, AttackAttribute, DefenseAttribute, AttackSpeedAttribute<br/>W: AttributeModifierBuffer<br/>R: GEEffectSpecBuffer, GE BlobAsset"]
     end
 
-    subgraph TypedFact["GasTypedFactProjectionSystemGroup"]
-        DeathCheck["SDeathCheckSystem<br/>W: BTypedSimulationFact, BPresentationEvent<br/>R: BHealth, CTagMask, CChessUnit"]
-        SynergyDetect["SSynergyDetectSystem<br/>W: BTypedSimulationFact<br/>R: CAscOwner, CTagMask"]
+    subgraph TypedFact["GASGameplayEventProjectionSystemGroup"]
+        DeathCheck["GameplayEventDeathCheckSystem<br/>W: GameplayEventBuffer, PresentationEventBuffer<br/>R: HealthAttribute, TagMaskComponent, CChessUnit"]
+        SynergyDetect["GameplayEventSynergyDetectSystem<br/>W: GameplayEventBuffer<br/>R: ASCIdentityComponent, TagMaskComponent"]
     end
 
-    subgraph Structural["GasStructuralPlaybackSystemGroup"]
-        BeginECB["BeginGasStructuralECBSystem"]
+    subgraph Structural["GASStructuralPlaybackSystemGroup"]
+        BeginECB["BeginGASStructuralECBSystem"]
         StructuralSys["Cleanup/Destroy/Grant Systems"]
-        EndECB["EndGasStructuralECBSystem"]
+        EndECB["EndGASStructuralECBSystem"]
     end
 
-    subgraph Observation["GasObservationProjectionSystemGroup"]
-        ObsProject["SObservationProjectionSystem<br/>R: BTypedSimulationFact, BPresentationEvent<br/>W: Outbox/Replay (read-only projection)"]
+    subgraph Observation["GASObservationProjectionSystemGroup"]
+        ObsProject["ObservationProjectionSystem<br/>R: GameplayEventBuffer, PresentationEventBuffer<br/>W: Outbox/Replay (read-only projection)"]
     end
 
     FramePrepare --> CommandIngest
@@ -2068,15 +2068,15 @@ flowchart TD
 
 | System | Phase Group | 结构变化 | Enableable Toggle | 写入 Component |
 |---|---|---|---|---|
-| `SAutoAttackSystem` | GasSpecEvaluationSystemGroup | 禁止 | 否 | BEffectCommand (via ECB) |
-| `SAbilityActivationSystem` | GasCommandIngestSystemGroup | 禁止 | 否 | BEffectCommand, BMana, CAbilityState |
-| `SSpecEvaluationSystem` | GasSpecEvaluationSystemGroup | 禁止 | 否 | BInstantEffectSpec, BActiveEffectMutation |
-| `SInstantSpecApplySystem` | GasDeltaApplySystemGroup | 禁止 | 否 | BHealth/BATK/BDEF/BASPD, BAttributeDelta |
-| `SActiveEffectLifecycleSystem` | GasActiveEffectLifecycleSystemGroup | 禁止 | **是** | BActiveEffectSlot, CTagMask, BAttributeDelta |
-| `SDeathCheckSystem` | GasTypedFactProjectionSystemGroup | 禁止 | 否 | BTypedSimulationFact, BPresentationEvent |
-| `SSynergyDetectSystem` | GasTypedFactProjectionSystemGroup | 禁止 | 否 | BTypedSimulationFact |
-| Structural cleanup | GasStructuralPlaybackSystemGroup | **唯一允许** | 是 | BActiveEffectSlot (remove), Entity (destroy) |
-| `SObservationProjectionSystem` | GasObservationProjectionSystemGroup | 禁止 | 否 | Outbox/Replay buffer |
+| `GEAutoAttackSystem` | GASSpecEvaluationSystemGroup | 禁止 | 否 | GEEffectCommandBuffer (via ECB) |
+| `AbilityActivationSystem` | GASCommandIngestSystemGroup | 禁止 | 否 | GEEffectCommandBuffer, ManaAttribute, AbilityStateComponent |
+| `GESpecEvaluationSystem` | GASSpecEvaluationSystemGroup | 禁止 | 否 | GEEffectSpecBuffer, ActiveEffectMutationBuffer |
+| `AttributeModifierApplySystem` | GASDeltaApplySystemGroup | 禁止 | 否 | HealthAttribute/AttackAttribute/DefenseAttribute/AttackSpeedAttribute, AttributeModifierBuffer |
+| `ActiveEffectLifecycleSystem` | GASGASActiveEffectLifecycleSystemGroup | 禁止 | **是** | ActiveGameplayEffectBuffer, TagMaskComponent, AttributeModifierBuffer |
+| `GameplayEventDeathCheckSystem` | GASGameplayEventProjectionSystemGroup | 禁止 | 否 | GameplayEventBuffer, PresentationEventBuffer |
+| `GameplayEventSynergyDetectSystem` | GASGameplayEventProjectionSystemGroup | 禁止 | 否 | GameplayEventBuffer |
+| Structural cleanup | GASStructuralPlaybackSystemGroup | **唯一允许** | 是 | ActiveGameplayEffectBuffer (remove), Entity (destroy) |
+| `ObservationProjectionSystem` | GASObservationProjectionSystemGroup | 禁止 | 否 | Outbox/Replay buffer |
 
 **World Bootstrap：** 无头 AutoChess 验收的 World 创建必须通过 `ICustomBootstrap`（CASE-17）实现。`ICustomBootstrap.Initialize` + `DefaultWorldInitialization.GetAllSystems` 创建 `FixedStepTime(1.0f / 60f)` 独立 World，不隐式依赖 Editor `World.Time` 或 `VariableStepTime`。各 SystemGroup 通过 `[UpdateInGroup]` 归属到上述 Phase Group，ICustomBootstrap 负责将 System 分发到正确的 World 和 Group。参见 `10-AutoChess无头验收Spec.md` 第 223 行、`CASE-17`、`90-目标态不变量.md` 第 31 条。
 
@@ -2126,23 +2126,23 @@ flowchart TD
 | 不变量 | 本 Spec 遵守方式 | 关联 DOTS 规则 |
 |---|---|---|
 | 1. 权威只在 ECS 数据 | 所有 gameplay state 在 ASC Entity 的 IComponentData/DynamicBuffer 中 | SYS-01 |
-| 2. 外部写入只通过 request entity | `CAbilityCommandRequest` 是 Boundary → Core 的唯一命令入口 | — |
-| 3. 外部观察只通过 mirror/outbox/replay/debugger/read model | `BPresentationEvent`, `BTypedSimulationFact`, Observation outbox | — |
+| 2. 外部写入只通过 request entity | `AbilityCommandRequest` 是 Boundary → Core 的唯一命令入口 | — |
+| 3. 外部观察只通过 mirror/outbox/replay/debugger/read model | `PresentationEventBuffer`, `GameplayEventBuffer`, Observation outbox | — |
 | 5. Runtime state 不反查 managed config | 所有 config 通过 BlobAsset 引用（unmanaged），不查 ScriptableObject | STORE-01 |
-| 6. Cue 不决定 gameplay | `BPresentationEvent` 只写不读，gameplay 不依赖 cue 状态 | — |
+| 6. Cue 不决定 gameplay | `PresentationEventBuffer` 只写不读，gameplay 不依赖 cue 状态 | — |
 | 7. System 调度显式 | 每个 System 声明 UpdateInGroup，Phase 归属明确 | SYS-02 |
-| 16. 高频 reaction 使用 typed facts | 羁绊检测通过 SSynergyDetectSystem → BTypedSimulationFact，不走 EventBus | NAT-03 |
+| 16. 高频 reaction 使用 typed facts | 羁绊检测通过 GameplayEventSynergyDetectSystem → GameplayEventBuffer，不走 EventBus | NAT-03 |
 | 17-18. Simple instant GE 热路径 + ECB 语义屏障 | Instant GE 走 IJobEntity 直接属性修改；Structural ECB 统一播放 | ECB-01 |
-| 21. hot path 禁止直接结构变化 | 结构变化只在 GasStructuralPlaybackSystemGroup (EndGasStructuralECBSystem) | SC-01, P0-02 |
+| 21. hot path 禁止直接结构变化 | 结构变化只在 GASStructuralPlaybackSystemGroup (EndGASStructuralECBSystem) | SC-01, P0-02 |
 | 22. DynamicBuffer 有容量/生命周期/清空策略 | 每个 buffer 有 InternalBufferCapacity 声明，见 7.3 节 | BUF-01, P1-06 |
-| 23. Chunk Component 是性能优化 | ChunkNoActiveEffects 用于 chunk 级跳过，不替代 per-entity 正确性 | PRF-09 |
+| 23. Chunk Component 是性能优化 | NoActiveEffectsChunkComponent 用于 chunk 级跳过，不替代 per-entity 正确性 | PRF-09 |
 | 29. 不使用托管 delegate | MMC 通过 MmcEvaluator static switch（Burst 友好），非 delegate | NAT-04 |
-| 32. Tag 用 bitmask, Archetype < 10 | CTagMask uint64 bitmask，0 个独立 tag component | P0-03, EN-01 |
-| 33. 每个 Buffer 有 InternalBufferCapacity | BActiveEffectSlot(8), BEffectCommand(64) 等，见 7.3 节 | BUF-01 |
+| 32. Tag 用 bitmask, Archetype < 10 | TagMaskComponent uint64 bitmask，0 个独立 tag component | P0-03, EN-01 |
+| 33. 每个 Buffer 有 InternalBufferCapacity | ActiveGameplayEffectBuffer(8), GEEffectCommandBuffer(64) 等，见 7.3 节 | BUF-01 |
 | 34. Component 明确分类 | 所有 component 标注 Data/Buffer/Enableable/Chunk/Cleanup，见 7.3 节 | — |
-| 35. Frame Arena (query/lookup/allocator budget) | SSpecEvaluationSystem 预拷贝 NativeArray 供 job 消费；GAStaticLookup singleton | QRY-03, PRF-07 |
-| 36. Enableable toggle 只在 ActiveEffectLifecycleSystemGroup | CEffectSlotActive enableable 仅在本 SystemGroup 内 toggle | EN-02 |
-| 37. Chunk Component 需 Debugger 一致性验证 | ChunkNoActiveEffects 标记需 GasRuntimeDebugger 验证 | CASE-07 |
+| 35. Frame Arena (query/lookup/allocator budget) | GESpecEvaluationSystem 预拷贝 NativeArray 供 job 消费；GAStaticLookup singleton | QRY-03, PRF-07 |
+| 36. Enableable toggle 只在 GASActiveEffectLifecycleSystemGroup | GEActiveEffectTag enableable 仅在本 SystemGroup 内 toggle | EN-02 |
+| 37. Chunk Component 需 Debugger 一致性验证 | NoActiveEffectsChunkComponent 标记需 GASRuntimeCoreDebugger 验证 | CASE-07 |
 
 ### 13.2 DOTS P0/P1 合规检查结果
 
@@ -2151,14 +2151,14 @@ flowchart TD
 | 规则 | 严重级别 | 问题位置 | 状态 |
 |---|---|---|---|
 | P0-01: 禁止用 Entity 表示临时状态 | P0 | — | 通过（所有 state 在 IComponentData/DynamicBuffer） |
-| P0-02: 禁止 Hot Path 直接结构变化 | P0 | SActiveEffectLifecycleSystem, SSpecEvaluationSystem, SAbilityActivationSystem | **已修复** — 全部改用 EndGasStructuralECBSystem ECB |
-| P0-03: 禁止 Tag Component | P0 | — | 通过（CTagMask uint64 bitmask，0 个 tag component） |
+| P0-02: 禁止 Hot Path 直接结构变化 | P0 | ActiveEffectLifecycleSystem, GESpecEvaluationSystem, AbilityActivationSystem | **已修复** — 全部改用 EndGASStructuralECBSystem ECB |
+| P0-03: 禁止 Tag Component | P0 | — | 通过（TagMaskComponent uint64 bitmask，0 个 tag component） |
 | P0-04: Sync Point 集中化 | P0 | TickActiveSlotsJob (DeltaBuffer[0]) | **已修复** — 改用 ECB AppendToBuffer |
-| P1-01: Hot Path 禁止主线程遍历 | P1 | SSpecEvaluationSystem (foreach), SActiveEffectLifecycleSystem (foreach mutations) | **已修复** — 全部改用 IJobEntity / IJobParallelFor |
-| P1-02: 禁止高频 Random Access Lookup | P1 | SActiveEffectLifecycleSystem (SystemAPI.GetSingleton in loop) | **已修复** — GAStaticLookup 提取为 job 注入参数 |
-| P1-03: 避免不必要 System 拆分 | P1 | SAutoAttackSystem + ManaRegenTickJob 合并 | 通过（两个 job 在同一 System 内调度，不拆分 System） |
+| P1-01: Hot Path 禁止主线程遍历 | P1 | GESpecEvaluationSystem (foreach), ActiveEffectLifecycleSystem (foreach mutations) | **已修复** — 全部改用 IJobEntity / IJobParallelFor |
+| P1-02: 禁止高频 Random Access Lookup | P1 | ActiveEffectLifecycleSystem (SystemAPI.GetSingleton in loop) | **已修复** — GAStaticLookup 提取为 job 注入参数 |
+| P1-03: 避免不必要 System 拆分 | P1 | GEAutoAttackSystem + ManaRegenTickJob 合并 | 通过（两个 job 在同一 System 内调度，不拆分 System） |
 | P1-04: 禁止 EntityIndexInQuery 在 Hot Path | P1 | TickActiveSlotsJob | **已修复** — 改用 [EntityIndexInChunk] |
-| P1-05: 注意 Query Sync 触发 | P1 | SActiveEffectLifecycleSystem (SystemAPI.GetBuffer 多次) | **已修复** — 单次 GetBuffer + NativeArray 拷贝 |
+| P1-05: 注意 Query Sync 触发 | P1 | ActiveEffectLifecycleSystem (SystemAPI.GetBuffer 多次) | **已修复** — 单次 GetBuffer + NativeArray 拷贝 |
 | P1-06: 监控 DynamicBuffer 溢出 | P1 | 全局 | 通过（所有 buffer 有 InternalBufferCapacity + spill 策略说明） |
 | P1-07: 控制 Prefab 数量 | P1 | CChessUnit | 通过（x1 精链路 archetype < 10） |
 | P1-08: 审核 SharedComponent | P1 | — | 通过（未使用 SharedComponent） |
@@ -2170,7 +2170,7 @@ flowchart TD
 | SynergyCountJob 并行写入 NativeArray（无锁） | x1 规模用 `[NativeDisableParallelForRestriction]` | x50+: IJobChunk + chunk-local accumulator + reduce |
 | ApplyActiveEffectMutationsJob 遍历所有 target entity 匹配 mutation | IJobEntity per entity 内循环 mutation NativeArray | 高 mutation 数: 先按 TargetAsc 对 mutation 排序，或使用 NativeMultiHashMap |
 | ApplyInstantSpecsJob 遍历所有 target entity 匹配 spec | 同上模式 | 同上优化方向 |
-| TickActiveSlotsJob 的 MMC source 属性读取 | 当前简化（直接计算 magnitude） | 注入 ComponentLookup<BAttack> 读取 source ASC 属性 |
+| TickActiveSlotsJob 的 MMC source 属性读取 | 当前简化（直接计算 magnitude） | 注入 ComponentLookup<AttackAttribute> 读取 source ASC 属性 |
 | Structural ECB 的 AppendToBuffer | 在 job 内使用 ECB ParallelWriter | 正确，符合 ECB-02 |
 
 ---

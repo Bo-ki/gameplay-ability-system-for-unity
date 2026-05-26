@@ -57,7 +57,7 @@ ActiveEffectStore 不再讨论“buffer 还是 entity”二选一，而是拆成
 3. `CleanupStore` 只处理 destroy 后清理，不替代 Active 生命周期状态机；cleanup component 不能 baked 到 definition。
 4. `ChunkSkipIndex` 的目标是让 idle effect 在 chunk 级跳过，而不是给每个 entity 重复写相同 fact。
 5. 状态机选择顺序：enableable 适合高频开关；enum / bit field 适合状态多且同 job 轻分支；tag / archetype 只适合低频且数据差异大的生命周期阶段。
-6. **`FSM-04`：单 entity 上多 FSM 叠加时评估拆分 entity。** ASC entity 的 `BActiveEffectSlot` buffer 可能同时承载多套独立 FSM（inhibit/tick/expire、stack push/pop、grant tag/ability cleanup 等）。当同一 entity 上出现 > 3 个独立的生命期决策（如 tick 到期判断、inhibit 状态恢复检查、stack overflow 检查）且各决策依赖不同的 component 读取集时，应评估是否将部分生命周期拆到 stable child entity 或 enableable component group 上，避免单个 job 的 component 读取集膨胀。
+6. **`FSM-04`：单 entity 上多 FSM 叠加时评估拆分 entity。** ASC entity 的 `ActiveGameplayEffectBuffer` buffer 可能同时承载多套独立 FSM（inhibit/tick/expire、stack push/pop、grant tag/ability cleanup 等）。当同一 entity 上出现 > 3 个独立的生命期决策（如 tick 到期判断、inhibit 状态恢复检查、stack overflow 检查）且各决策依赖不同的 component 读取集时，应评估是否将部分生命周期拆到 stable child entity 或 enableable component group 上，避免单个 job 的 component 读取集膨胀。
 
 ## ActiveEffectStore API 选型矩阵
 
@@ -77,7 +77,7 @@ AM5 验收必须能证明：普通 tick、period due、inhibit 切换不触发 a
 
 ## AM5 第一落点约束
 
-当前允许的第一落点是 `OwnerLocalStore`：ASC owner 持有 `CActiveEffectStore` 和 `BActiveEffectSlot`，用 slot 镜像 duration active effect 的跨帧状态。该落点是 migration proof，不是完整目标态终局。
+当前允许的第一落点是 `OwnerLocalStore`：ASC owner 持有 `ASCActiveEffectsComponent` 和 `ActiveGameplayEffectBuffer`，用 slot 镜像 duration active effect 的跨帧状态。该落点是 migration proof，不是完整目标态终局。
 
 约束：
 
@@ -92,10 +92,10 @@ AM5 验收必须能证明：普通 tick、period due、inhibit 切换不触发 a
 
 当前 period / overflow 的 simple instant child GE 已作为 ActiveEffectStore 的派生输出 proof：
 
-1. period due 时，旧 duration runtime GE 仍负责到期判断，但 simple instant child GE 不再默认创建 request/runtime child entity，而是写入 `BEffectCommand(Source=Period)`。
-2. stack overflow 派生 simple instant child GE 同样写入 `BEffectCommand(Source=Overflow)`；复杂 child GE 保持旧 request fallback。
+1. period due 时，旧 duration runtime GE 仍负责到期判断，但 simple instant child GE 不再默认创建 request/runtime child entity，而是写入 `GEEffectCommandBuffer(Source=Period)`。
+2. stack overflow 派生 simple instant child GE 同样写入 `GEEffectCommandBuffer(Source=Overflow)`；复杂 child GE 保持旧 request fallback。
 3. 派生命令复制 child GE runtime buffer 上的 SetByCaller values，保持 command/spec/delta/fact 的 magnitude 输入连续性。
-4. `CPeriodRuntime.StartTime` 与 owner-local `BActiveEffectSlot.LastPeriodFrame` 必须同步刷新；store cursor 是后续 store-driven lifecycle 和 Debugger 证据的一部分。
+4. `GEPeriodStateComponent.StartTime` 与 owner-local `ActiveGameplayEffectBuffer.LastPeriodFrame` 必须同步刷新；store cursor 是后续 store-driven lifecycle 和 Debugger 证据的一部分。
 5. 该落点仍是 `OwnerLocalStore + singleton command stream` proof，不是完整 scale-ready store；granted cleanup、slot compact、chunk skip、复杂 child GE 和真实 parallel fan-in 仍是后续 AM5 / AM3 缺口。
 
 ## 禁止方向
