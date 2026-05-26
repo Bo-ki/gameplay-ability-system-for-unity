@@ -77,9 +77,6 @@ namespace GAS.Runtime
 
         private static void AddRuntimeComponents(EntityManager entityManager, Entity entity)
         {
-            if (!entityManager.HasComponent<CEffectPendingApply>(entity))
-                entityManager.AddComponent<CEffectPendingApply>(entity);
-
             if (entityManager.HasComponent<CDurationDefinition>(entity)
                 && !entityManager.HasComponent<CDurationRuntime>(entity))
             {

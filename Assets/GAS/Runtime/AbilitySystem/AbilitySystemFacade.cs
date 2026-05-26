@@ -195,27 +195,41 @@ namespace GAS.Runtime
 
         public Entity TryActivateAbility(int abilityCode)
         {
-            return CreateAscCommandRequest(new CAscCommandRequest
+            if (!IsValid || EntityManager.HasComponent<CAscDestroying>(Entity))
+                return Entity.Null;
+
+            var request = EntityManager.CreateEntity();
+            EntityManager.SetName(request, $"AbilityCommand_Activate_{request.Index}");
+            EntityManager.AddComponentData(request, new CAbilityCommandRequest
             {
-                CommandType = EAscCommandType.TryActivateAbility,
+                Owner = Entity,
                 AbilityCode = abilityCode,
+                CommandType = EAbilityCommandType.Activate,
             });
+            return request;
         }
 
         public Entity CancelAbility(int abilityCode)
         {
-            return CreateAscCommandRequest(new CAscCommandRequest
+            if (!IsValid || EntityManager.HasComponent<CAscDestroying>(Entity))
+                return Entity.Null;
+
+            var request = EntityManager.CreateEntity();
+            EntityManager.SetName(request, $"AbilityCommand_Cancel_{request.Index}");
+            EntityManager.AddComponentData(request, new CAbilityCommandRequest
             {
-                CommandType = EAscCommandType.CancelAbility,
+                Owner = Entity,
                 AbilityCode = abilityCode,
+                CommandType = EAbilityCommandType.Cancel,
             });
+            return request;
         }
 
         #endregion
 
         #region Internal
 
-        private Entity CreateAscCommandRequest(in CAscCommandRequest command)
+        private Entity CreateAscCommandRequest(CAscCommandRequest command)
         {
             if (!IsValid || EntityManager.HasComponent<CAscDestroying>(Entity))
                 return Entity.Null;
@@ -234,10 +248,10 @@ namespace GAS.Runtime
 
             foreach (var tag in baseTags)
             {
-                var buffer = EntityManager.HasBuffer<BInitTag>(request)
-                    ? EntityManager.GetBuffer<BInitTag>(request)
-                    : EntityManager.AddBuffer<BInitTag>(request);
-                buffer.Add(new BInitTag { TagIndex = tag });
+                var buffer = EntityManager.HasBuffer<BAscInitFixedTag>(request)
+                    ? EntityManager.GetBuffer<BAscInitFixedTag>(request)
+                    : EntityManager.AddBuffer<BAscInitFixedTag>(request);
+                buffer.Add(new BAscInitFixedTag { TagCode = tag });
             }
         }
 
@@ -248,19 +262,21 @@ namespace GAS.Runtime
 
             foreach (var attrSet in attrSets)
             {
-                if (attrSet?.Attributes == null) continue;
-                foreach (var attr in attrSet.Attributes)
+                if (attrSet.Settings == null) continue;
+                foreach (var setting in attrSet.Settings)
                 {
-                    var buffer = EntityManager.HasBuffer<BInitAttribute>(request)
-                        ? EntityManager.GetBuffer<BInitAttribute>(request)
-                        : EntityManager.AddBuffer<BInitAttribute>(request);
-                    buffer.Add(new BInitAttribute
+                    var buffer = EntityManager.HasBuffer<BAscInitAttribute>(request)
+                        ? EntityManager.GetBuffer<BAscInitAttribute>(request)
+                        : EntityManager.AddBuffer<BAscInitAttribute>(request);
+                    buffer.Add(new BAscInitAttribute
                     {
-                        AttrSetCode = attrSet.SetCode,
-                        Code = attr.Code,
-                        BaseValue = attr.BaseValue,
-                        MaxValue = attr.MaxValue,
-                        MinValue = attr.MinValue,
+                        AttrSetCode = attrSet.Code,
+                        AttributeCode = setting.Code,
+                        BaseValue = setting.InitValue,
+                        MaxValue = setting.Max,
+                        MinValue = setting.Min,
+                        IsClampMin = setting.IsClampMin,
+                        IsClampMax = setting.IsClampMax,
                     });
                 }
             }
@@ -273,10 +289,10 @@ namespace GAS.Runtime
 
             foreach (var abilityCode in baseAbilityCodes)
             {
-                var buffer = EntityManager.HasBuffer<BInitAbility>(request)
-                    ? EntityManager.GetBuffer<BInitAbility>(request)
-                    : EntityManager.AddBuffer<BInitAbility>(request);
-                buffer.Add(new BInitAbility { AbilityCode = abilityCode });
+                var buffer = EntityManager.HasBuffer<BAscInitAbility>(request)
+                    ? EntityManager.GetBuffer<BAscInitAbility>(request)
+                    : EntityManager.AddBuffer<BAscInitAbility>(request);
+                buffer.Add(new BAscInitAbility { AbilityCode = abilityCode });
             }
         }
 
