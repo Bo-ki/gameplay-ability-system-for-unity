@@ -254,6 +254,7 @@ namespace GAS.Runtime
             typeof(SEffectApply),
             typeof(SOngoingTagRequirements),
             typeof(SEffectRemove),
+            typeof(SEffectFinalDestroy),
             typeof(SEffectTick),
         };
 

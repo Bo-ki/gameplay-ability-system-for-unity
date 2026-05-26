@@ -67,9 +67,8 @@
 
 | 支线 | 文档 | 状态 |
 |---|---|---|
-| Runtime Core Debugger | [RuntimeCoreDebugger.md](RuntimeCoreDebugger.md) | 就绪 |
+| Runtime Core Debugger | [RuntimeCoreDebugger/README.md](RuntimeCoreDebugger/README.md) | 就绪 |
 
 ## 交还规则
 
 交还时必须同步 Debugger Spec、当前架构问题诊断、AutoChess 验证摘要和对应支线状态。
-

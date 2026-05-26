@@ -34,6 +34,9 @@ namespace GAS.Runtime
             var em = state.EntityManager;
             var abilities = _cleanupQuery.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
+            var currentFrame = SystemAPI.TryGetSingleton<GlobalTimer>(out var timer)
+                ? timer.Frame
+                : GASRuntimeFrameContext.ResolveCurrentFrame(em);
             using var gameplayEventWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             foreach (var ability in abilities)
@@ -48,7 +51,7 @@ namespace GAS.Runtime
 
                 var owner = baseInfo.Owner;
                 var lifecycleRequest = ResolveLifecycleRequest(em, ability, shouldCancel);
-                CleanupAbilityCreatedEffects(em, ref ecb, ability, owner);
+                CleanupAbilityCreatedEffects(em, ref ecb, ability, owner, currentFrame);
                 AbilityRuntimeActions.RemoveActivationOwnedTags(ability, em);
                 var destroyOnCleanup = CleanupGrantedAbilityIfNeeded(em, ref ecb, ability, owner, shouldCancel);
 
@@ -140,7 +143,8 @@ namespace GAS.Runtime
             EntityManager em,
             ref EntityCommandBuffer ecb,
             Entity ability,
-            Entity owner)
+            Entity owner,
+            int currentFrame)
         {
             if (!em.Exists(owner) || !em.HasBuffer<BGameplayEffect>(owner))
                 return;
@@ -158,19 +162,19 @@ namespace GAS.Runtime
             }
 
             for (var i = 0; i < toRemove.Count; i++)
-                MarkEffectForDestroy(em, ref ecb, toRemove[i]);
+                MarkEffectForRemoval(em, ref ecb, toRemove[i], currentFrame);
         }
 
-        private static void MarkEffectForDestroy(
+        private static void MarkEffectForRemoval(
             EntityManager em,
             ref EntityCommandBuffer ecb,
-            Entity effect)
+            Entity effect,
+            int currentFrame)
         {
             if (!em.Exists(effect) || !em.HasComponent<CEffectContext>(effect))
                 return;
 
-            if (!em.HasComponent<CEffectDestroy>(effect))
-                ecb.AddComponent<CEffectDestroy>(effect);
+            EffectRuntimeUtility.MarkEffectForRemoval(em, ref ecb, effect, currentFrame);
         }
 
         private static bool CleanupGrantedAbilityIfNeeded(
@@ -198,6 +202,7 @@ namespace GAS.Runtime
 
             RemoveAbilityFromAsc(em, owner, ability);
             ClearRuntimeGrantedAbility(em, granted.SourceEffect, ability);
+            RefreshGrantedAbilityStoreState(em, granted.SourceEffect);
             if (!em.HasComponent<CAbilityDestroyOnCleanup>(ability))
                 ecb.AddComponent<CAbilityDestroyOnCleanup>(ability);
 
@@ -232,6 +237,21 @@ namespace GAS.Runtime
                 runtime.AbilityEntity = Entity.Null;
                 runtimeAbilities[i] = runtime;
             }
+        }
+
+        private static void RefreshGrantedAbilityStoreState(EntityManager em, Entity effect)
+        {
+            if (effect == Entity.Null
+                || !em.Exists(effect)
+                || !em.HasComponent<CEffectContext>(effect))
+            {
+                return;
+            }
+
+            ActiveEffectStore.TryRefreshGrantedAbilityState(
+                em,
+                effect,
+                em.GetComponentData<CEffectContext>(effect));
         }
 
         private static void DestroyAbilityEntity(

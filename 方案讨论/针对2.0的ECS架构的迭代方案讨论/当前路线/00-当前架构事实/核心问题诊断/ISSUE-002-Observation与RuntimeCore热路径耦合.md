@@ -77,7 +77,7 @@ Runtime Core writes BGameplayEvent / BAttributeChangeEvent / BDamageEvent
 
 ## 任务入口
 
-`../../02-主线任务树/T4-Observation_Presentation_Debugger/RuntimeCoreDebugger.md`
+`../../02-主线任务树/T4-Observation_Presentation_Debugger/RuntimeCoreDebugger/README.md`
 
 ## 退出条件
 

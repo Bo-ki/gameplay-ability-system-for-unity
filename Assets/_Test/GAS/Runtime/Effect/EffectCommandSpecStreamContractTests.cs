@@ -315,11 +315,110 @@ namespace GAS.Runtime.Tests.Effect
             Assert.That(counters.EntityDestroyCount, Is.EqualTo(0));
         }
 
+        [Test]
+        public void ParallelFanInCommandMergeIsStableByTargetThenSequence()
+        {
+            var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+            var source = _em.CreateEntity();
+            var targetA = _em.CreateEntity();
+            var targetB = _em.CreateEntity();
+
+            var plan = GASRuntimeFrameStreamOwnerPlanner.CreateCurrent();
+            Assert.That(plan.TryFind(EGasRuntimeFrameStreamId.EffectCommand, out var commandStream), Is.True);
+            Assert.That(commandStream.TargetCarrier, Is.EqualTo(EGasRuntimeFrameStreamCarrier.PerThreadNativeStream));
+            Assert.That(commandStream.MergePolicy, Is.EqualTo(EGasRuntimeFrameStreamMergePolicy.StableSortByTargetThenSequence));
+            Assert.That(commandStream.SortKey, Is.EqualTo(EGasRuntimeFrameStreamSortKey.TargetAscThenCommandSequence));
+
+            var records = new[]
+            {
+                FanInRecord(1, 0, source, targetB, sequence: 10, contextId: 110),
+                FanInRecord(1, 1, source, targetA, sequence: 5, contextId: 105),
+                FanInRecord(0, 0, source, targetB, sequence: 1, contextId: 101),
+                FanInRecord(0, 1, source, targetA, sequence: 20, contextId: 120),
+                FanInRecord(0, 2, source, targetA, sequence: 5, contextId: 205),
+            };
+
+            var first = MergeAndCaptureCommandOrder(streamEntity, records);
+            EffectCommandSpecStream.ClearFrameLocalData(_em, streamEntity, 2);
+            var second = MergeAndCaptureCommandOrder(streamEntity, records);
+
+            CollectionAssert.AreEqual(first, second);
+            CollectionAssert.AreEqual(
+                new[]
+                {
+                    Key(targetA, sequence: 5, contextId: 205),
+                    Key(targetA, sequence: 5, contextId: 105),
+                    Key(targetA, sequence: 20, contextId: 120),
+                    Key(targetB, sequence: 1, contextId: 101),
+                    Key(targetB, sequence: 10, contextId: 110),
+                },
+                first);
+
+            var stream = _em.GetComponentData<CEffectCommandSpecStream>(streamEntity);
+            Assert.That(stream.NextCommandSequence, Is.GreaterThan(20));
+            Assert.That(stream.NextContextId, Is.GreaterThan(205));
+        }
+
         private int CountEntitiesWith<T>()
             where T : unmanaged, IComponentData
         {
             using var query = _em.CreateEntityQuery(ComponentType.ReadOnly<T>());
             return query.CalculateEntityCount();
+        }
+
+        private string[] MergeAndCaptureCommandOrder(
+            Entity streamEntity,
+            IReadOnlyList<EffectCommandSpecStream.ParallelCommandFanInRecord> records)
+        {
+            var merged = EffectCommandSpecStream.MergeParallelCommandFanIn(
+                _em,
+                streamEntity,
+                records,
+                currentFrame: 77);
+            Assert.That(merged, Is.EqualTo(records.Count));
+
+            var commands = _em.GetBuffer<BEffectCommand>(streamEntity);
+            Assert.That(commands.Length, Is.EqualTo(records.Count));
+
+            var order = new string[commands.Length];
+            for (var i = 0; i < commands.Length; i++)
+            {
+                Assert.That(commands[i].Frame, Is.EqualTo(77));
+                Assert.That(commands[i].SetByCallerCount, Is.EqualTo(0));
+                order[i] = Key(commands[i].TargetAsc, commands[i].Sequence, commands[i].ContextId);
+            }
+
+            return order;
+        }
+
+        private static EffectCommandSpecStream.ParallelCommandFanInRecord FanInRecord(
+            int producerIndex,
+            int localIndex,
+            Entity source,
+            Entity target,
+            int sequence,
+            int contextId)
+        {
+            return new EffectCommandSpecStream.ParallelCommandFanInRecord
+            {
+                ProducerIndex = producerIndex,
+                LocalIndex = localIndex,
+                Command = new BEffectCommand
+                {
+                    Kind = EEffectCommandKind.Instant,
+                    Source = EEffectCommandSource.Ability,
+                    SourceAsc = source,
+                    TargetAsc = target,
+                    GameplayEffectCode = 9100 + sequence,
+                    Sequence = sequence,
+                    ContextId = contextId,
+                },
+            };
+        }
+
+        private static string Key(Entity target, int sequence, int contextId)
+        {
+            return target.Index + ":" + target.Version + ":" + sequence + ":" + contextId;
         }
 
         private static void AssertBufferOnly(Type type)

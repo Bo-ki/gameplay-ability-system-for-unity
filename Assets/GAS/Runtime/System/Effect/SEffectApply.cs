@@ -16,6 +16,8 @@ namespace GAS.Runtime
             _effectQuery = SystemAPI.QueryBuilder()
                 .WithAll<CEffectPendingApply, CEffectContext>()
                 .WithNone<CEffectDestroy>()
+                .WithNone<CEffectCleanup>()
+                .WithNone<CEffectFinalDestroy>()
                 .Build();
             state.RequireForUpdate(_effectQuery);
         }

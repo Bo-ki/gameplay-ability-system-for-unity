@@ -19,10 +19,14 @@ namespace GAS.Runtime
             _valueQuery = SystemAPI.QueryBuilder()
                 .WithAll<CEffectContext, CEffectSpecData, BExecutionCalculationValue>()
                 .WithNone<CEffectDestroy>()
+                .WithNone<CEffectCleanup>()
+                .WithNone<CEffectFinalDestroy>()
                 .Build();
             _outputModifierQuery = SystemAPI.QueryBuilder()
                 .WithAll<CEffectContext, CEffectSpecData, BExecutionCalculationOutputModifierDefinition>()
                 .WithNone<CEffectDestroy>()
+                .WithNone<CEffectCleanup>()
+                .WithNone<CEffectFinalDestroy>()
                 .Build();
             state.RequireForUpdate(_outputModifierQuery);
         }
@@ -31,17 +35,24 @@ namespace GAS.Runtime
         {
             var em = state.EntityManager;
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-
-            using var effectsWithValues = _valueQuery.ToEntityArray(Allocator.Temp);
-            for (var i = 0; i < effectsWithValues.Length; i++)
-                ResolveEffectOutputModifiers(em, ref ecb, effectsWithValues[i]);
-
-            using var effectsWithOutputDefinitions = _outputModifierQuery.ToEntityArray(Allocator.Temp);
-            for (var i = 0; i < effectsWithOutputDefinitions.Length; i++)
+            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            try
             {
-                var ge = effectsWithOutputDefinitions[i];
-                if (em.Exists(ge) && !em.HasBuffer<BExecutionCalculationValue>(ge))
-                    ResolveEffectOutputModifiers(em, ref ecb, ge);
+                using var effectsWithValues = _valueQuery.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < effectsWithValues.Length; i++)
+                    ResolveEffectOutputModifiers(em, ref ecb, effectsWithValues[i], ref eventBusWriter);
+
+                using var effectsWithOutputDefinitions = _outputModifierQuery.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < effectsWithOutputDefinitions.Length; i++)
+                {
+                    var ge = effectsWithOutputDefinitions[i];
+                    if (em.Exists(ge) && !em.HasBuffer<BExecutionCalculationValue>(ge))
+                        ResolveEffectOutputModifiers(em, ref ecb, ge, ref eventBusWriter);
+                }
+            }
+            finally
+            {
+                eventBusWriter.Dispose();
             }
 
             ecb.Playback(em);
@@ -59,12 +70,15 @@ namespace GAS.Runtime
         private static void ResolveEffectOutputModifiers(
             EntityManager em,
             ref EntityCommandBuffer ecb,
-            Entity ge)
+            Entity ge,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
         {
             if (!em.Exists(ge)
                 || !em.HasComponent<CEffectContext>(ge)
                 || !em.HasComponent<CEffectSpecData>(ge)
-                || em.HasComponent<CEffectDestroy>(ge))
+                || em.HasComponent<CEffectCleanup>(ge)
+                || em.HasComponent<CEffectDestroy>(ge)
+                || em.HasComponent<CEffectFinalDestroy>(ge))
             {
                 return;
             }
@@ -72,12 +86,12 @@ namespace GAS.Runtime
             var context = em.GetComponentData<CEffectContext>(ge);
             var spec = em.GetComponentData<CEffectSpecData>(ge);
 
-            EffectMagnitudeResolver.ResolveModifiers(em, ref ecb, ge, context, spec);
+            EffectMagnitudeResolver.ResolveModifiers(em, ge, context, spec, ref eventBusWriter);
             var hasValues = em.HasBuffer<BExecutionCalculationValue>(ge);
-            AppendExecutionOutputModifiers(em, ref ecb, ge, context, hasValues);
+            AppendExecutionOutputModifiers(em, ref ecb, ge, context, hasValues, ref eventBusWriter);
 
             if (EffectRuntimeUtility.IsActive(em, ge))
-                EffectRuntimeUtility.SyncRuntimeModifiersFromResolved(em, ge, context);
+                EffectRuntimeUtility.SyncRuntimeModifiersFromResolved(em, ge, context, ref eventBusWriter);
         }
 
         private static void AppendExecutionOutputModifiers(
@@ -85,7 +99,8 @@ namespace GAS.Runtime
             ref EntityCommandBuffer ecb,
             Entity ge,
             in CEffectContext context,
-            bool hasValues)
+            bool hasValues,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
         {
             if (!em.HasBuffer<BExecutionCalculationOutputModifierDefinition>(ge))
                 return;
@@ -105,7 +120,13 @@ namespace GAS.Runtime
             for (var i = 0; i < definitionBuffer.Length; i++)
             {
                 var definition = definitionBuffer[i];
-                var magnitude = ResolveOutputModifierMagnitude(em, ge, context, hasValues, values, definition);
+                var magnitude = ResolveOutputModifierMagnitude(
+                    ge,
+                    context,
+                    hasValues,
+                    values,
+                    definition,
+                    ref eventBusWriter);
                 resolvedModifiers.Add(new BResolvedModifier
                 {
                     AttrSetCode = definition.AttrSetCode,
@@ -118,12 +139,12 @@ namespace GAS.Runtime
         }
 
         private static float ResolveOutputModifierMagnitude(
-            EntityManager em,
             Entity ge,
             in CEffectContext context,
             bool hasValues,
             DynamicBuffer<BExecutionCalculationValue> values,
-            in BExecutionCalculationOutputModifierDefinition definition)
+            in BExecutionCalculationOutputModifierDefinition definition,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
         {
             if (hasValues
                 && TryGetOutputValue(values, definition.OutputKey, out var value))
@@ -132,7 +153,7 @@ namespace GAS.Runtime
             }
 
             EnqueueOutputMissingFact(
-                em,
+                ref eventBusWriter,
                 ge,
                 context,
                 ResolveEventCode(definition),
@@ -175,13 +196,16 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueOutputMissingFact(
-            EntityManager em,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
             Entity ge,
             in CEffectContext context,
             int eventCode,
             float value)
         {
-            EventBusHelper.EnqueueGameplayEvent(em, GASManager.EntityEventBus, new BGameplayEvent
+            if (!eventBusWriter.IsCreated)
+                return;
+
+            eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
             {
                 Type = EGameplayEventType.ExecutionCalculationOutputMissing,
                 SourceAsc = context.SourceAsc,

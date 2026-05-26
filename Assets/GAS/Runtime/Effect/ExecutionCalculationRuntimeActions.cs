@@ -16,11 +16,38 @@ namespace GAS.Runtime
             float value,
             int calculationCode = 0)
         {
+            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            try
+            {
+                return SetOutputValue(
+                    em,
+                    ge,
+                    context,
+                    outputKey,
+                    value,
+                    ref eventBusWriter,
+                    calculationCode);
+            }
+            finally
+            {
+                eventBusWriter.Dispose();
+            }
+        }
+
+        public static bool SetOutputValue(
+            EntityManager em,
+            Entity ge,
+            in CEffectContext context,
+            int outputKey,
+            float value,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
+            int calculationCode = 0)
+        {
             if (!WriteOutputValue(em, ge, outputKey, value))
                 return false;
 
             EnqueueOutputUpdatedFact(
-                em,
+                ref eventBusWriter,
                 ge,
                 context,
                 ResolveEventCode(calculationCode, outputKey),
@@ -69,8 +96,31 @@ namespace GAS.Runtime
             int eventCode,
             float value)
         {
+            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            try
+            {
+                EnqueueOutputUpdatedFact(
+                    ref eventBusWriter,
+                    ge,
+                    context,
+                    eventCode,
+                    value);
+            }
+            finally
+            {
+                eventBusWriter.Dispose();
+            }
+        }
+
+        public static void EnqueueOutputUpdatedFact(
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
+            Entity ge,
+            in CEffectContext context,
+            int eventCode,
+            float value)
+        {
             EnqueueExecutionFact(
-                em,
+                ref eventBusWriter,
                 ge,
                 context,
                 EGameplayEventType.ExecutionCalculationOutputUpdated,
@@ -113,14 +163,17 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueExecutionFact(
-            EntityManager em,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
             Entity ge,
             in CEffectContext context,
             EGameplayEventType type,
             int eventCode,
             float value)
         {
-            EventBusHelper.EnqueueGameplayEvent(em, GASManager.EntityEventBus, new BGameplayEvent
+            if (!eventBusWriter.IsCreated)
+                return;
+
+            eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
             {
                 Type = type,
                 SourceAsc = context.SourceAsc,

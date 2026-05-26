@@ -82,7 +82,7 @@ AutoChessDemo 应属于 Application Shell Layer + Runtime Boundary Layer 的验�
 
 ## 任务入口
 
-`../../02-主线任务树/T6-RuntimeValidationDemo/AutoChess无头验收.md`
+`../../02-主线任务树/T6-RuntimeValidationDemo/AutoChess无头验收/README.md`
 
 ## 退出条件
 

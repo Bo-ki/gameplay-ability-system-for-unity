@@ -19,6 +19,8 @@ namespace GAS.Runtime
             _query = SystemAPI.QueryBuilder()
                 .WithAll<CEffectContext, CDurationDefinition, CDurationRuntime>()
                 .WithNone<CEffectDestroy>()
+                .WithNone<CEffectCleanup>()
+                .WithNone<CEffectFinalDestroy>()
                 .Build();
             state.RequireForUpdate(_query);
         }

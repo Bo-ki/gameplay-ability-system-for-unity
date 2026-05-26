@@ -74,6 +74,26 @@ namespace GAS.Runtime
         public int RuntimeCoreActiveEffectSlotPendingRemoveCount;
         public int RuntimeCoreActiveEffectSlotLegacyBackedCount;
         public int RuntimeCoreActiveEffectSlotExternalizedOwnerCount;
+        public int RuntimeCoreActiveEffectSlotGrantedTagCount;
+        public int RuntimeCoreActiveEffectSlotGrantedAbilityCount;
+        public int RuntimeCoreActiveEffectChunkSkipMatchedSlotCount;
+        public int RuntimeCoreActiveEffectChunkSkipSkippedSlotCount;
+        public int RuntimeCoreActiveEffectChunkSkipDuePeriodSlotCount;
+        public int RuntimeCoreActiveEffectChunkSkipNoopSlotCount;
+        public int RuntimeCoreActiveEffectChunkSkipOwnerCount;
+        public int RuntimeCoreActiveEffectGlobalIndexOwnerCount;
+        public int RuntimeCoreActiveEffectGlobalIndexCount;
+        public int RuntimeCoreActiveEffectGlobalIndexActiveCount;
+        public int RuntimeCoreActiveEffectGlobalIndexInhibitedCount;
+        public int RuntimeCoreActiveEffectGlobalIndexPendingRemoveCount;
+        public int RuntimeCoreActiveEffectGlobalIndexPeriodDueCount;
+        public int RuntimeCoreActiveEffectGlobalIndexDurationDueCount;
+        public int RuntimeCoreActiveEffectGlobalIndexStaleCount;
+        public int RuntimeCoreActiveEffectGlobalIndexBucketOwnerCount;
+        public int RuntimeCoreActiveEffectGlobalIndexBucketIndexCount;
+        public int RuntimeCoreActiveEffectGlobalIndexMaxBucketLength;
+        public int RuntimeCoreActiveEffectGlobalIndexStableRowCount;
+        public int RuntimeCoreActiveEffectGlobalIndexStaleStableRowCount;
         public int RuntimeCoreQueryBudget;
         public int RuntimeCoreFilteredQueryBudget;
         public int RuntimeCoreUnfilteredQueryBudget;
@@ -149,6 +169,26 @@ namespace GAS.Runtime
         public int ActiveEffectSlotPendingRemoveCount;
         public int ActiveEffectSlotLegacyBackedCount;
         public int ActiveEffectSlotExternalizedOwnerCount;
+        public int ActiveEffectSlotGrantedTagCount;
+        public int ActiveEffectSlotGrantedAbilityCount;
+        public int ActiveEffectChunkSkipMatchedSlotCount;
+        public int ActiveEffectChunkSkipSkippedSlotCount;
+        public int ActiveEffectChunkSkipDuePeriodSlotCount;
+        public int ActiveEffectChunkSkipNoopSlotCount;
+        public int ActiveEffectChunkSkipOwnerCount;
+        public int ActiveEffectGlobalIndexOwnerCount;
+        public int ActiveEffectGlobalIndexCount;
+        public int ActiveEffectGlobalIndexActiveCount;
+        public int ActiveEffectGlobalIndexInhibitedCount;
+        public int ActiveEffectGlobalIndexPendingRemoveCount;
+        public int ActiveEffectGlobalIndexPeriodDueCount;
+        public int ActiveEffectGlobalIndexDurationDueCount;
+        public int ActiveEffectGlobalIndexStaleCount;
+        public int ActiveEffectGlobalIndexBucketOwnerCount;
+        public int ActiveEffectGlobalIndexBucketIndexCount;
+        public int ActiveEffectGlobalIndexMaxBucketLength;
+        public int ActiveEffectGlobalIndexStableRowCount;
+        public int ActiveEffectGlobalIndexStaleStableRowCount;
         public int QueryBudget;
         public int FilteredQueryBudget;
         public int UnfilteredQueryBudget;
@@ -247,6 +287,26 @@ namespace GAS.Runtime
         public readonly int ActiveEffectSlotPendingRemoveCount;
         public readonly int ActiveEffectSlotLegacyBackedCount;
         public readonly int ActiveEffectSlotExternalizedOwnerCount;
+        public readonly int ActiveEffectSlotGrantedTagCount;
+        public readonly int ActiveEffectSlotGrantedAbilityCount;
+        public readonly int ActiveEffectChunkSkipMatchedSlotCount;
+        public readonly int ActiveEffectChunkSkipSkippedSlotCount;
+        public readonly int ActiveEffectChunkSkipDuePeriodSlotCount;
+        public readonly int ActiveEffectChunkSkipNoopSlotCount;
+        public readonly int ActiveEffectChunkSkipOwnerCount;
+        public readonly int ActiveEffectGlobalIndexOwnerCount;
+        public readonly int ActiveEffectGlobalIndexCount;
+        public readonly int ActiveEffectGlobalIndexActiveCount;
+        public readonly int ActiveEffectGlobalIndexInhibitedCount;
+        public readonly int ActiveEffectGlobalIndexPendingRemoveCount;
+        public readonly int ActiveEffectGlobalIndexPeriodDueCount;
+        public readonly int ActiveEffectGlobalIndexDurationDueCount;
+        public readonly int ActiveEffectGlobalIndexStaleCount;
+        public readonly int ActiveEffectGlobalIndexBucketOwnerCount;
+        public readonly int ActiveEffectGlobalIndexBucketIndexCount;
+        public readonly int ActiveEffectGlobalIndexMaxBucketLength;
+        public readonly int ActiveEffectGlobalIndexStableRowCount;
+        public readonly int ActiveEffectGlobalIndexStaleStableRowCount;
         public readonly int QueryBudget;
         public readonly int FilteredQueryBudget;
         public readonly int UnfilteredQueryBudget;
@@ -282,6 +342,26 @@ namespace GAS.Runtime
             int activeEffectSlotPendingRemoveCount = 0,
             int activeEffectSlotLegacyBackedCount = 0,
             int activeEffectSlotExternalizedOwnerCount = 0,
+            int activeEffectSlotGrantedTagCount = 0,
+            int activeEffectSlotGrantedAbilityCount = 0,
+            int activeEffectChunkSkipMatchedSlotCount = 0,
+            int activeEffectChunkSkipSkippedSlotCount = 0,
+            int activeEffectChunkSkipDuePeriodSlotCount = 0,
+            int activeEffectChunkSkipNoopSlotCount = 0,
+            int activeEffectChunkSkipOwnerCount = 0,
+            int activeEffectGlobalIndexOwnerCount = 0,
+            int activeEffectGlobalIndexCount = 0,
+            int activeEffectGlobalIndexActiveCount = 0,
+            int activeEffectGlobalIndexInhibitedCount = 0,
+            int activeEffectGlobalIndexPendingRemoveCount = 0,
+            int activeEffectGlobalIndexPeriodDueCount = 0,
+            int activeEffectGlobalIndexDurationDueCount = 0,
+            int activeEffectGlobalIndexStaleCount = 0,
+            int activeEffectGlobalIndexBucketOwnerCount = 0,
+            int activeEffectGlobalIndexBucketIndexCount = 0,
+            int activeEffectGlobalIndexMaxBucketLength = 0,
+            int activeEffectGlobalIndexStableRowCount = 0,
+            int activeEffectGlobalIndexStaleStableRowCount = 0,
             int queryBudget = 0,
             int filteredQueryBudget = 0,
             int unfilteredQueryBudget = 0,
@@ -316,6 +396,26 @@ namespace GAS.Runtime
             ActiveEffectSlotPendingRemoveCount = activeEffectSlotPendingRemoveCount;
             ActiveEffectSlotLegacyBackedCount = activeEffectSlotLegacyBackedCount;
             ActiveEffectSlotExternalizedOwnerCount = activeEffectSlotExternalizedOwnerCount;
+            ActiveEffectSlotGrantedTagCount = activeEffectSlotGrantedTagCount;
+            ActiveEffectSlotGrantedAbilityCount = activeEffectSlotGrantedAbilityCount;
+            ActiveEffectChunkSkipMatchedSlotCount = activeEffectChunkSkipMatchedSlotCount;
+            ActiveEffectChunkSkipSkippedSlotCount = activeEffectChunkSkipSkippedSlotCount;
+            ActiveEffectChunkSkipDuePeriodSlotCount = activeEffectChunkSkipDuePeriodSlotCount;
+            ActiveEffectChunkSkipNoopSlotCount = activeEffectChunkSkipNoopSlotCount;
+            ActiveEffectChunkSkipOwnerCount = activeEffectChunkSkipOwnerCount;
+            ActiveEffectGlobalIndexOwnerCount = activeEffectGlobalIndexOwnerCount;
+            ActiveEffectGlobalIndexCount = activeEffectGlobalIndexCount;
+            ActiveEffectGlobalIndexActiveCount = activeEffectGlobalIndexActiveCount;
+            ActiveEffectGlobalIndexInhibitedCount = activeEffectGlobalIndexInhibitedCount;
+            ActiveEffectGlobalIndexPendingRemoveCount = activeEffectGlobalIndexPendingRemoveCount;
+            ActiveEffectGlobalIndexPeriodDueCount = activeEffectGlobalIndexPeriodDueCount;
+            ActiveEffectGlobalIndexDurationDueCount = activeEffectGlobalIndexDurationDueCount;
+            ActiveEffectGlobalIndexStaleCount = activeEffectGlobalIndexStaleCount;
+            ActiveEffectGlobalIndexBucketOwnerCount = activeEffectGlobalIndexBucketOwnerCount;
+            ActiveEffectGlobalIndexBucketIndexCount = activeEffectGlobalIndexBucketIndexCount;
+            ActiveEffectGlobalIndexMaxBucketLength = activeEffectGlobalIndexMaxBucketLength;
+            ActiveEffectGlobalIndexStableRowCount = activeEffectGlobalIndexStableRowCount;
+            ActiveEffectGlobalIndexStaleStableRowCount = activeEffectGlobalIndexStaleStableRowCount;
             QueryBudget = queryBudget;
             FilteredQueryBudget = filteredQueryBudget;
             UnfilteredQueryBudget = unfilteredQueryBudget;
@@ -768,6 +868,26 @@ namespace GAS.Runtime
             state.RuntimeCoreActiveEffectSlotPendingRemoveCount = 0;
             state.RuntimeCoreActiveEffectSlotLegacyBackedCount = 0;
             state.RuntimeCoreActiveEffectSlotExternalizedOwnerCount = 0;
+            state.RuntimeCoreActiveEffectSlotGrantedTagCount = 0;
+            state.RuntimeCoreActiveEffectSlotGrantedAbilityCount = 0;
+            state.RuntimeCoreActiveEffectChunkSkipMatchedSlotCount = 0;
+            state.RuntimeCoreActiveEffectChunkSkipSkippedSlotCount = 0;
+            state.RuntimeCoreActiveEffectChunkSkipDuePeriodSlotCount = 0;
+            state.RuntimeCoreActiveEffectChunkSkipNoopSlotCount = 0;
+            state.RuntimeCoreActiveEffectChunkSkipOwnerCount = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexOwnerCount = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexCount = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexActiveCount = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexInhibitedCount = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexPendingRemoveCount = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexPeriodDueCount = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexDurationDueCount = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexStaleCount = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexBucketOwnerCount = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexBucketIndexCount = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexMaxBucketLength = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexStableRowCount = 0;
+            state.RuntimeCoreActiveEffectGlobalIndexStaleStableRowCount = 0;
             state.RuntimeCoreQueryBudget = 0;
             state.RuntimeCoreFilteredQueryBudget = 0;
             state.RuntimeCoreUnfilteredQueryBudget = 0;
@@ -941,6 +1061,26 @@ namespace GAS.Runtime
                 counters.ActiveEffectSlotPendingRemoveCount,
                 counters.ActiveEffectSlotLegacyBackedCount,
                 counters.ActiveEffectSlotExternalizedOwnerCount,
+                counters.ActiveEffectSlotGrantedTagCount,
+                counters.ActiveEffectSlotGrantedAbilityCount,
+                counters.ActiveEffectChunkSkipMatchedSlotCount,
+                counters.ActiveEffectChunkSkipSkippedSlotCount,
+                counters.ActiveEffectChunkSkipDuePeriodSlotCount,
+                counters.ActiveEffectChunkSkipNoopSlotCount,
+                counters.ActiveEffectChunkSkipOwnerCount,
+                counters.ActiveEffectGlobalIndexOwnerCount,
+                counters.ActiveEffectGlobalIndexCount,
+                counters.ActiveEffectGlobalIndexActiveCount,
+                counters.ActiveEffectGlobalIndexInhibitedCount,
+                counters.ActiveEffectGlobalIndexPendingRemoveCount,
+                counters.ActiveEffectGlobalIndexPeriodDueCount,
+                counters.ActiveEffectGlobalIndexDurationDueCount,
+                counters.ActiveEffectGlobalIndexStaleCount,
+                counters.ActiveEffectGlobalIndexBucketOwnerCount,
+                counters.ActiveEffectGlobalIndexBucketIndexCount,
+                counters.ActiveEffectGlobalIndexMaxBucketLength,
+                counters.ActiveEffectGlobalIndexStableRowCount,
+                counters.ActiveEffectGlobalIndexStaleStableRowCount,
                 counters.QueryBudget,
                 counters.FilteredQueryBudget,
                 counters.UnfilteredQueryBudget,
@@ -990,9 +1130,11 @@ namespace GAS.Runtime
                 out var instantSpecCount,
                 out var attributeDeltaCount,
                 out var typedFactCount);
+            var currentFrame = ResolveCurrentFrame(em);
             ReadActiveEffectStoreCounters(
                 em,
                 queries.ActiveEffectStores,
+                currentFrame,
                 out var activeEffectStoreOwnerCount,
                 out var activeEffectSlotCount,
                 out var activeEffectSlotCapacity,
@@ -1001,7 +1143,30 @@ namespace GAS.Runtime
                 out var activeEffectSlotInhibitedCount,
                 out var activeEffectSlotPendingRemoveCount,
                 out var activeEffectSlotLegacyBackedCount,
-                out var activeEffectSlotExternalizedOwnerCount);
+                out var activeEffectSlotExternalizedOwnerCount,
+                out var activeEffectSlotGrantedTagCount,
+                out var activeEffectSlotGrantedAbilityCount,
+                out var activeEffectChunkSkipMatchedSlotCount,
+                out var activeEffectChunkSkipSkippedSlotCount,
+                out var activeEffectChunkSkipDuePeriodSlotCount,
+                out var activeEffectChunkSkipNoopSlotCount,
+                out var activeEffectChunkSkipOwnerCount);
+            ReadActiveEffectGlobalIndexCounters(
+                em,
+                currentFrame,
+                out var activeEffectGlobalIndexOwnerCount,
+                out var activeEffectGlobalIndexCount,
+                out var activeEffectGlobalIndexActiveCount,
+                out var activeEffectGlobalIndexInhibitedCount,
+                out var activeEffectGlobalIndexPendingRemoveCount,
+                out var activeEffectGlobalIndexPeriodDueCount,
+                out var activeEffectGlobalIndexDurationDueCount,
+                out var activeEffectGlobalIndexStaleCount,
+                out var activeEffectGlobalIndexBucketOwnerCount,
+                out var activeEffectGlobalIndexBucketIndexCount,
+                out var activeEffectGlobalIndexMaxBucketLength,
+                out var activeEffectGlobalIndexStableRowCount,
+                out var activeEffectGlobalIndexStaleStableRowCount);
 
             var factCount = gameplayEventCount
                             + attributeChangeCount
@@ -1014,7 +1179,6 @@ namespace GAS.Runtime
                 Math.Max(effectCommandCount, instantSpecCount),
                 Math.Max(attributeDeltaCount, typedFactCount));
             var presentationCount = CountPresentationOutboxEvents(em, eventBusEntity, queries.PresentationOutboxes);
-            var currentFrame = ResolveCurrentFrame(em);
             var presentationCursorLag = CalculatePresentationCursorLag(
                 em,
                 eventBusEntity,
@@ -1059,6 +1223,26 @@ namespace GAS.Runtime
                 activeEffectSlotPendingRemoveCount,
                 activeEffectSlotLegacyBackedCount,
                 activeEffectSlotExternalizedOwnerCount,
+                activeEffectSlotGrantedTagCount,
+                activeEffectSlotGrantedAbilityCount,
+                activeEffectChunkSkipMatchedSlotCount,
+                activeEffectChunkSkipSkippedSlotCount,
+                activeEffectChunkSkipDuePeriodSlotCount,
+                activeEffectChunkSkipNoopSlotCount,
+                activeEffectChunkSkipOwnerCount,
+                activeEffectGlobalIndexOwnerCount,
+                activeEffectGlobalIndexCount,
+                activeEffectGlobalIndexActiveCount,
+                activeEffectGlobalIndexInhibitedCount,
+                activeEffectGlobalIndexPendingRemoveCount,
+                activeEffectGlobalIndexPeriodDueCount,
+                activeEffectGlobalIndexDurationDueCount,
+                activeEffectGlobalIndexStaleCount,
+                activeEffectGlobalIndexBucketOwnerCount,
+                activeEffectGlobalIndexBucketIndexCount,
+                activeEffectGlobalIndexMaxBucketLength,
+                activeEffectGlobalIndexStableRowCount,
+                activeEffectGlobalIndexStaleStableRowCount,
                 frameBudget.TotalQueryBudget,
                 frameBudget.TotalFilteredQueryBudget,
                 frameBudget.TotalUnfilteredQueryBudget,
@@ -1292,6 +1476,26 @@ namespace GAS.Runtime
             int activeEffectSlotPendingRemoveCount = 0,
             int activeEffectSlotLegacyBackedCount = 0,
             int activeEffectSlotExternalizedOwnerCount = 0,
+            int activeEffectSlotGrantedTagCount = 0,
+            int activeEffectSlotGrantedAbilityCount = 0,
+            int activeEffectChunkSkipMatchedSlotCount = 0,
+            int activeEffectChunkSkipSkippedSlotCount = 0,
+            int activeEffectChunkSkipDuePeriodSlotCount = 0,
+            int activeEffectChunkSkipNoopSlotCount = 0,
+            int activeEffectChunkSkipOwnerCount = 0,
+            int activeEffectGlobalIndexOwnerCount = 0,
+            int activeEffectGlobalIndexCount = 0,
+            int activeEffectGlobalIndexActiveCount = 0,
+            int activeEffectGlobalIndexInhibitedCount = 0,
+            int activeEffectGlobalIndexPendingRemoveCount = 0,
+            int activeEffectGlobalIndexPeriodDueCount = 0,
+            int activeEffectGlobalIndexDurationDueCount = 0,
+            int activeEffectGlobalIndexStaleCount = 0,
+            int activeEffectGlobalIndexBucketOwnerCount = 0,
+            int activeEffectGlobalIndexBucketIndexCount = 0,
+            int activeEffectGlobalIndexMaxBucketLength = 0,
+            int activeEffectGlobalIndexStableRowCount = 0,
+            int activeEffectGlobalIndexStaleStableRowCount = 0,
             int queryBudget = 0,
             int filteredQueryBudget = 0,
             int unfilteredQueryBudget = 0,
@@ -1334,6 +1538,26 @@ namespace GAS.Runtime
             state.RuntimeCoreActiveEffectSlotPendingRemoveCount = activeEffectSlotPendingRemoveCount;
             state.RuntimeCoreActiveEffectSlotLegacyBackedCount = activeEffectSlotLegacyBackedCount;
             state.RuntimeCoreActiveEffectSlotExternalizedOwnerCount = activeEffectSlotExternalizedOwnerCount;
+            state.RuntimeCoreActiveEffectSlotGrantedTagCount = activeEffectSlotGrantedTagCount;
+            state.RuntimeCoreActiveEffectSlotGrantedAbilityCount = activeEffectSlotGrantedAbilityCount;
+            state.RuntimeCoreActiveEffectChunkSkipMatchedSlotCount = activeEffectChunkSkipMatchedSlotCount;
+            state.RuntimeCoreActiveEffectChunkSkipSkippedSlotCount = activeEffectChunkSkipSkippedSlotCount;
+            state.RuntimeCoreActiveEffectChunkSkipDuePeriodSlotCount = activeEffectChunkSkipDuePeriodSlotCount;
+            state.RuntimeCoreActiveEffectChunkSkipNoopSlotCount = activeEffectChunkSkipNoopSlotCount;
+            state.RuntimeCoreActiveEffectChunkSkipOwnerCount = activeEffectChunkSkipOwnerCount;
+            state.RuntimeCoreActiveEffectGlobalIndexOwnerCount = activeEffectGlobalIndexOwnerCount;
+            state.RuntimeCoreActiveEffectGlobalIndexCount = activeEffectGlobalIndexCount;
+            state.RuntimeCoreActiveEffectGlobalIndexActiveCount = activeEffectGlobalIndexActiveCount;
+            state.RuntimeCoreActiveEffectGlobalIndexInhibitedCount = activeEffectGlobalIndexInhibitedCount;
+            state.RuntimeCoreActiveEffectGlobalIndexPendingRemoveCount = activeEffectGlobalIndexPendingRemoveCount;
+            state.RuntimeCoreActiveEffectGlobalIndexPeriodDueCount = activeEffectGlobalIndexPeriodDueCount;
+            state.RuntimeCoreActiveEffectGlobalIndexDurationDueCount = activeEffectGlobalIndexDurationDueCount;
+            state.RuntimeCoreActiveEffectGlobalIndexStaleCount = activeEffectGlobalIndexStaleCount;
+            state.RuntimeCoreActiveEffectGlobalIndexBucketOwnerCount = activeEffectGlobalIndexBucketOwnerCount;
+            state.RuntimeCoreActiveEffectGlobalIndexBucketIndexCount = activeEffectGlobalIndexBucketIndexCount;
+            state.RuntimeCoreActiveEffectGlobalIndexMaxBucketLength = activeEffectGlobalIndexMaxBucketLength;
+            state.RuntimeCoreActiveEffectGlobalIndexStableRowCount = activeEffectGlobalIndexStableRowCount;
+            state.RuntimeCoreActiveEffectGlobalIndexStaleStableRowCount = activeEffectGlobalIndexStaleStableRowCount;
             state.RuntimeCoreQueryBudget = queryBudget;
             state.RuntimeCoreFilteredQueryBudget = filteredQueryBudget;
             state.RuntimeCoreUnfilteredQueryBudget = unfilteredQueryBudget;
@@ -1379,6 +1603,26 @@ namespace GAS.Runtime
                     ActiveEffectSlotPendingRemoveCount = activeEffectSlotPendingRemoveCount,
                     ActiveEffectSlotLegacyBackedCount = activeEffectSlotLegacyBackedCount,
                     ActiveEffectSlotExternalizedOwnerCount = activeEffectSlotExternalizedOwnerCount,
+                    ActiveEffectSlotGrantedTagCount = activeEffectSlotGrantedTagCount,
+                    ActiveEffectSlotGrantedAbilityCount = activeEffectSlotGrantedAbilityCount,
+                    ActiveEffectChunkSkipMatchedSlotCount = activeEffectChunkSkipMatchedSlotCount,
+                    ActiveEffectChunkSkipSkippedSlotCount = activeEffectChunkSkipSkippedSlotCount,
+                    ActiveEffectChunkSkipDuePeriodSlotCount = activeEffectChunkSkipDuePeriodSlotCount,
+                    ActiveEffectChunkSkipNoopSlotCount = activeEffectChunkSkipNoopSlotCount,
+                    ActiveEffectChunkSkipOwnerCount = activeEffectChunkSkipOwnerCount,
+                    ActiveEffectGlobalIndexOwnerCount = activeEffectGlobalIndexOwnerCount,
+                    ActiveEffectGlobalIndexCount = activeEffectGlobalIndexCount,
+                    ActiveEffectGlobalIndexActiveCount = activeEffectGlobalIndexActiveCount,
+                    ActiveEffectGlobalIndexInhibitedCount = activeEffectGlobalIndexInhibitedCount,
+                    ActiveEffectGlobalIndexPendingRemoveCount = activeEffectGlobalIndexPendingRemoveCount,
+                    ActiveEffectGlobalIndexPeriodDueCount = activeEffectGlobalIndexPeriodDueCount,
+                    ActiveEffectGlobalIndexDurationDueCount = activeEffectGlobalIndexDurationDueCount,
+                    ActiveEffectGlobalIndexStaleCount = activeEffectGlobalIndexStaleCount,
+                    ActiveEffectGlobalIndexBucketOwnerCount = activeEffectGlobalIndexBucketOwnerCount,
+                    ActiveEffectGlobalIndexBucketIndexCount = activeEffectGlobalIndexBucketIndexCount,
+                    ActiveEffectGlobalIndexMaxBucketLength = activeEffectGlobalIndexMaxBucketLength,
+                    ActiveEffectGlobalIndexStableRowCount = activeEffectGlobalIndexStableRowCount,
+                    ActiveEffectGlobalIndexStaleStableRowCount = activeEffectGlobalIndexStaleStableRowCount,
                     QueryBudget = queryBudget,
                     FilteredQueryBudget = filteredQueryBudget,
                     UnfilteredQueryBudget = unfilteredQueryBudget,
@@ -1577,6 +1821,26 @@ namespace GAS.Runtime
                     state.RuntimeCoreActiveEffectSlotPendingRemoveCount,
                     state.RuntimeCoreActiveEffectSlotLegacyBackedCount,
                     state.RuntimeCoreActiveEffectSlotExternalizedOwnerCount,
+                    state.RuntimeCoreActiveEffectSlotGrantedTagCount,
+                    state.RuntimeCoreActiveEffectSlotGrantedAbilityCount,
+                    state.RuntimeCoreActiveEffectChunkSkipMatchedSlotCount,
+                    state.RuntimeCoreActiveEffectChunkSkipSkippedSlotCount,
+                    state.RuntimeCoreActiveEffectChunkSkipDuePeriodSlotCount,
+                    state.RuntimeCoreActiveEffectChunkSkipNoopSlotCount,
+                    state.RuntimeCoreActiveEffectChunkSkipOwnerCount,
+                    state.RuntimeCoreActiveEffectGlobalIndexOwnerCount,
+                    state.RuntimeCoreActiveEffectGlobalIndexCount,
+                    state.RuntimeCoreActiveEffectGlobalIndexActiveCount,
+                    state.RuntimeCoreActiveEffectGlobalIndexInhibitedCount,
+                    state.RuntimeCoreActiveEffectGlobalIndexPendingRemoveCount,
+                    state.RuntimeCoreActiveEffectGlobalIndexPeriodDueCount,
+                    state.RuntimeCoreActiveEffectGlobalIndexDurationDueCount,
+                    state.RuntimeCoreActiveEffectGlobalIndexStaleCount,
+                    state.RuntimeCoreActiveEffectGlobalIndexBucketOwnerCount,
+                    state.RuntimeCoreActiveEffectGlobalIndexBucketIndexCount,
+                    state.RuntimeCoreActiveEffectGlobalIndexMaxBucketLength,
+                    state.RuntimeCoreActiveEffectGlobalIndexStableRowCount,
+                    state.RuntimeCoreActiveEffectGlobalIndexStaleStableRowCount,
                     state.RuntimeCoreQueryBudget,
                     state.RuntimeCoreFilteredQueryBudget,
                     state.RuntimeCoreUnfilteredQueryBudget,
@@ -1697,6 +1961,7 @@ namespace GAS.Runtime
         private static void ReadActiveEffectStoreCounters(
             EntityManager em,
             EntityQuery activeEffectStoreQuery,
+            int currentFrame,
             out int ownerCount,
             out int slotCount,
             out int slotCapacity,
@@ -1705,7 +1970,14 @@ namespace GAS.Runtime
             out int inhibitedCount,
             out int pendingRemoveCount,
             out int legacyBackedCount,
-            out int externalizedOwnerCount)
+            out int externalizedOwnerCount,
+            out int grantedTagCount,
+            out int grantedAbilityCount,
+            out int chunkSkipMatchedSlotCount,
+            out int chunkSkipSkippedSlotCount,
+            out int chunkSkipDuePeriodSlotCount,
+            out int chunkSkipNoopSlotCount,
+            out int chunkSkipOwnerCount)
         {
             ownerCount = 0;
             slotCount = 0;
@@ -1716,6 +1988,13 @@ namespace GAS.Runtime
             pendingRemoveCount = 0;
             legacyBackedCount = 0;
             externalizedOwnerCount = 0;
+            grantedTagCount = 0;
+            grantedAbilityCount = 0;
+            chunkSkipMatchedSlotCount = 0;
+            chunkSkipSkippedSlotCount = 0;
+            chunkSkipDuePeriodSlotCount = 0;
+            chunkSkipNoopSlotCount = 0;
+            chunkSkipOwnerCount = 0;
 
             using var owners = activeEffectStoreQuery.ToEntityArray(Allocator.Temp);
             ownerCount = owners.Length;
@@ -1727,6 +2006,14 @@ namespace GAS.Runtime
                 slotCapacity += slots.Capacity;
                 if (slots.Capacity > ActiveEffectStore.InlineSlotCapacity)
                     externalizedOwnerCount++;
+
+                var chunkSkip = ActiveEffectStore.CreateChunkSkipIndexSnapshot(slots, currentFrame);
+                chunkSkipMatchedSlotCount += chunkSkip.MatchedSlotCount;
+                chunkSkipSkippedSlotCount += chunkSkip.SkippedSlotCount;
+                chunkSkipDuePeriodSlotCount += chunkSkip.DuePeriodSlotCount;
+                chunkSkipNoopSlotCount += chunkSkip.NoopSlotCount;
+                if (chunkSkip.CanSkipOwner)
+                    chunkSkipOwnerCount++;
 
                 for (var slotIndex = 0; slotIndex < slots.Length; slotIndex++)
                 {
@@ -1749,7 +2036,132 @@ namespace GAS.Runtime
 
                     if ((slot.Flags & (int)EActiveEffectSlotFlags.LegacyEntityBacked) != 0)
                         legacyBackedCount++;
+
+                    grantedTagCount += slot.ActiveGrantedTagCount;
+                    grantedAbilityCount += slot.ActiveGrantedAbilityCount;
                 }
+            }
+        }
+
+        private static void ReadActiveEffectGlobalIndexCounters(
+            EntityManager em,
+            int currentFrame,
+            out int ownerCount,
+            out int indexCount,
+            out int activeCount,
+            out int inhibitedCount,
+            out int pendingRemoveCount,
+            out int periodDueCount,
+            out int durationDueCount,
+            out int staleCount,
+            out int bucketOwnerCount,
+            out int bucketIndexCount,
+            out int maxBucketLength,
+            out int stableRowCount,
+            out int staleStableRowCount)
+        {
+            ownerCount = 0;
+            indexCount = 0;
+            activeCount = 0;
+            inhibitedCount = 0;
+            pendingRemoveCount = 0;
+            periodDueCount = 0;
+            durationDueCount = 0;
+            staleCount = 0;
+            bucketOwnerCount = 0;
+            bucketIndexCount = 0;
+            maxBucketLength = 0;
+            stableRowCount = 0;
+            staleStableRowCount = 0;
+
+            if (!ActiveEffectStore.TryGetGlobalIndexStore(em, out var indexOwner)
+                || indexOwner == Entity.Null
+                || !em.Exists(indexOwner)
+                || !em.HasBuffer<BGlobalActiveEffectIndex>(indexOwner))
+            {
+                return;
+            }
+
+            ownerCount = 1;
+            if (em.HasComponent<CActiveEffectGlobalIndexStore>(indexOwner))
+            {
+                var store = em.GetComponentData<CActiveEffectGlobalIndexStore>(indexOwner);
+                stableRowCount = store.IndexedStableRowCount;
+                staleStableRowCount = store.StaleStableRowCount;
+            }
+
+            var indices = em.GetBuffer<BGlobalActiveEffectIndex>(indexOwner);
+            indexCount = indices.Length;
+            for (var i = 0; i < indices.Length; i++)
+            {
+                var index = indices[i];
+                if (index.ActiveEffectEntity == Entity.Null
+                    || index.OwnerAsc == Entity.Null
+                    || !em.Exists(index.ActiveEffectEntity)
+                    || !em.Exists(index.OwnerAsc))
+                {
+                    staleCount++;
+                }
+
+                switch (index.State)
+                {
+                    case EActiveEffectSlotState.Active:
+                        activeCount++;
+                        break;
+                    case EActiveEffectSlotState.Inhibited:
+                        inhibitedCount++;
+                        break;
+                    case EActiveEffectSlotState.PendingRemove:
+                        pendingRemoveCount++;
+                        break;
+                }
+
+                if (index.State == EActiveEffectSlotState.Active
+                    && index.PeriodDueFrame > 0
+                    && currentFrame >= index.PeriodDueFrame)
+                {
+                    periodDueCount++;
+                }
+
+                if ((index.State == EActiveEffectSlotState.Active
+                    || ((index.SlotFlags & (int)EActiveEffectSlotFlags.TicksWhenInactive) != 0
+                        && index.State == EActiveEffectSlotState.Inhibited))
+                    && index.DurationDueFrame > 0
+                    && currentFrame >= index.DurationDueFrame)
+                {
+                    durationDueCount++;
+                }
+            }
+
+            if (!em.HasBuffer<BGlobalActiveEffectIndexBucketOwner>(indexOwner))
+                return;
+
+            var bucketOwners = em.GetBuffer<BGlobalActiveEffectIndexBucketOwner>(indexOwner);
+            for (var i = 0; i < bucketOwners.Length; i++)
+            {
+                var bucketOwnerRef = bucketOwners[i];
+                var bucketOwner = bucketOwnerRef.BucketOwner;
+                if (bucketOwner == Entity.Null
+                    || !em.Exists(bucketOwner)
+                    || !em.HasComponent<CActiveEffectGlobalIndexBucket>(bucketOwner)
+                    || !em.HasBuffer<BGlobalActiveEffectIndex>(bucketOwner))
+                {
+                    continue;
+                }
+
+                var bucket = em.GetComponentData<CActiveEffectGlobalIndexBucket>(bucketOwner);
+                if (bucket.RootOwner != indexOwner
+                    || bucket.BucketIndex != bucketOwnerRef.BucketIndex
+                    || bucket.BucketCount != ActiveEffectStore.GlobalIndexBucketCount)
+                {
+                    continue;
+                }
+
+                var bucketLength = em.GetBuffer<BGlobalActiveEffectIndex>(bucketOwner).Length;
+                bucketOwnerCount++;
+                bucketIndexCount += bucketLength;
+                if (bucketLength > maxBucketLength)
+                    maxBucketLength = bucketLength;
             }
         }
 
@@ -2113,8 +2525,48 @@ namespace GAS.Runtime
                     .Append(evt.ActiveEffectSlotLegacyBackedCount)
                     .Append("|activeEffectSlotExternalizedOwners=")
                     .Append(evt.ActiveEffectSlotExternalizedOwnerCount)
-                    .Append("|queryBudget=")
-                    .Append(evt.QueryBudget)
+                    .Append("|activeEffectSlotGrantedTags=")
+                    .Append(evt.ActiveEffectSlotGrantedTagCount)
+                    .Append("|activeEffectSlotGrantedAbilities=")
+                    .Append(evt.ActiveEffectSlotGrantedAbilityCount)
+                    .Append("|activeEffectChunkSkipMatchedSlots=")
+                    .Append(evt.ActiveEffectChunkSkipMatchedSlotCount)
+                    .Append("|activeEffectChunkSkipSkippedSlots=")
+                    .Append(evt.ActiveEffectChunkSkipSkippedSlotCount)
+                    .Append("|activeEffectChunkSkipDuePeriodSlots=")
+                    .Append(evt.ActiveEffectChunkSkipDuePeriodSlotCount)
+                    .Append("|activeEffectChunkSkipNoopSlots=")
+                    .Append(evt.ActiveEffectChunkSkipNoopSlotCount)
+                .Append("|activeEffectChunkSkipOwners=")
+                .Append(evt.ActiveEffectChunkSkipOwnerCount)
+                .Append("|activeEffectGlobalIndexOwners=")
+                .Append(evt.ActiveEffectGlobalIndexOwnerCount)
+                .Append("|activeEffectGlobalIndexCount=")
+                .Append(evt.ActiveEffectGlobalIndexCount)
+                .Append("|activeEffectGlobalIndexActive=")
+                .Append(evt.ActiveEffectGlobalIndexActiveCount)
+                .Append("|activeEffectGlobalIndexInhibited=")
+                .Append(evt.ActiveEffectGlobalIndexInhibitedCount)
+                .Append("|activeEffectGlobalIndexPendingRemove=")
+                .Append(evt.ActiveEffectGlobalIndexPendingRemoveCount)
+                .Append("|activeEffectGlobalIndexPeriodDue=")
+                .Append(evt.ActiveEffectGlobalIndexPeriodDueCount)
+                .Append("|activeEffectGlobalIndexDurationDue=")
+                .Append(evt.ActiveEffectGlobalIndexDurationDueCount)
+                .Append("|activeEffectGlobalIndexStale=")
+                .Append(evt.ActiveEffectGlobalIndexStaleCount)
+                .Append("|activeEffectGlobalIndexBucketOwners=")
+                .Append(evt.ActiveEffectGlobalIndexBucketOwnerCount)
+                .Append("|activeEffectGlobalIndexBucketIndexCount=")
+                .Append(evt.ActiveEffectGlobalIndexBucketIndexCount)
+                .Append("|activeEffectGlobalIndexMaxBucketLength=")
+                .Append(evt.ActiveEffectGlobalIndexMaxBucketLength)
+                .Append("|activeEffectGlobalIndexStableRows=")
+                .Append(evt.ActiveEffectGlobalIndexStableRowCount)
+                .Append("|activeEffectGlobalIndexStaleStableRows=")
+                .Append(evt.ActiveEffectGlobalIndexStaleStableRowCount)
+                .Append("|queryBudget=")
+                .Append(evt.QueryBudget)
                     .Append("|filteredQueryBudget=")
                     .Append(evt.FilteredQueryBudget)
                     .Append("|unfilteredQueryBudget=")
@@ -2275,6 +2727,46 @@ namespace GAS.Runtime
                 .Append(counters.ActiveEffectSlotLegacyBackedCount)
                 .Append("|externalizedOwners=")
                 .Append(counters.ActiveEffectSlotExternalizedOwnerCount)
+                .Append("|grantedTags=")
+                .Append(counters.ActiveEffectSlotGrantedTagCount)
+                .Append("|grantedAbilities=")
+                .Append(counters.ActiveEffectSlotGrantedAbilityCount)
+                .Append("|chunkSkipMatched=")
+                .Append(counters.ActiveEffectChunkSkipMatchedSlotCount)
+                .Append("|chunkSkipSkipped=")
+                .Append(counters.ActiveEffectChunkSkipSkippedSlotCount)
+                .Append("|chunkSkipDuePeriod=")
+                .Append(counters.ActiveEffectChunkSkipDuePeriodSlotCount)
+                .Append("|chunkSkipNoop=")
+                .Append(counters.ActiveEffectChunkSkipNoopSlotCount)
+                .Append("|chunkSkipOwners=")
+                .Append(counters.ActiveEffectChunkSkipOwnerCount)
+                .Append("|globalIndexOwners=")
+                .Append(counters.ActiveEffectGlobalIndexOwnerCount)
+                .Append("|globalIndexCount=")
+                .Append(counters.ActiveEffectGlobalIndexCount)
+                .Append("|globalIndexActive=")
+                .Append(counters.ActiveEffectGlobalIndexActiveCount)
+                .Append("|globalIndexInhibited=")
+                .Append(counters.ActiveEffectGlobalIndexInhibitedCount)
+                .Append("|globalIndexPendingRemove=")
+                .Append(counters.ActiveEffectGlobalIndexPendingRemoveCount)
+                .Append("|globalIndexPeriodDue=")
+                .Append(counters.ActiveEffectGlobalIndexPeriodDueCount)
+                .Append("|globalIndexDurationDue=")
+                .Append(counters.ActiveEffectGlobalIndexDurationDueCount)
+                .Append("|globalIndexStale=")
+                .Append(counters.ActiveEffectGlobalIndexStaleCount)
+                .Append("|globalIndexBucketOwners=")
+                .Append(counters.ActiveEffectGlobalIndexBucketOwnerCount)
+                .Append("|globalIndexBucketIndexCount=")
+                .Append(counters.ActiveEffectGlobalIndexBucketIndexCount)
+                .Append("|globalIndexMaxBucketLength=")
+                .Append(counters.ActiveEffectGlobalIndexMaxBucketLength)
+                .Append("|globalIndexStableRows=")
+                .Append(counters.ActiveEffectGlobalIndexStableRowCount)
+                .Append("|globalIndexStaleStableRows=")
+                .Append(counters.ActiveEffectGlobalIndexStaleStableRowCount)
                 .AppendLine();
             builder.Append("runtimeCoreFrameBudget|queryBudget=")
                 .Append(counters.QueryBudget)

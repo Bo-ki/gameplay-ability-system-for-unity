@@ -14,6 +14,8 @@ namespace GAS.Runtime
             _query = SystemAPI.QueryBuilder()
                 .WithAll<CHeadlessAutoBattleExecuteCalculation, CEffectContext, CEffectSpecData>()
                 .WithNone<CEffectDestroy>()
+                .WithNone<CEffectCleanup>()
+                .WithNone<CEffectFinalDestroy>()
                 .Build();
             state.RequireForUpdate(_query);
         }
@@ -26,7 +28,10 @@ namespace GAS.Runtime
             for (var i = 0; i < effects.Length; i++)
             {
                 var ge = effects[i];
-                if (!em.Exists(ge) || em.HasComponent<CEffectDestroy>(ge))
+                if (!em.Exists(ge)
+                    || em.HasComponent<CEffectCleanup>(ge)
+                    || em.HasComponent<CEffectDestroy>(ge)
+                    || em.HasComponent<CEffectFinalDestroy>(ge))
                     continue;
 
                 var calculation = em.GetComponentData<CHeadlessAutoBattleExecuteCalculation>(ge);

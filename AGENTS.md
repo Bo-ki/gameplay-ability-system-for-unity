@@ -12,6 +12,20 @@ This repository is a Unity project (2022.3 LTS) centered on EX-GAS 2.0.
 
 Do not commit generated caches/build folders like `Library/`, `Temp/`, `Logs/`, or `obj/`.
 
+## Agent skills
+
+### Issue tracker
+
+Use GitHub issues for issue/PRD workflows in this repo. Prefer the `origin` repository unless the user explicitly asks to target `upstream`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default mattpocock/skills triage label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use a single-context domain documentation layout. Read `CONTEXT.md` and `docs/adr/` when present; also treat the existing `方案讨论/针对2.0的ECS架构的迭代方案讨论/当前路线/` docs as supporting architecture context. See `docs/agents/domain.md`.
+
 ## Build, Test, and Development Commands
 - Open project with Unity `2022.3.62f3` (see `ProjectSettings/ProjectVersion.txt`).
 - Regenerate config JSON from Excel:

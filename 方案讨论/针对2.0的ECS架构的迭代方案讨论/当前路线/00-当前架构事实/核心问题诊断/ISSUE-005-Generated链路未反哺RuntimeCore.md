@@ -80,7 +80,7 @@ SourceGenerator 不能越权生成 gameplay lifecycle，但必须给 Runtime Cor
 
 ## 任务入口
 
-1. `../../02-主线任务树/T2-Definition_Luban配置权威/LubanSourceGenerator配置链.md`
+1. `../../02-主线任务树/T2-Definition_Luban配置权威/LubanSourceGenerator配置链/README.md`
 2. `../../02-主线任务树/T5-Burst_Generated后置优化/README.md`
 
 ## 退出条件

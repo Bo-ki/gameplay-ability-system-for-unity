@@ -105,6 +105,26 @@ namespace GAS.Runtime
                     StackCount = 1,
                 });
             }
+
+            if (!entityManager.HasComponent<CActiveEffectGlobalIndexStableRow>(entity))
+                entityManager.AddComponentData(entity, ActiveEffectStore.CreateGlobalIndexStableRowDefault(entity));
+
+            EnsureRuntimeGrantedAbilityBuffer(entityManager, entity);
+        }
+
+        private static void EnsureRuntimeGrantedAbilityBuffer(EntityManager entityManager, Entity entity)
+        {
+            if (entityManager.HasBuffer<BGrantedAbilityRuntime>(entity)
+                || !entityManager.HasBuffer<BGrantedAbilityConfig>(entity))
+            {
+                return;
+            }
+
+            var definitions = entityManager.GetBuffer<BGrantedAbilityConfig>(entity);
+            if (definitions.Length == 0)
+                return;
+
+            entityManager.AddBuffer<BGrantedAbilityRuntime>(entity).EnsureCapacity(definitions.Length);
         }
 
         private static void ConvertToRuntimeBuffers(EntityManager entityManager, Entity ge)

@@ -79,9 +79,25 @@ namespace GAS.Runtime.Tests.Event
             Assert.That(store.Decision, Is.EqualTo(GASRuntimeLayoutDecision.TargetContract));
             Assert.That(store.HasRequiredSlot(GASRuntimeLayoutComponentSlot.ActiveEffectStore), Is.True);
             Assert.That(store.HasRequiredSlot(GASRuntimeLayoutComponentSlot.ActiveEffectSlotBuffer), Is.True);
+            Assert.That(store.HasOptionalSlot(GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexStore), Is.True);
+            Assert.That(store.HasOptionalSlot(GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexBuffer), Is.True);
             Assert.That(store.HasCapability(GASRuntimeLayoutCapability.NoPerHitStructuralChange), Is.True);
             Assert.That(store.HasBoundary(GASRuntimeLayoutBoundary.DynamicBufferMutation), Is.True);
             Assert.That(store.HasBoundary(GASRuntimeLayoutBoundary.StructuralEntityManagerHotspot), Is.False);
+        }
+
+        [Test]
+        public void GameplayEffectActiveRuntimeDeclaresCleanupAndFinalDestroyMarkers()
+        {
+            var plan = GASRuntimeQueryLayoutPlanner.CreateCurrent();
+
+            Assert.That(
+                plan.TryFind(GASRuntimeQueryLayoutEntryId.GameplayEffectActiveRuntime, out var active),
+                Is.True);
+            Assert.That(active.HasOptionalSlot(GASRuntimeLayoutComponentSlot.EffectCleanup), Is.True);
+            Assert.That(active.HasOptionalSlot(GASRuntimeLayoutComponentSlot.EffectDestroy), Is.True);
+            Assert.That(active.HasOptionalSlot(GASRuntimeLayoutComponentSlot.EffectFinalDestroy), Is.True);
+            Assert.That(active.HasOptionalSlot(GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexStableRow), Is.True);
         }
 
         [Test]

@@ -101,6 +101,22 @@ namespace GAS.Runtime.Tests.Event
         }
 
         [Test]
+        public void GameplayEffectActiveRuntimeMutationDeclaresCleanupAndFinalDestroyMarkers()
+        {
+            var plan = GASRuntimeStructuralChangePlanner.CreateCurrent();
+
+            Assert.That(
+                plan.TryFind(GASRuntimeStructuralChangeEntryId.GameplayEffectActiveRuntimeMutation, out var entry),
+                Is.True);
+            Assert.That(entry.HasAffectedSlot(GASRuntimeLayoutComponentSlot.EffectCleanup), Is.True);
+            Assert.That(entry.HasAffectedSlot(GASRuntimeLayoutComponentSlot.EffectDestroy), Is.True);
+            Assert.That(entry.HasAffectedSlot(GASRuntimeLayoutComponentSlot.EffectFinalDestroy), Is.True);
+            Assert.That(entry.HasAffectedSlot(GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexStableRow), Is.True);
+            Assert.That(entry.HasAffectedSlot(GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexStore), Is.True);
+            Assert.That(entry.HasAffectedSlot(GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexBuffer), Is.True);
+        }
+
+        [Test]
         public void ManagedCuePresentationStaysOutOfSimulationMigrationContract()
         {
             var plan = GASRuntimeStructuralChangePlanner.CreateCurrent();
@@ -279,8 +295,11 @@ namespace GAS.Runtime.Tests.Event
 
             AssertUsesLocalEcb(
                 "Assets/GAS/Runtime/System/Effect/SRemoveGameplayEffectRequest.cs",
-                "ecb.AddComponent<CEffectDestroy>",
+                "EffectRuntimeUtility.MarkEffectForRemoval(",
                 "ecb.DestroyEntity(requestEntity)");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SRemoveGameplayEffectRequest.cs",
+                "ecb.AddComponent<CEffectDestroy>");
             AssertNoSourceToken(
                 "Assets/GAS/Runtime/System/Effect/SRemoveGameplayEffectRequest.cs",
                 "em.AddComponent<CEffectDestroy>");
@@ -382,21 +401,165 @@ namespace GAS.Runtime.Tests.Event
 
             AssertUsesLocalEcb(
                 "Assets/GAS/Runtime/System/Effect/SEffectRemove.cs",
-                "EffectRuntimeUtility.CleanupActiveEffect(em, ref ecb",
+                "_cleanupQuery",
+                "CEffectCleanup",
+                "CEffectFinalDestroy",
+                "WithNone<CEffectFinalDestroy>",
+                "_activeEffectStoreQuery",
+                "BActiveEffectSlot",
+                "EActiveEffectSlotState.PendingRemove",
+                "CollectCleanupEffectCandidatesJob : IJobChunk",
+                "CollectPendingRemoveSlotCandidatesJob : IJobChunk",
+                "CollectLegacyDestroyEffectCandidatesJob : IJobChunk",
+                "NativeQueue<EffectCleanupCandidate>.ParallelWriter",
+                "SortCleanupCandidates",
+                "ActionFlags",
+                "EEffectCleanupCandidateActionFlags",
+                "ExecuteCleanupCandidate",
+                "HasCleanupAction(candidate.ActionFlags, EEffectCleanupCandidateActionFlags.CleanupActiveEffect)",
+                "HasCleanupAction(candidate.ActionFlags, EEffectCleanupCandidateActionFlags.DestroyEffectEntity)",
+                "CreateChunkCleanupActionFlags",
+                "CreateLookupCleanupActionFlags",
+                "ComponentTypeHandle<CEffectContext>",
+                "ComponentLookup<CEffectContext>",
+                "ComponentLookup<CEffectFinalDestroy>",
+                "BufferTypeHandle<BActiveEffectSlot>",
+                "ScheduleParallel(_activeEffectStoreQuery",
+                "EffectRuntimeUtility.CleanupActiveEffect(em, ref ecb, ge, currentFrame)",
                 "EffectRuntimeUtility.DestroyEffectEntity(em, ref ecb");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectRemove.cs",
+                "_cleanupQuery.ToEntityArray");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectRemove.cs",
+                "_removeQuery.ToEntityArray");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectRemove.cs",
+                "_activeEffectStoreQuery.ToEntityArray");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectRemove.cs",
+                "foreach (var owner in owners)");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectRemove.cs",
+                "CollectPendingRemoveEffects");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectRemove.cs",
+                "CleanupOrDestroyEffect");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectRemove.cs",
+                "em.HasComponent<CEffectContext>(ge)");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectRemove.cs",
+                "em.HasComponent<CEffectFinalDestroy>(ge)");
             AssertNoSourceToken(
                 "Assets/GAS/Runtime/System/Effect/SEffectRemove.cs",
                 "EffectRuntimeUtility.CleanupActiveEffect(em, ge)");
             AssertNoSourceToken(
                 "Assets/GAS/Runtime/System/Effect/SEffectRemove.cs",
+                "EffectRuntimeUtility.CleanupActiveEffect(em, ref ecb, ge);");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectRemove.cs",
                 "EffectRuntimeUtility.DestroyEffectEntity(em, ge)");
 
             AssertUsesLocalEcb(
+                "Assets/GAS/Runtime/System/Effect/SEffectFinalDestroy.cs",
+                "WithAll<CEffectFinalDestroy>",
+                "CollectFinalDestroyCandidatesJob : IJobChunk",
+                "NativeQueue<FinalDestroyCandidate>.ParallelWriter",
+                "SortFinalDestroyCandidates",
+                "ScheduleParallel(_finalDestroyQuery",
+                "EffectRuntimeUtility.FinalizeEffectDestroy(em, ref ecb, ge, currentFrame)");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectFinalDestroy.cs",
+                "EffectRuntimeUtility.DestroyEffectEntity(");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectFinalDestroy.cs",
+                "em.DestroyEntity(");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectFinalDestroy.cs",
+                "_finalDestroyQuery.ToEntityArray");
+
+            AssertUsesLocalEcb(
                 "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "RefreshOwnerLocalChunkSkipIndexJob : IJobChunk",
+                "CollectDurationEffectCandidatesJob : IJobChunk",
+                "OwnerLocalDueSlotCandidate",
+                "DurationEffectCandidate",
+                "NativeQueue<OwnerLocalDueSlotCandidate>.ParallelWriter",
+                "NativeQueue<DurationEffectCandidate>.ParallelWriter",
+                "NativeQueue<BGlobalActiveEffectIndex>.ParallelWriter",
+                "GlobalIndexCandidates",
+                "ActionFlags",
+                "ActiveEffectStore.CreateTickActionFlags",
+                "ActiveEffectStore.CreateLegacyDurationTickActionFlags",
+                "EActiveEffectTickActionFlags.None",
+                "HasTickAction(actionFlags, EActiveEffectTickActionFlags.Period)",
+                "HasTickAction(actionFlags, EActiveEffectTickActionFlags.DurationExpire)",
+                "TickLegacyDurationEffect",
+                "ComponentTypeHandle<CDurationDefinition>",
+                "ComponentTypeHandle<CDurationRuntime>",
+                "ComponentTypeHandle<CPeriodDefinition>",
+                "ComponentTypeHandle<CPeriodRuntime>",
+                "ComponentTypeHandle<CEffectLifecycle>",
+                "BufferLookup<BGameplayEffect>",
+                "RequireForUpdate<GlobalTimer>",
+                "_activeEffectStoreQuery.CalculateEntityCount() == 0",
+                "_activeDurationQuery.CalculateEntityCount() == 0",
+                "ScheduleParallel(_activeEffectStoreQuery",
+                "ScheduleParallel(_activeDurationQuery",
+                "SortDueSlotCandidates",
+                "SortDurationEffectCandidates",
+                "SortGlobalIndexCandidates",
+                "ActiveEffectStore.TryMergeGlobalIndexEntries",
+                "ActiveEffectStore.CreateGlobalIndexEntry",
+                "BufferTypeHandle<BActiveEffectSlot>",
                 "EffectRuntimeUtility.HandleDurationExpired(em, ref ecb",
+                "EffectRuntimeUtility.MarkEffectForRemoval(em, ref ecb, ge, currentFrame)",
                 "EffectRuntimeUtility.CreateDerivedApplyRequest(",
                 "ecb.AddComponent(ge, new CPeriodRuntime",
                 "ecb.SetComponent(ge, runtime)");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "_activeEffectStoreQuery.ToEntityArray");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "_activeDurationQuery.ToEntityArray");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "RequireForUpdate(_activeDurationQuery)");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                ".Schedule(_activeDurationQuery");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "NativeList<Entity>");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "TickOwnerLocalDueSlots");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "ownersWithDueWork");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "OwnersToSyncGlobalIndex");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "NativeQueue<Entity>");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "TrySyncGlobalIndexOwner(em");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "SortEntities");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "IsStoreDurationDue");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "TickDurationEffect");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
+                "TickInactiveDuration");
             AssertNoSourceToken(
                 "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
                 "EffectRuntimeUtility.HandleDurationExpired(em, ge");
@@ -407,13 +570,34 @@ namespace GAS.Runtime.Tests.Event
                 "Assets/GAS/Runtime/System/Effect/SEffectTick.cs",
                 "em.SetComponentData(ge, runtime)");
 
+            AssertSourceContains(
+                "Assets/GAS/Runtime/Effect/Component/Dynamic/CActiveEffectStore.cs",
+                "BGlobalActiveEffectIndexBucketOwner",
+                "CActiveEffectGlobalIndexBucket",
+                "GlobalIndexBucketCount",
+                "ResolveGlobalIndexBucket",
+                "TryGetGlobalIndexBucketOwner",
+                "CActiveEffectGlobalIndexStableRow",
+                "CreateGlobalIndexStableRowDefault",
+                "TrySyncGlobalIndexStableRow",
+                "TryMarkPendingRemove",
+                "EActiveEffectTickActionFlags",
+                "CreateTickActionFlags",
+                "CreateLegacyDurationTickActionFlags",
+                "CreateCleanupWorkFlags",
+                "StableRowBacked");
+
             AssertUsesLocalEcb(
                 "Assets/GAS/Runtime/System/Ability/SAbilityStateCleanup.cs",
                 "CleanupAbilityCreatedEffects(em, ref ecb",
+                "EffectRuntimeUtility.MarkEffectForRemoval(em, ref ecb",
                 "CleanupGrantedAbilityIfNeeded(em, ref ecb",
                 "RemoveComponentIfPresent<CAbilityActive>(em, ref ecb",
                 "ecb.SetComponent(ability, runtime)",
                 "DestroyAbilityEntity(em, ref ecb");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Ability/SAbilityStateCleanup.cs",
+                "ecb.AddComponent<CEffectDestroy>");
             AssertNoSourceToken(
                 "Assets/GAS/Runtime/System/Ability/SAbilityStateCleanup.cs",
                 "em.AddComponent<CEffectDestroy>");
@@ -433,7 +617,23 @@ namespace GAS.Runtime.Tests.Event
                 "public static void DestroyEffectEntity(EntityManager em, ref EntityCommandBuffer ecb",
                 "private static void SetPeriodStartTime(",
                 "private static void AddGrantedAbilities(",
-                "private static void CancelOrDestroyAbility(");
+                "private static void CancelOrDestroyAbility(",
+                "new CEffectCleanup",
+                "RequestedCleanupWorkFlags",
+                "new CEffectFinalDestroy",
+                "FinalizeEffectDestroy",
+                "ActiveEffectStore.TryMarkPendingRemove",
+                "ActiveEffectStore.CreateCleanupWorkFlags",
+                "em.HasComponent<CEffectCleanup>",
+                "ResolveRequestedCleanupWorkFlags",
+                "HasCleanupWork(requestedCleanupWorkFlags, EActiveEffectCleanupWorkFlags.GrantedAbilities)",
+                "HasCleanupWork(requestedCleanupWorkFlags, EActiveEffectCleanupWorkFlags.OwnerLocalSlot)",
+                "ActiveEffectStore.TryRecordLifecycleCleanup",
+                "ActiveEffectStore.TryResolveLifecycleCleanupBeforeEntityDestroy",
+                "ActiveEffectStore.TryResolveLifecycleCleanup");
+            AssertNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/EffectRuntimeUtility.cs",
+                "PlaybackAndReset(ref ecb, em);");
             AssertNoSourceToken(
                 "Assets/GAS/Runtime/System/Effect/EffectRuntimeUtility.cs",
                 "em.AddComponent<CEffectDestroy>");
@@ -449,6 +649,14 @@ namespace GAS.Runtime.Tests.Event
             AssertNoSourceToken(
                 "Assets/GAS/Runtime/System/Effect/EffectRuntimeUtility.cs",
                 "em.AddComponent<CAbilityInTryActivate>");
+            AssertMethodBodyNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/EffectRuntimeUtility.cs",
+                "private static void RemoveGrantedAbilities(",
+                "TryGetStaticDefinitionBlob");
+            AssertMethodBodyNoSourceToken(
+                "Assets/GAS/Runtime/System/Effect/EffectRuntimeUtility.cs",
+                "private static void RemoveGrantedAbilities(",
+                "NativeArray<BGrantedAbilityRuntime>");
             AssertNoSourceToken(
                 "Assets/GAS/Runtime/System/Effect/EffectRuntimeUtility.cs",
                 "em.AddComponent<CAbilityDestroyOnCleanup>");
@@ -577,10 +785,58 @@ namespace GAS.Runtime.Tests.Event
                 Assert.That(source.Contains(requiredTokens[i]), Is.True, relativePath + " missing " + requiredTokens[i]);
         }
 
+        private static void AssertSourceContains(
+            string relativePath,
+            params string[] requiredTokens)
+        {
+            var source = ReadProjectFile(relativePath);
+            for (var i = 0; i < requiredTokens.Length; i++)
+                Assert.That(source.Contains(requiredTokens[i]), Is.True, relativePath + " missing " + requiredTokens[i]);
+        }
+
         private static void AssertNoSourceToken(string relativePath, string forbiddenToken)
         {
             var source = ReadProjectFile(relativePath);
             Assert.That(source.Contains(forbiddenToken), Is.False, relativePath + " still contains " + forbiddenToken);
+        }
+
+        private static void AssertMethodBodyNoSourceToken(
+            string relativePath,
+            string methodSignature,
+            string forbiddenToken)
+        {
+            var source = ReadProjectFile(relativePath);
+            var start = source.IndexOf(methodSignature, StringComparison.Ordinal);
+            Assert.That(start, Is.GreaterThanOrEqualTo(0), relativePath + " missing " + methodSignature);
+
+            var braceStart = source.IndexOf('{', start);
+            Assert.That(braceStart, Is.GreaterThanOrEqualTo(0), relativePath + " missing body for " + methodSignature);
+
+            var depth = 0;
+            for (var i = braceStart; i < source.Length; i++)
+            {
+                if (source[i] == '{')
+                {
+                    depth++;
+                    continue;
+                }
+
+                if (source[i] != '}')
+                    continue;
+
+                depth--;
+                if (depth != 0)
+                    continue;
+
+                var body = source.Substring(braceStart, i - braceStart + 1);
+                Assert.That(
+                    body.Contains(forbiddenToken),
+                    Is.False,
+                    relativePath + " method " + methodSignature + " still contains " + forbiddenToken);
+                return;
+            }
+
+            Assert.Fail(relativePath + " missing closing brace for " + methodSignature);
         }
 
         private static string ReadProjectFile(string relativePath)

@@ -309,6 +309,13 @@ namespace GAS.Runtime
             }
         }
 
+        public struct ParallelCommandFanInRecord
+        {
+            public int ProducerIndex;
+            public int LocalIndex;
+            public BEffectCommand Command;
+        }
+
         public static Entity EnsureSingleton(EntityManager em)
         {
             if (TryGetSingleton(em, out var streamEntity))
@@ -485,6 +492,46 @@ namespace GAS.Runtime
             return resolved;
         }
 
+        public static int MergeParallelCommandFanIn(
+            EntityManager em,
+            Entity streamEntity,
+            IReadOnlyList<ParallelCommandFanInRecord> records,
+            int currentFrame)
+        {
+            if (records == null || records.Count == 0)
+                return 0;
+
+            if (streamEntity == Entity.Null || !em.Exists(streamEntity))
+                streamEntity = EnsureSingleton(em);
+            else
+                EnsureBuffers(em, streamEntity);
+
+            var sorted = new List<ParallelCommandFanInRecord>(records.Count);
+            for (var i = 0; i < records.Count; i++)
+                sorted.Add(records[i]);
+            SortParallelCommandFanInRecords(sorted);
+
+            var stream = em.GetComponentData<CEffectCommandSpecStream>(streamEntity);
+            var commands = em.GetBuffer<BEffectCommand>(streamEntity);
+            var setByCallerBuffer = em.GetBuffer<BEffectCommandSetByCallerValue>(streamEntity);
+
+            for (var i = 0; i < sorted.Count; i++)
+            {
+                var resolved = PrepareCommand(
+                    ref stream,
+                    setByCallerBuffer,
+                    sorted[i].Command,
+                    setByCallerCount: 0,
+                    currentFrame);
+                AdvanceAfterExplicitSequence(ref stream.NextCommandSequence, resolved.Sequence);
+                AdvanceAfterExplicitSequence(ref stream.NextContextId, resolved.ContextId);
+                commands.Add(resolved);
+            }
+
+            em.SetComponentData(streamEntity, stream);
+            return sorted.Count;
+        }
+
         public static void ClearFrameLocalData(EntityManager em, Entity streamEntity, int frame)
         {
             if (streamEntity == Entity.Null || !em.Exists(streamEntity))
@@ -581,6 +628,56 @@ namespace GAS.Runtime
             resolved.SetByCallerStart = setByCallerBuffer.Length;
             resolved.SetByCallerCount = setByCallerCount;
             return resolved;
+        }
+
+        private static void SortParallelCommandFanInRecords(List<ParallelCommandFanInRecord> records)
+        {
+            for (var i = 1; i < records.Count; i++)
+            {
+                var value = records[i];
+                var j = i - 1;
+                while (j >= 0 && CompareParallelCommandFanInRecords(records[j], value) > 0)
+                {
+                    records[j + 1] = records[j];
+                    j--;
+                }
+
+                records[j + 1] = value;
+            }
+        }
+
+        private static int CompareParallelCommandFanInRecords(
+            in ParallelCommandFanInRecord left,
+            in ParallelCommandFanInRecord right)
+        {
+            var result = CompareEntity(left.Command.TargetAsc, right.Command.TargetAsc);
+            if (result != 0)
+                return result;
+
+            result = left.Command.Sequence.CompareTo(right.Command.Sequence);
+            if (result != 0)
+                return result;
+
+            result = left.ProducerIndex.CompareTo(right.ProducerIndex);
+            if (result != 0)
+                return result;
+
+            return left.LocalIndex.CompareTo(right.LocalIndex);
+        }
+
+        private static int CompareEntity(Entity left, Entity right)
+        {
+            var result = left.Index.CompareTo(right.Index);
+            if (result != 0)
+                return result;
+
+            return left.Version.CompareTo(right.Version);
+        }
+
+        private static void AdvanceAfterExplicitSequence(ref int next, int value)
+        {
+            if (next <= value)
+                next = value + 1;
         }
 
     }

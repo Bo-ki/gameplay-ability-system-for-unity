@@ -87,8 +87,7 @@
 
 | 支线 | 文档 | 状态 |
 |---|---|---|
-| Runtime Core 重构 | [RuntimeCore重构.md](RuntimeCore重构.md) | 进行中 |
-| Runtime Core Frame Backbone | [RuntimeCoreFrameBackbone.md](RuntimeCoreFrameBackbone.md) | 已完成 AM2B-A -> AM2B-F contract-first / rebind handoff；当前继续 RuntimeCore AM3 / AM5 缺口迁移，activation simple producer、ability cost self producer、Timeline ApplyEffects single-target / multi-target simple instant producer 与 AM5 period / overflow simple instant derived command 已迁入 stream |
+| Runtime Core 重构 | [RuntimeCore重构/](RuntimeCore重构/README.md) | 进行中。AM3 契约已确立（Unity Test Runner 待补跑），AM5 进行中并推荐继续领取。共 11 个叶子任务，1 个子分支（AM2B Frame Backbone / 6 个叶子任务）。 |
 
 ## 交还规则
 

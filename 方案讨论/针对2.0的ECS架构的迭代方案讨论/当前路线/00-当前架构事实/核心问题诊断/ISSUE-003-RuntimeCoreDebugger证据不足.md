@@ -70,7 +70,7 @@ Debugger baseline 已能连接 Runtime Core 与 Runtime Boundary 的关键指标
 
 ## 任务入口
 
-`../../02-主线任务树/T4-Observation_Presentation_Debugger/RuntimeCoreDebugger.md`
+`../../02-主线任务树/T4-Observation_Presentation_Debugger/RuntimeCoreDebugger/README.md`
 
 ## 退出条件
 

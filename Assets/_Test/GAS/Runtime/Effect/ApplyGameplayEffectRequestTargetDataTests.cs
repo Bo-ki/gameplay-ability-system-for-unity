@@ -1022,9 +1022,12 @@ namespace GAS.Runtime.Tests.Effect
                 _created.Add(effect);
                 Assert.That(effect, Is.Not.EqualTo(Entity.Null));
                 Assert.That(_em.HasBuffer<BGrantedAbilityConfig>(effect), Is.True);
+                Assert.That(_em.HasBuffer<BGrantedAbilityRuntime>(effect), Is.True);
+                Assert.That(_em.GetBuffer<BGrantedAbilityRuntime>(effect).Length, Is.EqualTo(0));
 
                 _em.RemoveComponent<BGrantedAbilityConfig>(effect);
                 Assert.That(_em.HasBuffer<BGrantedAbilityConfig>(effect), Is.False);
+                Assert.That(_em.HasBuffer<BGrantedAbilityRuntime>(effect), Is.True);
 
                 var context = new CEffectContext
                 {

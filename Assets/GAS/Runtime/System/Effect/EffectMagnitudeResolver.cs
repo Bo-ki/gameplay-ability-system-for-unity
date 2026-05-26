@@ -688,17 +688,15 @@ namespace GAS.Runtime
             int eventCode,
             float value)
         {
-            EventBusHelper.EnqueueGameplayEvent(em, GASManager.EntityEventBus, new BGameplayEvent
+            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            try
             {
-                Type = type,
-                SourceAsc = context.SourceAsc,
-                TargetAsc = context.TargetAsc,
-                SourceAbility = context.SourceAbility,
-                GameplayEffect = ge,
-                ContextId = context.ContextId,
-                EventCode = eventCode,
-                Value = value,
-            });
+                EnqueueMagnitudeFact(ref eventBusWriter, ge, context, type, eventCode, value);
+            }
+            finally
+            {
+                eventBusWriter.Dispose();
+            }
         }
 
         private static void EnqueueMagnitudeFact(

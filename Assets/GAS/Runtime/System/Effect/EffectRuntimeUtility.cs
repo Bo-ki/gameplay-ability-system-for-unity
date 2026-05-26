@@ -77,6 +77,9 @@ namespace GAS.Runtime
 
         private static EGameplayEffectLifecycleState ResolveCleanupState(EntityManager em, Entity ge)
         {
+            if (em.HasComponent<CEffectCleanup>(ge))
+                return em.GetComponentData<CEffectCleanup>(ge).CleanupState;
+
             if (em.HasComponent<CEffectLifecycle>(ge))
             {
                 var lifecycle = em.GetComponentData<CEffectLifecycle>(ge);
@@ -86,6 +89,13 @@ namespace GAS.Runtime
             }
 
             return ResolveLifecycleState(em, ge);
+        }
+
+        private static bool IsPendingCleanup(EntityManager em, Entity ge)
+        {
+            return em.HasComponent<CEffectCleanup>(ge)
+                   || em.HasComponent<CEffectDestroy>(ge)
+                   || em.HasComponent<CEffectFinalDestroy>(ge);
         }
 
         private static void SetLifecycle(
@@ -136,18 +146,40 @@ namespace GAS.Runtime
             if (!em.Exists(ge))
                 return;
 
+            var cleanupState = ResolveCleanupState(em, ge);
             SetLifecycle(em, ref ecb, ge, EGameplayEffectLifecycleState.PendingRemove, currentFrame);
-            if (em.HasComponent<CEffectContext>(ge) && em.HasComponent<CDurationRuntime>(ge))
+            var hasContext = em.HasComponent<CEffectContext>(ge);
+            var context = hasContext ? em.GetComponentData<CEffectContext>(ge) : default;
+            if (hasContext && em.HasComponent<CDurationRuntime>(ge))
             {
-                var context = em.GetComponentData<CEffectContext>(ge);
                 var duration = em.GetComponentData<CDurationRuntime>(ge);
-                ActiveEffectStore.TryUpsertDurationEffect(
-                    em,
-                    ge,
-                    context,
-                    duration,
-                    EActiveEffectSlotState.PendingRemove,
-                    currentFrame);
+                if (!ActiveEffectStore.TryUpsertDurationEffect(
+                        em,
+                        ge,
+                        context,
+                        duration,
+                        EActiveEffectSlotState.PendingRemove,
+                        currentFrame))
+                {
+                    ActiveEffectStore.TryMarkPendingRemove(em, ge, context, currentFrame);
+                }
+            }
+            else if (hasContext)
+                ActiveEffectStore.TryMarkPendingRemove(em, ge, context, currentFrame);
+
+            var requestedCleanupWorkFlags = hasContext
+                ? ActiveEffectStore.CreateCleanupWorkFlags(em, ge, context, cleanupState)
+                : (int)EActiveEffectCleanupWorkFlags.EntityDestroy;
+            if (!em.HasComponent<CEffectCleanup>(ge))
+            {
+                ecb.AddComponent(ge, new CEffectCleanup
+                {
+                    RequestedFrame = currentFrame,
+                    CleanupState = cleanupState,
+                    RequestedCleanupWorkFlags = requestedCleanupWorkFlags,
+                    SourceAsc = context.SourceAsc,
+                    TargetAsc = context.TargetAsc,
+                });
             }
 
             if (!em.HasComponent<CEffectDestroy>(ge))
@@ -277,7 +309,7 @@ namespace GAS.Runtime
                 var activeEffect = activeEffects[i].GameplayEffect;
                 if (activeEffect == ge
                     || !em.Exists(activeEffect)
-                    || em.HasComponent<CEffectDestroy>(activeEffect)
+                    || IsPendingCleanup(em, activeEffect)
                     || !MatchesEffectTags(em, activeEffect, requirement))
                 {
                     continue;
@@ -916,7 +948,7 @@ namespace GAS.Runtime
                 var existing = effects[i].GameplayEffect;
                 if (existing == ge
                     || !em.Exists(existing)
-                    || em.HasComponent<CEffectDestroy>(existing)
+                    || IsPendingCleanup(em, existing)
                     || !em.HasComponent<CStackingDefinition>(existing)
                     || !em.HasComponent<CEffectContext>(existing))
                 {
@@ -1201,13 +1233,43 @@ namespace GAS.Runtime
 
         public static void CleanupActiveEffect(EntityManager em, Entity ge)
         {
-            var ecb = new EntityCommandBuffer(Allocator.Temp);
-            CleanupActiveEffect(em, ref ecb, ge);
-            ecb.Playback(em);
-            ecb.Dispose();
+            CleanupActiveEffect(em, ge, GASRuntimeFrameContext.ResolveCurrentFrame(em));
+        }
+
+        public static void CleanupActiveEffect(EntityManager em, Entity ge, int currentFrame)
+        {
+            var cleanupEcb = new EntityCommandBuffer(Allocator.Temp);
+            CleanupActiveEffect(
+                em,
+                ref cleanupEcb,
+                ge,
+                currentFrame);
+            cleanupEcb.Playback(em);
+            cleanupEcb.Dispose();
+
+            if (!em.Exists(ge) || !em.HasComponent<CEffectFinalDestroy>(ge))
+                return;
+
+            var destroyEcb = new EntityCommandBuffer(Allocator.Temp);
+            FinalizeEffectDestroy(em, ref destroyEcb, ge, currentFrame);
+            destroyEcb.Playback(em);
+            destroyEcb.Dispose();
         }
 
         public static void CleanupActiveEffect(EntityManager em, ref EntityCommandBuffer ecb, Entity ge)
+        {
+            CleanupActiveEffect(
+                em,
+                ref ecb,
+                ge,
+                GASRuntimeFrameContext.ResolveCurrentFrame(em));
+        }
+
+        public static void CleanupActiveEffect(
+            EntityManager em,
+            ref EntityCommandBuffer ecb,
+            Entity ge,
+            int currentFrame)
         {
             if (!em.Exists(ge))
                 return;
@@ -1221,30 +1283,112 @@ namespace GAS.Runtime
             var context = em.GetComponentData<CEffectContext>(ge);
             var target = context.TargetAsc;
             var cleanupState = ResolveCleanupState(em, ge);
+            var requestedCleanupWorkFlags = ResolveRequestedCleanupWorkFlags(em, ge, context, cleanupState);
+            ActiveEffectStore.TryRecordLifecycleCleanup(
+                em,
+                ge,
+                context,
+                cleanupState,
+                currentFrame,
+                requestedCleanupWorkFlags,
+                out var cleanupSequence);
 
             if (cleanupState == EGameplayEffectLifecycleState.Active)
             {
                 EnqueueCueRequests<CCueOnDeactivate>(em, ge, target, EGameplayCueEvent.OnDeactivate);
                 EnqueueStopCueRequests<CCueOnTick>(em, ge);
-                RemoveGrantedAbilities(em, ref ecb, ge, target);
-                RemoveRuntimeModifiers(em, ge, context);
-                RemoveGrantedTags(em, ref ecb, ge, target);
+                if (HasCleanupWork(requestedCleanupWorkFlags, EActiveEffectCleanupWorkFlags.GrantedAbilities))
+                    RemoveGrantedAbilities(em, ref ecb, ge, target);
+                if (HasCleanupWork(requestedCleanupWorkFlags, EActiveEffectCleanupWorkFlags.RuntimeModifiers))
+                    RemoveRuntimeModifiers(em, ge, context);
+                if (HasCleanupWork(requestedCleanupWorkFlags, EActiveEffectCleanupWorkFlags.GrantedTags))
+                    RemoveGrantedTags(em, ref ecb, ge, target);
             }
 
             if (cleanupState == EGameplayEffectLifecycleState.Active
                 || cleanupState == EGameplayEffectLifecycleState.Inhibited)
             {
-                RemoveEffectFromTarget(em, ge, context);
+                if (HasCleanupWork(requestedCleanupWorkFlags, EActiveEffectCleanupWorkFlags.OwnerLocalSlot)
+                    || HasCleanupWork(requestedCleanupWorkFlags, EActiveEffectCleanupWorkFlags.LegacyTargetBuffer))
+                {
+                    RemoveEffectFromTarget(em, ge, context, currentFrame);
+                }
+
                 EnqueueCueRequests<CCueOnRemove>(em, ge, target, EGameplayCueEvent.OnRemove);
             }
 
-            if (em.HasComponent<CDurationRuntime>(ge))
+            if (HasCleanupWork(requestedCleanupWorkFlags, EActiveEffectCleanupWorkFlags.DurationRuntime)
+                && em.HasComponent<CDurationRuntime>(ge))
             {
                 var duration = em.GetComponentData<CDurationRuntime>(ge);
                 duration.Active = false;
                 ecb.SetComponent(ge, duration);
             }
 
+            ActiveEffectStore.TryResolveLifecycleCleanupBeforeEntityDestroy(
+                em,
+                target,
+                cleanupSequence,
+                currentFrame);
+            if (HasCleanupWork(requestedCleanupWorkFlags, EActiveEffectCleanupWorkFlags.EntityDestroy))
+                MarkEffectForFinalDestroy(em, ref ecb, ge, target, cleanupSequence, currentFrame);
+        }
+
+        private static int ResolveRequestedCleanupWorkFlags(
+            EntityManager em,
+            Entity ge,
+            in CEffectContext context,
+            EGameplayEffectLifecycleState cleanupState)
+        {
+            if (em.HasComponent<CEffectCleanup>(ge))
+            {
+                var cleanup = em.GetComponentData<CEffectCleanup>(ge);
+                if (cleanup.RequestedCleanupWorkFlags != 0)
+                    return cleanup.RequestedCleanupWorkFlags;
+            }
+
+            return ActiveEffectStore.CreateCleanupWorkFlags(em, ge, context, cleanupState);
+        }
+
+        private static bool HasCleanupWork(int workFlags, EActiveEffectCleanupWorkFlags work)
+        {
+            return (workFlags & (int)work) != 0;
+        }
+
+        private static void MarkEffectForFinalDestroy(
+            EntityManager em,
+            ref EntityCommandBuffer ecb,
+            Entity ge,
+            Entity target,
+            int cleanupSequence,
+            int currentFrame)
+        {
+            if (!em.Exists(ge) || em.HasComponent<CEffectFinalDestroy>(ge))
+                return;
+
+            ecb.AddComponent(ge, new CEffectFinalDestroy
+            {
+                RequestedFrame = currentFrame,
+                CleanupSequence = cleanupSequence,
+                TargetAsc = target,
+            });
+        }
+
+        public static void FinalizeEffectDestroy(
+            EntityManager em,
+            ref EntityCommandBuffer ecb,
+            Entity ge,
+            int currentFrame)
+        {
+            if (!em.Exists(ge) || !em.HasComponent<CEffectFinalDestroy>(ge))
+                return;
+
+            var finalDestroy = em.GetComponentData<CEffectFinalDestroy>(ge);
+            ActiveEffectStore.TryResolveLifecycleCleanup(
+                em,
+                finalDestroy.TargetAsc,
+                finalDestroy.CleanupSequence,
+                currentFrame);
             DestroyEffectEntity(em, ref ecb, ge);
         }
 
@@ -1268,6 +1412,10 @@ namespace GAS.Runtime
             EnqueueKillCueRequests<CCueOnTick>(em, ge);
             EnqueueKillCueRequests<CCueOnDeactivate>(em, ge);
             EnqueueKillCueRequests<CCueOnRemove>(em, ge);
+            ActiveEffectStore.TryRemoveGlobalIndex(
+                em,
+                ge,
+                GASRuntimeFrameContext.ResolveCurrentFrame(em));
 
             ecb.DestroyEntity(ge);
         }
@@ -1317,6 +1465,23 @@ namespace GAS.Runtime
 
         private static void AddRuntimeModifiers(EntityManager em, Entity ge, in CEffectContext context)
         {
+            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            try
+            {
+                AddRuntimeModifiers(em, ge, context, ref eventBusWriter);
+            }
+            finally
+            {
+                eventBusWriter.Dispose();
+            }
+        }
+
+        private static void AddRuntimeModifiers(
+            EntityManager em,
+            Entity ge,
+            in CEffectContext context,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
+        {
             var target = context.TargetAsc;
             if (!em.HasBuffer<BActiveModifier>(target))
                 return;
@@ -1339,11 +1504,34 @@ namespace GAS.Runtime
                 });
 
                 AttributeHelper.MarkCurrentValueDirty(target, modifier.AttrSetCode, modifier.AttributeCode);
-                EnqueueGameplayEvent(em, ge, context, EGameplayEventType.ActiveModifierAdded, modifier.AttributeCode, modifier.Magnitude);
+                EnqueueGameplayEvent(
+                    ref eventBusWriter,
+                    ge,
+                    context,
+                    EGameplayEventType.ActiveModifierAdded,
+                    modifier.AttributeCode,
+                    modifier.Magnitude);
             }
         }
 
         private static void RemoveRuntimeModifiers(EntityManager em, Entity ge, in CEffectContext context)
+        {
+            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            try
+            {
+                RemoveRuntimeModifiers(em, ge, context, ref eventBusWriter);
+            }
+            finally
+            {
+                eventBusWriter.Dispose();
+            }
+        }
+
+        private static void RemoveRuntimeModifiers(
+            EntityManager em,
+            Entity ge,
+            in CEffectContext context,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
         {
             var target = context.TargetAsc;
             if (!em.HasBuffer<BActiveModifier>(target))
@@ -1357,12 +1545,35 @@ namespace GAS.Runtime
                     continue;
 
                 AttributeHelper.MarkCurrentValueDirty(target, modifier.AttrSetCode, modifier.AttributeCode);
-                EnqueueGameplayEvent(em, ge, context, EGameplayEventType.ActiveModifierRemoved, modifier.AttributeCode, modifier.Magnitude);
+                EnqueueGameplayEvent(
+                    ref eventBusWriter,
+                    ge,
+                    context,
+                    EGameplayEventType.ActiveModifierRemoved,
+                    modifier.AttributeCode,
+                    modifier.Magnitude);
                 activeModifiers.RemoveAt(i);
             }
         }
 
         public static void SyncRuntimeModifiersFromResolved(EntityManager em, Entity ge, in CEffectContext context)
+        {
+            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            try
+            {
+                SyncRuntimeModifiersFromResolved(em, ge, context, ref eventBusWriter);
+            }
+            finally
+            {
+                eventBusWriter.Dispose();
+            }
+        }
+
+        public static void SyncRuntimeModifiersFromResolved(
+            EntityManager em,
+            Entity ge,
+            in CEffectContext context,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
         {
             var target = context.TargetAsc;
             if (!em.HasBuffer<BActiveModifier>(target))
@@ -1370,7 +1581,7 @@ namespace GAS.Runtime
 
             if (!em.HasBuffer<BResolvedModifier>(ge))
             {
-                RemoveRuntimeModifiers(em, ge, context);
+                RemoveRuntimeModifiers(em, ge, context, ref eventBusWriter);
                 return;
             }
 
@@ -1379,8 +1590,8 @@ namespace GAS.Runtime
             var activeModifierCount = CountActiveModifiers(activeModifiers, ge);
             if (activeModifierCount != resolvedModifiers.Length)
             {
-                RemoveRuntimeModifiers(em, ge, context);
-                AddRuntimeModifiers(em, ge, context);
+                RemoveRuntimeModifiers(em, ge, context, ref eventBusWriter);
+                AddRuntimeModifiers(em, ge, context, ref eventBusWriter);
                 return;
             }
 
@@ -1418,7 +1629,7 @@ namespace GAS.Runtime
                     activeModifier.AttrSetCode,
                     activeModifier.AttributeCode);
                 EnqueueGameplayEvent(
-                    em,
+                    ref eventBusWriter,
                     ge,
                     context,
                     EGameplayEventType.ActiveModifierUpdated,
@@ -1480,6 +1691,7 @@ namespace GAS.Runtime
             }
 
             ecb.SetComponent(target, tags);
+            ActiveEffectStore.TryRefreshGrantedTagState(em, ge, target);
         }
 
         private static void RemoveGrantedTags(
@@ -1526,6 +1738,7 @@ namespace GAS.Runtime
             }
 
             ecb.SetComponent(target, tags);
+            ActiveEffectStore.TryRefreshGrantedTagState(em, ge, target);
         }
 
         private static void AddGrantedAbilities(
@@ -1544,11 +1757,10 @@ namespace GAS.Runtime
             if (definitions.Length == 0)
                 return;
 
-            if (!em.HasBuffer<BGrantedAbilityRuntime>(ge))
-            {
-                ecb.AddBuffer<BGrantedAbilityRuntime>(ge);
-                PlaybackAndReset(ref ecb, em);
-            }
+            var hasRuntimeBuffer = em.HasBuffer<BGrantedAbilityRuntime>(ge);
+            var pendingRuntimeAbilities = default(DynamicBuffer<BGrantedAbilityRuntime>);
+            if (!hasRuntimeBuffer)
+                pendingRuntimeAbilities = ecb.AddBuffer<BGrantedAbilityRuntime>(ge);
 
             for (var i = 0; i < definitions.Length; i++)
             {
@@ -1563,8 +1775,12 @@ namespace GAS.Runtime
                     definition.Level,
                     definition.ActivationPolicy,
                     definition.DeactivationPolicy,
-                    definition.RemovePolicy);
+                    definition.RemovePolicy,
+                    hasRuntimeBuffer,
+                    ref pendingRuntimeAbilities);
             }
+
+            RefreshGrantedAbilityStoreState(em, ge);
         }
 
         private static void AddGrantedAbility(
@@ -1577,9 +1793,13 @@ namespace GAS.Runtime
             int level,
             GrantedAbilityActivationPolicy activationPolicy,
             GrantedAbilityDeactivationPolicy deactivationPolicy,
-            GrantedAbilityRemovePolicy removePolicy)
+            GrantedAbilityRemovePolicy removePolicy,
+            bool hasRuntimeBuffer,
+            ref DynamicBuffer<BGrantedAbilityRuntime> pendingRuntimeAbilities)
         {
-            var abilityEntity = FindRuntimeGrantedAbility(em, ge, configIndex);
+            var abilityEntity = hasRuntimeBuffer
+                ? FindRuntimeGrantedAbility(em, ge, configIndex)
+                : Entity.Null;
             var queuedTryActivate = false;
             if (abilityEntity == Entity.Null || !em.Exists(abilityEntity))
             {
@@ -1612,8 +1832,18 @@ namespace GAS.Runtime
                     RemovePolicy = removePolicy,
                 });
 
+                if (!TryAddRuntimeGrantedAbility(
+                    em,
+                    ge,
+                    configIndex,
+                    abilityEntity,
+                    hasRuntimeBuffer,
+                    ref pendingRuntimeAbilities))
+                {
+                    return;
+                }
+
                 AddAbilityToTargetBuffer(em, target, abilityEntity);
-                AddRuntimeGrantedAbility(em, ref ecb, ge, configIndex, abilityEntity);
 
                 if (activationPolicy is GrantedAbilityActivationPolicy.WhenAdded
                     or GrantedAbilityActivationPolicy.SyncWithEffect)
@@ -1645,37 +1875,28 @@ namespace GAS.Runtime
             if (!em.HasBuffer<BGrantedAbilityRuntime>(ge))
                 return;
 
-            var runtimeBuffer = em.GetBuffer<BGrantedAbilityRuntime>(ge);
-            var runtimeAbilities = new NativeArray<BGrantedAbilityRuntime>(runtimeBuffer.Length, Allocator.Temp);
-            for (var i = 0; i < runtimeBuffer.Length; i++)
-                runtimeAbilities[i] = runtimeBuffer[i];
-
-            if (!TryGetStaticDefinitionBlob(em, ge, out var blob))
-            {
-                runtimeAbilities.Dispose();
-                return;
-            }
-
-            ref var definitions = ref blob.Value.GrantedAbilities;
+            var runtimeAbilities = em.GetBuffer<BGrantedAbilityRuntime>(ge);
             for (var i = runtimeAbilities.Length - 1; i >= 0; i--)
             {
                 var runtime = runtimeAbilities[i];
-                if (runtime.ConfigIndex < 0 || runtime.ConfigIndex >= definitions.Length)
+                var ability = runtime.AbilityEntity;
+                if (ability == Entity.Null || !em.Exists(ability))
+                {
+                    SetRuntimeGrantedAbility(runtimeAbilities, i, Entity.Null);
                     continue;
+                }
 
-                var definition = definitions[runtime.ConfigIndex];
                 RemoveGrantedAbility(
                     em,
                     ref ecb,
                     ge,
                     target,
                     i,
-                    runtime.AbilityEntity,
-                    definition.DeactivationPolicy,
-                    definition.RemovePolicy);
+                    ability,
+                    runtimeAbilities);
             }
 
-            runtimeAbilities.Dispose();
+            RefreshGrantedAbilityStoreState(em, ge);
         }
 
         private static void RemoveGrantedAbility(
@@ -1685,12 +1906,23 @@ namespace GAS.Runtime
             Entity target,
             int runtimeBufferIndex,
             Entity abilityEntity,
-            GrantedAbilityDeactivationPolicy deactivationPolicy,
-            GrantedAbilityRemovePolicy removePolicy)
+            DynamicBuffer<BGrantedAbilityRuntime> runtimeAbilities)
         {
             if (abilityEntity == Entity.Null || !em.Exists(abilityEntity))
                 return;
 
+            if (!em.HasComponent<CGrantedByEffect>(abilityEntity))
+            {
+                SetRuntimeGrantedAbility(runtimeAbilities, runtimeBufferIndex, Entity.Null);
+                return;
+            }
+
+            var granted = em.GetComponentData<CGrantedByEffect>(abilityEntity);
+            if (granted.SourceEffect != ge)
+                return;
+
+            var deactivationPolicy = granted.DeactivationPolicy;
+            var removePolicy = granted.RemovePolicy;
             if (deactivationPolicy == GrantedAbilityDeactivationPolicy.SyncWithEffect
                 && removePolicy != GrantedAbilityRemovePolicy.SyncWithEffect
                 && em.HasComponent<CAbilityActive>(abilityEntity))
@@ -1708,7 +1940,7 @@ namespace GAS.Runtime
 
             RemoveAbilityFromTargetBuffer(em, target, abilityEntity);
             CancelOrDestroyAbility(em, ref ecb, abilityEntity, ge);
-            SetRuntimeGrantedAbility(em, ge, runtimeBufferIndex, Entity.Null);
+            SetRuntimeGrantedAbility(runtimeAbilities, runtimeBufferIndex, Entity.Null);
         }
 
         private static Entity FindRuntimeGrantedAbility(EntityManager em, Entity ge, int configIndex)
@@ -1735,17 +1967,25 @@ namespace GAS.Runtime
             abilityBuffer.Add(new BGrantedAbility { AbilityEntity = abilityEntity });
         }
 
-        private static void AddRuntimeGrantedAbility(
+        private static bool TryAddRuntimeGrantedAbility(
             EntityManager em,
-            ref EntityCommandBuffer ecb,
             Entity ge,
             int configIndex,
-            Entity abilityEntity)
+            Entity abilityEntity,
+            bool hasRuntimeBuffer,
+            ref DynamicBuffer<BGrantedAbilityRuntime> pendingRuntimeAbilities)
         {
-            if (!em.HasBuffer<BGrantedAbilityRuntime>(ge))
+            if (!hasRuntimeBuffer)
             {
-                ecb.AddBuffer<BGrantedAbilityRuntime>(ge);
-                PlaybackAndReset(ref ecb, em);
+                if (!pendingRuntimeAbilities.IsCreated)
+                    return false;
+
+                pendingRuntimeAbilities.Add(new BGrantedAbilityRuntime
+                {
+                    ConfigIndex = configIndex,
+                    AbilityEntity = abilityEntity,
+                });
+                return true;
             }
 
             var runtimeAbilities = em.GetBuffer<BGrantedAbilityRuntime>(ge);
@@ -1757,7 +1997,7 @@ namespace GAS.Runtime
                 var runtime = runtimeAbilities[i];
                 runtime.AbilityEntity = abilityEntity;
                 runtimeAbilities[i] = runtime;
-                return;
+                return true;
             }
 
             runtimeAbilities.Add(new BGrantedAbilityRuntime
@@ -1765,20 +2005,35 @@ namespace GAS.Runtime
                 ConfigIndex = configIndex,
                 AbilityEntity = abilityEntity,
             });
+            return true;
         }
 
-        private static void SetRuntimeGrantedAbility(EntityManager em, Entity ge, int bufferIndex, Entity abilityEntity)
+        private static void SetRuntimeGrantedAbility(
+            DynamicBuffer<BGrantedAbilityRuntime> runtimeAbilities,
+            int bufferIndex,
+            Entity abilityEntity)
         {
-            if (!em.HasBuffer<BGrantedAbilityRuntime>(ge))
-                return;
-
-            var runtimeAbilities = em.GetBuffer<BGrantedAbilityRuntime>(ge);
             if (bufferIndex < 0 || bufferIndex >= runtimeAbilities.Length)
                 return;
 
             var runtime = runtimeAbilities[bufferIndex];
             runtime.AbilityEntity = abilityEntity;
             runtimeAbilities[bufferIndex] = runtime;
+        }
+
+        private static void RefreshGrantedAbilityStoreState(EntityManager em, Entity ge)
+        {
+            if (ge == Entity.Null
+                || !em.Exists(ge)
+                || !em.HasComponent<CEffectContext>(ge))
+            {
+                return;
+            }
+
+            ActiveEffectStore.TryRefreshGrantedAbilityState(
+                em,
+                ge,
+                em.GetComponentData<CEffectContext>(ge));
         }
 
         private static void RemoveAbilityFromTargetBuffer(EntityManager em, Entity target, Entity abilityEntity)
@@ -1854,20 +2109,25 @@ namespace GAS.Runtime
             effects.Add(new BGameplayEffect { GameplayEffect = ge });
         }
 
-        private static void RemoveEffectFromTarget(EntityManager em, Entity ge, in CEffectContext context)
+        private static void RemoveEffectFromTarget(
+            EntityManager em,
+            Entity ge,
+            in CEffectContext context,
+            int currentFrame)
         {
             var target = context.TargetAsc;
-            if (!em.HasBuffer<BGameplayEffect>(target))
-                return;
+            ActiveEffectStore.TryRemove(em, ge, context, currentFrame);
 
-            var effects = em.GetBuffer<BGameplayEffect>(target);
-            for (var i = effects.Length - 1; i >= 0; i--)
+            if (em.Exists(target) && em.HasBuffer<BGameplayEffect>(target))
             {
-                if (effects[i].GameplayEffect == ge)
-                    effects.RemoveAt(i);
+                var effects = em.GetBuffer<BGameplayEffect>(target);
+                for (var i = effects.Length - 1; i >= 0; i--)
+                {
+                    if (effects[i].GameplayEffect == ge)
+                        effects.RemoveAt(i);
+                }
             }
 
-            ActiveEffectStore.TryRemove(em, ge, context);
             EnqueueGameplayEvent(em, ge, context, EGameplayEventType.GameplayEffectRemoved);
         }
 
@@ -1908,8 +2168,9 @@ namespace GAS.Runtime
                 : default;
             var sourceAsc = context.SourceAsc != Entity.Null ? context.SourceAsc : Entity.Null;
             var sourceAbility = context.SourceAbility != Entity.Null ? context.SourceAbility : Entity.Null;
+            using var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
-            EventBusHelper.EnqueueCueRequest(em, GASManager.EntityEventBus, new BCueRequest
+            eventBusWriter.EnqueueCueRequest(new BCueRequest
             {
                 TargetAsc = target,
                 SourceAsc = sourceAsc,
@@ -1922,7 +2183,7 @@ namespace GAS.Runtime
                 CueEvent = cueEvent,
             });
 
-            EventBusHelper.EnqueueGameplayEvent(em, GASManager.EntityEventBus, new BGameplayEvent
+            eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
             {
                 Type = EGameplayEventType.CueRequested,
                 SourceAsc = sourceAsc,
@@ -1988,8 +2249,9 @@ namespace GAS.Runtime
             var sourceAsc = context.SourceAsc != Entity.Null ? context.SourceAsc : Entity.Null;
             var sourceAbility = context.SourceAbility != Entity.Null ? context.SourceAbility : Entity.Null;
             var contextId = context.ContextId;
+            using var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
-            EventBusHelper.EnqueueCueRequest(em, GASManager.EntityEventBus, new BCueRequest
+            eventBusWriter.EnqueueCueRequest(new BCueRequest
             {
                 TargetAsc = target,
                 SourceAsc = sourceAsc,
@@ -2002,7 +2264,7 @@ namespace GAS.Runtime
                 CueEvent = cueEvent,
             });
 
-            EventBusHelper.EnqueueGameplayEvent(em, GASManager.EntityEventBus, new BGameplayEvent
+            eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
             {
                 Type = EGameplayEventType.CueRequested,
                 SourceAsc = sourceAsc,
@@ -2064,7 +2326,30 @@ namespace GAS.Runtime
             float value = 0f,
             int reasonCode = 0)
         {
-            EventBusHelper.EnqueueGameplayEvent(em, GASManager.EntityEventBus, new BGameplayEvent
+            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            try
+            {
+                EnqueueGameplayEvent(ref eventBusWriter, ge, context, type, eventCode, value, reasonCode);
+            }
+            finally
+            {
+                eventBusWriter.Dispose();
+            }
+        }
+
+        private static void EnqueueGameplayEvent(
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
+            Entity ge,
+            in CEffectContext context,
+            EGameplayEventType type,
+            int eventCode = 0,
+            float value = 0f,
+            int reasonCode = 0)
+        {
+            if (!eventBusWriter.IsCreated)
+                return;
+
+            eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
             {
                 Type = type,
                 SourceAsc = context.SourceAsc,
@@ -2088,7 +2373,8 @@ namespace GAS.Runtime
             float newValue,
             bool isBaseValue)
         {
-            EventBusHelper.EnqueueAttributeChangeEvent(em, GASManager.EntityEventBus, new BAttributeChangeEvent
+            using var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            eventBusWriter.EnqueueAttributeChangeEvent(new BAttributeChangeEvent
             {
                 ASC = context.TargetAsc,
                 SourceAsc = context.SourceAsc,
@@ -2112,7 +2398,8 @@ namespace GAS.Runtime
             int tagIndex,
             bool added)
         {
-            EventBusHelper.EnqueueTagChangeEvent(em, GASManager.EntityEventBus, new BTagChangeEvent
+            using var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            eventBusWriter.EnqueueTagChangeEvent(new BTagChangeEvent
             {
                 ASC = asc,
                 TagIndex = tagIndex,
@@ -2122,4 +2409,3 @@ namespace GAS.Runtime
 
     }
 }
-

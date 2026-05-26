@@ -22,6 +22,9 @@ namespace GAS.Runtime
             var em = state.EntityManager;
             var requests = _query.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
+            var currentFrame = SystemAPI.TryGetSingleton<GlobalTimer>(out var timer)
+                ? timer.Frame
+                : GASRuntimeFrameContext.ResolveCurrentFrame(em);
 
             for (var i = 0; i < requests.Length; i++)
             {
@@ -30,9 +33,15 @@ namespace GAS.Runtime
                 if (request.GameplayEffect != Entity.Null
                     && em.Exists(request.GameplayEffect)
                     && em.HasComponent<CEffectContext>(request.GameplayEffect)
-                    && !em.HasComponent<CEffectDestroy>(request.GameplayEffect))
+                    && !em.HasComponent<CEffectCleanup>(request.GameplayEffect)
+                    && !em.HasComponent<CEffectDestroy>(request.GameplayEffect)
+                    && !em.HasComponent<CEffectFinalDestroy>(request.GameplayEffect))
                 {
-                    ecb.AddComponent<CEffectDestroy>(request.GameplayEffect);
+                    EffectRuntimeUtility.MarkEffectForRemoval(
+                        em,
+                        ref ecb,
+                        request.GameplayEffect,
+                        currentFrame);
                 }
 
                 ecb.DestroyEntity(requestEntity);

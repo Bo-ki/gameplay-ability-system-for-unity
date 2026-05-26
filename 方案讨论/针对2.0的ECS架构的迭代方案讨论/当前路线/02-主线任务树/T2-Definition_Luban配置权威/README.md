@@ -65,9 +65,8 @@
 
 | 支线 | 文档 | 状态 |
 |---|---|---|
-| Luban SourceGenerator 配置链 | [LubanSourceGenerator配置链.md](LubanSourceGenerator配置链.md) | 就绪 |
+| Luban SourceGenerator 配置链 | [LubanSourceGenerator配置链/README.md](LubanSourceGenerator配置链/README.md) | 就绪 |
 
 ## 交还规则
 
 交还时必须同步 Definition 配置事实、Luban SourceGenerator Spec、生成物忽略规则和验证摘要。
-

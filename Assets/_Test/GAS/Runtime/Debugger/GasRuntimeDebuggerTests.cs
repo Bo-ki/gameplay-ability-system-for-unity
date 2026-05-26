@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime.Tests.Debugger
@@ -38,6 +39,7 @@ namespace GAS.Runtime.Tests.Debugger
             CreateAscDestroyRequest();
             CreatePresentationOutbox(eventBus);
             CreateActiveEffectStoreOwner();
+            CreateActiveEffectGlobalIndexOwner();
 
             using var queries = GasRuntimeCoreCounterQueries.CreateOwned(_em);
             GasRuntimeDebugger.CollectAndRecordRuntimeCoreCounters(
@@ -71,6 +73,28 @@ namespace GAS.Runtime.Tests.Debugger
             Assert.That(snapshot.CoreCounters.ActiveEffectSlotPendingRemoveCount, Is.EqualTo(1));
             Assert.That(snapshot.CoreCounters.ActiveEffectSlotLegacyBackedCount, Is.EqualTo(3));
             Assert.That(snapshot.CoreCounters.ActiveEffectSlotExternalizedOwnerCount, Is.EqualTo(1));
+            Assert.That(snapshot.CoreCounters.ActiveEffectSlotGrantedTagCount, Is.EqualTo(2));
+            Assert.That(snapshot.CoreCounters.ActiveEffectSlotGrantedAbilityCount, Is.EqualTo(1));
+            Assert.That(snapshot.CoreCounters.ActiveEffectChunkSkipMatchedSlotCount, Is.EqualTo(4));
+            Assert.That(snapshot.CoreCounters.ActiveEffectChunkSkipSkippedSlotCount, Is.EqualTo(3));
+            Assert.That(snapshot.CoreCounters.ActiveEffectChunkSkipDuePeriodSlotCount, Is.EqualTo(1));
+            Assert.That(snapshot.CoreCounters.ActiveEffectChunkSkipNoopSlotCount, Is.EqualTo(3));
+            Assert.That(snapshot.CoreCounters.ActiveEffectChunkSkipOwnerCount, Is.EqualTo(0));
+            Assert.That(snapshot.CoreCounters.ActiveEffectGlobalIndexOwnerCount, Is.EqualTo(1));
+            Assert.That(snapshot.CoreCounters.ActiveEffectGlobalIndexCount, Is.EqualTo(4));
+            Assert.That(snapshot.CoreCounters.ActiveEffectGlobalIndexActiveCount, Is.EqualTo(1));
+            Assert.That(snapshot.CoreCounters.ActiveEffectGlobalIndexInhibitedCount, Is.EqualTo(1));
+            Assert.That(snapshot.CoreCounters.ActiveEffectGlobalIndexPendingRemoveCount, Is.EqualTo(1));
+            Assert.That(snapshot.CoreCounters.ActiveEffectGlobalIndexPeriodDueCount, Is.EqualTo(1));
+            Assert.That(snapshot.CoreCounters.ActiveEffectGlobalIndexDurationDueCount, Is.EqualTo(1));
+            Assert.That(snapshot.CoreCounters.ActiveEffectGlobalIndexStaleCount, Is.EqualTo(1));
+            Assert.That(snapshot.CoreCounters.ActiveEffectGlobalIndexStableRowCount, Is.EqualTo(3));
+            Assert.That(snapshot.CoreCounters.ActiveEffectGlobalIndexStaleStableRowCount, Is.EqualTo(0));
+            Assert.That(
+                snapshot.CoreCounters.ActiveEffectGlobalIndexBucketOwnerCount,
+                Is.EqualTo(ActiveEffectStore.GlobalIndexBucketCount));
+            Assert.That(snapshot.CoreCounters.ActiveEffectGlobalIndexBucketIndexCount, Is.EqualTo(4));
+            Assert.That(snapshot.CoreCounters.ActiveEffectGlobalIndexMaxBucketLength, Is.GreaterThanOrEqualTo(1));
             var frameBudget = GASRuntimeFrameBudgetPlanner.CreateCurrent();
             Assert.That(snapshot.CoreCounters.QueryBudget, Is.EqualTo(frameBudget.TotalQueryBudget));
             Assert.That(snapshot.CoreCounters.LookupUpdateBudget, Is.EqualTo(frameBudget.TotalLookupUpdateBudget));
@@ -88,6 +112,31 @@ namespace GAS.Runtime.Tests.Debugger
             Assert.That(text, Does.Contain("runtimeCoreActiveEffectStore|owners=1|slots=4"));
             Assert.That(text, Does.Contain("legacyBacked=3"));
             Assert.That(text, Does.Contain("activeEffectSlotExternalizedOwners=1"));
+            Assert.That(text, Does.Contain("grantedTags=2"));
+            Assert.That(text, Does.Contain("grantedAbilities=1"));
+            Assert.That(text, Does.Contain("chunkSkipMatched=4"));
+            Assert.That(text, Does.Contain("chunkSkipSkipped=3"));
+            Assert.That(text, Does.Contain("chunkSkipDuePeriod=1"));
+            Assert.That(text, Does.Contain("globalIndexOwners=1"));
+            Assert.That(text, Does.Contain("globalIndexCount=4"));
+            Assert.That(text, Does.Contain("globalIndexPeriodDue=1"));
+            Assert.That(text, Does.Contain("globalIndexDurationDue=1"));
+            Assert.That(text, Does.Contain("globalIndexStale=1"));
+            Assert.That(text, Does.Contain("globalIndexStableRows=3"));
+            Assert.That(text, Does.Contain("globalIndexStaleStableRows=0"));
+            Assert.That(text, Does.Contain("globalIndexBucketOwners=16"));
+            Assert.That(text, Does.Contain("globalIndexBucketIndexCount=4"));
+            Assert.That(text, Does.Contain("globalIndexMaxBucketLength="));
+            Assert.That(text, Does.Contain("activeEffectSlotGrantedTags=2"));
+            Assert.That(text, Does.Contain("activeEffectSlotGrantedAbilities=1"));
+            Assert.That(text, Does.Contain("activeEffectChunkSkipDuePeriodSlots=1"));
+            Assert.That(text, Does.Contain("activeEffectGlobalIndexOwners=1"));
+            Assert.That(text, Does.Contain("activeEffectGlobalIndexCount=4"));
+            Assert.That(text, Does.Contain("activeEffectGlobalIndexStableRows=3"));
+            Assert.That(text, Does.Contain("activeEffectGlobalIndexStaleStableRows=0"));
+            Assert.That(text, Does.Contain("activeEffectGlobalIndexBucketOwners=16"));
+            Assert.That(text, Does.Contain("activeEffectGlobalIndexBucketIndexCount=4"));
+            Assert.That(text, Does.Contain("activeEffectGlobalIndexMaxBucketLength="));
             Assert.That(text, Does.Contain("runtimeCoreFrameBudget|queryBudget="));
             Assert.That(text, Does.Contain("lookupUpdateBudget="));
             Assert.That(text, Does.Contain("worldUpdateAllocatorOwners=1"));
@@ -335,16 +384,80 @@ namespace GAS.Runtime.Tests.Debugger
             {
                 State = EActiveEffectSlotState.Active,
                 Flags = (int)EActiveEffectSlotFlags.LegacyEntityBacked,
+                PeriodFrame = 5,
+                LastPeriodFrame = 1,
+                ActiveGrantedTagCount = 2,
             });
             slots.Add(new BActiveEffectSlot
             {
                 State = EActiveEffectSlotState.Inhibited,
+                ActiveGrantedAbilityCount = 1,
             });
             slots.Add(new BActiveEffectSlot
             {
                 State = EActiveEffectSlotState.PendingRemove,
                 Flags = (int)EActiveEffectSlotFlags.LegacyEntityBacked,
             });
+        }
+
+        private void CreateActiveEffectGlobalIndexOwner()
+        {
+            ActiveEffectStore.EnsureGlobalIndexStore(_em);
+            var owner = _em.CreateEntity();
+            var activeEffect = _em.CreateEntity();
+            var inhibitedEffect = _em.CreateEntity();
+            var pendingRemoveEffect = _em.CreateEntity();
+            var staleEffect = _em.CreateEntity();
+            AddStableRow(activeEffect);
+            AddStableRow(inhibitedEffect);
+            AddStableRow(pendingRemoveEffect);
+            var entries = new NativeList<BGlobalActiveEffectIndex>(Allocator.Temp);
+            try
+            {
+                entries.Add(new BGlobalActiveEffectIndex
+                {
+                    ActiveEffectEntity = activeEffect,
+                    OwnerAsc = owner,
+                    State = EActiveEffectSlotState.Active,
+                    PeriodDueFrame = 7,
+                    IndexFlags = (int)EActiveEffectGlobalIndexFlags.PeriodDue,
+                });
+                entries.Add(new BGlobalActiveEffectIndex
+                {
+                    ActiveEffectEntity = inhibitedEffect,
+                    OwnerAsc = owner,
+                    State = EActiveEffectSlotState.Inhibited,
+                    DurationDueFrame = 7,
+                    SlotFlags = (int)EActiveEffectSlotFlags.TicksWhenInactive,
+                    IndexFlags = (int)(EActiveEffectGlobalIndexFlags.Inhibited | EActiveEffectGlobalIndexFlags.DurationDue),
+                });
+                entries.Add(new BGlobalActiveEffectIndex
+                {
+                    ActiveEffectEntity = pendingRemoveEffect,
+                    OwnerAsc = owner,
+                    State = EActiveEffectSlotState.PendingRemove,
+                    IndexFlags = (int)EActiveEffectGlobalIndexFlags.PendingRemove,
+                });
+                entries.Add(new BGlobalActiveEffectIndex
+                {
+                    ActiveEffectEntity = staleEffect,
+                    OwnerAsc = owner,
+                    State = EActiveEffectSlotState.PendingApply,
+                });
+
+                Assert.That(ActiveEffectStore.TryMergeGlobalIndexEntries(_em, entries, currentFrame: 7), Is.True);
+            }
+            finally
+            {
+                entries.Dispose();
+            }
+
+            _em.DestroyEntity(staleEffect);
+        }
+
+        private void AddStableRow(Entity effect)
+        {
+            _em.AddComponentData(effect, ActiveEffectStore.CreateGlobalIndexStableRowDefault(effect));
         }
     }
 }

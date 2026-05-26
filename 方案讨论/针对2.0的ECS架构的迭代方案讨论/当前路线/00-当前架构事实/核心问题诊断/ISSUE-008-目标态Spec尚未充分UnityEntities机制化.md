@@ -50,7 +50,7 @@
 12. 本轮继续按官方文档体系查缺补漏后，发现 `UnityDOTS官方文档参考/主题/*` 仍缺少统一覆盖矩阵和流程闭环 owner。已新增 `../../UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md`，覆盖 sync point、system/job 固定开销、chunk fragmentation、buffer externalized、world time、allocator rewind、singleton dependency、Transform stale data、content management、LinkedEntityGroup、Baking filter、version / WriteGroup、Collections deterministic output、Burst vectorization、Mathematics RNG 和官方诊断工具，并转成 `ODF-*` 流程规则。
 13. 本轮文档治理后，发现 `UnityDOTS官方文档参考/主题/*` 已经构成官方文档参考体系，但缺少独立主题入口。已新增 `../../UnityDOTS官方文档参考/README.md`，把 PackageCache 第一性版本、阅读顺序、规则层关系、行动报告要求和反哺路径收束为主题 owner。
 14. Unity 升级到 `6000.3.14f1` 并新增 Unity Physics / Entities Graphics 后，目标态还必须把物理输入层和渲染表现层纳入官方参考体系。当前已将 Physics pipeline、`PhysicsWorldSingleton` / `SimulationSingleton`、collision query / event lifetime、collider authoring，以及 Entities Graphics SRP 前提、single render world、`RenderMeshArray` / `MaterialMeshInfo`、runtime creation、material override 和 render performance evidence 转成 `ODF-15..18`、`PHY-*`、`GFX-*` 规则。
-15. 本轮使用 `../../UnityDOTS官方文档参考/` 重新审视目标态和任务树后，确认问题已经从“Spec 需要 Unity Entities 机制化”推进到“任务执行顺序需要 DOTS Backbone First”。`Frame Arena / Query Preparation` 已存在于 `../../01-目标态架构共识/03-RuntimeCore管线Spec.md`，但此前缺少独立任务 owner。当前已新增 `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构.md` 中的 `T1-RuntimeCore-AM2B Runtime Core Frame Backbone`，要求 AM3 / AM5 继续扩张前先建立 SystemGroup、frame owner、query / lookup / allocator / dependency budget、deterministic stream、structural playback gate 和 Debugger evidence gate。
+15. 本轮使用 `../../UnityDOTS官方文档参考/` 重新审视目标态和任务树后，确认问题已经从“Spec 需要 Unity Entities 机制化”推进到“任务执行顺序需要 DOTS Backbone First”。`Frame Arena / Query Preparation` 已存在于 `../../01-目标态架构共识/03-RuntimeCore管线Spec.md`，但此前缺少独立任务 owner。当前已新增 `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构/README.md` 中的 `T1-RuntimeCore-AM2B Runtime Core Frame Backbone`，要求 AM3 / AM5 继续扩张前先建立 SystemGroup、frame owner、query / lookup / allocator / dependency budget、deterministic stream、structural playback gate 和 Debugger evidence gate。
 
 当前版本证据：
 
@@ -112,10 +112,10 @@
 
 ## 任务入口
 
-1. `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构.md`
-2. `../../02-主线任务树/T4-Observation_Presentation_Debugger/RuntimeCoreDebugger.md`
-3. `../../02-主线任务树/T2-Definition_Luban配置权威/LubanSourceGenerator配置链.md`
-4. `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构.md#三级任务runtime-core-frame-backbone`
+1. `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构/README.md`
+2. `../../02-主线任务树/T4-Observation_Presentation_Debugger/RuntimeCoreDebugger/README.md`
+3. `../../02-主线任务树/T2-Definition_Luban配置权威/LubanSourceGenerator配置链/README.md`
+4. `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构/README.md#三级任务runtime-core-frame-backbone`
 
 ## 退出条件
 
@@ -132,5 +132,3 @@
 11. 后续任务行动报告必须能引用 `ODF-01` 到 `ODF-18` 等官方文档覆盖流程规则，并说明相关 PackageCache 证据、采用 / 拒绝 / 暂不相关理由、反哺 owner 和验收指标，否则视为尚未吸收官方文档查缺补漏结果。
 12. 涉及 Physics / Graphics 的任务必须说明 `PhysicsWorldSingleton`、`SimulationSingleton`、query broadphase、collision / trigger event 有效窗口、`RenderMeshArray`、`MaterialMeshInfo`、material override、draw command / BRG / Profiler evidence 的采用或不相关理由，并拆分 core / physics / render 成本。
 13. `T1-RuntimeCore-AM2B Runtime Core Frame Backbone` 已完成 AM2B-A phase contract、AM2B-B frame budget contract、AM2B-C stream owner / deterministic merge contract、AM2B-D structural playback gate contract 和 AM2B-E debugger evidence gate contract；后续仍需完成 AM2B-F，才能要求 AM3 / AM5 行动报告完整复用 SystemGroup、frame owner、query / lookup budget、allocator owner、dependency wait、deterministic merge、structural playback 和 Debugger evidence gate。
-
-

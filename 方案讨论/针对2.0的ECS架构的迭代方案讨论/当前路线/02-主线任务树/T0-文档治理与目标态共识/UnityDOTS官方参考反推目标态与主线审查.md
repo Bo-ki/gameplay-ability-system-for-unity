@@ -28,7 +28,7 @@
 14. `01-目标态架构共识/05-ActiveEffectStoreSpec.md`
 15. `01-目标态架构共识/07-RuntimeCoreDebuggerSpec.md`
 16. `02-主线任务树/README.md`
-17. `02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构.md`
+17. `02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构/README.md`
 
 ## 对目标态架构的判断
 
@@ -91,7 +91,7 @@ Freeze Safety Gate
 ## 验收口径
 
 1. 任务树当前推荐改为 `Runtime Core Frame Backbone`。
-2. `T1-GAS_ECS_Runtime/RuntimeCore重构.md` 中存在可直接领取的任务提示词。
+2. `T1-GAS_ECS_Runtime/RuntimeCore重构/README.md` 中存在可直接领取的任务提示词。
 3. 目标态总览或 Runtime Core 管线 Spec 明确 `DOTS Backbone First` 约束。
 4. `04-当前进度状态/当前窗口.md` 明确 AM3 / AM5 后续扩张前必须先完成 frame backbone。
 5. 后续 AM3 / AM5 行动报告必须引用 frame backbone 的 SystemGroup、frame owner、structural playback gate 和 Debugger counters。

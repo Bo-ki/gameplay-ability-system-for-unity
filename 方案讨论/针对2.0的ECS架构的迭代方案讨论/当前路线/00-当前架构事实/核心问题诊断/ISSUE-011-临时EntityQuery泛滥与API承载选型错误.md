@@ -6,7 +6,7 @@
 |---|---|
 | 状态 | Active |
 | 严重度 | P0（EntityQuery 部分）/ P1（承载选型部分） |
-| 最近复核 | 2026-05-25 |
+| 最近复核 | 2026-05-26 |
 | 所属层 | GAS Runtime Core Layer / Runtime Boundary Layer |
 
 ## DOTS规则引用
@@ -72,8 +72,9 @@
 2. `SApplyGameplayEffectRequest` 的 legacy instant bypass / runtime GE instantiate event 已迁移为显式 writer，`CEffectContext.ContextId` 和 `BGameplayEvent.Sequence` 在同一 apply 流程内复用 writer snapshot。
 3. `EffectMagnitudeResolver` 已新增 writer overload，避免 execution calculation missing fact 在 `SApplyGameplayEffectRequest` 外层 writer 尚未 flush 时走静态 enqueue 读旧 `NextSequence`。
 4. `SEffectCommandSpecStreamPhases` 中 attribute typed fact bridge 与 Cue-on-Apply projection 已迁移为显式 writer 写 legacy `BGameplayEvent` / `BCueRequest`。
-5. 保留的单条 `EventBusHelper.Enqueue*` 入口仍是 legacy / 低频路径，每次 gameplay event 仍单独解析 current frame 和写回 `CGameplayEventBus`。
-6. 显式 writer 只是去 ThreadStatic 与 legacy callsite 收缩的 main-thread 迁移承载，不等于 Burst/job-safe fan-in；全局 singleton EventBus 后续仍需按 `NativeStream` / owner-local fact buffer / deterministic merge 重新选型。
+5. `EffectRuntimeUtility`、`EffectMagnitudeResolver`、`SExecutionCalculation`、`SExecutionCalculationOutputModifier` 的 AM3 / System/Effect 静态 enqueue callsite 已迁移到显式 writer；`Assets/GAS/Runtime/System/Effect/` 搜索 `EventBusHelper.Enqueue` 为空。
+6. 保留的单条 `EventBusHelper.Enqueue*` 入口仍是 legacy / 低频路径，每次 gameplay event 仍单独解析 current frame 和写回 `CGameplayEventBus`；`AbilityRuntimeActions`、`SAbilityTimelineAction`、`SAscCommandRequest`、`AttributeHelper` 等非 AM3 callsite 仍待后续收缩。
+7. 显式 writer 只是去 ThreadStatic 与 legacy callsite 收缩的 main-thread 迁移承载，不等于 Burst/job-safe fan-in；全局 singleton EventBus 后续仍需按 `NativeStream` / owner-local fact buffer / deterministic merge 重新选型。
 
 历史违规代码：
 
@@ -94,6 +95,14 @@
 本子缺陷已局部闭合：`GasRuntimeDebugger.cs`、`EventBusHelper.cs`、`SPresentationOutboxProjection.cs`、`SDebugReplayLogProjection.cs`、`EffectCommandSpecStream.cs` 中的重复 `ResolveCurrentFrame` 实现已删除或转发到 `GASRuntimeFrameContext`，且 `GASRuntimeFrameContext` 的 fallback 临时 `GlobalTimer` query 已删除。目标态尚未完成：current-frame 仍由 `GASManager.EntityGlobalTimer` static known owner 提供，后续必须迁移到 frame owner / `SystemAPI.GetSingleton` 或 `SystemState.GetEntityQuery` 预创建路径。
 
 ### 已完成的局部收缩
+
+2026-05-26 本轮 `T1-RuntimeCore-AM3 EventBus callsite 收尾 + parallel fan-in contract`：
+
+1. `EffectRuntimeUtility` 新增 `SyncRuntimeModifiersFromResolved` / `AddRuntimeModifiers` / `RemoveRuntimeModifiers` 的 writer overload，active modifier add/remove/update 事件复用外层 `GameplayEventBusWriter`。
+2. `SExecutionCalculation`、`SExecutionCalculationOutputModifier` 在 `OnUpdate` 创建一次 writer，并向 missing input、output updated、output missing、resolved modifier 同步链路传递。
+3. `EffectMagnitudeResolver` 保留旧 wrapper，但内部创建 writer 后调用 writer overload，不再直接静态 enqueue。
+4. `EffectCommandSpecStream` 新增 parallel fan-in record / deterministic merge proof，排序契约为 `TargetAsc(Index,Version) -> Command.Sequence -> ProducerIndex -> LocalIndex`。
+5. `rg -n "EventBusHelper\.Enqueue" Assets/GAS/Runtime/System/Effect/ -g "*.cs"` 为空；Runtime + Tests dotnet build 通过。Unity Test Runner 待补跑。
 
 2026-05-25 本轮 `T1-RuntimeCore-AM3 EventBus legacy callsite writer 迁移`：
 
@@ -167,8 +176,8 @@
 
 ## 任务入口
 
-1. `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构.md`
-2. `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCoreFrameBackbone.md`
+1. `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构/README.md`
+2. `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构/AM2B-FrameBackbone/README.md`
 
 ## 退出条件
 

@@ -73,10 +73,9 @@
 
 | 支线 | 文档 | 状态 |
 |---|---|---|
-| AutoChess 无头验收 | [AutoChess无头验收.md](AutoChess无头验收.md) | 进行中 |
+| AutoChess 无头验收 | [AutoChess无头验收/README.md](AutoChess无头验收/README.md) | 进行中 |
 | 当前 Demo 业务迁移 | [当前Demo业务迁移.md](当前Demo业务迁移.md) | 后置 |
 
 ## 交还规则
 
 交还时必须同步最近验证摘要、当前架构事实、相关 Debugger / Observation Spec 和 demo 支线状态。
-

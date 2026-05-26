@@ -139,6 +139,11 @@ namespace GAS.Runtime
         TypedSimulationFactBuffer = 41,
         ActiveEffectStore = 42,
         ActiveEffectSlotBuffer = 43,
+        EffectCleanup = 44,
+        EffectFinalDestroy = 45,
+        ActiveEffectGlobalIndexStore = 46,
+        ActiveEffectGlobalIndexBuffer = 47,
+        ActiveEffectGlobalIndexStableRow = 48,
     }
 
     public readonly struct GASRuntimeQueryLayoutEntry
@@ -518,6 +523,8 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.GameplayEffectBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveModifierBuffer,
                         GASRuntimeLayoutComponentSlot.GrantedAbilityBuffer,
+                        GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexStore,
+                        GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexBuffer,
                     },
                     Array.Empty<Type>()),
                 Entry(
@@ -575,11 +582,15 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.PeriodDefinition,
                         GASRuntimeLayoutComponentSlot.PeriodRuntime,
                         GASRuntimeLayoutComponentSlot.StackingRuntime,
+                        GASRuntimeLayoutComponentSlot.EffectCleanup,
                         GASRuntimeLayoutComponentSlot.EffectDestroy,
+                        GASRuntimeLayoutComponentSlot.EffectFinalDestroy,
+                        GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexStableRow,
                     },
                     typeof(SEffectApply),
                     typeof(SOngoingTagRequirements),
                     typeof(SEffectRemove),
+                    typeof(SEffectFinalDestroy),
                     typeof(SEffectTick)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.ExecutionCalculationPipeline,

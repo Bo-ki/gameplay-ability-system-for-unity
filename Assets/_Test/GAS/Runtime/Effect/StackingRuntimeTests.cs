@@ -609,6 +609,354 @@ namespace GAS.Runtime.Tests
         }
 
         [Test]
+        public void StoreBackedEffectTickUsesOwnerLocalSlotBeforeLegacyRuntimeDuration()
+        {
+            var previousTimer = SetFrame(100);
+            try
+            {
+                var source = CreateEntity();
+                var target = AbilitySystemEntityFactory.Create(_em);
+                _entities.Add(target);
+                var effect = CreateEntity();
+                var context = new CEffectContext
+                {
+                    SourceAsc = source,
+                    TargetAsc = target,
+                    Instigator = source,
+                    ContextId = 9381,
+                };
+                var duration = new CDurationRuntime
+                {
+                    ResolvedDuration = 10,
+                    ResolvedTimeUnit = TimeUnit.Frame,
+                    Active = true,
+                    ActiveTime = 0,
+                    RemainingTime = 1000,
+                };
+
+                _em.AddComponentData(effect, context);
+                _em.AddComponentData(effect, new CEffectLifecycle
+                {
+                    State = EGameplayEffectLifecycleState.Active,
+                    PreviousState = EGameplayEffectLifecycleState.Active,
+                    StateStartFrame = 1,
+                });
+                _em.AddComponentData(effect, new CDurationDefinition
+                {
+                    Duration = 10,
+                    TimeUnit = TimeUnit.Frame,
+                });
+                _em.AddComponentData(effect, duration);
+                _em.GetBuffer<BGameplayEffect>(target).Add(new BGameplayEffect { GameplayEffect = effect });
+
+                Assert.That(
+                    ActiveEffectStore.TryUpsertDurationEffect(
+                        _em,
+                        effect,
+                        context,
+                        duration,
+                        EActiveEffectSlotState.Active,
+                        currentFrame: 0),
+                    Is.True);
+
+                RunEffectGroup();
+
+                Assert.That(_em.Exists(effect), Is.True);
+                Assert.That(_em.HasComponent<CEffectDestroy>(effect), Is.False);
+
+                var store = _em.GetComponentData<CActiveEffectStore>(target);
+                Assert.That(store.LastChunkSkipIndexFrame, Is.EqualTo(100));
+                Assert.That(store.ChunkSkipMatchedSlotCount, Is.EqualTo(1));
+                Assert.That(store.ChunkSkipSkippedSlotCount, Is.EqualTo(1));
+                Assert.That(store.ChunkSkipNoopSlotCount, Is.EqualTo(1));
+                Assert.That(store.ChunkSkipDuePeriodSlotCount, Is.EqualTo(0));
+            }
+            finally
+            {
+                RestoreFrame(previousTimer);
+            }
+        }
+
+        [Test]
+        public void StoreOnlyOwnerLocalSlotDrivesTickWithoutLegacyDurationQuery()
+        {
+            var previousTimer = SetFrame(100);
+            try
+            {
+                var source = CreateEntity();
+                var target = AbilitySystemEntityFactory.Create(_em);
+                _entities.Add(target);
+                var effect = CreateEntity();
+
+                _em.AddComponentData(effect, new CEffectContext
+                {
+                    SourceAsc = source,
+                    TargetAsc = target,
+                    Instigator = source,
+                    ContextId = 9382,
+                });
+                _em.AddComponentData(effect, new CEffectLifecycle
+                {
+                    State = EGameplayEffectLifecycleState.Active,
+                    PreviousState = EGameplayEffectLifecycleState.Active,
+                    StateStartFrame = 0,
+                });
+
+                var slots = _em.GetBuffer<BActiveEffectSlot>(target);
+                slots.Add(new BActiveEffectSlot
+                {
+                    Sequence = 1,
+                    State = EActiveEffectSlotState.Active,
+                    ActiveEffectEntity = effect,
+                    SourceAsc = source,
+                    TargetAsc = target,
+                    GameplayEffectCode = 9382,
+                    Level = 1,
+                    StackCount = 1,
+                    ContextId = 9382,
+                    StartFrame = 0,
+                    StateStartFrame = 0,
+                    DurationFrame = 200,
+                    RemainingFrame = 200,
+                    PeriodFrame = 0,
+                    LastPeriodFrame = 0,
+                    Flags = (int)EActiveEffectSlotFlags.HasDuration,
+                });
+
+                Assert.That(_em.HasComponent<CDurationRuntime>(effect), Is.False);
+                Assert.That(_em.HasComponent<CDurationDefinition>(effect), Is.False);
+
+                RunEffectGroup();
+
+                var store = _em.GetComponentData<CActiveEffectStore>(target);
+                Assert.That(store.LastChunkSkipIndexFrame, Is.EqualTo(100));
+                Assert.That(store.ChunkSkipMatchedSlotCount, Is.EqualTo(1));
+                Assert.That(store.ChunkSkipSkippedSlotCount, Is.EqualTo(1));
+                Assert.That(store.ChunkSkipNoopSlotCount, Is.EqualTo(1));
+                Assert.That(store.ChunkSkipDuePeriodSlotCount, Is.EqualTo(0));
+            }
+            finally
+            {
+                RestoreFrame(previousTimer);
+            }
+        }
+
+        [Test]
+        public void StoreOnlyOwnerLocalSlotExpiresWithoutLegacyDurationRuntime()
+        {
+            var previousTimer = SetFrame(100);
+            try
+            {
+                var source = CreateEntity();
+                var target = AbilitySystemEntityFactory.Create(_em);
+                _entities.Add(target);
+                var effect = CreateEntity();
+
+                _em.AddComponentData(effect, new CEffectContext
+                {
+                    SourceAsc = source,
+                    TargetAsc = target,
+                    Instigator = source,
+                    ContextId = 9383,
+                });
+                _em.AddComponentData(effect, new CEffectLifecycle
+                {
+                    State = EGameplayEffectLifecycleState.Active,
+                    PreviousState = EGameplayEffectLifecycleState.Active,
+                    StateStartFrame = 0,
+                });
+
+                var slots = _em.GetBuffer<BActiveEffectSlot>(target);
+                slots.Add(new BActiveEffectSlot
+                {
+                    Sequence = 1,
+                    State = EActiveEffectSlotState.Active,
+                    ActiveEffectEntity = effect,
+                    SourceAsc = source,
+                    TargetAsc = target,
+                    GameplayEffectCode = 9383,
+                    Level = 1,
+                    StackCount = 1,
+                    ContextId = 9383,
+                    StartFrame = 0,
+                    StateStartFrame = 0,
+                    DurationFrame = 10,
+                    RemainingFrame = 10,
+                    PeriodFrame = 0,
+                    LastPeriodFrame = 0,
+                    Flags = (int)EActiveEffectSlotFlags.HasDuration,
+                });
+
+                Assert.That(_em.HasComponent<CDurationRuntime>(effect), Is.False);
+                Assert.That(_em.HasComponent<CDurationDefinition>(effect), Is.False);
+
+                RunEffectGroup();
+
+                Assert.That(_em.Exists(effect), Is.True);
+                Assert.That(_em.HasComponent<CEffectCleanup>(effect), Is.True);
+                Assert.That(_em.HasComponent<CEffectDestroy>(effect), Is.True);
+                Assert.That(_em.GetComponentData<CEffectLifecycle>(effect).State,
+                    Is.EqualTo(EGameplayEffectLifecycleState.PendingRemove));
+
+                slots = _em.GetBuffer<BActiveEffectSlot>(target);
+                Assert.That(slots.Length, Is.EqualTo(1));
+                Assert.That(slots[0].State, Is.EqualTo(EActiveEffectSlotState.PendingRemove));
+                Assert.That(slots[0].PreviousState, Is.EqualTo(EActiveEffectSlotState.Active));
+                Assert.That(slots[0].StateStartFrame, Is.EqualTo(100));
+
+                RunEffectGroup();
+
+                Assert.That(_em.Exists(effect), Is.False);
+                Assert.That(_em.GetBuffer<BActiveEffectSlot>(target).Length, Is.EqualTo(0));
+                Assert.That(_em.GetComponentData<CActiveEffectStore>(target).LastCompactedFrame, Is.EqualTo(100));
+            }
+            finally
+            {
+                RestoreFrame(previousTimer);
+            }
+        }
+
+        [Test]
+        public void StoreBackedPeriodTickUsesOwnerLocalSlotCursorBeforeLegacyRuntimeCursor()
+        {
+            const int sourceEffectCode = 93025;
+            const int periodEffectCode = 93026;
+            const int attrSetCode = 20;
+            const int attributeCode = 30;
+            const int magnitudeKey = 7002;
+            var previousTimer = SetFrame(100);
+
+            GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(id =>
+            {
+                if (id == sourceEffectCode)
+                    return CreatePeriodDefinitionConfig(periodEffectCode);
+
+                return id == periodEffectCode
+                    ? CreateSetByCallerModifierConfig(attrSetCode, attributeCode, magnitudeKey)
+                    : null;
+            });
+
+            try
+            {
+                var streamEntity = EffectCommandSpecStream.EnsureSingleton(_em);
+                EffectCommandSpecStream.ClearFrameLocalData(_em, streamEntity, 0);
+
+                var source = CreateEntity();
+                var target = AbilitySystemEntityFactory.Create(_em);
+                _entities.Add(target);
+                _em.GetBuffer<BAttribute>(target).Add(new BAttribute
+                {
+                    AttrSetCode = attrSetCode,
+                    Code = attributeCode,
+                    BaseValue = 100f,
+                    CurrentValue = 100f,
+                    PreviousCurrentValue = 100f,
+                });
+
+                var effect = GameplayEffectConfigRegistry.CreateRuntimeEffectInstance(_em, sourceEffectCode);
+                _entities.Add(effect);
+                var context = new CEffectContext
+                {
+                    SourceAsc = source,
+                    TargetAsc = target,
+                    Instigator = source,
+                    ContextId = 9325,
+                };
+                var duration = new CDurationRuntime
+                {
+                    ResolvedDuration = 1000,
+                    ResolvedTimeUnit = TimeUnit.Frame,
+                    Active = true,
+                    ActiveTime = 0,
+                    RemainingTime = 1000,
+                };
+
+                _em.AddComponentData(effect, context);
+                _em.AddComponentData(effect, new CEffectSpecData
+                {
+                    GameplayEffectCode = sourceEffectCode,
+                    Level = 4,
+                    StackCount = 1,
+                });
+                _em.AddComponentData(effect, new CEffectLifecycle
+                {
+                    State = EGameplayEffectLifecycleState.Active,
+                    PreviousState = EGameplayEffectLifecycleState.Active,
+                    StateStartFrame = 1,
+                });
+                _em.SetComponentData(effect, duration);
+                _em.SetComponentData(effect, new CPeriodRuntime
+                {
+                    StartTime = 99,
+                });
+                _em.AddBuffer<BSetByCallerValue>(effect).Add(new BSetByCallerValue
+                {
+                    Key = magnitudeKey,
+                    Value = 7f,
+                });
+                _em.GetBuffer<BGameplayEffect>(target).Add(new BGameplayEffect { GameplayEffect = effect });
+
+                Assert.That(
+                    ActiveEffectStore.TryUpsertDurationEffect(
+                        _em,
+                        effect,
+                        context,
+                        duration,
+                        EActiveEffectSlotState.Active,
+                        currentFrame: 90),
+                    Is.True);
+
+                var slots = _em.GetBuffer<BActiveEffectSlot>(target);
+                Assert.That(slots.Length, Is.EqualTo(1));
+                var slot = slots[0];
+                slot.LastPeriodFrame = 90;
+                slots[0] = slot;
+
+                RunEffectGroup();
+
+                Assert.That(CountApplyRequests(periodEffectCode), Is.EqualTo(0));
+                Assert.That(CountEffectsByCode(periodEffectCode), Is.EqualTo(0));
+
+                var commands = _em.GetBuffer<BEffectCommand>(streamEntity);
+                var setByCallers = _em.GetBuffer<BEffectCommandSetByCallerValue>(streamEntity);
+                Assert.That(commands.Length, Is.EqualTo(1));
+                Assert.That(commands[0].Source, Is.EqualTo(EEffectCommandSource.Period));
+                Assert.That(commands[0].SourceAsc, Is.EqualTo(source));
+                Assert.That(commands[0].TargetAsc, Is.EqualTo(target));
+                Assert.That(commands[0].SourceEffect, Is.EqualTo(effect));
+                Assert.That(commands[0].GameplayEffectCode, Is.EqualTo(periodEffectCode));
+                Assert.That(commands[0].SetByCallerCount, Is.EqualTo(1));
+                Assert.That(setByCallers.Length, Is.EqualTo(1));
+                Assert.That(setByCallers[0].CommandSequence, Is.EqualTo(commands[0].Sequence));
+                Assert.That(setByCallers[0].Key, Is.EqualTo(magnitudeKey));
+                Assert.That(setByCallers[0].Value, Is.EqualTo(7f));
+
+                Assert.That(_em.GetComponentData<CPeriodRuntime>(effect).StartTime, Is.EqualTo(100));
+                slots = _em.GetBuffer<BActiveEffectSlot>(target);
+                Assert.That(slots[0].LastPeriodFrame, Is.EqualTo(100));
+                var store = _em.GetComponentData<CActiveEffectStore>(target);
+                Assert.That(store.LastChunkSkipIndexFrame, Is.EqualTo(100));
+                Assert.That(store.ChunkSkipDuePeriodSlotCount, Is.EqualTo(0));
+
+                RunCommandGroup();
+
+                var specs = _em.GetBuffer<BInstantEffectSpec>(streamEntity);
+                var deltas = _em.GetBuffer<BAttributeDelta>(streamEntity);
+                var attribute = _em.GetBuffer<BAttribute>(target)[0];
+                Assert.That(specs.Length, Is.EqualTo(1));
+                Assert.That(deltas.Length, Is.EqualTo(1));
+                Assert.That(deltas[0].Magnitude, Is.EqualTo(20f));
+                Assert.That(attribute.BaseValue, Is.EqualTo(120f));
+                Assert.That(attribute.CurrentValue, Is.EqualTo(120f));
+            }
+            finally
+            {
+                GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(null);
+                RestoreFrame(previousTimer);
+            }
+        }
+
+        [Test]
         public void MissingPeriodDerivedGameplayEffectConfigIsDiscardedWhenRequestIsConsumed()
         {
             const int sourceEffectCode = 93041;

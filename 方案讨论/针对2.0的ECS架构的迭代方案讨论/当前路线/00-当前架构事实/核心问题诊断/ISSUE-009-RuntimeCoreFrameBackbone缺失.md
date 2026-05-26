@@ -62,7 +62,7 @@
 文档 / 任务证据：
 
 1. `../../01-目标态架构共识/03-RuntimeCore管线Spec.md` 已将 `Frame Arena / Query Preparation` 列为 phase，并新增 `DOTS Backbone First`；这说明目标态已经明确该骨架是前置条件。
-2. `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCoreFrameBackbone.md` 已将 `GAS ECS Runtime - Runtime Core 重构 - Runtime Core Frame Backbone` 拆成 `AM2B-A -> AM2B-F` 连续任务链，并把 AM3 / AM5 后续扩张改为依赖该任务链。
+2. `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构/AM2B-FrameBackbone/README.md` 已将 `GAS ECS Runtime - Runtime Core 重构 - Runtime Core Frame Backbone` 拆成 `AM2B-A -> AM2B-F` 连续任务链，并把 AM3 / AM5 后续扩张改为依赖该任务链。
 3. `../../04-当前进度状态/当前窗口.md` 已将当前推荐领取推进到 `GAS ECS Runtime - Runtime Core 重构 - Instant Spec Evaluation 迁移`（任务ID：`T1-RuntimeCore-AM3`），并明确 AutoChess 仍是 Runtime 重构后的后置全链路验收工具。
 
 ## 执行路径
@@ -114,8 +114,8 @@ AM2/AM3/AM5 局部 proof 已落地
 
 ## 任务入口
 
-1. `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCoreFrameBackbone.md`
-2. `../../02-主线任务树/T4-Observation_Presentation_Debugger/RuntimeCoreDebugger.md`
+1. `../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构/AM2B-FrameBackbone/README.md`
+2. `../../02-主线任务树/T4-Observation_Presentation_Debugger/RuntimeCoreDebugger/README.md`
 
 ## 退出条件
 

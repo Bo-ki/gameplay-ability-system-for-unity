@@ -81,7 +81,7 @@ System reads DynamicBuffer / query result
 
 ## 任务入口
 
-`../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构.md`
+`../../02-主线任务树/T1-GAS_ECS_Runtime/RuntimeCore重构/README.md`
 
 ## 退出条件
 

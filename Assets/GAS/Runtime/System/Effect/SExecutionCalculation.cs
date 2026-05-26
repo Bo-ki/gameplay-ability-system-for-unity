@@ -18,6 +18,8 @@ namespace GAS.Runtime
             _query = SystemAPI.QueryBuilder()
                 .WithAll<CEffectContext, CEffectSpecData, BExecutionCalculationDefinition>()
                 .WithNone<CEffectDestroy>()
+                .WithNone<CEffectCleanup>()
+                .WithNone<CEffectFinalDestroy>()
                 .Build();
             state.RequireForUpdate(_query);
         }
@@ -26,81 +28,89 @@ namespace GAS.Runtime
         {
             var em = state.EntityManager;
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            using var effects = _query.ToEntityArray(Allocator.Temp);
-
-            for (var i = 0; i < effects.Length; i++)
+            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            try
             {
-                var ge = effects[i];
-                if (!em.Exists(ge)
-                    || !em.HasComponent<CEffectContext>(ge)
-                    || !em.HasComponent<CEffectSpecData>(ge)
-                    || !em.HasBuffer<BExecutionCalculationDefinition>(ge))
-                {
-                    continue;
-                }
+                using var effects = _query.ToEntityArray(Allocator.Temp);
 
-                var context = em.GetComponentData<CEffectContext>(ge);
-                var spec = em.GetComponentData<CEffectSpecData>(ge);
-                var definitions = em.GetBuffer<BExecutionCalculationDefinition>(ge);
-                var hadOutputValues = em.HasBuffer<BExecutionCalculationValue>(ge);
-                var outputValues = hadOutputValues
-                    ? em.GetBuffer<BExecutionCalculationValue>(ge)
-                    : ecb.AddBuffer<BExecutionCalculationValue>(ge);
-                var hasInputDefinitions = em.HasBuffer<BExecutionCalculationInputDefinition>(ge);
-                var inputDefinitions = hasInputDefinitions
-                    ? em.GetBuffer<BExecutionCalculationInputDefinition>(ge)
-                    : default;
-                for (var j = 0; j < definitions.Length; j++)
+                for (var i = 0; i < effects.Length; i++)
                 {
-                    var definition = definitions[j];
-                    var hasMissingInput = false;
-                    var missingInputValue = 0f;
-                    var input = 0f;
-                    var hasResolvedInput = false;
-                    if (hasInputDefinitions
-                        && TryResolveInputAggregate(
-                            em,
-                            ge,
-                            context,
-                            spec,
-                            definition,
-                            inputDefinitions,
-                            out input,
-                            out hasMissingInput,
-                            out missingInputValue))
+                    var ge = effects[i];
+                    if (!em.Exists(ge)
+                        || !em.HasComponent<CEffectContext>(ge)
+                        || !em.HasComponent<CEffectSpecData>(ge)
+                        || !em.HasBuffer<BExecutionCalculationDefinition>(ge))
                     {
-                        hasResolvedInput = true;
+                        continue;
                     }
 
-                    if (!hasResolvedInput && !TryResolveInput(em, ge, context, spec, definition, out input))
+                    var context = em.GetComponentData<CEffectContext>(ge);
+                    var spec = em.GetComponentData<CEffectSpecData>(ge);
+                    var definitions = em.GetBuffer<BExecutionCalculationDefinition>(ge);
+                    var hadOutputValues = em.HasBuffer<BExecutionCalculationValue>(ge);
+                    var outputValues = hadOutputValues
+                        ? em.GetBuffer<BExecutionCalculationValue>(ge)
+                        : ecb.AddBuffer<BExecutionCalculationValue>(ge);
+                    var hasInputDefinitions = em.HasBuffer<BExecutionCalculationInputDefinition>(ge);
+                    var inputDefinitions = hasInputDefinitions
+                        ? em.GetBuffer<BExecutionCalculationInputDefinition>(ge)
+                        : default;
+                    for (var j = 0; j < definitions.Length; j++)
                     {
-                        input = definition.FallbackValue;
-                        hasMissingInput = true;
-                        missingInputValue = input;
-                    }
-
-                    var result = ApplyMath(input, definition);
-                    if (ExecutionCalculationRuntimeActions.WriteOutputValue(outputValues, definition.OutputKey, result))
-                    {
-                        if (hasMissingInput)
-                        {
-                            EnqueueExecutionFact(
+                        var definition = definitions[j];
+                        var hasMissingInput = false;
+                        var missingInputValue = 0f;
+                        var input = 0f;
+                        var hasResolvedInput = false;
+                        if (hasInputDefinitions
+                            && TryResolveInputAggregate(
                                 em,
                                 ge,
                                 context,
-                                EGameplayEventType.ExecutionCalculationInputMissing,
-                                ResolveEventCode(definition),
-                                missingInputValue);
+                                spec,
+                                definition,
+                                inputDefinitions,
+                                out input,
+                                out hasMissingInput,
+                                out missingInputValue))
+                        {
+                            hasResolvedInput = true;
                         }
 
-                        ExecutionCalculationRuntimeActions.EnqueueOutputUpdatedFact(
-                            em,
-                            ge,
-                            context,
-                            ResolveEventCode(definition),
-                            result);
+                        if (!hasResolvedInput && !TryResolveInput(em, ge, context, spec, definition, out input))
+                        {
+                            input = definition.FallbackValue;
+                            hasMissingInput = true;
+                            missingInputValue = input;
+                        }
+
+                        var result = ApplyMath(input, definition);
+                        if (ExecutionCalculationRuntimeActions.WriteOutputValue(outputValues, definition.OutputKey, result))
+                        {
+                            if (hasMissingInput)
+                            {
+                                EnqueueExecutionFact(
+                                    ref eventBusWriter,
+                                    ge,
+                                    context,
+                                    EGameplayEventType.ExecutionCalculationInputMissing,
+                                    ResolveEventCode(definition),
+                                    missingInputValue);
+                            }
+
+                            ExecutionCalculationRuntimeActions.EnqueueOutputUpdatedFact(
+                                ref eventBusWriter,
+                                ge,
+                                context,
+                                ResolveEventCode(definition),
+                                result);
+                        }
                     }
                 }
+            }
+            finally
+            {
+                eventBusWriter.Dispose();
             }
 
             ecb.Playback(em);
@@ -402,14 +412,17 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueExecutionFact(
-            EntityManager em,
+            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
             Entity ge,
             in CEffectContext context,
             EGameplayEventType type,
             int eventCode,
             float value)
         {
-            EventBusHelper.EnqueueGameplayEvent(em, GASManager.EntityEventBus, new BGameplayEvent
+            if (!eventBusWriter.IsCreated)
+                return;
+
+            eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
             {
                 Type = type,
                 SourceAsc = context.SourceAsc,

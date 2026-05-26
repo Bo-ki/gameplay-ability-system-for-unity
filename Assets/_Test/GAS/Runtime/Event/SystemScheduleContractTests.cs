@@ -94,6 +94,15 @@ namespace GAS.Runtime.Tests.Event
         }
 
         [Test]
+        public void EffectFinalDestroyRunsAfterRemoveAndBeforeTick()
+        {
+            var effectSystems = GASSystemScheduleContract.EffectSystems;
+
+            Assert.That(IndexOf<SEffectRemove>(effectSystems), Is.LessThan(IndexOf<SEffectFinalDestroy>(effectSystems)));
+            Assert.That(IndexOf<SEffectFinalDestroy>(effectSystems), Is.LessThan(IndexOf<SEffectTick>(effectSystems)));
+        }
+
+        [Test]
         public void AbilityLifecycleRequestRunsAfterTickAndBeforeCleanup()
         {
             var abilitySystems = GASSystemScheduleContract.AbilitySystems;
