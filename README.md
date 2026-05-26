@@ -1,5 +1,7 @@
 # EX Gameplay Ability System For Unity 2.0
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Bo-ki/gameplay-ability-system-for-unity)
+
 更新时间：2026-05-26
 
 EX-GAS 2.0 是一个基于 Unity DOTS / ECS 的 Gameplay Ability System 实现。当前主线不再是 1.x 的托管 OOP 运行模型，也不再以 `AbilitySystemCell`、`AbilityLogicBase`、`AbilitySpec`、`GameplayEffectSpec` 作为 Runtime 主入口。旧文档、旧 Demo 说明或历史方案若与本文冲突，以当前代码和本文口径为准。
