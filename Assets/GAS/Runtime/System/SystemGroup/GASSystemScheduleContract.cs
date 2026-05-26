@@ -205,7 +205,6 @@ namespace GAS.Runtime
             typeof(SASCCreate),
             typeof(SAscInitializeRequest),
             typeof(SAscCommandRequest),
-            typeof(SHeadlessAutoBattleDriver),
             typeof(SAbilityCommandRequest),
             typeof(STryActivateAbility),
             typeof(SAbilityCommit),
@@ -233,10 +232,7 @@ namespace GAS.Runtime
             typeof(STypedSimulationFactProjection),
         };
 
-        private static readonly Type[] ExecutionCalculationExtensionSystemTypes =
-        {
-            typeof(SHeadlessAutoBattleExecuteCalculation),
-        };
+
 
         private static readonly Type[] ResetDirtySystemTypes =
         {
@@ -293,9 +289,7 @@ namespace GAS.Runtime
 
         public static IReadOnlyList<Type> EffectCommandSpecStreamTargetSystems =>
             EffectCommandSpecStreamTargetSystemTypes;
-
-        public static IReadOnlyList<Type> ExecutionCalculationExtensionSystems => ExecutionCalculationExtensionSystemTypes;
-
+        
         public static IReadOnlyList<Type> ResetDirtySystems => ResetDirtySystemTypes;
 
         public static IReadOnlyList<Type> TagSystems => TagSystemTypes;
@@ -354,7 +348,6 @@ namespace GAS.Runtime
         public static void RegisterSystems(World world, GASSystemGroups groups)
         {
             AddCommandSystems(world, groups);
-            AddSystems(world, groups.ExecutionCalculationExtension, ExecutionCalculationExtensionSystemTypes);
             AddSystems(world, groups.ResetDirty, ResetDirtySystemTypes);
             AddSystems(world, groups.Tag, TagSystemTypes);
             AddSystems(world, groups.Effect, EffectSystemTypes);
