@@ -4,17 +4,17 @@
 
 原报告来源：`代码DOTS合规审查报告.md`（主篇，Assets/GAS/Runtime ~8000 行）+ `代码DOTS合规审查报告-补充篇.md`（补充篇，~50 个文件 ~15000 行）。
 
-**最近审查**: 2026-05-26 | **审查范围**: Assets/GAS/Runtime ~222 个 C# 文件 | [审查更新摘要](../审查更新-2026-05-26.md)
+**最近审查**: 2026-05-26 | **审查范围**: Assets/GAS/Runtime ~223 个 C# 文件 + Luban 配置链 18 个文件
 
 ## 审查看板
 
 | 严重度 | 文件 | 缺陷数 | 缺陷编号 |
 |--------|------|--------|----------|
 | P0 致命 | [P0-致命缺陷](P0-致命缺陷.md) | 7 | A, B, C, D, M, N, O |
-| P1 高风险 | [P1-高风险缺陷](P1-高风险缺陷.md) | 12 | E, F, G, I, P, Q, R, S, T, U, V, W |
-| P2 改进 | [P2-改进建议](P2-改进建议.md) | 5 | K, L, X, Y, Z |
+| P1 高风险 | [P1-高风险缺陷](P1-高风险缺陷.md) | 14 | E, F, G, I, P, Q, R, S, T, U, V, W, AA, AB |
+| P2 改进 | [P2-改进建议](P2-改进建议.md) | 8 | K, L, X, Y, Z, AC, AD, AE |
 
-**合计**: 24 活跃缺陷（已修复的 H/J 已清除），覆盖 Runtime Core 热路径 ~65 个文件、~23000 行 C#。
+**合计**: 29 活跃缺陷（已修复的 H/J 已清除），覆盖 Runtime Core 热路径 ~65 个文件 + Luban 配置链 18 个文件。
 
 ## 缺陷速查
 
@@ -36,15 +36,19 @@
 | R | GameplayCueUnit Hybrid ECS 遗留 class | `SYS-01` |
 | S | SAbilityTimelineAction 零 ECB + 直接创建 | `SC-01` |
 | T | CueHelper 运行时反射创建实例 | `SYS-01` |
-| U | Definition 层 6 个 DTO struct 含托管数组 | `BAKE-01` |
+| U | Definition/Bake Contract 层 struct 全线托管数组 | `BAKE-01` |
 | V | BlobAsset 通过静态 Dictionary 管理生命周期 | `BLOB-02` |
 | W | 代码库中零 Baker<T> 实现 | `CASE-39/40/41` |
-| J | ResolveCurrentFrame 重复实现 5 次（已收口）| `PRF-32` |
+| AA | ConfigRegistryDiagnostics 全局可变静态状态 | `BUR-01` |
+| AB | GASDefinitionTable O(n) 线性查询 + 非 Burst 友好 | `PRF-05` |
 | K | managed 数组分配在每帧调用路径 | `NAT-05` |
 | L | IComponentData 上挂 NativeArray | `PRF-34` |
 | X | 5 个 System OnUpdate [BurstCompile] 被注释 | `BUR-01` |
 | Y | 4 个空 struct Tag Component | `PRF-03` |
 | Z | CCueOn* 六个文件 NativeArray 挂 IComponentData | `PRF-34` |
+| AC | Luban 配置目录结构与 Spec 11 不一致 | — |
+| AD | 生成物未按 Spec 11 拆分为独立文件 | — |
+| AE | BakingSystem 使用 SystemBase 而非 ISystem | `JOB-01` |
 
 ## 维护规则
 
