@@ -1,7 +1,6 @@
 {
   "dependencies": {
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
-    "com.exhard.exopensourcepluginmanager": "https://gitee.com/exhard/EX_Toy_Lib.git?path=Assets/ExOpenSourcePluginManager",
     "com.unity.animation.rigging": "1.4.1",
     "com.unity.collab-proxy": "2.12.4",
     "com.unity.entities": "1.4.6",
@@ -21,7 +20,6 @@
     "com.unity.timeline": "1.8.12",
     "com.unity.ugui": "2.0.0",
     "com.unity.visualscripting": "1.9.11",
-    "com.vovgou.loxodon-framework": "https://github.com/vovgou/loxodon-framework.git?path=Loxodon.Framework/Assets/LoxodonFramework",
     "com.unity.modules.accessibility": "1.0.0",
     "com.unity.modules.adaptiveperformance": "1.0.0",
     "com.unity.modules.ai": "1.0.0",
