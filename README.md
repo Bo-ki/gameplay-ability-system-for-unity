@@ -19,21 +19,19 @@ EX-GAS 2.0 是一个基于 Unity DOTS / ECS 的 Gameplay Ability System 实现�
 - Editor / Authoring 工具：`Assets/GAS/Editor`。
 - Wiki 文字页：`Assets/GAS/Wiki`。
 - 配置源：`EX_GAS_Config/ProjectConfigTable/exgas_config/Datas`。
-- 迭代讨论目录：`方案讨论/` 是本地中间产物，已通过 `.gitignore` 排除。
+- 迭代讨论：`方案讨论/针对2.0的ECS架构的迭代方案讨论/`，详见下方文档索引。
 - 不要修改 `Library/PackageCache` 下的包缓存内容；Unity 会自动还原，这类改动不是有效工程修复。
-- 当前重构主线：`T6-CHESS-AM`，AM-0 到 AM-4 已完成，旧 GE entity lifecycle pipeline 已删除，EffectCommandSpecStream 成为唯一 GE 写入路径。
 
 ## 架构分层
 
-当前 EX-GAS 2.0 按五个平面理解和维护：
+当前 EX-GAS 2.0 按四层工程架构理解：
 
-| 平面 | 职责 | 主要入口 |
+| 层 | 职责 | 边界 |
 | --- | --- | --- |
-| Authoring | 编辑器、表格、Schema、诊断 UI | `Assets/GAS/Editor`、GAS Center、Timeline editor、web editors |
-| Definition | 配置定义、Registry、Blob、Generated adapter | `AbilityConfigRegistry`、`GameplayEffectConfigRegistry`、`GASDefinitionTable` |
-| Simulation | 真正的玩法权威和状态变更 | ECS component、request entity、`GASSystemScheduleContract` 中的 system |
-| Observation | 事实流、表现 outbox、replay、结构化日志 | `CGameplayEventBus`、`BPresentationEvent`、`BDebugReplayEvent` |
-| Extension | 业务扩展、ExecutionCalculation、Demo driver | `GASExecutionCalculationExtensionGroup`、AutoChess systems |
+| Application Shell | UI / Input / AI / Network / Demo runner | 不持有 runtime 权威 |
+| Runtime Boundary | command gateway、read model、presentation outbox、diagnostics | 只读派生，不反向喂给 Core |
+| GAS Runtime Core | ASC / Ability / GE / Attribute / Tag entities | 零 GameObject / managed callback |
+| Definition & Generation | Luban / Excel / Bean schema / generated ids / bake plan | 不生成 gameplay lifecycle |
 
 核心不变量：
 
@@ -42,7 +40,7 @@ EX-GAS 2.0 是一个基于 Unity DOTS / ECS 的 Gameplay Ability System 实现�
 3. Definition 不携带 spec、context、runtime state。
 4. Runtime state 不反查 managed authoring config。
 5. Cue / UI / VFX / SFX / log / replay 不决定 gameplay。
-6. 新增 runtime system 必须进入 `GASSystemScheduleContract`，并由调度契约测试锁住顺序。
+6. 新增 runtime system 必须进入 `GASSystemScheduleContract`。
 
 ## Runtime 主链
 
@@ -121,58 +119,39 @@ Runtime facts 与表现分层如下：
 
 ## 当前已知问题与重构路线
 
-当前 AutoChess 无头验收已经覆盖较完整业务链路，包括伤害、死亡、被动、羁绊、周期 GE、Shield、Summon、Damage Type / Resistance、装备、净化、Rally、LifeSteal、Poison、Execute、DeathBurst、Enrage、Presentation outbox、Replay、结构化日志和 Luban / SourceGenerator 配置链。但这轮验证也暴露出当前 Runtime Core 仍有严重架构问题。
+最新 x50 profile 事实和架构诊断见 [00-当前架构事实](方案讨论/针对2.0的ECS架构的迭代方案讨论/00-当前架构事实/README.md)。关键数据点：
 
-旧 x50 profile 关键事实（基于已删除的旧管线，保留作为历史基线参考）：
+- 仅 2/39 System 使用 IJobEntity，22 文件使用 ToEntityArray，24 文件直接 EM 结构变化
+- 15+ ECB PlaybackAndReset 反模式
+- 8-phase 管线契约已定义但 System 仍按旧 Group 名称注册
 
-- x1 / x10 / x50 非 systemTiming `avgTickMs` 分别约为 `1.658575 / 3.535375 / 13.76954167`。
-- 主要热点集中在 `SEffectApply`、`SApplyGameplayEffectRequest`、`SHeadlessAutoChessPresentationCueMarkerProjection`、`SHeadlessAutoChessDriver`、`SEffectTick` 和多个业务 reaction system。
-- 旧管线使用 request entity → runtime GE entity → lifecycle → destroy 链路，存在大量 ToEntityArray + ECB 碎片化。
+已修复的核心问题：
 
-这些问题通过 AM-0 到 AM-4 已修复的架构问题：
+1. ~~Instant GE 走 request entity → runtime GE entity → lifecycle → destroy 链路~~ → 已修复：全程 command → spec → delta → fact 流
+2. ~~旧 GE lifecycle pipeline（~7000 行）~~ → 已删除
+3. ~~AutoChessDemo 零 DOTS 合规~~ → 已破坏性删除 24 个文件，待按 Spec 10/10B 重构
 
-1. ~~Instant GE 仍大量走 request entity、runtime GE entity、apply、destroy 的生命周期链路。~~ **已修复**：Instant GE 全程走 command → spec → delta → fact 流，不创建 runtime GE entity。
-2. `BGameplayEvent / BAttributeChangeEvent / BDamageEvent` 仍被部分业务 reaction 当成高频 simulation 输入，而不是纯 observation projection。（待 AM-7 解决）
-3. Presentation / Replay / Debug 逻辑完整，但与 core simulation hot path 的计时和数据流隔离不足。（待 AM-7 解决）
-4. AutoChess Driver 仍有 OOP 回合控制器形态，存在全量快照和多次 O(n) 选择目标的问题。（待 AM-6 解决）
-5. Runtime Core Debugger 还不够强，缺少 request/spec/delta/fact/entity create/destroy/ECB playback/buffer pressure/cursor lag 等机器可读 counters。（AM-1 部分完成）
+待解决的核心问题（详见 [ISSUE 看板](方案讨论/针对2.0的ECS架构的迭代方案讨论/00-当前架构事实/README.md)）：
 
-当前路线 `T6-CHESS-AM` 分阶段 Runtime rebuild 进度：
+- P0：代码执行范式未切换到 DOTS（全主线程 foreach + EntityManager）
+- P0：临时 EntityQuery 泛滥与 API 承载选型错误
+- P1：Runtime Core Frame Backbone 缺失
+- P1：Observation 与 Runtime Core 热路径耦合
 
-```text
-AM-0 Freeze / Safety Gate                                    [DONE]
-  冻结并删除旧 GE lifecycle pipeline（~7000 行代码移除）
+当前主线任务树进度（详见 [主线任务树](方案讨论/针对2.0的ECS架构的迭代方案讨论/02-主线任务树/README.md)）：
 
-AM-1 Runtime Core Debugger Baseline                          [PARTIAL]
-  输出 request / spec / delta / fact / entity lifecycle / buffer pressure counters
+| 阶段 | 状态 |
+| --- | --- |
+| AM-0 Freeze / Safety Gate — 冻结并删除旧 GE lifecycle pipeline | 已完成 |
+| AM-1 Runtime Core Debugger Baseline | 契约已确立 |
+| AM-2 EffectCommand / SpecStream 契约 | 已完成 |
+| AM-2B Frame Backbone (A~F) — phase / arena / stream / playback / debugger | 契约已确立 |
+| AM-3 Instant Spec Evaluation — simple instant GE 不创建 runtime GE entity | 已完成 |
+| AM-5 Active Effect Store — duration/stack/period/granted state 存储重建 | 进行中 |
+| T0 文档治理与目标态共识 — Unity DOTS 官方文档全覆盖 | 已完成 |
+| T6 AutoChess 无头验收 — 旧 Demo 已破坏性删除，待按 Spec 10/10B 重构 | 暂停 |
 
-AM-2 Effect Command / Spec Stream Contract                   [DONE]
-  定义 Effect Command、Instant Spec、Active Effect Mutation 和 8-phase schedule
-
-AM-3 Instant Spec Evaluation Rebuild                         [DONE]
-  simple instant GE 默认不创建 runtime GE entity，走 cursor 驱动索引 for 循环
-
-AM-4 Attribute Delta / Damage Typed Facts Pipeline           [DONE]
-  BAttributeDelta、BTypedSimulationFact 成为 simulation 主输出
-
-AM-5 Active Effect Store Rebuild                             [NEXT]
-  duration / stack / period / granted tag / granted ability 进入稳定 active store
-  当前 SEffectTick/SEffectRemove/SEffectFinalDestroy 已桩化，待重新实现
-
-AM-6 AutoChess Driver / Reaction Read Model
-  actor cursor、team stats、target candidates、board index 替代重复全量扫描
-
-AM-7 Observation / Presentation / Replay Split
-  core simulation tick 与 observation projection tick 分开报告
-
-AM-8 Burst / Jobify / Generated Runtime Glue
-  语义稳定后再 jobify/chunk 化，并生成 static lookup / query glue
-
-AM-9 Scale Gates
-  x50 进入 0.x ms 后，再扩 x100 / x1000 验证结构变化和规模曲线
-```
-
-当前代码应被理解为”AM-0~4 完成后的新基线，AM-5 为下一阶段目标”。
+当前代码基线：AM-0~3 已完成，AM-5 为当前推进目标。
 
 ## Definition 与配置链
 
@@ -270,10 +249,19 @@ Unity.exe -batchmode -quit -projectPath . -runTests -testPlatform PlayMode -test
 
 ## 文档索引
 
-- [Assets/GAS/Wiki/EX-GAS.md](Assets/GAS/Wiki/EX-GAS.md)：Wiki 总览。
-- [Assets/GAS/Wiki/Ability.md](Assets/GAS/Wiki/Ability.md)：Ability 当前生命周期。
-- [Assets/GAS/Wiki/GameplayEffect.md](Assets/GAS/Wiki/GameplayEffect.md)：GE definition / spec / context / runtime instance。
-- [Assets/GAS/Wiki/GameplayCue.md](Assets/GAS/Wiki/GameplayCue.md)：Cue / Presentation 边界。
-- [BeanMappingSpec.md](BeanMappingSpec.md)：Bean / Luban / XParam 映射规范。
-- [DemoFrameworkIntroduction.md](DemoFrameworkIntroduction.md)：当前 ECS Demo / 项目接入说明。
-- [方案讨论/针对2.0的ECS架构的迭代方案讨论/当前路线/06-当前进度状态.md](方案讨论/针对2.0的ECS架构的迭代方案讨论/当前路线/06-当前进度状态.md)：当前迭代接力状态，本目录已被 `.gitignore` 排除，仅作为本地架构讨论与路线记录。
+**项目文档**：
+- [Assets/GAS/Wiki/EX-GAS.md](Assets/GAS/Wiki/EX-GAS.md)：Wiki 总览
+- [Assets/GAS/Wiki/Ability.md](Assets/GAS/Wiki/Ability.md)：Ability 当前生命周期
+- [Assets/GAS/Wiki/GameplayEffect.md](Assets/GAS/Wiki/GameplayEffect.md)：GE definition / spec / context / runtime instance
+- [Assets/GAS/Wiki/GameplayCue.md](Assets/GAS/Wiki/GameplayCue.md)：Cue / Presentation 边界
+- [BeanMappingSpec.md](BeanMappingSpec.md)：Bean / Luban / XParam 映射规范
+- [DemoFrameworkIntroduction.md](DemoFrameworkIntroduction.md)：ECS Demo / 项目接入说明
+
+**2.0 ECS 架构迭代讨论**：
+- [方案讨论/针对2.0的ECS架构的迭代方案讨论/README.md](方案讨论/针对2.0的ECS架构的迭代方案讨论/README.md)：迭代讨论总入口
+- [00-当前架构事实](方案讨论/针对2.0的ECS架构的迭代方案讨论/00-当前架构事实/README.md)：当前代码事实、核心问题诊断、合规缺陷
+- [01-目标态架构共识](方案讨论/针对2.0的ECS架构的迭代方案讨论/01-目标态架构共识/README.md)：目标态 Spec、架构契约、术语表
+- [02-主线任务树](方案讨论/针对2.0的ECS架构的迭代方案讨论/02-主线任务树/README.md)：任务看板、可领取叶子任务
+- [04-当前进度状态](方案讨论/针对2.0的ECS架构的迭代方案讨论/04-当前进度状态/README.md)：跨轮接力快照、当前窗口
+- [规范手册](方案讨论/针对2.0的ECS架构的迭代方案讨论/规范手册.md)：文档治理规范统一入口
+- [Unity DOTS 官方文档参考](方案讨论/UnityDOTS官方文档参考/README.md)：PackageCache 版本、DOTS API 规则、官方案例
