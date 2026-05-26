@@ -8,7 +8,7 @@ namespace GAS.Runtime
     /// </summary>
     [UpdateInGroup(typeof(GASCommandGroup))]
     [UpdateAfter(typeof(SAbilityCommit))]
-    [UpdateBefore(typeof(SApplyGameplayEffectRequest))]
+    [UpdateBefore(typeof(SEffectCommandIngest))]
     public partial struct SAbilityTimelineAction : ISystem
     {
         private const string ApplyEffectsActionType = "ApplyEffects";

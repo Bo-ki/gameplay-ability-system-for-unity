@@ -211,7 +211,6 @@ namespace GAS.Runtime
             typeof(SAbilityCommit),
             typeof(SAbilityTimelineAction),
             typeof(SAbilityTimelineLifecycleRequest),
-            typeof(SRemoveGameplayEffectRequest),
             typeof(SEffectCommandIngest),
             typeof(SInstantEffectSpecBuild),
             typeof(SActiveEffectMutationApply),
@@ -220,7 +219,6 @@ namespace GAS.Runtime
             typeof(STypedSimulationFactEventBridge),
             typeof(SInstantEffectCueRequestProjection),
             typeof(SAscDestroyRequest),
-            typeof(SApplyGameplayEffectRequest),
             typeof(SExecutionCalculation),
             typeof(GASExecutionCalculationExtensionGroup),
             typeof(SExecutionCalculationOutputModifier),
@@ -251,8 +249,6 @@ namespace GAS.Runtime
 
         private static readonly Type[] EffectSystemTypes =
         {
-            typeof(SEffectApply),
-            typeof(SOngoingTagRequirements),
             typeof(SEffectRemove),
             typeof(SEffectFinalDestroy),
             typeof(SEffectTick),

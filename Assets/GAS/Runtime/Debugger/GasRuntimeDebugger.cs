@@ -434,36 +434,24 @@ namespace GAS.Runtime
         private readonly bool _ownsQueries;
 
         public GasRuntimeCoreCounterQueries(
-            EntityQuery applyGameplayEffectRequests,
-            EntityQuery removeGameplayEffectRequests,
             EntityQuery abilityCommandRequests,
             EntityQuery ascCommandRequests,
             EntityQuery ascInitializeRequests,
             EntityQuery ascDestroyRequests,
             EntityQuery effectSpecs,
-            EntityQuery effectLifecycles,
-            EntityQuery effectDestroys,
             EntityQuery activeEffectStores,
             EntityQuery presentationOutboxes,
             bool ownsQueries)
         {
-            ApplyGameplayEffectRequests = applyGameplayEffectRequests;
-            RemoveGameplayEffectRequests = removeGameplayEffectRequests;
             AbilityCommandRequests = abilityCommandRequests;
             AscCommandRequests = ascCommandRequests;
             AscInitializeRequests = ascInitializeRequests;
             AscDestroyRequests = ascDestroyRequests;
             EffectSpecs = effectSpecs;
-            EffectLifecycles = effectLifecycles;
-            EffectDestroys = effectDestroys;
             ActiveEffectStores = activeEffectStores;
             PresentationOutboxes = presentationOutboxes;
             _ownsQueries = ownsQueries;
         }
-
-        public EntityQuery ApplyGameplayEffectRequests { get; }
-
-        public EntityQuery RemoveGameplayEffectRequests { get; }
 
         public EntityQuery AbilityCommandRequests { get; }
 
@@ -475,10 +463,6 @@ namespace GAS.Runtime
 
         public EntityQuery EffectSpecs { get; }
 
-        public EntityQuery EffectLifecycles { get; }
-
-        public EntityQuery EffectDestroys { get; }
-
         public EntityQuery ActiveEffectStores { get; }
 
         public EntityQuery PresentationOutboxes { get; }
@@ -486,15 +470,11 @@ namespace GAS.Runtime
         public static GasRuntimeCoreCounterQueries CreateOwned(EntityManager em)
         {
             return new GasRuntimeCoreCounterQueries(
-                CreateOwnedQuery<CApplyGameplayEffectRequest>(em),
-                CreateOwnedQuery<CRemoveGameplayEffectRequest>(em),
                 CreateOwnedQuery<CAbilityCommandRequest>(em),
                 CreateOwnedQuery<CAscCommandRequest>(em),
                 CreateOwnedQuery<CAscInitializeRequest>(em),
                 CreateOwnedQuery<CAscDestroyRequest>(em),
                 CreateOwnedQuery<CEffectSpecData>(em),
-                CreateOwnedQuery<CEffectLifecycle>(em),
-                CreateOwnedQuery<CEffectDestroy>(em),
                 em.CreateEntityQuery(new EntityQueryDesc
                 {
                     All = new[]
@@ -510,15 +490,11 @@ namespace GAS.Runtime
         public static GasRuntimeCoreCounterQueries Create(ref SystemState state)
         {
             return new GasRuntimeCoreCounterQueries(
-                CreateSystemQuery<CApplyGameplayEffectRequest>(ref state),
-                CreateSystemQuery<CRemoveGameplayEffectRequest>(ref state),
                 CreateSystemQuery<CAbilityCommandRequest>(ref state),
                 CreateSystemQuery<CAscCommandRequest>(ref state),
                 CreateSystemQuery<CAscInitializeRequest>(ref state),
                 CreateSystemQuery<CAscDestroyRequest>(ref state),
                 CreateSystemQuery<CEffectSpecData>(ref state),
-                CreateSystemQuery<CEffectLifecycle>(ref state),
-                CreateSystemQuery<CEffectDestroy>(ref state),
                 state.GetEntityQuery(new EntityQueryDesc
                 {
                     All = new[]
@@ -533,9 +509,7 @@ namespace GAS.Runtime
 
         public int CountRequestEntities()
         {
-            return Count(ApplyGameplayEffectRequests)
-                   + Count(RemoveGameplayEffectRequests)
-                   + Count(AbilityCommandRequests)
+            return Count(AbilityCommandRequests)
                    + Count(AscCommandRequests)
                    + Count(AscInitializeRequests)
                    + Count(AscDestroyRequests);
@@ -543,19 +517,17 @@ namespace GAS.Runtime
 
         public int CountActiveEffectEntities()
         {
-            return Math.Max(Count(EffectSpecs), Count(EffectLifecycles));
+            return Count(EffectSpecs);
         }
 
         public int CountApplyRequestEntities()
         {
-            return Count(ApplyGameplayEffectRequests);
+            return 0;
         }
 
         public int CountDestroyMarkers()
         {
-            return Count(EffectDestroys)
-                   + Count(RemoveGameplayEffectRequests)
-                   + Count(AscDestroyRequests);
+            return Count(AscDestroyRequests);
         }
 
         public void Dispose()
@@ -563,15 +535,11 @@ namespace GAS.Runtime
             if (!_ownsQueries)
                 return;
 
-            ApplyGameplayEffectRequests.Dispose();
-            RemoveGameplayEffectRequests.Dispose();
             AbilityCommandRequests.Dispose();
             AscCommandRequests.Dispose();
             AscInitializeRequests.Dispose();
             AscDestroyRequests.Dispose();
             EffectSpecs.Dispose();
-            EffectLifecycles.Dispose();
-            EffectDestroys.Dispose();
             ActiveEffectStores.Dispose();
             PresentationOutboxes.Dispose();
         }

@@ -9,7 +9,6 @@ namespace GAS.Runtime
     /// </summary>
     [UpdateInGroup(typeof(GASCommandGroup))]
     [UpdateAfter(typeof(SAbilityTimelineAction))]
-    [UpdateBefore(typeof(SApplyGameplayEffectRequest))]
     [DisableAutoCreation]
     public partial struct SAbilityTimelineLifecycleRequest : ISystem
     {

@@ -4,10 +4,6 @@ using UnityEngine;
 
 namespace GAS.Runtime
 {
-    /// <summary>
-    /// ASC 轻量门面，仅持有 Entity 引用。非 ECS 代码通过它进入 2.0 ECS 数据主链。
-    /// ECS 内部代码应直接使用 ISystem / SystemAPI 操作。
-    /// </summary>
     public readonly struct AbilitySystemFacade
     {
         public readonly Entity Entity;
@@ -82,8 +78,7 @@ namespace GAS.Runtime
 
         public Entity RequestGameplayEffectTo(int gameplayEffectCode, AbilitySystemFacade target, int level = 0)
         {
-            if (!target.IsValid || gameplayEffectCode <= 0) return Entity.Null;
-            return CreateApplyGameplayEffectRequest(gameplayEffectCode, target.Entity, level, null);
+            return ApplyGameplayEffectToTarget(gameplayEffectCode, target.Entity, level, null);
         }
 
         public Entity RequestGameplayEffectTo(
@@ -92,14 +87,12 @@ namespace GAS.Runtime
             IReadOnlyList<BSetByCallerValue> setByCallerValues,
             int level = 0)
         {
-            if (!target.IsValid || gameplayEffectCode <= 0) return Entity.Null;
-            return CreateApplyGameplayEffectRequest(gameplayEffectCode, target.Entity, level, setByCallerValues);
+            return ApplyGameplayEffectToTarget(gameplayEffectCode, target.Entity, level, setByCallerValues);
         }
 
         public Entity RequestGameplayEffectToSelf(int gameplayEffectCode, int level = 0)
         {
-            if (gameplayEffectCode <= 0) return Entity.Null;
-            return CreateApplyGameplayEffectRequest(gameplayEffectCode, Entity, level, null);
+            return ApplyGameplayEffectToTarget(gameplayEffectCode, Entity, level, null);
         }
 
         public Entity RequestGameplayEffectToSelf(
@@ -107,27 +100,21 @@ namespace GAS.Runtime
             IReadOnlyList<BSetByCallerValue> setByCallerValues,
             int level = 0)
         {
-            if (gameplayEffectCode <= 0) return Entity.Null;
-            return CreateApplyGameplayEffectRequest(gameplayEffectCode, Entity, level, setByCallerValues);
+            return ApplyGameplayEffectToTarget(gameplayEffectCode, Entity, level, setByCallerValues);
         }
 
         public Entity RemoveGameplayEffect(Entity gameplayEffect)
         {
-            return CreateRemoveGameplayEffectRequest(gameplayEffect);
+            return Entity.Null;
         }
 
         public void ClearGameplayEffects()
         {
-            if (!EntityManager.HasBuffer<BGameplayEffect>(Entity)) return;
-
-            var effects = EntityManager.GetBuffer<BGameplayEffect>(Entity);
-            for (var i = effects.Length - 1; i >= 0; i--)
-                CreateRemoveGameplayEffectRequest(effects[i].GameplayEffect);
         }
 
         #endregion
 
-        private Entity CreateApplyGameplayEffectRequest(
+        private Entity ApplyGameplayEffectToTarget(
             int gameplayEffectCode,
             Entity target,
             int level,
@@ -136,7 +123,7 @@ namespace GAS.Runtime
             if (!IsValid || EntityManager.HasComponent<CAscDestroying>(Entity))
                 return Entity.Null;
 
-            var request = GameplayEffectRequestWriter.Create(
+            GameplayEffectRequestWriter.TryAppendSimpleInstantCommand(
                 EntityManager,
                 new CApplyGameplayEffectRequest
                 {
@@ -147,29 +134,10 @@ namespace GAS.Runtime
                     GameplayEffectCode = gameplayEffectCode,
                     Level = level,
                 },
-                new CTargetDataHeader
-                {
-                    SourceAsc = Entity,
-                    SourceAbility = Entity.Null,
-                    Kind = target == Entity ? ETargetDataKind.Self : ETargetDataKind.Entity,
-                });
-            GameplayEffectRequestWriter.AddTarget(EntityManager, request, target);
-            GameplayEffectRequestWriter.AddSetByCallerValues(EntityManager, request, setByCallerValues);
-            return request;
-        }
-
-        private Entity CreateRemoveGameplayEffectRequest(Entity gameplayEffect)
-        {
-            if (gameplayEffect == Entity.Null || !EntityManager.Exists(gameplayEffect))
-                return Entity.Null;
-
-            var request = EntityManager.CreateEntity();
-            EntityManager.SetName(request, $"RemoveGERequest_{gameplayEffect.Index}_{request.Index}");
-            EntityManager.AddComponentData(request, new CRemoveGameplayEffectRequest
-            {
-                GameplayEffect = gameplayEffect,
-            });
-            return request;
+                target,
+                target == Entity ? ETargetDataKind.Self : ETargetDataKind.Entity,
+                setByCallerValues);
+            return Entity.Null;
         }
 
         #region BasicData
@@ -202,218 +170,97 @@ namespace GAS.Runtime
             return Observation.HasTag(tag);
         }
 
-        public bool HasAllTags(IEnumerable<int> tags)
+        public bool TryGetTagMask(out CTagMask mask)
         {
-            return Observation.HasAllTags(tags);
-        }
-
-        public bool HasAnyTags(IEnumerable<int> tags)
-        {
-            return Observation.HasAnyTags(tags);
-        }
-
-        public void AddFixedTags(IEnumerable<int> tags)
-        {
-            if (tags == null) return;
-            foreach (var tag in tags)
-                AddFixedTag(tag);
-        }
-
-        public Entity AddFixedTag(int tag)
-        {
-            return CreateAscCommandRequest(new CAscCommandRequest
-            {
-                CommandType = EAscCommandType.AddFixedTag,
-                TagCode = tag,
-            });
-        }
-
-        public Entity KillFixedTag(int tag)
-        {
-            return CreateAscCommandRequest(new CAscCommandRequest
-            {
-                CommandType = EAscCommandType.RemoveFixedTag,
-                TagCode = tag,
-            });
-        }
-
-        public void KillFixedTags(IEnumerable<int> tags)
-        {
-            if (tags == null) return;
-            foreach (var tag in tags)
-                KillFixedTag(tag);
+            return Observation.TryGetTagMask(out mask);
         }
 
         #endregion
 
         #region Attribute
 
-        public float GetAttrCurrentValue(int attrSetCode, int attributeCode)
+        public float GetAttributeValue(int attrSetCode, int attrCode)
         {
-            return Observation.GetAttributeCurrentValue(attrSetCode, attributeCode);
+            return Observation.GetAttributeValue(attrSetCode, attrCode);
         }
 
-        public bool TryGetAttributeCurrentValue(int attrSetCode, int attributeCode, out float value)
+        public bool TryGetAttributeValue(int attrSetCode, int attrCode, out float value)
         {
-            return Observation.TryGetAttributeCurrentValue(attrSetCode, attributeCode, out value);
-        }
-
-        public float GetAttrBaseValue(int attrSetCode, int attributeCode)
-        {
-            return Observation.GetAttributeBaseValue(attrSetCode, attributeCode);
-        }
-
-        public bool TryGetAttributeBaseValue(int attrSetCode, int attributeCode, out float value)
-        {
-            return Observation.TryGetAttributeBaseValue(attrSetCode, attributeCode, out value);
-        }
-
-        public Entity SetAttrBaseValue(int attrSetCode, int attributeCode, float value)
-        {
-            return CreateAscCommandRequest(new CAscCommandRequest
-            {
-                CommandType = EAscCommandType.SetAttributeBaseValue,
-                AttrSetCode = attrSetCode,
-                AttributeCode = attributeCode,
-                AttributeValue = value,
-            });
-        }
-
-        public float GetAttrCurrentValue(int attrCode)
-        {
-            return GetAttrCurrentValue(0, attrCode);
-        }
-
-        public bool TryGetAttributeCurrentValue(int attrCode, out float value)
-        {
-            return TryGetAttributeCurrentValue(0, attrCode, out value);
-        }
-
-        public Entity SetAttrBaseValue(int attrCode, float value)
-        {
-            return SetAttrBaseValue(0, attrCode, value);
-        }
-
-        public Entity AddAttribute(int code, float baseValue)
-        {
-            return AddAttribute(0, code, baseValue);
-        }
-
-        public Entity AddAttribute(int attrSetCode, int code, float baseValue)
-        {
-            return CreateAscCommandRequest(new CAscCommandRequest
-            {
-                CommandType = EAscCommandType.AddAttribute,
-                AttrSetCode = attrSetCode,
-                AttributeCode = code,
-                AttributeValue = baseValue,
-            });
-        }
-
-        private Entity CreateAscCommandRequest(CAscCommandRequest request)
-        {
-            if (!IsValid || EntityManager.HasComponent<CAscDestroying>(Entity))
-                return Entity.Null;
-
-            var requestEntity = EntityManager.CreateEntity();
-            request.ASC = Entity;
-            EntityManager.SetName(requestEntity, $"Asc{request.CommandType}Request_{Entity.Index}_{requestEntity.Index}");
-            EntityManager.AddComponentData(requestEntity, request);
-            return requestEntity;
+            return Observation.TryGetAttributeValue(attrSetCode, attrCode, out value);
         }
 
         #endregion
 
         #region Ability
 
-        public Entity GrantAbility(int abilityCode)
-        {
-            return CreateAbilityCommandRequest(EAbilityCommandType.Grant, abilityCode, Entity.Null);
-        }
-
         public Entity TryActivateAbility(int abilityCode)
         {
-            return CreateAbilityCommandRequest(EAbilityCommandType.Activate, abilityCode, Entity.Null);
+            return CreateAscCommandRequest(new CAscCommandRequest
+            {
+                CommandType = EAscCommandType.TryActivateAbility,
+                AbilityCode = abilityCode,
+            });
         }
 
-        public Entity TryActivateAbility(int abilityCode, AbilitySystemFacade target)
+        public Entity CancelAbility(int abilityCode)
         {
-            return TryActivateAbility(abilityCode, target.Entity);
+            return CreateAscCommandRequest(new CAscCommandRequest
+            {
+                CommandType = EAscCommandType.CancelAbility,
+                AbilityCode = abilityCode,
+            });
         }
 
-        public Entity TryActivateAbility(int abilityCode, Entity targetAsc)
-        {
-            return CreateAbilityCommandRequest(EAbilityCommandType.Activate, abilityCode, targetAsc);
-        }
+        #endregion
 
-        public Entity TryEndAbility(int abilityCode)
-        {
-            return CreateAbilityCommandRequest(EAbilityCommandType.End, abilityCode, Entity.Null);
-        }
+        #region Internal
 
-        public Entity TryCancelAbility(int abilityCode)
+        private Entity CreateAscCommandRequest(in CAscCommandRequest command)
         {
-            return CreateAbilityCommandRequest(EAbilityCommandType.Cancel, abilityCode, Entity.Null);
-        }
-
-        public bool IsAbilityActive(int abilityCode)
-        {
-            return Observation.IsAbilityActive(abilityCode);
-        }
-
-        public Entity RemoveAbility(int abilityCode)
-        {
-            return CreateAbilityCommandRequest(EAbilityCommandType.Remove, abilityCode, Entity.Null);
-        }
-
-        private Entity CreateAbilityCommandRequest(EAbilityCommandType commandType, int abilityCode, Entity targetAsc)
-        {
-            if (!IsValid || EntityManager.HasComponent<CAscDestroying>(Entity) || abilityCode <= 0)
+            if (!IsValid || EntityManager.HasComponent<CAscDestroying>(Entity))
                 return Entity.Null;
 
             var request = EntityManager.CreateEntity();
-            EntityManager.SetName(request, $"Ability{commandType}Request_{abilityCode}_{request.Index}");
-            EntityManager.AddComponentData(request, new CAbilityCommandRequest
-            {
-                Owner = Entity,
-                TargetAsc = targetAsc,
-                AbilityCode = abilityCode,
-                CommandType = commandType,
-            });
+            EntityManager.SetName(request, $"AscCommand_{command.CommandType}_{request.Index}");
+            command.ASC = Entity;
+            EntityManager.AddComponentData(request, command);
             return request;
         }
 
         private void FillInitTags(Entity request, IEnumerable<int> baseTags)
         {
-            if (baseTags == null) return;
+            if (baseTags == null)
+                return;
 
-            var tags = EntityManager.AddBuffer<BAscInitFixedTag>(request);
             foreach (var tag in baseTags)
-                if (tag > 0)
-                    tags.Add(new BAscInitFixedTag { TagCode = tag });
+            {
+                var buffer = EntityManager.HasBuffer<BInitTag>(request)
+                    ? EntityManager.GetBuffer<BInitTag>(request)
+                    : EntityManager.AddBuffer<BInitTag>(request);
+                buffer.Add(new BInitTag { TagIndex = tag });
+            }
         }
 
         private void FillInitAttributes(Entity request, IEnumerable<AttrSetConfig> attrSets)
         {
-            if (attrSets == null) return;
+            if (attrSets == null)
+                return;
 
-            var attributes = EntityManager.AddBuffer<BAscInitAttribute>(request);
             foreach (var attrSet in attrSets)
             {
-                if (attrSet.Settings == null)
-                    continue;
-
-                foreach (var setting in attrSet.Settings)
+                if (attrSet?.Attributes == null) continue;
+                foreach (var attr in attrSet.Attributes)
                 {
-                    attributes.Add(new BAscInitAttribute
+                    var buffer = EntityManager.HasBuffer<BInitAttribute>(request)
+                        ? EntityManager.GetBuffer<BInitAttribute>(request)
+                        : EntityManager.AddBuffer<BInitAttribute>(request);
+                    buffer.Add(new BInitAttribute
                     {
-                        AttrSetCode = attrSet.Code,
-                        AttributeCode = setting.Code,
-                        BaseValue = setting.InitValue,
-                        IsClampMin = setting.IsClampMin,
-                        IsClampMax = setting.IsClampMax,
-                        MinValue = setting.Min,
-                        MaxValue = setting.Max,
+                        AttrSetCode = attrSet.SetCode,
+                        Code = attr.Code,
+                        BaseValue = attr.BaseValue,
+                        MaxValue = attr.MaxValue,
+                        MinValue = attr.MinValue,
                     });
                 }
             }
@@ -421,250 +268,18 @@ namespace GAS.Runtime
 
         private void FillInitAbilities(Entity request, IEnumerable<int> baseAbilityCodes)
         {
-            if (baseAbilityCodes == null) return;
+            if (baseAbilityCodes == null)
+                return;
 
-            var abilities = EntityManager.AddBuffer<BAscInitAbility>(request);
             foreach (var abilityCode in baseAbilityCodes)
-                if (abilityCode > 0)
-                    abilities.Add(new BAscInitAbility { AbilityCode = abilityCode });
+            {
+                var buffer = EntityManager.HasBuffer<BInitAbility>(request)
+                    ? EntityManager.GetBuffer<BInitAbility>(request)
+                    : EntityManager.AddBuffer<BInitAbility>(request);
+                buffer.Add(new BInitAbility { AbilityCode = abilityCode });
+            }
         }
 
         #endregion
-
-        #region Observation
-
-        public int PresentationEventCount => Observation.PresentationEventCount;
-
-        public int PeekPresentationEvents(GasPresentationEventView[] output)
-        {
-            return Observation.PeekPresentationEvents(output);
-        }
-
-        #endregion
-    }
-
-    /// <summary>
-    /// Facade read side. It reads ECS authority as an observation view and never
-    /// caches gameplay state or drains presentation outboxes.
-    /// </summary>
-    public readonly struct AbilitySystemObservation
-    {
-        private readonly Entity _entity;
-
-        private static EntityManager EntityManager => GASManager.EntityManager;
-
-        internal AbilitySystemObservation(Entity entity)
-        {
-            _entity = entity;
-        }
-
-        public bool IsValid => _entity != Entity.Null && EntityManager.Exists(_entity);
-
-        public int GetLevel()
-        {
-            return TryGetLevel(out var level) ? level : 0;
-        }
-
-        public bool TryGetLevel(out int level)
-        {
-            level = 0;
-            if (!IsValid || !EntityManager.HasComponent<CAscBasicData>(_entity))
-                return false;
-
-            level = EntityManager.GetComponentData<CAscBasicData>(_entity).Level;
-            return true;
-        }
-
-        public bool HasTag(int tag)
-        {
-            if (!IsValid || !EntityManager.HasComponent<CTagMask>(_entity))
-                return false;
-
-            return TagHelper.TryGetDenseIndex(tag, out var denseIndex)
-                   && EntityManager.GetComponentData<CTagMask>(_entity).HasTag(denseIndex);
-        }
-
-        public bool HasAllTags(IEnumerable<int> tags)
-        {
-            if (tags == null || !IsValid || !EntityManager.HasComponent<CTagMask>(_entity))
-                return false;
-
-            var mask = EntityManager.GetComponentData<CTagMask>(_entity);
-            foreach (var tag in tags)
-            {
-                if (!TagHelper.TryGetDenseIndex(tag, out var denseIndex) || !mask.HasTag(denseIndex))
-                    return false;
-            }
-            return true;
-        }
-
-        public bool HasAnyTags(IEnumerable<int> tags)
-        {
-            if (tags == null || !IsValid || !EntityManager.HasComponent<CTagMask>(_entity))
-                return false;
-
-            var mask = EntityManager.GetComponentData<CTagMask>(_entity);
-            foreach (var tag in tags)
-            {
-                if (TagHelper.TryGetDenseIndex(tag, out var denseIndex) && mask.HasTag(denseIndex))
-                    return true;
-            }
-            return false;
-        }
-
-        public float GetAttributeCurrentValue(int attrSetCode, int attributeCode)
-        {
-            return TryGetAttributeCurrentValue(attrSetCode, attributeCode, out var value) ? value : 0f;
-        }
-
-        public float GetAttributeBaseValue(int attrSetCode, int attributeCode)
-        {
-            return TryGetAttributeBaseValue(attrSetCode, attributeCode, out var value) ? value : 0f;
-        }
-
-        public bool TryGetAttributeCurrentValue(int attrSetCode, int attributeCode, out float value)
-        {
-            return TryGetAttributeValue(attrSetCode, attributeCode, current: true, out value);
-        }
-
-        public bool TryGetAttributeBaseValue(int attrSetCode, int attributeCode, out float value)
-        {
-            return TryGetAttributeValue(attrSetCode, attributeCode, current: false, out value);
-        }
-
-        public bool IsAbilityActive(int abilityCode)
-        {
-            var ability = FindAbility(abilityCode);
-            if (ability == Entity.Null || !EntityManager.HasComponent<CAbilityRuntimeState>(ability))
-                return false;
-
-            var runtime = EntityManager.GetComponentData<CAbilityRuntimeState>(ability);
-            return runtime.Phase is EAbilityPhase.Activating or EAbilityPhase.Active;
-        }
-
-        public int PresentationEventCount
-        {
-            get
-            {
-                return IsValid && EntityManager.HasBuffer<BPresentationEvent>(_entity)
-                    ? EntityManager.GetBuffer<BPresentationEvent>(_entity).Length
-                    : 0;
-            }
-        }
-
-        public int PeekPresentationEvents(GasPresentationEventView[] output)
-        {
-            if (output == null
-                || output.Length == 0
-                || !IsValid
-                || !EntityManager.HasBuffer<BPresentationEvent>(_entity))
-            {
-                return 0;
-            }
-
-            var events = EntityManager.GetBuffer<BPresentationEvent>(_entity);
-            var count = output.Length < events.Length ? output.Length : events.Length;
-            for (var i = 0; i < count; i++)
-                output[i] = GasPresentationEventView.From(events[i]);
-
-            return count;
-        }
-
-        private bool TryGetAttributeValue(int attrSetCode, int attributeCode, bool current, out float value)
-        {
-            value = 0f;
-            if (!IsValid || !EntityManager.HasBuffer<BAttribute>(_entity))
-                return false;
-
-            var attributes = EntityManager.GetBuffer<BAttribute>(_entity);
-            for (var i = 0; i < attributes.Length; i++)
-            {
-                if (!IsAttribute(attributes[i], attrSetCode, attributeCode))
-                    continue;
-
-                value = current ? attributes[i].CurrentValue : attributes[i].BaseValue;
-                return true;
-            }
-            return false;
-        }
-
-        private Entity FindAbility(int abilityCode)
-        {
-            if (!IsValid || !EntityManager.HasBuffer<BGrantedAbility>(_entity))
-                return Entity.Null;
-
-            var abilities = EntityManager.GetBuffer<BGrantedAbility>(_entity);
-            for (var i = 0; i < abilities.Length; i++)
-            {
-                var ability = abilities[i].AbilityEntity;
-                if (!EntityManager.Exists(ability) || !EntityManager.HasComponent<CAbilityConfig>(ability))
-                    continue;
-
-                var config = EntityManager.GetComponentData<CAbilityConfig>(ability).Config;
-                if (config.IsCreated && config.Value.Code == abilityCode)
-                    return ability;
-            }
-            return Entity.Null;
-        }
-
-        private static bool IsAttribute(BAttribute attribute, int attrSetCode, int attributeCode)
-        {
-            return attribute.AttrSetCode == attrSetCode && attribute.Code == attributeCode;
-        }
-    }
-
-    public struct GasPresentationEventView
-    {
-        public int Frame;
-        public int Sequence;
-        public EPresentationEventKind Kind;
-        public EGameplayEventType GameplayEventType;
-        public EGameplayCueEvent CueEvent;
-        public Entity SourceAsc;
-        public Entity TargetAsc;
-        public Entity SourceAbility;
-        public Entity GameplayEffect;
-        public Entity SourceEntity;
-        public Entity CueEntity;
-        public CueSourceType CueSourceType;
-        public int ContextId;
-        public int EventCode;
-        public int AttrSetCode;
-        public int AttributeCode;
-        public int TagIndex;
-        public float Value;
-        public float OldValue;
-        public float NewValue;
-        public float DamageAmount;
-        public byte Flag;
-
-        public static GasPresentationEventView From(BPresentationEvent evt)
-        {
-            return new GasPresentationEventView
-            {
-                Frame = evt.Frame,
-                Sequence = evt.Sequence,
-                Kind = evt.Kind,
-                GameplayEventType = evt.GameplayEventType,
-                CueEvent = evt.CueEvent,
-                SourceAsc = evt.SourceAsc,
-                TargetAsc = evt.TargetAsc,
-                SourceAbility = evt.SourceAbility,
-                GameplayEffect = evt.GameplayEffect,
-                SourceEntity = evt.SourceEntity,
-                CueEntity = evt.CueEntity,
-                CueSourceType = evt.CueSourceType,
-                ContextId = evt.ContextId,
-                EventCode = evt.EventCode,
-                AttrSetCode = evt.AttrSetCode,
-                AttributeCode = evt.AttributeCode,
-                TagIndex = evt.TagIndex,
-                Value = evt.Value,
-                OldValue = evt.OldValue,
-                NewValue = evt.NewValue,
-                DamageAmount = evt.DamageAmount,
-                Flag = evt.Flag,
-            };
-        }
     }
 }

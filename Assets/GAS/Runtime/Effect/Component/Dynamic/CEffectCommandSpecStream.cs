@@ -556,19 +556,6 @@ namespace GAS.Runtime
             em.SetComponentData(streamEntity, stream);
         }
 
-        public static BEffectCommand AppendLegacyRequestBridgeCommand(
-            EntityManager em,
-            in CApplyGameplayEffectRequest request,
-            Entity targetAsc,
-            ETargetDataKind targetDataKind,
-            IReadOnlyList<BSetByCallerValue> setByCallerValues = null)
-        {
-            return AppendCommand(
-                em,
-                ToCommand(request, targetAsc, targetDataKind, EEffectCommandSource.LegacyRequestBridge),
-                setByCallerValues);
-        }
-
         public static BEffectCommand ToCommand(
             in CApplyGameplayEffectRequest request,
             Entity targetAsc,

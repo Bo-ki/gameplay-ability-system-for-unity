@@ -34,9 +34,6 @@ namespace GAS.Runtime
             var em = state.EntityManager;
             var abilities = _cleanupQuery.ToEntityArray(Allocator.Temp);
             var ecb = new EntityCommandBuffer(Allocator.Temp);
-            var currentFrame = SystemAPI.TryGetSingleton<GlobalTimer>(out var timer)
-                ? timer.Frame
-                : GASRuntimeFrameContext.ResolveCurrentFrame(em);
             using var gameplayEventWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             foreach (var ability in abilities)
@@ -51,7 +48,6 @@ namespace GAS.Runtime
 
                 var owner = baseInfo.Owner;
                 var lifecycleRequest = ResolveLifecycleRequest(em, ability, shouldCancel);
-                CleanupAbilityCreatedEffects(em, ref ecb, ability, owner, currentFrame);
                 AbilityRuntimeActions.RemoveActivationOwnedTags(ability, em);
                 var destroyOnCleanup = CleanupGrantedAbilityIfNeeded(em, ref ecb, ability, owner, shouldCancel);
 
@@ -137,44 +133,6 @@ namespace GAS.Runtime
             public Entity SourceAbility;
             public Entity SourceEffect;
             public int SourceAbilityCode;
-        }
-
-        private static void CleanupAbilityCreatedEffects(
-            EntityManager em,
-            ref EntityCommandBuffer ecb,
-            Entity ability,
-            Entity owner,
-            int currentFrame)
-        {
-            if (!em.Exists(owner) || !em.HasBuffer<BGameplayEffect>(owner))
-                return;
-
-            var effects = em.GetBuffer<BGameplayEffect>(owner);
-            var toRemove = new List<Entity>();
-            for (var i = 0; i < effects.Length; i++)
-            {
-                var effect = effects[i].GameplayEffect;
-                if (!em.Exists(effect) || !em.HasComponent<CCreatedByAbility>(effect))
-                    continue;
-
-                if (em.GetComponentData<CCreatedByAbility>(effect).sourceAbility == ability)
-                    toRemove.Add(effect);
-            }
-
-            for (var i = 0; i < toRemove.Count; i++)
-                MarkEffectForRemoval(em, ref ecb, toRemove[i], currentFrame);
-        }
-
-        private static void MarkEffectForRemoval(
-            EntityManager em,
-            ref EntityCommandBuffer ecb,
-            Entity effect,
-            int currentFrame)
-        {
-            if (!em.Exists(effect) || !em.HasComponent<CEffectContext>(effect))
-                return;
-
-            EffectRuntimeUtility.MarkEffectForRemoval(em, ref ecb, effect, currentFrame);
         }
 
         private static bool CleanupGrantedAbilityIfNeeded(

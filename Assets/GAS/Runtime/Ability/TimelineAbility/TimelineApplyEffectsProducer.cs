@@ -99,15 +99,12 @@ namespace GAS.Runtime
                     Level = baseInfo.Level,
                 };
 
-                var request = GameplayEffectRequestWriter.AppendSimpleInstantCommandsOrCreateTargetListRequest(
+                GameplayEffectRequestWriter.AppendSimpleInstantCommandsOrCreateTargetListRequest(
                     entityManager,
                     requestData,
                     validTargets,
                     targetKind,
                     "TimelineApplyEffectsRequest");
-
-                if (request != Entity.Null)
-                    createdRequests?.Add(request);
 
                 createdCount++;
             }

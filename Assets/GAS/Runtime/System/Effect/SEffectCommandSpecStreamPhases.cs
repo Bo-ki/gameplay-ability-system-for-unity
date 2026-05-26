@@ -4,7 +4,7 @@ using static GAS.Runtime.EffectCommandSpecStreamPhaseUtility;
 namespace GAS.Runtime
 {
     [UpdateInGroup(typeof(GASCommandGroup))]
-    [UpdateAfter(typeof(SRemoveGameplayEffectRequest))]
+    [UpdateAfter(typeof(STryActivateAbility))]
     public partial struct SEffectCommandIngest : ISystem
     {
         public void OnCreate(ref SystemState state)

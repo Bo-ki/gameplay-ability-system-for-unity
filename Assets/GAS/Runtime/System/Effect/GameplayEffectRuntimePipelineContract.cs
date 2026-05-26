@@ -83,20 +83,6 @@ namespace GAS.Runtime
         private static readonly GameplayEffectRuntimePipelineContractEntry[] Entries =
         {
             new(
-                GameplayEffectRuntimePipelineKind.LegacyInstantEntityLifecycle,
-                GameplayEffectRuntimePipelineStatus.LegacyFrozen,
-                GameplayEffectRuntimePipelineRestriction.MigrationOnly
-                | GameplayEffectRuntimePipelineRestriction.NoNewFeatureExpansion
-                | GameplayEffectRuntimePipelineRestriction.NotDefaultNewBusinessPath
-                | GameplayEffectRuntimePipelineRestriction.NotHighFrequencyReactionInput,
-                nameof(CApplyGameplayEffectRequest),
-                nameof(SApplyGameplayEffectRequest),
-                "runtime GE entity / global observation projection",
-                typeof(CApplyGameplayEffectRequest),
-                typeof(SApplyGameplayEffectRequest),
-                typeof(CEffectSpecData),
-                typeof(BGameplayEvent)),
-            new(
                 GameplayEffectRuntimePipelineKind.EffectCommandSpecStream,
                 GameplayEffectRuntimePipelineStatus.TargetContract,
                 GameplayEffectRuntimePipelineRestriction.AvoidsRuntimeGameplayEffectEntity,
@@ -117,14 +103,6 @@ namespace GAS.Runtime
         };
 
         public static IReadOnlyList<GameplayEffectRuntimePipelineContractEntry> All => Entries;
-
-        public static bool IsLegacyInstantEntityLifecycleFrozen =>
-            TryFind(
-                GameplayEffectRuntimePipelineKind.LegacyInstantEntityLifecycle,
-                out var entry)
-            && entry.Status == GameplayEffectRuntimePipelineStatus.LegacyFrozen
-            && entry.HasRestriction(GameplayEffectRuntimePipelineRestriction.MigrationOnly)
-            && entry.HasRestriction(GameplayEffectRuntimePipelineRestriction.NoNewFeatureExpansion);
 
         public static bool AllowsNewFeatureExpansion(GameplayEffectRuntimePipelineKind kind)
         {

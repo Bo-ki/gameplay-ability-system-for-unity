@@ -52,7 +52,13 @@ namespace GAS.Runtime
                 return Entity.Null;
 
             var cooldown = entityManager.GetComponentData<CAbilityCooldown>(ability);
-            return CreateSelfGameplayEffectRequest(entityManager, ability, baseInfo, cooldown.GameplayEffectCode, cooldown.Cooldown);
+            return AppendSimpleInstantSelfCommandOrCreateRequest(
+                entityManager,
+                ability,
+                baseInfo,
+                cooldown.GameplayEffectCode,
+                cooldown.Cooldown,
+                "AbilityCooldownRequest");
         }
 
         public static void RemoveActivationOwnedTags(Entity ability, EntityManager entityManager)
@@ -168,41 +174,6 @@ namespace GAS.Runtime
                 sources.RemoveAt(i);
                 TagRuntimeUtility.RemoveTagIndexFromEffectiveMaskIfUnreferenced(entityManager, owner, tagIndex);
             }
-        }
-
-        private static Entity CreateSelfGameplayEffectRequest(
-            EntityManager entityManager,
-            Entity ability,
-            in CAbilityBaseInfo baseInfo,
-            int gameplayEffectCode,
-            int durationFrameOverride)
-        {
-            if (gameplayEffectCode <= 0
-                || baseInfo.Owner == Entity.Null
-                || !entityManager.Exists(baseInfo.Owner)
-                || entityManager.HasComponent<CAscDestroying>(baseInfo.Owner))
-                return Entity.Null;
-
-            var request = GameplayEffectRequestWriter.Create(
-                entityManager,
-                new CApplyGameplayEffectRequest
-                {
-                    SourceAsc = baseInfo.Owner,
-                    SourceAbility = ability,
-                    Instigator = baseInfo.Owner,
-                    Causer = ability,
-                    GameplayEffectCode = gameplayEffectCode,
-                    Level = baseInfo.Level,
-                    DurationFrameOverride = durationFrameOverride,
-                },
-                new CTargetDataHeader
-                {
-                    SourceAsc = baseInfo.Owner,
-                    SourceAbility = ability,
-                    Kind = ETargetDataKind.Self,
-                });
-            GameplayEffectRequestWriter.AddTarget(entityManager, request, baseInfo.Owner);
-            return request;
         }
 
         private static Entity AppendSimpleInstantSelfCommandOrCreateRequest(

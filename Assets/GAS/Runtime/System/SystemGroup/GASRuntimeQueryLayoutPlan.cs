@@ -528,31 +528,6 @@ namespace GAS.Runtime
                     },
                     Array.Empty<Type>()),
                 Entry(
-                    GASRuntimeQueryLayoutEntryId.GameplayEffectApplyRequest,
-                    GASRuntimeLayoutDomain.GameplayEffect,
-                    GASRuntimeEntityKind.Request,
-                    GASRuntimeLayoutCapability.QueryBased
-                    | GASRuntimeLayoutCapability.EcbMigrationCandidate
-                    | GASRuntimeLayoutCapability.RequiresMainThreadEntityManager
-                    | GASRuntimeLayoutCapability.StructuralChanges
-                    | GASRuntimeLayoutCapability.ReadsDefinitionData
-                    | GASRuntimeLayoutCapability.WritesSimulationState,
-                    GASRuntimeLayoutBoundary.RequestEntityWriteBoundary
-                    | GASRuntimeLayoutBoundary.CrossEntityLookup
-                    | GASRuntimeLayoutBoundary.DynamicBufferMutation
-                    | GASRuntimeLayoutBoundary.DefinitionRuntimeBoundary
-                    | GASRuntimeLayoutBoundary.StructuralEntityManagerHotspot,
-                    GASRuntimeLayoutDecision.NeedsEcbMigration,
-                    new[]
-                    {
-                        GASRuntimeLayoutComponentSlot.ApplyGameplayEffectRequest,
-                    },
-                    new[]
-                    {
-                        GASRuntimeLayoutComponentSlot.TargetData,
-                    },
-                    typeof(SApplyGameplayEffectRequest)),
-                Entry(
                     GASRuntimeQueryLayoutEntryId.GameplayEffectActiveRuntime,
                     GASRuntimeLayoutDomain.GameplayEffect,
                     GASRuntimeEntityKind.GameplayEffectRuntime,
@@ -587,8 +562,6 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.EffectFinalDestroy,
                         GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexStableRow,
                     },
-                    typeof(SEffectApply),
-                    typeof(SOngoingTagRequirements),
                     typeof(SEffectRemove),
                     typeof(SEffectFinalDestroy),
                     typeof(SEffectTick)),
