@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using GAS.Runtime.Generated;
 using Unity.Entities;
 
 namespace GAS.Runtime
@@ -350,17 +349,14 @@ namespace GAS.Runtime
             return new GameplayCueConfig(typeof(HeadlessAutoChessNoopCue), new XParamNone());
         }
 
-        private static CTagMask CreateDenseMask(IEnumerable<int> tagCodes)
+        private static CTagMask CreateDenseMask(IEnumerable<int> tagIndices)
         {
             var mask = new CTagMask();
-            if (tagCodes == null)
+            if (tagIndices == null)
                 return mask;
 
-            foreach (var tagCode in tagCodes)
-            {
-                if (AutoChessTagMaskTable.TryGetDenseIndex(tagCode, out var denseIndex))
-                    mask.AddTag(denseIndex);
-            }
+            foreach (var tagIndex in tagIndices)
+                mask.AddTag(tagIndex);
 
             return mask;
         }

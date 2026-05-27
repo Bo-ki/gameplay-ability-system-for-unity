@@ -707,7 +707,7 @@ namespace GAS.Editor
             foreach (var row in context.Rows.Select((value, index) => new { value, index }))
             {
                 writer.WriteLine($"public const int {row.value.BlobSchemaName}Kind = {row.index};");
-                writer.WriteLine($"public const int {row.value.BlobSchemaName}DefinitionKind = {(int)row.value.DefinitionKind};");
+                writer.WriteLine($"public const int {row.value.DomainName}DefinitionKind = {(int)row.value.DefinitionKind};");
             }
             writer.Indent--;
             writer.WriteLine("}");

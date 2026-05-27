@@ -20,23 +20,9 @@ namespace GAS.Editor
             new ValidationReportPhase(),
         };
 
-        private static readonly IGasCodeGenPhase[] s_autoChessDemoPhases =
-        {
-            new AutoChessAttributeComponentPhase(),
-            new AutoChessTagMaskPhase(),
-            new AutoChessUnitConfigPhase(),
-            new AutoChessMmcEvaluatorPhase(),
-            new AutoChessScenarioBuildPlanPhase(),
-        };
-
         public static void RunAll()
         {
             Run(s_corePhases);
-        }
-
-        public static void RunAutoChessDemo()
-        {
-            Run(s_corePhases.Concat(s_autoChessDemoPhases));
         }
 
         internal static void Run(IEnumerable<IGasCodeGenPhase> phases)

@@ -16,7 +16,7 @@
 
 本轮审查以 `08-Luban-SourceGenerator配置生成链路Spec.md`、`90-目标态不变量.md`、`13-EntityComponent物理布局Spec.md` 和 DOTS 规则索引为准，结论是当前计划必须从 AutoChess 业务闭环退回到通用 Luban / SourceGenerator 核心生成链路。
 
-### 当前偏差
+### 重定位前偏差
 
 1. `GasCodeGenPipeline.RunAll()` 仍默认执行 `AutoChessAttributeComponentPhase`、`AutoChessTagMaskPhase`、`AutoChessUnitConfigPhase`、`AutoChessMmcEvaluatorPhase`、`AutoChessScenarioBuildPlanPhase`。这违反 `08` 的通用 `Context -> RowMetadata -> Phase -> Manifest` 主链定位，也把 demo 旧架构混进了核心生成链。
 2. `RowMetadataFactory` 仍在代码里硬编码 `HeadlessAutoChess` 前缀。根据 `08` 的 `GasCodeGenSettings` 要求，项目名前缀只能来自配置，不能存在于生成器实现。
@@ -31,7 +31,7 @@
 
 1. `GenerateAllCode()` 默认只运行 `BeanUpdater + CoreGasCodeGenPipeline`。
 2. Core phase 固定为：`AssemblyDefinition`、`DefinitionIndex`、`BlobSchema`、`StaticLookup`、`BakerGlue`、`ComponentTypeSet`、`QueryLayout`、`ValidationReport`。
-3. AutoChess 专用 phase 只能作为显式 demo phase 存在，不进入默认 `RunAll()`，不作为当前验收目标。
+3. AutoChess 专用 phase 当前轮直接后置，不保留在 Core pipeline 中；后续若重启 Demo 生成链路，必须另起 Demo 专用入口且不得污染 `RunAll()`。
 4. Core generated 输出根目录固定收敛到 `Assets/GAS/Generated/CodeGen`；AutoChessDemo 不再作为默认 glue 输出位置。
 5. `RowMetadataFactory` 的项目名前缀剥离、生成 namespace、输出目录必须由 `GasCodeGenSettings` 或 `GASSettingAsset` 承载。
 6. Runtime-visible generated artifact 不得出现 `DefinitionRow`、row factory、`IReadOnlyList<*DefinitionRow>`、`cfg.*`、`XLuban`、`SimpleJSON`、`JsonReader` 或 managed row snapshot。
@@ -58,7 +58,7 @@
 已经具备的 Core 基础：
 
 - 主入口 `GenerateAllCode()` 已切到 `BeanUpdater + GasCodeGenPipeline`。
-- `GasCodeGenPipeline.RunAll()` 已默认只执行 core phases；AutoChess phase 已拆到显式 `RunAutoChessDemo()`。
+- `GasCodeGenPipeline.RunAll()` 已默认只执行 core phases；AutoChess 专用 phase 与 `RunAutoChessDemo()` 入口已从当前 Core 收口范围移除。
 - `AssemblyDefinitionPhase` 已进入 core phases，generated runtime/editor asmdef 由管线按当前 row source assembly 自动生成。
 - `DefinitionIndexPhase` 已进入 core phases。
 - `GASSettingAsset` / `GasCodeGenSettings` 已承载 generated namespace、输出根目录、row prefix strip。
@@ -91,7 +91,7 @@
 
 - AutoChessScenario bootstrap、driver、summon projection、fact projection、presentation marker。
 - `HeadlessAutoChessDefinitionSource` managed row adapter 的业务补全。
-- AutoChess 专用 Attribute / Tag / Unit / MMC / Scenario phase 深化。
+- AutoChess 专用 Attribute / Tag / Unit / MMC / Scenario phase 及其 demo 入口。
 - 基于 AutoChess 的 runtime facts、settlement、scale profile、validation expectation。
 
 ## 下一轮目标
@@ -112,4 +112,4 @@
 - Editor/Baking lookup builder 使用 `GASGeneratedDefinitionLookupBuilder`，不得回流 `BlobDefinitionLookupBuilder`。
 - Luban C# 输出保留在 `Assets/DataGenerated/Luban/CSharp` 并由 Unity 编译；GAS generated Runtime 不引用 `cfg.*` / `Luban.Runtime` / `SimpleJSON`。
 - Runtime-visible generated 文件不得引入 `DefinitionRow`、row factory、`cfg.*`、`XLuban`、`SimpleJSON`、`JsonReader`。
-- AutoChessDemo 当前改动只作为迁移期工作树状态保留，不纳入本轮完成度判断。
+- AutoChessDemo 旧业务链路不纳入本轮提交范围；当前 Core 收口不得新增或补全 AutoChessDemo generated glue、scenario driver、runtime projection。

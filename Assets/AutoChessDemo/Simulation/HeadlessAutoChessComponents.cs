@@ -144,10 +144,6 @@ namespace GAS.Runtime
     public struct CHeadlessAutoChessDriver : IComponentData
     {
         public bool Enabled;
-        public int ScenarioCode;
-        public HeadlessAutoChessScenarioVariant Variant;
-        public int DeterministicSeed;
-        public int SpawnedUnitCount;
         public int BoardWidth;
         public int BoardHeight;
         public int Round;
@@ -167,18 +163,10 @@ namespace GAS.Runtime
         public HeadlessAutoChessTeam Winner;
     }
 
-    public struct CHeadlessAutoChessScenarioBootstrapRequest : IComponentData
-    {
-        public int ScenarioCode;
-        public HeadlessAutoChessScenarioVariant Variant;
-        public int DeterministicSeed;
-    }
-
     public struct CHeadlessAutoChessBattleFacts : IComponentData
     {
         public int LastDamageProjectionFrame;
         public int LastTypedFactFrame;
-        public int LastProcessedTypedFactSequence;
         public int ProcessedAttributeEventCount;
         public int HealthDamageFactCount;
         public int ShieldAppliedFactCount;
@@ -212,7 +200,6 @@ namespace GAS.Runtime
     public struct CHeadlessAutoChessGameplayEffectFacts : IComponentData
     {
         public int LastProjectionFrame;
-        public int LastProcessedGameplayEventSequence;
         public int ProcessedGameplayEventCount;
         public int GameplayEffectAppliedFactCount;
     }
@@ -694,14 +681,6 @@ namespace GAS.Runtime
         public float MaxShield;
         public float MaxArcaneResistance;
         public HeadlessAutoChessTargetPolicy PrimaryTargetPolicy;
-    }
-
-    public struct CHeadlessAutoChessSummonProcessed : IComponentData
-    {
-        public Entity SummonedAsc;
-        public int Frame;
-        public int Turn;
-        public int SummonSerial;
     }
 
     public struct CHeadlessAutoChessSummonedUnit : IComponentData
