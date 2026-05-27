@@ -29,6 +29,11 @@
 
 **不含 Buffer。** Arena allocator 是 NativeContainer（在 `FrameArenaStateComponent` 中 by ref），非 DynamicBuffer。
 
+> **`PRF-34` 警告**：`FrameArenaStateComponent` 包含 `AllocatorManager.AllocatorHandle`（NativeContainer 相关类型）。**禁止**对该 entity 调度 `IJobChunk`/`IJobEntity`（安全系统无法追踪 component 内嵌容器的读写依赖）。正确做法：
+> 1. 主线程通过 `SystemAPI.GetSingletonRW<FrameArenaStateComponent>()` 读取 allocator handle
+> 2. 将 handle 作为 Job 参数传入，不让 Job 通过 `ComponentLookup` 访问 `FrameArenaStateComponent`
+> 3. `AllocatorHandle` 本身是轻量 struct（index + version），作为 Job 参数传递无性能问题
+
 ---
 
 ### Entity 2: EffectCommandStreamOwner（帧命令流）
@@ -58,10 +63,20 @@
 
 **Scale 路径：**
 ```
-AM2-AM3: 全局 stream owner（当前）
-     ↓ 当 global buffer pressure 超过阈值
-AM4+: 切换到 per-owner (ASC) DynamicBuffer 或 NativeStream fan-in
+AM2-AM3: 全局 stream owner（当前 proof-only）
+     ↓ 当 global buffer pressure 超过阈值 / 需要 ScheduleParallel
+AM4+: 切换到 per-owner (ASC) DynamicBuffer
+     - GEEffectCommandBuffer → 挂 ASC Entity（per-owner，可并行）
+     - GEEffectSpecBuffer → 挂 ASC Entity（per-owner，可并行）
+     - AttributeModifierBuffer → 挂 ASC Entity（per-owner，消除 O(N²) 扫描，PRF-06）
+     - GameplayEventBuffer → 挂 ASC Entity（per-owner，消除 O(N²) 扫描，PRF-06）
+     - GESetByCallerValueBuffer → 挂 ASC Entity（同 owner，SetByCaller range 生命周期一致）
+     - 保留 NativeStream fan-in 作为高规模备选（CASE-12 NAT-03）
 ```
+
+**AM4 per-owner 的并行收益：**
+- 全局 singleton → 必须串行写 → `ScheduleParallel` 收益为零
+- Per-owner → 每个 ASC 独立写自己的 buffer → 真正的 `ScheduleParallel`，O(N_asc) 并行
 
 ---
 
@@ -82,8 +97,10 @@ AM4+: 切换到 per-owner (ASC) DynamicBuffer 或 NativeStream fan-in
 |---|---|---|---|---|
 | `ASCIdentityComponent` | `IComponentData` | ~8 bytes | 否 | ASC 身份标识（PlayerId, TeamId） |
 | `AttributeComponent` (属性统称，每个属性一个独立 IComponentData) | `IComponentData` | ~16 bytes × N_attrs | 否 | **每种属性一个独立的 component type**（如 `HealthAttribute`, `ManaAttribute`）。属性 component 统一使用 `[属性名]Attribute` 命名（`IComponentData`），`Buffer` 后缀严格保留给 `IBufferElementData` |
-| `TagMaskComponent` | `IComponentData` | ~8 bytes | 否 | 当前 granted tag 的 bitmask（不是 tag component！） |
+| `TagMaskComponent` | `IComponentData` | ~24 bytes | 否 | 当前 granted tag 的三层 bitmask（192 tags），支持层级查询 |
 | `ASCActiveEffectsComponent` | `IComponentData` | ~4 bytes | 否 | active effect store 版本标记 |
+| `AbilitySlotBuffer` | `IBufferElementData` | ~16 bytes/slot | — | ASC → Ability Entity 反向查找，O(1) 定位，避免全量扫描 |
+| `PresentationEventBuffer` | `IBufferElementData` | ~32 bytes/event | — | per-ASC 表现事件 outbox，UI 直接读取对应 ASC 的 buffer，无需全量扫描 |
 | `ActiveGameplayEffectBuffer` | `IBufferElementData` | ~64 bytes/slot | — | **核心跨帧存储**；每个 slot 记录一个 active effect 的状态 |
 
 **`ActiveGameplayEffectBuffer` 结构：**
@@ -112,6 +129,27 @@ public struct ActiveGameplayEffectBuffer : IBufferElementData
 - **Cache 优化**：Attribute Delta Apply 只读/写变化的属性 component，无关属性不受影响
 - **Job 依赖精确性**：写 `HealthAttribute` 的 job 不会 block 读 `ManaAttribute` 的 job
 
+**关键约束 —— 属性集一致性（`PRF-03` `PRF-07`）：**
+
+Per-Attribute IComponentData 设计有效的前提是：**同一游戏模式内所有 ASC Entity 必须具有完全相同的属性 component 集合**。若不同角色类型有不同的属性集合（如战士有 `ArmorAttribute` 而法师没有），则每种角色类型产生一个独立 Archetype，与 Archetype < 10 目标矛盾。
+
+```
+正确（AutoChess 场景）:
+  所有棋子 ASC: HealthAttribute + ManaAttribute + AttackAttribute
+  → 1 个 ASC Archetype（属性层面）
+
+错误（不同角色不同属性集）:
+  战士 ASC: HealthAttribute + StrengthAttribute + ArmorAttribute
+  法师 ASC: HealthAttribute + ManaAttribute + SpellPowerAttribute
+  → 2 个 ASC Archetype（仅属性差异），随角色类型线性增长
+```
+
+当确实需要不同角色有不同属性时，评估两种替代方案：
+1. **统一属性集 + 默认值**：所有角色包含全部属性 component，不适用者设为 0（增加内存但 Archetype 不变）
+2. **FixedList 属性集**：用 `FixedList128Bytes<float2>` 替代 Per-Attribute IComponentData，所有 ASC 共享同一 Archetype，属性数量由 BlobAsset 定义（牺牲 Query 精确性换取 Archetype 统一）
+
+当前目标态默认选择方案 1（统一属性集），方案 2 作为规模备选。此约束必须在 Archetype 审计中验证。
+
 **Tag 为何用 Bitmask 而非 Tag Component：**
 
 > `PRF-03`: 每个 tag component 使 archetype 排列数翻倍
@@ -120,9 +158,35 @@ public struct ActiveGameplayEffectBuffer : IBufferElementData
 反模式: BGrantedTag_Stun, BGrantedTag_Slow, BGrantedTag_Bleed, ...
         → 10 个 tag component → 最多 2^10 = 1024 种 archetype
 
-正确:   TagMaskComponent (uint64 bitmask) → 最多 64 个 tag 用 1 个 component
+正确:   TagMaskComponent (3 × uint64 bitmask = 192 tags) → 1 个 component
         → 1 个 component type → 不增加 archetype 排列数
 ```
+
+**TagMaskComponent 结构：**
+
+```csharp
+public struct TagMaskComponent : IComponentData
+{
+    public ulong Mask0; // tag id 0-63
+    public ulong Mask1; // tag id 64-127
+    public ulong Mask2; // tag id 128-191
+
+    // 层级查询：检查 tag 或其任意祖先
+    // ancestorMask 由 TagHierarchyDefinition BlobAsset 预计算
+    public bool HasTagOrAncestor(TagMaskComponent ancestorMask) => ...;
+
+    // 批量检查：是否满足全部 RequiredTags
+    public bool HasAllTags(TagMaskComponent required) => ...;
+
+    // 批量检查：是否包含任意 BlockedTags
+    public bool HasAnyTag(TagMaskComponent blocked) => ...;
+}
+```
+
+**Tag 层级定义（`TagHierarchyDefinition` BlobAsset）：**
+- 每个 tag 的祖先 mask 预计算（查询时直接 AND，零递归）
+- 由 Luban/SourceGenerator 生成，不可变，Burst 可消费
+- 例：`Status.Debuff.Stun` 的 ancestorMask 包含 `Status` + `Status.Debuff` + `Status.Debuff.Stun`
 
 ---
 
@@ -147,13 +211,27 @@ public struct ActiveGameplayEffectBuffer : IBufferElementData
 
 **与 ASC Entity 的关系：**
 - Ability Entity 通过 `AbilityStateComponent.SourceAsc` 指向 owning ASC
+- **ASC → Ability 反向查找**：通过 ASC Entity 上的 `AbilitySlotBuffer` 直接定位所有 Ability Entity，O(N_slots_per_asc) 而非 O(N_abilities_global) 全量扫描
 - Ability Entity 可独立 query，不增加 ASC Entity 的 archetype 复杂度
-- `AbilityActiveTag` 被 revoke 后 entity 进入 Structural Playback 销毁队列
+- `AbilityActiveTag` 被 revoke 后 entity 进入 Structural Playback 销毁队列，同时从 `AbilitySlotBuffer` 移除对应 slot
+
+**`AbilitySlotBuffer` 结构（挂在 ASC Entity 上）：**
+
+```csharp
+[InternalBufferCapacity(8)]  // 大多数角色 granted ability < 8 个
+public struct AbilitySlotBuffer : IBufferElementData
+{
+    public Entity AbilityEntity;  // 指向 Ability Entity
+    public int    AbilityCode;    // 冗余存储，避免 Lookup（热路径优化）
+    public byte   SlotIndex;      // 技能槽位（0-7），用于 UI 绑定
+}
+```
 
 **关键约束：**
 - Ability Entity 是 ASC Entity 的独立子 entity，不是 ASC 上的 component
 - Ability 的激活/冷却/结束等高频状态切换通过 enableable toggle + enum state，不触发结构变化
 - 目标解析结果 `TargetDataBuffer` 是 frame-local buffer，消费者（EffectCommand 生成）读取后清空
+- Ability grant 时向 `AbilitySlotBuffer` 添加 slot；revoke 时移除 slot 并销毁 Ability Entity（通过 Structural Playback ECB）
 
 ---
 
@@ -204,6 +282,49 @@ public struct ActiveGameplayEffectBuffer : IBufferElementData
 
 ---
 
+## ASC Entity 批量创建策略（`P1-14`）
+
+> **`P1-14`**：禁止逐 Component 构建 Entity Archetype。使用 `EntityManager.CreateEntity()` 后逐次 `AddComponent<T>()` 会在每次调用时创建中间 archetype，这些中间 archetype 在应用剩余生命周期内持续存在并增加所有 `EntityQuery` 的计算开销。
+
+**正确做法 —— 预建 Archetype 批量创建：**
+
+```csharp
+// 在 GASFrameArenaSetupSystem.OnCreate 或 ICustomBootstrap 中一次性创建
+var ascArchetype = EntityManager.CreateArchetype(
+    typeof(ASCIdentityComponent),
+    typeof(HealthAttribute),        // 属性 component（按属性集一致性约束，全角色相同）
+    typeof(ManaAttribute),
+    typeof(AttackAttribute),
+    typeof(TagMaskComponent),
+    typeof(ASCActiveEffectsComponent),
+    typeof(AbilitySlotBuffer),
+    typeof(ActiveGameplayEffectBuffer),
+    typeof(GEEffectCommandBuffer),
+    typeof(GESetByCallerValueBuffer),
+    typeof(GEEffectSpecBuffer),
+    typeof(AttributeModifierBuffer),
+    typeof(GameplayEventBuffer),
+    typeof(PresentationEventBuffer),
+    typeof(AbilityActiveTag),       // IEnableableComponent
+    typeof(PeriodDueTag)            // IEnableableComponent
+);
+
+// 批量创建 ASC Entity（AutoChess battle init 等场景）
+var entities = new NativeArray<Entity>(count, Allocator.Temp);
+EntityManager.CreateEntity(ascArchetype, entities);
+```
+
+**为什么必须预建 Archetype：**
+- ECB 逐个 `AddComponent` → N-1 个冗余中间 Archetype 永久存在
+- AutoChess 50 棋子逐个添加 5 个 component → 4 个冗余 Archetype，每次 Query 创建/更新都要遍历
+- 预建 Archetype → 零中间 Archetype，所有 ASC Entity 共享同一 Archetype
+
+**验收指标**：Debugger 报告 `ascArchetypeCount = 1`（所有 ASC Entity 属于同一 Archetype），`intermediateArchetypeCount = 0`。
+
+---
+
+---
+
 ## Archetype 审计目标
 
 | 指标 | 目标值 | 告警阈值 | 当前 ISSUE |
@@ -227,7 +348,7 @@ public struct ActiveGameplayEffectBuffer : IBufferElementData
 | `GEStreamOwnerComponent` | EffectCommandStreamOwner | ~16 bytes | version, sequence |
 | `ASCIdentityComponent` | ASC Entity | ~8 bytes | PlayerId, TeamId |
 | `AttributeComponent` (每种属性一个 type) | ASC Entity | ~16 bytes/type | CurrentValue, BaseValue, Bonus |
-| `TagMaskComponent` | ASC Entity | ~8 bytes | granted tag bitmask |
+| `TagMaskComponent` | ASC Entity | ~24 bytes | 三层 uint64 bitmask（192 tags）+ 层级查询 |
 | `ASCActiveEffectsComponent` | ASC Entity | ~4 bytes | store version marker |
 | `AbilityCommandRequest` | Request Entity | ~32 bytes | ability code, source, target |
 | `TargetAcquisitionComponent` | Ability Entity / ASC Entity | ~16 bytes | target selection mode, filter params |
@@ -243,6 +364,8 @@ public struct ActiveGameplayEffectBuffer : IBufferElementData
 | `AttributeModifierBuffer` | EffectCommandStreamOwner | 512 | ~24 bytes |
 | `ActiveEffectMutationBuffer` | EffectCommandStreamOwner | 128 | ~32 bytes |
 | `GameplayEventBuffer` | EffectCommandStreamOwner | 256 | ~32 bytes |
+| `AbilitySlotBuffer` | ASC Entity | 8 | ~16 bytes |
+| `PresentationEventBuffer` | ASC Entity | 4 | ~32 bytes |
 | `ActiveGameplayEffectBuffer` | ASC Entity | 8 | ~64 bytes |
 | `TargetDataBuffer` | Ability Entity / ASC Entity | 16 | ~8 bytes |
 
@@ -287,6 +410,8 @@ public struct ActiveGameplayEffectBuffer : IBufferElementData
 | `AttributeModifierBuffer` | 512 | ~12 KB | 2048 | > 50% | frame-local |
 | `ActiveEffectMutationBuffer` | 128 | ~4 KB | 512 | > 50% | frame-local |
 | `GameplayEventBuffer` | 256 | ~8 KB | 1024 | > 50% | frame-local |
+| `AbilitySlotBuffer` | 8 | ~128 bytes | 32 slots | > 50% | **跨帧存储**，ASC→Ability 反向查找 |
+| `PresentationEventBuffer` | 4 | ~128 bytes | 16 events | > 50% | per-ASC outbox，UI 直接读取 |
 | `ActiveGameplayEffectBuffer` | 8 | ~512 bytes | 64 slots | spill（溢出）或 > 32 slots | **跨帧存储** |
 | `TargetDataBuffer` | 16 | ~128 bytes | 32 targets | > 50% | frame-local，Ability 目标解析结果 |
 

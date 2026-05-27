@@ -77,6 +77,12 @@ namespace GAS.Runtime
         public const int DamageTypeExecute = 9675;
         public const int DamageTypeDeathBurst = 9678;
 
+        public const int ScenarioDefaultDuel = 1;
+        public const int UnitPlayerVanguard = 9901;
+        public const int UnitPlayerArcanist = 9902;
+        public const int UnitEnemyBrute = 9903;
+        public const int UnitEnemyCaster = 9904;
+
         public const int TagAbilityActing = 4;
         public const int TagManaBurstCooldown = 5;
         public const int TagArcaneTeamBuff = 6;

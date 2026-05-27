@@ -24,7 +24,19 @@ namespace GAS.Editor
         [LabelWidth(LABEL_WIDTH)]
         [FolderPath]
         [OnValueChanged(nameof(SaveAsset))]
-        public string CodeGeneratePath = "Assets/Scripts/Gen";
+        public string CodeGeneratePath = "Assets/GAS/Generated/CodeGen";
+
+        [BoxGroup("A")]
+        [LabelText("生成代码命名空间")]
+        [LabelWidth(LABEL_WIDTH)]
+        [OnValueChanged(nameof(SaveAsset))]
+        public string CodeGenerateRootNamespace = "GAS.Runtime.Generated";
+
+        [BoxGroup("A")]
+        [LabelText("Row类型前缀剥离")]
+        [LabelWidth(LABEL_WIDTH)]
+        [OnValueChanged(nameof(SaveAsset))]
+        public string CodeGenerateRowTypePrefixesToStrip = "";
         
 
         [BoxGroup("A")]

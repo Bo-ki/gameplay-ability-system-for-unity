@@ -57,7 +57,22 @@ ActiveEffectStore 不再讨论“buffer 还是 entity”二选一，而是拆成
 3. `CleanupStore` 只处理 destroy 后清理，不替代 Active 生命周期状态机；cleanup component 不能 baked 到 definition。
 4. `ChunkSkipIndex` 的目标是让 idle effect 在 chunk 级跳过，而不是给每个 entity 重复写相同 fact。
 5. 状态机选择顺序：enableable 适合高频开关；enum / bit field 适合状态多且同 job 轻分支；tag / archetype 只适合低频且数据差异大的生命周期阶段。
-6. **`FSM-04`：单 entity 上多 FSM 叠加时评估拆分 entity。** ASC entity 的 `ActiveGameplayEffectBuffer` buffer 可能同时承载多套独立 FSM（inhibit/tick/expire、stack push/pop、grant tag/ability cleanup 等）。当同一 entity 上出现 > 3 个独立的生命期决策（如 tick 到期判断、inhibit 状态恢复检查、stack overflow 检查）且各决策依赖不同的 component 读取集时，应评估是否将部分生命周期拆到 stable child entity 或 enableable component group 上，避免单个 job 的 component 读取集膨胀。
+6. **`FSM-04`：单 entity 上多 FSM 叠加时拆分 Job，而非拆分 Entity。** ASC entity 的 `ActiveGameplayEffectBuffer` buffer 同时承载多套独立 FSM（inhibit/tick/expire、stack push/pop、grant tag/ability cleanup 等）。`FSM-04` 的官方判断标准是：**同一 entity 上 > 3 个独立的生命期决策，且各决策依赖不同的 component 读取集**。`ActiveGameplayEffectBuffer` 完全命中这个条件。
+
+   **修正策略 —— 按 FSM 职责拆分 Job（不增加 Archetype）：**
+   ```
+   Job A: Duration lifecycle FSM（读 RemainingDuration，写 State/Flags）
+   Job B: Period cursor FSM（读 PeriodAccumulator，写 PeriodDueTag）
+   Job C: Stack overflow check（读 StackCount，写 ActiveEffectMutationBuffer）
+   Job D: Granted tag/ability cleanup（读 Flags.PendingRemove，写 ECB）
+
+   Job 依赖链：
+   A → B（Inhibited 状态不应 tick period）
+   A → D（需要知道哪些 effect 进入 PendingRemove）
+   C 与 A 并行（不依赖 duration state）
+   ```
+
+   **不拆分 Entity 的原因**：拆分为独立 Entity 会增加 archetype 数量和 entity 数量，与 Archetype < 10 目标矛盾。拆分 Job 保持同一 Entity/Archetype，仅通过 Job 依赖链管理 FSM 间的数据依赖。每个 Job 只读写自己关心的字段，依赖链清晰，可独立 Profile。
 
 ## ActiveEffectStore API 选型矩阵
 
@@ -72,6 +87,21 @@ ActiveEffectStore 不能预设为“每个 active effect 一个 entity”或“�
 | Cleanup Component | owner destroy 后仍需释放 granted tag / ability / cue | cleanup 生命周期必须明确移除 | cleanup retained count、cleanup latency |
 | Chunk Component / chunk counters | 大量 idle/no-op effect 可整体跳过 | 只适合 per-chunk 优化事实，不替代 per-entity state | chunk skip count、matched chunk reduction |
 | LinkedEntityGroup | prefab-like group、表现/authoring 组合实例化和销毁 | 不进入 Core hot path 决策 | group instantiate/destroy count |
+
+### `CASE-37` LinkedEntityGroup 在 ASC→Ability Entity 生命周期中的应用
+
+**评估结论**：`LinkedEntityGroup` 适合用于 ASC → Ability Entity 的**生命周期级联销毁**，但不适合用于**迭代顺序依赖**的场景。
+
+**适用场景 —— ASC Entity 销毁时的级联清理：**
+- 当 ASC Entity 被销毁时，其所有 Ability Entity 也应当被销毁
+- 使用 `LinkedEntityGroup` 后，`EntityManager.DestroyEntity(ascEntity)` 自动级联销毁所有 Ability Entity
+- 替代当前需要 `SAscDestroyRequest` System 手动查找并销毁的 O(N_abilities_global) 操作
+
+**不适用场景：**
+- 需要按特定顺序逐 Ability Entity 执行清理逻辑（如先 revoke 后 destroy）
+- `PRF-31`：Child Buffer 迭代顺序不保证确定，不应依赖 sibling index 做排序
+
+**当前状态**：Spec 已在 "不进入 Core hot path 决策" 中提及 `LinkedEntityGroup`。目标态建议在 ASC Entity 创建时将 Ability Entity 加入 `LinkedEntityGroup`，销毁时利用级联机制减少手动清理代码。此选项应在 Structural Playback phase 中实现，不影响 hot path 性能。
 
 AM5 验收必须能证明：普通 tick、period due、inhibit 切换不触发 archetype churn；grant/remove/cleanup 进入 structural playback；Debugger 能解释 slot pressure、enabled state、cleanup 和 chunk skip。
 

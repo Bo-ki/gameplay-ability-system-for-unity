@@ -12,7 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0bf62a9aa7db48b38f37313afe3e6ef5, type: 3}
   m_Name: GASSettingAsset
   m_EditorClassIdentifier: 
-  CodeGeneratePath: Assets/DemoForESC/_Script/Gen
-  TableOutpuPath: Assets/DemoForESC/Resources/Tables
-  TableClassCodeOutpuPath: Assets/DemoForESC/_Script/Gen/LubanTable
+  CodeGeneratePath: Assets/GAS/Generated/CodeGen
+  CodeGenerateRootNamespace: GAS.Runtime.Generated
+  CodeGenerateRowTypePrefixesToStrip: HeadlessAutoChess
+  TableOutpuPath: Assets/DataGenerated/Luban/Json/GAS
+  TableClassCodeOutpuPath: Assets/DataGenerated/Luban/CSharp
   ConfigProjectPath: EX_GAS_Config/ProjectConfigTable/exgas_config

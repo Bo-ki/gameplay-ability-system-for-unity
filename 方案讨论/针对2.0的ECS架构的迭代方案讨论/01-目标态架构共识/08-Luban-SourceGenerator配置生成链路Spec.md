@@ -9,13 +9,16 @@
 ```mermaid
 flowchart LR
     Excel["Excel / Bean Schema"] --> Luban["Luban CLI\njson + gen.cs"]
-    Luban --> Package["Generated Definition Package"]
-    Package --> Adapter["GASDefinitionGeneratedAdapter"]
-    Adapter --> Table["GASDefinitionTable"]
-    Table --> BakePlan["GASGeneratedDefinitionBakingPlan"]
-    BakePlan --> BakeContract["GASGeneratedDefinitionBakeContract"]
-    BakeContract --> BakePipeline["GASGeneratedDefinitionBakePipeline"]
-    BakePipeline --> Integration["RuntimeIntegrationPlan"]
+    Luban --> Rows["Definition rows / schema / process gate"]
+    Rows --> Pipeline["GasCodeGenPipeline\nContext / RowMetadata / Phases"]
+    Pipeline --> RuntimeArtifacts["Runtime artifacts\nids / blobs / lookup / calculation switch"]
+    Pipeline --> BakingArtifacts["Baking artifacts\nBaker glue / bake plan"]
+    Pipeline --> Reports["Editor/CI artifacts\nmanifest / validation / query layout"]
+    RuntimeArtifacts --> Table["GASDefinitionTable / generated registry"]
+    BakingArtifacts --> BakePipeline["GASGeneratedDefinitionBakePipeline"]
+    Table --> Integration["RuntimeIntegrationPlan"]
+    BakePipeline --> Integration
+    Reports --> Integration
 ```
 
 ## UML 类图
@@ -32,6 +35,25 @@ classDiagram
     class GASDefinitionGeneratedAdapter {
         Build(source)
     }
+    class GasCodeGenPipeline {
+        RunAll()
+    }
+    class GasCodeGenContext {
+        rows
+        outputRoot
+        phases
+    }
+    class RowMetadata {
+        domain
+        codeField
+        generatedNames
+        blobMembers
+    }
+    class GasCodeGenManifest {
+        outputs
+        inputHash
+        clean
+    }
     class GASDefinitionTable {
         Lookup(kind, code)
     }
@@ -45,8 +67,12 @@ classDiagram
     }
 
     GASGeneratedDefinitionSource --> GASDefinitionGeneratedAdapter
-    GASDefinitionGeneratedAdapter --> GASDefinitionTable
-    GASDefinitionTable --> GASGeneratedDefinitionBakingPlan
+    GASDefinitionGeneratedAdapter --> GasCodeGenPipeline
+    GasCodeGenPipeline --> GasCodeGenContext
+    GasCodeGenContext --> RowMetadata
+    GasCodeGenPipeline --> GasCodeGenManifest
+    GasCodeGenPipeline --> GASDefinitionTable
+    GasCodeGenPipeline --> GASGeneratedDefinitionBakingPlan
     GASGeneratedDefinitionBakingPlan --> GASGeneratedDefinitionIntegrationPlan
 ```
 
@@ -74,6 +100,59 @@ sequenceDiagram
 2. Generated adapter 不持有 `Entity`、`BlobAssetReference`、Editor、spec/context/runtime state。
 3. Bake plan / contract / pipeline 不生成 gameplay lifecycle。
 4. Runtime integration plan 只描述落点和 deferred boundary。
+5. 生成链路必须是“输入收集 -> Row metadata 规范化 -> Phase 输出 -> manifest / validation report”的显式管道；不得让多个生成器各自重复扫描程序集、重复推断命名和重复写出 header。
+6. Runtime Core 可消费的 static lookup 必须是 Burst 可读的 unmanaged / blob lookup，或带明确 allocator owner / dispose 责任的 Native container；托管数组、`Dictionary`、`Func<>` 只允许留在 Editor / CI / Baking 边界。
+7. Ability / GE / Modifier / TagRequirement 的 Blob builder 必须从 Luban row、generated definition 或 Baker 输入直接构建，不从 prototype entity、runtime component 或 active effect state 反推静态定义。
+8. Baker glue 必须生成真正的 `Baker<TAuthoring>` 或显式标注的 Baking System plan；静态方法 + `EntityCommandBuffer` 只能作为迁移期工具，不是目标态 Baker 契约。
+9. Luban 生成的 C# 必须留在 Unity 编译域内（默认 `Assets/DataGenerated/Luban/CSharp`），因为它是配置事实、row / table API 和后续 baking/source generation 的输入边界。`cfg.*`、`Luban.Runtime`、`SimpleJSON` 的编译错误是表源链路失败，不允许通过挪出 `Assets` 隐藏。
+10. GAS Runtime package contract 中不得出现 `cfg.*`、`XLuban`、`SimpleJSON` 或 Luban managed row 直接引用；这些类型只能存在于 Luban compile boundary、Definition / Baking / Editor 侧，SourceGenerator 必须把它们转换成 Runtime Core 可消费的 id、Blob、unmanaged lookup 和 component type set。
+11. Runtime Core lookup 必须是 O(1) 或 O(log n) 且可报告数据规模；`GASDefinitionTable` 这类线性扫描表不得进入 hot path。
+
+## Luban 与 SourceGenerator 职责边界
+
+| 环节 | 允许职责 | 禁止事项 |
+|---|---|---|
+| Luban CLI | 读取 Excel / schema，输出 JSON、bean、表行源码、稳定 id 原始事实和 process gate 结果 | 生成 Runtime Core lifecycle system；让 `cfg.*` 成为 Runtime Core 依赖 |
+| Gas CodeGen Pipeline | 收集 DefinitionRow / schema metadata，统一推断 RowMetadata，按 Phase 输出 ids、Blob schema / builder、lookup、Baker glue、query hint、validation graph 和 manifest | 每个 Phase 自行全量反射扫描；硬编码项目名前缀；分散维护 code field / blob type / component type 推断 |
+| Baking | 把 generated definition / authoring 输入转换为 `BlobAssetReference<T>`、Baker output、BakingOnly / TemporaryBaking data 和 report | 从 runtime entity 或 prototype component 反推静态定义；在 Baker 中读取其他 Baker 的输出 |
+| Runtime Core | 只读取 generated id、Blob、static lookup、generated component type 和 validation 允许的常量 | 运行时反查 JSON、managed Luban row、ScriptableObject 或 Editor-only registry |
+| Editor / CI | 输出 config diagnostics、official DOTS coverage、query layout、buffer capacity、Burst AOT / Player evidence、orphan generated file report | 把诊断结构作为 gameplay 决策输入 |
+
+### Luban Unity 编译边界
+
+Luban C# 输出不是临时脚本缓存，也不是应当绕开 Unity 编译的外部产物。当前目标态固定为：
+
+1. `TableClassCodeOutpuPath` 默认指向 `Assets/DataGenerated/Luban/CSharp`，由 Unity 正常编译 `cfg.*` 表行、bean、多态配置和 `Tables` API。
+2. `Assets/Plugins/LubanRuntime/Luban.Runtime.dll` 与 `Assets/Plugins/LubanRuntime/SimpleJSON.dll` 是该编译边界的显式依赖；缺失时应让生成/编译失败。
+3. `Assets/DataGenerated/Luban/Json/GAS` 是 JSON 数据输出边界；可被 loader / authoring / baking 使用，但 Runtime Core hot path 不直接查询。
+4. `Assets/GAS/Generated/CodeGen/Runtime` 是 GAS SourceGenerator Runtime 输出边界，只允许依赖 GAS Runtime 与 Unity DOTS 基础程序集，不引用 `cfg.*`、`Luban.Runtime`、`SimpleJSON`、JSON reader 或 managed row。
+5. `Assets/GAS/Generated/CodeGen/Editor` 是 Editor/Baking 输出边界，可引用 row source assembly，把 Luban / row 事实转换为 BlobAsset、Baker 输出和诊断报告。
+
+## 生成器内部架构目标
+
+生成器实现应收敛为 `GasCodeGenPipeline + GasCodeGenContext + RowMetadata + IGasCodeGenPhase` 形态：
+
+1. `GasCodeGenContext` 只构建一次，包含输出目录、命名空间、所有 RowMetadata、按领域分组的 ability / GE / attribute / tag / cue / unit / scenario 行。
+2. `RowMetadataFactory` 集中处理 row type 前缀、code field、blob schema、lookup 名称、Baker 名称、component type 和 blob member 映射；新增 DefinitionRow 类型优先新增 provider，而不是修改多个 Phase。
+3. `IGasCodeGenPhase` 单一职责输出一个或一组文件；Phase 只消费 context，不自行扫描程序集、不自行推断全局命名、不自行决定输出根目录。
+4. `GasCodeGenManifest` 记录所有生成文件、输入 hash、Phase 名称和输出路径，用于清理孤儿 `.g.cs`、检查路径逃逸和支撑 CI diff。
+5. `GasCodeGenSettings` 或等价配置承载项目名前缀、generated namespace、输出目录、manifest 策略和是否写入版本控制；禁止在生成器中硬编码 `HeadlessAutoChess` 之类项目前缀。
+
+“SourceGenerator”在本 Spec 中指确定性源码生成子系统。Roslyn `IIncrementalGenerator` 是更长期的理想形态；若当前阶段仍通过 Unity Editor menu / offline tool 触发，也必须满足同一套输入、manifest、Phase、层级归属和 Runtime 依赖隔离契约。
+
+推荐 Phase 切分：
+
+| Phase | 输出 | Runtime 可见性 |
+|---|---|---|
+| Assembly definition phase | generated runtime/editor asmdef、row source assembly references | asmdef 可见；Runtime asmdef 不引用 row source，Editor asmdef 可引用 row source |
+| Id / Tag bit phase | `XAttr`、`XTagBit`、`XGE`、`XAbility`、`XCueCode`、`TagCheck` | 可见；必须 Burst 友好 |
+| Attribute component phase | `HealthAttribute`、`ManaAttribute` 等每属性独立 `IComponentData` | 可见；只生成数据类型和访问器，不生成 lifecycle |
+| Blob schema / builder phase | `GameplayEffectDefinition`、`AbilityDefinition`、`BuildFromRow` / `BuildFromDefinition` | Blob 可见；builder 多数在 Baking / initialization 使用 |
+| Static lookup phase | id -> `BlobAssetReference<T>` / compact lookup | 可见；必须 unmanaged / Burst 可读 |
+| Calculation phase | `MmcTypeId`、`MmcEvaluator.Evaluate()` static switch | 可见；禁止托管 delegate / 可变 registry |
+| Baker glue phase | `Baker<TAuthoring>`、`DependsOn()`、`AddBlobAsset()`、custom hash | Baking 可见；不进入 Runtime Core tick |
+| Scenario / validation phase | build plan、validation expectations、diagnostics report | Scenario 常量可见；validation / report 不参与 gameplay |
+| Query / capacity hint phase | query layout、read/write set、buffer capacity、TransformUsageFlags、ODF coverage | Editor / CI 为主；Runtime 只消费经确认的常量 |
 
 ## Unity Entities 校准
 
@@ -161,6 +240,15 @@ Luban / SourceGenerator 目标态要补齐“配置 -> DOTS 承载”的生成�
 
 生成链路输出的每个 artifact 都应标记归属层：Definition、Baking、Runtime Core、Boundary、Editor/CI。未标记层级的 generated artifact 不得进入 Runtime Core。
 
+### ASM-01 生成程序集边界
+
+generated asmdef 也属于 SourceGenerator 输出，不手写维护依赖漂移：
+
+1. Runtime generated asmdef 只允许引用 GAS Runtime 与 Unity DOTS 基础程序集（`Unity.Collections`、`Unity.Entities` 等），不得引用 row source assembly、Editor、Luban、JSON reader 或 Demo assembly。
+2. Editor/Baking generated asmdef 允许引用实际 row source assembly，因为 row-based builder、lookup builder 和 Baker glue 只在 Editor / Baking 边界编译。
+3. row source assembly 引用必须从 `GasCodeGenContext.Rows` 推导，禁止在生成器代码中硬编码 `HeadlessAutoChess` 或其他项目名前缀。
+4. asmdef 必须进入 manifest，且 Runtime asmdef 标记为 Runtime，Editor/Baking asmdef 标记为非 runtime-visible。
+
 ## 禁止方向
 
 1. SourceGenerator 生成 Ability / GE active lifecycle。
@@ -170,19 +258,34 @@ Luban / SourceGenerator 目标态要补齐“配置 -> DOTS 承载”的生成�
 5. 生成可变托管静态 calculation registry。
 6. 生成隐藏结构变化、隐藏 query 或隐藏 system 调度。
 7. 让 weak resource / SceneSystem load 状态参与 Core gameplay 决策。
+8. 多个 Glue generator 各自执行 `FindDefinitionRowTypes()`、各自维护命名推断和输出策略。
+9. 用托管数组 / managed dictionary 承载 Runtime Core hot path lookup。
+10. 从 prototype entity、runtime component 或 active effect slot 构建静态定义 Blob。
 
 ## 验收
 
-1. AutoChess generated source 可进入 DefinitionTable。
+### Core CodeGen 当前验收
+
+1. `GasCodeGenPipeline.RunAll()` 默认只运行通用 Core phases，不运行 AutoChess 专用 phase。
 2. 真实 Luban process gate 通过后才导出 artifact。
 3. `.g.cs` 和 manifest 输出路径不能逃逸 project root。
-4. 至少一条 Runtime Core 链路消费 generated Blob / static lookup，而不是运行时反查 managed config。
-5. AutoChessDemo 的 Luban 配置链必须证明至少一条业务链路能从 generated definition 进入 Blob / Baker / static lookup，并在 Boundary 层用 WeakObjectReference / UnityObjectRef 或日志占位表现资源。
-6. 生成报告必须输出 query layout hint、buffer capacity hint、TransformUsageFlags、WeakObjectReference load plan 和 Baking dependency summary。
-7. 生成报告必须输出 `CASE-10/CASE-11` 对照：哪些产物进入 Blob / Baker，哪些资源只属于 Boundary，哪些 generated lifecycle 被禁止。
-8. 生成报告必须输出 `ODF-*` 官方文档覆盖检查：哪些覆盖主题已满足，哪些暂不相关，哪些需要后续任务处理。
-9. 生成报告必须输出 Baking world / phase report、EntityPrefabReference load plan、IncludePrefab query policy、Burst AOT / Player evidence plan 和 allocator / aliasing 不相关或采用理由。
-10. 生成报告必须输出 Physics profile 和 Render binding profile：是否启用 Unity Physics / Entities Graphics、使用哪些 PackageCache 官方依据、哪些字段只属于 Boundary / Presentation、哪些字段禁止进入 Core。
+4. 生成器必须输出 Phase manifest：输入 hash、输出文件、归属层、是否进入 runtime assembly、是否 version-controlled，以及 orphan `.g.cs` 清理结果。
+5. Core generated 默认输出根目录为 `Assets/GAS/Generated/CodeGen`，并通过 generated runtime/editor asmdef 分层；AutoChessDemo 目录不能作为默认 glue 输出位置。asmdef 也由 Core pipeline 生成并进入 manifest：Runtime asmdef 只引用 GAS Runtime / Unity DOTS 基础程序集，Editor asmdef 才允许引用实际 row source assembly。
+6. Luban C# 输出必须在 Unity 编译域内通过编译；同时 Runtime assembly 扫描必须证明 GAS Runtime Core 与 generated runtime 不存在 `cfg.*`、`XLuban`、`SimpleJSON`、managed Luban row 或 JSON table reader 引用。
+7. Runtime-visible generated artifact 不得出现 `DefinitionRow`、row factory、`IReadOnlyList<*DefinitionRow>` 或 row snapshot。
+8. Core generated 命名必须对齐 `12-命名规范Spec.md`：Blob 根类型使用 `{Domain}DefinitionBlob`，lookup 使用 `{Domain}DefinitionLookup`，lookup builder 使用 `GASGeneratedDefinitionLookupBuilder`，框架产物使用 `GASGenerated*` 前缀，通用 component 使用 `GASGeneratedDefinitionBlobComponent<T>` / `GASDefinitionCodeComponent`。
+9. 生成报告必须输出 `BAKE-*`、`BLOB-*`、`QRY-*`、`JOB-*`、`SC-*`、`BUR-*`、`PRF-*`、`ODF-*` 规则对照：采用、拒绝、暂缓理由必须明确。
+10. Baker 生成物必须能映射到 `Baker<TAuthoring>`、`DependsOn()`、`AddBlobAsset()` / custom hash、Baking System dependency report 中的至少一种官方 baking 模式。
+11. Static lookup 必须是 O(1) 或 O(log n) 的 unmanaged / Blob lookup 形态；线性 `GASDefinitionTable` 只能作为 Editor/CI 或迁移期 fallback。
+
+### AutoChess 业务链路后置验收
+
+1. AutoChess generated source 可进入 DefinitionTable。
+2. 至少一条 AutoChess Ability / GE 链路证明 Runtime Core 消费 generated Blob / static lookup，而不是运行时反查 managed config。
+3. AutoChessDemo 的 Luban 配置链证明至少一条业务链路能从 generated definition 进入 Blob / Baker / static lookup，并在 Boundary 层用 WeakObjectReference / UnityObjectRef 或日志占位表现资源。
+4. 生成报告补齐 query layout hint、buffer capacity hint、TransformUsageFlags、WeakObjectReference load plan 和 Baking dependency summary。
+5. 生成报告补齐 Baking world / phase report、EntityPrefabReference load plan、IncludePrefab query policy、Burst AOT / Player evidence plan 和 allocator / aliasing 不相关或采用理由。
+6. 生成报告补齐 Physics profile 和 Render binding profile：是否启用 Unity Physics / Entities Graphics、使用哪些 PackageCache 官方依据、哪些字段只属于 Boundary / Presentation、哪些字段禁止进入 Core。
 
 ## 历史方案定位
 
@@ -191,5 +294,3 @@ Luban / SourceGenerator 目标态要补齐“配置 -> DOTS 承载”的生成�
 3. 自走棋 Luban 配置和 generated 代码示例来自 `../历史方案参考/方案14.md:1138-1269`。
 4. 方案15 中 Layer 4 数据配置层与 SourceGenerator 组件/注册胶水来自 `../历史方案参考/方案15.md:94-189`。
 5. SourceGenerator 生成查找索引和系统注册价值来自 `../历史方案参考/方案15.md:817-960`、`../历史方案参考/方案15.md:1289-1299`。
-
-

@@ -60,6 +60,26 @@ EffectContext 不作为独立 entity 或 component type 存在。字段按性质
 | `GEEffectSpecBuffer` buffer element | 从 EffectCommand 复制需要的 context 字段 | frame-local |
 | Ability Entity component | SourceAbilityCode, Instigator | 跨帧（ability 激活期间） |
 
+### ContextId 生成机制
+
+ContextId 在 CommandIngest phase 由主线程预分配，保证帧内唯一、跨帧唯一、Burst 可用：
+
+```
+ContextId (int, 32 bits)
+├── 高 20 位 = FrameIndex（约 100 万帧 ≈ 4.6 小时 @ 60fps）
+└── 低 12 位 = 帧内序号（每帧最多 4096 个 context）
+```
+
+**生成流程：**
+1. `GASFrameArenaSetupSystem`（主线程）每帧递增 `FrameIndex`，重置 `NextContextSequence = 0`
+2. CommandIngest 阶段，主线程调用 `AllocateContextRange(count)` 预分配一批 ContextId，Job 通过参数接收 `FrameIndex + ContextSequenceBase`
+3. Job 内编码：`contextId = (FrameIndex << 12) | (sequenceBase + i)`，无需原子操作
+
+**设计要点：**
+- 主线程预分配范围，避免 Job 内 `Interlocked` 原子操作（`PRF-34` 兼容）
+- `FrameIndex` 和 `ContextSequenceBase` 作为 Job 参数传入，Job 不通过 `ComponentLookup` 访问 `FrameArenaStateComponent`
+- 解码（Debugger 追踪用）：`(frameIndex, seq) = (contextId >> 12, contextId & 0xFFF)`
+
 ### 不变量
 
 1. ContextId 在 command→spec→delta→fact 中连续传递，不可断裂。

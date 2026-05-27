@@ -154,6 +154,10 @@ namespace GAS.Runtime
         private static readonly GASRuntimeCoreFramePhaseSystemContract[] RuntimeCoreFramePhaseSystemContracts =
         {
             new GASRuntimeCoreFramePhaseSystemContract(
+                typeof(SEffectCommandSpecStreamFramePrepare),
+                EGasRuntimeCoreFramePhase.FramePrepare,
+                typeof(GASCommandGroup)),
+            new GASRuntimeCoreFramePhaseSystemContract(
                 typeof(SEffectCommandIngest),
                 EGasRuntimeCoreFramePhase.CommandIngest,
                 typeof(GASCommandGroup)),
@@ -210,21 +214,23 @@ namespace GAS.Runtime
             typeof(SAbilityCommit),
             typeof(SAbilityTimelineAction),
             typeof(SAbilityTimelineLifecycleRequest),
+            typeof(SEffectCommandSpecStreamFramePrepare),
             typeof(SEffectCommandIngest),
             typeof(SInstantEffectSpecBuild),
             typeof(SActiveEffectMutationApply),
+            typeof(SExecutionCalculation),
+            typeof(GASExecutionCalculationExtensionGroup),
+            typeof(SExecutionCalculationOutputModifier),
             typeof(SAttributeDeltaApply),
             typeof(STypedSimulationFactProjection),
             typeof(STypedSimulationFactEventBridge),
             typeof(SInstantEffectCueRequestProjection),
             typeof(SAscDestroyRequest),
-            typeof(SExecutionCalculation),
-            typeof(GASExecutionCalculationExtensionGroup),
-            typeof(SExecutionCalculationOutputModifier),
         };
 
         private static readonly Type[] EffectCommandSpecStreamTargetSystemTypes =
         {
+            typeof(SEffectCommandSpecStreamFramePrepare),
             typeof(SEffectCommandIngest),
             typeof(SInstantEffectSpecBuild),
             typeof(SActiveEffectMutationApply),
@@ -245,9 +251,9 @@ namespace GAS.Runtime
 
         private static readonly Type[] EffectSystemTypes =
         {
+            typeof(SEffectTick),
             typeof(SEffectRemove),
             typeof(SEffectFinalDestroy),
-            typeof(SEffectTick),
         };
 
         private static readonly Type[] AttributeSystemTypes =

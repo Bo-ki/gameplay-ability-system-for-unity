@@ -80,12 +80,17 @@ namespace GAS.Editor
 
         public static IReadOnlyList<AbilityExecutionSchema> GetAbilityExecutionSchemas()
         {
-            return _abilityExecutionSchemas ??= new[]
+            if (_abilityExecutionSchemas != null)
+                return _abilityExecutionSchemas;
+
+            var schemas = new List<AbilityExecutionSchema>
             {
-                new AbilityExecutionSchema("ApplyEffectsOnActivate", typeof(XParamEffectIDs)),
-                new AbilityExecutionSchema("TimelineRef", typeof(XParamTimelineID)),
-                new AbilityExecutionSchema("MoveInput", ResolveXParamType("MoveInput", "DemoForESC._Script.Gas.Ability.XParamMove", "XParamMove")),
+                new("ApplyEffectsOnActivate", typeof(XParamEffectIDs)),
+                new("TimelineRef", typeof(XParamTimelineID)),
             };
+
+            _abilityExecutionSchemas = schemas;
+            return _abilityExecutionSchemas;
         }
 
         public static IEnumerable<string> GetAbilityExecutionTypeNames()
@@ -106,17 +111,27 @@ namespace GAS.Editor
 
         public static IReadOnlyList<TimelineActionParameterSchema> GetTimelineActionParameterSchemas()
         {
-            return _timelineActionParameterSchemas ??= new[]
+            if (_timelineActionParameterSchemas != null)
+                return _timelineActionParameterSchemas;
+
+            var schemas = new List<TimelineActionParameterSchema>
             {
-                new TimelineActionParameterSchema("NoOp", typeof(XParamNone)),
-                new TimelineActionParameterSchema("DebugLog", typeof(XParamString)),
-                new TimelineActionParameterSchema("ApplyCost", typeof(XParamNone)),
-                new TimelineActionParameterSchema("ApplyCooldown", typeof(XParamNone)),
-                new TimelineActionParameterSchema("PlayCue", typeof(XParamCue)),
-                new TimelineActionParameterSchema("ApplyEffects", typeof(XParamApplyEffects)),
-                new TimelineActionParameterSchema("DodgeMove", ResolveXParamType("DodgeMove", "DemoForESC._Script.Gas.Ability.XParamDodgeMove", "XParamDodgeMove")),
-                new TimelineActionParameterSchema("PlayCuePreset", typeof(XParamCueList)),
+                new("NoOp", typeof(XParamNone)),
+                new("DebugLog", typeof(XParamString)),
+                new("ApplyCost", typeof(XParamNone)),
+                new("ApplyCooldown", typeof(XParamNone)),
+                new("PlayCue", typeof(XParamCue)),
+                new("ApplyEffects", typeof(XParamApplyEffects)),
             };
+            AddOptionalTimelineXParamSchema(
+                schemas,
+                "DodgeMove",
+                "DemoForESC._Script.Gas.Ability.XParamDodgeMove",
+                "XParamDodgeMove");
+            schemas.Add(new TimelineActionParameterSchema("PlayCuePreset", typeof(XParamCueList)));
+
+            _timelineActionParameterSchemas = schemas;
+            return _timelineActionParameterSchemas;
         }
 
         public static IEnumerable<string> GetTimelineActionTypeNames()
@@ -135,16 +150,40 @@ namespace GAS.Editor
             return abilityParamEditor;
         }
 
-        private static Type ResolveXParamType(string ownerName, params string[] typeNames)
+        private static void AddOptionalXParamSchema(
+            List<AbilityExecutionSchema> schemas,
+            string ownerName,
+            params string[] typeNames)
+        {
+            if (TryResolveXParamType(ownerName, out var paramType, typeNames))
+                schemas.Add(new AbilityExecutionSchema(ownerName, paramType));
+        }
+
+        private static void AddOptionalTimelineXParamSchema(
+            List<TimelineActionParameterSchema> schemas,
+            string ownerName,
+            params string[] typeNames)
+        {
+            if (TryResolveXParamType(ownerName, out var paramType, typeNames))
+                schemas.Add(new TimelineActionParameterSchema(ownerName, paramType));
+        }
+
+        private static bool TryResolveXParamType(string ownerName, out Type paramType, params string[] typeNames)
         {
             foreach (var typeName in typeNames)
             {
                 var resolved = ResolveType(typeName);
                 if (resolved != null && typeof(XParam).IsAssignableFrom(resolved))
-                    return resolved;
+                {
+                    paramType = resolved;
+                    return true;
+                }
             }
 
-            throw new InvalidOperationException($"未找到 {ownerName} 需要的 XParam 类型：{string.Join(", ", typeNames)}");
+            paramType = null;
+            UnityEngine.Debug.LogWarning(
+                $"[EditorAbilityHelper] 跳过缺失的 legacy XParam schema: {ownerName} ({string.Join(", ", typeNames)})");
+            return false;
         }
 
         private static Type ResolveType(string typeName)

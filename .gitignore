@@ -87,9 +87,15 @@ Bundles/StandaloneWindows64/MainPackage/Simulate/MainPackage_Simulate.json
 
 # Luban / SourceGenerator generated code
 /[Aa]ssets/[Dd]emo[Ff]orESC/_Script/[Gg]en/
+/[Aa]ssets/[Dd]ata[Gg]enerated.meta
 /[Aa]ssets/[Dd]ata[Gg]enerated/[Ll]uban/
-/[Aa]ssets/[Aa]uto[Cc]hess[Dd]emo/[Cc]onfig/[Gg]enerated/
-/[Aa]ssets/[Aa]uto[Cc]hess[Dd]emo/[Cc]onfig/[Gg]enerated.meta
+/[Aa]ssets/[Dd]ata[Gg]enerated/[Ll]uban.meta
+!/[Aa]ssets/[Aa]uto[Cc]hess[Dd]emo/[Cc]onfig/[Gg]enerated.meta
+!/[Aa]ssets/[Aa]uto[Cc]hess[Dd]emo/[Cc]onfig/[Gg]enerated/
+/[Aa]ssets/[Aa]uto[Cc]hess[Dd]emo/[Cc]onfig/[Gg]enerated/*
+!/[Aa]ssets/[Aa]uto[Cc]hess[Dd]emo/[Cc]onfig/[Gg]enerated/[Gg]lue.meta
+!/[Aa]ssets/[Aa]uto[Cc]hess[Dd]emo/[Cc]onfig/[Gg]enerated/[Gg]lue/
+!/[Aa]ssets/[Aa]uto[Cc]hess[Dd]emo/[Cc]onfig/[Gg]enerated/[Gg]lue/**
 
 # Python cache
 __pycache__/

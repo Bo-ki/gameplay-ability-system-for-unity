@@ -50,12 +50,15 @@ flowchart TB
 1. 维护 Luban Excel / JSON / schema / validation rule。
 2. 生成稳定 id、静态 lookup、definition snapshot、bake plan 和 runtime integration plan。
 3. 为 Runtime Core 提供不可变、可校验、可 Burst 消费的定义输入。
+4. 维护生成链路的显式 pipeline、RowMetadata、Phase manifest、路径审计和 orphan generated file 清理策略。
 
 ### 禁止
 
 1. 不生成 Ability / GameplayEffect lifecycle system。
 2. 不携带 runtime state、spec、context、cooldown instance、active effect instance。
 3. 不依赖 GameObject、MonoBehaviour、Editor window、Odin、XLua 或业务 UI。
+4. 不把 Luban managed row、`cfg.*`、`XLuban`、`SimpleJSON` 或 JSON reader 暴露给 Runtime Core assembly。
+5. 不用托管数组、managed dictionary 或可变 delegate registry 作为 Runtime Core hot path lookup。
 
 ## Layer 3: GAS Runtime Core Layer
 
@@ -126,4 +129,3 @@ flowchart TB
 4. 方案15 对边界单向性的总结可作为应用壳层、运行时边界层和 Runtime Core 的验收图：`../历史方案参考/方案15.md:2843-2857`。
 5. 方案14 的四层职责总览和 Luban + SourceGenerator 生成链路提供了 Definition & Generation Layer 的来源参考：`../历史方案参考/方案14.md:100-118`。
 6. 方案14 的“架构分层职责最终定义”提供了 Core 全 unmanaged、全 Burst、禁止反向查 OOP 的硬约束：`../历史方案参考/方案14.md:1038-1058`。
-

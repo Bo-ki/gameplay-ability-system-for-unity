@@ -1,0 +1,118 @@
+{
+    "OutputRoot": "Assets/AutoChessDemo/Config/Generated/Glue",
+    "InputHash": "a39391dc4d25597299ad8449396d6b083033a46df2e2e53bc47954014b12f7c6",
+    "Entries": [
+        {
+            "PhaseName": "BlobSchema",
+            "FileName": "BlobSchemas.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Runtime/BlobSchemas.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "BlobSchema",
+            "FileName": "BlobBuilders.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Editor/BlobBuilders.gen.cs",
+            "Layer": "Baking",
+            "RuntimeVisible": false,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "StaticLookup",
+            "FileName": "StaticLookups.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Runtime/StaticLookups.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "StaticLookup",
+            "FileName": "StaticLookupBuilders.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Editor/StaticLookupBuilders.gen.cs",
+            "Layer": "Baking",
+            "RuntimeVisible": false,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "BakerGlue",
+            "FileName": "DefinitionComponents.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Runtime/DefinitionComponents.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "BakerGlue",
+            "FileName": "BakerGlue.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Editor/BakerGlue.gen.cs",
+            "Layer": "Baking",
+            "RuntimeVisible": false,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "ComponentTypeSet",
+            "FileName": "ComponentTypeSets.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Runtime/ComponentTypeSets.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "QueryLayout",
+            "FileName": "QueryLayouts.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Runtime/QueryLayouts.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "AutoChessAttributeComponent",
+            "FileName": "AutoChessAttributeComponents.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Runtime/AutoChessAttributeComponents.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "AutoChessTagMask",
+            "FileName": "AutoChessTagMasks.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Runtime/AutoChessTagMasks.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "AutoChessUnitConfig",
+            "FileName": "AutoChessUnitConfigs.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Runtime/AutoChessUnitConfigs.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "AutoChessMmcEvaluator",
+            "FileName": "AutoChessMmcEvaluator.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Runtime/AutoChessMmcEvaluator.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "AutoChessScenarioBuildPlan",
+            "FileName": "AutoChessScenarioBuildPlan.gen.cs",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/Runtime/AutoChessScenarioBuildPlan.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "ValidationReport",
+            "FileName": "GasCodeGenValidationReport.md",
+            "ProjectRelativePath": "Assets/AutoChessDemo/Config/Generated/Glue/GasCodeGenValidationReport.md",
+            "Layer": "Editor/CI",
+            "RuntimeVisible": false,
+            "VersionControlled": true
+        }
+    ]
+}

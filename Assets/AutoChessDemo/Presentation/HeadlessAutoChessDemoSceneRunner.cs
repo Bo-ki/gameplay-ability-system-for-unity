@@ -16,7 +16,11 @@ namespace GAS.Runtime
                 yield break;
 
             yield return null;
-            Debug.Log("HeadlessAutoChessDemoSceneRunner: scenario runtime removed pending destructive refactor — see AutoChessDemo事实.md");
+            var request = HeadlessAutoChessRuntimeSystemBootstrap.RequestDefaultScenario();
+            HasResult = request != Unity.Entities.Entity.Null;
+            Debug.Log(
+                "HeadlessAutoChessDemoSceneRunner: queued generated AutoChess scenario bootstrap "
+                + $"request={request.Index}, scenario={HeadlessAutoChessScenario.ScenarioDefaultDuel}");
         }
     }
 }

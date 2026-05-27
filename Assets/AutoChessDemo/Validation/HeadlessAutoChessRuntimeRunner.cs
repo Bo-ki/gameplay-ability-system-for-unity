@@ -17,7 +17,10 @@ namespace GAS.Runtime
             if (!HasArgument(RunArgument))
                 return;
 
-            Debug.Log("HeadlessAutoChessRuntimeRunner: scenario runtime removed pending destructive refactor — see AutoChessDemo事实.md");
+            var request = HeadlessAutoChessRuntimeSystemBootstrap.RequestDefaultScenario();
+            Debug.Log(
+                "HeadlessAutoChessRuntimeRunner: queued generated AutoChess scenario bootstrap "
+                + $"request={request.Index}, scenario={HeadlessAutoChessScenario.ScenarioDefaultDuel}");
         }
 
         private static bool HasArgument(string argument)

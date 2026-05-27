@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using UnityEditor;
+using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 namespace GAS.Editor
@@ -12,40 +13,57 @@ namespace GAS.Editor
         [MenuItem("EXTool/EX-GAS/生成脚本/GAS表配置",priority = 0)]
         public static void GenerateGasConfigTables()
         {
+            TryGenerateGasConfigTables();
+        }
+
+        internal static bool TryGenerateGasConfigTables()
+        {
             var instance = GASSettingAsset.Instance;
-            string fullBatPath = Path.GetFullPath(instance.FullGenBatPath());
-            string fullOutputPath = Path.GetFullPath(instance.TableOutpuPath);
-            string fullCodeOutputPath = Path.GetFullPath(instance.TableClassCodeOutpuPath);
-            // 验证文件和输出路径是否存在
-            if (!File.Exists(fullBatPath))
+            var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            var fullConfigProjectPath = ResolveProjectPath(projectRoot, instance.ConfigProjectPath);
+            var fullOutputPath = ResolveProjectPath(projectRoot, instance.TableOutpuPath);
+            var fullCodeOutputPath = ResolveProjectPath(projectRoot, instance.TableClassCodeOutpuPath);
+            var fullLubanDllPath = Path.GetFullPath(Path.Combine(fullConfigProjectPath, "..", "Tools", "Luban", "Luban.dll"));
+            var fullLubanConfPath = Path.Combine(fullConfigProjectPath, "luban.conf");
+
+            if (!Directory.Exists(fullConfigProjectPath))
             {
-                Debug.LogError($"BAT文件不存在: {fullBatPath}");
-                return;
-            }
-            if (!Directory.Exists(fullOutputPath))
-            {
-                Debug.LogError($"输出路径不存在: {fullOutputPath}");
-                return;
-            }
-            if (!Directory.Exists(fullCodeOutputPath))
-            {
-                Debug.LogError($"表类Class输出路径不存在: {fullCodeOutputPath}");
-                return;
+                Debug.LogError($"配置表工程路径不存在: {fullConfigProjectPath}");
+                return false;
             }
 
-            // 获取bat文件的文件夹路径
-            string fullBuildPath = Path.GetDirectoryName(fullBatPath);
+            if (!File.Exists(fullLubanDllPath))
+            {
+                Debug.LogError($"Luban.dll 不存在: {fullLubanDllPath}");
+                return false;
+            }
+
+            if (!File.Exists(fullLubanConfPath))
+            {
+                Debug.LogError($"luban.conf 不存在: {fullLubanConfPath}");
+                return false;
+            }
+
+            Directory.CreateDirectory(fullOutputPath);
+            Directory.CreateDirectory(fullCodeOutputPath);
+
             // 创建进程配置
             Process process = new Process();
             process.StartInfo = new ProcessStartInfo()
             {
-                FileName = fullBatPath,
-                WorkingDirectory = fullBuildPath,
-                Arguments = $"\"{fullOutputPath}\" \"{fullCodeOutputPath}\"",  // 用引号包裹路径防空格问题
+                FileName = "dotnet",
+                WorkingDirectory = fullConfigProjectPath,
+                Arguments = $"{Quote(fullLubanDllPath)} " +
+                            "-t client " +
+                            "-c cs-simple-json " +
+                            "-d json " +
+                            $"--conf {Quote(fullLubanConfPath)} " +
+                            $"-x outputCodeDir={Quote(fullCodeOutputPath)} " +
+                            $"-x outputDataDir={Quote(fullOutputPath)}",
                 UseShellExecute = false,              // 不使用系统shell
                 RedirectStandardOutput = true,        // 重定向输出
                 RedirectStandardError = true,         // 重定向错误
-                CreateNoWindow = false                // 不创建窗口
+                CreateNoWindow = true                 // 不创建窗口
             };
 
             // 注册输出事件
@@ -66,11 +84,21 @@ namespace GAS.Editor
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 process.WaitForExit(); // 等待执行完成
-                Debug.Log($"BAT执行完成，退出代码: {process.ExitCode}");
+                process.WaitForExit();
+
+                if (process.ExitCode != 0)
+                {
+                    Debug.LogError($"Luban执行失败，退出代码: {process.ExitCode}");
+                    return false;
+                }
+
+                Debug.Log($"Luban执行完成，退出代码: {process.ExitCode}");
+                return true;
             }
             catch (Exception ex)
             {
                 Debug.LogError($"执行错误: {ex.Message}");
+                return false;
             }
             finally
             {
@@ -78,6 +106,18 @@ namespace GAS.Editor
                 // 刷新资源
                 AssetDatabase.Refresh();
             }
+        }
+
+        private static string ResolveProjectPath(string projectRoot, string path)
+        {
+            return Path.GetFullPath(Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(projectRoot, path));
+        }
+
+        private static string Quote(string value)
+        {
+            return $"\"{value.Replace("\"", "\\\"")}\"";
         }
         
         public static string MakeTagValidIdentifier(string name)
@@ -408,59 +448,19 @@ namespace GAS.Editor
             writer.WriteLine("}");
         }
         
-        [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成 BlobSchema + BlobBuilder")]
-        public static void GenerateGlueBlobSchema()
-        {
-            GasBlobSchemaGenerator.GenerateBlobSchemaAndBuilder();
-        }
-
-        [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成 StaticLookup")]
-        public static void GenerateGlueStaticLookup()
-        {
-            GasStaticLookupGenerator.GenerateStaticLookup();
-        }
-
         /// <summary>
         ///  生成所有GAS相关代码
         /// </summary>
         [MenuItem("EXTool/EX-GAS/生成脚本/生成所有")]
         public static void GenerateAllCode()
         {
-            // 先更新Bean定义（因为其他代码生成可能依赖它）
-            BeanUpdater.UpdateBeans();
+            if (!GasCodeGenProcessGate.RunDefault())
+                return;
 
-            GenerateTagCode();
-            GenerateAttrCode();
-            GenerateAttrSetCode();
-            GenerateAbilityCode();
-            GenerateCueCode();
-            GenerateLubanExtension();
-            GenerateLauncher();
-
-            // Phase 1-5: Luban → DOTS 胶水代码生成（按依赖顺序）
-            GenerateGlueBlobSchema();
-            GenerateGlueStaticLookup();
-            GenerateGlueBakers();
-            GenerateGlueComponentTypeSets();
-            GenerateGlueQueryLayouts();
+            GasCodeGenPipeline.RunAll();
         }
 
-        [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成 Baker + BakingSystem")]
-        public static void GenerateGlueBakers()
-        {
-            GasBakerBakingSystemGenerator.GenerateBakersAndBakingSystem();
-        }
-
-        [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成 ComponentTypeSet")]
-        public static void GenerateGlueComponentTypeSets()
-        {
-            GasComponentTypeSetGenerator.GenerateComponentTypeSets();
-        }
-
-        [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成 QueryLayout")]
-        public static void GenerateGlueQueryLayouts()
-        {
-            GasQueryLayoutGenerator.GenerateQueryLayouts();
-        }
+        [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成所有胶水代码（Pipeline）")]
+        public static void GenerateGluePipeline() => GasCodeGenPipeline.RunAll();
     }
 }

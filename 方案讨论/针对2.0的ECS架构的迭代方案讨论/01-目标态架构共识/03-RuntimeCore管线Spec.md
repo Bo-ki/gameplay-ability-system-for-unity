@@ -601,6 +601,16 @@ Debugger 在 `GASObservationProjectionSystemGroup` 中执行轻量级采样验�
 | `ReplayLogSystem` | 已落地 | `GameplayEventBuffer` → `BDebugReplayEvent` |
 | `DiagnosticsSnapshotSystem` | 已落地（AM1 baseline） | Debugger counters → `RuntimeDiagnosticsSnapshot` |
 
+> **`PRF-07` 说明 —— 不拆分 Group**：三个 System 共享相同的输入 Query（`GameplayEventBuffer`），合并在同一 SystemGroup 是正确的。每个 System 有固定的 TypeHandle 刷新 + Lookup 创建 + Dependency 链开销，不必要地拆分为多个 Group 会增加固定成本（`PRF-07`）。
+>
+> **`DiagnosticsSnapshotSystem` 采样频率控制**：不同于 `PresentationOutboxSystem` 需要每帧执行（低延迟 UI 反馈），`DiagnosticsSnapshotSystem` 应在其内部用帧计数器控制采样频率（如每 60 帧采样一次），而非通过拆分 Group 实现。三个 System 的写入频率、消费者和性能预算不同，通过**内部采样控制**而非**Group 拆分**来解决。
+>
+> ```
+> PresentationOutboxSystem:  每帧执行（UI 低延迟要求）
+> ReplayLogSystem:           每帧执行（确定性回放要求）
+> DiagnosticsSnapshotSystem: 每 N 帧采样（N 可配置，默认 60）
+> ```
+
 ---
 
 ## 禁止方向

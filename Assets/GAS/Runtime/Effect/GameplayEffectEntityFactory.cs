@@ -106,7 +106,28 @@ namespace GAS.Runtime
             if (!entityManager.HasComponent<CActiveEffectGlobalIndexStableRow>(entity))
                 entityManager.AddComponentData(entity, ActiveEffectStore.CreateGlobalIndexStableRowDefault(entity));
 
+            EnsureExecutionCalculationBuffers(entityManager, entity);
             EnsureRuntimeGrantedAbilityBuffer(entityManager, entity);
+        }
+
+        private static void EnsureExecutionCalculationBuffers(EntityManager entityManager, Entity entity)
+        {
+            var hasExecutionDefinition =
+                entityManager.HasBuffer<BExecutionCalculationDefinition>(entity)
+                || entityManager.HasBuffer<BExecutionCalculationInputDefinition>(entity)
+                || entityManager.HasBuffer<BExecutionCalculationOutputModifierDefinition>(entity);
+
+            if (!hasExecutionDefinition)
+                return;
+
+            if (!entityManager.HasBuffer<BExecutionCalculationValue>(entity))
+                entityManager.AddBuffer<BExecutionCalculationValue>(entity);
+
+            if (!entityManager.HasBuffer<BSetByCallerValue>(entity))
+                entityManager.AddBuffer<BSetByCallerValue>(entity);
+
+            if (!entityManager.HasBuffer<BResolvedModifier>(entity))
+                entityManager.AddBuffer<BResolvedModifier>(entity);
         }
 
         private static void EnsureRuntimeGrantedAbilityBuffer(EntityManager entityManager, Entity entity)

@@ -44,16 +44,22 @@ Assets/AutoChessDemo/Config
     AutoChessDemoGenerator.cs
   GeneratedRuntime/
     AutoChessIds.g.cs
+    AutoChessAttributeComponents.g.cs
+    AutoChessTagMasks.g.cs
     AutoChessStaticLookups.g.cs
     AutoChessBlobBuilders.g.cs
+    AutoChessMmcEvaluator.g.cs
     AutoChessScenarioBuildPlan.g.cs
     AutoChessValidationExpectations.g.cs
+  GeneratedBaking/
+    AutoChessBakers.g.cs
+    AutoChessBakePlan.g.cs
   GeneratedEditor/
     AutoChessConfigDiagnostics.g.cs
     AutoChessConfigReport.g.cs
 ```
 
-配置权威源表放在 `EX_GAS_Config/ProjectConfigTable/exgas_config/Datas/AutoChessDemo`。`Assets/AutoChessDemo/Config` 只保存 schema 文档、SourceGenerator 工程和可审查生成代码。生成缓存、临时 JSON、中间 manifest 和本地导出文件按 `.gitignore` 处理；进入版本控制的生成物必须是源码契约，而不是缓存。
+配置权威源表放在 `EX_GAS_Config/ProjectConfigTable/exgas_config/Datas/AutoChessDemo`。`Assets/AutoChessDemo/Config` 只保存 schema 文档、SourceGenerator 工程和可审查生成代码。生成缓存、临时 JSON 和本地导出文件按 `.gitignore` 处理；manifest 必须生成并参与路径审计 / orphan `.g.cs` 清理，但是否进入版本控制由 `08-Luban-SourceGenerator配置生成链路Spec.md` 的 manifest 策略决定。进入版本控制的生成物必须是源码契约，而不是缓存。
 
 ## 配置表职责
 
@@ -255,13 +261,21 @@ flowchart TD
     Excel["AutoChess Luban Excel"] --> Luban["Luban JSON / Bean"]
     Luban --> Gen["AutoChessDemo SourceGenerator"]
     Gen --> Ids["AutoChessIds.g.cs"]
+    Gen --> Attrs["AutoChessAttributeComponents.g.cs"]
+    Gen --> Tags["AutoChessTagMasks.g.cs"]
     Gen --> Lookups["AutoChessStaticLookups.g.cs"]
     Gen --> Blobs["AutoChessBlobBuilders.g.cs"]
+    Gen --> Mmc["AutoChessMmcEvaluator.g.cs"]
+    Gen --> Bakers["AutoChessBakers.g.cs"]
     Gen --> Scenario["AutoChessScenarioBuildPlan.g.cs"]
     Gen --> Validate["AutoChessValidationExpectations.g.cs"]
     Ids --> Runtime["AutoChessDemo Runtime"]
+    Attrs --> Runtime
+    Tags --> Runtime
     Lookups --> Runtime
     Blobs --> Runtime
+    Mmc --> Runtime
+    Bakers --> Baking["AutoChessDemo Baking"]
     Scenario --> Validation["Validation Runner"]
     Validate --> Validation
 ```
@@ -271,8 +285,13 @@ flowchart TD
 | 生成物 | 职责 | 禁止事项 |
 |---|---|---|
 | `AutoChessIds.g.cs` | 属性、Tag、Ability、GE、Cue、Unit、Scenario、ScaleProfile 常量 | 不包含 gameplay 逻辑 |
-| `AutoChessStaticLookups.g.cs` | id -> blob / static row / compact lookup | 不读取原始 JSON |
-| `AutoChessBlobBuilders.g.cs` | Unit / Ability / GE / TagRequirement / Cue marker blob 构建 | 不生成 active lifecycle |
+| `AutoChessAttributeComponents.g.cs` | `HealthAttribute`、`ManaAttribute` 等属性 component type 和必要 accessor | 不为不同单位生成不同属性集合；不生成属性生命周期 system |
+| `AutoChessTagMasks.g.cs` | `XTagBit`、parent / requirement mask、`TagCheck` static helper | 不生成独立 tag component |
+| `AutoChessStaticLookups.g.cs` | id -> blob / compact lookup；Runtime Core 只读 | 不读取原始 JSON；不使用托管数组 / dictionary 作为 hot path lookup |
+| `AutoChessBlobBuilders.g.cs` | Unit / Ability / GE / TagRequirement / Cue marker blob 构建，输入来自 row / generated definition | 不从 prototype entity 或 runtime state 构建静态 definition |
+| `AutoChessMmcEvaluator.g.cs` | `MmcTypeId` 常量和 `MmcEvaluator.Evaluate()` static switch | 不生成托管 delegate、`Func<>` 或可变 registry |
+| `AutoChessBakers.g.cs` | `Baker<TAuthoring>`、`DependsOn()`、`AddBlobAsset()` / custom hash glue | 不生成静态 ECB Baker 方法；不读取其他 Baker 输出 |
+| `AutoChessBakePlan.g.cs` | bake-time 依赖、BlobAssetStore、Baking world / phase 输出计划 | 不参与 Runtime Core tick |
 | `AutoChessScenarioBuildPlan.g.cs` | 根据 scenario 表生成 spawn plan、board plan、seed | 不直接操作 Runtime Core 私有结构 |
 | `AutoChessValidationExpectations.g.cs` | expected summary、facts hash、thresholds | 不把测试结果写死为实现逻辑 |
 | `AutoChessConfigDiagnostics.g.cs` | Editor / CI 配置诊断 | 不参与 runtime hot path |
@@ -431,6 +450,10 @@ sequenceDiagram
 5. DiagnosticsThreshold 能生成 pass / excellent 性能阈值，并被 ValidationExpectation 引用。
 6. 生成链不生成 gameplay lifecycle，只生成 Definition & Generation Layer 输入和 runtime static lookup。
 7. PhysicsProfile / RenderProfile 能生成可选 profile，默认无头输出 disabled reason，启用时能把 Physics / Graphics 指标纳入 validation summary。
+8. Runtime assembly 中不存在 `cfg.*`、`XLuban`、`SimpleJSON` 或 Luban managed row 依赖；AutoChess runtime 只消费 generated ids、Blob、lookup、attribute component、tag mask 和 MMC static switch。
+9. AutoChess lookup 必须证明 O(1) 或 O(log n)，并在生成报告中输出数据规模、排序/哈希策略和 Burst / Player AOT 可见性。
+10. `AutoChessBakers.g.cs` 必须能映射到 `Baker<TAuthoring>` / `DependsOn()` / `AddBlobAsset()` / custom hash 规则；不得用静态 ECB helper 冒充 Baker。
+11. 生成 manifest 必须能清理删除表行后遗留的 `.g.cs`，并证明输出路径没有逃逸 `Assets/AutoChessDemo/Config` 或约定 generated root。
 
 ## 历史方案定位
 
@@ -438,4 +461,3 @@ sequenceDiagram
 2. 方案13 的 Tag bit、Ability / Effect blob、真实 Demo 业务配置链见 `../历史方案参考/方案13.md:153-170`、`../历史方案参考/方案13.md:696-818`、`../历史方案参考/方案13.md:1164-1215`、`../历史方案参考/方案13.md:2053-2176`。
 3. 方案14 的自走棋 Luban 配置表、GEBlobBuilder、ECS 数据和 UI 事件链见 `../历史方案参考/方案14.md:1138-1368`、`../历史方案参考/方案14.md:1446-1508`、`../历史方案参考/方案14.md:2178-2351`。
 4. 方案15 的四层架构、SourceGenerator、完整自走棋配置、业务管理和 Debug workflow 见 `../历史方案参考/方案15.md:35-92`、`../历史方案参考/方案15.md:788-960`、`../历史方案参考/方案15.md:1437-1533`、`../历史方案参考/方案15.md:2228-2545`、`../历史方案参考/方案15.md:2661-2843`。
-

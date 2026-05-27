@@ -556,6 +556,40 @@ namespace GAS.Runtime
             em.SetComponentData(streamEntity, stream);
         }
 
+        public static void PrepareFrameLocalData(EntityManager em, Entity streamEntity, int frame)
+        {
+            if (streamEntity == Entity.Null || !em.Exists(streamEntity))
+                return;
+
+            EnsureBuffers(em, streamEntity);
+            var stream = em.GetComponentData<CEffectCommandSpecStream>(streamEntity);
+            if (stream.LastClearedFrame == frame)
+                return;
+
+            var commands = em.GetBuffer<BEffectCommand>(streamEntity);
+            var setByCallerValues = em.GetBuffer<BEffectCommandSetByCallerValue>(streamEntity);
+            CompactConsumedCommands(
+                commands,
+                setByCallerValues,
+                MinCursor(
+                    ClampCursor(stream.SpecBuildCommandCursor, commands.Length),
+                    ClampCursor(stream.ActiveMutationCommandCursor, commands.Length)));
+
+            em.GetBuffer<BInstantEffectSpec>(streamEntity).Clear();
+            em.GetBuffer<BAttributeDelta>(streamEntity).Clear();
+            em.GetBuffer<BActiveEffectMutation>(streamEntity).Clear();
+            em.GetBuffer<BTypedSimulationFact>(streamEntity).Clear();
+
+            stream.LastClearedFrame = frame;
+            stream.SpecBuildCommandCursor = 0;
+            stream.ActiveMutationCommandCursor = 0;
+            stream.DeltaApplySpecCursor = 0;
+            stream.FactProjectionDeltaCursor = 0;
+            stream.EventBridgeFactCursor = 0;
+            stream.CueProjectionSpecCursor = 0;
+            em.SetComponentData(streamEntity, stream);
+        }
+
         public static BEffectCommand AppendLegacyRequestBridgeCommand(
             EntityManager em,
             in CApplyGameplayEffectRequest request,
@@ -674,6 +708,71 @@ namespace GAS.Runtime
         {
             if (next <= value)
                 next = value + 1;
+        }
+
+        private static void CompactConsumedCommands(
+            DynamicBuffer<BEffectCommand> commands,
+            DynamicBuffer<BEffectCommandSetByCallerValue> setByCallerValues,
+            int consumedCommandCount)
+        {
+            if (consumedCommandCount <= 0)
+                return;
+
+            if (consumedCommandCount >= commands.Length)
+            {
+                commands.Clear();
+                setByCallerValues.Clear();
+                return;
+            }
+
+            var setByCallerDropCount = setByCallerValues.Length;
+            var hasKeptSetByCallerRange = false;
+            for (var i = consumedCommandCount; i < commands.Length; i++)
+            {
+                var command = commands[i];
+                if (command.SetByCallerCount <= 0)
+                    continue;
+
+                hasKeptSetByCallerRange = true;
+                if (command.SetByCallerStart < setByCallerDropCount)
+                    setByCallerDropCount = command.SetByCallerStart;
+            }
+
+            commands.RemoveRange(0, consumedCommandCount);
+            if (hasKeptSetByCallerRange)
+            {
+                setByCallerDropCount = ClampCursor(setByCallerDropCount, setByCallerValues.Length);
+                if (setByCallerDropCount > 0)
+                    setByCallerValues.RemoveRange(0, setByCallerDropCount);
+            }
+            else
+            {
+                setByCallerValues.Clear();
+                setByCallerDropCount = 0;
+            }
+
+            for (var i = 0; i < commands.Length; i++)
+            {
+                var command = commands[i];
+                if (command.SetByCallerCount > 0)
+                    command.SetByCallerStart -= setByCallerDropCount;
+                else
+                    command.SetByCallerStart = 0;
+
+                commands[i] = command;
+            }
+        }
+
+        private static int ClampCursor(int cursor, int length)
+        {
+            if (cursor < 0)
+                return 0;
+            return cursor > length ? length : cursor;
+        }
+
+        private static int MinCursor(int left, int right)
+        {
+            return left < right ? left : right;
         }
 
     }

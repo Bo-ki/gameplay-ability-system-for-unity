@@ -73,18 +73,20 @@ namespace GAS.Runtime
 
             for (var i = 0; i < targetAscs.Count; i++)
             {
-                if (!CanAppendSimpleInstantCommand(em, request, targetAscs[i], targetDataKind, source))
+                if (!CanAppendEffectCommand(em, request, targetAscs[i], targetDataKind, source))
                     return false;
             }
 
             var writer = EffectCommandSpecStream.BeginCommandWriter(em);
             for (var i = 0; i < targetAscs.Count; i++)
             {
-                var command = EffectCommandSpecStream.ToCommand(
+                PrepareAppendableCommand(
+                    em,
                     request,
                     targetAscs[i],
                     targetDataKind,
-                    source);
+                    source,
+                    out var command);
                 writer.AppendCommand(command, setByCallerValues);
             }
 
@@ -116,14 +118,8 @@ namespace GAS.Runtime
             IReadOnlyList<BSetByCallerValue> setByCallerValues,
             EEffectCommandSource source)
         {
-            if (!CanAppendSimpleInstantCommand(em, request, targetAsc, targetDataKind, source))
+            if (!PrepareAppendableCommand(em, request, targetAsc, targetDataKind, source, out var command))
                 return false;
-
-            var command = EffectCommandSpecStream.ToCommand(
-                request,
-                targetAsc,
-                targetDataKind,
-                source);
 
             EffectCommandSpecStream.AppendCommand(em, command, setByCallerValues);
             return true;
@@ -137,41 +133,73 @@ namespace GAS.Runtime
             DynamicBuffer<BSetByCallerValue> setByCallerValues,
             EEffectCommandSource source)
         {
-            if (!CanAppendSimpleInstantCommand(em, request, targetAsc, targetDataKind, source))
+            if (!PrepareAppendableCommand(em, request, targetAsc, targetDataKind, source, out var command))
                 return false;
-
-            var command = EffectCommandSpecStream.ToCommand(
-                request,
-                targetAsc,
-                targetDataKind,
-                source);
 
             EffectCommandSpecStream.AppendCommand(em, command, setByCallerValues);
             return true;
         }
 
-        private static bool CanAppendSimpleInstantCommand(
+        public static bool TryPrepareAppendableCommand(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind,
+            EEffectCommandSource source,
+            out BEffectCommand command)
+        {
+            return PrepareAppendableCommand(
+                em,
+                request,
+                targetAsc,
+                targetDataKind,
+                source,
+                out command);
+        }
+
+        private static bool CanAppendEffectCommand(
             EntityManager em,
             in CApplyGameplayEffectRequest request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
             EEffectCommandSource source)
         {
-            if (targetAsc == Entity.Null)
-                return false;
+            return PrepareAppendableCommand(
+                em,
+                request,
+                targetAsc,
+                targetDataKind,
+                source,
+                out _);
+        }
 
-            var command = EffectCommandSpecStream.ToCommand(
+        private static bool PrepareAppendableCommand(
+            EntityManager em,
+            in CApplyGameplayEffectRequest request,
+            Entity targetAsc,
+            ETargetDataKind targetDataKind,
+            EEffectCommandSource source,
+            out BEffectCommand command)
+        {
+            if (targetAsc == Entity.Null)
+            {
+                command = default;
+                return false;
+            }
+
+            command = EffectCommandSpecStream.ToCommand(
                 request,
                 targetAsc,
                 targetDataKind,
                 source);
 
-            if (command.Kind != EEffectCommandKind.Instant
-                || !EffectCommandSpecStreamPhaseUtility.CanBuildSimpleInstantSpec(em, in command))
-            {
-                return false;
-            }
+            if (EffectCommandSpecStreamPhaseUtility.CanBuildSimpleInstantSpec(em, in command))
+                return true;
 
+            if (!EffectCommandSpecStreamPhaseUtility.CanBuildActiveEffectMutation(em, in command))
+                return false;
+
+            command.Kind = EEffectCommandKind.ActiveMutation;
             return true;
         }
 

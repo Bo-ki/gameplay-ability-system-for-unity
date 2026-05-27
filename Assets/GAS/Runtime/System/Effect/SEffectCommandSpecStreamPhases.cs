@@ -4,6 +4,26 @@ using static GAS.Runtime.EffectCommandSpecStreamPhaseUtility;
 namespace GAS.Runtime
 {
     [UpdateInGroup(typeof(GASCommandGroup))]
+    [UpdateBefore(typeof(SEffectCommandIngest))]
+    public partial struct SEffectCommandSpecStreamFramePrepare : ISystem
+    {
+        public void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<CEffectCommandSpecStream>();
+        }
+
+        public void OnUpdate(ref SystemState state)
+        {
+            var em = state.EntityManager;
+            var streamEntity = SystemAPI.GetSingletonEntity<CEffectCommandSpecStream>();
+            EffectCommandSpecStream.PrepareFrameLocalData(
+                em,
+                streamEntity,
+                GASRuntimeFrameContext.ResolveCurrentFrame(em));
+        }
+    }
+
+    [UpdateInGroup(typeof(GASCommandGroup))]
     [UpdateAfter(typeof(STryActivateAbility))]
     public partial struct SEffectCommandIngest : ISystem
     {
@@ -360,8 +380,375 @@ namespace GAS.Runtime
             var streamEntity = SystemAPI.GetSingletonEntity<CEffectCommandSpecStream>();
             var stream = em.GetComponentData<CEffectCommandSpecStream>(streamEntity);
             var commands = em.GetBuffer<BEffectCommand>(streamEntity);
-            stream.ActiveMutationCommandCursor = commands.Length;
-            em.SetComponentData(streamEntity, stream);
+            var mutations = em.GetBuffer<BActiveEffectMutation>(streamEntity);
+            var setByCallerValues = em.GetBuffer<BEffectCommandSetByCallerValue>(streamEntity);
+            var frame = GASRuntimeFrameContext.ResolveCurrentFrame(em);
+            var eventBusEntity = SystemAPI.TryGetSingletonEntity<CGameplayEventBus>(out var resolvedEventBus)
+                ? resolvedEventBus
+                : Entity.Null;
+            var eventWriter = eventBusEntity != Entity.Null
+                ? EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity)
+                : default;
+
+            try
+            {
+                var start = ClampCursor(stream.ActiveMutationCommandCursor, commands.Length);
+                for (var i = start; i < commands.Length; i++)
+                {
+                    var command = commands[i];
+                    if (command.Kind != EEffectCommandKind.ActiveMutation
+                        || !CanBuildActiveEffectMutation(em, in command))
+                    {
+                        continue;
+                    }
+
+                    ApplyActiveMutation(em, mutations, in command, setByCallerValues, frame, ref eventWriter);
+                }
+
+                stream.ActiveMutationCommandCursor = commands.Length;
+                em.SetComponentData(streamEntity, stream);
+            }
+            finally
+            {
+                eventWriter.Dispose();
+            }
+        }
+
+        private static void ApplyActiveMutation(
+            EntityManager em,
+            DynamicBuffer<BActiveEffectMutation> mutations,
+            in BEffectCommand command,
+            DynamicBuffer<BEffectCommandSetByCallerValue> setByCallerValues,
+            int frame,
+            ref EventBusHelper.GameplayEventBusWriter eventWriter)
+        {
+            var effect = GameplayEffectConfigRegistry.CreateRuntimeEffectInstance(
+                em,
+                command.GameplayEffectCode,
+                new ConfigRegistryReferenceContext(
+                    ConfigRegistryConfigKind.GameplayEffect,
+                    command.GameplayEffectCode,
+                    ConfigRegistryReferenceKind.ApplyGameplayEffectRequest));
+            if (effect == Entity.Null || !em.Exists(effect))
+                return;
+
+            em.SetName(effect, $"GE_{command.GameplayEffectCode}_{effect.Index}");
+            var context = CreateContext(in command);
+            SetOrAdd(em, effect, context);
+            SetOrAdd(em, effect, new CEffectSpecData
+            {
+                GameplayEffectCode = command.GameplayEffectCode,
+                Level = command.Level,
+                StackCount = 1,
+                DurationFrameOverride = command.DurationFrameOverride,
+            });
+            CopySetByCallerValues(em, effect, command, setByCallerValues);
+
+            var spec = em.GetComponentData<CEffectSpecData>(effect);
+            SetOrAdd(em, effect, new CEffectLifecycle
+            {
+                State = EGameplayEffectLifecycleState.Active,
+                PreviousState = EGameplayEffectLifecycleState.PendingApply,
+                StateStartFrame = frame,
+            });
+
+            ApplyRemoveGameplayEffectsWithTags(em, effect, command.TargetAsc);
+            EffectRuntimeUtility.ApplyResolvedModifiersAsActive(
+                em,
+                effect,
+                in context,
+                in spec,
+                ref eventWriter);
+            EnsureIndefiniteActiveRuntime(em, effect);
+
+            var hasDuration = em.HasComponent<CDurationRuntime>(effect);
+            if (hasDuration)
+            {
+                var duration = em.GetComponentData<CDurationRuntime>(effect);
+                if (command.DurationFrameOverride > 0)
+                    duration.ResolvedDuration = command.DurationFrameOverride;
+                duration.Active = true;
+                duration.ActiveTime = frame;
+                duration.LastActiveTime = frame;
+                duration.RemainingTime = duration.ResolvedDuration;
+                em.SetComponentData(effect, duration);
+                if (em.HasComponent<CPeriodRuntime>(effect))
+                    em.SetComponentData(effect, new CPeriodRuntime { StartTime = frame });
+
+                AddTargetEffect(em, command.TargetAsc, effect);
+                ApplyGrantedTags(em, command.TargetAsc, effect, ref eventWriter);
+                ActiveEffectStore.TryUpsertDurationEffect(
+                    em,
+                    effect,
+                    in context,
+                    in duration,
+                    EActiveEffectSlotState.Active,
+                    frame);
+            }
+
+            mutations.Add(new BActiveEffectMutation
+            {
+                Sequence = command.Sequence,
+                SourceCommandSequence = command.Sequence,
+                Frame = frame,
+                Kind = EActiveEffectMutationKind.Apply,
+                ActiveEffect = effect,
+                SourceAsc = command.SourceAsc,
+                TargetAsc = command.TargetAsc,
+                SourceAbility = command.SourceAbility,
+                SourceEffect = command.SourceEffect,
+                GameplayEffectCode = command.GameplayEffectCode,
+                ContextId = command.ContextId,
+                ParentContextId = command.ParentContextId,
+                StackCount = 1,
+                DurationFrameOverride = command.DurationFrameOverride,
+                PeriodFrame = em.HasComponent<CPeriodDefinition>(effect)
+                    ? em.GetComponentData<CPeriodDefinition>(effect).Period
+                    : 0,
+            });
+
+            EnqueueGameplayEffectEvents(ref eventWriter, effect, in command);
+            if (!hasDuration && em.Exists(effect))
+                EffectRuntimeUtility.CleanupActiveEffect(em, effect, ref eventWriter);
+        }
+
+        private static void EnsureIndefiniteActiveRuntime(EntityManager em, Entity effect)
+        {
+            if (em.HasComponent<CDurationRuntime>(effect)
+                || !HasPersistentActiveState(em, effect))
+            {
+                return;
+            }
+
+            em.AddComponentData(effect, new CDurationRuntime
+            {
+                ResolvedDuration = 0,
+                RemainingTime = 0,
+            });
+        }
+
+        private static void CopySetByCallerValues(
+            EntityManager em,
+            Entity effect,
+            in BEffectCommand command,
+            DynamicBuffer<BEffectCommandSetByCallerValue> setByCallerValues)
+        {
+            if (command.SetByCallerCount <= 0)
+                return;
+
+            var values = em.HasBuffer<BSetByCallerValue>(effect)
+                ? em.GetBuffer<BSetByCallerValue>(effect)
+                : em.AddBuffer<BSetByCallerValue>(effect);
+            values.Clear();
+
+            var start = command.SetByCallerStart;
+            var end = start + command.SetByCallerCount;
+            if (start < 0)
+                start = 0;
+            if (end > setByCallerValues.Length)
+                end = setByCallerValues.Length;
+
+            for (var i = start; i < end; i++)
+            {
+                var value = setByCallerValues[i];
+                if (value.CommandSequence != command.Sequence)
+                    continue;
+
+                values.Add(new BSetByCallerValue
+                {
+                    Key = value.Key,
+                    Value = value.Value,
+                });
+            }
+        }
+
+        private static CEffectContext CreateContext(in BEffectCommand command)
+        {
+            return new CEffectContext
+            {
+                SourceAsc = command.SourceAsc,
+                TargetAsc = command.TargetAsc,
+                SourceAbility = command.SourceAbility,
+                SourceEffect = command.SourceEffect,
+                Instigator = command.Instigator,
+                Causer = command.Causer,
+                ContextId = command.ContextId,
+                ParentContextId = command.ParentContextId,
+                TargetDataKind = command.TargetDataKind,
+            };
+        }
+
+        private static void AddTargetEffect(EntityManager em, Entity targetAsc, Entity effect)
+        {
+            if (targetAsc == Entity.Null || !em.Exists(targetAsc))
+                return;
+            if (!em.HasBuffer<BGameplayEffect>(targetAsc))
+                em.AddBuffer<BGameplayEffect>(targetAsc);
+
+            var effects = em.GetBuffer<BGameplayEffect>(targetAsc);
+            for (var i = 0; i < effects.Length; i++)
+            {
+                if (effects[i].GameplayEffect == effect)
+                    return;
+            }
+
+            effects.Add(new BGameplayEffect { GameplayEffect = effect });
+        }
+
+        private static void ApplyGrantedTags(
+            EntityManager em,
+            Entity targetAsc,
+            Entity effect,
+            ref EventBusHelper.GameplayEventBusWriter eventWriter)
+        {
+            if (targetAsc == Entity.Null
+                || !em.Exists(targetAsc)
+                || !em.HasComponent<CTagMask>(targetAsc)
+                || !em.HasBuffer<BTempTagSource>(targetAsc)
+                || !TryGetGrantedTags(em, effect, out var grantedTags)
+                || grantedTags.IsEmpty)
+            {
+                return;
+            }
+
+            var mask = em.GetComponentData<CTagMask>(targetAsc);
+            var sources = em.GetBuffer<BTempTagSource>(targetAsc);
+            for (var tagIndex = 0; tagIndex < CTagMask.Capacity; tagIndex++)
+            {
+                if (!grantedTags.HasTag(tagIndex) || HasTempTagSource(sources, tagIndex, effect))
+                    continue;
+
+                mask.AddTag(tagIndex);
+                sources.Add(new BTempTagSource
+                {
+                    TagIndex = tagIndex,
+                    Source = effect,
+                });
+                if (eventWriter.IsCreated)
+                {
+                    eventWriter.EnqueueTagChangeEvent(new BTagChangeEvent
+                    {
+                        ASC = targetAsc,
+                        TagIndex = tagIndex,
+                        Added = true,
+                    });
+                }
+            }
+
+            em.SetComponentData(targetAsc, mask);
+        }
+
+        private static void ApplyRemoveGameplayEffectsWithTags(
+            EntityManager em,
+            Entity effect,
+            Entity targetAsc)
+        {
+            if (targetAsc == Entity.Null
+                || !em.Exists(targetAsc)
+                || !em.HasComponent<CRemoveEffectWithTags>(effect)
+                || !em.HasBuffer<BTempTagSource>(targetAsc))
+            {
+                return;
+            }
+
+            var requirement = em.GetComponentData<CRemoveEffectWithTags>(effect).requirement;
+            if (requirement.IsEmpty)
+                return;
+
+            for (var tagIndex = 0; tagIndex < CTagMask.Capacity; tagIndex++)
+            {
+                if (!ShouldRemoveTag(requirement, tagIndex))
+                    continue;
+
+                EffectRuntimeUtility.RemoveActiveGameplayEffectsWithTags(em, targetAsc, tagIndex);
+            }
+        }
+
+        private static bool TryGetGrantedTags(EntityManager em, Entity effect, out CTagMask grantedTags)
+        {
+            if (em.HasComponent<CEffectGrantedTags>(effect))
+            {
+                grantedTags = em.GetComponentData<CEffectGrantedTags>(effect).Tags;
+                return !grantedTags.IsEmpty;
+            }
+
+            grantedTags = default;
+            if (!em.HasBuffer<BGrantedTagConfig>(effect))
+                return false;
+
+            var tags = em.GetBuffer<BGrantedTagConfig>(effect);
+            for (var i = 0; i < tags.Length; i++)
+                grantedTags.AddTag(tags[i].TagIndex);
+            return !grantedTags.IsEmpty;
+        }
+
+        private static bool HasPersistentActiveState(EntityManager em, Entity effect)
+        {
+            return em.HasComponent<CPeriodRuntime>(effect)
+                   || em.HasComponent<CStackingRuntime>(effect)
+                   || em.HasBuffer<BGrantedAbilityConfig>(effect)
+                   || (em.HasBuffer<BResolvedModifier>(effect)
+                       && em.GetBuffer<BResolvedModifier>(effect).Length > 0)
+                   || (TryGetGrantedTags(em, effect, out var grantedTags)
+                       && !grantedTags.IsEmpty);
+        }
+
+        private static bool HasTempTagSource(
+            DynamicBuffer<BTempTagSource> sources,
+            int tagIndex,
+            Entity source)
+        {
+            for (var i = 0; i < sources.Length; i++)
+            {
+                if (sources[i].TagIndex == tagIndex && sources[i].Source == source)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool ShouldRemoveTag(in TagRequirementMask requirement, int tagIndex)
+        {
+            return requirement.Any.HasTag(tagIndex) || requirement.All.HasTag(tagIndex);
+        }
+
+        private static void EnqueueGameplayEffectEvents(
+            ref EventBusHelper.GameplayEventBusWriter writer,
+            Entity effect,
+            in BEffectCommand command)
+        {
+            if (!writer.IsCreated)
+                return;
+
+            writer.EnqueueGameplayEvent(new BGameplayEvent
+            {
+                Type = EGameplayEventType.GameplayEffectInstanced,
+                SourceAsc = command.SourceAsc,
+                TargetAsc = command.TargetAsc,
+                SourceAbility = command.SourceAbility,
+                GameplayEffect = effect,
+                ContextId = command.ContextId,
+                EventCode = command.GameplayEffectCode,
+            });
+            writer.EnqueueGameplayEvent(new BGameplayEvent
+            {
+                Type = EGameplayEventType.GameplayEffectApplied,
+                SourceAsc = command.SourceAsc,
+                TargetAsc = command.TargetAsc,
+                SourceAbility = command.SourceAbility,
+                GameplayEffect = effect,
+                ContextId = command.ContextId,
+                EventCode = command.GameplayEffectCode,
+            });
+        }
+
+        private static void SetOrAdd<T>(EntityManager em, Entity entity, T component)
+            where T : unmanaged, IComponentData
+        {
+            if (em.HasComponent<T>(entity))
+                em.SetComponentData(entity, component);
+            else
+                em.AddComponentData(entity, component);
         }
     }
 
@@ -372,6 +759,40 @@ namespace GAS.Runtime
             in BEffectCommand command)
         {
             return TryGetSimpleInstantDefinition(em, in command, out _);
+        }
+
+        public static bool CanBuildActiveEffectMutation(
+            EntityManager em,
+            in BEffectCommand command)
+        {
+            if (command.GameplayEffectCode <= 0
+                || command.TargetAsc == Entity.Null
+                || IsUnavailableAsc(em, command.SourceAsc)
+                || IsUnavailableAsc(em, command.TargetAsc)
+                || !GameplayEffectConfigRegistry.TryGetOrCreateStaticDefinitionBlob(
+                    em,
+                    command.GameplayEffectCode,
+                    out var blob,
+                    new ConfigRegistryReferenceContext(
+                        ConfigRegistryConfigKind.GameplayEffect,
+                        command.GameplayEffectCode,
+                        ConfigRegistryReferenceKind.ApplyGameplayEffectRequest)))
+            {
+                return false;
+            }
+
+            ref var definition = ref blob.Value;
+            if (CanApplySimpleInstantSpec(ref definition))
+                return false;
+
+            return definition.HasDuration
+                   || definition.HasPeriod
+                   || definition.HasStacking
+                   || definition.HasRemoveGameplayEffectsWithTags
+                   || definition.HasOngoingRequiredTags
+                   || !definition.GrantedTags.IsEmpty
+                   || definition.GrantedAbilities.Length > 0
+                   || definition.Modifiers.Length == 0;
         }
 
         public static bool TryGetSimpleInstantDefinition(

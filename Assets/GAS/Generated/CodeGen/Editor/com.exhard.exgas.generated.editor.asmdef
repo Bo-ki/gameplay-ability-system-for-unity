@@ -1,0 +1,24 @@
+{
+    "name": "com.exhard.exgas.generated.editor",
+    "rootNamespace": "",
+    "references": [
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Entities.Hybrid",
+        "com.exhard.exgas.autochessdemo",
+        "com.exhard.exgas.editor",
+        "com.exhard.exgas.generated.runtime",
+        "com.exhard.exgas.runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

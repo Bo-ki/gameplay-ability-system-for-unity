@@ -152,6 +152,31 @@ SystemGroup 命名保持原有模式，统一使用 `GAS` 大写前缀：
 | GAS Runtime Core Layer | 见上：`[GAS前缀][职责][DOTS后缀]` | 不使用 `Manager`、`Facade`、泛化 `Helper`、真实 UI/VFX/SFX 资源名；不使用旧 `C*`/`B*`/`S*` 单字母前缀 |
 | Definition & Generation Layer | `*Definition`、`*Registry`、`*Lookup`、`*BakePlan`、`*ValidationReport`、`*GeneratedIds` | 不使用 `Runtime` 命名承载生成产物，不生成 `*LifecycleSystem` |
 
+## Definition & Generation Layer 生成产物命名
+
+Luban / SourceGenerator 生成的 Runtime-visible 类型也必须遵守职责命名，不使用 `Blob*Definition`、`Gas*`/`GAS*` 混用或无机制后缀的短名。
+
+| 产物 | 命名格式 | 示例 | 说明 |
+|---|---|---|---|
+| Blob 根类型 | `{Domain}DefinitionBlob` | `AbilityDefinitionBlob`、`GameplayEffectDefinitionBlob` | `Blob` 是 DOTS 承载机制，必须放在后缀 |
+| Static lookup | `{Domain}DefinitionLookup` | `AbilityDefinitionLookup` | lookup 是定义查找表，不承载 runtime state |
+| Generated index | `GASGeneratedDefinitionIndex` / `GASGeneratedDefinitionIndexEntry` | `GASGeneratedDefinitionIndexEntry` | GAS 框架级生成元数据，统一 `GASGenerated*` |
+| Blob component | `GASGeneratedDefinitionBlobComponent<T>` | `GASGeneratedDefinitionBlobComponent<AbilityDefinitionBlob>` | Runtime-visible `IComponentData`，后缀必须是 `Component` |
+| Code component | `GASDefinitionCodeComponent` | `GASDefinitionCodeComponent` | Runtime-visible `IComponentData`，只保存 stable code |
+| Baker authoring | `{Domain}DefinitionBlobAuthoring` / `{Domain}DefinitionBlobBaker` | `AbilityDefinitionBlobBaker` | Baker 命名必须能看出输入 Blob 类型 |
+| Blob builder | `GASGeneratedDefinitionBlobBuilder` | `BuildAbilityDefinitionBlob()` | Builder 只构建 Blob，不拥有生命周期 |
+| Lookup builder | `GASGeneratedDefinitionLookupBuilder` | `BuildAbilityDefinitionLookupFromRows()` | Editor/Baking 侧从 row 构建 lookup；不得使用 `BlobDefinitionLookupBuilder` 这类机制前置命名 |
+| Component type set | `GASGeneratedDefinitionComponentTypeSets` | `AbilityDefinitionComponentTypes` | 只输出 `ComponentTypeSet` 常量，不隐藏结构变化 |
+| Query layout | `GASGeneratedDefinitionQueryLayouts` | `AbilityDefinitionQuery` | 只描述 query shape，不生成 runtime lifecycle system |
+| Validation report | `GASCodeGenValidationReport` 或文件 `GasCodeGenValidationReport.md` | `GasCodeGenValidationReport.md` | Editor/CI 诊断，不进入 Runtime Core |
+
+禁止样例：
+
+1. `BlobAbilityDefinition`：机制前缀压过 GAS 概念，违反“GAS 概念作前缀，DOTS 机制作后缀”。
+2. `GeneratedDefinitionBlobComponent<T>`：缺少 `GAS` 框架归属前缀。
+3. `GasGeneratedDefinitionIndex`：框架缩写大小写不一致，新生成类型统一使用 `GAS`。
+4. `BlobDefinitionLookupBuilder`：机制前置且缺少 `GASGenerated` 框架归属；应改为 `GASGeneratedDefinitionLookupBuilder`。
+
 ## 旧 C/B/S 前缀的迁移
 
 旧惯例 `C*` = IComponentData、`B*` = IBufferElementData、`S*` = ISystem 自本 Spec v2 起废弃。迁移规则：

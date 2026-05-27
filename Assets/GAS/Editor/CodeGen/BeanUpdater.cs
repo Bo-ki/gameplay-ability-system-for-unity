@@ -60,13 +60,18 @@ namespace GAS.Editor
         [MenuItem("EXTool/EX-GAS/生成脚本/更新Bean定义")]
         public static void UpdateBeans()
         {
+            TryUpdateBeans();
+        }
+
+        public static bool TryUpdateBeans()
+        {
             var setting = GASSettingAsset.LoadOrCreate();
             var beansPath = Path.Combine(setting.ConfigProjectPath, "Datas", BEANS_XLSX_NAME);
 
             if (!File.Exists(beansPath))
             {
-                EditorUtility.DisplayDialog("错误", $"__beans__.xlsx 文件不存在:\n{beansPath}", "确定");
-                return;
+                ReportError($"__beans__.xlsx 文件不存在:\n{beansPath}");
+                return false;
             }
 
             try
@@ -78,11 +83,24 @@ namespace GAS.Editor
                 GenerateAndUpdateBeans(beansPath, beans);
 
                 Debug.Log($"[BeanUpdater] Bean定义更新完成，共 {beans.Count} 个Bean");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+                return false;
             }
             finally
             {
                 EditorUtility.ClearProgressBar();
             }
+        }
+
+        private static void ReportError(string message)
+        {
+            Debug.LogError(message);
+            if (!Application.isBatchMode)
+                EditorUtility.DisplayDialog("错误", message, "确定");
         }
 
         #endregion

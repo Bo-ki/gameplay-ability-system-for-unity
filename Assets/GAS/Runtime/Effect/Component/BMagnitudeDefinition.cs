@@ -120,4 +120,13 @@ namespace GAS.Runtime
         public float PreAdd;
         public float PostAdd;
     }
+
+    /// <summary>
+    /// Marks a transient GE whose ExecutionCalculation outputs have already been converted to attribute deltas.
+    /// </summary>
+    public struct CExecutionCalculationOutputModifierApplied : IComponentData
+    {
+        public int Frame;
+        public int DeltaCount;
+    }
 }
