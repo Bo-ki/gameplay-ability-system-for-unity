@@ -7,13 +7,12 @@
 `IEnableableComponent` 是 Unity ECS 提供的标记接口，继承自 `IComponentData`。实现此接口的 component 可以在不改变 entity archetype 的前提下被启用或禁用，从而控制 entity 在 EntityQuery 中的可见性。
 
 ```csharp
-public struct CAbilityActive : IComponentData, IEnableableComponent
+public struct PeriodDueTag : IComponentData, IEnableableComponent
 {
-    public int AbilityCode;
 }
 ```
 
-**关键区别：** AddComponent/RemoveComponent 触发结构变化（archetype 迁移 + sync point）；Enableable toggle 只修改 chunk 内的 enabled bit mask，不改变 archetype，无需 sync point。
+**关键区别：** AddComponent/RemoveComponent 触发结构变化（archetype 迁移 + sync point）；Enableable toggle 只修改 chunk 内的 enabled bit mask，不改变 archetype。注意同步 query 若遇到未完成的 enableable 写 job，仍可能等待依赖完成。
 
 ### Enableable 的三种操作方式
 
@@ -28,12 +27,11 @@ public struct CAbilityActive : IComponentData, IEnableableComponent
 
 ```csharp
 [BurstCompile]
-public partial struct DisableFinishedAbilityJob : IJobEntity
+public partial struct MarkDuePeriodJob : IJobEntity
 {
-    void Execute(EnabledRefRW<CAbilityActive> active, in CAbilityRuntimeState state)
+    void Execute(EnabledRefRW<PeriodDueTag> due, in ActiveEffectSummaryComponent state)
     {
-        if (state.RemainingTime <= 0)
-            active.ValueRW = false;  // 无结构变化，无 sync point
+        due.ValueRW = state.NextPeriodFrame <= state.CurrentFrame;
     }
 }
 ```
@@ -82,8 +80,9 @@ lookup.SetComponentEnabled(targetEntity, false);  // 随机访问
 |---|---|---|
 | 高频状态开关（每帧可能多次） | Enableable | 无结构变化，无 sync point，无 archetype 迁移 |
 | 低频生命周期（创建/销毁时一次） | Add/Remove Component | 语义更明确，减少 enableable 查询复杂度 |
-| active/inactive 标记 | Enableable | 一次写入，所有依赖 query 自动反应 |
-| tag/role 授予 | Enableable 或 owner-local bitset | 避免每个 tag 创建一个 component 类型 |
+| 高频且不可预测的 query 可见性开关 | Enableable | 无结构变化，适合高排列状态和 chunk/entity skip |
+| 低频且持续多帧的 active/granted 生命周期 | Add/Remove 或状态字段 | 官方建议低频状态变化优先 add/remove；GAS grant/revoke 也需要明确生命周期语义 |
+| tag/role 授予 | owner-local bitset / mask；必要时才 Enableable | 避免每个 tag 创建一个 component 类型，同时避免 enableable 过滤成本 |
 | 永久性 component 添加 | Add Component | entity 整个生命周期都需要 |
 
 ### Enableable 的竞态条件
@@ -106,17 +105,25 @@ lookup.SetComponentEnabled(targetEntity, false);  // 随机访问
 
 ### ChunkEntityEnumerator（CASE-26）
 
-IJobChunk 中处理 enableable component 时必须使用 `ChunkEntityEnumerator`，而非简单 `for` 循环：
+IJobChunk 中处理 enableable component 时必须感知 `useEnabledMask`。无 mask 时用普通 `for` 快路径；有 mask 时必须使用 `ChunkEntityEnumerator`，而非简单 `for` 循环：
 
 ```csharp
-var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+if (!useEnabledMask)
+{
+    for (var i = 0; i < chunk.Count; i++)
+        ExecuteEntity(i);
+    return;
+}
+
+var enumerator = new ChunkEntityEnumerator(true, chunkEnabledMask, chunk.Count);
 while (enumerator.NextEntityIndex(out var i))
 {
     // i 始终是 enabled entity 的索引
+    ExecuteEntity(i);
 }
 ```
 
-无 enableable 时可简单 `for` 并用 `Assert.IsFalse(useEnabledMask)` 断言。
+query 设计上永远无 enableable 时，可简单 `for` 并用 `Assert.IsFalse(useEnabledMask)` 断言。
 
 ---
 
@@ -124,31 +131,31 @@ while (enumerator.NextEntityIndex(out var i))
 
 ### Enableable 在 EX-GAS 中的角色
 
-EX-GAS 2.0 中 Enableable Component 是替代高频 entity 创建/销毁的核心机制，对应三个关键场景：
+EX-GAS 2.0 中 Enableable Component 只承担“高频、不可预测、需要 query 过滤”的状态开关，不再作为所有生命周期状态的默认替代。PackageCache `components-enableable-intro.md` 明确说：频繁且不可预测的状态适合 enableable，低频且持续多帧的状态更适合 Add/Remove Component。
 
-1. **Active Effect Store**：每个 ASC entity 持有 `DynamicBuffer<CActiveEffectSlot>` 存储所有活跃效果。每个 slot 通过 enableable 标记 active/inactive。duration 到期时只需 `slotActive.ValueRW = false`，无需销毁 effect entity。
+1. **Active Effect Store**：每个 ASC entity 持有 `ActiveGameplayEffectBuffer` 存储活跃效果。默认用 slot enum / bit flags 表达 active、inhibited、expired；只有 profiler 证明大量 idle slot 需要 chunk/entity skip 时，才引入 `PeriodDueTag` 或 Chunk Component。
 
-2. **Ability Cooldown / Granted State**：Ability 的 cooldown 状态、granted tag、attribute modifier 的开关——这些高频切换的状态使用 Enableable 标记，无结构变化。
+2. **Ability Cooldown / Granted State**：Ability grant/revoke 是低频生命周期变化，默认由 `AbilityStateComponent`、`AbilitySlotBuffer` 和 Structural Commit 表达；cooldown / activating / blocked 等状态默认是 enum / bit flags。`AbilityExecutableTag` 这类 enableable 只在 profiler 证明 query skip 收益后引入。
 
-3. **Effect Granted Tag Set**：原来每个 granted tag 是一个单独 component，导致 archetype 排列爆炸。改为 owner-local bitset（如 `DynamicBuffer<int>` 存储位掩码）或 `IEnableableComponent` 数组。
+3. **Effect Granted Tag Set**：原来每个 granted tag 是一个单独 component，导致 archetype 排列爆炸。目标态改为 owner-local `TagMaskComponent` / `TagStatusFlagsComponent` / buffer bitset；仅当某个 tag 本身必须参与高频 query 过滤且收益明确时，才允许 enableable。
 
 ### 关键代码映射
 
 | 代码位置 | 当前状态 | 目标态 |
 |---|---|---|
-| `CActiveEffectStore.cs` | 可能使用 entity 表示 active effect | DynamicBuffer + IEnableableComponent slot |
-| `SEffectRemove.cs` | entity destroy 移除 effect | enableable toggle + slot reuse |
-| `SAbilityCommit.cs` | 可能使用 Add/Remove 切换 cooldown 状态 | Enableable toggle |
-| `SAbilityStateCleanup.cs` | entity cleanup | enableable 状态重置 |
+| `CActiveEffectStore.cs` | 可能使用 entity 表示 active effect | `ActiveGameplayEffectBuffer` + slot flags；可选 `PeriodDueTag` / Chunk Component 做 skip |
+| `SEffectRemove.cs` | entity destroy 移除 effect | slot expired flag + Structural Commit cleanup |
+| `SAbilityCommit.cs` | 可能使用 enableable 表达 grant/cooldown | `AbilityStateComponent` enum/flags + `AbilitySlotBuffer`；低频 revoke 走 Structural Commit |
+| `SAbilityStateCleanup.cs` | entity cleanup | 状态字段复位或 ability entity 销毁；不默认 toggle enableable |
 
 ### 选型决策树
 
 ```
 需要该 entity 在 query 中是否可见？
-  ├── 是，且切换频率 > 每帧 1 次
+  ├── 是，且状态频繁/不可预测/排列组合高
   │     └── 使用 IEnableableComponent
-  ├── 是，但切换频率极低（初始化/销毁时各一次）
-  │     └── 使用 AddComponent / RemoveComponent
+  ├── 是，但切换频率低且会持续多帧
+  │     └── 使用 AddComponent / RemoveComponent，或在已有生命周期 component 中记录 state
   └── 不需要在 query 中过滤，只是标记
         └── 使用 DynamicBuffer<byte> bitset 或单字段 int flag
 ```

@@ -15,14 +15,14 @@ public partial struct GEDefinitionBakingSystem : ISystem
     public void OnUpdate(ref SystemState state)
     {
         // 1. 显式 DependsOn 所有外部引用
-        SystemAPI.TryGetSingleton<GEDefinitionTable>(out var table);
+        SystemAPI.TryGetSingleton<GEDefinitionBakingInput>(out var input);
         // 不需要对 singleton 调用 DependsOn，Baking System 需要手动管理
 
         // 2. 处理数据
         foreach (var (rawData, entity) in
             SystemAPI.Query<CRawModifierData>().WithEntityAccess())
         {
-            var processed = ProcessModifier(rawData, table);
+            var processed = ProcessModifier(rawData, input);
             state.EntityManager.AddComponent(entity, processed);
         }
     }

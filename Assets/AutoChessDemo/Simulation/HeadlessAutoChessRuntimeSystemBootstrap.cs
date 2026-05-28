@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
@@ -13,14 +11,14 @@ namespace GAS.Runtime
                 throw new ArgumentNullException(nameof(world));
 
             var groups = new GASSystemGroups(
-                world.GetExistingSystemManaged<GASCommandGroup>(),
-                world.GetExistingSystemManaged<GASExecutionCalculationExtensionGroup>(),
-                world.GetExistingSystemManaged<GASResetDirtyGroup>(),
-                world.GetExistingSystemManaged<GASTagGroup>(),
-                world.GetExistingSystemManaged<GASEffectGroup>(),
-                world.GetExistingSystemManaged<GASAttributeGroup>(),
-                world.GetExistingSystemManaged<GASAbilityGroup>(),
-                world.GetExistingSystemManaged<GASCueGroup>());
+                world.GetExistingSystemManaged<GASFramePrepareSystemGroup>(),
+                world.GetExistingSystemManaged<GASCommandResolveSystemGroup>(),
+                world.GetExistingSystemManaged<GASCoreSimulationSystemGroup>(),
+                world.GetExistingSystemManaged<GEExecutionCalculationExtensionSystemGroup>(),
+                world.GetExistingSystemManaged<GASStructuralCommitSystemGroup>(),
+                world.GetExistingSystemManaged<BeginGASStructuralCommitECBSystem>(),
+                world.GetExistingSystemManaged<EndGASStructuralCommitECBSystem>(),
+                world.GetExistingSystemManaged<GASBoundaryProjectionSystemGroup>());
             var fixedStepSimulation = world.GetExistingSystemManaged<FixedStepSimulationSystemGroup>();
 
             GASSystemScheduleContract.SortSystems(fixedStepSimulation, groups);

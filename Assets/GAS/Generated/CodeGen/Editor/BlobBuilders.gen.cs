@@ -196,24 +196,6 @@ namespace GAS.Runtime.Generated
             return blob;
         }
 
-        public static BlobAssetReference<TimelineDefinitionBlob> BuildTimelineDefinitionBlob(
-            GAS.Runtime.HeadlessAutoChessTimelineDefinitionRow row,
-            Allocator allocator = Allocator.Persistent)
-        {
-            var builder = new BlobBuilder(Allocator.Temp);
-            ref var root = ref builder.ConstructRoot<TimelineDefinitionBlob>();
-
-            root.TimelineId = row.TimelineId;
-            builder.AllocateString(ref root.Name, row.Name ?? string.Empty);
-            root.GameplayEffectCode = row.GameplayEffectCode;
-            root.SecondaryGameplayEffectCode = row.SecondaryGameplayEffectCode;
-            builder.AllocateString(ref root.TargetCatcherName, row.TargetCatcherName ?? string.Empty);
-
-            var blob = builder.CreateBlobAssetReference<TimelineDefinitionBlob>(allocator);
-            builder.Dispose();
-            return blob;
-        }
-
         public static BlobAssetReference<UnitDefinitionBlob> BuildUnitDefinitionBlob(
             GAS.Runtime.HeadlessAutoChessUnitDefinitionRow row,
             Allocator allocator = Allocator.Persistent)

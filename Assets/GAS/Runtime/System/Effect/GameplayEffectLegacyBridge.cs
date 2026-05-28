@@ -7,7 +7,7 @@ namespace GAS.Runtime
     {
         public static bool TryCreateLegacyRequestEntity(
             EntityManager em,
-            in CApplyGameplayEffectRequest request,
+            in GEApplyRequestComponent request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
             out Entity requestEntity)

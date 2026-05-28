@@ -26,23 +26,24 @@
 | **GameplayEvent** | `GameplayEvent` | `FGameplayEventData` | Core 内部事件（驱动 Ability trigger 和 GE reaction） |
 | **EffectContext** | `GEContext` | `FGameplayEffectContext` | GE 施加上下文（Source/Instigator/AbilityRef/HitResult） |
 | **Modifier/Magnitude** | `Modifier` | `FGameplayModifierInfo` / `FGameplayEffectModifierMagnitude` | 已解析的 modifier 结果、magnitude 计算 |
-| **跨概念基础设施** | `GAS` | — | Frame Arena、Stream Owner、Structural ECB 等框架级设施 |
+| **跨概念基础设施** | `GAS` | — | Frame Prepare、Effect Fan-In、Structural Commit、Boundary Projection 等 Runtime Core kernel |
 
 ## DOTS 类型后缀表
 
 | DOTS 机制 | 后缀 | 说明 |
 |---|---|---|
-| `IComponentData` | `Component` | unmanaged 数据组件：`ASCIdentityComponent`、`AttributeComponent` |
+| `IComponentData` | `Component` | unmanaged 数据组件：`ASCIdentityComponent`、`CombatAttributeCurrentSetComponent` |
 | `IBufferElementData` | `Buffer` | 动态数组元素：`GEEffectSpecBuffer`、`AttributeModifierBuffer` |
-| `IEnableableComponent` | `Tag` | 高频状态开关（语义接近 UE 的 tag 查询）：`AbilityActiveTag`、`PeriodDueTag` |
+| `IEnableableComponent` | `Tag` | 高频、不可预测、需要 query 过滤的开关：`PeriodDueTag`、`AbilityExecutableTag` 均仅在 profiler 证明 chunk/entity skip 收益时可选 |
 | `IChunkComponent` | `ChunkComponent` | chunk 级共享数据：`AllIdleChunkComponent`、`NoActiveEffectsChunkComponent` |
-| `ISystem` | `System` | 系统实现：`GEEffectCommandIngestSystem`、`AttributeModifierApplySystem` |
-| `ComponentSystemGroup` | `SystemGroup` | 系统组：`GASCommandIngestSystemGroup` |
-| `BlobAsset` / static data def | `Definition` | 不可变定义数据：`GameplayEffectDefinition`、`AbilityDefinition` |
-| `EntityCommandBuffer` singleton | `ECBSystem` | 自定义 ECB 播放系统：`BeginGASStructuralECBSystem`、`EndGASStructuralECBSystem` |
+| `ISystem` | `System` | 系统实现：`GASEffectFanInSystem`、`GASAttributeSetReduceApplySystem` |
+| `ComponentSystemGroup` | `SystemGroup` | 物理执行域：`GASCommandResolveSystemGroup`、`GASCoreSimulationSystemGroup` |
+| `BlobAsset` / static data def | `DefinitionBlob` | 不可变定义数据：`GameplayEffectDefinitionBlob`、`AbilityDefinitionBlob`、`GASDefinitionCatalogBlob` |
+| `EntityCommandBuffer` singleton | `ECBSystem` | 自定义 ECB 播放系统：`BeginGASStructuralCommitECBSystem`、`EndGASStructuralCommitECBSystem` |
 | Singleton Entity | `Singleton` | 全局唯一实体：`FrameArenaSingleton` |
-| Static lookup / table | `Registry` / `Lookup` | 静态查找表：`GEConfigRegistry`、`AbilityConfigRegistry` |
-| Request Entity | `Request` | 边界请求实体上的 component：`AbilityCommandRequest`、`GEApplyRequest` |
+| Static lookup / table | `Lookup` | 静态查找表：`GameplayEffectDefinitionLookup`、`AbilityDefinitionLookup`、`GASGeneratedDefinitionLookup` |
+| Request Entity | `Request` | 边界请求实体上的 component：`AbilityActivationRequestComponent`、`AbilityCommandComponent`、`GEApplyRequest` |
+| Frame-local command record | `Record` | NativeContainer 中的帧内记录：`AbilityActivationCommandRecord`、`AbilityTargetRecord`、`GEEffectCommandRecord` |
 | Presentation outbox | `Event`（表现用） | 表现层事件：`PresentationEvent`（区别于 Core 内部 `GameplayEvent`） |
 | `IJobEntity` / `IJobChunk` | `Job` | Job 结构体：`BuildEffectSpecsJob`、`TickActiveEffectsJob` |
 
@@ -53,37 +54,61 @@
 | 目标命名 | 旧命名 | GAS 概念 | 挂载 Entity | 职责 |
 |---|---|---|---|---|
 | `ASCIdentityComponent` | `CAscOwner` | ASC | ASC Entity | 标记”此 Entity 是 GAS 权威中枢” |
-| `AttributeComponent`（占位统称） | `CAttribute` | Attribute | ASC Entity | 每种属性一个独立 type（如 `HealthAttribute` 直接作为 struct 名，不再用统称） |
+| `CombatAttributeCurrentSetComponent` / `CombatAttributeBaseSetComponent`（属性集家族） | `CAttribute` / `HealthAttribute` 等 | Attribute | ASC Entity | 默认按热路径和变更频率生成 AttributeSet component family；不再默认每种属性一个 component type |
+| `AttributeDirtyMaskComponent` | （新增） | Attribute | ASC Entity | 标记本帧哪些 AttributeCode 发生变化，用于 fact/projection 精确过滤 |
 | `TagMaskComponent` | `CTagMask` | Tag | ASC Entity | 运行时 granted tag 的 dense bitmask |
 | `ASCActiveEffectsComponent` | `CActiveEffectStore` | ASC | ASC Entity | active effect store 的版本标记和统计 |
 | `AbilityStateComponent` | `CAbilityRuntimeState` | Ability | Ability Entity | ability code、当前状态、激活帧 |
-| `TargetAcquisitionComponent` | `CTargetDataRequest` | Target | Ability Entity | 目标获取参数（mode/range/filter） |
+| `AbilityActivationRequestComponent` | `AbilityCommandRequest` | Ability | Request Entity | Boundary 输入意图：source、ability、显式目标、input sequence、target mode |
+| `AbilityCommandComponent` | （新增） | Ability | Request Entity | Ingest 后的归一化激活命令：primary GE、level、target params、status |
 | `GEContextComponent` | （新增） | EffectContext | Request/Spec | GE 施加时的完整上下文（Source/Instigator/AbilityRef/OptionalObject） |
-| `FrameArenaStateComponent` | `CFrameArenaState` | GAS | FrameArenaSingleton | RewindableAllocator handle、frame index |
-| `FrameArenaOwnerComponent` | `CFrameArenaOwner` | GAS | FrameArenaSingleton | 标记”此 Entity 是 Frame Arena owner” |
-| `GEStreamOwnerComponent` | `CEffectCommandStreamOwner` | GE | StreamOwnerSingleton | stream 元数据（version/sequence） |
+| `GASDefinitionCatalogComponent` | （新增） | Definition | DefinitionCatalogSingleton | 只读 Definition Catalog Blob 入口；world/bootstrap 后不可写 |
+| `FrameArenaStateComponent` | `CFrameArenaState` | GAS | FrameArenaSingleton | frame index、allocator budget、lookup refresh counters；禁止承载 query registry |
+| `FrameArenaOwnerComponent` | `CFrameArenaOwner` | GAS | FrameArenaSingleton | 标记此 Entity 是 Frame Prepare owner |
+| `GEStreamOwnerComponent` | `CEffectCommandStreamOwner` | GE | `GEStreamOwnerSingleton`（迁移期） | proof-only stream 元数据（version/sequence）；scale-ready 不作为默认 owner |
+| `EffectFanInScratchComponent` | （新增） | GAS | System-associated / Scratch Owner（可选） | fan-in scratch 的 owner 与预算标记；不得作为 query registry |
+
+**Attribute 命名规则（PackageCache 原文交叉审查后更新）：**
+
+1. 默认不生成 `HealthAttribute` / `ManaAttribute` 这类“一属性一 component type”。Entities 官方 `systems-data-granularity.md` 同时说明小 component 有利于精细 query，也警告过度 component 粒度会增加 query、archetype 和内部流程开销；GAS 热路径中大多数属性在同一 Apply / MMC / Fact lane 一起参与计算，因此默认按 AttributeSet family 生成。
+2. 当前值与低频基准值必须拆分：`CombatAttributeCurrentSetComponent` / `CombatAttributeBaseSetComponent`、`ResourceAttributeCurrentSetComponent` / `ResourceAttributeBaseSetComponent`。这对应官方 `systems-data-granularity.md` 的 read-only / read-write 分离，避免写 Current 时让 Base 的 reactive consumer 被误触发。
+3. AttributeSet family 的划分依据是真实 DOTS 查询共现和写入频率，而不是 OOP 属性类层级。示例：`CombatAttributeCurrentSetComponent`（Health/Shield/Attack/Defense/MagicPower）、`ResourceAttributeCurrentSetComponent`（Mana/Energy/Rage）。
+4. 只有 profiler 或 query contract 证明某个属性长期稀有、查询隔离收益大于额外 type/system/handle 成本时，才允许生成独立 `[AttributeName]AttributeComponent`，并必须在 `13-EntityComponent物理布局Spec.md` 的 archetype 审计中记录理由。
 
 ### IBufferElementData（`[GAS前缀][职责]Buffer`）
 
 | 目标命名 | 旧命名 | GAS 概念 | 帧内/跨帧 | 职责 |
 |---|---|---|---|---|
-| `GEEffectCommandBuffer` | `BEffectCommand` | GE | 帧内 | 本帧施加意图（等效 GAS 的 Apply 请求） |
-| `GESetByCallerValueBuffer` | `BEffectCommandSetByCallerValue` | GE | 帧内 | SetByCaller magnitude 数据 |
-| `GEEffectSpecBuffer` | `BInstantEffectSpec` | GE | 帧内 | 运行时 GE 规格数据（等效 `FGameplayEffectSpec`），所有 GE 类型共用 |
-| `AttributeModifierBuffer` | `BAttributeDelta` | Attribute | 帧内 | 已解析的属性修改器结果（等效 resolved modifier） |
+| `GEEffectCommandBuffer` | `BEffectCommand` | GE | 帧内 | 本帧施加意图；目标态是 compact owner-local range 或迁移期 proof buffer，不代表全局总线 |
+| `GESetByCallerValueBuffer` | `BEffectCommandSetByCallerValue` | GE | 帧内 | SetByCaller magnitude range；必须随 command/spec range 传递 |
+| `GEEffectSpecBuffer` | `BInstantEffectSpec` | GE | 帧内 | 迁移期 instant spec buffer；目标态可由 `NativeStream` / NativeList record 承载 |
+| `AttributeModifierBuffer` | `BAttributeDelta` | Attribute | 帧内 | 已解析的属性修改器结果；目标态按 target grouped range apply |
 | `ActiveGameplayEffectBuffer` | `BActiveEffectSlot` | GE | **跨帧** | 目标 ASC 上的 active effect（等效 `FActiveGameplayEffect`） |
 | `ActiveEffectMutationBuffer` | `BActiveEffectMutation` | GE | 帧内 | duration/stack/period 状态变更 |
-| `GameplayEventBuffer` | `BTypedSimulationFact` | GameplayEvent | 帧内 | Core 内部 gameplay 事件（驱动 Ability trigger / GE reaction） |
+| `GameplayEventBuffer` | `BTypedSimulationFact` | GameplayFact | 帧内 | Core fact / Boundary observation 的迁移期承载 |
 | `PresentationEventBuffer` | `BPresentationEvent` | GAS | 帧内 | Boundary 表现层事件（UI/Cue/VFX/SFX 消费） |
-| `TargetDataBuffer` | `BTargetDataResult` | Target | 帧内 | 目标解析结果列表 |
+| `TargetDataBuffer` | `BTargetDataResult` | Target | 帧内 | Request/Command Entity 上的目标解析结果列表 |
+
+### NativeContainer Record（`[GAS概念][职责]Record`）
+
+| 目标命名 | GAS 概念 | 载体 | 生命周期 | 职责 |
+|---|---|---|---|---|
+| `AbilityActivationCommandRecord` | Ability | `NativeStream` / `NativeList` | 帧内 | Core 内部高频 ability 激活命令；AI autocast、passive、period、reaction 默认写它，不创建 request entity |
+| `AbilityTargetRecord` | Target | `NativeStream` / `NativeList` | 帧内 | Target Resolve 输出的扁平 target record；包含 `Sequence`、`TargetIndex`、`TargetSortKey` |
+| `GEEffectCommandRecord` | GE | `NativeStream` / `NativeList` | 帧内 | Effect Fan-In 的统一 GE apply/period/passive/reaction command record |
 
 ### IEnableableComponent（`[GAS前缀][职责]Tag`）
 
 | 目标命名 | 旧命名 | GAS 概念 | Toggle 频率 | 职责 |
 |---|---|---|---|---|
-| `AbilityActiveTag` | `CAbilityActive` | Ability | 低频（grant/revoke） | Ability 当前是否可用 |
-| `AbilityActivatingTag` | `CAbilityInTryActivate` | Ability | 中频（激活期间） | Ability 正在激活流程中 |
-| `PeriodDueTag` | `CPeriodDue` | GE | 每帧 | period tick 到期，需派生 EffectCommand |
+| `AbilityExecutableTag`（可选） | `CAbilityActive` | Ability | 仅 profiler 证明大量不可执行 ability 需要 skip 时 | ability 可执行 query skip cache；grant/revoke 默认不使用 enableable |
+| `PeriodDueTag`（可选） | `CPeriodDue` | GE | 仅 profiler 证明大量 idle 可跳过时 | period tick chunk/entity skip cache；默认用 slot flag |
+
+> `AbilityActiveTag` / `AbilityActivatingTag` 不作为默认目标态命名保留。PackageCache `components-enableable-intro.md` 明确低频且持续多帧的状态更适合 Add/Remove Component 或普通状态字段；因此 ability grant/revoke、activating/cooldown/blocked 默认进入 `AbilityStateComponent.State/Flags` 与 Structural Commit 链路。只有 query skip 收益被 profiler 证明后，才生成 `AbilityExecutableTag` 这类可选 enableable。
+>
+> `TargetAcquisitionComponent` 不再作为挂在 Ability Entity 上的目标态命名保留。Boundary 低频单次激活的目标参数属于 `AbilityActivationRequestComponent` / `AbilityCommandComponent`，解析结果属于同一 request/command entity 的 `TargetDataBuffer`；Core 高频单次激活的目标参数和解析结果属于 `AbilityActivationCommandRecord` / `AbilityTargetRecord`；Ability Entity 只保留 granted ability 的跨帧 `AbilityStateComponent`。
+>
+> `Request Entity` 命名只用于 Boundary 低频外部意图。Core 内部高频命令不得命名为 `Request`，应使用 `Record`，避免把 frame-local fan-in 误设计成 entity create/destroy 链路。
 
 ### IChunkComponent
 
@@ -94,54 +119,53 @@
 
 ### ISystem（`[GAS前缀][职责]System`）
 
-| 目标命名 | 旧命名 | Phase |
+| 目标命名 | 旧命名 | Physical Group / Lane |
 |---|---|---|
-| `GASFrameArenaSetupSystem` | `SFrameArenaSetup` | FramePrepare |
-| `GEEffectCommandIngestSystem` | `SEffectCommandIngest` | CommandIngest |
-| `AbilityCommandIngestSystem` | —（新增） | CommandIngest |
-| `GEEffectSpecBuildSystem` | `SInstantEffectSpecBuild` | SpecEval |
-| `ActiveEffectMutationApplySystem` | `SActiveEffectMutationApply` | SpecEval |
-| `AttributeModifierApplySystem` | `SAttributeDeltaApply` | DeltaApply |
-| `ActiveEffectTickSystem` | `SEffectTick` | ActiveLifecycle |
-| `ActiveEffectSlotSyncSystem` | `SActiveEffectSlotSync` | ActiveLifecycle |
-| `ChunkComponentMaintainSystem` | `SChunkComponentMaintain` | ActiveLifecycle |
-| `GameplayEventProjectionSystem` | `STypedSimulationFactProjection` | TypedFact |
-| `CueRequestProjectionSystem` | `SInstantEffectCueRequestProjection` | TypedFact |
-| `GameplayEventLegacyBridgeSystem` | `STypedSimulationFactEventBridge` | TypedFact（迁移期） |
-| `AbilityCommitSystem` | `SAbilityCommit` | CommandIngest / SpecEval |
-| `PresentationOutboxSystem` | `SPresentationOutboxProjection` | Observation |
-| `ReplayLogSystem` | `SDebugReplayLogProjection` | Observation |
-| `DiagnosticsSnapshotSystem` | `SDiagnosticsSnapshotExport` | Observation |
+| `GASFrameArenaSetupSystem` | `SFrameArenaSetup` | FramePrepare / FramePrepare |
+| `AbilityCommandIngestSystem` | —（新增） | CommandResolve / BoundaryCommandIngest |
+| `AbilityTargetResolveSystem` | —（新增） | CommandResolve / TargetResolve |
+| `GASEffectFanInSystem` | —（新增） | CoreSimulation / EffectFanIn |
+| `GEEffectSpecBuildSystem` | `SInstantEffectSpecBuild` | CoreSimulation / EffectFanIn（迁移期可独立 system，不独立 group） |
+| `GASActiveEffectPreTickSystem`（或 `GASEffectFanInSystem` 内 producer job） | `SEffectTick`（period/expire seed 部分） | CoreSimulation / StateEvaluate.PreTick |
+| `GASActiveEffectPostApplySystem` | `SEffectTick`（slot mutation 部分） | CoreSimulation / StateEvaluate.PostApply |
+| `AbilityStateEvaluateSystem` | `SAbilityTick` | CoreSimulation / StateEvaluate |
+| `ChunkComponentMaintainSystem` | `SChunkComponentMaintain` | CoreSimulation / StateEvaluate |
+| `GASAttributeSetReduceApplySystem` | `SAttributeDeltaApply` / 旧 Health-only apply sample | CoreSimulation / AttributeReduceApply |
+| `GameplayReactionSystem` | —（新增） | CoreSimulation / GameplayFact |
+| `GameplayFactProjectionSystem` | `STypedSimulationFactProjection` / `GameplayEventProjectionSystem` | CoreSimulation / GameplayFact（迁移期命名收敛） |
+| `GASAbilityDestroyCommitSystem` | —（新增） | StructuralCommit / StructuralCommit |
+| `PresentationOutboxSystem` | `SPresentationOutboxProjection` | BoundaryProjection / BoundaryProjection |
+| `ReplayLogSystem` | `SDebugReplayLogProjection` | BoundaryProjection / BoundaryProjection |
+| `DiagnosticsSnapshotSystem` | `SDiagnosticsSnapshotExport` | BoundaryProjection / BoundaryProjection |
 
-### ComponentSystemGroup（`GAS[Phase]SystemGroup`）
+### ComponentSystemGroup（`GAS[PhysicalDomain]SystemGroup`）
 
-SystemGroup 命名保持原有模式，统一使用 `GAS` 大写前缀：
+SystemGroup 命名统一使用 `GAS` 大写前缀，但只表达 DOTS 物理执行域，不表达每个业务 kernel。`SYS-03` / `PRF-07` 要求避免把每个职责都拆成独立 group。
 
 | 目标命名 | 旧命名 |
 |---|---|
 | `GASFramePrepareSystemGroup` | `GasRuntimeFramePrepareSystemGroup` |
-| `GASCommandIngestSystemGroup` | `GasCommandIngestSystemGroup` |
-| `GASSpecEvaluationSystemGroup` | `GasSpecEvaluationSystemGroup` |
-| `GASActiveEffectLifecycleSystemGroup` | `GasActiveEffectLifecycleSystemGroup` |
-| `GASDeltaApplySystemGroup` | `GasDeltaApplySystemGroup` |
-| `GASGameplayEventProjectionSystemGroup` | `GasTypedFactProjectionSystemGroup` |
-| `GASStructuralPlaybackSystemGroup` | `GasStructuralPlaybackSystemGroup` |
-| `GASObservationProjectionSystemGroup` | `GasObservationProjectionSystemGroup` |
+| `GASCommandResolveSystemGroup` | `GasCommandIngestSystemGroup` / `GASTargetResolveSystemGroup`（合并） |
+| `GASCoreSimulationSystemGroup` | `GASEffectFanInSystemGroup` / `GASStateEvaluateSystemGroup` / `GASAttributeReduceApplySystemGroup` / `GASGameplayFactSystemGroup`（合并为 lane systems） |
+| `GASStructuralCommitSystemGroup` | `GasStructuralPlaybackSystemGroup` |
+| `GASBoundaryProjectionSystemGroup` | `GasObservationProjectionSystemGroup` |
 
-### BlobAsset Definition（`[GAS前缀]Definition`）
+### BlobAsset Definition（`[GAS前缀]DefinitionBlob`）
 
 | 目标命名 | 旧命名 | 职责 |
 |---|---|---|
-| `GameplayEffectDefinition` | （Blob 统称） | GE 静态定义（Duration/Period/Stack/Modifier/Tag/Cue 配置） |
-| `AbilityDefinition` | （Blob 统称） | Ability 静态定义（tag requirement/cooldown/cost/effect 引用） |
-| `AttributeSetDefinition` | （新增） | 属性集定义（属性列表、初始值、Min/Max/曲线引用） |
+| `GASDefinitionCatalogBlob` | （新增） | Definition Catalog 根 Blob；聚合 Ability / GE / Tag / Attribute 等只读定义、排序 code、schema/content hash |
+| `GameplayEffectDefinitionBlob` | `GameplayEffectDefinition` | GE 静态定义（Duration/Period/Stack/Modifier/Tag/Cue 配置） |
+| `AbilityDefinitionBlob` | `AbilityDefinition` | Ability 静态定义（tag requirement/cooldown/cost/effect 引用） |
+| `AttributeSetDefinitionBlob` | `AttributeSetDefinition` | 属性集定义（属性列表、初始值、Min/Max/曲线引用、生成到哪个 AttributeSet family） |
 
 ### Singleton Entity 命名
 
 | 目标命名 | 旧命名 | 理由 |
 |---|---|---|
 | `FrameArenaSingleton` | `FrameArenaSingleton`（不变） | 全局唯一，跨帧持久 |
-| `GEStreamOwnerSingleton` | `EffectCommandStreamOwner` | 全局唯一 GE 命令流 owner（proof-only） |
+| `DefinitionCatalogSingleton` | （新增） | 每个 World / battle config set 一个，只持有 `GASDefinitionCatalogComponent`；不是 registry manager |
+| `GEStreamOwnerSingleton` | `EffectCommandStreamOwner` | 全局唯一 GE 命令流 owner（proof-only；scale-ready 不新增依赖） |
 
 ## 层级命名约束（更新）
 
@@ -158,13 +182,21 @@ Luban / SourceGenerator 生成的 Runtime-visible 类型也必须遵守职责命
 
 | 产物 | 命名格式 | 示例 | 说明 |
 |---|---|---|---|
+| Catalog Blob 根类型 | `GASDefinitionCatalogBlob` | `GASDefinitionCatalogBlob` | 聚合多 domain 静态定义；只保存 immutable definition，不保存 runtime state |
+| Catalog Component | `GASDefinitionCatalogComponent` | `GASDefinitionCatalogComponent` | Runtime-visible singleton component，字段名用 `DefinitionCatalogBlob` |
 | Blob 根类型 | `{Domain}DefinitionBlob` | `AbilityDefinitionBlob`、`GameplayEffectDefinitionBlob` | `Blob` 是 DOTS 承载机制，必须放在后缀 |
-| Static lookup | `{Domain}DefinitionLookup` | `AbilityDefinitionLookup` | lookup 是定义查找表，不承载 runtime state |
+| Static lookup | `{Domain}DefinitionLookup` / `GASGeneratedDefinitionLookup` | `AbilityDefinitionLookup`、`GASGeneratedDefinitionLookup` | lookup 是 code -> index / BlobRef 查找表，不承载 runtime state；Blob 元素必须通过 index + `ref` 读取 |
+| Runtime definition glue | `GASGeneratedRuntimeDefinitionResolver` | `GASGeneratedRuntimeDefinitionResolver` | generated static pure functions：Ability definition -> activation plan、GE definition -> command/modifier records；不是 service locator |
+| Requirement evaluator | `GASGeneratedRequirementEvaluator` | `GASGeneratedRequirementEvaluator` | tag mask / attribute threshold / failure reason 的 generated static switch；不访问 entity |
+| Magnitude evaluator | `GASGeneratedMagnitudeEvaluator` | `GASGeneratedMagnitudeEvaluator` | MMC / modifier magnitude static switch；默认不使用托管 delegate |
+| Target rule table | `GASGeneratedTargetRuleTable` | `GASGeneratedTargetRuleTable` | target rule code -> unmanaged params / sort policy；不生成 strategy class |
+| Runtime glue record | `{Domain}{Intent}Record` | `AbilityActivationPlanRecord`、`GECommandSeedRecord`、`ResolvedModifierRecord` | frame-local NativeContainer record，不是 `IComponentData`，不进入 EntityComponent 布局 |
 | Generated index | `GASGeneratedDefinitionIndex` / `GASGeneratedDefinitionIndexEntry` | `GASGeneratedDefinitionIndexEntry` | GAS 框架级生成元数据，统一 `GASGenerated*` |
 | Blob component | `GASGeneratedDefinitionBlobComponent<T>` | `GASGeneratedDefinitionBlobComponent<AbilityDefinitionBlob>` | Runtime-visible `IComponentData`，后缀必须是 `Component` |
 | Code component | `GASDefinitionCodeComponent` | `GASDefinitionCodeComponent` | Runtime-visible `IComponentData`，只保存 stable code |
 | Baker authoring | `{Domain}DefinitionBlobAuthoring` / `{Domain}DefinitionBlobBaker` | `AbilityDefinitionBlobBaker` | Baker 命名必须能看出输入 Blob 类型 |
 | Blob builder | `GASGeneratedDefinitionBlobBuilder` | `BuildAbilityDefinitionBlob()` | Builder 只构建 Blob，不拥有生命周期 |
+| Catalog builder | `GASGeneratedDefinitionCatalogBuilder` | `BuildDefinitionCatalogBlob()` | 聚合各 domain definition，生成排序 code、schema/content hash 和去重信息 |
 | Lookup builder | `GASGeneratedDefinitionLookupBuilder` | `BuildAbilityDefinitionLookupFromRows()` | Editor/Baking 侧从 row 构建 lookup；不得使用 `BlobDefinitionLookupBuilder` 这类机制前置命名 |
 | Component type set | `GASGeneratedDefinitionComponentTypeSets` | `AbilityDefinitionComponentTypes` | 只输出 `ComponentTypeSet` 常量，不隐藏结构变化 |
 | Query layout | `GASGeneratedDefinitionQueryLayouts` | `AbilityDefinitionQuery` | 只描述 query shape，不生成 runtime lifecycle system |
@@ -200,7 +232,7 @@ Luban / SourceGenerator 生成的 Runtime-visible 类型也必须遵守职责命
 | `Projector` | 把 Core 数据投影为 fact、read model 或 outbox | 不拥有生命周期，不做 command 写入 | `AttributeDeltaProjector` |
 | `Store` | Runtime Core 内稳定状态容器 | 不表示静态注册表，不访问 OOP | `ActiveEffectStore` |
 | `Registry` | 静态定义注册和查找 | 不保存 runtime state | `GameplayEffectDefinitionRegistry` |
-| `Resolver` | 纯计算解析，输入明确，输出明确 | 不执行结构变化，不调用外部资源 | `ModifierMagnitudeResolver` |
+| `Resolver` | 纯计算解析，输入明确，输出明确；generated `GASGeneratedRuntimeDefinitionResolver` 只表示静态纯函数集合 | 不执行结构变化，不调用外部资源，不保存 runtime state，不作为 service locator | `ModifierMagnitudeResolver`、`GASGeneratedRuntimeDefinitionResolver` |
 | `Builder` | 构建 command、spec、blob、report | 不拥有运行时生命周期 | `GameplayEffectSpecBuilder` |
 | `Runner` | 测试或场景执行入口 | 不承载业务规则巨类 | `AutoChessHeadlessRunner` |
 | `Scenario` | 场景数据或测试编排描述 | 不成为配置、逻辑、表现、报告混合容器 | `AutoChessScenarioDefinition` |
@@ -215,9 +247,9 @@ Luban / SourceGenerator 生成的 Runtime-visible 类型也必须遵守职责命
 |---|---|
 | 后缀 `SystemGroup` | 所有 Unity `ComponentSystemGroup` 子类使用 `*SystemGroup` 后缀 |
 | 前缀 `GAS` | Runtime Core 的 SystemGroup 统一使用大写 `GAS` 前缀 |
-| 嵌套命名 | 子 SystemGroup 使用 `GAS<Phase><SubPhase>SystemGroup` 模式 |
+| 物理域命名 | 子 SystemGroup 只表达物理执行域：FramePrepare、CommandResolve、CoreSimulation、StructuralCommit、BoundaryProjection |
 
-示例：`GASFramePrepareSystemGroup`、`GASSpecEvaluationSystemGroup`、`GASStructuralPlaybackSystemGroup`。
+示例：`GASFramePrepareSystemGroup`、`GASCommandResolveSystemGroup`、`GASCoreSimulationSystemGroup`、`GASStructuralCommitSystemGroup`。
 
 ### ISystem 命名
 
@@ -225,9 +257,9 @@ Luban / SourceGenerator 生成的 Runtime-visible 类型也必须遵守职责命
 |---|---|
 | 格式 `[GAS前缀][职责]System` | 所有 `ISystem` 实现使用 GAS 概念前缀 + 职责描述 + `System` 后缀 |
 | 语义完整名 | 使用完整语义名，不使用缩写：`GEEffectCommandIngestSystem`，非 `GECIS` |
-| Phase 归属 | System 名应表达所在 phase：`[GAS前缀]` + Phase + 具体职责 + `System` |
+| 归属声明 | System 名表达业务职责；物理执行域和 kernel lane 通过 `[UpdateInGroup]`、`[UpdateBefore]` / `[UpdateAfter]` 与文档表声明，不再把每个 lane 升格为 SystemGroup |
 
-示例：`GEEffectCommandIngestSystem`、`GEEffectSpecBuildSystem`、`AttributeModifierApplySystem`、`GameplayEventProjectionSystem`。
+示例：`AbilityCommandIngestSystem`、`GASEffectFanInSystem`、`GASAttributeSetReduceApplySystem`、`GameplayFactProjectionSystem`。
 
 ### Job 结构体命名
 
@@ -241,17 +273,19 @@ Luban / SourceGenerator 生成的 Runtime-visible 类型也必须遵守职责命
 
 | 规则 | 说明 |
 |---|---|
-| 引用字段 | `BlobAssetReference<T>` 字段名以 `Blob` 结尾：`AbilityDefinitionBlob`、`EffectConfigBlob` |
+| 引用字段 | `BlobAssetReference<T>` 字段名以 `Blob` 结尾：`DefinitionCatalogBlob`、`AbilityDefinitionBlob`、`EffectConfigBlob` |
 | Blob 类型 | Blob 根类型以 `*Blob` 或 `*DefinitionBlob` 结尾 |
 | 不要 BlobData | 不使用泛化 `BlobData` 后缀，必须表达数据内容 |
+| 返回形态 | lookup 不返回含 `BlobArray` / `BlobString` / `BlobPtr` 的定义值副本；命名为 `TryGet*Index` + `Get*` 表达 index + `ref readonly` 访问 |
 
 ### Singleton Entity 命名
 
 | 规则 | 说明 |
 |---|---|
 | 后缀 `Singleton` | 全局唯一的 entity 使用 `*Singleton` 后缀：`FrameArenaSingleton` |
-| 后缀 `Owner` | 拥有 frame-local stream 的 singleton entity 使用 `*Owner` 后缀：`EffectCommandStreamOwner` |
-| 区分标准 | `Singleton` = 跨帧持久且全局唯一；`Owner` = 持有可变 buffer 的帧级单例 |
+| 后缀 `Owner` | 仅迁移期 proof-only 的 frame-local stream singleton 使用 `*Owner` 后缀；新 scale-ready 设计优先 owner system + NativeContainer |
+| Definition Catalog | `DefinitionCatalogSingleton` 只持有只读 `GASDefinitionCatalogComponent`，不是 service locator；Runtime system 通过 `RequireForUpdate` 和只读 `GetSingleton` 获取 BlobRef |
+| 区分标准 | `Singleton` = 跨帧持久且全局唯一；`Owner` = 持有可变 buffer 的帧级单例，不得升级为 manager/service locator |
 
 ## 限制词
 

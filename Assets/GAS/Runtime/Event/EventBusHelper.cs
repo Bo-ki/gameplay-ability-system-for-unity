@@ -14,7 +14,7 @@ namespace GAS.Runtime
         {
             private EntityManager _entityManager;
             private Entity _eventBusEntity;
-            private CGameplayEventBus _eventBus;
+            private GameplayEventBusComponent _eventBus;
             private int _frame;
             private bool _isCreated;
             private bool _canWriteEventBus;
@@ -28,7 +28,7 @@ namespace GAS.Runtime
             private GameplayEventBusWriter(
                 EntityManager entityManager,
                 Entity eventBusEntity,
-                CGameplayEventBus eventBus,
+                GameplayEventBusComponent eventBus,
                 int frame,
                 bool canWriteEventBus,
                 bool gameplayEventCanAppend,
@@ -60,9 +60,9 @@ namespace GAS.Runtime
                 if (eventBusEntity == Entity.Null || !entityManager.Exists(eventBusEntity))
                     return default;
 
-                var canWriteEventBus = entityManager.HasComponent<CGameplayEventBus>(eventBusEntity);
+                var canWriteEventBus = entityManager.HasComponent<GameplayEventBusComponent>(eventBusEntity);
                 var eventBus = canWriteEventBus
-                    ? entityManager.GetComponentData<CGameplayEventBus>(eventBusEntity)
+                    ? entityManager.GetComponentData<GameplayEventBusComponent>(eventBusEntity)
                     : default;
                 var frame = GASRuntimeFrameContext.ResolveCurrentFrame(entityManager);
 
@@ -72,11 +72,11 @@ namespace GAS.Runtime
                     eventBus,
                     frame,
                     canWriteEventBus,
-                    entityManager.HasBuffer<BGameplayEvent>(eventBusEntity),
-                    entityManager.HasBuffer<BAttributeChangeEvent>(eventBusEntity),
-                    entityManager.HasBuffer<BCueRequest>(eventBusEntity),
-                    entityManager.HasBuffer<BTagChangeEvent>(eventBusEntity),
-                    entityManager.HasBuffer<BDamageEvent>(eventBusEntity));
+                    entityManager.HasBuffer<GameplayEventBusEventBuffer>(eventBusEntity),
+                    entityManager.HasBuffer<AttributeChangeEventBuffer>(eventBusEntity),
+                    entityManager.HasBuffer<CueRequestBuffer>(eventBusEntity),
+                    entityManager.HasBuffer<TagChangeEventBuffer>(eventBusEntity),
+                    entityManager.HasBuffer<DamageEventBuffer>(eventBusEntity));
             }
 
             public int AllocateGameplayEffectContextId()
@@ -88,7 +88,7 @@ namespace GAS.Runtime
                 return AllocateContextId(ref _eventBus);
             }
 
-            public void EnqueueGameplayEvent(BGameplayEvent evt)
+            public void EnqueueGameplayEvent(GameplayEventBusEventBuffer evt)
             {
                 if (!_gameplayEventCanAppend)
                     return;
@@ -105,31 +105,31 @@ namespace GAS.Runtime
                     evt.Sequence = 0;
                 }
 
-                _entityManager.GetBuffer<BGameplayEvent>(_eventBusEntity).Add(evt);
+                _entityManager.GetBuffer<GameplayEventBusEventBuffer>(_eventBusEntity).Add(evt);
             }
 
-            public void EnqueueAttributeChangeEvent(BAttributeChangeEvent evt)
+            public void EnqueueAttributeChangeEvent(AttributeChangeEventBuffer evt)
             {
                 if (_attributeChangeEventCanAppend)
-                    _entityManager.GetBuffer<BAttributeChangeEvent>(_eventBusEntity).Add(evt);
+                    _entityManager.GetBuffer<AttributeChangeEventBuffer>(_eventBusEntity).Add(evt);
             }
 
-            public void EnqueueCueRequest(BCueRequest evt)
+            public void EnqueueCueRequest(CueRequestBuffer evt)
             {
                 if (_cueRequestCanAppend)
-                    _entityManager.GetBuffer<BCueRequest>(_eventBusEntity).Add(evt);
+                    _entityManager.GetBuffer<CueRequestBuffer>(_eventBusEntity).Add(evt);
             }
 
-            public void EnqueueTagChangeEvent(BTagChangeEvent evt)
+            public void EnqueueTagChangeEvent(TagChangeEventBuffer evt)
             {
                 if (_tagChangeEventCanAppend)
-                    _entityManager.GetBuffer<BTagChangeEvent>(_eventBusEntity).Add(evt);
+                    _entityManager.GetBuffer<TagChangeEventBuffer>(_eventBusEntity).Add(evt);
             }
 
-            public void EnqueueDamageEvent(BDamageEvent evt)
+            public void EnqueueDamageEvent(DamageEventBuffer evt)
             {
                 if (_damageEventCanAppend)
-                    _entityManager.GetBuffer<BDamageEvent>(_eventBusEntity).Add(evt);
+                    _entityManager.GetBuffer<DamageEventBuffer>(_eventBusEntity).Add(evt);
             }
 
             public void Flush()
@@ -139,7 +139,7 @@ namespace GAS.Runtime
 
                 if (_eventBusEntity != Entity.Null
                     && _entityManager.Exists(_eventBusEntity)
-                    && _entityManager.HasComponent<CGameplayEventBus>(_eventBusEntity))
+                    && _entityManager.HasComponent<GameplayEventBusComponent>(_eventBusEntity))
                 {
                     _entityManager.SetComponentData(_eventBusEntity, _eventBus);
                 }
@@ -166,12 +166,12 @@ namespace GAS.Runtime
         {
             if (eventBusEntity == Entity.Null
                 || !entityManager.Exists(eventBusEntity)
-                || !entityManager.HasComponent<CGameplayEventBus>(eventBusEntity))
+                || !entityManager.HasComponent<GameplayEventBusComponent>(eventBusEntity))
             {
                 return 0;
             }
 
-            var eventBus = entityManager.GetComponentData<CGameplayEventBus>(eventBusEntity);
+            var eventBus = entityManager.GetComponentData<GameplayEventBusComponent>(eventBusEntity);
             var contextId = AllocateContextId(ref eventBus);
             entityManager.SetComponentData(eventBusEntity, eventBus);
             return contextId;
@@ -185,63 +185,63 @@ namespace GAS.Runtime
         public static void EnqueueGameplayEvent(
             EntityManager entityManager,
             Entity eventBusEntity,
-            BGameplayEvent evt)
+            GameplayEventBusEventBuffer evt)
         {
-            if (!CanAppend<BGameplayEvent>(entityManager, eventBusEntity))
+            if (!CanAppend<GameplayEventBusEventBuffer>(entityManager, eventBusEntity))
                 return;
 
             evt.Frame = GASRuntimeFrameContext.ResolveCurrentFrame(entityManager);
             evt.Sequence = AssignGameplayEventSequence(entityManager, eventBusEntity);
-            entityManager.GetBuffer<BGameplayEvent>(eventBusEntity).Add(evt);
+            entityManager.GetBuffer<GameplayEventBusEventBuffer>(eventBusEntity).Add(evt);
         }
 
         public static void EnqueueAttributeChangeEvent(
             EntityManager entityManager,
             Entity eventBusEntity,
-            BAttributeChangeEvent evt)
+            AttributeChangeEventBuffer evt)
         {
-            if (CanAppend<BAttributeChangeEvent>(entityManager, eventBusEntity))
-                entityManager.GetBuffer<BAttributeChangeEvent>(eventBusEntity).Add(evt);
+            if (CanAppend<AttributeChangeEventBuffer>(entityManager, eventBusEntity))
+                entityManager.GetBuffer<AttributeChangeEventBuffer>(eventBusEntity).Add(evt);
         }
 
         public static void EnqueueCueRequest(
             EntityManager entityManager,
             Entity eventBusEntity,
-            BCueRequest evt)
+            CueRequestBuffer evt)
         {
-            if (CanAppend<BCueRequest>(entityManager, eventBusEntity))
-                entityManager.GetBuffer<BCueRequest>(eventBusEntity).Add(evt);
+            if (CanAppend<CueRequestBuffer>(entityManager, eventBusEntity))
+                entityManager.GetBuffer<CueRequestBuffer>(eventBusEntity).Add(evt);
         }
 
         public static void EnqueueTagChangeEvent(
             EntityManager entityManager,
             Entity eventBusEntity,
-            BTagChangeEvent evt)
+            TagChangeEventBuffer evt)
         {
-            if (CanAppend<BTagChangeEvent>(entityManager, eventBusEntity))
-                entityManager.GetBuffer<BTagChangeEvent>(eventBusEntity).Add(evt);
+            if (CanAppend<TagChangeEventBuffer>(entityManager, eventBusEntity))
+                entityManager.GetBuffer<TagChangeEventBuffer>(eventBusEntity).Add(evt);
         }
 
         public static void EnqueueDamageEvent(
             EntityManager entityManager,
             Entity eventBusEntity,
-            BDamageEvent evt)
+            DamageEventBuffer evt)
         {
-            if (CanAppend<BDamageEvent>(entityManager, eventBusEntity))
-                entityManager.GetBuffer<BDamageEvent>(eventBusEntity).Add(evt);
+            if (CanAppend<DamageEventBuffer>(entityManager, eventBusEntity))
+                entityManager.GetBuffer<DamageEventBuffer>(eventBusEntity).Add(evt);
         }
 
         public static void AppendPresentationEvent(
             EntityManager entityManager,
             Entity eventBusEntity,
             Entity asc,
-            BPresentationEvent evt)
+            PresentationEventBuffer evt)
         {
             if (eventBusEntity != Entity.Null
                 && entityManager.Exists(eventBusEntity)
-                && entityManager.HasBuffer<BPresentationOutboxOwner>(eventBusEntity))
+                && entityManager.HasBuffer<PresentationOutboxOwnerBuffer>(eventBusEntity))
             {
-                var owners = entityManager.GetBuffer<BPresentationOutboxOwner>(eventBusEntity);
+                var owners = entityManager.GetBuffer<PresentationOutboxOwnerBuffer>(eventBusEntity);
                 var alreadyOwned = false;
                 for (var i = 0; i < owners.Length; i++)
                 {
@@ -253,11 +253,11 @@ namespace GAS.Runtime
                 }
 
                 if (!alreadyOwned)
-                    owners.Add(new BPresentationOutboxOwner { ASC = asc });
+                    owners.Add(new PresentationOutboxOwnerBuffer { ASC = asc });
             }
 
-            if (asc != Entity.Null && entityManager.Exists(asc) && entityManager.HasBuffer<BPresentationEvent>(asc))
-                entityManager.GetBuffer<BPresentationEvent>(asc).Add(evt);
+            if (asc != Entity.Null && entityManager.Exists(asc) && entityManager.HasBuffer<PresentationEventBuffer>(asc))
+                entityManager.GetBuffer<PresentationEventBuffer>(asc).Add(evt);
         }
 
         public static NativeArray<T> CopyBufferRange<T>(
@@ -334,7 +334,7 @@ namespace GAS.Runtime
             Entity source,
             float amount)
         {
-            ecb.AppendToBuffer(sortKey, eventBusEntity, new BDamageEvent
+            ecb.AppendToBuffer(sortKey, eventBusEntity, new DamageEventBuffer
             {
                 Target = target,
                 Source = source,
@@ -350,7 +350,7 @@ namespace GAS.Runtime
             int tagIndex,
             bool added)
         {
-            ecb.AppendToBuffer(sortKey, eventBusEntity, new BTagChangeEvent
+            ecb.AppendToBuffer(sortKey, eventBusEntity, new TagChangeEventBuffer
             {
                 ASC = asc,
                 TagIndex = tagIndex,
@@ -368,17 +368,17 @@ namespace GAS.Runtime
 
         private static int AssignGameplayEventSequence(EntityManager entityManager, Entity eventBusEntity)
         {
-            if (!entityManager.HasComponent<CGameplayEventBus>(eventBusEntity))
+            if (!entityManager.HasComponent<GameplayEventBusComponent>(eventBusEntity))
                 return 0;
 
-            var eventBus = entityManager.GetComponentData<CGameplayEventBus>(eventBusEntity);
+            var eventBus = entityManager.GetComponentData<GameplayEventBusComponent>(eventBusEntity);
             var sequence = eventBus.NextSequence;
             eventBus.NextSequence++;
             entityManager.SetComponentData(eventBusEntity, eventBus);
             return sequence;
         }
 
-        private static int AllocateContextId(ref CGameplayEventBus eventBus)
+        private static int AllocateContextId(ref GameplayEventBusComponent eventBus)
         {
             if (eventBus.NextContextId <= 0)
                 eventBus.NextContextId = 1;

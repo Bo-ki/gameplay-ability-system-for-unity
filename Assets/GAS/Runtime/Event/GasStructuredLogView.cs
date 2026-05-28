@@ -134,14 +134,14 @@ namespace GAS.Runtime
     {
         public const int NoReplayLogIndex = -1;
 
-        public static GasStructuredLogEntry FromReplay(in BDebugReplayEvent evt)
+        public static GasStructuredLogEntry FromReplay(in ReplayLogEventBuffer evt)
         {
             return Create(evt.LogIndex, evt, GameplayFactClassifier.Classify(evt));
         }
 
-        public static GasStructuredLogEntry FromGameplayEvent(in BGameplayEvent evt)
+        public static GasStructuredLogEntry FromGameplayEvent(in GameplayEventBusEventBuffer evt)
         {
-            var replay = new BDebugReplayEvent
+            var replay = new ReplayLogEventBuffer
             {
                 LogIndex = NoReplayLogIndex,
                 Frame = evt.Frame,
@@ -163,9 +163,9 @@ namespace GAS.Runtime
             return Create(NoReplayLogIndex, replay, GameplayFactClassifier.Classify(evt.Type));
         }
 
-        public static GasStructuredLogEntry FromAttributeChange(in BAttributeChangeEvent evt)
+        public static GasStructuredLogEntry FromAttributeChange(in AttributeChangeEventBuffer evt)
         {
-            var replay = new BDebugReplayEvent
+            var replay = new ReplayLogEventBuffer
             {
                 LogIndex = NoReplayLogIndex,
                 Kind = EDebugReplayEventKind.AttributeChange,
@@ -185,9 +185,9 @@ namespace GAS.Runtime
             return Create(NoReplayLogIndex, replay, GameplayFactClassifier.Classify(replay));
         }
 
-        public static GasStructuredLogEntry FromCueRequest(in BCueRequest evt)
+        public static GasStructuredLogEntry FromCueRequest(in CueRequestBuffer evt)
         {
-            var replay = new BDebugReplayEvent
+            var replay = new ReplayLogEventBuffer
             {
                 LogIndex = NoReplayLogIndex,
                 Kind = EDebugReplayEventKind.CueRequest,
@@ -206,9 +206,9 @@ namespace GAS.Runtime
             return Create(NoReplayLogIndex, replay, GameplayFactClassifier.Classify(replay));
         }
 
-        public static GasStructuredLogEntry FromTagChange(in BTagChangeEvent evt)
+        public static GasStructuredLogEntry FromTagChange(in TagChangeEventBuffer evt)
         {
-            var replay = new BDebugReplayEvent
+            var replay = new ReplayLogEventBuffer
             {
                 LogIndex = NoReplayLogIndex,
                 Kind = EDebugReplayEventKind.TagChange,
@@ -220,9 +220,9 @@ namespace GAS.Runtime
             return Create(NoReplayLogIndex, replay, GameplayFactClassifier.Classify(replay));
         }
 
-        public static GasStructuredLogEntry FromDamage(in BDamageEvent evt)
+        public static GasStructuredLogEntry FromDamage(in DamageEventBuffer evt)
         {
-            var replay = new BDebugReplayEvent
+            var replay = new ReplayLogEventBuffer
             {
                 LogIndex = NoReplayLogIndex,
                 Kind = EDebugReplayEventKind.Damage,
@@ -266,7 +266,7 @@ namespace GAS.Runtime
 
         private static GasStructuredLogEntry Create(
             int logIndex,
-            in BDebugReplayEvent evt,
+            in ReplayLogEventBuffer evt,
             GameplayFactClassification classification)
         {
             return new GasStructuredLogEntry(

@@ -2,13 +2,13 @@ namespace GAS.Runtime
 {
     public struct TagRequirementMask
     {
-        public CTagMask All;
-        public CTagMask Any;
-        public CTagMask None;
+        public TagMaskComponent All;
+        public TagMaskComponent Any;
+        public TagMaskComponent None;
 
         public readonly bool IsEmpty => All.IsEmpty && Any.IsEmpty && None.IsEmpty;
 
-        public readonly bool Evaluate(in CTagMask owner)
+        public readonly bool Evaluate(in TagMaskComponent owner)
         {
             if (!owner.HasAllTags(All))
                 return false;

@@ -7,7 +7,7 @@ namespace GAS.Runtime
     {
         public static Entity AppendSimpleInstantCommandOrCreateSingleTargetRequest(
             EntityManager em,
-            in CApplyGameplayEffectRequest request,
+            in GEApplyRequestComponent request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
             string namePrefix = "ApplyGERequest")
@@ -18,10 +18,10 @@ namespace GAS.Runtime
 
         public static Entity AppendSimpleInstantCommandOrCreateSingleTargetRequest(
             EntityManager em,
-            in CApplyGameplayEffectRequest request,
+            in GEApplyRequestComponent request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
-            in BSetByCallerValue setByCallerValue,
+            in GESetByCallerRequestValueBuffer setByCallerValue,
             string namePrefix = "ApplyGERequest")
         {
             var canUseSetByCaller = setByCallerValue.Key > 0;
@@ -35,7 +35,7 @@ namespace GAS.Runtime
 
         public static Entity AppendSimpleInstantCommandsOrCreateTargetListRequest(
             EntityManager em,
-            in CApplyGameplayEffectRequest request,
+            in GEApplyRequestComponent request,
             IReadOnlyList<Entity> targetAscs,
             ETargetDataKind targetDataKind,
             string namePrefix = "ApplyGERequest")
@@ -46,10 +46,10 @@ namespace GAS.Runtime
 
         public static bool TryAppendSimpleInstantCommands(
             EntityManager em,
-            in CApplyGameplayEffectRequest request,
+            in GEApplyRequestComponent request,
             IReadOnlyList<Entity> targetAscs,
             ETargetDataKind targetDataKind,
-            IReadOnlyList<BSetByCallerValue> setByCallerValues)
+            IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues)
         {
             return TryAppendSimpleInstantCommands(
                 em,
@@ -62,11 +62,11 @@ namespace GAS.Runtime
 
         public static bool TryAppendSimpleInstantCommands(
             EntityManager em,
-            in CApplyGameplayEffectRequest request,
+            in GEApplyRequestComponent request,
             IReadOnlyList<Entity> targetAscs,
             ETargetDataKind targetDataKind,
-            IReadOnlyList<BSetByCallerValue> setByCallerValues,
-            EEffectCommandSource source)
+            IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues,
+            GEEffectCommandSource source)
         {
             if (targetAscs == null || targetAscs.Count == 0)
                 return false;
@@ -96,10 +96,10 @@ namespace GAS.Runtime
 
         public static bool TryAppendSimpleInstantCommand(
             EntityManager em,
-            in CApplyGameplayEffectRequest request,
+            in GEApplyRequestComponent request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
-            IReadOnlyList<BSetByCallerValue> setByCallerValues)
+            IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues)
         {
             return TryAppendSimpleInstantCommand(
                 em,
@@ -112,11 +112,11 @@ namespace GAS.Runtime
 
         public static bool TryAppendSimpleInstantCommand(
             EntityManager em,
-            in CApplyGameplayEffectRequest request,
+            in GEApplyRequestComponent request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
-            IReadOnlyList<BSetByCallerValue> setByCallerValues,
-            EEffectCommandSource source)
+            IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues,
+            GEEffectCommandSource source)
         {
             if (!PrepareAppendableCommand(em, request, targetAsc, targetDataKind, source, out var command))
                 return false;
@@ -127,11 +127,11 @@ namespace GAS.Runtime
 
         public static bool TryAppendSimpleInstantCommand(
             EntityManager em,
-            in CApplyGameplayEffectRequest request,
+            in GEApplyRequestComponent request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
-            DynamicBuffer<BSetByCallerValue> setByCallerValues,
-            EEffectCommandSource source)
+            DynamicBuffer<GESetByCallerRequestValueBuffer> setByCallerValues,
+            GEEffectCommandSource source)
         {
             if (!PrepareAppendableCommand(em, request, targetAsc, targetDataKind, source, out var command))
                 return false;
@@ -142,11 +142,11 @@ namespace GAS.Runtime
 
         public static bool TryPrepareAppendableCommand(
             EntityManager em,
-            in CApplyGameplayEffectRequest request,
+            in GEApplyRequestComponent request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
-            EEffectCommandSource source,
-            out BEffectCommand command)
+            GEEffectCommandSource source,
+            out GEEffectCommandBuffer command)
         {
             return PrepareAppendableCommand(
                 em,
@@ -159,10 +159,10 @@ namespace GAS.Runtime
 
         private static bool CanAppendEffectCommand(
             EntityManager em,
-            in CApplyGameplayEffectRequest request,
+            in GEApplyRequestComponent request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
-            EEffectCommandSource source)
+            GEEffectCommandSource source)
         {
             return PrepareAppendableCommand(
                 em,
@@ -175,11 +175,11 @@ namespace GAS.Runtime
 
         private static bool PrepareAppendableCommand(
             EntityManager em,
-            in CApplyGameplayEffectRequest request,
+            in GEApplyRequestComponent request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
-            EEffectCommandSource source,
-            out BEffectCommand command)
+            GEEffectCommandSource source,
+            out GEEffectCommandBuffer command)
         {
             if (targetAsc == Entity.Null)
             {
@@ -192,98 +192,15 @@ namespace GAS.Runtime
                 targetAsc,
                 targetDataKind,
                 source);
-
-            if (EffectCommandSpecStreamPhaseUtility.CanBuildSimpleInstantSpec(em, in command))
-                return true;
-
-            if (!EffectCommandSpecStreamPhaseUtility.CanBuildActiveEffectMutation(em, in command))
-                return false;
-
-            command.Kind = EEffectCommandKind.ActiveMutation;
             return true;
         }
 
-        private static EEffectCommandSource ResolveCommandSource(in CApplyGameplayEffectRequest request)
+        private static GEEffectCommandSource ResolveCommandSource(in GEApplyRequestComponent request)
         {
             return request.SourceAbility != Entity.Null
-                ? EEffectCommandSource.Ability
-                : EEffectCommandSource.RuntimeBoundary;
+                ? GEEffectCommandSource.Ability
+                : GEEffectCommandSource.RuntimeBoundary;
         }
 
-        #region Placeholder — legacy methods retained for test compilation
-
-        public static Entity Create(
-            EntityManager em,
-            in CApplyGameplayEffectRequest request,
-            Entity targetAsc,
-            ETargetDataKind targetDataKind,
-            string namePrefix = "ApplyGERequest")
-        {
-            return AppendSimpleInstantCommandOrCreateSingleTargetRequest(
-                em, request, targetAsc, targetDataKind, namePrefix);
-        }
-
-        public static Entity Create(
-            EntityManager em,
-            in CApplyGameplayEffectRequest request,
-            IReadOnlyList<Entity> targetAscs,
-            ETargetDataKind targetDataKind,
-            string namePrefix = "ApplyGERequest")
-        {
-            return AppendSimpleInstantCommandsOrCreateTargetListRequest(
-                em, request, targetAscs, targetDataKind, namePrefix);
-        }
-
-        public static void AddTarget(
-            EntityManager em,
-            Entity requestEntity,
-            Entity targetAsc,
-            ETargetDataKind targetDataKind) { }
-
-        public static void AddTarget(
-            EntityManager em,
-            Entity requestEntity,
-            IReadOnlyList<Entity> targetAscs,
-            ETargetDataKind targetDataKind) { }
-
-        public static void AddSetByCallerValues(
-            EntityManager em,
-            Entity requestEntity,
-            IReadOnlyList<BSetByCallerValue> values) { }
-
-        public static void AddSetByCallerValues(
-            EntityManager em,
-            Entity requestEntity,
-            in BSetByCallerValue value) { }
-
-        public static void AddSetByCallerValues(
-            EntityManager em,
-            Entity requestEntity,
-            DynamicBuffer<BSetByCallerValue> values) { }
-
-        public static Entity ApplyLegacyInstantBypassOrCreateSingleTargetRequest(
-            EntityManager em,
-            in CApplyGameplayEffectRequest request,
-            Entity targetAsc,
-            ETargetDataKind targetDataKind,
-            string namePrefix = "ApplyGERequest")
-        {
-            return AppendSimpleInstantCommandOrCreateSingleTargetRequest(
-                em, request, targetAsc, targetDataKind, namePrefix);
-        }
-
-        public static Entity ApplyLegacyInstantBypassOrCreateSingleTargetRequest(
-            EntityManager em,
-            in CApplyGameplayEffectRequest request,
-            Entity targetAsc,
-            ETargetDataKind targetDataKind,
-            in BSetByCallerValue setByCallerValue,
-            string namePrefix = "ApplyGERequest")
-        {
-            return AppendSimpleInstantCommandOrCreateSingleTargetRequest(
-                em, request, targetAsc, targetDataKind, setByCallerValue, namePrefix);
-        }
-
-        #endregion
     }
 }

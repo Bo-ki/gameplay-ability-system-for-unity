@@ -1,6 +1,6 @@
 # GAS CodeGen Validation Report
 
-InputHash: `a39391dc4d25597299ad8449396d6b083033a46df2e2e53bc47954014b12f7c6`
+InputHash: `7757403529c5cf18df03b2bc95e2d0e56c38f0f2d1767897346709ff2800218f`
 RowCount: `10`
 OrphansDeleted: `1`
 LubanCSharpOutput: `Assets/DataGenerated/Luban/CSharp`
@@ -21,15 +21,15 @@ GeneratedNamingDebtHits: `0`
 | `GAS.Runtime.HeadlessAutoChessGameplayTagDefinitionRow` | `GameplayTag` | `GameplayTagCode` | `GameplayTagDefinitionBlob` | `GameplayTagDefinitionLookup` | `GAS.Runtime.HeadlessAutoChessGeneratedDefinitionRows.CreateGameplayTagRows()` | `3` | `19` |
 | `GAS.Runtime.HeadlessAutoChessScenarioSpawnDefinitionRow` | `None` | `ScenarioSpawnCode` | `ScenarioSpawnDefinitionBlob` | `ScenarioSpawnDefinitionLookup` | `GAS.Runtime.HeadlessAutoChessGeneratedDefinitionRows.CreateScenarioSpawnRows()` | `7` | `4` |
 | `GAS.Runtime.HeadlessAutoChessSummonDefinitionRow` | `None` | `SummonGameplayEffectCode` | `SummonDefinitionBlob` | `SummonDefinitionLookup` | `GAS.Runtime.HeadlessAutoChessGeneratedDefinitionRows.CreateSummonRows()` | `16` | `1` |
-| `GAS.Runtime.HeadlessAutoChessTimelineDefinitionRow` | `TimelineAbility` | `TimelineId` | `TimelineDefinitionBlob` | `TimelineDefinitionLookup` | `GAS.Runtime.HeadlessAutoChessGeneratedDefinitionRows.CreateTimelineRows()` | `5` | `7` |
+| `GAS.Runtime.HeadlessAutoChessTimelineDefinitionRow` | `None` | `TimelineId` | `TimelineDefinitionBlob` | `TimelineDefinitionLookup` | `GAS.Runtime.HeadlessAutoChessGeneratedDefinitionRows.CreateTimelineRows()` | `5` | `7` |
 | `GAS.Runtime.HeadlessAutoChessUnitDefinitionRow` | `None` | `UnitCode` | `UnitDefinitionBlob` | `UnitDefinitionLookup` | `GAS.Runtime.HeadlessAutoChessGeneratedDefinitionRows.CreateUnitRows()` | `20` | `5` |
 
 ## Layer Checks
 
 | Layer | RuntimeVisible | Artifacts | Contract |
 | --- | --- | --- | --- |
-| Runtime | yes | Runtime asmdef, definition index, definition blobs, static lookups, component type sets | No row, no JSON, no `cfg.*`, no mutable managed registry; runtime asmdef does not reference row source assemblies |
-| Baking | no | Editor asmdef, row-based Blob builders, lookup builders, authoring/Baker glue | `Baker<TAuthoring>` only adds outputs and calls `AddBlobAsset()`; row source assemblies are editor/baking-only references |
+| Runtime | yes | Runtime asmdef, definition index, definition blobs, static lookups, catalog lookup, runtime definition glue, component type sets | No row, no JSON, no `cfg.*`, no mutable managed registry; runtime asmdef does not reference row source assemblies |
+| Baking | no | Editor asmdef, row-based Blob builders, lookup builders, catalog builder, authoring/Baker glue | `Baker<TAuthoring>` only adds components and BlobAssets; row source assemblies are editor/baking-only references |
 | Editor/CI | no | Query layout hints, manifest, validation report, dependency scan | Diagnostics only; not gameplay input |
 
 ## Luban Compile Boundary
@@ -38,7 +38,7 @@ GeneratedNamingDebtHits: `0`
 | --- | --- | --- | --- | --- |
 | Luban generated C# | yes | no direct GAS Runtime Core dependency | `Assets/DataGenerated/Luban/CSharp` may use `cfg.*`, `Luban.Runtime`, `SimpleJSON` | Source row / table API boundary; compile errors are real gate failures, not hidden by moving files out of Assets |
 | Luban generated JSON | asset/data | no | `Assets/DataGenerated/Luban/Json/GAS` | Data input for loaders / authoring / baking; not queried by Runtime Core hot path |
-| GAS generated Runtime | yes | yes | GAS Runtime, Unity.Collections, Unity.Entities | May consume IDs, blobs, unmanaged lookups and component type sets only; no `cfg.*` / JSON reader / managed row reference |
+| GAS generated Runtime | yes | yes | GAS Runtime, Unity.Collections, Unity.Entities, Unity.Burst | May consume IDs, blobs, unmanaged lookups and component type sets only; no `cfg.*` / JSON reader / managed row reference |
 | GAS generated Editor/Baking | Editor only | no | row source assemblies, GAS Editor, GAS Runtime, Unity DOTS | May convert rows into BlobAssets and Baker outputs; no gameplay lifecycle ownership |
 
 ## Manifest Entries
@@ -52,6 +52,13 @@ GeneratedNamingDebtHits: `0`
 | `BlobSchema` | `Assets/GAS/Generated/CodeGen/Editor/BlobBuilders.gen.cs` | `Baking` | `False` | `True` |
 | `StaticLookup` | `Assets/GAS/Generated/CodeGen/Runtime/StaticLookups.gen.cs` | `Runtime` | `True` | `True` |
 | `StaticLookup` | `Assets/GAS/Generated/CodeGen/Editor/StaticLookupBuilders.gen.cs` | `Baking` | `False` | `True` |
+| `DefinitionCatalog` | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionCatalog.gen.cs` | `Runtime` | `True` | `True` |
+| `DefinitionCatalog` | `Assets/GAS/Generated/CodeGen/Editor/DefinitionCatalogBuilder.gen.cs` | `Baking` | `False` | `True` |
+| `RuntimeDefinitionGlue` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeDefinitionGlue.gen.cs` | `Runtime` | `True` | `True` |
+| `RuntimeDefinitionGlue` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `Runtime` | `True` | `True` |
+| `RuntimeDefinitionGlue` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `Runtime` | `True` | `True` |
+| `RuntimeDefinitionGlue` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `Runtime` | `True` | `True` |
+| `RuntimeDefinitionGlue` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeSystemRegistration.gen.cs` | `Runtime` | `True` | `True` |
 | `BakerGlue` | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionComponents.gen.cs` | `Runtime` | `True` | `True` |
 | `BakerGlue` | `Assets/GAS/Generated/CodeGen/Editor/BakerGlue.gen.cs` | `Baking` | `False` | `True` |
 | `ComponentTypeSet` | `Assets/GAS/Generated/CodeGen/Runtime/ComponentTypeSets.gen.cs` | `Runtime` | `True` | `True` |
@@ -65,7 +72,8 @@ GeneratedNamingDebtHits: `0`
 | `BAKE-01` / `CASE-39` | Adopted | Generated Baker glue only adds components and BlobAssets; it does not read other Baker outputs. |
 | `BAKE-02` / `CASE-40` | Adopted | Generated Bakers do not cache instance state. |
 | `BLOB-01` / `BLOB-02` / `CASE-24` | Adopted | Static definitions are emitted as immutable Blob root structs and builder methods are Editor/Baking side. |
-| `QRY-01` / `JOB-01` / `PRF-05` | Deferred | CodeGen emits query layout descriptions only; it does not generate runtime lifecycle systems or hot path traversal. |
+| `CAT-01` | Adopted | Generated catalog stores Ability/GE data in one Blob root with sorted code arrays and range-based child arrays; Runtime glue consumes the catalog by ref and never queries row entities. Timeline rows are flattened at generation time and are not Runtime Core state. |
+| `QRY-01` / `JOB-01` / `PRF-05` | Partial | Generated Runtime now owns catalog-driven ability, instant GE, and active effect lifecycle systems; full chunk-job traversal remains a later optimization pass. |
 | `SC-01` / `PRF-02` / `ECB-03` | Deferred | CodeGen does not hide structural changes; runtime playback ownership remains a Runtime Core contract. |
 | `BUR-01` / `BUR-02` | Adopted | Runtime-visible lookup data is unmanaged / Blob based; managed delegate registries remain forbidden. |
 | `NAT-01` / `NAT-04` | Adopted | Generated lookup structs expose `OwnsMemory`; `Dispose()` only releases NativeArray and Blob memory for owning instances. |

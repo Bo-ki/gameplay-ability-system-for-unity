@@ -166,25 +166,6 @@ namespace GAS.Runtime.Generated
             return new SummonDefinitionLookup(sortedCodes, entries);
         }
 
-        public static TimelineDefinitionLookup BuildTimelineDefinitionLookupFromRows(
-            IReadOnlyList<GAS.Runtime.HeadlessAutoChessTimelineDefinitionRow> rows,
-            Allocator allocator = Allocator.Persistent)
-        {
-            if (rows == null) throw new ArgumentNullException(nameof(rows));
-            var sorted = new (int Code, int Index)[rows.Count];
-            for (var i = 0; i < rows.Count; i++)
-                sorted[i] = (rows[i].TimelineId, i);
-            Array.Sort(sorted, (left, right) => left.Code.CompareTo(right.Code));
-            var sortedCodes = new NativeArray<int>(rows.Count, allocator);
-            var entries = new NativeArray<BlobAssetReference<TimelineDefinitionBlob>>(rows.Count, allocator);
-            for (var i = 0; i < sorted.Length; i++)
-            {
-                sortedCodes[i] = sorted[i].Code;
-                entries[i] = GASGeneratedDefinitionBlobBuilder.BuildTimelineDefinitionBlob(rows[sorted[i].Index], allocator);
-            }
-            return new TimelineDefinitionLookup(sortedCodes, entries);
-        }
-
         public static UnitDefinitionLookup BuildUnitDefinitionLookupFromRows(
             IReadOnlyList<GAS.Runtime.HeadlessAutoChessUnitDefinitionRow> rows,
             Allocator allocator = Allocator.Persistent)

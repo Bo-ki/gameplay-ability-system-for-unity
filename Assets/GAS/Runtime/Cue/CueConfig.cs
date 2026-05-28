@@ -41,8 +41,8 @@ namespace GAS.Runtime
 
         public int[] ImmunityTags
         {
-            get => ImmunityNoneTags;
-            set => ImmunityNoneTags = value;
+            get => ImmunityAnyTags;
+            set => ImmunityAnyTags = value;
         }
 
         public int[] RequiredAllTags { get; set; }
@@ -57,7 +57,7 @@ namespace GAS.Runtime
             CueType = cueType;
             Param = param;
             SetRequiredTagRequirement(requiredTags, Array.Empty<int>(), Array.Empty<int>());
-            SetImmunityTagRequirement(Array.Empty<int>(), Array.Empty<int>(), immunityTags);
+            SetImmunityTagRequirement(Array.Empty<int>(), immunityTags, Array.Empty<int>());
         }
 
         public GameplayCueConfig(Type cueType, XParam param,
@@ -83,7 +83,7 @@ namespace GAS.Runtime
 
         public void SetImmunityTags(int[] immunityTags)
         {
-            SetImmunityTagRequirement(Array.Empty<int>(), Array.Empty<int>(), immunityTags);
+            SetImmunityTagRequirement(Array.Empty<int>(), immunityTags, Array.Empty<int>());
         }
 
         public void SetRequiredTagRequirement(int[] all, int[] any, int[] none)

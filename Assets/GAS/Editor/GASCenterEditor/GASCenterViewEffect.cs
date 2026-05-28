@@ -433,20 +433,20 @@ namespace GAS.Editor
                         ? int.Parse(selectInfo[_headerMap["Stacking"]].ToString())
                         : 0,
                     stackingType = selectInfo[_headerMap["Stacking"] + 1] != null
-                        ? (StackingType)int.Parse(selectInfo[_headerMap["Stacking"] + 1].ToString())
+                        ? (EffectStackType)int.Parse(selectInfo[_headerMap["Stacking"] + 1].ToString())
                         : 0,
                     limitCount = selectInfo[_headerMap["Stacking"] + 2] != null
                         ? int.Parse(selectInfo[_headerMap["Stacking"] + 2].ToString())
                         : 0,
                     durationRefreshPolicy = selectInfo[_headerMap["Stacking"] + 3] != null
-                        ? (DurationRefreshPolicy)int.Parse(selectInfo[_headerMap["Stacking"] + 3].ToString())
-                        : DurationRefreshPolicy.NeverRefresh,
+                        ? (EffectDurationRefreshPolicy)int.Parse(selectInfo[_headerMap["Stacking"] + 3].ToString())
+                        : EffectDurationRefreshPolicy.NeverRefresh,
                     periodResetPolicy = selectInfo[_headerMap["Stacking"] + 4] != null
-                        ? (PeriodResetPolicy)int.Parse(selectInfo[_headerMap["Stacking"] + 4].ToString())
-                        : PeriodResetPolicy.NeverRefresh,
+                        ? (EffectPeriodResetPolicy)int.Parse(selectInfo[_headerMap["Stacking"] + 4].ToString())
+                        : EffectPeriodResetPolicy.NeverRefresh,
                     stackingExpirationPolicy = selectInfo[_headerMap["Stacking"] + 5] != null
-                        ? (StackingExpirationPolicy)int.Parse(selectInfo[_headerMap["Stacking"] + 5].ToString())
-                        : StackingExpirationPolicy.ClearEntireStack,
+                        ? (EffectExpirationPolicy)int.Parse(selectInfo[_headerMap["Stacking"] + 5].ToString())
+                        : EffectExpirationPolicy.ClearEntireStack,
                     DenyOverflowApplication = selectInfo[_headerMap["Stacking"] + 6] != null &&
                                               bool.Parse(selectInfo[_headerMap["Stacking"] + 6].ToString()),
                     clearStackOnOverflow = selectInfo[_headerMap["Stacking"] + 7] != null &&

@@ -1,6 +1,6 @@
 {
     "OutputRoot": "Assets/GAS/Generated/CodeGen",
-    "InputHash": "a39391dc4d25597299ad8449396d6b083033a46df2e2e53bc47954014b12f7c6",
+    "InputHash": "7757403529c5cf18df03b2bc95e2d0e56c38f0f2d1767897346709ff2800218f",
     "Entries": [
         {
             "PhaseName": "AssemblyDefinition",
@@ -56,6 +56,62 @@
             "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/StaticLookupBuilders.gen.cs",
             "Layer": "Baking",
             "RuntimeVisible": false,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "DefinitionCatalog",
+            "FileName": "DefinitionCatalog.gen.cs",
+            "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/DefinitionCatalog.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "DefinitionCatalog",
+            "FileName": "DefinitionCatalogBuilder.gen.cs",
+            "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/DefinitionCatalogBuilder.gen.cs",
+            "Layer": "Baking",
+            "RuntimeVisible": false,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "RuntimeDefinitionGlue",
+            "FileName": "RuntimeDefinitionGlue.gen.cs",
+            "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeDefinitionGlue.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "RuntimeDefinitionGlue",
+            "FileName": "RuntimeAbilityActivation.gen.cs",
+            "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "RuntimeDefinitionGlue",
+            "FileName": "RuntimeEffectInstant.gen.cs",
+            "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "RuntimeDefinitionGlue",
+            "FileName": "RuntimeActiveEffect.gen.cs",
+            "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
+            "VersionControlled": true
+        },
+        {
+            "PhaseName": "RuntimeDefinitionGlue",
+            "FileName": "RuntimeSystemRegistration.gen.cs",
+            "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeSystemRegistration.gen.cs",
+            "Layer": "Runtime",
+            "RuntimeVisible": true,
             "VersionControlled": true
         },
         {

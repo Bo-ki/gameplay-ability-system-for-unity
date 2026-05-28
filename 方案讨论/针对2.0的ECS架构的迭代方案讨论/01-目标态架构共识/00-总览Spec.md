@@ -12,7 +12,7 @@
 
 ```mermaid
 flowchart TD
-    Definition["Layer 4: Definition & Generation\nLuban / SourceGenerator / Static Lookup / Bake Plan"] --> Core["Layer 3: GAS Runtime Core\nAbility / Effect / Attribute / Tag / TypedFacts"]
+    Definition["Layer 4: Definition & Generation\nLuban / SourceGenerator / Static Lookup / Bake Plan"] --> Core["Layer 3: GAS Runtime Core\nAbility / Effect / Attribute / Tag / GameplayFact"]
     Shell["Layer 1: Application Shell\nInput / AI / Network / UI / Demo Runner"] --> Boundary["Layer 2: Runtime Boundary\nCommandGateway / ReadModel / PresentationOutboxBridge / DiagnosticsSink"]
     Boundary --> Core
     Core --> Boundary
@@ -32,11 +32,11 @@ flowchart TD
 
 | AM 编号 | 名称 | 目标 | 关键交付 |
 |---|---|---|---|
-| **AM0** | Frame Backbone | 建立 SystemGroup / Frame Arena / Query / Lookup / Allocator / Dependency / Structural Playback / Debugger evidence 的统一骨架 | DOTS Backbone First 验收通过 |
+| **AM0** | DOTS Physical Backbone | 建立少量物理执行域 SystemGroup / Frame Prepare / Query ownership / Lookup / Allocator / Dependency / Structural Commit / Debugger evidence 的统一骨架 | DOTS Physical Backbone 验收通过 |
 | **AM1** | Diagnostics Baseline | Runtime Core Debugger 完成 counters / timing / buffer pressure / sync point 采样 | Debugger summary 可与 Profiler/Journaling 对照 |
-| **AM2** | EffectCommand Contract | EffectCommand / SpecStream / AttributeDelta 契约落地，完成 AM1→AM2 的 stream owner 迁移 | simple instant GE 不创建 runtime entity |
-| **AM3** | Instant Spec Evaluation | Instant GE 全链路迁入 command→spec→delta→fact 主链 | 所有 simple instant producer 迁入；旧 request fallback 仅余复杂 GE |
-| **AM4** | Scale-Ready Stream | 全局 singleton DynamicBuffer 迁移到 per-owner / NativeStream，parallel fan-in 确定性闭合 | buffer pressure 达标；battle hash 稳定 |
+| **AM2** | EffectCommand Contract | EffectCommand / TargetData / AttributeModifier / GameplayFact 契约落地，明确 owner-local 与 frame-local fan-in 边界 | simple instant GE 不创建 runtime entity |
+| **AM3** | Fan-In to Attribute Apply | Instant GE 全链路迁入 target resolve → effect fan-in → attribute reduce/apply → gameplay fact 主链 | 所有 simple instant producer 迁入；旧 request fallback 仅余复杂 GE |
+| **AM4** | Scale-Ready Fan-In | 全局 singleton DynamicBuffer 迁移到 `NativeStream` deterministic merge + compact owner-local range，parallel fan-in 确定性闭合 | merge cost / buffer pressure 达标；battle hash 稳定 |
 | **AM5** | Active Effect Store | Duration/Stack/Period/Granted 的 store-driven lifecycle 闭合 | 全部 duration GE 迁入 store；复杂 child GE 闭合 |
 | **AM6+** | Full GAS Closure | TargetData / EffectContext / MagnitudeEvaluation / GameplayEvent 全部闭合 | ECS GAS 完整语义闭环 |
 
@@ -56,21 +56,40 @@ AM 编号只表示目标态递进顺序，不代表严格的前置依赖。例�
 10. 无头 Demo 只省略真实资源和画面，不省略 Cue / UI / VFX / SFX 的 Boundary 链路；表现资源加载状态不能反向影响 Core simulation。（`ODF-18`）
 11. Runtime Core 任务必须能把自己的实现写法映射到 Unity 官方 DocCodeSamples / Tests / PerformanceTests 中的案例模式；若拒绝官方常见模式，必须说明原因和重新选型触发条件。（`CASE-01`~`CASE-47`）
 12. Runtime Core / Debugger / Luban / Demo 任务必须能把自己的实现取舍映射到 `../UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md` 的官方文档覆盖主题和 `ODF-*` 规则；若某主题暂不相关，必须说明原因。（`ODF-01`~`ODF-18`）
-13. Runtime Core 落地顺序遵守 `DOTS Backbone First`：先建立 SystemGroup / Frame Arena / Query / Lookup / Allocator / Dependency / Structural Playback / Debugger evidence 的统一骨架，再继续扩展 AM3 / AM5 等 GAS 功能迁移。（`SYS-01` `SYS-02` `PRF-04` `CASE-16`）
+13. Runtime Core 落地顺序遵守 `DOTS Physical Backbone First`：先建立少量物理执行域 SystemGroup / Frame Prepare / Query ownership / Lookup / Allocator / Dependency / Structural Commit / Debugger evidence，再继续扩展 Target Resolve、Effect Fan-In、State Evaluate、Attribute Reduce/Apply 等 GAS kernel lane。（`SYS-01` `SYS-02` `SYS-03` `PRF-04` `PRF-07` `CASE-16`）
+14. Runtime Core 新任务必须按业务 kernel lane 归属，而不是按 OOP 类或旧 SpecStream phase 归属；默认 lane 为 Boundary Command Ingest、Target Resolve、Effect Fan-In、State Evaluate、Attribute Reduce/Apply、Gameplay Fact、Structural Commit、Boundary Projection；但 lane 不默认升格为 `ComponentSystemGroup`。
+15. EffectCommand / Spec / Delta / Fact 是语义链，不是全局总线；scale-ready 默认是 `NativeStream` deterministic merge + compact owner-local buffer，proof-only singleton DynamicBuffer 不得固化为目标态。（`CASE-12` `NAT-03` `MAT-05` `BUF-02`）
+16. Luban / SourceGenerator 进入 Runtime Core 的目标形态是 `GASDefinitionCatalogBlob` + generated code->index lookup + Generated Runtime Glue；Runtime lane 消费 `AbilityActivationPlanRecord`、`GECommandSeedRecord`、`ResolvedModifierRecord` 等 frame-local record，不反查 managed row / JSON / `Dictionary`。
 
-## DOTS Backbone First
+## Runtime Core 物理执行域与 Kernel Lane 划分
+
+| 物理执行域 SystemGroup | Kernel lane | 数据所有权 |
+|---|---|---|
+| `GASFramePrepareSystemGroup` | Frame Prepare | allocator、lookup refresh budget、dependency counters；不集中持有 query |
+| `GASCommandResolveSystemGroup` | Boundary Command Ingest | 低频 Boundary request entity / Core 高频 `AbilityActivationCommandRecord` |
+| `GASCommandResolveSystemGroup` | Target Resolve | `AbilityTargetRecord` NativeStream / request-owned `TargetDataBuffer`（低量物化）/ deterministic target sort key |
+| `GASCoreSimulationSystemGroup` | Effect Fan-In | `NativeStream` producer + deterministic merge + compact owner-local command range |
+| `GASCoreSimulationSystemGroup` | State Evaluate | `AbilityStateComponent`、`ActiveGameplayEffectBuffer`、status bit field、chunk skip cache |
+| `GASCoreSimulationSystemGroup` | Attribute Reduce / Apply | target-grouped modifier reduce；attribute / tag / status 写入 |
+| `GASCoreSimulationSystemGroup` | Gameplay Fact | Core reaction facts；Ability trigger / reactive GE |
+| `GASStructuralCommitSystemGroup` | Structural Commit | custom ECB playback / EntityQuery bulk / `ComponentTypeSet` |
+| `GASBoundaryProjectionSystemGroup` | Boundary Projection | read model、presentation outbox、replay、debugger samples |
+
+## DOTS Physical Backbone First
 
 四层架构只定义工程职责边界，不替代 Unity DOTS 的执行机制。Runtime Core 进入更多功能迁移前，必须先拥有可验收的 frame backbone：
 
-1. `GASFramePrepareSystemGroup` 统一准备 query、lookup、type handle、frame scratch、allocator 和 dependency budget。
-2. command / spec / delta / fact / active mutation stream 必须声明 frame owner、clear phase、merge policy、deterministic ordering 和重新选型触发条件。
-3. `GASStructuralPlaybackSystemGroup` 是 hot path 唯一结构变化屏障；其他 phase 禁止直接做 `EntityManager` 结构变化。
-4. Runtime Core Debugger 必须输出 frame backbone counters，并能与 Unity Profiler / Entities Journaling / Burst evidence 对照。
-5. AM3 / AM5 后续任务只能在该 backbone 上扩展，不允许继续把旧 lifecycle mirror 当作目标态主线。
+1. `GASFramePrepareSystemGroup` 只负责 lookup refresh budget、frame scratch、allocator 和 dependency counters；EntityQuery 由各 `ISystem` 通过 `SystemState.GetEntityQuery` 自行拥有。
+2. command / target / modifier / fact / active slot 必须声明 owner、clear phase、merge policy、deterministic ordering 和重新选型触发条件。
+3. `GASStructuralCommitSystemGroup` 是 hot path 唯一结构变化屏障；其他 kernel 禁止直接做 `EntityManager` 结构变化。
+4. Runtime Core Debugger 必须同时输出 physical group counters 与 kernel lane counters，并能与 Unity Profiler / Entities Journaling / Burst evidence 对照。
+5. AM3 / AM5 后续任务只能在该 backbone 上扩展，不允许继续把旧 lifecycle mirror、singleton SpecStream 或 runtime GE entity churn 当作目标态主线。
+6. Frame Prepare 不能升级为中央 registry / service locator；query owner、buffer owner 和 stream owner 必须在具体 lane system 中声明。
+7. 新增 SystemGroup 必须通过 `SYS-03` / `PRF-07` 审查：只有引入新的同步/结构变化/投影物理边界时才允许新增 group。
 
 ## 当前优先 Spec
 
-1. [03-RuntimeCore管线Spec](03-RuntimeCore管线Spec.md) — SystemGroup 层级、Component 读写矩阵、Frame Arena 物理设计
+1. [03-RuntimeCore管线Spec](03-RuntimeCore管线Spec.md) — DOTS Kernel SystemGroup、Component 读写矩阵、Frame Prepare 物理设计、完整代码骨架
 2. [13-EntityComponent物理布局Spec](13-EntityComponent物理布局Spec.md) — Entity/Component 布局、Archetype 审计、Buffer 容量策略
 3. [04-EffectCommand-SpecStream-AttributeDeltaSpec](04-EffectCommand-SpecStream-AttributeDeltaSpec.md)
 4. [07-RuntimeCoreDebuggerSpec](07-RuntimeCoreDebuggerSpec.md)
@@ -95,6 +114,8 @@ AM 编号只表示目标态递进顺序，不代表严格的前置依赖。例�
 9. 不让 generated code 隐藏 query、allocator、system 调度、结构变化或 runtime lifecycle。
 10. 不把官方入门示例的主线程 foreach、ECB immediate playback、SceneSystem load 等边界用法直接搬进 Runtime Core hot path。
 11. 不把官方文档结论只停留在摘要；必须通过 `../UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md` 的覆盖矩阵和 `ODF-*` 规则进入行动报告、任务树和验收指标。
+12. 不把 Frame Arena 写成 query/lookup/service registry；Runtime Core 不接受中央 manager 型 ECS 抽象。
+13. 不把大容量全局 singleton DynamicBuffer 或大容量 per-ASC frame buffer 当作默认 scale-ready fan-in 方案。
 
 ## 历史方案定位
 

@@ -386,7 +386,6 @@ namespace GAS.Editor
                     writer.WriteLine("GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(GetGameplayEffectConfig);");
                     writer.WriteLine("GameplayCueConfigRegistry.RegisterGetConfigByIDFunc(GetGameplayCueConfig);");
                     writer.WriteLine("AbilityConfigRegistry.RegisterGetConfigByIDFunc(GetAbilityConfig);");
-                    writer.WriteLine("TimelineAbilityConfigRegistry.RegisterGetConfigByIDFunc(GetTimelineAbilityConfig);");
                     writer.WriteLine("WarmupConfigRegistryGraph();");
                     writer.Indent--;
                     writer.WriteLine("}");
@@ -408,7 +407,6 @@ namespace GAS.Editor
                     writer.Indent++;
                     writer.WriteLine("Tables.Tbability.DataList.Select(data => data.ID),");
                     writer.WriteLine("Tables.TbgameplayEffect.DataList.Select(data => data.ID),");
-                    writer.WriteLine("Tables.TbtimelineAbility.DataList.Select(data => data.ID),");
                     writer.WriteLine("clearDiagnostics);");
                     writer.Indent--;
                     writer.Indent--;
@@ -864,7 +862,11 @@ namespace GAS.Editor
                         writer.WriteLine("    configs.Add(new ConfAbilityEffectsOnActivate { EffectCodes = aData.Param.IDs });");
                         writer.WriteLine("    break;");
                         writer.WriteLine("case cfg.TimelineRef aData:");
-                        writer.WriteLine("    configs.Add(new ConfAbilityTimelineRef { TimelineId = aData.Param.ID });");
+                        writer.WriteLine("    configs.Add(new ConfAbilityTargetEffectsOnActivate");
+                        writer.WriteLine("    {");
+                        writer.WriteLine("        EffectCodes = CollectTimelineApplyEffectCodes(aData.Param.ID),");
+                        writer.WriteLine("        AutoEndOnCommit = true");
+                        writer.WriteLine("    });");
                         writer.WriteLine("    break;");
                         writer.WriteLine("case cfg.MoveInput aData:");
                         writer.WriteLine("    configs.Add(new ConfAbilityMoveInput { RotationOffset = aData.Param.RotationOffset });");
@@ -882,6 +884,61 @@ namespace GAS.Editor
 
                     #endregion
 
+                    writer.WriteLine("");
+
+                    writer.WriteLine("private static int[] CollectTimelineApplyEffectCodes(int timelineId)");
+                    writer.WriteLine("{");
+                    writer.Indent++;
+                    writer.WriteLine("var timeline = Tables.TbtimelineAbility.GetOrDefault(timelineId);");
+                    writer.WriteLine("if (timeline == null)");
+                    writer.WriteLine("{");
+                    writer.Indent++;
+                    writer.WriteLine("Debug.LogError($\"TimelineAbility_ID:{timelineId}  不存在.\");");
+                    writer.WriteLine("return Array.Empty<int>();");
+                    writer.Indent--;
+                    writer.WriteLine("}");
+                    writer.WriteLine("");
+                    writer.WriteLine("var effects = new List<int>();");
+                    writer.WriteLine("if (timeline.Tracks == null)");
+                    writer.Indent++;
+                    writer.WriteLine("return Array.Empty<int>();");
+                    writer.Indent--;
+                    writer.WriteLine("");
+                    writer.WriteLine("for (var trackIndex = 0; trackIndex < timeline.Tracks.Length; trackIndex++)");
+                    writer.WriteLine("{");
+                    writer.Indent++;
+                    writer.WriteLine("var track = timeline.Tracks[trackIndex];");
+                    writer.WriteLine("if (track?.ActionClips == null)");
+                    writer.Indent++;
+                    writer.WriteLine("continue;");
+                    writer.Indent--;
+                    writer.WriteLine("");
+                    writer.WriteLine("for (var clipIndex = 0; clipIndex < track.ActionClips.Length; clipIndex++)");
+                    writer.WriteLine("{");
+                    writer.Indent++;
+                    writer.WriteLine("if (track.ActionClips[clipIndex]?.Action is not cfg.ApplyEffects applyEffects)");
+                    writer.Indent++;
+                    writer.WriteLine("continue;");
+                    writer.Indent--;
+                    writer.WriteLine("");
+                    writer.WriteLine("var ids = applyEffects.Param?.IDs;");
+                    writer.WriteLine("if (ids == null)");
+                    writer.Indent++;
+                    writer.WriteLine("continue;");
+                    writer.Indent--;
+                    writer.WriteLine("");
+                    writer.WriteLine("for (var effectIndex = 0; effectIndex < ids.Length; effectIndex++)");
+                    writer.Indent++;
+                    writer.WriteLine("if (ids[effectIndex] > 0) effects.Add(ids[effectIndex]);");
+                    writer.Indent--;
+                    writer.Indent--;
+                    writer.WriteLine("}");
+                    writer.Indent--;
+                    writer.WriteLine("}");
+                    writer.WriteLine("");
+                    writer.WriteLine("return effects.Count == 0 ? Array.Empty<int>() : effects.ToArray();");
+                    writer.Indent--;
+                    writer.WriteLine("}");
                     writer.WriteLine("");
 
                     #region TimelineAbility

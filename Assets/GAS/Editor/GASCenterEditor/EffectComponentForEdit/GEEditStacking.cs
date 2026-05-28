@@ -18,7 +18,7 @@ namespace GAS.Editor
         [LabelText("堆叠类型")]
         [LabelWidth(100)]
         [EnumToggleButtons]
-        public StackingType stackingType;
+        public EffectStackType stackingType;
         
         [VerticalGroup("A")]
         [LabelText("限制层数")]
@@ -29,20 +29,20 @@ namespace GAS.Editor
         [LabelText("持续时间刷新策略")]
         [EnumToggleButtons]
         [LabelWidth(100)]
-        public DurationRefreshPolicy durationRefreshPolicy;
+        public EffectDurationRefreshPolicy durationRefreshPolicy;
 
         [VerticalGroup("A")]
         [LabelText("周期重置策略")]
         [EnumToggleButtons]
         [LabelWidth(100)]
-        public PeriodResetPolicy periodResetPolicy;
+        public EffectPeriodResetPolicy periodResetPolicy;
         
         [FormerlySerializedAs("expirationPolicy")]
         [VerticalGroup("A")]
         [LabelText("过期策略")]
         [EnumToggleButtons]
         [LabelWidth(100)]
-        public StackingExpirationPolicy stackingExpirationPolicy;
+        public EffectExpirationPolicy stackingExpirationPolicy;
 
         [VerticalGroup("A")] 
         [LabelText("拒绝溢出时间重置")]

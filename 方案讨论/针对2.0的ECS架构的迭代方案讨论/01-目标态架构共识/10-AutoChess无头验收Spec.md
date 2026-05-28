@@ -110,7 +110,7 @@ flowchart TD
 职责：
 
 1. 维护棋子、职业、阵营、属性、技能、GE、Cue、表现 marker、回合参数和规模参数的 Luban 表。
-2. 由 SourceGenerator 生成属性常量、Tag bit、Ability / GE static lookup、Blob builder、query glue 和 Demo 专用 validation constants。
+2. 由 SourceGenerator 生成属性常量、Tag bit、Ability / GE static lookup、Blob builder、Generated Runtime Glue、query glue 和 Demo 专用 validation constants。
 3. 生成链路必须服务 Demo 验收，同时反哺 `08-Luban-SourceGenerator配置生成链路Spec.md`。
 4. 详细配置表、生成物和验收规则见 `11-AutoChessDemo-Luban配置方案Spec.md`。
 
@@ -125,7 +125,7 @@ flowchart TD
 职责：
 
 1. 维护棋盘、站位、单位、阵营、AI 选敌、普攻节奏、技能释放、伤害、治疗、护盾、死亡、召唤、羁绊、控制、净化、吸血、毒、处决、狂暴等业务系统。
-2. 通过 GAS Runtime Core 的 EffectCommand / SpecStream / AttributeDelta / ActiveEffectStore / TypedFacts 契约表达业务。
+2. 通过 GAS Runtime Core 的 EffectCommand / Spec/Delta/Fact 语义链 / AttributeDelta / ActiveEffectStore / GameplayFacts 契约表达业务。
 3. 业务系统必须是可拆分、可测试的 ECS systems，不允许重新堆出 `Scenario` 式巨类。
 
 禁止：
@@ -219,7 +219,7 @@ AutoChessDemo 从设计上必须考虑十万实体和百万实体压力测试，
 
 ### 计量口径
 
-1. 性能结论默认只接受 `ecsRuntimeTickOnly` 口径：只统计 AutoChess Simulation Systems、GAS Runtime Core、Observation Projection、Presentation marker 生成和 Runtime Core Debugger counters。
+1. 性能结论默认只接受 `ecsRuntimeTickOnly` 口径：只统计 AutoChess Simulation Systems、GAS Runtime Core、Boundary Projection、Presentation marker 生成和 Runtime Core Debugger counters。
 2. **World Time 配置**：无头 runner 必须使用 `FixedStepTime(1.0f / 60f)` 的独立 World，通过 `ICustomBootstrap` 创建。默认 headless profile 不隐式依赖 Editor 的 `World.Time` 或 `VariableStepTime`。Validation summary 必须输出 `worldTimePolicy`（取自 `autochess.scale_profile.xlsx` 的 `TimePolicy` 字段），并显式标注是否使用了 Editor frame delta。此约束来自 `90-目标态不变量.md` 第 31 条。
 2. `config load`、`bootstrap spawn`、Scene 加载、Luban JSON 解析、报告文件写入、人读日志打印、Editor GUI 和 Profiler 窗口刷新必须单独统计，不能混入 `coreTickMs`。
 3. `coreTickMs` 只代表 Simulation + GAS Runtime Core；`runtimeTickMs` 代表 `core + observation + presentation + debugger counters`，不包含 export / log flush。
@@ -324,7 +324,7 @@ sequenceDiagram
     participant Config as Generated Config Registry
     participant Sim as AutoChess Simulation Systems
     participant GAS as GAS Runtime Core
-    participant Obs as Observation Projection
+    participant Obs as Boundary Projection
     participant Pres as Presentation Markers
     participant Debug as Runtime Core Debugger
     participant Report as Validation Summary
@@ -333,7 +333,7 @@ sequenceDiagram
     Runner->>Sim: Spawn board and units
     loop Battle Tick
         Sim->>GAS: Emit EffectCommand / AbilityCommand
-        GAS->>GAS: Evaluate SpecStream / ActiveEffectStore / AttributeDelta
+        GAS->>GAS: Evaluate Spec/Delta/Fact 语义链 / ActiveEffectStore / AttributeDelta
         GAS-->>Obs: Typed facts and counters
         Obs-->>Pres: UI / VFX / SFX / FloatingText / Cue markers
         Obs-->>Debug: Diagnostics counters and replay slices
@@ -352,11 +352,13 @@ classDiagram
         +LoadConfig()
         +StartScenario()
     }
-    class AutoChessConfigRegistry {
+    class GASDefinitionCatalogBlob {
         +UnitDefs
         +AbilityDefs
         +EffectDefs
         +CueDefs
+        +SchemaHash
+        +ContentHash
     }
     class AutoChessBattleState {
         +Round
@@ -387,7 +389,7 @@ classDiagram
         +WriteSummary()
     }
 
-    AutoChessDemoBootstrap --> AutoChessConfigRegistry
+    AutoChessDemoBootstrap --> GASDefinitionCatalogBlob
     AutoChessDemoBootstrap --> AutoChessBattleState
     AutoChessSimulationSystems --> AutoChessBattleState
     AutoChessSimulationSystems --> AutoChessObservationSystems
@@ -447,4 +449,3 @@ classDiagram
 2. 方案13 的当前 Demo 业务拆解、Luban / SourceGenerator、移动 / 闪避 / 死亡 / 引导 / 耐力案例见 `../历史方案参考/方案13.md:941-1215`、`../历史方案参考/方案13.md:1309-2176`。
 3. 方案14 的第一版 RPG 自走棋业务案例、Luban 配置、UI 层和四层职责见 `../历史方案参考/方案14.md:705-1038`；完整自走棋业务案例、配置表、ECS 数据、System 链路和 UI 解耦见 `../历史方案参考/方案14.md:1062-1508`、`../历史方案参考/方案14.md:2178-2351`。
 4. 方案15 的四层架构、自走棋业务案例、Debugger 实战和完整业务管理器见 `../历史方案参考/方案15.md:35-92`、`../历史方案参考/方案15.md:788-1253`、`../历史方案参考/方案15.md:1330-1437`、`../历史方案参考/方案15.md:1533-1810`、`../历史方案参考/方案15.md:2228-2545`、`../历史方案参考/方案15.md:2661-2843`。
-

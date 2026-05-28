@@ -21,8 +21,8 @@ namespace GAS.Runtime
         public GEStackingDefinition Stacking;
         public BlobArray<int> OverflowEffectCodes;
 
-        public CTagMask AssetTags;
-        public CTagMask GrantedTags;
+        public TagMaskComponent AssetTags;
+        public TagMaskComponent GrantedTags;
         public bool HasApplicationRequiredTags;
         public TagRequirementMask ApplicationRequiredTags;
         public bool HasOngoingRequiredTags;
@@ -102,14 +102,15 @@ namespace GAS.Runtime
         {
             if (prototype == Entity.Null
                 || !entityManager.Exists(prototype)
-                || !entityManager.HasComponent<CGameplayEffectPrototype>(prototype))
+                || !entityManager.HasComponent<GEPrototypeComponent>(prototype)
+                || !entityManager.IsComponentEnabled<GEPrototypeComponent>(prototype))
                 return default;
 
             var builder = new BlobBuilder(Allocator.Temp);
             ref var root = ref builder.ConstructRoot<GEStaticDefinitionBlob>();
 
             root.GameplayEffectCode = entityManager
-                .GetComponentData<CGameplayEffectPrototype>(prototype)
+                .GetComponentData<GEPrototypeComponent>(prototype)
                 .GameplayEffectCode;
 
             CopyDuration(entityManager, prototype, ref root);
@@ -130,10 +131,10 @@ namespace GAS.Runtime
             Entity prototype,
             ref GEStaticDefinitionBlob root)
         {
-            if (!entityManager.HasComponent<CDurationDefinition>(prototype))
+            if (!entityManager.IsComponentEnabled<GEDurationDefinitionComponent>(prototype))
                 return;
 
-            var duration = entityManager.GetComponentData<CDurationDefinition>(prototype);
+            var duration = entityManager.GetComponentData<GEDurationDefinitionComponent>(prototype);
             root.HasDuration = true;
             root.Duration = new GEDurationDefinition
             {
@@ -150,9 +151,9 @@ namespace GAS.Runtime
             Entity prototype,
             ref GEStaticDefinitionBlob root)
         {
-            if (entityManager.HasComponent<CPeriodDefinition>(prototype))
+            if (entityManager.IsComponentEnabled<GEPeriodDefinitionComponent>(prototype))
             {
-                var period = entityManager.GetComponentData<CPeriodDefinition>(prototype);
+                var period = entityManager.GetComponentData<GEPeriodDefinitionComponent>(prototype);
                 root.HasPeriod = true;
                 root.Period = new GEPeriodDefinition
                 {
@@ -161,14 +162,14 @@ namespace GAS.Runtime
                 };
             }
 
-            var length = entityManager.HasBuffer<BPeriodGEConfig>(prototype)
-                ? entityManager.GetBuffer<BPeriodGEConfig>(prototype).Length
+            var length = entityManager.IsComponentEnabled<GEPeriodConfigBuffer>(prototype)
+                ? entityManager.GetBuffer<GEPeriodConfigBuffer>(prototype).Length
                 : 0;
             var target = builder.Allocate(ref root.PeriodEffectCodes, length);
             if (length == 0)
                 return;
 
-            var source = entityManager.GetBuffer<BPeriodGEConfig>(prototype);
+            var source = entityManager.GetBuffer<GEPeriodConfigBuffer>(prototype);
             for (var i = 0; i < source.Length; i++)
                 target[i] = source[i].GameplayEffectCode;
         }
@@ -179,9 +180,9 @@ namespace GAS.Runtime
             Entity prototype,
             ref GEStaticDefinitionBlob root)
         {
-            if (entityManager.HasComponent<CStackingDefinition>(prototype))
+            if (entityManager.IsComponentEnabled<GEStackingDefinitionComponent>(prototype))
             {
-                var stacking = entityManager.GetComponentData<CStackingDefinition>(prototype);
+                var stacking = entityManager.GetComponentData<GEStackingDefinitionComponent>(prototype);
                 root.HasStacking = true;
                 root.Stacking = new GEStackingDefinition
                 {
@@ -196,14 +197,14 @@ namespace GAS.Runtime
                 };
             }
 
-            var length = entityManager.HasBuffer<BOverflowGEConfig>(prototype)
-                ? entityManager.GetBuffer<BOverflowGEConfig>(prototype).Length
+            var length = entityManager.IsComponentEnabled<GEOverflowConfigBuffer>(prototype)
+                ? entityManager.GetBuffer<GEOverflowConfigBuffer>(prototype).Length
                 : 0;
             var target = builder.Allocate(ref root.OverflowEffectCodes, length);
             if (length == 0)
                 return;
 
-            var source = entityManager.GetBuffer<BOverflowGEConfig>(prototype);
+            var source = entityManager.GetBuffer<GEOverflowConfigBuffer>(prototype);
             for (var i = 0; i < source.Length; i++)
                 target[i] = source[i].GameplayEffectCode;
         }
@@ -213,50 +214,50 @@ namespace GAS.Runtime
             Entity prototype,
             ref GEStaticDefinitionBlob root)
         {
-            if (entityManager.HasComponent<CEffectAssetTags>(prototype))
-                root.AssetTags = entityManager.GetComponentData<CEffectAssetTags>(prototype).Tags;
+            if (entityManager.IsComponentEnabled<GEAssetTagsComponent>(prototype))
+                root.AssetTags = entityManager.GetComponentData<GEAssetTagsComponent>(prototype).Tags;
 
-            if (entityManager.HasComponent<CEffectGrantedTags>(prototype))
-                root.GrantedTags = entityManager.GetComponentData<CEffectGrantedTags>(prototype).Tags;
-            else if (entityManager.HasBuffer<BGrantedTagConfig>(prototype))
-                root.GrantedTags = CreateMask(entityManager.GetBuffer<BGrantedTagConfig>(prototype));
+            if (entityManager.IsComponentEnabled<GEGrantedTagsComponent>(prototype))
+                root.GrantedTags = entityManager.GetComponentData<GEGrantedTagsComponent>(prototype).Tags;
+            else if (entityManager.IsComponentEnabled<GEGrantedTagConfigBuffer>(prototype))
+                root.GrantedTags = CreateMask(entityManager.GetBuffer<GEGrantedTagConfigBuffer>(prototype));
 
-            if (entityManager.HasComponent<CApplicationRequiredTags>(prototype))
+            if (entityManager.IsComponentEnabled<GEApplicationRequiredTagsComponent>(prototype))
             {
                 root.HasApplicationRequiredTags = true;
                 root.ApplicationRequiredTags = entityManager
-                    .GetComponentData<CApplicationRequiredTags>(prototype)
+                    .GetComponentData<GEApplicationRequiredTagsComponent>(prototype)
                     .requirement;
             }
 
-            if (entityManager.HasComponent<COngoingRequiredTags>(prototype))
+            if (entityManager.IsComponentEnabled<GEOngoingRequiredTagsComponent>(prototype))
             {
                 root.HasOngoingRequiredTags = true;
                 root.OngoingRequiredTags = entityManager
-                    .GetComponentData<COngoingRequiredTags>(prototype)
+                    .GetComponentData<GEOngoingRequiredTagsComponent>(prototype)
                     .requirement;
             }
 
-            if (entityManager.HasComponent<CRemoveEffectWithTags>(prototype))
+            if (entityManager.IsComponentEnabled<GERemoveEffectWithTagsComponent>(prototype))
             {
                 root.HasRemoveGameplayEffectsWithTags = true;
                 root.RemoveGameplayEffectsWithTags = entityManager
-                    .GetComponentData<CRemoveEffectWithTags>(prototype)
+                    .GetComponentData<GERemoveEffectWithTagsComponent>(prototype)
                     .requirement;
             }
 
-            if (entityManager.HasComponent<CEffectImmunityTags>(prototype))
+            if (entityManager.IsComponentEnabled<GEImmunityTagsComponent>(prototype))
             {
                 root.HasImmunityTags = true;
                 root.ImmunityTags = entityManager
-                    .GetComponentData<CEffectImmunityTags>(prototype)
+                    .GetComponentData<GEImmunityTagsComponent>(prototype)
                     .requirement;
             }
         }
 
-        private static CTagMask CreateMask(DynamicBuffer<BGrantedTagConfig> grantedTags)
+        private static TagMaskComponent CreateMask(DynamicBuffer<GEGrantedTagConfigBuffer> grantedTags)
         {
-            var mask = new CTagMask();
+            var mask = new TagMaskComponent();
             for (var i = 0; i < grantedTags.Length; i++)
                 mask.AddTag(grantedTags[i].TagIndex);
             return mask;
@@ -267,10 +268,10 @@ namespace GAS.Runtime
             Entity prototype,
             ref GEStaticDefinitionBlob root)
         {
-            if (!entityManager.HasComponent<CGameplayEffectCueRequestOnApply>(prototype))
+            if (!entityManager.IsComponentEnabled<GECueRequestOnApplyComponent>(prototype))
                 return;
 
-            var cue = entityManager.GetComponentData<CGameplayEffectCueRequestOnApply>(prototype);
+            var cue = entityManager.GetComponentData<GECueRequestOnApplyComponent>(prototype);
             if (cue.CueCode <= 0)
                 return;
 
@@ -284,17 +285,17 @@ namespace GAS.Runtime
             Entity prototype,
             ref BlobArray<GEModifierDefinition> targetArray)
         {
-            var length = entityManager.HasBuffer<BModifierConfig>(prototype)
-                ? entityManager.GetBuffer<BModifierConfig>(prototype).Length
+            var length = entityManager.IsComponentEnabled<GEModifierConfigBuffer>(prototype)
+                ? entityManager.GetBuffer<GEModifierConfigBuffer>(prototype).Length
                 : 0;
             var target = builder.Allocate(ref targetArray, length);
             if (length == 0)
                 return;
 
-            var modifiers = entityManager.GetBuffer<BModifierConfig>(prototype);
-            var hasMagnitudeDefinitions = entityManager.HasBuffer<BMagnitudeDefinition>(prototype);
+            var modifiers = entityManager.GetBuffer<GEModifierConfigBuffer>(prototype);
+            var hasMagnitudeDefinitions = entityManager.IsComponentEnabled<GEMagnitudeDefinitionBuffer>(prototype);
             var magnitudeDefinitions = hasMagnitudeDefinitions
-                ? entityManager.GetBuffer<BMagnitudeDefinition>(prototype)
+                ? entityManager.GetBuffer<GEMagnitudeDefinitionBuffer>(prototype)
                 : default;
 
             for (var i = 0; i < modifiers.Length; i++)
@@ -331,9 +332,9 @@ namespace GAS.Runtime
         }
 
         private static bool TryGetMagnitudeDefinition(
-            DynamicBuffer<BMagnitudeDefinition> definitions,
+            DynamicBuffer<GEMagnitudeDefinitionBuffer> definitions,
             int modifierIndex,
-            out BMagnitudeDefinition definition)
+            out GEMagnitudeDefinitionBuffer definition)
         {
             for (var i = 0; i < definitions.Length; i++)
             {
@@ -354,14 +355,14 @@ namespace GAS.Runtime
             Entity prototype,
             ref BlobArray<GEGrantedAbilityDefinition> targetArray)
         {
-            var length = entityManager.HasBuffer<BGrantedAbilityConfig>(prototype)
-                ? entityManager.GetBuffer<BGrantedAbilityConfig>(prototype).Length
+            var length = entityManager.IsComponentEnabled<GEGrantedAbilityConfigBuffer>(prototype)
+                ? entityManager.GetBuffer<GEGrantedAbilityConfigBuffer>(prototype).Length
                 : 0;
             var target = builder.Allocate(ref targetArray, length);
             if (length == 0)
                 return;
 
-            var source = entityManager.GetBuffer<BGrantedAbilityConfig>(prototype);
+            var source = entityManager.GetBuffer<GEGrantedAbilityConfigBuffer>(prototype);
             for (var i = 0; i < source.Length; i++)
             {
                 target[i] = new GEGrantedAbilityDefinition

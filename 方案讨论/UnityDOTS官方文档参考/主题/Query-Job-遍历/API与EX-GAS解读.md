@@ -6,17 +6,17 @@
 
 | 方式 | 执行线程 | Burst | 适用规模 | Sync Point | EX-GAS 推荐场景 |
 |------|----------|-------|----------|------------|----------------|
-| `SystemAPI.Query` (idiomatic foreach) | 主线程 | 否 | 小规模（<100 实体） | **是** | Debugger 快照、Editor 工具、proof 验证 |
+| `SystemAPI.Query` (idiomatic foreach) | 主线程 | 可（受 `ISystem` / Burst 上下文约束） | 小规模（<100 实体） | **是** | Debugger 快照、Editor 工具、proof 验证 |
 | `IJobEntity` | Worker 线程 | 是 | 中大规模（100-10K） | 否 | 简单 per-entity 变换、stateless 计算 |
 | `IJobChunk` | Worker 线程 | 是 | 大规模（>10K） | 否 | chunk skip/mask/optional、批量统计、复杂循环 |
 
-**核心规则：Runtime Core hot path 默认优先 IJobEntity 或 IJobChunk。`SystemAPI.Query` 触发的主线程 sync 在高频场景下不可接受。**
+**核心规则：Runtime Core hot path 默认优先 IJobEntity 或 IJobChunk。`SystemAPI.Query` 的主线程串行遍历和自动 dependency completion 在高频场景下不可接受。**
 
 ### SystemAPI.Query（主线程遍历）
 
 ```csharp
 // 底层机制：source generator 创建并缓存 EntityQuery
-// 每次 foreach 触发主线程 sync —— 等待所有相关 job 完成
+// foreach 前 source generator 会完成必要依赖；相关 job 未完成时主线程等待
 // 适用于 proof、debug、Editor，不适用于 hot path
 foreach (var (health, translation) in SystemAPI.Query<RefRO<Health>, RefRW<Translation>>())
 {
@@ -26,8 +26,9 @@ foreach (var (health, translation) in SystemAPI.Query<RefRO<Health>, RefRW<Trans
 
 **关键事实：**
 - Source generator 为每个 `SystemAPI.Query` 调用自动创建并缓存 `EntityQuery`
-- `foreach` 触发主线程 sync point —— 等待所有写入相关 component 的 job 完成
+- `foreach` 前会自动完成必要 read/write 依赖；若相关 job 未完成，会表现为主线程等待
 - 主线程遍历导致所有 worker 线程闲置等待
+- `upgrade-guide.md` 说明 `SystemAPI.Query` 可在合适上下文 Burst 编译；hot path 禁用原因是主线程串行 + dependency completion + 无 worker 并行，而不是“绝对不能 Burst”
 - **CASE-01**：`SystemAPI.Query` 仅用于 Debugger 快照、Editor 工具、<100 entity 的 proof。任何 >100 entity 的 hot path 拒绝使用。
 
 ### IJobEntity（per-entity 并行 job）
@@ -98,7 +99,14 @@ public struct EffectSpecChunkJob : IJobChunk
         var specs = chunk.GetNativeArray(ref SpecRequestHandle);
         var attrs = chunk.GetNativeArray(ref AttributeHandle);
 
-        var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+        if (!useEnabledMask)
+        {
+            for (var i = 0; i < chunk.Count; i++)
+                attrs[i] = ApplySpec(attrs[i], specs[i]);
+            return;
+        }
+
+        var enumerator = new ChunkEntityEnumerator(true, chunkEnabledMask, chunk.Count);
         while (enumerator.NextEntityIndex(out var i))
         {
             attrs[i] = ApplySpec(attrs[i], specs[i]);
@@ -306,7 +314,8 @@ public struct OptionalComponentJob : IJobChunk
 | `systems-optimizing.html` | 每个 system 有 TypeHandle 刷新、Lookup 创建、Dependency 链三种固定开销 | JOB-02 (跨文档) |
 | `components-enableable-use.html` | Random-access 方法额外开销；enableable 查询成本；IgnoreFilter 无 sync 成本 | PRF-06, PRF-09 |
 | `systems-looking-up-data.md` | ComponentLookup 随机访问竞态条件；NativeDisableParallelForRestriction | PRF-19 |
-| `concepts-safety.md` | IJobEntity 不验证 Execute 参数与 EntityQuery 匹配；ExclusiveEntityTransaction | PRF-20 |
+| `concepts-safety.md` | `ExclusiveEntityTransaction` 主要服务 secondary/streaming World，不是通用 worker-thread `EntityManager` 替代 | PRF-21 |
+| `common-errors.md` | IJobEntity 参数不匹配问题 | PRF-20 |
 | `common-errors.md` | 嵌套 job 的 safety handle 不正确；IJobEntity 参数不匹配问题 | PRF-23 |
 | `systems-version-numbers.md` | ChangeFilter chunk 级触发；手动调用 Update 破坏版本号 | (核心概念) |
 | `aspects-intro.md` | Aspects 已废弃，将移除 | PRF-17 |

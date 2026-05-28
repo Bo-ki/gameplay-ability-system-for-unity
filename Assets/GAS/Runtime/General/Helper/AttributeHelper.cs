@@ -7,7 +7,7 @@ namespace GAS.Runtime
     {
         private static EntityManager _entityManager => GASManager.EntityManager;
 
-        public static int IndexOfAttribute(this DynamicBuffer<BAttribute> attributes, int attrSetCode, int attrCode)
+        public static int IndexOfAttribute(this DynamicBuffer<AttributeValueBuffer> attributes, int attrSetCode, int attrCode)
         {
             for (var i = 0; i < attributes.Length; i++)
             {
@@ -21,10 +21,10 @@ namespace GAS.Runtime
 
         public static float RecalculateCurrentValue(Entity asc, int attrSetCode, int attrCode)
         {
-            if (!_entityManager.Exists(asc) || !_entityManager.HasBuffer<BAttribute>(asc))
+            if (!_entityManager.Exists(asc) || !_entityManager.HasBuffer<AttributeValueBuffer>(asc))
                 return 0f;
 
-            var attributes = _entityManager.GetBuffer<BAttribute>(asc);
+            var attributes = _entityManager.GetBuffer<AttributeValueBuffer>(asc);
             var attrIndex = attributes.IndexOfAttribute(attrSetCode, attrCode);
             if (attrIndex == -1) return 0f;
 
@@ -32,9 +32,9 @@ namespace GAS.Runtime
             var oldValue = attr.CurrentValue;
             attr.CurrentValue = attr.BaseValue;
 
-            if (_entityManager.HasBuffer<BActiveModifier>(asc))
+            if (_entityManager.HasBuffer<AttributeActiveModifierBuffer>(asc))
             {
-                var modifiers = _entityManager.GetBuffer<BActiveModifier>(asc);
+                var modifiers = _entityManager.GetBuffer<AttributeActiveModifierBuffer>(asc);
                 foreach (var mod in modifiers)
                 {
                     if (mod.AttrSetCode != attrSetCode || mod.AttributeCode != attrCode) continue;
@@ -50,7 +50,7 @@ namespace GAS.Runtime
 
             if (oldValue != attr.CurrentValue)
             {
-                EventBusHelper.EnqueueAttributeChangeEvent(_entityManager, GASManager.EntityEventBus, new BAttributeChangeEvent
+                EventBusHelper.EnqueueAttributeChangeEvent(_entityManager, GASManager.EntityEventBus, new AttributeChangeEventBuffer
                 {
                     ASC = asc,
                     AttrSetCode = attr.AttrSetCode,
@@ -66,14 +66,14 @@ namespace GAS.Runtime
 
         public static bool MarkCurrentValueDirty(Entity asc, int attrSetCode, int attrCode)
         {
-            if (!_entityManager.Exists(asc) || !_entityManager.HasBuffer<BAttribute>(asc))
+            if (!_entityManager.Exists(asc) || !_entityManager.HasBuffer<AttributeValueBuffer>(asc))
                 return false;
 
-            var attributes = _entityManager.GetBuffer<BAttribute>(asc);
+            var attributes = _entityManager.GetBuffer<AttributeValueBuffer>(asc);
             return MarkCurrentValueDirty(attributes, attrSetCode, attrCode);
         }
 
-        public static bool MarkCurrentValueDirty(DynamicBuffer<BAttribute> attributes, int attrSetCode, int attrCode)
+        public static bool MarkCurrentValueDirty(DynamicBuffer<AttributeValueBuffer> attributes, int attrSetCode, int attrCode)
         {
             var attrIndex = attributes.IndexOfAttribute(attrSetCode, attrCode);
             if (attrIndex == -1) return false;
@@ -84,7 +84,7 @@ namespace GAS.Runtime
             return true;
         }
 
-        public static void Clamp(ref BAttribute attribute)
+        public static void Clamp(ref AttributeValueBuffer attribute)
         {
             if (attribute.IsClampMin) attribute.CurrentValue = math.max(attribute.CurrentValue, attribute.MinValue);
             if (attribute.IsClampMax) attribute.CurrentValue = math.min(attribute.CurrentValue, attribute.MaxValue);

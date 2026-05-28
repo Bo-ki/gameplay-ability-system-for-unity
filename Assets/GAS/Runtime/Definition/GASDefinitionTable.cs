@@ -13,7 +13,6 @@ namespace GAS.Runtime
         Attribute = 4,
         GameplayTag = 5,
         GameplayCue = 6,
-        TimelineAbility = 7,
     }
 
     public readonly struct GASDefinitionKey
@@ -32,12 +31,12 @@ namespace GAS.Runtime
 
     public interface IGASDefinitionAbilityActivationOwnedTagsProvider
     {
-        bool TryGetDefinitionActivationOwnedTags(out CTagMask tags);
+        bool TryGetDefinitionActivationOwnedTags(out TagMaskComponent tags);
     }
 
     public interface IGASDefinitionGameplayEffectGrantedTagsProvider
     {
-        bool TryGetDefinitionGrantedTags(out CTagMask tags);
+        bool TryGetDefinitionGrantedTags(out TagMaskComponent tags);
     }
 
     public interface IGASDefinitionGameplayEffectRemoveTagsProvider
@@ -49,17 +48,16 @@ namespace GAS.Runtime
     {
         public readonly int AbilityCode;
         public readonly int Level;
-        public readonly CTagMask AssetTags;
+        public readonly TagMaskComponent AssetTags;
         public readonly TagRequirementMask ActivationRequiredTags;
         public readonly TagRequirementMask ActivationBlockedTags;
-        public readonly CTagMask ActivationOwnedTags;
-        public readonly CTagMask CancelAbilityTags;
-        public readonly CTagMask BlockAbilityTags;
+        public readonly TagMaskComponent ActivationOwnedTags;
+        public readonly TagMaskComponent CancelAbilityTags;
+        public readonly TagMaskComponent BlockAbilityTags;
         public readonly int CostGameplayEffectCode;
         public readonly int CooldownGameplayEffectCode;
         public readonly int Cooldown;
         public readonly int ActivationEffectCount;
-        public readonly int TimelineId;
         public readonly bool HasAssetTags;
         public readonly bool HasActivationRequiredTags;
         public readonly bool HasActivationBlockedTags;
@@ -70,17 +68,16 @@ namespace GAS.Runtime
         public AbilityDefinitionSummary(
             int abilityCode,
             int level,
-            CTagMask assetTags,
+            TagMaskComponent assetTags,
             TagRequirementMask activationRequiredTags,
             TagRequirementMask activationBlockedTags,
-            CTagMask activationOwnedTags,
-            CTagMask cancelAbilityTags,
-            CTagMask blockAbilityTags,
+            TagMaskComponent activationOwnedTags,
+            TagMaskComponent cancelAbilityTags,
+            TagMaskComponent blockAbilityTags,
             int costGameplayEffectCode,
             int cooldownGameplayEffectCode,
             int cooldown,
             int activationEffectCount,
-            int timelineId,
             bool hasAssetTags,
             bool hasActivationRequiredTags,
             bool hasActivationBlockedTags,
@@ -100,7 +97,6 @@ namespace GAS.Runtime
             CooldownGameplayEffectCode = cooldownGameplayEffectCode;
             Cooldown = cooldown;
             ActivationEffectCount = activationEffectCount;
-            TimelineId = timelineId;
             HasAssetTags = hasAssetTags;
             HasActivationRequiredTags = hasActivationRequiredTags;
             HasActivationBlockedTags = hasActivationBlockedTags;
@@ -112,7 +108,6 @@ namespace GAS.Runtime
         public bool HasCost => CostGameplayEffectCode > 0;
         public bool HasCooldown => CooldownGameplayEffectCode > 0 || Cooldown > 0;
         public bool HasActivationEffects => ActivationEffectCount > 0;
-        public bool HasTimeline => TimelineId > 0;
     }
 
     public readonly struct GameplayEffectDefinitionSummary
@@ -126,8 +121,8 @@ namespace GAS.Runtime
         public readonly bool HasStacking;
         public readonly GEStackingDefinition Stacking;
         public readonly int OverflowEffectCount;
-        public readonly CTagMask AssetTags;
-        public readonly CTagMask GrantedTags;
+        public readonly TagMaskComponent AssetTags;
+        public readonly TagMaskComponent GrantedTags;
         public readonly bool HasAssetTags;
         public readonly bool HasGrantedTags;
         public readonly bool HasApplicationRequiredTags;
@@ -153,8 +148,8 @@ namespace GAS.Runtime
             bool hasStacking,
             GEStackingDefinition stacking,
             int overflowEffectCount,
-            CTagMask assetTags,
-            CTagMask grantedTags,
+            TagMaskComponent assetTags,
+            TagMaskComponent grantedTags,
             bool hasAssetTags,
             bool hasGrantedTags,
             bool hasApplicationRequiredTags,
@@ -441,17 +436,16 @@ namespace GAS.Runtime
         {
             var resolvedCode = abilityCode;
             var level = 0;
-            var assetTags = default(CTagMask);
+            var assetTags = default(TagMaskComponent);
             var activationRequiredTags = default(TagRequirementMask);
             var activationBlockedTags = default(TagRequirementMask);
-            var activationOwnedTags = default(CTagMask);
-            var cancelAbilityTags = default(CTagMask);
-            var blockAbilityTags = default(CTagMask);
+            var activationOwnedTags = default(TagMaskComponent);
+            var cancelAbilityTags = default(TagMaskComponent);
+            var blockAbilityTags = default(TagMaskComponent);
             var costGameplayEffectCode = 0;
             var cooldownGameplayEffectCode = 0;
             var cooldown = 0;
             var activationEffectCount = 0;
-            var timelineId = 0;
             var hasAssetTags = false;
             var hasActivationRequiredTags = false;
             var hasActivationBlockedTags = false;
@@ -516,9 +510,6 @@ namespace GAS.Runtime
                     case ConfAbilityEffectsOnActivate activationEffects:
                         activationEffectCount += CountPositive(activationEffects.EffectCodes);
                         break;
-                    case ConfAbilityTimelineRef timelineRef:
-                        timelineId = timelineRef.TimelineId;
-                        break;
                 }
             }
 
@@ -535,7 +526,6 @@ namespace GAS.Runtime
                 cooldownGameplayEffectCode,
                 cooldown,
                 activationEffectCount,
-                timelineId,
                 hasAssetTags,
                 hasActivationRequiredTags,
                 hasActivationBlockedTags,
@@ -556,8 +546,8 @@ namespace GAS.Runtime
             var hasStacking = false;
             var stacking = default(GEStackingDefinition);
             var overflowEffectCount = 0;
-            var assetTags = default(CTagMask);
-            var grantedTags = default(CTagMask);
+            var assetTags = default(TagMaskComponent);
+            var grantedTags = default(TagMaskComponent);
             var hasAssetTags = false;
             var hasGrantedTags = false;
             var hasApplicationRequiredTags = false;

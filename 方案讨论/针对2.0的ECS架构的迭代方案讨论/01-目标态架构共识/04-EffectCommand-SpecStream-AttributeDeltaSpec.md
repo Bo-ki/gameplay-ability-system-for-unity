@@ -1,8 +1,8 @@
-# EffectCommand / SpecStream / AttributeDelta Spec
+# EffectCommand / Spec-Delta-Fact 语义链 Spec
 
 ## 目的
 
-定义 AM-2 到 AM-4 的核心契约：Effect Command 是写入口，Instant Spec 是计算输入，Attribute Delta 是状态变更载体，Typed Facts 是业务 reaction 的主输入。
+定义目标态 Runtime Core 的 Effect Command / Spec / Delta / Fact 语义链，以及 AM-2 到 AM-4 的迁移期落点。这里的 Spec、Delta、Fact 是语义阶段，不是要求建立一个全局 SpecStream 总线。
 
 ## 数据流图
 
@@ -15,36 +15,36 @@ flowchart TD
     Classifier -->|Duration / Stack / Period| ActiveMutation["ActiveEffectMutation"]
     Spec --> Magnitude["Magnitude / Execution Resolve"]
     Magnitude --> Delta["AttributeDelta / TagDelta"]
-    Delta --> Apply["Delta Apply"]
+    Delta --> Apply["Attribute Reduce / Apply"]
     Apply --> Facts["Typed Simulation Facts"]
-    Facts --> ObservationBridge["Observation Bridge"]
+    Facts --> BoundaryProjection["Boundary Projection"]
 ```
 
 ## 核心契约
 
 | 契约 | 职责 |
 |---|---|
-| `TargetData` | 承载 Ability 的目标选择结果，按 target 拆分为独立 EffectCommand |
-| `EffectCommand` | 表达施加意图，携带 source/target/context/effect code |
-| `InstantEffectSpec` | 承载一次 instant GE 的只读计算输入 |
-| `ActiveEffectMutation` | 承载 duration/stack/period/granted state 变更 |
-| `AttributeDelta` | 承载 attribute 变更，不直接代表表现 |
-| `TypedSimulationFact` | 供业务 reaction 消费的稳定事实 |
+| `TargetData` | 承载 Ability 的目标选择结果和确定性 sort key，按 target 派生 command record |
+| `EffectCommand` | 表达施加意图，携带 source/target/context/effect code；不是 Unity entity |
+| `InstantEffectSpec` | 承载一次 instant GE 的只读计算输入；目标态可以是 `NativeStream` / compact range 中的中间 record |
+| `ActiveEffectMutation` | 承载 duration/stack/period/granted state 变更；默认写 ASC owner-local slot |
+| `AttributeDelta` | 承载 attribute 变更语义；目标态按 target grouped modifier reduce/apply 落地 |
+| `TypedSimulationFact` | 供 Runtime Core reaction 消费的稳定事实；Boundary observation 从它派生 |
 
 ## EffectContext 定义
 
-`EffectContext` 是 EffectCommand 携带的运行时上下文元数据。它在 Spec Evaluation phase 中被消费，为 magnitude 计算、tag 判定和事实投影提供完整上下文。
+`EffectContext` 是 EffectCommand 携带的运行时上下文元数据。它在 Effect Fan-In / Attribute Reduce-Apply / Gameplay Fact kernel 中按需消费，为 magnitude 计算、tag 判定和事实投影提供完整上下文。
 
 ### 字段清单
 
 | 字段 | 类型 | 来源 | 消费者 | 说明 |
 |---|---|---|---|---|
 | `SourceAsc` | `Entity` | Ability activation / GE source | Magnitude Resolver, Fact Projection | 效果来源 ASC |
-| `TargetAsc` | `Entity` | TargetData resolution | Delta Apply, Fact Projection | 效果目标 ASC |
+| `TargetAsc` | `Entity` | TargetData resolution | Attribute Reduce/Apply, Gameplay Fact | 效果目标 ASC |
 | `Instigator` | `Entity` | Ability activation | Fact Projection | 发起者（可与 Source 不同，如召唤物） |
 | `SourceAbilityCode` | `int` | Ability activation | Magnitude Resolver, Tag Check | 来源 Ability 定义 id |
 | `SourceEffectCode` | `int` | GE definition ref | Stacking, Overflow, Fact Projection | 来源 GE 定义 id |
-| `ContextId` | `int` | CommandIngest（生成） | 全链路 trace | 本次施加的唯一上下文 id，command→spec→delta→fact 连续传递 |
+| `ContextId` | `int` | Boundary Command Ingest / Effect Fan-In（生成） | 全链路 trace | 本次施加的唯一上下文 id，command→spec→delta→fact 连续传递 |
 | `Level` | `float` | Ability level / GE spec | Magnitude Resolver | 影响 magnitude 计算的等级 |
 | `SetByCallerValues` | `GESetByCallerValueBuffer` range | Boundary request / period derivation | Magnitude Resolver | SetByCaller magnitude 的数据源 |
 | `HitResultRef` | `int`（index into target data） | TargetData resolution | Cue Projection | 命中结果引用（位置/方向等） |
@@ -53,16 +53,17 @@ flowchart TD
 
 EffectContext 不作为独立 entity 或 component type 存在。字段按性质拆分到不同承载：
 
-| 承载 | 包含字段 | 生命周期 |
-|---|---|---|
-| `GEEffectCommandBuffer` buffer element | SourceAsc, TargetAsc, SourceEffectCode, ContextId, Level | frame-local |
-| `GESetByCallerValueBuffer` buffer range | SetByCaller values | frame-local |
-| `GEEffectSpecBuffer` buffer element | 从 EffectCommand 复制需要的 context 字段 | frame-local |
-| Ability Entity component | SourceAbilityCode, Instigator | 跨帧（ability 激活期间） |
+| 承载 | 包含字段 | 生命周期 | 目标态说明 |
+|---|---|---|---|
+| `NativeStream` command record / per-producer stream | SourceAsc, TargetAsc, SourceEffectCode, ContextId, Level, TargetSortKey, Sequence | frame-local | 高并发 producer 默认承载，merge 后才进入 owner-local range |
+| Compact owner-local command range / small `GEEffectCommandBuffer` | 合并后的少量 target-local command | frame-local | 只保存 merge 后消费范围，不复制 proof 阶段的大容量 singleton buffer |
+| `GESetByCallerValueBuffer` range / fixed set-by-caller slice | SetByCaller values | frame-local | 必须记录 owner、range、capacity、spill 指标 |
+| `GEEffectSpecRecord` / target-grouped modifier record | 从 EffectCommand 复制的计算输入、resolved modifier | frame-local | 可以是 `NativeList` / `NativeStream` / compact buffer，不固定为全局 `GEEffectSpecBuffer` |
+| Ability Entity component | SourceAbilityCode, Instigator | 跨帧（ability 激活期间） | 由 Ability 状态拥有，不反查 managed authoring |
 
 ### ContextId 生成机制
 
-ContextId 在 CommandIngest phase 由主线程预分配，保证帧内唯一、跨帧唯一、Burst 可用：
+ContextId 在 Boundary Command Ingest / Effect Fan-In kernel 由主线程预分配，保证帧内唯一、跨帧唯一、Burst 可用：
 
 ```
 ContextId (int, 32 bits)
@@ -72,7 +73,7 @@ ContextId (int, 32 bits)
 
 **生成流程：**
 1. `GASFrameArenaSetupSystem`（主线程）每帧递增 `FrameIndex`，重置 `NextContextSequence = 0`
-2. CommandIngest 阶段，主线程调用 `AllocateContextRange(count)` 预分配一批 ContextId，Job 通过参数接收 `FrameIndex + ContextSequenceBase`
+2. Boundary Command Ingest / Effect Fan-In 阶段，主线程调用 `AllocateContextRange(count)` 预分配一批 ContextId，Job 通过参数接收 `FrameIndex + ContextSequenceBase`
 3. Job 内编码：`contextId = (FrameIndex << 12) | (sequenceBase + i)`，无需原子操作
 
 **设计要点：**
@@ -95,7 +96,7 @@ ContextId (int, 32 bits)
 |---|---|---|
 | 低频边界意图 | request entity / command component | 玩家输入、AI 决策、测试 runner |
 | 高频 instant GE | frame-local command DynamicBuffer / Native stream / chunk-local command | 普攻、伤害、治疗、period tick、passive trigger |
-| 结构变化命令 | ECB + structural playback phase | spawn、destroy、grant ability、owner cleanup |
+| 结构变化命令 | ECB + `GASStructuralCommitSystemGroup` | spawn、destroy、grant ability、owner cleanup |
 
 普通 instant GE 不能因为“写入口统一”而默认创建 request entity 或 runtime GE entity。高频路径必须能被 `ISystem` + job 批处理，并由 Debugger 输出 command/spec/delta/fact 计数。
 
@@ -118,7 +119,7 @@ ContextId (int, 32 bits)
 4. 确定性排序机制选型（三种不同用途，不可混用）：
    - **`[EntityIndexInQuery]`** — IJobEntity 属性，全局 entity 索引。**禁止在 hot path 使用**（`PRF-08`/`P1-04`），即使在不做结构变化的 phase 中也因其内部 `CalculateBaseEntityIndexArray` 成本不推荐。
    - **`[EntityIndexInChunk]`** — IJobEntity 属性，chunk 内 entity 索引。可在 IJobEntity 中用作 per-chunk 稳定序号，不适用于 ECB sortKey。
-   - **`[ChunkIndexInQuery] int sortKey`** — ECB playback 的确定性排序键（`CASE-35`）。在 `GASStructuralPlaybackSystemGroup` 中，ECB 命令使用 `sortKey = [ChunkIndexInQuery]` 保证 playback 顺序确定且可复现。**前置条件**：使用 `EntityQueryCaptureMode.AtPlayback` 的 ECB 在 playback 时刻评估 query，此时 chunk 索引可能因前期结构变化而偏移；若需要严格跨帧确定性，必须额外附加 command sequence / frame index 作为二级排序键。
+   - **`[ChunkIndexInQuery] int sortKey`** — ECB playback 的确定性排序键（`CASE-35`）。在 `GASStructuralCommitSystemGroup` 中，ECB 命令使用 `sortKey = [ChunkIndexInQuery]` 保证同一 playback 内顺序确定且可复现。**前置条件**：使用 `EntityQueryCaptureMode.AtPlayback` 的 ECB 在 playback 时刻评估 query，此时 chunk 索引可能因前期结构变化而偏移；若需要严格跨帧确定性，必须额外附加 command sequence / frame index 作为二级排序键。
 5. ExecutionCalculation 不使用托管 delegate；目标形态是 generated id + Burst job/static switch。FunctionPointer 只有在单次调用处理足够多 modifier 时才可作为候选。
 
 ## EffectCommand API 选型矩阵
@@ -150,42 +151,42 @@ ContextId (int, 32 bits)
 
 每个迁移的**重新选型触发条件**（`SEL-04`）：
 1. **buffer pressure 触发**：Debugger 报告 `GEEffectCommandBuffer` 或 `AttributeModifierBuffer` 的 `spillCount > 0` 或 `peakLength > capacity × 50%` 持续超过 10 帧
-2. **merge cost 触发**：若后续引入 parallel fan-in，merge phase 耗时 > SpecEval phase 耗时的 30%
+2. **merge cost 触发**：若后续引入 parallel fan-in，merge phase 耗时 > Effect Fan-In 主计算耗时的 30%
 3. **deterministic ordering 触发**：battle hash 在 x50 规模下连续 3 次运行结果不一致
 4. **random lookup 触发**：Debugger 报告 `randomLookupCount / totalEntityProcessed > 10%`
 
-## AM-2 ECS 数据落点
+## 迁移期 ECS 数据落点
 
-当前代码契约把 GAS 语义映射到 Unity Entities 数据承载：
+当前代码契约把 GAS 语义映射到 Unity Entities 数据承载，但以下 singleton stream 只作为 AM2-AM3 proof-only 落点；目标态以 `GASCoreSimulationSystemGroup` 的 Effect Fan-In lane 使用 `NativeStream` producer、deterministic merge 和 compact owner-local range 为准：
 
-| GAS 契约 | ECS 类型 | 承载策略 |
+| GAS 契约 | 迁移期 ECS 类型 | 目标态收敛方向 |
 |---|---|---|
-| Stream owner | `GEStreamOwnerComponent` | singleton entity，只保存版本、sequence、context 游标 |
-| Effect command | `GEEffectCommandBuffer` | `IBufferElementData`，frame command data，不默认创建 request entity |
-| SetByCaller | `GESetByCallerValueBuffer` | stream buffer range，属于 command/spec 侧数据 |
-| Instant spec | `GEEffectSpecBuffer` | `IBufferElementData`，承载本次 instant GE 的只读计算输入，迁移期携带 `CueRequestOnApplyCode` |
-| Attribute delta | `AttributeModifierBuffer` | `IBufferElementData`，承载 attribute 写入意图和旧/新值 |
-| Active mutation | `ActiveEffectMutationBuffer` | `IBufferElementData`，作为 AM5 Active Effect Store 的 mutation 占位 |
-| Typed facts | `GameplayEventBuffer` | `IBufferElementData`，作为 reaction / observation 的稳定事实源 |
+| Stream owner | `GEStreamOwnerComponent` singleton | 只保存 proof-only 版本/sequence/context 游标；scale-ready 不依赖全局 owner |
+| Effect command | `GEEffectCommandBuffer` | `NativeStream` 写入 `GEEffectCommandRecord` → deterministic merge → compact owner-local range |
+| SetByCaller | `GESetByCallerValueBuffer` | range/slice 必须随 command record 传递，禁止无限追加到全局 buffer |
+| Instant spec | `GEEffectSpecBuffer` | `GEEffectSpecRecord` / modifier candidate，靠 CoreSimulation 内 Effect Fan-In lane 或 Attribute Reduce/Apply lane 的中间数据承载 |
+| Attribute delta | `AttributeModifierBuffer` | target-grouped modifier range，按 target chunk / owner 局部 apply |
+| Active mutation | `ActiveEffectMutationBuffer` | ASC `ActiveGameplayEffectBuffer` slot mutation，必要时 `NativeStream` fan-in |
+| Typed facts | `GameplayEventBuffer` | Core reaction fact / Boundary observation fact 分流，必要时 `NativeStream` merge 或 per-owner fact buffer |
 
-显式 phase skeleton 使用 `GEEffectCommandIngestSystem`、`GEEffectSpecBuildSystem`、`ActiveEffectMutationApplySystem`、`AttributeModifierApplySystem`、`GameplayEventProjectionSystem`，并进入 `GASSystemScheduleContract`。AM-3 增加 `GameplayEventLegacyBridgeSystem` 作为迁移期 observation bridge：它消费 `GameplayEventBuffer` 并投影旧 `BAttributeChangeEvent`，用于 legacy event bus 兼容；AM-3 已让 `PresentationOutboxSystem` / `ReplayLogSystem` 直接消费 attribute typed fact、cue typed fact、generic typed gameplay fact 和 damage typed fact，并通过 `SourceFactSequence` 跳过同源 legacy duplicate；AM-3 还让 `CueRequestProjectionSystem` 从 `GEEffectSpecBuffer.CueRequestOnApplyCode` 先写 `GameplayEventBuffer(CueRequested)`，再投影旧 `BCueRequest` / `BGameplayEvent(CueRequested)`。目标态业务 reaction 仍应直接消费 typed facts。AM-2 固定 phase 和查询布局；AM-3 已开始把 direct simple instant evaluation 迁入该主链。
+显式 target kernel skeleton 使用 `AbilityCommandIngestSystem`、`GASEffectFanInSystem`、`GASActiveEffectPreTickSystem`（或 Fan-In 内 producer job）/ `GASActiveEffectPostApplySystem`、`GASAttributeSetReduceApplySystem`、`GameplayFactProjectionSystem`，并进入 `GASSystemScheduleContract`。`GEEffectSpecBuildSystem`、`AttributeModifierApplySystem`、`GameplayEventProjectionSystem` 等当前代码名只表示迁移期落点；后续新任务按 `12-命名规范Spec.md` 收敛到 Effect Fan-In、Attribute Reduce/Apply、Gameplay Fact kernel。AM-3 的 `GameplayEventLegacyBridgeSystem` 只作为迁移期 boundary bridge，用于 legacy event bus 兼容；目标态业务 reaction 直接消费 GameplayFact，默认写 next-frame command seed。
 
 ## AM-3 Instant Evaluation 落点
 
 当前代码主链已经覆盖 direct simple instant command 的最小可验收路径：
 
-1. `GEEffectCommandBuffer` 进入 `GEEffectSpecBuildSystem`，对 simple instant GE definition 生成 `GEEffectSpecBuffer`。
-2. `AttributeModifierApplySystem` 解析 `GEModifierDefinition` 的 `Constant` / `SetByCaller` magnitude，直接更新目标 ASC 的 `AttributeComponent`，并写入 `AttributeModifierBuffer`。
-3. `GameplayEventProjectionSystem` 将 `AttributeModifierBuffer` 投影为 `GameplayEventBuffer`。
+1. 迁移期 `GEEffectCommandBuffer` 进入 `GEEffectSpecBuildSystem`，对 simple instant GE definition 生成 `GEEffectSpecBuffer`；目标态等价逻辑并入 `GASCoreSimulationSystemGroup` 的 Effect Fan-In lane。
+2. 迁移期 `AttributeModifierApplySystem` 解析 `GEModifierDefinition` 的 `Constant` / `SetByCaller` magnitude，直接更新目标 ASC 的旧属性承载，并写入 `AttributeModifierBuffer`；目标态收敛为 `GASAttributeSetReduceApplySystem`，对 generated AttributeSet family 做 target-grouped reduce/apply。目标态不再默认生成 per-attribute apply system；只有 profiler/query contract 证明收益时才允许独立属性 component。
+3. 迁移期 `GameplayEventProjectionSystem` 将 `AttributeModifierBuffer` 投影为 `GameplayEventBuffer`；目标态拆成 `GASCoreSimulationSystemGroup` 的 Gameplay Fact lane 中的 Core reaction fact 和 `GASBoundaryProjectionSystemGroup` 的只读投影。
 4. `GESetByCallerValueBuffer` 在 spec build 后回写 `SpecSequence`，保持 command/spec/delta/fact 的关联证据。
 5. direct command 主链不创建 `CApplyGameplayEffectRequest`，也不创建 `CEffectSpecData` / `CEffectLifecycle` runtime GE entity。
 6. `GameplayEffectRequestWriter.AppendSimpleInstantCommandOrCreateSingleTargetRequest` 作为迁移期 producer 入口，能把 simple single-target request 转成 `GEEffectCommandBuffer`；未命中 AM3 条件时保留旧 request fallback。
 7. `AbilityCommitSystem` 的 activation self / target effect producer、`AbilityRuntimeActions.RequestCostGameplayEffect` 的 self cost producer，以及 `TimelineApplyEffectsProducer` 的 single-target ApplyEffects producer 已接入该入口，因此这些 simple single-target instant GE 不再默认创建 request entity。
 8. `GameplayEventLegacyBridgeSystem` 当前只桥接 attribute base value changed fact 到旧 `BAttributeChangeEvent`，作为迁移期 legacy 出口；它不是目标态 reaction 主输入。
-9. `PresentationOutboxSystem` / `ReplayLogSystem` 已直接消费 attribute typed fact 并输出 `PresentationEventBuffer(AttributeChange)` / `BDebugReplayEvent(AttributeChange)`；同源 legacy `BAttributeChangeEvent` 通过 `SourceFactSequence` 跳过，避免 Observation 重复投影。
-10. `CueRequestProjectionSystem` 已将 simple instant Cue-on-Apply 写成 `GameplayEventBuffer(CueRequested)`；`PresentationOutboxSystem` / `ReplayLogSystem` 已直接消费 cue typed fact 并输出 `PresentationEventBuffer(CueRequest)` / `BDebugReplayEvent(CueRequest)`；同源 legacy `BCueRequest` / `BGameplayEvent(CueRequested)` 通过 `SourceFactSequence` 跳过，避免 Observation 重复投影。
-11. `PresentationOutboxSystem` / `ReplayLogSystem` 已对 attribute / cue 之外的 typed gameplay fact 提供 generic fallback，输出 `PresentationEventBuffer(GameplayEvent)` / `BDebugReplayEvent(GameplayEvent)`；同源 legacy `BGameplayEvent` 通过 `SourceFactSequence` 跳过，避免 Observation 重复投影。
-12. `PresentationOutboxSystem` / `ReplayLogSystem` 已直接消费 damage typed fact 并输出 `PresentationEventBuffer(Damage)` / `BDebugReplayEvent(Damage)`；同源 legacy `BDamageEvent` 通过 `SourceFactSequence` 跳过，避免 Observation 重复投影。
+9. `PresentationOutboxSystem` / `ReplayLogSystem` 已直接消费 attribute typed fact 并输出 `PresentationEventBuffer(AttributeChange)` / `BDebugReplayEvent(AttributeChange)`；同源 legacy `BAttributeChangeEvent` 通过 `SourceFactSequence` 跳过，避免 Boundary Projection 重复投影。
+10. `CueRequestProjectionSystem` 已将 simple instant Cue-on-Apply 写成 `GameplayEventBuffer(CueRequested)`；`PresentationOutboxSystem` / `ReplayLogSystem` 已直接消费 cue typed fact 并输出 `PresentationEventBuffer(CueRequest)` / `BDebugReplayEvent(CueRequest)`；同源 legacy `BCueRequest` / `BGameplayEvent(CueRequested)` 通过 `SourceFactSequence` 跳过，避免 Boundary Projection 重复投影。
+11. `PresentationOutboxSystem` / `ReplayLogSystem` 已对 attribute / cue 之外的 typed gameplay fact 提供 generic fallback，输出 `PresentationEventBuffer(GameplayEvent)` / `BDebugReplayEvent(GameplayEvent)`；同源 legacy `BGameplayEvent` 通过 `SourceFactSequence` 跳过，避免 Boundary Projection 重复投影。
+12. `PresentationOutboxSystem` / `ReplayLogSystem` 已直接消费 damage typed fact 并输出 `PresentationEventBuffer(Damage)` / `BDebugReplayEvent(Damage)`；同源 legacy `BDamageEvent` 通过 `SourceFactSequence` 跳过，避免 Boundary Projection 重复投影。
 13. `EffectCommandSpecStream.CommandWriter` 是迁移期 frame-local writer：批量 producer 可一次解析 stream entity / current frame / command buffer / SetByCaller buffer 后多次 append，并在 `Flush()` 时一次回写 stream counters。它只减少 proof-only singleton DynamicBuffer 路径的 per-command query 放大，不改变 `NativeStream` / per-owner buffer 的高规模目标态选型。
 
 AM-3 仍是迁移期落点：当前已迁入 ability activation simple single-target producer、ability cost self producer、Timeline ApplyEffects single-target simple instant producer 与 Timeline ApplyEffects multi-target simple instant command fan-out，并补入 command writer frame query 收缩、attribute typed fact observation bridge、attribute typed fact native Presentation / Replay consumer、Cue-on-Apply projection、cue typed fact native Presentation / Replay consumer、generic typed gameplay fact native Presentation / Replay consumer 和 damage typed fact native Presentation / Replay consumer；AM-5 已让 period due / overflow simple instant child GE 复用该主链。剩余 producer 尚未全部迁入 command stream，业务 reaction typed fact consumer、全局临时 EntityQuery 清理和真实 parallel fan-in / deterministic merge 尚未闭合；Duration / Stack / Granted state、复杂 tag 语义和复杂 period / overflow child GE 仍归旧 request fallback 或后续 Active Effect Store / typed fact consumer 任务处理。
@@ -205,11 +206,13 @@ ActiveEffectStore 的 period / overflow 派生输出遵守同一 command/spec/de
 1. ContextId 在 command/spec/delta/fact 中连续传递。
 2. SetByCaller 属于 command/spec，不进入 definition。
 3. AttributeDelta 应可批量 apply，不依赖 managed callback。
-4. Observation event 从 typed facts 派生，不作为 reaction 主输入。
+4. Boundary observation event 从 typed facts 派生，不作为 reaction 主输入。
 5. 高频 `EffectCommand` 承载不得引入 per-hit structural change。
 6. `EffectCommand` 具体承载必须有 API 选型表，不能把 AM2 的全局 DynamicBuffer 当作最终答案。
 7. `EffectCommand` 任务必须报告 allocator、buffer spill、query/filter、lookup、deterministic ordering 和 Burst calculation 证据。
 8. period / overflow 派生命令必须保留 `Source`，并与 SetByCaller range、context、sequence 连续传递。
+9. EffectCommand / Spec / Delta / Fact 是语义链路，不是旧 `B* / C* / S*` 命名或单一 singleton buffer 的实现承诺；新代码和新文档必须使用 `12-命名规范Spec.md` 的目标命名。
+10. EffectCommand 派生出的结构变化意图不得写入任意默认 ECB System；目标态必须进入 `GASStructuralCommitSystemGroup`，并声明 sortKey、独立 ECB per job 和 playback phase。
 
 ## 验收
 

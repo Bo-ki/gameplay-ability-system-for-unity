@@ -18,7 +18,6 @@ namespace GAS.Runtime
         None = 0,
         SourceHasErrors = 1 << 0,
         RuntimeLifecycle = 1 << 1,
-        RuntimeTimeline = 1 << 2,
         ManagedPresentation = 1 << 3,
         GameplayEffectCacheLifecycleOwner = 1 << 4,
         MissingGameplayEffectConfigProvider = 1 << 5,
@@ -69,8 +68,6 @@ namespace GAS.Runtime
         public readonly GASGeneratedDefinitionBakingBoundary DeferredBoundaries;
         public readonly int RegistryDiagnosticCount;
         public readonly int ValidationDiagnosticCount;
-        public readonly int TimelineDefinitionCount;
-        public readonly int AbilityTimelineReferenceCount;
         public readonly GameplayEffectDefinitionLifecycleOwnerKind GameplayEffectLifecycleOwnerKind;
         public readonly bool HasGameplayEffectConfigProvider;
         public readonly int GameplayEffectCacheGeneration;
@@ -83,8 +80,6 @@ namespace GAS.Runtime
             GASGeneratedDefinitionBakingBoundary deferredBoundaries,
             int registryDiagnosticCount,
             int validationDiagnosticCount,
-            int timelineDefinitionCount,
-            int abilityTimelineReferenceCount,
             GameplayEffectDefinitionLifecycleOwnerKind gameplayEffectLifecycleOwnerKind,
             bool hasGameplayEffectConfigProvider,
             int gameplayEffectCacheGeneration,
@@ -98,8 +93,6 @@ namespace GAS.Runtime
             DeferredBoundaries = deferredBoundaries;
             RegistryDiagnosticCount = registryDiagnosticCount;
             ValidationDiagnosticCount = validationDiagnosticCount;
-            TimelineDefinitionCount = timelineDefinitionCount;
-            AbilityTimelineReferenceCount = abilityTimelineReferenceCount;
             GameplayEffectLifecycleOwnerKind = gameplayEffectLifecycleOwnerKind;
             HasGameplayEffectConfigProvider = hasGameplayEffectConfigProvider;
             GameplayEffectCacheGeneration = gameplayEffectCacheGeneration;
@@ -112,8 +105,6 @@ namespace GAS.Runtime
                 Array.Empty<GASGeneratedDefinitionBakingEntry>(),
                 GASGeneratedDefinitionBakingBoundary.None,
                 GASGeneratedDefinitionBakingBoundary.None,
-                0,
-                0,
                 0,
                 0,
                 default,
@@ -135,8 +126,6 @@ namespace GAS.Runtime
         public int EligibleBakerInputCount => CanBake ? BakerInputCandidateCount : 0;
         public int RuntimeLifecycleDeferredEntryCount => CountEntriesWithBoundary(GASGeneratedDefinitionBakingBoundary.RuntimeLifecycle);
         public int ManagedPresentationDeferredEntryCount => CountEntriesWithBoundary(GASGeneratedDefinitionBakingBoundary.ManagedPresentation);
-        public int RuntimeTimelineDeferredCount =>
-            CountEntriesWithBoundary(GASGeneratedDefinitionBakingBoundary.RuntimeTimeline) + TimelineDefinitionCount;
 
         public bool HasDeferredBoundary(GASGeneratedDefinitionBakingBoundary boundary)
         {
@@ -184,16 +173,12 @@ namespace GAS.Runtime
                 : GASGeneratedDefinitionBakingBoundary.None;
 
             var table = buildResult.DefinitionTable;
-            var abilityTimelineReferenceCount = AppendAbilities(table.Abilities, entries, ref deferredBoundaries);
+            AppendAbilities(table.Abilities, entries, ref deferredBoundaries);
             AppendGameplayEffects(table.GameplayEffects, entries, ref deferredBoundaries);
             AppendAttributeSets(table.AttributeSets, entries);
             AppendAttributes(table.Attributes, entries);
             AppendGameplayTags(table.GameplayTags, entries);
             AppendGameplayCues(table.GameplayCues, entries, ref deferredBoundaries);
-
-            var timelineDefinitionCount = buildResult.WarmupResult.TimelineConfigCount;
-            if (timelineDefinitionCount > 0 || abilityTimelineReferenceCount > 0)
-                deferredBoundaries |= GASGeneratedDefinitionBakingBoundary.RuntimeTimeline;
 
             if (table.GameplayEffects.Count > 0)
             {
@@ -208,8 +193,6 @@ namespace GAS.Runtime
                 deferredBoundaries,
                 buildResult.RegistryDiagnosticCount,
                 buildResult.ValidationDiagnosticCount,
-                timelineDefinitionCount,
-                abilityTimelineReferenceCount,
                 gameplayEffectCacheState.OwnerKind,
                 gameplayEffectCacheState.HasConfigProvider,
                 gameplayEffectCacheState.Generation,
@@ -217,21 +200,15 @@ namespace GAS.Runtime
                 gameplayEffectCacheState.CachedStaticDefinitionBlobCount);
         }
 
-        private static int AppendAbilities(
+        private static void AppendAbilities(
             IReadOnlyList<AbilityDefinitionSummary> abilities,
             List<GASGeneratedDefinitionBakingEntry> entries,
             ref GASGeneratedDefinitionBakingBoundary planDeferredBoundaries)
         {
-            var timelineReferenceCount = 0;
             for (var i = 0; i < abilities.Count; i++)
             {
                 var ability = abilities[i];
                 var deferredBoundaries = GASGeneratedDefinitionBakingBoundary.RuntimeLifecycle;
-                if (ability.HasTimeline)
-                {
-                    deferredBoundaries |= GASGeneratedDefinitionBakingBoundary.RuntimeTimeline;
-                    timelineReferenceCount++;
-                }
 
                 planDeferredBoundaries |= deferredBoundaries;
                 entries.Add(new GASGeneratedDefinitionBakingEntry(
@@ -242,8 +219,6 @@ namespace GAS.Runtime
                     deferredBoundaries,
                     CountAbilityReferences(ability)));
             }
-
-            return timelineReferenceCount;
         }
 
         private static void AppendGameplayEffects(
@@ -352,8 +327,6 @@ namespace GAS.Runtime
             if (ability.HasCost)
                 count++;
             if (ability.HasCooldown)
-                count++;
-            if (ability.HasTimeline)
                 count++;
             return count;
         }

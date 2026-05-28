@@ -90,16 +90,6 @@ namespace GAS.Runtime.Generated
             Options = EntityQueryOptions.IncludeDisabledEntities,
         };
 
-        public static readonly EntityQueryDesc TimelineDefinitionQuery = new EntityQueryDesc
-        {
-            All = new ComponentType[]
-            {
-                ComponentType.ReadOnly<GASGeneratedDefinitionBlobComponent<TimelineDefinitionBlob>>(),
-                ComponentType.ReadOnly<GASDefinitionCodeComponent>(),
-            },
-            Options = EntityQueryOptions.IncludeDisabledEntities,
-        };
-
         public static readonly EntityQueryDesc UnitDefinitionQuery = new EntityQueryDesc
         {
             All = new ComponentType[]

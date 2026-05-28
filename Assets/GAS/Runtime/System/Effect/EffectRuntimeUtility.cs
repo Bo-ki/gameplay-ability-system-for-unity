@@ -10,16 +10,7 @@ namespace GAS.Runtime
             out BlobAssetReference<GEStaticDefinitionBlob> blob)
         {
             blob = default;
-
-            if (!em.Exists(ge) || !em.HasComponent<CEffectSpecData>(ge))
-                return false;
-
-            var spec = em.GetComponentData<CEffectSpecData>(ge);
-            return spec.GameplayEffectCode > 0
-                   && GameplayEffectConfigRegistry.TryGetOrCreateStaticDefinitionBlob(
-                       em,
-                       spec.GameplayEffectCode,
-                       out blob);
+            return false;
         }
 
         public static Entity ApplyInstantEffect(
@@ -82,8 +73,8 @@ namespace GAS.Runtime
                 return;
 
             var frame = GASRuntimeFrameContext.ResolveCurrentFrame(em);
-            var context = em.HasComponent<CEffectContext>(ge)
-                ? em.GetComponentData<CEffectContext>(ge)
+            var context = em.HasComponent<GEContextComponent>(ge)
+                ? em.GetComponentData<GEContextComponent>(ge)
                 : default;
 
             if (context.TargetAsc != Entity.Null)
@@ -97,19 +88,19 @@ namespace GAS.Runtime
                     frame);
             }
 
-            var lifecycle = em.HasComponent<CEffectLifecycle>(ge)
-                ? em.GetComponentData<CEffectLifecycle>(ge)
+            var lifecycle = em.HasComponent<GEEffectLifecycleComponent>(ge)
+                ? em.GetComponentData<GEEffectLifecycleComponent>(ge)
                 : default;
+            if (!em.HasComponent<GEEffectLifecycleComponent>(ge))
+                return;
+
             lifecycle.PreviousState = lifecycle.State;
             lifecycle.State = EGameplayEffectLifecycleState.PendingRemove;
             lifecycle.StateStartFrame = frame;
-            if (em.HasComponent<CEffectLifecycle>(ge))
-                em.SetComponentData(ge, lifecycle);
-            else
-                em.AddComponentData(ge, lifecycle);
+            em.SetComponentData(ge, lifecycle);
 
-            if (!em.HasComponent<CEffectDestroy>(ge))
-                em.AddComponent<CEffectDestroy>(ge);
+            if (em.HasComponent<GEEffectDestroyComponent>(ge))
+                em.SetComponentEnabled<GEEffectDestroyComponent>(ge, true);
         }
 
         public static void CleanupActiveEffect(
@@ -144,8 +135,8 @@ namespace GAS.Runtime
             var frame = GASRuntimeFrameContext.ResolveCurrentFrame(em);
             if (!TryGetContext(em, ge, out var context))
             {
-                if (!em.HasComponent<CEffectFinalDestroy>(ge))
-                    em.AddComponent<CEffectFinalDestroy>(ge);
+                if (em.HasComponent<GEEffectFinalDestroyComponent>(ge))
+                    em.SetComponentEnabled<GEEffectFinalDestroyComponent>(ge, true);
                 return;
             }
 
@@ -171,8 +162,8 @@ namespace GAS.Runtime
 
             EnqueueRemovedEvent(ref eventWriter, em, ge, in context);
 
-            if (!em.HasComponent<CEffectFinalDestroy>(ge))
-                em.AddComponent<CEffectFinalDestroy>(ge);
+            if (em.HasComponent<GEEffectFinalDestroyComponent>(ge))
+                em.SetComponentEnabled<GEEffectFinalDestroyComponent>(ge, true);
         }
 
         public static bool ShouldReject(
@@ -191,12 +182,12 @@ namespace GAS.Runtime
         {
             if (target == Entity.Null
                 || !em.Exists(target)
-                || !em.HasBuffer<BTempTagSource>(target))
+                || !em.HasBuffer<TagTemporarySourceBuffer>(target))
             {
                 return;
             }
 
-            var sources = em.GetBuffer<BTempTagSource>(target);
+            var sources = em.GetBuffer<TagTemporarySourceBuffer>(target);
             for (var i = sources.Length - 1; i >= 0; i--)
             {
                 if (sources[i].TagIndex != tagIndex)
@@ -212,31 +203,38 @@ namespace GAS.Runtime
             EntityManager em,
             Entity ge)
         {
+        }
+
+        public static void FinalizeEffectDestroy(
+            EntityManager em,
+            ref EntityCommandBuffer ecb,
+            Entity ge)
+        {
             if (ge != Entity.Null && em.Exists(ge))
-                em.DestroyEntity(ge);
+                ecb.DestroyEntity(ge);
         }
 
         public static void ApplyResolvedModifiersAsActive(
             EntityManager em,
             Entity ge,
-            in CEffectContext context,
-            in CEffectSpecData spec,
+            in GEContextComponent context,
+            in GEEffectSpecComponent spec,
             ref EventBusHelper.GameplayEventBusWriter eventWriter)
         {
             if (context.TargetAsc == Entity.Null || !em.Exists(context.TargetAsc))
                 return;
 
             EffectMagnitudeResolver.ResolveModifiers(em, ge, in context, in spec, ref eventWriter);
-            if (!em.HasBuffer<BResolvedModifier>(ge))
+            if (!em.HasBuffer<GEResolvedModifierBuffer>(ge))
                 return;
 
-            if (!em.HasBuffer<BActiveModifier>(context.TargetAsc))
-                em.AddBuffer<BActiveModifier>(context.TargetAsc);
+            if (!em.HasBuffer<AttributeActiveModifierBuffer>(context.TargetAsc))
+                return;
 
-            var resolved = em.GetBuffer<BResolvedModifier>(ge);
-            var active = em.GetBuffer<BActiveModifier>(context.TargetAsc);
-            var attributes = em.HasBuffer<BAttribute>(context.TargetAsc)
-                ? em.GetBuffer<BAttribute>(context.TargetAsc)
+            var resolved = em.GetBuffer<GEResolvedModifierBuffer>(ge);
+            var active = em.GetBuffer<AttributeActiveModifierBuffer>(context.TargetAsc);
+            var attributes = em.HasBuffer<AttributeValueBuffer>(context.TargetAsc)
+                ? em.GetBuffer<AttributeValueBuffer>(context.TargetAsc)
                 : default;
 
             for (var i = 0; i < resolved.Length; i++)
@@ -245,7 +243,7 @@ namespace GAS.Runtime
                 if (HasActiveModifier(active, ge, modifier.AttrSetCode, modifier.AttributeCode, modifier.Op))
                     continue;
 
-                active.Add(new BActiveModifier
+                active.Add(new AttributeActiveModifierBuffer
                 {
                     AttrSetCode = modifier.AttrSetCode,
                     AttributeCode = modifier.AttributeCode,
@@ -269,14 +267,14 @@ namespace GAS.Runtime
         {
             if (owner == Entity.Null
                 || !em.Exists(owner)
-                || !em.HasBuffer<BActiveModifier>(owner))
+                || !em.HasBuffer<AttributeActiveModifierBuffer>(owner))
             {
                 return;
             }
 
-            var modifiers = em.GetBuffer<BActiveModifier>(owner);
-            var attributes = em.HasBuffer<BAttribute>(owner)
-                ? em.GetBuffer<BAttribute>(owner)
+            var modifiers = em.GetBuffer<AttributeActiveModifierBuffer>(owner);
+            var attributes = em.HasBuffer<AttributeValueBuffer>(owner)
+                ? em.GetBuffer<AttributeValueBuffer>(owner)
                 : default;
 
             for (var i = modifiers.Length - 1; i >= 0; i--)
@@ -302,12 +300,12 @@ namespace GAS.Runtime
         {
             if (owner == Entity.Null
                 || !em.Exists(owner)
-                || !em.HasBuffer<BTempTagSource>(owner))
+                || !em.HasBuffer<TagTemporarySourceBuffer>(owner))
             {
                 return;
             }
 
-            var sources = em.GetBuffer<BTempTagSource>(owner);
+            var sources = em.GetBuffer<TagTemporarySourceBuffer>(owner);
             for (var i = sources.Length - 1; i >= 0; i--)
             {
                 var source = sources[i];
@@ -318,7 +316,7 @@ namespace GAS.Runtime
                 TagRuntimeUtility.RemoveTagIndexFromEffectiveMaskIfUnreferenced(em, owner, source.TagIndex);
                 if (eventWriter.IsCreated)
                 {
-                    eventWriter.EnqueueTagChangeEvent(new BTagChangeEvent
+                    eventWriter.EnqueueTagChangeEvent(new TagChangeEventBuffer
                     {
                         ASC = owner,
                         TagIndex = source.TagIndex,
@@ -335,12 +333,12 @@ namespace GAS.Runtime
         {
             if (owner == Entity.Null
                 || !em.Exists(owner)
-                || !em.HasBuffer<BGameplayEffect>(owner))
+                || !em.HasBuffer<LegacyGameplayEffectEntityBuffer>(owner))
             {
                 return;
             }
 
-            var effects = em.GetBuffer<BGameplayEffect>(owner);
+            var effects = em.GetBuffer<LegacyGameplayEffectEntityBuffer>(owner);
             for (var i = effects.Length - 1; i >= 0; i--)
             {
                 if (effects[i].GameplayEffect == ge)
@@ -351,11 +349,11 @@ namespace GAS.Runtime
         public static bool TryGetContext(
             EntityManager em,
             Entity ge,
-            out CEffectContext context)
+            out GEContextComponent context)
         {
-            if (ge != Entity.Null && em.Exists(ge) && em.HasComponent<CEffectContext>(ge))
+            if (ge != Entity.Null && em.Exists(ge) && em.HasComponent<GEContextComponent>(ge))
             {
-                context = em.GetComponentData<CEffectContext>(ge);
+                context = em.GetComponentData<GEContextComponent>(ge);
                 return context.TargetAsc != Entity.Null;
             }
 
@@ -364,7 +362,7 @@ namespace GAS.Runtime
         }
 
         private static bool HasActiveModifier(
-            DynamicBuffer<BActiveModifier> active,
+            DynamicBuffer<AttributeActiveModifierBuffer> active,
             Entity ge,
             int attrSetCode,
             int attributeCode,
@@ -387,8 +385,8 @@ namespace GAS.Runtime
 
         private static EGameplayEffectLifecycleState ResolveCleanupState(EntityManager em, Entity ge)
         {
-            if (em.HasComponent<CEffectLifecycle>(ge))
-                return em.GetComponentData<CEffectLifecycle>(ge).State;
+            if (em.HasComponent<GEEffectLifecycleComponent>(ge))
+                return em.GetComponentData<GEEffectLifecycleComponent>(ge).State;
 
             return EGameplayEffectLifecycleState.Active;
         }
@@ -397,16 +395,16 @@ namespace GAS.Runtime
             ref EventBusHelper.GameplayEventBusWriter writer,
             EntityManager em,
             Entity ge,
-            in CEffectContext context)
+            in GEContextComponent context)
         {
             if (!writer.IsCreated)
                 return;
 
             var gameplayEffectCode = 0;
-            if (em.HasComponent<CEffectSpecData>(ge))
-                gameplayEffectCode = em.GetComponentData<CEffectSpecData>(ge).GameplayEffectCode;
+            if (em.HasComponent<GEEffectSpecComponent>(ge))
+                gameplayEffectCode = em.GetComponentData<GEEffectSpecComponent>(ge).GameplayEffectCode;
 
-            writer.EnqueueGameplayEvent(new BGameplayEvent
+            writer.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
             {
                 Type = EGameplayEventType.GameplayEffectRemoved,
                 SourceAsc = context.SourceAsc,

@@ -27,10 +27,11 @@ namespace GAS.Runtime
         public static Entity RequestCostGameplayEffect(Entity ability, EntityManager entityManager)
         {
             if (!TryGetBaseInfo(entityManager, ability, out var baseInfo)
-                || !entityManager.HasComponent<CAbilityCost>(ability))
+                || !entityManager.HasComponent<AbilityCostComponent>(ability)
+                || !entityManager.IsComponentEnabled<AbilityCostComponent>(ability))
                 return Entity.Null;
 
-            var cost = entityManager.GetComponentData<CAbilityCost>(ability);
+            var cost = entityManager.GetComponentData<AbilityCostComponent>(ability);
             return AppendSimpleInstantSelfCommandOrCreateRequest(
                 entityManager,
                 ability,
@@ -48,10 +49,11 @@ namespace GAS.Runtime
         public static Entity RequestCooldownGameplayEffect(Entity ability, EntityManager entityManager)
         {
             if (!TryGetBaseInfo(entityManager, ability, out var baseInfo)
-                || !entityManager.HasComponent<CAbilityCooldown>(ability))
+                || !entityManager.HasComponent<AbilityCooldownComponent>(ability)
+                || !entityManager.IsComponentEnabled<AbilityCooldownComponent>(ability))
                 return Entity.Null;
 
-            var cooldown = entityManager.GetComponentData<CAbilityCooldown>(ability);
+            var cooldown = entityManager.GetComponentData<AbilityCooldownComponent>(ability);
             return AppendSimpleInstantSelfCommandOrCreateRequest(
                 entityManager,
                 ability,
@@ -63,8 +65,8 @@ namespace GAS.Runtime
 
         public static void RemoveActivationOwnedTags(Entity ability, EntityManager entityManager)
         {
-            if (!entityManager.HasComponent<CAbilityBaseInfo>(ability)) return;
-            var owner = entityManager.GetComponentData<CAbilityBaseInfo>(ability).Owner;
+            if (!entityManager.HasComponent<AbilityStateComponent>(ability)) return;
+            var owner = entityManager.GetComponentData<AbilityStateComponent>(ability).Owner;
             RemoveTagsFromSource(owner, ability, entityManager);
         }
 
@@ -76,17 +78,20 @@ namespace GAS.Runtime
             Entity sourceEffect = default,
             int sourceAbilityCode = 0)
         {
-            if (!entityManager.Exists(ability) || entityManager.HasComponent<CAbilityInTryEnd>(ability))
+            if (!entityManager.Exists(ability)
+                || !entityManager.HasComponent<AbilityEndRequestComponent>(ability)
+                || entityManager.IsComponentEnabled<AbilityEndRequestComponent>(ability))
                 return false;
 
             var resolvedSourceAbilityCode = ResolveSourceAbilityCode(entityManager, sourceAbility, sourceAbilityCode);
-            entityManager.AddComponentData(ability, new CAbilityInTryEnd
+            entityManager.SetComponentData(ability, new AbilityEndRequestComponent
             {
                 Reason = reason,
                 SourceAbility = sourceAbility,
                 SourceEffect = sourceEffect,
                 SourceAbilityCode = resolvedSourceAbilityCode,
             });
+            entityManager.SetComponentEnabled<AbilityEndRequestComponent>(ability, true);
             EnqueueAbilityLifecycleRequestFact(
                 entityManager,
                 ability,
@@ -106,17 +111,20 @@ namespace GAS.Runtime
             Entity sourceEffect = default,
             int sourceAbilityCode = 0)
         {
-            if (!entityManager.Exists(ability) || entityManager.HasComponent<CAbilityInTryCancel>(ability))
+            if (!entityManager.Exists(ability)
+                || !entityManager.HasComponent<AbilityCancelRequestComponent>(ability)
+                || entityManager.IsComponentEnabled<AbilityCancelRequestComponent>(ability))
                 return false;
 
             var resolvedSourceAbilityCode = ResolveSourceAbilityCode(entityManager, sourceAbility, sourceAbilityCode);
-            entityManager.AddComponentData(ability, new CAbilityInTryCancel
+            entityManager.SetComponentData(ability, new AbilityCancelRequestComponent
             {
                 Reason = reason,
                 SourceAbility = sourceAbility,
                 SourceEffect = sourceEffect,
                 SourceAbilityCode = resolvedSourceAbilityCode,
             });
+            entityManager.SetComponentEnabled<AbilityCancelRequestComponent>(ability, true);
             EnqueueAbilityLifecycleRequestFact(
                 entityManager,
                 ability,
@@ -137,17 +145,29 @@ namespace GAS.Runtime
             Entity sourceEffect = default,
             int sourceAbilityCode = 0)
         {
-            if (!entityManager.Exists(ability) || entityManager.HasComponent<CAbilityInTryCancel>(ability))
+            if (!entityManager.Exists(ability))
                 return false;
 
             var resolvedSourceAbilityCode = ResolveSourceAbilityCode(entityManager, sourceAbility, sourceAbilityCode);
-            ecb.AddComponent(ability, new CAbilityInTryCancel
+            if (entityManager.HasComponent<AbilityCancelRequestComponent>(ability))
             {
-                Reason = reason,
-                SourceAbility = sourceAbility,
-                SourceEffect = sourceEffect,
-                SourceAbilityCode = resolvedSourceAbilityCode,
-            });
+                if (entityManager.IsComponentEnabled<AbilityCancelRequestComponent>(ability))
+                    return false;
+
+                entityManager.SetComponentData(ability, new AbilityCancelRequestComponent
+                {
+                    Reason = reason,
+                    SourceAbility = sourceAbility,
+                    SourceEffect = sourceEffect,
+                    SourceAbilityCode = resolvedSourceAbilityCode,
+                });
+                entityManager.SetComponentEnabled<AbilityCancelRequestComponent>(ability, true);
+            }
+            else
+            {
+                return false;
+            }
+
             EnqueueAbilityLifecycleRequestFact(
                 entityManager,
                 ability,
@@ -159,12 +179,67 @@ namespace GAS.Runtime
             return true;
         }
 
-        public static void RemoveTagsFromSource(Entity owner, Entity source, EntityManager entityManager)
+        public static void EnableDestroyOnCleanup(
+            Entity ability,
+            EntityManager entityManager,
+            ref EntityCommandBuffer ecb)
         {
-            if (!entityManager.HasComponent<CTagMask>(owner) || !entityManager.HasBuffer<BTempTagSource>(owner))
+            if (!entityManager.Exists(ability))
                 return;
 
-            var sources = entityManager.GetBuffer<BTempTagSource>(owner);
+            if (entityManager.HasComponent<AbilityDestroyOnCleanupComponent>(ability))
+            {
+                entityManager.SetComponentEnabled<AbilityDestroyOnCleanupComponent>(ability, true);
+                return;
+            }
+
+            return;
+        }
+
+        public static bool IsDestroyOnCleanupEnabled(Entity ability, EntityManager entityManager)
+        {
+            return entityManager.Exists(ability)
+                   && entityManager.HasComponent<AbilityDestroyOnCleanupComponent>(ability)
+                   && entityManager.IsComponentEnabled<AbilityDestroyOnCleanupComponent>(ability);
+        }
+
+        public static bool IsCancelRequested(Entity ability, EntityManager entityManager)
+        {
+            return entityManager.Exists(ability)
+                   && entityManager.HasComponent<AbilityCancelRequestComponent>(ability)
+                   && entityManager.IsComponentEnabled<AbilityCancelRequestComponent>(ability);
+        }
+
+        public static bool IsEndRequested(Entity ability, EntityManager entityManager)
+        {
+            return entityManager.Exists(ability)
+                   && entityManager.HasComponent<AbilityEndRequestComponent>(ability)
+                   && entityManager.IsComponentEnabled<AbilityEndRequestComponent>(ability);
+        }
+
+        public static void DisableLifecycleRequestMarkers(Entity ability, EntityManager entityManager)
+        {
+            if (!entityManager.Exists(ability))
+                return;
+
+            if (entityManager.HasComponent<AbilityActivationPendingComponent>(ability))
+                entityManager.SetComponentEnabled<AbilityActivationPendingComponent>(ability, false);
+            if (entityManager.HasComponent<AbilityCommitRequestComponent>(ability))
+                entityManager.SetComponentEnabled<AbilityCommitRequestComponent>(ability, false);
+            if (entityManager.HasComponent<AbilityCancelRequestComponent>(ability))
+                entityManager.SetComponentEnabled<AbilityCancelRequestComponent>(ability, false);
+            if (entityManager.HasComponent<AbilityEndRequestComponent>(ability))
+                entityManager.SetComponentEnabled<AbilityEndRequestComponent>(ability, false);
+            if (entityManager.HasComponent<AbilityDestroyOnCleanupComponent>(ability))
+                entityManager.SetComponentEnabled<AbilityDestroyOnCleanupComponent>(ability, false);
+        }
+
+        public static void RemoveTagsFromSource(Entity owner, Entity source, EntityManager entityManager)
+        {
+            if (!entityManager.HasComponent<TagMaskComponent>(owner) || !entityManager.HasBuffer<TagTemporarySourceBuffer>(owner))
+                return;
+
+            var sources = entityManager.GetBuffer<TagTemporarySourceBuffer>(owner);
 
             for (var i = sources.Length - 1; i >= 0; i--)
             {
@@ -179,7 +254,7 @@ namespace GAS.Runtime
         private static Entity AppendSimpleInstantSelfCommandOrCreateRequest(
             EntityManager entityManager,
             Entity ability,
-            in CAbilityBaseInfo baseInfo,
+            in AbilityStateComponent baseInfo,
             int gameplayEffectCode,
             int durationFrameOverride,
             string namePrefix)
@@ -187,12 +262,12 @@ namespace GAS.Runtime
             if (gameplayEffectCode <= 0
                 || baseInfo.Owner == Entity.Null
                 || !entityManager.Exists(baseInfo.Owner)
-                || entityManager.HasComponent<CAscDestroying>(baseInfo.Owner))
+                || ASCEntityFactory.IsDestroying(entityManager, baseInfo.Owner))
             {
                 return Entity.Null;
             }
 
-            var request = new CApplyGameplayEffectRequest
+            var request = new GEApplyRequestComponent
             {
                 SourceAsc = baseInfo.Owner,
                 SourceAbility = ability,
@@ -219,12 +294,12 @@ namespace GAS.Runtime
             if (sourceAbilityCode != 0
                 || sourceAbility == Entity.Null
                 || !entityManager.Exists(sourceAbility)
-                || !entityManager.HasComponent<CAbilityBaseInfo>(sourceAbility))
+                || !entityManager.HasComponent<AbilityStateComponent>(sourceAbility))
             {
                 return sourceAbilityCode;
             }
 
-            return entityManager.GetComponentData<CAbilityBaseInfo>(sourceAbility).Code;
+            return entityManager.GetComponentData<AbilityStateComponent>(sourceAbility).Code;
         }
 
         private static void EnqueueAbilityLifecycleRequestFact(
@@ -237,7 +312,7 @@ namespace GAS.Runtime
             int sourceAbilityCode)
         {
             TryGetBaseInfo(entityManager, ability, out var baseInfo);
-            EventBusHelper.EnqueueGameplayEvent(entityManager, GASManager.EntityEventBus, new BGameplayEvent
+            EventBusHelper.EnqueueGameplayEvent(entityManager, GASManager.EntityEventBus, new GameplayEventBusEventBuffer
             {
                 Type = type,
                 SourceAsc = baseInfo.Owner,
@@ -252,13 +327,13 @@ namespace GAS.Runtime
             });
         }
 
-        private static bool TryGetBaseInfo(EntityManager entityManager, Entity ability, out CAbilityBaseInfo baseInfo)
+        private static bool TryGetBaseInfo(EntityManager entityManager, Entity ability, out AbilityStateComponent baseInfo)
         {
             baseInfo = default;
-            if (!entityManager.Exists(ability) || !entityManager.HasComponent<CAbilityBaseInfo>(ability))
+            if (!entityManager.Exists(ability) || !entityManager.HasComponent<AbilityStateComponent>(ability))
                 return false;
 
-            baseInfo = entityManager.GetComponentData<CAbilityBaseInfo>(ability);
+            baseInfo = entityManager.GetComponentData<AbilityStateComponent>(ability);
             return true;
         }
 

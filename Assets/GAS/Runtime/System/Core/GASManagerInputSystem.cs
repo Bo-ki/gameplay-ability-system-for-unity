@@ -10,21 +10,13 @@ namespace GAS.Runtime
 
         protected override void OnCreate()
         {
-            _managerEntity = World.DefaultGameObjectInjectionWorld.EntityManager.CreateEntity();
+            _managerEntity = EntityManager.CreateEntity(GASRuntimeEntityArchetypes.GASRunningTag(EntityManager));
+            EntityManager.SetComponentEnabled<GASRunningTag>(_managerEntity, false);
         }
 
         protected override void OnUpdate()
         {
-            if (GASManager.IsRunning)
-            {
-                if (!EntityManager.HasComponent<CGASRunningTag>(_managerEntity))
-                    EntityManager.AddComponent<CGASRunningTag>(_managerEntity);
-            }
-            else
-            {
-                if (EntityManager.HasComponent<CGASRunningTag>(_managerEntity))
-                    EntityManager.RemoveComponent<CGASRunningTag>(_managerEntity);
-            }
+            EntityManager.SetComponentEnabled<GASRunningTag>(_managerEntity, GASManager.IsRunning);
         }
     }
 }

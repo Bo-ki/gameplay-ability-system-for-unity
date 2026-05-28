@@ -1,4 +1,3 @@
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
@@ -8,27 +7,30 @@ namespace GAS.Runtime
         public static void ResolveModifiers(
             EntityManager em,
             Entity ge,
-            in CEffectContext context,
-            in CEffectSpecData spec)
+            in GEContextComponent context,
+            in GEEffectSpecComponent spec)
         {
-            if (!em.HasBuffer<BModifierConfig>(ge))
+            if (!em.IsComponentEnabled<GEModifierConfigBuffer>(ge))
             {
-                if (em.HasBuffer<BResolvedModifier>(ge))
-                    em.GetBuffer<BResolvedModifier>(ge).Clear();
+                if (em.HasBuffer<GEResolvedModifierBuffer>(ge))
+                    em.GetBuffer<GEResolvedModifierBuffer>(ge).Clear();
 
                 return;
             }
 
-            EnsureResolverBuffers(em, ge);
+            if (!TryGetResolvedModifierBuffer(em, ge, out var resolvedModifiers))
+                return;
 
-            var configBuffer = em.GetBuffer<BModifierConfig>(ge);
-            var resolvedModifiers = em.GetBuffer<BResolvedModifier>(ge);
             resolvedModifiers.Clear();
+            if (!HasRequiredCaptureBuffer(em, ge))
+                return;
+
+            var configBuffer = em.GetBuffer<GEModifierConfigBuffer>(ge);
             for (var i = 0; i < configBuffer.Length; i++)
             {
                 var config = configBuffer[i];
                 var magnitude = ResolveMagnitude(em, ge, i, config.Magnitude, context, spec);
-                resolvedModifiers.Add(new BResolvedModifier
+                resolvedModifiers.Add(new GEResolvedModifierBuffer
                 {
                     AttrSetCode = config.AttrSetCode,
                     AttributeCode = config.AttributeCode,
@@ -42,23 +44,26 @@ namespace GAS.Runtime
         public static void ResolveModifiers(
             EntityManager em,
             Entity ge,
-            in CEffectContext context,
-            in CEffectSpecData spec,
+            in GEContextComponent context,
+            in GEEffectSpecComponent spec,
             ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
         {
-            if (!em.HasBuffer<BModifierConfig>(ge))
+            if (!em.IsComponentEnabled<GEModifierConfigBuffer>(ge))
             {
-                if (em.HasBuffer<BResolvedModifier>(ge))
-                    em.GetBuffer<BResolvedModifier>(ge).Clear();
+                if (em.HasBuffer<GEResolvedModifierBuffer>(ge))
+                    em.GetBuffer<GEResolvedModifierBuffer>(ge).Clear();
 
                 return;
             }
 
-            EnsureResolverBuffers(em, ge);
+            if (!TryGetResolvedModifierBuffer(em, ge, out var resolvedModifiers))
+                return;
 
-            var configBuffer = em.GetBuffer<BModifierConfig>(ge);
-            var resolvedModifiers = em.GetBuffer<BResolvedModifier>(ge);
             resolvedModifiers.Clear();
+            if (!HasRequiredCaptureBuffer(em, ge))
+                return;
+
+            var configBuffer = em.GetBuffer<GEModifierConfigBuffer>(ge);
             for (var i = 0; i < configBuffer.Length; i++)
             {
                 var config = configBuffer[i];
@@ -70,7 +75,7 @@ namespace GAS.Runtime
                     context,
                     spec,
                     ref eventBusWriter);
-                resolvedModifiers.Add(new BResolvedModifier
+                resolvedModifiers.Add(new GEResolvedModifierBuffer
                 {
                     AttrSetCode = config.AttrSetCode,
                     AttributeCode = config.AttributeCode,
@@ -85,27 +90,30 @@ namespace GAS.Runtime
             EntityManager em,
             ref EntityCommandBuffer ecb,
             Entity ge,
-            in CEffectContext context,
-            in CEffectSpecData spec)
+            in GEContextComponent context,
+            in GEEffectSpecComponent spec)
         {
-            if (!em.HasBuffer<BModifierConfig>(ge))
+            if (!em.IsComponentEnabled<GEModifierConfigBuffer>(ge))
             {
-                if (em.HasBuffer<BResolvedModifier>(ge))
-                    em.GetBuffer<BResolvedModifier>(ge).Clear();
+                if (em.HasBuffer<GEResolvedModifierBuffer>(ge))
+                    em.GetBuffer<GEResolvedModifierBuffer>(ge).Clear();
 
                 return;
             }
 
-            EnsureResolverBuffers(em, ref ecb, ge);
+            if (!TryGetResolvedModifierBuffer(em, ge, out var resolvedModifiers))
+                return;
 
-            var configBuffer = em.GetBuffer<BModifierConfig>(ge);
-            var resolvedModifiers = em.GetBuffer<BResolvedModifier>(ge);
             resolvedModifiers.Clear();
+            if (!HasRequiredCaptureBuffer(em, ge))
+                return;
+
+            var configBuffer = em.GetBuffer<GEModifierConfigBuffer>(ge);
             for (var i = 0; i < configBuffer.Length; i++)
             {
                 var config = configBuffer[i];
                 var magnitude = ResolveMagnitude(em, ref ecb, ge, i, config.Magnitude, context, spec);
-                resolvedModifiers.Add(new BResolvedModifier
+                resolvedModifiers.Add(new GEResolvedModifierBuffer
                 {
                     AttrSetCode = config.AttrSetCode,
                     AttributeCode = config.AttributeCode,
@@ -116,43 +124,33 @@ namespace GAS.Runtime
             }
         }
 
-        private static void EnsureResolverBuffers(EntityManager em, Entity ge)
+        private static bool TryGetResolvedModifierBuffer(
+            EntityManager em,
+            Entity ge,
+            out DynamicBuffer<GEResolvedModifierBuffer> resolvedModifiers)
         {
-            if (!em.HasBuffer<BResolvedModifier>(ge))
-                em.AddBuffer<BResolvedModifier>(ge);
+            if (!em.HasBuffer<GEResolvedModifierBuffer>(ge))
+            {
+                resolvedModifiers = default;
+                return false;
+            }
 
-            if (RequiresAttributeCaptureBuffer(em, ge) && !em.HasBuffer<BAttributeCaptureValue>(ge))
-                em.AddBuffer<BAttributeCaptureValue>(ge);
+            resolvedModifiers = em.GetBuffer<GEResolvedModifierBuffer>(ge);
+            return true;
         }
 
-        private static void EnsureResolverBuffers(
-            EntityManager em,
-            ref EntityCommandBuffer ecb,
-            Entity ge)
+        private static bool HasRequiredCaptureBuffer(EntityManager em, Entity ge)
         {
-            var requiresPlayback = false;
-            if (!em.HasBuffer<BResolvedModifier>(ge))
-            {
-                ecb.AddBuffer<BResolvedModifier>(ge);
-                requiresPlayback = true;
-            }
-
-            if (RequiresAttributeCaptureBuffer(em, ge) && !em.HasBuffer<BAttributeCaptureValue>(ge))
-            {
-                ecb.AddBuffer<BAttributeCaptureValue>(ge);
-                requiresPlayback = true;
-            }
-
-            if (requiresPlayback)
-                PlaybackAndReset(ref ecb, em);
+            return !RequiresAttributeCaptureBuffer(em, ge)
+                || em.HasBuffer<GEAttributeCaptureValueBuffer>(ge);
         }
 
         private static bool RequiresAttributeCaptureBuffer(EntityManager em, Entity ge)
         {
-            if (!em.HasBuffer<BMagnitudeDefinition>(ge))
+            if (!em.IsComponentEnabled<GEMagnitudeDefinitionBuffer>(ge))
                 return false;
 
-            var definitions = em.GetBuffer<BMagnitudeDefinition>(ge);
+            var definitions = em.GetBuffer<GEMagnitudeDefinitionBuffer>(ge);
             for (var i = 0; i < definitions.Length; i++)
             {
                 var definition = definitions[i];
@@ -174,8 +172,8 @@ namespace GAS.Runtime
             Entity ge,
             int modifierIndex,
             float constantMagnitude,
-            in CEffectContext context,
-            in CEffectSpecData spec)
+            in GEContextComponent context,
+            in GEEffectSpecComponent spec)
         {
             if (!TryGetMagnitudeDefinition(em, ge, modifierIndex, out var definition))
                 return constantMagnitude;
@@ -223,8 +221,8 @@ namespace GAS.Runtime
             Entity ge,
             int modifierIndex,
             float constantMagnitude,
-            in CEffectContext context,
-            in CEffectSpecData spec,
+            in GEContextComponent context,
+            in GEEffectSpecComponent spec,
             ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
         {
             if (!TryGetMagnitudeDefinition(em, ge, modifierIndex, out var definition))
@@ -275,8 +273,8 @@ namespace GAS.Runtime
             Entity ge,
             int modifierIndex,
             float constantMagnitude,
-            in CEffectContext context,
-            in CEffectSpecData spec)
+            in GEContextComponent context,
+            in GEEffectSpecComponent spec)
         {
             if (!TryGetMagnitudeDefinition(em, ge, modifierIndex, out var definition))
                 return constantMagnitude;
@@ -325,15 +323,15 @@ namespace GAS.Runtime
             EntityManager em,
             Entity ge,
             int modifierIndex,
-            out BMagnitudeDefinition definition)
+            out GEMagnitudeDefinitionBuffer definition)
         {
-            if (!em.HasBuffer<BMagnitudeDefinition>(ge))
+            if (!em.IsComponentEnabled<GEMagnitudeDefinitionBuffer>(ge))
             {
                 definition = default;
                 return false;
             }
 
-            var definitions = em.GetBuffer<BMagnitudeDefinition>(ge);
+            var definitions = em.GetBuffer<GEMagnitudeDefinitionBuffer>(ge);
             for (var i = 0; i < definitions.Length; i++)
             {
                 if (definitions[i].ModifierIndex != modifierIndex)
@@ -364,9 +362,9 @@ namespace GAS.Runtime
             int key,
             out float value)
         {
-            if (em.HasBuffer<BSetByCallerValue>(ge))
+            if (em.HasBuffer<GESetByCallerRequestValueBuffer>(ge))
             {
-                var values = em.GetBuffer<BSetByCallerValue>(ge);
+                var values = em.GetBuffer<GESetByCallerRequestValueBuffer>(ge);
                 for (var i = 0; i < values.Length; i++)
                 {
                     if (values[i].Key == key)
@@ -381,7 +379,7 @@ namespace GAS.Runtime
             return false;
         }
 
-        internal static float ResolveStackCount(in CEffectSpecData spec)
+        internal static float ResolveStackCount(in GEEffectSpecComponent spec)
         {
             return spec.StackCount > 0 ? spec.StackCount : 1;
         }
@@ -391,15 +389,15 @@ namespace GAS.Runtime
             Entity ge,
             int key,
             float fallbackMagnitude,
-            in CEffectContext context)
+            in GEContextComponent context)
         {
-            if (!em.HasBuffer<BExecutionCalculationValue>(ge))
+            if (!em.HasBuffer<GEExecutionCalculationValueBuffer>(ge))
             {
                 EnqueueMagnitudeFact(em, ge, context, EGameplayEventType.ExecutionCalculationOutputMissing, key, fallbackMagnitude);
                 return fallbackMagnitude;
             }
 
-            var values = em.GetBuffer<BExecutionCalculationValue>(ge);
+            var values = em.GetBuffer<GEExecutionCalculationValueBuffer>(ge);
             for (var i = 0; i < values.Length; i++)
             {
                 if (values[i].Key == key)
@@ -415,10 +413,10 @@ namespace GAS.Runtime
             Entity ge,
             int key,
             float fallbackMagnitude,
-            in CEffectContext context,
+            in GEContextComponent context,
             ref EventBusHelper.GameplayEventBusWriter eventBusWriter)
         {
-            if (!em.HasBuffer<BExecutionCalculationValue>(ge))
+            if (!em.HasBuffer<GEExecutionCalculationValueBuffer>(ge))
             {
                 EnqueueMagnitudeFact(
                     ref eventBusWriter,
@@ -430,7 +428,7 @@ namespace GAS.Runtime
                 return fallbackMagnitude;
             }
 
-            var values = em.GetBuffer<BExecutionCalculationValue>(ge);
+            var values = em.GetBuffer<GEExecutionCalculationValueBuffer>(ge);
             for (var i = 0; i < values.Length; i++)
             {
                 if (values[i].Key == key)
@@ -529,9 +527,9 @@ namespace GAS.Runtime
             int attributeCode,
             out float value)
         {
-            if (asc != Entity.Null && em.Exists(asc) && em.HasBuffer<BAttribute>(asc))
+            if (asc != Entity.Null && em.Exists(asc) && em.HasBuffer<AttributeValueBuffer>(asc))
             {
-                var attributes = em.GetBuffer<BAttribute>(asc);
+                var attributes = em.GetBuffer<AttributeValueBuffer>(asc);
                 for (var i = 0; i < attributes.Length; i++)
                 {
                     var attribute = attributes[i];
@@ -556,13 +554,13 @@ namespace GAS.Runtime
             int attributeCode,
             out float value)
         {
-            if (!em.HasBuffer<BAttributeCaptureValue>(ge))
+            if (!em.HasBuffer<GEAttributeCaptureValueBuffer>(ge))
             {
                 value = 0f;
                 return false;
             }
 
-            var captures = em.GetBuffer<BAttributeCaptureValue>(ge);
+            var captures = em.GetBuffer<GEAttributeCaptureValueBuffer>(ge);
             for (var i = 0; i < captures.Length; i++)
             {
                 var capture = captures[i];
@@ -589,9 +587,11 @@ namespace GAS.Runtime
             int attributeCode,
             float value)
         {
-            var captures = GetOrCreateAttributeCaptures(em, ge);
+            if (!em.HasBuffer<GEAttributeCaptureValueBuffer>(ge))
+                return;
 
-            captures.Add(new BAttributeCaptureValue
+            var captures = em.GetBuffer<GEAttributeCaptureValueBuffer>(ge);
+            captures.Add(new GEAttributeCaptureValueBuffer
             {
                 ModifierIndex = modifierIndex,
                 Source = source,
@@ -611,9 +611,11 @@ namespace GAS.Runtime
             int attributeCode,
             float value)
         {
-            var captures = GetOrCreateAttributeCaptures(em, ref ecb, ge);
+            if (!em.HasBuffer<GEAttributeCaptureValueBuffer>(ge))
+                return;
 
-            captures.Add(new BAttributeCaptureValue
+            var captures = em.GetBuffer<GEAttributeCaptureValueBuffer>(ge);
+            captures.Add(new GEAttributeCaptureValueBuffer
             {
                 ModifierIndex = modifierIndex,
                 Source = source,
@@ -623,67 +625,10 @@ namespace GAS.Runtime
             });
         }
 
-        private static DynamicBuffer<BResolvedModifier> GetOrCreateResolvedModifiers(
-            EntityManager em,
-            Entity ge)
-        {
-            return em.HasBuffer<BResolvedModifier>(ge)
-                ? em.GetBuffer<BResolvedModifier>(ge)
-                : em.AddBuffer<BResolvedModifier>(ge);
-        }
-
-        private static DynamicBuffer<BResolvedModifier> GetOrCreateResolvedModifiers(
-            EntityManager em,
-            ref EntityCommandBuffer ecb,
-            Entity ge)
-        {
-            if (!em.HasBuffer<BResolvedModifier>(ge))
-            {
-                ecb.AddBuffer<BResolvedModifier>(ge);
-                PlaybackAndReset(ref ecb, em);
-            }
-
-            return em.GetBuffer<BResolvedModifier>(ge);
-        }
-
-        private static DynamicBuffer<BAttributeCaptureValue> GetOrCreateAttributeCaptures(
-            EntityManager em,
-            Entity ge)
-        {
-            return em.HasBuffer<BAttributeCaptureValue>(ge)
-                ? em.GetBuffer<BAttributeCaptureValue>(ge)
-                : em.AddBuffer<BAttributeCaptureValue>(ge);
-        }
-
-        private static DynamicBuffer<BAttributeCaptureValue> GetOrCreateAttributeCaptures(
-            EntityManager em,
-            ref EntityCommandBuffer ecb,
-            Entity ge)
-        {
-            if (!em.HasBuffer<BAttributeCaptureValue>(ge))
-            {
-                ecb.AddBuffer<BAttributeCaptureValue>(ge);
-                PlaybackAndReset(ref ecb, em);
-            }
-
-            return em.GetBuffer<BAttributeCaptureValue>(ge);
-        }
-
-        private static void PlaybackAndReset(ref EntityCommandBuffer ecb, EntityManager em)
-        {
-            ecb.Playback(em);
-            GasRuntimeDebugger.RecordRuntimeCoreEcbPlayback(
-                em,
-                GasRuntimeDebugger.ResolveCurrentFrame(em),
-                EGasRuntimeDiagnosticModule.Effect);
-            ecb.Dispose();
-            ecb = new EntityCommandBuffer(Allocator.Temp);
-        }
-
         private static void EnqueueMagnitudeFact(
             EntityManager em,
             Entity ge,
-            in CEffectContext context,
+            in GEContextComponent context,
             EGameplayEventType type,
             int eventCode,
             float value)
@@ -702,7 +647,7 @@ namespace GAS.Runtime
         private static void EnqueueMagnitudeFact(
             ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
             Entity ge,
-            in CEffectContext context,
+            in GEContextComponent context,
             EGameplayEventType type,
             int eventCode,
             float value)
@@ -710,7 +655,7 @@ namespace GAS.Runtime
             if (!eventBusWriter.IsCreated)
                 return;
 
-            eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
+            eventBusWriter.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
             {
                 Type = type,
                 SourceAsc = context.SourceAsc,

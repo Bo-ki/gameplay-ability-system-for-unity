@@ -3,9 +3,9 @@ using Unity.Entities;
 
 namespace GAS.Runtime
 {
-    [UpdateInGroup(typeof(GASCommandGroup))]
-    [UpdateAfter(typeof(SAscCommandRequest))]
-    [UpdateBefore(typeof(SAbilityCommandRequest))]
+    [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
+    [UpdateAfter(typeof(ASCCommandRequestSystem))]
+    [UpdateBefore(typeof(AbilityCommandRequestSystem))]
     public partial struct SHeadlessAutoBattleDriver : ISystem
     {
         private EntityQuery _driverQuery;
@@ -17,7 +17,7 @@ namespace GAS.Runtime
                 .WithAll<CHeadlessAutoBattleDriver>()
                 .Build();
             _unitQuery = SystemAPI.QueryBuilder()
-                .WithAll<CHeadlessAutoBattleUnit, BAttribute, BGrantedAbility, CTagMask>()
+                .WithAll<CHeadlessAutoBattleUnit, AttributeValueBuffer, AbilitySlotBuffer, TagMaskComponent>()
                 .Build();
             state.RequireForUpdate<GlobalTimer>();
             state.RequireForUpdate(_driverQuery);
@@ -77,7 +77,7 @@ namespace GAS.Runtime
 
                 var request = ecb.CreateEntity();
                 ecb.SetName(request, $"AutoBattleActivate_{abilityCode}");
-                ecb.AddComponent(request, new CAbilityCommandRequest
+                ecb.AddComponent(request, new AbilityCommandRequestComponent
                 {
                     Owner = asc,
                     AbilityCode = abilityCode,
@@ -266,7 +266,7 @@ namespace GAS.Runtime
         {
             if (asc == Entity.Null
                 || !em.Exists(asc)
-                || em.HasComponent<CAscDestroying>(asc)
+                || em.HasComponent<ASCDestroyingComponent>(asc)
                 || HasDenseTag(em, asc, unit.CooldownTagIndex)
                 || GetAttribute(em, asc, unit.EnergyAttrSetCode, unit.EnergyAttrCode) < 1f)
             {
@@ -278,27 +278,26 @@ namespace GAS.Runtime
 
         private static bool IsAbilityBusy(EntityManager em, Entity asc, int abilityCode)
         {
-            if (!em.HasBuffer<BGrantedAbility>(asc))
+            if (!em.HasBuffer<AbilitySlotBuffer>(asc))
                 return true;
 
-            var abilities = em.GetBuffer<BGrantedAbility>(asc);
+            var abilities = em.GetBuffer<AbilitySlotBuffer>(asc);
             for (var i = 0; i < abilities.Length; i++)
             {
                 var ability = abilities[i].AbilityEntity;
                 if (!IsAbilityWithCode(em, ability, abilityCode))
                     continue;
 
-                if (em.HasComponent<CAbilityInTryActivate>(ability)
-                    || em.HasComponent<CAbilityCommitRequest>(ability)
-                    || em.HasComponent<CAbilityActive>(ability))
+                if (em.HasComponent<AbilityActivationPendingComponent>(ability)
+                    || em.HasComponent<AbilityCommitRequestComponent>(ability))
                 {
                     return true;
                 }
 
-                if (!em.HasComponent<CAbilityRuntimeState>(ability))
+                if (!em.HasComponent<AbilityStateComponent>(ability))
                     return false;
 
-                var runtime = em.GetComponentData<CAbilityRuntimeState>(ability);
+                var runtime = em.GetComponentData<AbilityStateComponent>(ability);
                 return runtime.Phase is EAbilityPhase.Activating or EAbilityPhase.Active or EAbilityPhase.Ending;
             }
 
@@ -309,24 +308,20 @@ namespace GAS.Runtime
         {
             if (ability == Entity.Null || !em.Exists(ability))
                 return false;
-            if (em.HasComponent<CAbilityBaseInfo>(ability)
-                && em.GetComponentData<CAbilityBaseInfo>(ability).Code == abilityCode)
+            if (em.HasComponent<AbilityStateComponent>(ability)
+                && em.GetComponentData<AbilityStateComponent>(ability).Code == abilityCode)
             {
                 return true;
             }
 
-            if (!em.HasComponent<CAbilityConfig>(ability))
-                return false;
-
-            var config = em.GetComponentData<CAbilityConfig>(ability).Config;
-            return config.IsCreated && config.Value.Code == abilityCode;
+            return false;
         }
 
         private static bool IsAlive(EntityManager em, Entity asc, in CHeadlessAutoBattleUnit unit)
         {
             return asc != Entity.Null
                    && em.Exists(asc)
-                   && !em.HasComponent<CAscDestroying>(asc)
+                   && !em.HasComponent<ASCDestroyingComponent>(asc)
                    && GetAttribute(em, asc, unit.HealthAttrSetCode, unit.HealthAttrCode) > 0f;
         }
 
@@ -336,10 +331,10 @@ namespace GAS.Runtime
             int attrSetCode,
             int attrCode)
         {
-            if (asc == Entity.Null || !em.Exists(asc) || !em.HasBuffer<BAttribute>(asc))
+            if (asc == Entity.Null || !em.Exists(asc) || !em.HasBuffer<AttributeValueBuffer>(asc))
                 return 0f;
 
-            var attributes = em.GetBuffer<BAttribute>(asc);
+            var attributes = em.GetBuffer<AttributeValueBuffer>(asc);
             for (var i = 0; i < attributes.Length; i++)
             {
                 var attribute = attributes[i];
@@ -352,11 +347,11 @@ namespace GAS.Runtime
 
         private static bool HasDenseTag(EntityManager em, Entity asc, int denseTagIndex)
         {
-            return CTagMask.IsValidIndex(denseTagIndex)
+            return TagMaskComponent.IsValidIndex(denseTagIndex)
                    && asc != Entity.Null
                    && em.Exists(asc)
-                   && em.HasComponent<CTagMask>(asc)
-                   && em.GetComponentData<CTagMask>(asc).HasTag(denseTagIndex);
+                   && em.HasComponent<TagMaskComponent>(asc)
+                   && em.GetComponentData<TagMaskComponent>(asc).HasTag(denseTagIndex);
         }
     }
 }

@@ -5,7 +5,7 @@ namespace GAS.Runtime
 {
     public static class GASRuntimeStructuralPlaybackGateNames
     {
-        public const string GroupName = "GasStructuralPlaybackSystemGroup";
+        public const string GroupName = "GASStructuralCommitSystemGroup";
         public const string DebuggerGroupName = "StructuralPlayback";
     }
 
@@ -18,7 +18,7 @@ namespace GAS.Runtime
     public enum GASRuntimeStructuralPlaybackRouteStatus
     {
         None = 0,
-        AlreadyEcbLocalPlayback = 1,
+        StructuralCommitPlayback = 1,
         LocalPlaybackMigration = 2,
         DirtyPipelineNoPlayback = 3,
         ObservationBoundaryNoPlayback = 4,
@@ -190,8 +190,7 @@ namespace GAS.Runtime
         public int RequiredStructuralPlaybackCount => CountRoutesRequiringStructuralPlayback();
 
         public int LocalPlaybackMigrationCount =>
-            CountRoutesWithStatus(GASRuntimeStructuralPlaybackRouteStatus.LocalPlaybackMigration)
-            + CountRoutesWithStatus(GASRuntimeStructuralPlaybackRouteStatus.AlreadyEcbLocalPlayback);
+            CountRoutesWithStatus(GASRuntimeStructuralPlaybackRouteStatus.LocalPlaybackMigration);
 
         public int BulkQueryCandidateCount =>
             CountRoutesWithPolicy(GASRuntimeStructuralPlaybackPolicy.EntityQueryBulkCandidate);
@@ -295,8 +294,8 @@ namespace GAS.Runtime
         {
             return new GASRuntimeStructuralPlaybackGateContract(
                 GASRuntimeStructuralPlaybackGateId.RuntimeCoreHotPath,
-                typeof(GasStructuralPlaybackSystemGroup),
-                typeof(GasEndStructuralEcbSystem),
+                typeof(GASStructuralCommitSystemGroup),
+                typeof(EndGASStructuralCommitECBSystem),
                 EGasRuntimeCoreFramePhase.StructuralPlayback,
                 EGasRuntimeCoreStructuralPermission.PlaybackOnly,
                 uniqueHotPathGate: true,
@@ -358,7 +357,7 @@ namespace GAS.Runtime
             if (!requiresPlayback)
                 return GASRuntimeStructuralPlaybackRouteStatus.DirtyPipelineNoPlayback;
             if (entry.HasMigrationStep(GASRuntimeStructuralMigrationStep.AlreadyEcb))
-                return GASRuntimeStructuralPlaybackRouteStatus.AlreadyEcbLocalPlayback;
+                return GASRuntimeStructuralPlaybackRouteStatus.StructuralCommitPlayback;
 
             return GASRuntimeStructuralPlaybackRouteStatus.LocalPlaybackMigration;
         }
@@ -456,8 +455,7 @@ namespace GAS.Runtime
 
             if ((policy & GASRuntimeStructuralPlaybackPolicy.CleanupComponentCandidate) != 0)
                 evidence |= GASRuntimeStructuralPlaybackEvidence.CleanupPolicy;
-            if (status == GASRuntimeStructuralPlaybackRouteStatus.LocalPlaybackMigration
-                || status == GASRuntimeStructuralPlaybackRouteStatus.AlreadyEcbLocalPlayback)
+            if (status == GASRuntimeStructuralPlaybackRouteStatus.LocalPlaybackMigration)
             {
                 evidence |= GASRuntimeStructuralPlaybackEvidence.LocalPlaybackMigration;
             }

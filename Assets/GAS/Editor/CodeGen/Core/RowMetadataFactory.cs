@@ -81,8 +81,6 @@ namespace GAS.Editor
                 return GASDefinitionKind.GameplayTag;
             if (domainName == "GameplayCue")
                 return GASDefinitionKind.GameplayCue;
-            if (domainName == "Timeline")
-                return GASDefinitionKind.TimelineAbility;
 
             return GASDefinitionKind.None;
         }

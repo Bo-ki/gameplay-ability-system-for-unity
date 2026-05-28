@@ -10,7 +10,7 @@
 
 | 方式 | 执行线程 | Burst | 适用规模 | Sync Point | EX-GAS 推荐场景 |
 |---|---|---|---|---|---|
-| `SystemAPI.Query` (idiomatic foreach) | 主线程 | 否 | 小规模（<100 实体） | **是** | Debugger 快照、Editor 工具、proof 验证 |
+| `SystemAPI.Query` (idiomatic foreach) | 主线程 | 可（受 `ISystem` / Burst 上下文约束） | 小规模（<100 实体） | **是** | Debugger 快照、Editor 工具、proof 验证 |
 | `IJobEntity` | Worker 线程 | 是 | 中大规模（100-10K） | 否 | 简单 per-entity 变换、stateless 计算 |
 | `IJobChunk` | Worker 线程 | 是 | 大规模（>10K） | 否 | chunk skip/mask/optional、批量统计、复杂循环 |
 
@@ -20,20 +20,21 @@
 
 ```csharp
 // 底层机制：source generator 创建并缓存 EntityQuery
-// 每次 foreach 触发主线程 sync —— 等待所有相关 job 完成
+// foreach 前 source generator 会完成必要依赖；相关 job 未完成时主线程等待
 // 适用于 proof、debug、Editor，不适用于 hot path
 foreach (var (health, translation) in SystemAPI.Query<RefRO<Health>, RefRW<Translation>>())
 {
-    // 主线程执行，不能 Burst
+    // 主线程执行；可在合适 ISystem/Burst 上下文编译，但不是 worker-thread 并行 job
     translation.ValueRW.Value += health.ValueRO.Value;
 }
 ```
 
 **关键事实：**
 - Source generator 为每个 `SystemAPI.Query` 调用自动创建并缓存 `EntityQuery`
-- `foreach` 触发主线程 sync point —— 等待所有写入相关 component 的 job 完成
+- `foreach` 前会自动完成必要 read/write 依赖；若相关 job 未完成，会表现为主线程等待
 - `Run()` 方法同理：同步执行，block 主线程
 - 主线程遍历导致所有 worker 线程闲置等待
+- `upgrade-guide.md` 明确 `SystemAPI.Query` 在不需要 job 的遍历中仍可 Burst 编译；EX-GAS 拒绝它进入 hot path 的理由不是“绝对不能 Burst”，而是主线程串行遍历、自动完成依赖、没有 worker 并行度
 
 ### IJobEntity（per-entity 并行 job）
 
@@ -110,8 +111,15 @@ public struct EffectSpecChunkJob : IJobChunk
         var specs = chunk.GetNativeArray(ref SpecRequestHandle);
         var attrs = chunk.GetNativeArray(ref AttributeHandle);
 
-        // ChunkEntityEnumerator 处理 enableable 过滤
-        var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+        if (!useEnabledMask)
+        {
+            for (var i = 0; i < chunk.Count; i++)
+                attrs[i] = ApplySpec(attrs[i], specs[i]);
+            return;
+        }
+
+        // useEnabledMask=true 时必须跳过 disabled entity
+        var enumerator = new ChunkEntityEnumerator(true, chunkEnabledMask, chunk.Count);
         while (enumerator.NextEntityIndex(out var i))
         {
             attrs[i] = ApplySpec(attrs[i], specs[i]);
@@ -167,6 +175,10 @@ public partial struct MySystem : ISystem
 2. 每个 system 的 `OnUpdate` 被调用前，ECS 注入对前驱 system 写入 component 的等待
 3. 手动组合依赖用 `JobHandle.CombineDependencies`
 4. **依赖链的长度和复杂度直接影响调度性能**
+
+**NativeContainer 依赖补充（PackageCache `scheduling-jobs-dependencies.md` 原文校准）：**
+
+`SystemState.Dependency` / `SystemBase.Dependency` 只根据 ECS component 的读写访问建立系统级依赖，不会追踪通过 `NativeArray`、`NativeList`、`NativeStream` 等 NativeContainer 传递的数据。如果 Job A 写 `NativeList<GECommandSeedRecord>`，Job B 读同一个 list，B 的输入依赖必须显式包含 A 的 `JobHandle`；多路生产者合并时必须用 `JobHandle.CombineDependencies`。EX-GAS 的 Fan-In / Target / Modifier record 管线因此必须由 owner system 明确保存 producer handle、merge handle、consumer handle，并在返回 `OnUpdate` 前写回 `state.Dependency`。
 
 #### 并行安全规则
 
@@ -287,7 +299,14 @@ struct UpdateOnChangeJob : IJobChunk
         var inputBs = chunk.GetNativeArray(ref InputBTypeHandle);
         var outputs = chunk.GetNativeArray(ref OutputTypeHandle);
 
-        var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+        if (!useEnabledMask)
+        {
+            for (var i = 0; i < chunk.Count; i++)
+                outputs[i] = new Output { Value = inputAs[i].Value + inputBs[i].Value };
+            return;
+        }
+
+        var enumerator = new ChunkEntityEnumerator(true, chunkEnabledMask, chunk.Count);
         while (enumerator.NextEntityIndex(out var i))
         {
             outputs[i] = new Output { Value = inputAs[i].Value + inputBs[i].Value };

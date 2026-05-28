@@ -44,7 +44,7 @@ Assets/AutoChessDemo/Config
     AutoChessDemoGenerator.cs
   GeneratedRuntime/
     AutoChessIds.g.cs
-    AutoChessAttributeComponents.g.cs
+    AutoChessAttributeSets.g.cs
     AutoChessTagMasks.g.cs
     AutoChessStaticLookups.g.cs
     AutoChessBlobBuilders.g.cs
@@ -261,7 +261,7 @@ flowchart TD
     Excel["AutoChess Luban Excel"] --> Luban["Luban JSON / Bean"]
     Luban --> Gen["AutoChessDemo SourceGenerator"]
     Gen --> Ids["AutoChessIds.g.cs"]
-    Gen --> Attrs["AutoChessAttributeComponents.g.cs"]
+    Gen --> Attrs["AutoChessAttributeSets.g.cs"]
     Gen --> Tags["AutoChessTagMasks.g.cs"]
     Gen --> Lookups["AutoChessStaticLookups.g.cs"]
     Gen --> Blobs["AutoChessBlobBuilders.g.cs"]
@@ -285,7 +285,7 @@ flowchart TD
 | 生成物 | 职责 | 禁止事项 |
 |---|---|---|
 | `AutoChessIds.g.cs` | 属性、Tag、Ability、GE、Cue、Unit、Scenario、ScaleProfile 常量 | 不包含 gameplay 逻辑 |
-| `AutoChessAttributeComponents.g.cs` | `HealthAttribute`、`ManaAttribute` 等属性 component type 和必要 accessor | 不为不同单位生成不同属性集合；不生成属性生命周期 system |
+| `AutoChessAttributeSets.g.cs` | `CombatAttributeCurrentSetComponent`、`CombatAttributeBaseSetComponent`、`ResourceAttributeCurrentSetComponent` 等 AttributeSet family 和必要 accessor / dirty mask helper | 不为不同单位生成不同属性集合；不生成属性生命周期 system；per-attribute component 仅作为有审计依据的例外 |
 | `AutoChessTagMasks.g.cs` | `XTagBit`、parent / requirement mask、`TagCheck` static helper | 不生成独立 tag component |
 | `AutoChessStaticLookups.g.cs` | id -> blob / compact lookup；Runtime Core 只读 | 不读取原始 JSON；不使用托管数组 / dictionary 作为 hot path lookup |
 | `AutoChessBlobBuilders.g.cs` | Unit / Ability / GE / TagRequirement / Cue marker blob 构建，输入来自 row / generated definition | 不从 prototype entity 或 runtime state 构建静态 definition |
@@ -427,30 +427,30 @@ ValidationExpectation 用于自动验收，不用于驱动 gameplay。
 sequenceDiagram
     participant Excel as Luban Excel
     participant Gen as SourceGenerator
-    participant Registry as AutoChessConfigRegistry
+    participant Catalog as GASDefinitionCatalogBlob
     participant Bootstrap as AutoChessDemoBootstrap
     participant Sim as Simulation Systems
     participant Validation as Validation Runner
 
     Excel->>Gen: Bean + table metadata
-    Gen->>Registry: ids / lookups / blob builders
-    Bootstrap->>Registry: load static config
+    Gen->>Catalog: ids / code->index lookup / DefinitionBlob schema / catalog builder / Runtime glue
+    Bootstrap->>Catalog: load immutable Definition Catalog
     Bootstrap->>Sim: create board and units from scenario build plan
-    Sim->>Registry: read ability / GE / cue static data
-    Validation->>Registry: read expectations and scale profile
+    Sim->>Catalog: read ability / GE / cue static data by index + ref readonly, then build plan/seed/modifier records through generated glue
+    Validation->>Catalog: read expectations and scale profile outside Core tick
     Validation->>Validation: compare summary / facts / markers / diagnostics
 ```
 
 ## 验收标准
 
 1. AutoChessDemo 默认链路不再依赖手写巨量 definition rows。
-2. 配置表能生成 Unit / Ability / GE / Cue / Scenario / ScaleProfile / ValidationExpectation 的 runtime lookup。
+2. 配置表能生成 Unit / Ability / GE / Cue / Scenario / ScaleProfile / ValidationExpectation 的 Definition Catalog / runtime lookup。
 3. x1 默认场景和 x50 profile 能从配置生成，不在测试代码里硬编码业务数据。
 4. x10w / x100w profile 具备配置入口，即使当前实现阶段暂不运行。
 5. DiagnosticsThreshold 能生成 pass / excellent 性能阈值，并被 ValidationExpectation 引用。
-6. 生成链不生成 gameplay lifecycle，只生成 Definition & Generation Layer 输入和 runtime static lookup。
+6. 生成链不生成 gameplay lifecycle，只生成 Definition & Generation Layer 输入、runtime static lookup 和 Generated Runtime Glue。
 7. PhysicsProfile / RenderProfile 能生成可选 profile，默认无头输出 disabled reason，启用时能把 Physics / Graphics 指标纳入 validation summary。
-8. Runtime assembly 中不存在 `cfg.*`、`XLuban`、`SimpleJSON` 或 Luban managed row 依赖；AutoChess runtime 只消费 generated ids、Blob、lookup、attribute component、tag mask 和 MMC static switch。
+8. Runtime assembly 中不存在 `cfg.*`、`XLuban`、`SimpleJSON` 或 Luban managed row 依赖；AutoChess runtime 只消费 generated ids、`GASDefinitionCatalogBlob` / Blob、code->index lookup、Generated Runtime Glue、AttributeSet component family、tag mask 和 MMC static switch。
 9. AutoChess lookup 必须证明 O(1) 或 O(log n)，并在生成报告中输出数据规模、排序/哈希策略和 Burst / Player AOT 可见性。
 10. `AutoChessBakers.g.cs` 必须能映射到 `Baker<TAuthoring>` / `DependsOn()` / `AddBlobAsset()` / custom hash 规则；不得用静态 ECB helper 冒充 Baker。
 11. 生成 manifest 必须能清理删除表行后遗留的 `.g.cs`，并证明输出路径没有逃逸 `Assets/AutoChessDemo/Config` 或约定 generated root。

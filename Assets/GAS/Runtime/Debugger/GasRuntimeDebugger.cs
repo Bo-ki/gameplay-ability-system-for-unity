@@ -38,7 +38,7 @@ namespace GAS.Runtime
         Presentation = 9,
     }
 
-    public struct CGasRuntimeDebugger : IComponentData
+    public struct GASRuntimeDebuggerComponent : IComponentData
     {
         public byte Enabled;
         public byte CaptureSystemTimings;
@@ -134,7 +134,8 @@ namespace GAS.Runtime
         public int RuntimeCoreFrameBackboneEvidenceMask;
     }
 
-    public struct BGasRuntimeDiagnosticEvent : IBufferElementData
+    [InternalBufferCapacity(0)]
+    public struct GASRuntimeDiagnosticEventBuffer : IBufferElementData
     {
         public int Sequence;
         public int Frame;
@@ -432,6 +433,7 @@ namespace GAS.Runtime
     public struct GasRuntimeCoreCounterQueries : IDisposable
     {
         private readonly bool _ownsQueries;
+        private readonly bool _isCreated;
 
         public GasRuntimeCoreCounterQueries(
             EntityQuery abilityCommandRequests,
@@ -451,6 +453,7 @@ namespace GAS.Runtime
             ActiveEffectStores = activeEffectStores;
             PresentationOutboxes = presentationOutboxes;
             _ownsQueries = ownsQueries;
+            _isCreated = true;
         }
 
         public EntityQuery AbilityCommandRequests { get; }
@@ -469,41 +472,26 @@ namespace GAS.Runtime
 
         public static GasRuntimeCoreCounterQueries CreateOwned(EntityManager em)
         {
-            return new GasRuntimeCoreCounterQueries(
-                CreateOwnedQuery<CAbilityCommandRequest>(em),
-                CreateOwnedQuery<CAscCommandRequest>(em),
-                CreateOwnedQuery<CAscInitializeRequest>(em),
-                CreateOwnedQuery<CAscDestroyRequest>(em),
-                CreateOwnedQuery<CEffectSpecData>(em),
-                em.CreateEntityQuery(new EntityQueryDesc
-                {
-                    All = new[]
-                    {
-                        ComponentType.ReadOnly<CActiveEffectStore>(),
-                        ComponentType.ReadOnly<BActiveEffectSlot>(),
-                    },
-                }),
-                CreateOwnedQuery<BPresentationEvent>(em),
-                ownsQueries: true);
+            return default;
         }
 
         public static GasRuntimeCoreCounterQueries Create(ref SystemState state)
         {
             return new GasRuntimeCoreCounterQueries(
-                CreateSystemQuery<CAbilityCommandRequest>(ref state),
-                CreateSystemQuery<CAscCommandRequest>(ref state),
-                CreateSystemQuery<CAscInitializeRequest>(ref state),
-                CreateSystemQuery<CAscDestroyRequest>(ref state),
-                CreateSystemQuery<CEffectSpecData>(ref state),
+                CreateSystemQuery<AbilityCommandRequestComponent>(ref state),
+                CreateSystemQuery<ASCCommandRequestComponent>(ref state),
+                CreateSystemQuery<ASCInitializeRequestComponent>(ref state),
+                CreateSystemQuery<ASCDestroyRequestComponent>(ref state),
+                CreateSystemQuery<GEEffectSpecComponent>(ref state),
                 state.GetEntityQuery(new EntityQueryDesc
                 {
                     All = new[]
                     {
-                        ComponentType.ReadOnly<CActiveEffectStore>(),
-                        ComponentType.ReadOnly<BActiveEffectSlot>(),
+                        ComponentType.ReadOnly<ASCActiveEffectsComponent>(),
+                        ComponentType.ReadOnly<ActiveGameplayEffectBuffer>(),
                     },
                 }),
-                CreateSystemQuery<BPresentationEvent>(ref state),
+                CreateSystemQuery<PresentationEventBuffer>(ref state),
                 ownsQueries: false);
         }
 
@@ -544,17 +532,6 @@ namespace GAS.Runtime
             PresentationOutboxes.Dispose();
         }
 
-        private static EntityQuery CreateOwnedQuery<T>(EntityManager em)
-        {
-            return em.CreateEntityQuery(new EntityQueryDesc
-            {
-                All = new[]
-                {
-                    ComponentType.ReadOnly<T>(),
-                },
-            });
-        }
-
         private static EntityQuery CreateSystemQuery<T>(ref SystemState state)
         {
             return state.GetEntityQuery(new EntityQueryDesc
@@ -566,9 +543,9 @@ namespace GAS.Runtime
             });
         }
 
-        private static int Count(EntityQuery query)
+        private int Count(EntityQuery query)
         {
-            return query.CalculateEntityCount();
+            return _isCreated ? query.CalculateEntityCount() : 0;
         }
     }
 
@@ -743,12 +720,12 @@ namespace GAS.Runtime
         public readonly GasRuntimeDiagnosticStats Stats;
         public readonly GasRuntimeCoreDiagnosticCounters CoreCounters;
         public readonly GasRuntimeFrameBackboneDiagnosticCounters FrameBackboneCounters;
-        public readonly BGasRuntimeDiagnosticEvent[] Events;
+        public readonly GASRuntimeDiagnosticEventBuffer[] Events;
 
         public GasRuntimeDiagnosticSnapshot(
             in GasRuntimeDiagnosticStats stats,
             in GasRuntimeCoreDiagnosticCounters coreCounters,
-            BGasRuntimeDiagnosticEvent[] events)
+            GASRuntimeDiagnosticEventBuffer[] events)
             : this(
                 stats,
                 coreCounters,
@@ -761,12 +738,12 @@ namespace GAS.Runtime
             in GasRuntimeDiagnosticStats stats,
             in GasRuntimeCoreDiagnosticCounters coreCounters,
             in GasRuntimeFrameBackboneDiagnosticCounters frameBackboneCounters,
-            BGasRuntimeDiagnosticEvent[] events)
+            GASRuntimeDiagnosticEventBuffer[] events)
         {
             Stats = stats;
             CoreCounters = coreCounters;
             FrameBackboneCounters = frameBackboneCounters;
-            Events = events ?? Array.Empty<BGasRuntimeDiagnosticEvent>();
+            Events = events ?? Array.Empty<GASRuntimeDiagnosticEventBuffer>();
         }
 
         public int EventCount => Events?.Length ?? 0;
@@ -782,16 +759,16 @@ namespace GAS.Runtime
 
         public static Entity CreateSingleton(EntityManager em)
         {
-            var entity = em.CreateEntity();
-            em.AddComponentData(entity, CreateDefaultState());
-            em.AddBuffer<BGasRuntimeDiagnosticEvent>(entity).EnsureCapacity(DefaultDiagnosticCapacity);
+            var entity = em.CreateEntity(GASRuntimeEntityArchetypes.RuntimeDebugger(em));
+            em.SetComponentData(entity, CreateDefaultState());
+            em.GetBuffer<GASRuntimeDiagnosticEventBuffer>(entity).EnsureCapacity(DefaultDiagnosticCapacity);
             em.SetName(entity, "GasRuntimeDebugger");
             return entity;
         }
 
-        public static CGasRuntimeDebugger CreateDefaultState()
+        public static GASRuntimeDebuggerComponent CreateDefaultState()
         {
-            return new CGasRuntimeDebugger
+            return new GASRuntimeDebuggerComponent
             {
                 Enabled = 1,
                 CaptureSystemTimings = 0,
@@ -809,7 +786,7 @@ namespace GAS.Runtime
             if (!CanUse(em, debuggerEntity))
                 return;
 
-            var state = em.GetComponentData<CGasRuntimeDebugger>(debuggerEntity);
+            var state = em.GetComponentData<GASRuntimeDebuggerComponent>(debuggerEntity);
             state.NextSequence = 0;
             state.FirstRetainedSequence = 0;
             state.DroppedEventCount = 0;
@@ -895,7 +872,7 @@ namespace GAS.Runtime
             state.RuntimeCoreFrameBackboneHotPathManagedStringCount = 0;
             state.RuntimeCoreFrameBackboneEvidenceMask = 0;
             em.SetComponentData(debuggerEntity, state);
-            em.GetBuffer<BGasRuntimeDiagnosticEvent>(debuggerEntity).Clear();
+            em.GetBuffer<GASRuntimeDiagnosticEventBuffer>(debuggerEntity).Clear();
         }
 
         public static void Configure(
@@ -908,7 +885,7 @@ namespace GAS.Runtime
             if (!CanUse(em, debuggerEntity))
                 return;
 
-            var state = em.GetComponentData<CGasRuntimeDebugger>(debuggerEntity);
+            var state = em.GetComponentData<GASRuntimeDebuggerComponent>(debuggerEntity);
             state.Enabled = enabled ? (byte)1 : (byte)0;
             state.CaptureSystemTimings = captureSystemTimings ? (byte)1 : (byte)0;
             state.CaptureBufferPressure = captureBufferPressure ? (byte)1 : (byte)0;
@@ -936,7 +913,7 @@ namespace GAS.Runtime
             Append(
                 log,
                 ref state,
-                new BGasRuntimeDiagnosticEvent
+                new GASRuntimeDiagnosticEventBuffer
                 {
                     Frame = frame,
                     Kind = EGasRuntimeDiagnosticKind.TickSummary,
@@ -979,7 +956,7 @@ namespace GAS.Runtime
             Append(
                 log,
                 ref state,
-                new BGasRuntimeDiagnosticEvent
+                new GASRuntimeDiagnosticEventBuffer
                 {
                     Frame = frame,
                     Kind = EGasRuntimeDiagnosticKind.SystemTiming,
@@ -1277,7 +1254,7 @@ namespace GAS.Runtime
             Append(
                 log,
                 ref state,
-                new BGasRuntimeDiagnosticEvent
+                new GASRuntimeDiagnosticEventBuffer
                 {
                     Frame = frame,
                     Kind = EGasRuntimeDiagnosticKind.StructuralChange,
@@ -1318,7 +1295,7 @@ namespace GAS.Runtime
             Append(
                 log,
                 ref state,
-                new BGasRuntimeDiagnosticEvent
+                new GASRuntimeDiagnosticEventBuffer
                 {
                     Frame = frame,
                     Kind = EGasRuntimeDiagnosticKind.StructuralChange,
@@ -1362,7 +1339,7 @@ namespace GAS.Runtime
             Append(
                 log,
                 ref state,
-                new BGasRuntimeDiagnosticEvent
+                new GASRuntimeDiagnosticEventBuffer
                 {
                     Frame = frame,
                     Kind = EGasRuntimeDiagnosticKind.RuntimeCoreFrameBackbone,
@@ -1540,7 +1517,7 @@ namespace GAS.Runtime
             Append(
                 log,
                 ref state,
-                new BGasRuntimeDiagnosticEvent
+                new GASRuntimeDiagnosticEventBuffer
                 {
                     Frame = frame,
                     Kind = EGasRuntimeDiagnosticKind.RuntimeCoreCounters,
@@ -1621,17 +1598,17 @@ namespace GAS.Runtime
                 return;
             }
 
-            RecordBufferPressure<BGameplayEvent>(em, eventBusEntity, "BGameplayEvent", frame, log, ref state);
-            RecordBufferPressure<BAttributeChangeEvent>(em, eventBusEntity, "BAttributeChangeEvent", frame, log, ref state);
-            RecordBufferPressure<BCueRequest>(em, eventBusEntity, "BCueRequest", frame, log, ref state);
-            RecordBufferPressure<BDamageEvent>(em, eventBusEntity, "BDamageEvent", frame, log, ref state);
-            RecordBufferPressure<BTagChangeEvent>(em, eventBusEntity, "BTagChangeEvent", frame, log, ref state);
+            RecordBufferPressure<GameplayEventBusEventBuffer>(em, eventBusEntity, "GameplayEventBusEventBuffer", frame, log, ref state);
+            RecordBufferPressure<AttributeChangeEventBuffer>(em, eventBusEntity, "AttributeChangeEventBuffer", frame, log, ref state);
+            RecordBufferPressure<CueRequestBuffer>(em, eventBusEntity, "CueRequestBuffer", frame, log, ref state);
+            RecordBufferPressure<DamageEventBuffer>(em, eventBusEntity, "DamageEventBuffer", frame, log, ref state);
+            RecordBufferPressure<TagChangeEventBuffer>(em, eventBusEntity, "TagChangeEventBuffer", frame, log, ref state);
             ApplyRetention(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
 
         private static void ApplyRuntimeCoreFrameBackboneCounters(
-            ref CGasRuntimeDebugger state,
+            ref GASRuntimeDebuggerComponent state,
             in GasRuntimeFrameBackboneDiagnosticCounters counters)
         {
             state.RuntimeCoreQueryBudget = counters.QueryBudget;
@@ -1675,7 +1652,7 @@ namespace GAS.Runtime
         }
 
         private static GasRuntimeFrameBackboneDiagnosticCounters CreateFrameBackboneCounters(
-            in CGasRuntimeDebugger state)
+            in GASRuntimeDebuggerComponent state)
         {
             return new GasRuntimeFrameBackboneDiagnosticCounters(
                 state.RuntimeCoreFrameBackbonePhaseCount,
@@ -1724,12 +1701,12 @@ namespace GAS.Runtime
                 return new GasRuntimeDiagnosticSnapshot(
                     new GasRuntimeDiagnosticStats(0, 0, 0, 0, 0, 0, 0, 0),
                     new GasRuntimeCoreDiagnosticCounters(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-                    Array.Empty<BGasRuntimeDiagnosticEvent>());
+                    Array.Empty<GASRuntimeDiagnosticEventBuffer>());
             }
 
-            var state = em.GetComponentData<CGasRuntimeDebugger>(debuggerEntity);
-            var log = em.GetBuffer<BGasRuntimeDiagnosticEvent>(debuggerEntity);
-            var events = new BGasRuntimeDiagnosticEvent[log.Length];
+            var state = em.GetComponentData<GASRuntimeDebuggerComponent>(debuggerEntity);
+            var log = em.GetBuffer<GASRuntimeDiagnosticEventBuffer>(debuggerEntity);
+            var events = new GASRuntimeDiagnosticEventBuffer[log.Length];
             var warningCount = 0;
             var errorCount = 0;
             var slowSystemCount = 0;
@@ -1843,7 +1820,7 @@ namespace GAS.Runtime
             AppendRuntimeCoreCounters(builder, snapshot.CoreCounters);
             AppendRuntimeCoreFrameBackboneCounters(builder, snapshot.FrameBackboneCounters);
 
-            var events = snapshot.Events ?? Array.Empty<BGasRuntimeDiagnosticEvent>();
+            var events = snapshot.Events ?? Array.Empty<GASRuntimeDiagnosticEventBuffer>();
             var count = maxEvents > 0 && maxEvents < events.Length ? maxEvents : events.Length;
             for (var i = 0; i < count; i++)
                 AppendEventLine(builder, events[i]);
@@ -1855,8 +1832,8 @@ namespace GAS.Runtime
         {
             return debuggerEntity != Entity.Null
                    && em.Exists(debuggerEntity)
-                   && em.HasComponent<CGasRuntimeDebugger>(debuggerEntity)
-                   && em.HasBuffer<BGasRuntimeDiagnosticEvent>(debuggerEntity);
+                   && em.HasComponent<GASRuntimeDebuggerComponent>(debuggerEntity)
+                   && em.HasBuffer<GASRuntimeDiagnosticEventBuffer>(debuggerEntity);
         }
 
         private static void ReadEventBusCounters(
@@ -1883,9 +1860,9 @@ namespace GAS.Runtime
             if (eventBusEntity == Entity.Null || !em.Exists(eventBusEntity))
                 return;
 
-            if (em.HasBuffer<BGameplayEvent>(eventBusEntity))
+            if (em.HasBuffer<GameplayEventBusEventBuffer>(eventBusEntity))
             {
-                var gameplayEvents = em.GetBuffer<BGameplayEvent>(eventBusEntity);
+                var gameplayEvents = em.GetBuffer<GameplayEventBusEventBuffer>(eventBusEntity);
                 gameplayEventCount = gameplayEvents.Length;
                 for (var i = 0; i < gameplayEvents.Length; i++)
                 {
@@ -1899,10 +1876,10 @@ namespace GAS.Runtime
                 }
             }
 
-            attributeChangeCount = GetBufferLength<BAttributeChangeEvent>(em, eventBusEntity);
-            cueRequestCount = GetBufferLength<BCueRequest>(em, eventBusEntity);
-            tagChangeCount = GetBufferLength<BTagChangeEvent>(em, eventBusEntity);
-            damageEventCount = GetBufferLength<BDamageEvent>(em, eventBusEntity);
+            attributeChangeCount = GetBufferLength<AttributeChangeEventBuffer>(em, eventBusEntity);
+            cueRequestCount = GetBufferLength<CueRequestBuffer>(em, eventBusEntity);
+            tagChangeCount = GetBufferLength<TagChangeEventBuffer>(em, eventBusEntity);
+            damageEventCount = GetBufferLength<DamageEventBuffer>(em, eventBusEntity);
         }
 
         private static void ReadEffectCommandSpecStreamCounters(
@@ -1920,10 +1897,10 @@ namespace GAS.Runtime
             if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity))
                 return;
 
-            effectCommandCount = GetBufferLength<BEffectCommand>(em, streamEntity);
-            instantSpecCount = GetBufferLength<BInstantEffectSpec>(em, streamEntity);
-            attributeDeltaCount = GetBufferLength<BAttributeDelta>(em, streamEntity);
-            typedFactCount = GetBufferLength<BTypedSimulationFact>(em, streamEntity);
+            effectCommandCount = GetBufferLength<GEEffectCommandBuffer>(em, streamEntity);
+            instantSpecCount = GetBufferLength<GEEffectSpecBuffer>(em, streamEntity);
+            attributeDeltaCount = GetBufferLength<AttributeModifierBuffer>(em, streamEntity);
+            typedFactCount = GetBufferLength<GameplayEventBuffer>(em, streamEntity);
         }
 
         private static void ReadActiveEffectStoreCounters(
@@ -1969,7 +1946,7 @@ namespace GAS.Runtime
 
             for (var ownerIndex = 0; ownerIndex < owners.Length; ownerIndex++)
             {
-                var slots = em.GetBuffer<BActiveEffectSlot>(owners[ownerIndex]);
+                var slots = em.GetBuffer<ActiveGameplayEffectBuffer>(owners[ownerIndex]);
                 slotCount += slots.Length;
                 slotCapacity += slots.Capacity;
                 if (slots.Capacity > ActiveEffectStore.InlineSlotCapacity)
@@ -1988,21 +1965,21 @@ namespace GAS.Runtime
                     var slot = slots[slotIndex];
                     switch (slot.State)
                     {
-                        case EActiveEffectSlotState.PendingApply:
+                        case ActiveEffectSlotState.PendingApply:
                             pendingApplyCount++;
                             break;
-                        case EActiveEffectSlotState.Active:
+                        case ActiveEffectSlotState.Active:
                             activeCount++;
                             break;
-                        case EActiveEffectSlotState.Inhibited:
+                        case ActiveEffectSlotState.Inhibited:
                             inhibitedCount++;
                             break;
-                        case EActiveEffectSlotState.PendingRemove:
+                        case ActiveEffectSlotState.PendingRemove:
                             pendingRemoveCount++;
                             break;
                     }
 
-                    if ((slot.Flags & (int)EActiveEffectSlotFlags.LegacyEntityBacked) != 0)
+                    if ((slot.Flags & (int)ActiveEffectSlotFlags.LegacyEntityBacked) != 0)
                         legacyBackedCount++;
 
                     grantedTagCount += slot.ActiveGrantedTagCount;
@@ -2045,20 +2022,20 @@ namespace GAS.Runtime
             if (!ActiveEffectStore.TryGetGlobalIndexStore(em, out var indexOwner)
                 || indexOwner == Entity.Null
                 || !em.Exists(indexOwner)
-                || !em.HasBuffer<BGlobalActiveEffectIndex>(indexOwner))
+                || !em.HasBuffer<ActiveGameplayEffectGlobalIndexBuffer>(indexOwner))
             {
                 return;
             }
 
             ownerCount = 1;
-            if (em.HasComponent<CActiveEffectGlobalIndexStore>(indexOwner))
+            if (em.HasComponent<ActiveGameplayEffectGlobalIndexComponent>(indexOwner))
             {
-                var store = em.GetComponentData<CActiveEffectGlobalIndexStore>(indexOwner);
+                var store = em.GetComponentData<ActiveGameplayEffectGlobalIndexComponent>(indexOwner);
                 stableRowCount = store.IndexedStableRowCount;
                 staleStableRowCount = store.StaleStableRowCount;
             }
 
-            var indices = em.GetBuffer<BGlobalActiveEffectIndex>(indexOwner);
+            var indices = em.GetBuffer<ActiveGameplayEffectGlobalIndexBuffer>(indexOwner);
             indexCount = indices.Length;
             for (var i = 0; i < indices.Length; i++)
             {
@@ -2073,27 +2050,27 @@ namespace GAS.Runtime
 
                 switch (index.State)
                 {
-                    case EActiveEffectSlotState.Active:
+                    case ActiveEffectSlotState.Active:
                         activeCount++;
                         break;
-                    case EActiveEffectSlotState.Inhibited:
+                    case ActiveEffectSlotState.Inhibited:
                         inhibitedCount++;
                         break;
-                    case EActiveEffectSlotState.PendingRemove:
+                    case ActiveEffectSlotState.PendingRemove:
                         pendingRemoveCount++;
                         break;
                 }
 
-                if (index.State == EActiveEffectSlotState.Active
+                if (index.State == ActiveEffectSlotState.Active
                     && index.PeriodDueFrame > 0
                     && currentFrame >= index.PeriodDueFrame)
                 {
                     periodDueCount++;
                 }
 
-                if ((index.State == EActiveEffectSlotState.Active
-                    || ((index.SlotFlags & (int)EActiveEffectSlotFlags.TicksWhenInactive) != 0
-                        && index.State == EActiveEffectSlotState.Inhibited))
+                if ((index.State == ActiveEffectSlotState.Active
+                    || ((index.SlotFlags & (int)ActiveEffectSlotFlags.TicksWhenInactive) != 0
+                        && index.State == ActiveEffectSlotState.Inhibited))
                     && index.DurationDueFrame > 0
                     && currentFrame >= index.DurationDueFrame)
                 {
@@ -2101,23 +2078,23 @@ namespace GAS.Runtime
                 }
             }
 
-            if (!em.HasBuffer<BGlobalActiveEffectIndexBucketOwner>(indexOwner))
+            if (!em.HasBuffer<ActiveGameplayEffectGlobalIndexBucketOwnerBuffer>(indexOwner))
                 return;
 
-            var bucketOwners = em.GetBuffer<BGlobalActiveEffectIndexBucketOwner>(indexOwner);
+            var bucketOwners = em.GetBuffer<ActiveGameplayEffectGlobalIndexBucketOwnerBuffer>(indexOwner);
             for (var i = 0; i < bucketOwners.Length; i++)
             {
                 var bucketOwnerRef = bucketOwners[i];
                 var bucketOwner = bucketOwnerRef.BucketOwner;
                 if (bucketOwner == Entity.Null
                     || !em.Exists(bucketOwner)
-                    || !em.HasComponent<CActiveEffectGlobalIndexBucket>(bucketOwner)
-                    || !em.HasBuffer<BGlobalActiveEffectIndex>(bucketOwner))
+                    || !em.HasComponent<ActiveGameplayEffectGlobalIndexBucketComponent>(bucketOwner)
+                    || !em.HasBuffer<ActiveGameplayEffectGlobalIndexBuffer>(bucketOwner))
                 {
                     continue;
                 }
 
-                var bucket = em.GetComponentData<CActiveEffectGlobalIndexBucket>(bucketOwner);
+                var bucket = em.GetComponentData<ActiveGameplayEffectGlobalIndexBucketComponent>(bucketOwner);
                 if (bucket.RootOwner != indexOwner
                     || bucket.BucketIndex != bucketOwnerRef.BucketIndex
                     || bucket.BucketCount != ActiveEffectStore.GlobalIndexBucketCount)
@@ -2125,7 +2102,7 @@ namespace GAS.Runtime
                     continue;
                 }
 
-                var bucketLength = em.GetBuffer<BGlobalActiveEffectIndex>(bucketOwner).Length;
+                var bucketLength = em.GetBuffer<ActiveGameplayEffectGlobalIndexBuffer>(bucketOwner).Length;
                 bucketOwnerCount++;
                 bucketIndexCount += bucketLength;
                 if (bucketLength > maxBucketLength)
@@ -2148,15 +2125,15 @@ namespace GAS.Runtime
         {
             if (eventBusEntity != Entity.Null
                 && em.Exists(eventBusEntity)
-                && em.HasBuffer<BPresentationOutboxOwner>(eventBusEntity))
+                && em.HasBuffer<PresentationOutboxOwnerBuffer>(eventBusEntity))
             {
-                var owners = em.GetBuffer<BPresentationOutboxOwner>(eventBusEntity);
+                var owners = em.GetBuffer<PresentationOutboxOwnerBuffer>(eventBusEntity);
                 var count = 0;
                 for (var i = 0; i < owners.Length; i++)
                 {
                     var asc = owners[i].ASC;
-                    if (asc != Entity.Null && em.Exists(asc) && em.HasBuffer<BPresentationEvent>(asc))
-                        count += em.GetBuffer<BPresentationEvent>(asc).Length;
+                    if (asc != Entity.Null && em.Exists(asc) && em.HasBuffer<PresentationEventBuffer>(asc))
+                        count += em.GetBuffer<PresentationEventBuffer>(asc).Length;
                 }
 
                 return count;
@@ -2165,7 +2142,7 @@ namespace GAS.Runtime
             using var entities = presentationOutboxQuery.ToEntityArray(Allocator.Temp);
             var fallbackCount = 0;
             for (var i = 0; i < entities.Length; i++)
-                fallbackCount += em.GetBuffer<BPresentationEvent>(entities[i]).Length;
+                fallbackCount += em.GetBuffer<PresentationEventBuffer>(entities[i]).Length;
 
             return fallbackCount;
         }
@@ -2182,12 +2159,12 @@ namespace GAS.Runtime
         {
             if (eventBusEntity == Entity.Null
                 || !em.Exists(eventBusEntity)
-                || !em.HasComponent<CPresentationOutboxProjectionState>(eventBusEntity))
+                || !em.HasComponent<PresentationOutboxProjectionStateComponent>(eventBusEntity))
             {
                 return 0;
             }
 
-            var projectionState = em.GetComponentData<CPresentationOutboxProjectionState>(eventBusEntity);
+            var projectionState = em.GetComponentData<PresentationOutboxProjectionStateComponent>(eventBusEntity);
             var sameFrame = projectionState.LastProjectedFrame == currentFrame;
             return SumCursorLag(
                 gameplayEventCount,
@@ -2214,12 +2191,12 @@ namespace GAS.Runtime
         {
             if (eventLogSinkEntity == Entity.Null
                 || !em.Exists(eventLogSinkEntity)
-                || !em.HasComponent<CGameplayEventLogSink>(eventLogSinkEntity))
+                || !em.HasComponent<GameplayEventLogSinkComponent>(eventLogSinkEntity))
             {
                 return 0;
             }
 
-            var sinkState = em.GetComponentData<CGameplayEventLogSink>(eventLogSinkEntity);
+            var sinkState = em.GetComponentData<GameplayEventLogSinkComponent>(eventLogSinkEntity);
             var sameFrame = sinkState.LastProjectedFrame == currentFrame;
             return SumCursorLag(
                 gameplayEventCount,
@@ -2261,25 +2238,25 @@ namespace GAS.Runtime
         private static bool TryGetWritableLog(
             EntityManager em,
             Entity debuggerEntity,
-            out CGasRuntimeDebugger state,
-            out DynamicBuffer<BGasRuntimeDiagnosticEvent> log)
+            out GASRuntimeDebuggerComponent state,
+            out DynamicBuffer<GASRuntimeDiagnosticEventBuffer> log)
         {
             state = default;
             log = default;
             if (!CanUse(em, debuggerEntity))
                 return false;
 
-            state = em.GetComponentData<CGasRuntimeDebugger>(debuggerEntity);
+            state = em.GetComponentData<GASRuntimeDebuggerComponent>(debuggerEntity);
             if (state.Enabled == 0)
                 return false;
 
-            log = em.GetBuffer<BGasRuntimeDiagnosticEvent>(debuggerEntity);
+            log = em.GetBuffer<GASRuntimeDiagnosticEventBuffer>(debuggerEntity);
             return true;
         }
 
         private static void AppendGroupTiming(
-            DynamicBuffer<BGasRuntimeDiagnosticEvent> log,
-            ref CGasRuntimeDebugger state,
+            DynamicBuffer<GASRuntimeDiagnosticEventBuffer> log,
+            ref GASRuntimeDebuggerComponent state,
             int frame,
             string groupName,
             EGasRuntimeDiagnosticModule module,
@@ -2294,7 +2271,7 @@ namespace GAS.Runtime
             Append(
                 log,
                 ref state,
-                new BGasRuntimeDiagnosticEvent
+                new GASRuntimeDiagnosticEventBuffer
                 {
                     Frame = frame,
                     Kind = EGasRuntimeDiagnosticKind.GroupTiming,
@@ -2312,8 +2289,8 @@ namespace GAS.Runtime
             Entity entity,
             string bufferName,
             int frame,
-            DynamicBuffer<BGasRuntimeDiagnosticEvent> log,
-            ref CGasRuntimeDebugger state)
+            DynamicBuffer<GASRuntimeDiagnosticEventBuffer> log,
+            ref GASRuntimeDebuggerComponent state)
             where T : unmanaged, IBufferElementData
         {
             if (!em.HasBuffer<T>(entity))
@@ -2335,7 +2312,7 @@ namespace GAS.Runtime
             Append(
                 log,
                 ref state,
-                new BGasRuntimeDiagnosticEvent
+                new GASRuntimeDiagnosticEventBuffer
                 {
                     Frame = frame,
                     Kind = EGasRuntimeDiagnosticKind.BufferPressure,
@@ -2350,9 +2327,9 @@ namespace GAS.Runtime
         }
 
         private static void Append(
-            DynamicBuffer<BGasRuntimeDiagnosticEvent> log,
-            ref CGasRuntimeDebugger state,
-            BGasRuntimeDiagnosticEvent evt)
+            DynamicBuffer<GASRuntimeDiagnosticEventBuffer> log,
+            ref GASRuntimeDebuggerComponent state,
+            GASRuntimeDiagnosticEventBuffer evt)
         {
             evt.Sequence = state.NextSequence;
             state.NextSequence++;
@@ -2360,8 +2337,8 @@ namespace GAS.Runtime
         }
 
         private static void ApplyRetention(
-            DynamicBuffer<BGasRuntimeDiagnosticEvent> log,
-            ref CGasRuntimeDebugger state)
+            DynamicBuffer<GASRuntimeDiagnosticEventBuffer> log,
+            ref GASRuntimeDebuggerComponent state)
         {
             if (state.MaxRetainedEvents <= 0 || log.Length <= state.MaxRetainedEvents)
                 return;
@@ -2426,7 +2403,7 @@ namespace GAS.Runtime
             };
         }
 
-        private static void AppendEventLine(StringBuilder builder, in BGasRuntimeDiagnosticEvent evt)
+        private static void AppendEventLine(StringBuilder builder, in GASRuntimeDiagnosticEventBuffer evt)
         {
             builder.Append("runtimeDiagnostic|seq=")
                 .Append(evt.Sequence)

@@ -10,7 +10,6 @@ namespace GAS.Runtime
         GameplayEffect = 1,
         Ability = 2,
         GameplayCue = 3,
-        TimelineAbility = 4,
         AttributeSet = 5,
         Attribute = 6,
         GameplayTag = 7,
@@ -24,13 +23,10 @@ namespace GAS.Runtime
         AbilityCost = 3,
         AbilityCooldown = 4,
         GameplayEffectGrantedAbility = 5,
-        AbilityTimeline = 6,
         AbilityCuePreset = 7,
         AbilityActivationEffect = 8,
         GameplayEffectPeriodEffect = 9,
         GameplayEffectOverflowEffect = 10,
-        TimelineApplyEffect = 11,
-        TimelineCuePreset = 12,
     }
 
     public enum ConfigRegistryDiagnosticSeverity
@@ -95,37 +91,31 @@ namespace GAS.Runtime
     {
         public readonly int AbilityConfigCount;
         public readonly int GameplayEffectConfigCount;
-        public readonly int TimelineConfigCount;
         public readonly int AbilityDiagnosticCount;
         public readonly int GameplayEffectDiagnosticCount;
-        public readonly int TimelineDiagnosticCount;
         public readonly int NewDiagnosticCount;
         public readonly ConfigRegistryDiagnostic[] Diagnostics;
 
         public ConfigRegistryGraphWarmupResult(
             int abilityConfigCount,
             int gameplayEffectConfigCount,
-            int timelineConfigCount,
             int abilityDiagnosticCount,
             int gameplayEffectDiagnosticCount,
-            int timelineDiagnosticCount,
             int newDiagnosticCount,
             ConfigRegistryDiagnostic[] diagnostics)
         {
             AbilityConfigCount = abilityConfigCount;
             GameplayEffectConfigCount = gameplayEffectConfigCount;
-            TimelineConfigCount = timelineConfigCount;
             AbilityDiagnosticCount = abilityDiagnosticCount;
             GameplayEffectDiagnosticCount = gameplayEffectDiagnosticCount;
-            TimelineDiagnosticCount = timelineDiagnosticCount;
             NewDiagnosticCount = newDiagnosticCount;
             Diagnostics = diagnostics ?? Array.Empty<ConfigRegistryDiagnostic>();
         }
 
         public static ConfigRegistryGraphWarmupResult Empty =>
-            new(0, 0, 0, 0, 0, 0, 0, Array.Empty<ConfigRegistryDiagnostic>());
+            new(0, 0, 0, 0, 0, Array.Empty<ConfigRegistryDiagnostic>());
 
-        public int TotalConfigCount => AbilityConfigCount + GameplayEffectConfigCount + TimelineConfigCount;
+        public int TotalConfigCount => AbilityConfigCount + GameplayEffectConfigCount;
     }
 
     public static class ConfigRegistryDiagnostics
@@ -232,7 +222,6 @@ namespace GAS.Runtime
         public static ConfigRegistryGraphWarmupResult Warmup(
             IEnumerable<int> abilityCodes,
             IEnumerable<int> gameplayEffectCodes,
-            IEnumerable<int> timelineIds,
             bool clearDiagnostics = true)
         {
             if (clearDiagnostics)
@@ -241,10 +230,8 @@ namespace GAS.Runtime
             var before = ConfigRegistryDiagnostics.Count;
             var abilityConfigCount = 0;
             var gameplayEffectConfigCount = 0;
-            var timelineConfigCount = 0;
             var abilityDiagnosticCount = 0;
             var gameplayEffectDiagnosticCount = 0;
-            var timelineDiagnosticCount = 0;
 
             foreach (var abilityCode in EnumerateUniquePositiveCodes(abilityCodes))
             {
@@ -258,19 +245,11 @@ namespace GAS.Runtime
                 gameplayEffectDiagnosticCount += ValidateGameplayEffectConfigByID(gameplayEffectCode);
             }
 
-            foreach (var timelineId in EnumerateUniquePositiveCodes(timelineIds))
-            {
-                timelineConfigCount++;
-                timelineDiagnosticCount += ValidateTimelineConfigByID(timelineId);
-            }
-
             return new ConfigRegistryGraphWarmupResult(
                 abilityConfigCount,
                 gameplayEffectConfigCount,
-                timelineConfigCount,
                 abilityDiagnosticCount,
                 gameplayEffectDiagnosticCount,
-                timelineDiagnosticCount,
                 ConfigRegistryDiagnostics.Count - before,
                 ConfigRegistryDiagnostics.Snapshot());
         }
@@ -288,14 +267,6 @@ namespace GAS.Runtime
             var before = ConfigRegistryDiagnostics.Count;
             var config = GameplayEffectConfigRegistry.GetConfigByID(gameplayEffectCode);
             ValidateGameplayEffectConfig(gameplayEffectCode, config);
-            return ConfigRegistryDiagnostics.Count - before;
-        }
-
-        public static int ValidateTimelineConfigByID(int timelineId)
-        {
-            var before = ConfigRegistryDiagnostics.Count;
-            var timeline = TimelineAbilityConfigRegistry.GetConfigByID(timelineId);
-            ValidateTimelineConfig(timelineId, timeline);
             return ConfigRegistryDiagnostics.Count - before;
         }
 
@@ -328,9 +299,6 @@ namespace GAS.Runtime
                             ConfigRegistryConfigKind.Ability,
                             abilityCode,
                             ConfigRegistryReferenceKind.AbilityActivationEffect);
-                        break;
-                    case ConfAbilityTimelineRef timelineRef:
-                        ValidateTimelineReference(abilityCode, timelineRef.TimelineId);
                         break;
                 }
             }
@@ -368,79 +336,6 @@ namespace GAS.Runtime
             }
 
             return ConfigRegistryDiagnostics.Count - before;
-        }
-
-        public static int ValidateTimelineConfig(int timelineId, XParamTimeline timeline)
-        {
-            var before = ConfigRegistryDiagnostics.Count;
-            if (timeline?.Tracks == null || timeline.Tracks.Count == 0)
-                return 0;
-
-            var sourceCode = timeline.ID > 0 ? timeline.ID : timelineId;
-            for (var trackIndex = 0; trackIndex < timeline.Tracks.Count; trackIndex++)
-            {
-                var track = timeline.Tracks[trackIndex];
-                if (track?.ActionClips == null || track.ActionClips.Count == 0)
-                    continue;
-
-                for (var clipIndex = 0; clipIndex < track.ActionClips.Count; clipIndex++)
-                    ValidateTimelineClip(sourceCode, track.ActionClips[clipIndex]);
-            }
-
-            return ConfigRegistryDiagnostics.Count - before;
-        }
-
-        private static void ValidateTimelineReference(int abilityCode, int timelineId)
-        {
-            if (timelineId <= 0)
-                return;
-
-            var timeline = TimelineAbilityConfigRegistry.GetConfigByID(
-                timelineId,
-                new ConfigRegistryReferenceContext(
-                    ConfigRegistryConfigKind.Ability,
-                    abilityCode,
-                    ConfigRegistryReferenceKind.AbilityTimeline));
-            if (timeline != null)
-                ValidateTimelineConfig(timelineId, timeline);
-        }
-
-        private static void ValidateTimelineClip(int timelineId, TimelineActionClipData clip)
-        {
-            if (clip == null)
-                return;
-
-            switch (clip.Parameter)
-            {
-                case XParamApplyEffects applyEffects:
-                    ValidateGameplayEffectReferences(
-                        applyEffects.IDs,
-                        ConfigRegistryConfigKind.TimelineAbility,
-                        timelineId,
-                        ConfigRegistryReferenceKind.TimelineApplyEffect);
-                    break;
-                case XParamEffectIDs effectIds:
-                    ValidateGameplayEffectReferences(
-                        effectIds.IDs,
-                        ConfigRegistryConfigKind.TimelineAbility,
-                        timelineId,
-                        ConfigRegistryReferenceKind.TimelineApplyEffect);
-                    break;
-                case XParamCueList cueList:
-                    ValidateGameplayCueReferences(
-                        cueList.IDs,
-                        ConfigRegistryConfigKind.TimelineAbility,
-                        timelineId,
-                        ConfigRegistryReferenceKind.TimelineCuePreset);
-                    break;
-                case XParamCueIDs cueIds:
-                    ValidateGameplayCueReferences(
-                        cueIds.IDs,
-                        ConfigRegistryConfigKind.TimelineAbility,
-                        timelineId,
-                        ConfigRegistryReferenceKind.TimelineCuePreset);
-                    break;
-            }
         }
 
         private static void ValidateGrantedAbilities(

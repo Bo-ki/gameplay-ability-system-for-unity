@@ -8,7 +8,7 @@
 仅用于 Debugger 快照、Editor 工具、<100 entity 的 proof 验证。任何 >100 entity 的 hot path 拒绝使用。
 
 ## 模式描述
-`SystemAPI.Query` 是 ECS 的主线程遍历方式。底层机制为 source generator 创建并缓存 EntityQuery，但每次 foreach 触发主线程 sync point——等待所有相关 job 完成。
+`SystemAPI.Query` 是 ECS 的主线程遍历方式。底层机制为 source generator 创建并缓存 EntityQuery，并在 foreach 前自动完成必要 read/write 依赖；若相关 job 未完成，会表现为主线程等待。
 
 ```csharp
 // 仅限 Debugger/Editor/proof 场景
@@ -20,9 +20,9 @@ foreach (var (health, translation) in SystemAPI.Query<RefRO<Health>, RefRW<Trans
 
 **关键事实：**
 - Source generator 为每个 `SystemAPI.Query` 调用自动创建并缓存 `EntityQuery`
-- `foreach` 触发主线程 sync point —— 等待所有写入相关 component 的 job 完成
+- `foreach` 前会自动完成必要 read/write 依赖；若相关 job 未完成，会表现为主线程等待
 - 主线程遍历导致所有 worker 线程闲置等待
-- 无法 Burst 编译
+- 可在合适 `ISystem` / Burst 上下文被 Burst 编译，但仍是主线程 idiomatic foreach，不提供 worker-thread 并行
 
 ## 注意事项
 - 不可以用于 Runtime Core hot path

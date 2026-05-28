@@ -9,19 +9,19 @@ namespace GAS.Runtime
 
         public override void LoadToGameplayEffectEntity(Entity ge)
         {
-            if (!GASManager.EntityManager.HasBuffer<BModifierConfig>(ge))
-                GASManager.EntityManager.AddBuffer<BModifierConfig>(ge);
-
-            var modifiers = GASManager.EntityManager.GetBuffer<BModifierConfig>(ge);
+            var modifiers = GASManager.EntityManager.GetBuffer<GEModifierConfigBuffer>(ge);
             modifiers.Clear();
 
             if (ModifierSettings == null)
+            {
+                GASManager.EntityManager.SetComponentEnabled<GEModifierConfigBuffer>(ge, false);
                 return;
+            }
 
             for (var i = 0; i < ModifierSettings.Length; i++)
             {
                 var setting = ModifierSettings[i];
-                modifiers.Add(new BModifierConfig
+                modifiers.Add(new GEModifierConfigBuffer
                 {
                     AttrSetCode = setting.AttrSetCode,
                     AttributeCode = setting.AttrCode,
@@ -29,6 +29,7 @@ namespace GAS.Runtime
                     Op = setting.Operation,
                 });
             }
+            GASManager.EntityManager.SetComponentEnabled<GEModifierConfigBuffer>(ge, modifiers.Length > 0);
         }
     }
 

@@ -51,7 +51,8 @@ namespace GAS.Runtime
             ExWorld = new World("EX_GAS_World");
             EntityManager = ExWorld.EntityManager;
             CreateSystems();
-            EntityGlobalTimer = ExWorld.EntityManager.CreateSingleton<GlobalTimer>();
+            EntityGlobalTimer = ExWorld.EntityManager.CreateEntity(GASRuntimeEntityArchetypes.GlobalTimer(EntityManager));
+            ExWorld.EntityManager.SetName(EntityGlobalTimer, "GAS_GlobalTimer");
             EntityEffectCommandSpecStream = EffectCommandSpecStream.EnsureSingleton(EntityManager);
             EntityActiveEffectGlobalIndex = ActiveEffectStore.EnsureGlobalIndexStore(EntityManager);
             CreateEventBusSingleton();
@@ -80,10 +81,6 @@ namespace GAS.Runtime
             sgFixedStepSimulation.RateManager = new RateUtils.FixedRateSimpleManager(Time.fixedDeltaTime);
             sgSimulation.AddSystemToUpdateList(sgFixedStepSimulation);
 
-            // EndSimulationEntityCommandBufferSystem — 标准 ECB 基础设施
-            var ecbSystem = ExWorld.CreateSystemManaged<EndSimulationEntityCommandBufferSystem>();
-            sgSimulation.AddSystemToUpdateList(ecbSystem);
-
             var gasGroups = GASSystemScheduleContract.CreateFixedStepGroups(ExWorld, sgFixedStepSimulation);
             GASSystemScheduleContract.RegisterSystems(ExWorld, gasGroups);
             GASSystemScheduleContract.SortSystems(sgFixedStepSimulation, gasGroups);
@@ -100,27 +97,24 @@ namespace GAS.Runtime
 
         private static void CreateEventBusSingleton()
         {
-            EntityEventBus = ExWorld.EntityManager.CreateEntity();
-            ExWorld.EntityManager.AddComponent<CGameplayEventBus>(EntityEventBus);
-            ExWorld.EntityManager.AddComponent<CPresentationOutboxProjectionState>(EntityEventBus);
-            ExWorld.EntityManager.AddComponentData(EntityEventBus, new CPresentationOutboxProjectionOptions
+            EntityEventBus = ExWorld.EntityManager.CreateEntity(GASRuntimeEntityArchetypes.GameplayEventBus(EntityManager));
+            ExWorld.EntityManager.SetComponentData(EntityEventBus, new PresentationOutboxProjectionOptionsComponent
             {
                 ProjectRawFacts = 1,
             });
-            ExWorld.EntityManager.AddBuffer<BDamageEvent>(EntityEventBus).EnsureCapacity(DamageEventCapacity);
-            ExWorld.EntityManager.AddBuffer<BTagChangeEvent>(EntityEventBus).EnsureCapacity(TagChangeEventCapacity);
-            ExWorld.EntityManager.AddBuffer<BGameplayEvent>(EntityEventBus).EnsureCapacity(GameplayEventCapacity);
-            ExWorld.EntityManager.AddBuffer<BAttributeChangeEvent>(EntityEventBus).EnsureCapacity(AttributeChangeEventCapacity);
-            ExWorld.EntityManager.AddBuffer<BCueRequest>(EntityEventBus).EnsureCapacity(CueRequestCapacity);
-            ExWorld.EntityManager.AddBuffer<BPresentationOutboxOwner>(EntityEventBus).EnsureCapacity(PresentationOutboxOwnerCapacity);
+            ExWorld.EntityManager.GetBuffer<DamageEventBuffer>(EntityEventBus).EnsureCapacity(DamageEventCapacity);
+            ExWorld.EntityManager.GetBuffer<TagChangeEventBuffer>(EntityEventBus).EnsureCapacity(TagChangeEventCapacity);
+            ExWorld.EntityManager.GetBuffer<GameplayEventBusEventBuffer>(EntityEventBus).EnsureCapacity(GameplayEventCapacity);
+            ExWorld.EntityManager.GetBuffer<AttributeChangeEventBuffer>(EntityEventBus).EnsureCapacity(AttributeChangeEventCapacity);
+            ExWorld.EntityManager.GetBuffer<CueRequestBuffer>(EntityEventBus).EnsureCapacity(CueRequestCapacity);
+            ExWorld.EntityManager.GetBuffer<PresentationOutboxOwnerBuffer>(EntityEventBus).EnsureCapacity(PresentationOutboxOwnerCapacity);
             ExWorld.EntityManager.SetName(EntityEventBus, "EventBus");
         }
 
         private static void CreateEventLogSinkSingleton()
         {
-            EntityEventLogSink = ExWorld.EntityManager.CreateEntity();
-            ExWorld.EntityManager.AddComponent<CGameplayEventLogSink>(EntityEventLogSink);
-            ExWorld.EntityManager.AddBuffer<BDebugReplayEvent>(EntityEventLogSink).EnsureCapacity(DebugReplayEventCapacity);
+            EntityEventLogSink = ExWorld.EntityManager.CreateEntity(GASRuntimeEntityArchetypes.GameplayEventLogSink(EntityManager));
+            ExWorld.EntityManager.GetBuffer<ReplayLogEventBuffer>(EntityEventLogSink).EnsureCapacity(DebugReplayEventCapacity);
             ExWorld.EntityManager.SetName(EntityEventLogSink, "DebugReplayEventLog");
         }
 

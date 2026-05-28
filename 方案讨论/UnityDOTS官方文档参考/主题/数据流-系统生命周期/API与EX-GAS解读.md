@@ -50,10 +50,18 @@ struct CHealthConfig : IComponentData { public float Max; }       // 极少写
 public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex,
     bool useEnabledMask, in v128 chunkEnabledMask)
 {
-    var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+    if (!useEnabledMask)
+    {
+        for (var i = 0; i < chunk.Count; i++)
+            ExecuteEntity(i);
+        return;
+    }
+
+    var enumerator = new ChunkEntityEnumerator(true, chunkEnabledMask, chunk.Count);
     while (enumerator.NextEntityIndex(out var i))
     {
         // 只处理 enabled entity
+        ExecuteEntity(i);
     }
 }
 ```

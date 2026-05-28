@@ -39,8 +39,8 @@ namespace GAS.Runtime
             _requiredAnyTags = Array.Empty<int>();
             _requiredNoneTags = Array.Empty<int>();
             _immunityAllTags = Array.Empty<int>();
-            _immunityAnyTags = Array.Empty<int>();
-            _immunityNoneTags = TagHelper.FilterInvalidTags(immunityTags);
+            _immunityAnyTags = TagHelper.FilterInvalidTags(immunityTags);
+            _immunityNoneTags = Array.Empty<int>();
         }
         
         public GameplayCueUnit(GameplayCueConfig config)
@@ -68,15 +68,34 @@ namespace GAS.Runtime
             return true;
         }
         
-        private bool EvaluateTagRequirement(Entity asc, int[] all, int[] any, int[] none)
+        private bool EvaluateRequiredTags(Entity asc, int[] all, int[] any, int[] none)
         {
-            if (!EntityManager.HasComponent<CTagMask>(asc)) return false;
+            if (!EntityManager.HasComponent<TagMaskComponent>(asc)) return false;
 
-            var mask = EntityManager.GetComponentData<CTagMask>(asc);
-            bool passAll = all == null || all.Length == 0 || STagQuery.HasAllTags(mask, all);
-            bool passAny = any == null || any.Length == 0 || STagQuery.HasAnyTag(mask, any);
-            bool passNone = none == null || none.Length == 0 || !STagQuery.HasAnyTag(mask, none);
+            var mask = EntityManager.GetComponentData<TagMaskComponent>(asc);
+            bool passAll = all == null || all.Length == 0 || GameplayTagQuery.HasAllTags(mask, all);
+            bool passAny = any == null || any.Length == 0 || GameplayTagQuery.HasAnyTag(mask, any);
+            bool passNone = none == null || none.Length == 0 || !GameplayTagQuery.HasAnyTag(mask, none);
             return passAll && passAny && passNone;
+        }
+
+        private bool IsImmune(Entity asc)
+        {
+            if (!EntityManager.HasComponent<TagMaskComponent>(asc))
+                return true;
+
+            var requirement = TagHelper.BuildRequirementMask(
+                _immunityAllTags,
+                _immunityAnyTags,
+                _immunityNoneTags);
+            if (requirement.IsEmpty)
+                return false;
+
+            return !TagRequirementEvaluator.EvaluateImmunity(
+                    EntityManager.GetComponentData<TagMaskComponent>(asc),
+                    requirement,
+                    asc)
+                .Passed;
         }
 
         /// <summary>
@@ -91,22 +110,17 @@ namespace GAS.Runtime
 #endif
                 return;
             }
-            _cueEntity = EntityManager.CreateEntity();
+            _cueEntity = EntityManager.CreateEntity(GASRuntimeEntityArchetypes.CueRuntime(EntityManager));
+            GASRuntimeEntityArchetypes.InitializeCueEntity(EntityManager, _cueEntity);
             EntityManager.SetName(_cueEntity, $"Cue_{_cueType.Name}_{_cueEntity.Version}_{_cueEntity.Index}");
             
-            var mcCue = new MCCue(CueHelper.TryCreateCue(_cueType, _xParam));
-            mcCue.cue.SetCueEntity(_cueEntity);
-            mcCue.cue.SetSourceEntity(Entity.Null, CueSourceType.None);
-            EntityManager.AddComponentData(_cueEntity, mcCue);
-            
-            EntityManager.AddComponent<ECCuePlayable>(_cueEntity);
-            EntityManager.SetComponentEnabled<ECCuePlayable>(_cueEntity, false);
-            
-            EntityManager.AddComponent<ECCuePlaying>(_cueEntity);
-            EntityManager.SetComponentEnabled<ECCuePlaying>(_cueEntity, false);
-            
-            EntityManager.AddComponent<ECKillCue>(_cueEntity);
-            EntityManager.SetComponentEnabled<ECKillCue>(_cueEntity, false);
+            var mcCue = new CueManagedInstanceComponent(CueHelper.TryCreateCue(_cueType, _xParam));
+            mcCue.Cue.SetCueEntity(_cueEntity);
+            mcCue.Cue.SetSourceEntity(Entity.Null, CueSourceType.None);
+            EntityManager.SetComponentData(_cueEntity, mcCue);
+            SetCueState<CuePlayableTag>(false);
+            SetCueState<CuePlayingTag>(false);
+            SetCueState<CueKillRequestTag>(false);
         }
         
         /// <summary>
@@ -123,9 +137,9 @@ namespace GAS.Runtime
                 return;
             }
 
-            EntityManager.SetComponentEnabled<ECKillCue>(_cueEntity, true);
-            var mcCue = EntityManager.GetComponentData<MCCue>(_cueEntity);
-            mcCue.cue.OnRemove(Time.time);
+            SetCueState<CueKillRequestTag>(true);
+            var mcCue = EntityManager.GetComponentData<CueManagedInstanceComponent>(_cueEntity);
+            mcCue.Cue.OnRemove(Time.time);
             _cueEntity = Entity.Null;
         }
         
@@ -138,11 +152,11 @@ namespace GAS.Runtime
         {
             if (!CheckCueEntity()) return false;
             
-            if (!EvaluateTagRequirement(asc, _requiredAllTags, _requiredAnyTags, _requiredNoneTags)) return false;
-            if (!EvaluateTagRequirement(asc, _immunityAllTags, _immunityAnyTags, _immunityNoneTags)) return false;
+            if (!EvaluateRequiredTags(asc, _requiredAllTags, _requiredAnyTags, _requiredNoneTags)) return false;
+            if (IsImmune(asc)) return false;
 
-            var mcCue = EntityManager.GetComponentData<MCCue>(_cueEntity);
-            mcCue.cue.AddToTargetAsc(asc);
+            var mcCue = EntityManager.GetComponentData<CueManagedInstanceComponent>(_cueEntity);
+            mcCue.Cue.AddToTargetAsc(asc);
             return true;
         }
         
@@ -154,8 +168,8 @@ namespace GAS.Runtime
         {
             if (!CheckCueEntity()) return;
             
-            var mcCue = EntityManager.GetComponentData<MCCue>(_cueEntity);
-            mcCue.cue.RemoveFromTargetAsc();
+            var mcCue = EntityManager.GetComponentData<CueManagedInstanceComponent>(_cueEntity);
+            mcCue.Cue.RemoveFromTargetAsc();
         }
         
         /// <summary>
@@ -164,7 +178,7 @@ namespace GAS.Runtime
         public void Play()
         {
             if (!CheckCueEntity()) return;
-            EntityManager.SetComponentEnabled<ECCuePlayable>(_cueEntity, true);
+            SetCueState<CuePlayableTag>(true);
         }
         
         /// <summary>
@@ -173,15 +187,17 @@ namespace GAS.Runtime
         public void Stop()
         {
             if (!CheckCueEntity()) return;
-            EntityManager.SetComponentEnabled<ECCuePlayable>(_cueEntity, false);
+            SetCueState<CuePlayableTag>(false);
         }
         
         /// <summary>
         ///     手动Tick
-        ///     TODO
         /// </summary>
         public void Tick()
         {
+            if (!CheckCueEntity()) return;
+            var mcCue = EntityManager.GetComponentData<CueManagedInstanceComponent>(_cueEntity);
+            mcCue.Cue.OnTick(Time.time);
         }
         
         /// <summary>
@@ -192,9 +208,20 @@ namespace GAS.Runtime
         public void SetSource(Entity source, CueSourceType sourceType)
         {
             if (!CheckCueEntity()) return;
-            var mcCue = EntityManager.GetComponentData<MCCue>(_cueEntity);
-            mcCue.cue.SetSourceEntity(source, sourceType);
+            var mcCue = EntityManager.GetComponentData<CueManagedInstanceComponent>(_cueEntity);
+            mcCue.Cue.SetSourceEntity(source, sourceType);
             EntityManager.SetComponentData(_cueEntity, mcCue);
+        }
+
+        private void SetCueState<T>(bool enabled)
+            where T : unmanaged, IComponentData, IEnableableComponent
+        {
+            if (_cueEntity != Entity.Null
+                && EntityManager.Exists(_cueEntity)
+                && EntityManager.HasComponent<T>(_cueEntity))
+            {
+                EntityManager.SetComponentEnabled<T>(_cueEntity, enabled);
+            }
         }
 
 #if UNITY_EDITOR

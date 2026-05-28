@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | Layer 1 | Application Shell Layer | 应用壳层 | Extension / Presentation consumer | UI、输入、AI、网络、场景编排、Demo runner、真实资源和无头 log 占位 |
 | Layer 2 | Runtime Boundary Layer | 运行时边界层 | Thin Adapter / Observation / Debugger | OOP/ECS 边界、command gateway、read model、presentation outbox、diagnostics/replay sink |
-| Layer 3 | GAS Runtime Core Layer | GAS 运行时核心层 | Simulation | ASC、Ability、GameplayEffect、Attribute、Tag、Target、EffectCommand、SpecStream、AttributeDelta、ActiveEffectStore、TypedFacts |
+| Layer 3 | GAS Runtime Core Layer | GAS 运行时核心层 | Simulation | ASC、Ability、GameplayEffect、Attribute、Tag、Target、EffectCommand、StateEvaluate、AttributeReduceApply、GameplayFact |
 | Layer 4 | Definition & Generation Layer | 定义与生成层 | Authoring / Definition / Generated | Luban source、schema、generated id、static lookup、Blob/Bake plan、validation summary |
 
 层级编号沿用历史方案的表达习惯，不代表调用方向。目标态调用方向只有两条：应用壳层通过运行时边界层写入命令，GAS Runtime Core 只消费定义与生成层的不可变输入并输出事实。
@@ -22,7 +22,7 @@
 ```mermaid
 flowchart TB
     Definition["Layer 4: Definition & Generation\nLuban / SourceGenerator / Static Lookup / Bake Plan"]
-    Core["Layer 3: GAS Runtime Core\nASC / Ability / Effect / Attribute / Tag / TypedFacts"]
+    Core["Layer 3: GAS Runtime Core\nASC / Ability / Effect / Attribute / Tag / GameplayFact"]
     Boundary["Layer 2: Runtime Boundary\nCommandGateway / ReadModel / PresentationOutboxBridge / DiagnosticsSink"]
     Shell["Layer 1: Application Shell\nUI / AI / Input / Network / Demo Runner / Resource Binding"]
 
@@ -37,9 +37,9 @@ flowchart TB
 
 四层架构只是工程边界，不是自定义 ECS runtime。Layer 3 和 Layer 4 的实现必须遵守 `UnityDOTS官方文档参考/主题/01-Entities系统与World.md`：
 
-1. Layer 3 的 phase 必须映射到 Unity `ComponentSystemGroup` 和 update order。
+1. Layer 3 的物理执行域必须映射到 Unity `ComponentSystemGroup` 和 update order；业务 kernel 只作为 lane system / job chain，不默认新增 group。
 2. Layer 3 hot path 默认使用 unmanaged `ISystem` 和 job，不依赖 managed object。
-3. Layer 3 结构变化集中到明确 ECB playback phase，不在 Spec / Delta / Reaction phase 直接 create / destroy entity。
+3. Layer 3 结构变化集中到 `GASStructuralCommitSystemGroup`，不在 Target Resolve / Effect Fan-In / State Evaluate / Attribute Apply / Gameplay Fact kernel 直接 create / destroy entity。
 4. Layer 4 的 generated artifact 优先落为 Blob、Baker output、static lookup 和 validation graph。
 5. Layer 2 / Layer 1 可以有 managed bridge，但不能把 managed bridge 写回 Runtime Core 热路径。
 
@@ -65,14 +65,17 @@ flowchart TB
 ### 职责
 
 1. 承载 GAS 权威状态和 gameplay 规则，所有热路径以 unmanaged component、buffer、blob、lookup、command stream、typed fact 表达。
-2. 以显式 phase 处理 `Command -> SpecStream -> Delta -> StoreMutation -> TypedFacts`。
+2. 以显式 DOTS kernel 处理 `Boundary Command Ingest -> Target Resolve -> Effect Fan-In -> State Evaluate -> Attribute Reduce/Apply -> Gameplay Fact -> Structural Commit -> Boundary Projection`。
 3. 将 Cue、UI、VFX、SFX、FloatingText、Debugger 需要的信息输出为只读 facts / outbox marker。
+4. 将 `EffectCommand / Spec / Delta / Fact` 作为语义链，而不是全局 singleton 总线；scale-ready fan-in 默认走 `NativeStream` deterministic merge + compact owner-local buffer。
 
 ### 禁止
 
 1. 不持有托管业务对象，不调用 `GameObject`、`MonoBehaviour`、真实 UI/VFX/SFX 资源。
 2. 不把全局 `EventBus` 当业务 reaction 主输入，不用 observation stream 反向驱动 simulation。
 3. 不跨结构变化持有 `DynamicBuffer` / `ComponentLookup` / `BufferTypeHandle` 的旧句柄。
+4. 不把 Frame Arena 写成 query registry / service locator；EntityQuery 归属各 `ISystem`。
+5. 不把大容量 singleton DynamicBuffer 或大容量 per-ASC frame buffer 固化为目标态。
 
 ## Layer 2: Runtime Boundary Layer
 

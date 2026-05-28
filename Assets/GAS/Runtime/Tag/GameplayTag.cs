@@ -3,7 +3,7 @@ using System;
 namespace GAS.Runtime
 {
     [Serializable]
-    public struct GameplayTag
+    public struct GameplayTag : IEquatable<GameplayTag>
     {
         public readonly int Code;
         public readonly int[] Parents;
@@ -80,6 +80,21 @@ namespace GAS.Runtime
         public static bool operator !=(GameplayTag x, GameplayTag y)
         {
             return x.Code != y.Code;
+        }
+
+        public bool Equals(GameplayTag other)
+        {
+            return Code == other.Code;
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is GameplayTag other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            return Code;
         }
         
         public bool IsRoot => Parents.Length == 0;

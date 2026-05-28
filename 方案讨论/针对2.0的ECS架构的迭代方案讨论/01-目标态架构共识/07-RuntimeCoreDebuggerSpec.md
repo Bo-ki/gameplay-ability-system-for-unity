@@ -84,6 +84,7 @@ sequenceDiagram
 12. Boundary resource / managed component / Baking / prefab load state：managed bridge count、weak resource load state、`RequestEntityPrefabLoaded` / `PrefabLoadResult`、`IncludePrefab` policy。
 13. Unity Physics 口径：physics step count、fixed-step cost、query count / batch size、broadphase sync count、collision event / trigger event count、event dropped / converted count。
 14. Entities Graphics 口径：presentation marker cost、render proxy count、draw command、instances per draw、BRG marker、material override write count、render disabled reason。
+15. bounded reaction pass 口径：pass count、command count、cutoff reason、next-frame seed count。
 
 ## Unity Entities 证据对齐
 
@@ -95,7 +96,7 @@ Runtime Core Debugger 是项目内证据源，但必须能与 Unity 官方工具
 | Entities Structural Changes | entity create/destroy/add/remove / ECB playback counters |
 | Entities Journaling | structural event timeline / owner system |
 | GC Alloc | `gcAllocBytesPerTick` |
-| sync point | `syncPointCount` / structural playback phase |
+| sync point | `syncPointCount` / `GASStructuralCommitSystemGroup` playback |
 | query match | matched chunks / matched entities |
 
 Debugger 不直接替代 Unity Profiler；它负责把 GAS 语义计数与 Unity ECS 机制计数绑定起来。
@@ -112,6 +113,7 @@ Runtime Core Debugger 必须能解释 API 选型是否健康，而不只是记�
 | structural query batch | EntityQuery bulk count / `ComponentTypeSet` count / ECB playback count | 判断是否退化为逐实体结构变化 |
 | singleton / system-associated state | singleton access count / dependency completion warning / cursor owner | 判断 singleton 和 system state 是否引入同步 |
 | query / lookup | query count / lookup update count / random lookup count | 判断是否过多依赖随机访问 |
+| reaction feedback | bounded pass count / next-frame seed count / cutoff reason | 判断 Gameplay Fact 是否形成同帧无界循环 |
 | Burst evidence | Burst target count / warmup state / synchronous compile flag | 判断 hot path 是否真的 Burst 化 |
 | deterministic output | sort key policy / stream partition / post-sort count / order violation count | 判断 gameplay 并行输出是否可复现 |
 | NativeContainer owner | owner system / singleton / allocator / dispose state | 判断 Persistent / sampled container 是否泄漏或隐藏同步 |
@@ -142,7 +144,7 @@ Runtime summary 需要额外输出 `casePattern` / `caseViolation` 字段，用�
 | `CASE-01` | hot path 是否仍使用主线程 `SystemAPI.Query` 扫大规模实体 |
 | `CASE-04` | enableable / chunk skip 是否用 `ChunkEntityEnumerator` / `EnabledMask`，skip count 是否有效 |
 | `CASE-07` | DynamicBuffer 是否有 internal capacity、spill、clear phase 和 Append 目标稳定性 |
-| `CASE-08` | ECB 是否只在 structural playback phase 播放，是否有 sort key policy |
+| `CASE-08` | ECB 是否只在 `GASStructuralCommitSystemGroup` 播放，是否有 sort key policy |
 | `CASE-10` | Definition 是否进入 Blob / Baker / generated lookup，而不是 runtime managed config |
 | `CASE-11` | Scene / WeakObjectReference / UnityObjectRef 是否只在 Boundary / Presentation 产生 load marker |
 | `CASE-12` | performance summary 是否包含 warmup、measurement、p95/max、TopN、allocator cleanup |
@@ -192,7 +194,7 @@ Debugger 必须先对齐 `UnityDOTS官方文档参考/README.md`，再吸收 `Un
 
 1. `runtimeCoreCounters` 输出累计 request/spec/delta/fact/cue/presentation、entityCreates、entityDestroys、ecbPlaybacks。
 2. `runtimeCoreCountersPeak` 输出 activeEffectEntities、applyRequestEntities、eventBusBufferLength、presentationCursorLag、replayCursorLag。
-3. AM-2 开始接入 EffectCommand / SpecStream / AttributeDelta 权威 stream 计数；在 simple instant evaluation 迁移完成前，旧 EventBus 和 GE runtime entity 采样仍作为迁移期近似量级。
+3. AM-2 开始接入 EffectCommand / Spec/Delta/Fact 语义链 / AttributeDelta 权威 stream 计数；在 simple instant evaluation 迁移完成前，旧 EventBus 和 GE runtime entity 采样仍作为迁移期近似量级。
 4. ECB playback baseline 可以先覆盖主要工具路径；最终验收需要能按 system / phase 定位结构变化预算。
 5. AM-5 owner-local ActiveEffectStore baseline 输出 `runtimeCoreActiveEffectStore`，字段包括 owners、slots、capacity、pendingApply、active、inhibited、pendingRemove、legacyBacked、externalizedOwners；compact / cleanup / chunk skip 在对应 store 层实现后继续扩展。
 
@@ -224,5 +226,3 @@ Debugger 必须先对齐 `UnityDOTS官方文档参考/README.md`，再吸收 `Un
 2. 自走棋 Debug 工作流中通过 GASDebugger 排查数值异常来自 `../历史方案参考/方案15.md:1214-1253`。
 3. 完整 Debug workflow 和中毒爆发场景时序导出来自 `../历史方案参考/方案15.md:2661-2794`。
 4. 固定容量结构化日志 / ring buffer 的参考来自 `../历史方案参考/方案14.md:635-694`。
-
-

@@ -38,7 +38,7 @@ namespace GAS.Runtime.Generated
 
     public static class GASGeneratedDefinitionIndex
     {
-        public const int Count = 10;
+        public const int Count = 9;
 
         public static bool TryGetAt(int index, out GASGeneratedDefinitionIndexEntry entry)
         {
@@ -69,10 +69,7 @@ namespace GAS.Runtime.Generated
                     entry = new GASGeneratedDefinitionIndexEntry(7, GASDefinitionKind.None, 1188892602, 878040070, -779313708, 1, 16);
                     return true;
                 case 8:
-                    entry = new GASGeneratedDefinitionIndexEntry(8, GASDefinitionKind.TimelineAbility, 819430390, 984365931, 1285909208, 7, 5);
-                    return true;
-                case 9:
-                    entry = new GASGeneratedDefinitionIndexEntry(9, GASDefinitionKind.None, 1759602215, 1863546534, 1386546657, 5, 20);
+                    entry = new GASGeneratedDefinitionIndexEntry(8, GASDefinitionKind.None, 1759602215, 1863546534, 1386546657, 5, 20);
                     return true;
                 default:
                     entry = default;
@@ -104,9 +101,6 @@ namespace GAS.Runtime.Generated
                     return true;
                 case GASDefinitionKind.None:
                     entry = new GASGeneratedDefinitionIndexEntry(6, GASDefinitionKind.None, -1178083798, 137200775, 10808612, 4, 7);
-                    return true;
-                case GASDefinitionKind.TimelineAbility:
-                    entry = new GASGeneratedDefinitionIndexEntry(8, GASDefinitionKind.TimelineAbility, 819430390, 984365931, 1285909208, 7, 5);
                     return true;
                 default:
                     entry = default;

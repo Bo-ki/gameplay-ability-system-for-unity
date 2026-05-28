@@ -54,7 +54,6 @@ namespace GAS.Runtime
         private readonly AttrSetConfig[] _attributeSetConfigs;
         private readonly GameplayTag[] _gameplayTags;
         private readonly int[] _gameplayCueCodes;
-        private readonly int[] _timelineIds;
 
         public GASGeneratedDefinitionSource(
             IEnumerable<int> abilityCodes,
@@ -63,13 +62,27 @@ namespace GAS.Runtime
             IEnumerable<GameplayTag> gameplayTags,
             IEnumerable<int> gameplayCueCodes,
             IEnumerable<int> timelineIds)
+            : this(
+                abilityCodes,
+                gameplayEffectCodes,
+                attributeSetConfigs,
+                gameplayTags,
+                gameplayCueCodes)
+        {
+        }
+
+        public GASGeneratedDefinitionSource(
+            IEnumerable<int> abilityCodes,
+            IEnumerable<int> gameplayEffectCodes,
+            IEnumerable<AttrSetConfig> attributeSetConfigs,
+            IEnumerable<GameplayTag> gameplayTags,
+            IEnumerable<int> gameplayCueCodes)
         {
             _abilityCodes = Materialize(abilityCodes);
             _gameplayEffectCodes = Materialize(gameplayEffectCodes);
             _attributeSetConfigs = Materialize(attributeSetConfigs);
             _gameplayTags = Materialize(gameplayTags);
             _gameplayCueCodes = Materialize(gameplayCueCodes);
-            _timelineIds = Materialize(timelineIds);
         }
 
         public IReadOnlyList<int> AbilityCodes => _abilityCodes ?? Array.Empty<int>();
@@ -77,15 +90,13 @@ namespace GAS.Runtime
         public IReadOnlyList<AttrSetConfig> AttributeSetConfigs => _attributeSetConfigs ?? Array.Empty<AttrSetConfig>();
         public IReadOnlyList<GameplayTag> GameplayTags => _gameplayTags ?? Array.Empty<GameplayTag>();
         public IReadOnlyList<int> GameplayCueCodes => _gameplayCueCodes ?? Array.Empty<int>();
-        public IReadOnlyList<int> TimelineIds => _timelineIds ?? Array.Empty<int>();
 
         public int TotalInputCount =>
             AbilityCodes.Count
             + GameplayEffectCodes.Count
             + AttributeSetConfigs.Count
             + GameplayTags.Count
-            + GameplayCueCodes.Count
-            + TimelineIds.Count;
+            + GameplayCueCodes.Count;
 
         private static int[] Materialize(IEnumerable<int> values)
         {
@@ -164,7 +175,6 @@ namespace GAS.Runtime
             var warmupResult = ConfigRegistryGraphValidator.Warmup(
                 source.AbilityCodes,
                 source.GameplayEffectCodes,
-                source.TimelineIds,
                 clearDiagnostics: false);
             var table = GASDefinitionSummaryBuilder.BuildFromRegistries(
                 source.AbilityCodes,
@@ -188,7 +198,6 @@ namespace GAS.Runtime
             ValidateCodeList(source.AbilityCodes, GASDefinitionKind.Ability, diagnostics);
             ValidateCodeList(source.GameplayEffectCodes, GASDefinitionKind.GameplayEffect, diagnostics);
             ValidateCodeList(source.GameplayCueCodes, GASDefinitionKind.GameplayCue, diagnostics);
-            ValidateCodeList(source.TimelineIds, GASDefinitionKind.TimelineAbility, diagnostics);
             ValidateAttributeSets(source.AttributeSetConfigs, diagnostics);
             ValidateGameplayTags(source.GameplayTags, diagnostics);
 

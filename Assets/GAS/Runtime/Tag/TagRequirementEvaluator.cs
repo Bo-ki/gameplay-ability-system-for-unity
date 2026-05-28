@@ -82,7 +82,7 @@ namespace GAS.Runtime
         }
 
         public static TagRequirementEvaluationResult EvaluateRequired(
-            in CTagMask tags,
+            in TagMaskComponent tags,
             in TagRequirementMask requirement,
             Entity subject = default)
         {
@@ -90,7 +90,7 @@ namespace GAS.Runtime
         }
 
         public static TagRequirementEvaluationResult EvaluateBlocked(
-            in CTagMask tags,
+            in TagMaskComponent tags,
             in TagRequirementMask requirement,
             Entity subject = default)
         {
@@ -98,7 +98,7 @@ namespace GAS.Runtime
         }
 
         public static TagRequirementEvaluationResult EvaluateImmunity(
-            in CTagMask tags,
+            in TagMaskComponent tags,
             in TagRequirementMask requirement,
             Entity subject = default)
         {
@@ -114,26 +114,29 @@ namespace GAS.Runtime
             if (subject == Entity.Null || !entityManager.Exists(subject))
                 return Fail(mode, ETagRequirementFailure.MissingSubject, subject);
 
-            if (!entityManager.HasComponent<CTagMask>(subject))
+            if (!entityManager.HasComponent<TagMaskComponent>(subject))
                 return Fail(mode, ETagRequirementFailure.MissingTagMask, subject);
 
-            return EvaluateMask(entityManager.GetComponentData<CTagMask>(subject), requirement, mode, subject);
+            return EvaluateMask(entityManager.GetComponentData<TagMaskComponent>(subject), requirement, mode, subject);
         }
 
         private static TagRequirementEvaluationResult EvaluateMask(
-            in CTagMask tags,
+            in TagMaskComponent tags,
             in TagRequirementMask requirement,
             ETagRequirementEvaluationMode mode,
             Entity subject)
         {
+            if (requirement.IsEmpty)
+                return Pass(mode, subject);
+
             return mode switch
             {
                 ETagRequirementEvaluationMode.Required => requirement.Evaluate(tags)
                     ? Pass(mode, subject)
                     : Fail(mode, ETagRequirementFailure.RequiredTagsNotMet, subject),
                 ETagRequirementEvaluationMode.Blocked => requirement.Evaluate(tags)
-                    ? Pass(mode, subject)
-                    : Fail(mode, ETagRequirementFailure.BlockedTagsMatched, subject),
+                    ? Fail(mode, ETagRequirementFailure.BlockedTagsMatched, subject)
+                    : Pass(mode, subject),
                 ETagRequirementEvaluationMode.Immunity => requirement.Evaluate(tags)
                     ? Fail(mode, ETagRequirementFailure.ImmunityTagsMatched, subject)
                     : Pass(mode, subject),

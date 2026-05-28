@@ -290,8 +290,8 @@ namespace GAS.Runtime
     public static class GasStructuredLogExporter
     {
         public static GasStructuredLogExportSnapshot CreateSnapshot(
-            DynamicBuffer<BDebugReplayEvent> replayLog,
-            in CGameplayEventLogSink sinkState)
+            DynamicBuffer<ReplayLogEventBuffer> replayLog,
+            in GameplayEventLogSinkComponent sinkState)
         {
             var stats = GasReplaySinkPolicy.GetStats(sinkState, replayLog);
             return CreateSnapshot(
@@ -303,8 +303,8 @@ namespace GAS.Runtime
         }
 
         public static GasStructuredLogExportSnapshot CreateSnapshot(
-            DynamicBuffer<BDebugReplayEvent> replayLog,
-            in CGameplayEventLogSink sinkState,
+            DynamicBuffer<ReplayLogEventBuffer> replayLog,
+            in GameplayEventLogSinkComponent sinkState,
             in GasReplayCursor cursor,
             in GasReplayEventFilter replayFilter,
             in GasStructuredLogFilter logFilter)
@@ -352,7 +352,7 @@ namespace GAS.Runtime
         }
 
         private static GasStructuredLogExportSnapshot CreateSnapshot(
-            DynamicBuffer<BDebugReplayEvent> replayLog,
+            DynamicBuffer<ReplayLogEventBuffer> replayLog,
             in GasReplaySinkStats stats,
             in GasReplayCursor cursor,
             in GasReplayEventFilter replayFilter,

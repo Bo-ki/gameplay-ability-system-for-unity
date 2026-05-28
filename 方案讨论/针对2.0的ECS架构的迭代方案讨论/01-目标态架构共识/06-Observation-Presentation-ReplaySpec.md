@@ -8,9 +8,9 @@
 
 ```mermaid
 flowchart LR
-    TypedFacts["Typed Simulation Facts"] --> FactStream["GameplayFactStream\nframe facts / read cursor"]
-    TypedFacts --> Presentation["PresentationEventBuffer\ncurrent frame outbox"]
-    TypedFacts --> Replay["BDebugReplayEvent\npersistent sink"]
+    GameplayFacts["Gameplay Facts"] --> FactStream["GameplayFactStream\nframe facts / read cursor"]
+    GameplayFacts --> Presentation["PresentationEventBuffer\ncurrent frame outbox"]
+    GameplayFacts --> Replay["BDebugReplayEvent\npersistent sink"]
     Replay --> StructuredLog["Structured Log Export"]
     Presentation --> Bridge["PresentationOutboxBridge"]
     Bridge --> UI["UI / VFX / SFX / FloatingText"]

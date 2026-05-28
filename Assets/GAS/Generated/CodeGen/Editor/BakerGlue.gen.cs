@@ -109,20 +109,6 @@ namespace GAS.Runtime.Generated
             return false;
         }
 
-        public static bool TryGetTimelineDefinitionBlobRow(int code, out GAS.Runtime.HeadlessAutoChessTimelineDefinitionRow row)
-        {
-            var rows = GAS.Runtime.HeadlessAutoChessGeneratedDefinitionRows.CreateTimelineRows();
-            for (var i = 0; i < rows.Length; i++)
-            {
-                if (rows[i].TimelineId != code)
-                    continue;
-                row = rows[i];
-                return true;
-            }
-            row = default;
-            return false;
-        }
-
         public static bool TryGetUnitDefinitionBlobRow(int code, out GAS.Runtime.HeadlessAutoChessUnitDefinitionRow row)
         {
             var rows = GAS.Runtime.HeadlessAutoChessGeneratedDefinitionRows.CreateUnitRows();
@@ -294,25 +280,6 @@ namespace GAS.Runtime.Generated
             AddBlobAsset(ref blob, out _);
             AddComponent(entity, new GASDefinitionCodeComponent { Value = definitionCode });
             AddComponent(entity, new GASGeneratedDefinitionBlobComponent<SummonDefinitionBlob> { Value = blob });
-        }
-    }
-
-    public sealed class TimelineDefinitionBlobAuthoring : GASGeneratedDefinitionAuthoring
-    {
-    }
-
-    public sealed class TimelineDefinitionBlobBaker : Baker<TimelineDefinitionBlobAuthoring>
-    {
-        public override void Bake(TimelineDefinitionBlobAuthoring authoring)
-        {
-            var entity = GetEntity(TransformUsageFlags.None);
-            if (!GASGeneratedDefinitionRowResolver.TryGetTimelineDefinitionBlobRow(authoring.Code, out var row))
-                return;
-            var definitionCode = row.TimelineId;
-            var blob = GASGeneratedDefinitionBlobBuilder.BuildTimelineDefinitionBlob(row);
-            AddBlobAsset(ref blob, out _);
-            AddComponent(entity, new GASDefinitionCodeComponent { Value = definitionCode });
-            AddComponent(entity, new GASGeneratedDefinitionBlobComponent<TimelineDefinitionBlob> { Value = blob });
         }
     }
 

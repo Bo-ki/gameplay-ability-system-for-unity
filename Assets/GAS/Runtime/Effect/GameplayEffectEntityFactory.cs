@@ -8,7 +8,8 @@ namespace GAS.Runtime
             EntityManager entityManager,
             GameplayEffectComponentConfig[] componentConfigs)
         {
-            var entity = entityManager.CreateEntity();
+            var entity = entityManager.CreateEntity(GASRuntimeEntityArchetypes.GameplayEffectRuntime(entityManager));
+            GASRuntimeEntityArchetypes.InitializeGameplayEffectEntity(entityManager, entity, prototype: false);
 
             LoadConfigComponents(entityManager, entity, componentConfigs);
             AddRuntimeComponents(entityManager, entity);
@@ -20,9 +21,10 @@ namespace GAS.Runtime
             int gameplayEffectCode,
             GameplayEffectComponentConfig[] componentConfigs)
         {
-            var entity = entityManager.CreateEntity();
+            var entity = entityManager.CreateEntity(GASRuntimeEntityArchetypes.GameplayEffectPrototype(entityManager));
+            GASRuntimeEntityArchetypes.InitializeGameplayEffectEntity(entityManager, entity, prototype: true);
             entityManager.SetName(entity, $"GE_Prototype_{gameplayEffectCode}_{entity.Index}");
-            entityManager.AddComponentData(entity, new CGameplayEffectPrototype
+            entityManager.SetComponentData(entity, new GEPrototypeComponent
             {
                 GameplayEffectCode = gameplayEffectCode,
             });
@@ -37,8 +39,7 @@ namespace GAS.Runtime
                 return Entity.Null;
 
             var entity = entityManager.Instantiate(prototype);
-            if (entityManager.HasComponent<CGameplayEffectPrototype>(entity))
-                entityManager.RemoveComponent<CGameplayEffectPrototype>(entity);
+            GASRuntimeEntityArchetypes.InitializeGameplayEffectRuntimeInstance(entityManager, entity);
 
             AddRuntimeComponents(entityManager, entity);
             return entity;
@@ -77,92 +78,130 @@ namespace GAS.Runtime
 
         private static void AddRuntimeComponents(EntityManager entityManager, Entity entity)
         {
-            if (entityManager.HasComponent<CDurationDefinition>(entity)
-                && !entityManager.HasComponent<CDurationRuntime>(entity))
+            if (entityManager.IsComponentEnabled<GEDurationDefinitionComponent>(entity))
             {
-                var definition = entityManager.GetComponentData<CDurationDefinition>(entity);
-                entityManager.AddComponentData(entity, new CDurationRuntime
+                var definition = entityManager.GetComponentData<GEDurationDefinitionComponent>(entity);
+                entityManager.SetComponentData(entity, new GEDurationRuntimeComponent
                 {
                     ResolvedDuration = definition.Duration,
                     ResolvedTimeUnit = definition.TimeUnit,
                 });
+                entityManager.SetComponentEnabled<GEDurationRuntimeComponent>(entity, true);
             }
 
-            if (entityManager.HasComponent<CPeriodDefinition>(entity)
-                && !entityManager.HasComponent<CPeriodRuntime>(entity))
+            if (entityManager.IsComponentEnabled<GEPeriodDefinitionComponent>(entity))
             {
-                entityManager.AddComponentData(entity, new CPeriodRuntime());
+                entityManager.SetComponentData(entity, new GEPeriodRuntimeComponent());
+                entityManager.SetComponentEnabled<GEPeriodRuntimeComponent>(entity, true);
             }
 
-            if (entityManager.HasComponent<CStackingDefinition>(entity)
-                && !entityManager.HasComponent<CStackingRuntime>(entity))
+            if (entityManager.IsComponentEnabled<GEStackingDefinitionComponent>(entity))
             {
-                entityManager.AddComponentData(entity, new CStackingRuntime
+                entityManager.SetComponentData(entity, new GEStackingRuntimeComponent
                 {
                     StackCount = 1,
                 });
+                entityManager.SetComponentEnabled<GEStackingRuntimeComponent>(entity, true);
             }
 
-            if (!entityManager.HasComponent<CActiveEffectGlobalIndexStableRow>(entity))
-                entityManager.AddComponentData(entity, ActiveEffectStore.CreateGlobalIndexStableRowDefault(entity));
+            entityManager.SetComponentData(entity, ActiveEffectStore.CreateGlobalIndexStableRowDefault(entity));
 
+            EnsureLegacyLifecycleComponents(entityManager, entity);
+            EnsureMagnitudeResolverBuffers(entityManager, entity);
             EnsureExecutionCalculationBuffers(entityManager, entity);
             EnsureRuntimeGrantedAbilityBuffer(entityManager, entity);
+        }
+
+        private static void EnsureLegacyLifecycleComponents(EntityManager entityManager, Entity entity)
+        {
+            entityManager.SetComponentData(entity, new GEEffectLifecycleComponent());
+
+            entityManager.SetComponentEnabled<GEEffectDestroyComponent>(entity, false);
+
+            entityManager.SetComponentEnabled<GEEffectFinalDestroyComponent>(entity, false);
+        }
+
+        private static void EnsureMagnitudeResolverBuffers(EntityManager entityManager, Entity entity)
+        {
+            if (entityManager.HasBuffer<GEModifierConfigBuffer>(entity)
+                && !entityManager.HasBuffer<GEResolvedModifierBuffer>(entity))
+                return;
+
+            if (RequiresAttributeCaptureBuffer(entityManager, entity)
+                && !entityManager.HasBuffer<GEAttributeCaptureValueBuffer>(entity))
+                return;
+        }
+
+        private static bool RequiresAttributeCaptureBuffer(EntityManager entityManager, Entity entity)
+        {
+            if (!entityManager.IsComponentEnabled<GEMagnitudeDefinitionBuffer>(entity))
+                return false;
+
+            var definitions = entityManager.GetBuffer<GEMagnitudeDefinitionBuffer>(entity);
+            for (var i = 0; i < definitions.Length; i++)
+            {
+                var definition = definitions[i];
+                if (definition.CaptureTiming == EAttributeCaptureTiming.CurrentValue)
+                    continue;
+
+                if (definition.Source == EMagnitudeSource.SourceAttribute
+                    || definition.Source == EMagnitudeSource.TargetAttribute)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static void EnsureExecutionCalculationBuffers(EntityManager entityManager, Entity entity)
         {
             var hasExecutionDefinition =
-                entityManager.HasBuffer<BExecutionCalculationDefinition>(entity)
-                || entityManager.HasBuffer<BExecutionCalculationInputDefinition>(entity)
-                || entityManager.HasBuffer<BExecutionCalculationOutputModifierDefinition>(entity);
+                entityManager.IsComponentEnabled<GEExecutionCalculationDefinitionBuffer>(entity)
+                || entityManager.IsComponentEnabled<GEExecutionCalculationInputDefinitionBuffer>(entity)
+                || entityManager.IsComponentEnabled<GEExecutionCalculationOutputModifierDefinitionBuffer>(entity);
 
             if (!hasExecutionDefinition)
                 return;
 
-            if (!entityManager.HasBuffer<BExecutionCalculationValue>(entity))
-                entityManager.AddBuffer<BExecutionCalculationValue>(entity);
-
-            if (!entityManager.HasBuffer<BSetByCallerValue>(entity))
-                entityManager.AddBuffer<BSetByCallerValue>(entity);
-
-            if (!entityManager.HasBuffer<BResolvedModifier>(entity))
-                entityManager.AddBuffer<BResolvedModifier>(entity);
+            if (!entityManager.HasBuffer<GEExecutionCalculationValueBuffer>(entity)
+                || !entityManager.HasBuffer<GESetByCallerRequestValueBuffer>(entity)
+                || !entityManager.HasBuffer<GEResolvedModifierBuffer>(entity))
+                return;
         }
 
         private static void EnsureRuntimeGrantedAbilityBuffer(EntityManager entityManager, Entity entity)
         {
-            if (entityManager.HasBuffer<BGrantedAbilityRuntime>(entity)
-                || !entityManager.HasBuffer<BGrantedAbilityConfig>(entity))
+            if (!entityManager.IsComponentEnabled<GEGrantedAbilityConfigBuffer>(entity))
             {
                 return;
             }
 
-            var definitions = entityManager.GetBuffer<BGrantedAbilityConfig>(entity);
+            var definitions = entityManager.GetBuffer<GEGrantedAbilityConfigBuffer>(entity);
             if (definitions.Length == 0)
                 return;
 
-            entityManager.AddBuffer<BGrantedAbilityRuntime>(entity).EnsureCapacity(definitions.Length);
+            entityManager.GetBuffer<GEGrantedAbilityRuntimeBuffer>(entity).EnsureCapacity(definitions.Length);
         }
 
         private static void ConvertToRuntimeBuffers(EntityManager entityManager, Entity ge)
         {
-            if (!entityManager.HasComponent<CEffectGrantedTags>(ge))
+            if (!entityManager.IsComponentEnabled<GEGrantedTagsComponent>(ge))
                 return;
 
-            var grantedTags = entityManager.GetComponentData<CEffectGrantedTags>(ge);
+            var grantedTags = entityManager.GetComponentData<GEGrantedTagsComponent>(ge);
             if (grantedTags.Tags.IsEmpty)
                 return;
 
-            var tagBuffer = entityManager.HasBuffer<BGrantedTagConfig>(ge)
-                ? entityManager.GetBuffer<BGrantedTagConfig>(ge)
-                : entityManager.AddBuffer<BGrantedTagConfig>(ge);
+            var tagBuffer = entityManager.GetBuffer<GEGrantedTagConfigBuffer>(ge);
+            tagBuffer.Clear();
 
-            for (var tagIndex = 0; tagIndex < CTagMask.Capacity; tagIndex++)
+            for (var tagIndex = 0; tagIndex < TagMaskComponent.Capacity; tagIndex++)
             {
                 if (grantedTags.Tags.HasTag(tagIndex))
-                    tagBuffer.Add(new BGrantedTagConfig { TagIndex = tagIndex });
+                    tagBuffer.Add(new GEGrantedTagConfigBuffer { TagIndex = tagIndex });
             }
+            entityManager.SetComponentEnabled<GEGrantedTagConfigBuffer>(ge, tagBuffer.Length > 0);
         }
     }
 }

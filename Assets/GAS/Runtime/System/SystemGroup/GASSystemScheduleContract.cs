@@ -98,53 +98,57 @@ namespace GAS.Runtime
 
     public static class GASSystemScheduleContract
     {
+        private const string GeneratedRuntimeRegistrationTypeName =
+            "GAS.Runtime.Generated.GASGeneratedRuntimeSystemRegistration, com.exhard.exgas.generated.runtime";
+        private const string GeneratedRuntimeRegistrationMethodName = "Register";
+
         private static readonly GASRuntimeCoreFramePhaseContract[] RuntimeCoreFramePhaseContracts =
         {
-            new GASRuntimeCoreFramePhaseContract(
+            new(
                 EGasRuntimeCoreFramePhase.FramePrepare,
-                typeof(GASCommandGroup),
+                typeof(GASFramePrepareSystemGroup),
                 EGasRuntimeCorePhaseAccess.FrameState,
                 EGasRuntimeCorePhaseAccess.FrameState,
-                EGasRuntimeCoreStructuralPermission.RecordOnly),
-            new GASRuntimeCoreFramePhaseContract(
+                EGasRuntimeCoreStructuralPermission.None),
+            new(
                 EGasRuntimeCoreFramePhase.CommandIngest,
-                typeof(GASCommandGroup),
+                typeof(GASCommandResolveSystemGroup),
                 EGasRuntimeCorePhaseAccess.FrameState,
                 EGasRuntimeCorePhaseAccess.CommandStream,
                 EGasRuntimeCoreStructuralPermission.None),
-            new GASRuntimeCoreFramePhaseContract(
+            new(
                 EGasRuntimeCoreFramePhase.SpecEvaluation,
-                typeof(GASCommandGroup),
+                typeof(GASCoreSimulationSystemGroup),
                 EGasRuntimeCorePhaseAccess.CommandStream,
                 EGasRuntimeCorePhaseAccess.SpecStream,
                 EGasRuntimeCoreStructuralPermission.None),
-            new GASRuntimeCoreFramePhaseContract(
+            new(
                 EGasRuntimeCoreFramePhase.ActiveEffectLifecycle,
-                typeof(GASEffectGroup),
+                typeof(GASCoreSimulationSystemGroup),
                 EGasRuntimeCorePhaseAccess.ActiveEffectStore | EGasRuntimeCorePhaseAccess.SpecStream,
                 EGasRuntimeCorePhaseAccess.ActiveEffectStore | EGasRuntimeCorePhaseAccess.StructuralMutation,
                 EGasRuntimeCoreStructuralPermission.RecordOnly),
-            new GASRuntimeCoreFramePhaseContract(
+            new(
                 EGasRuntimeCoreFramePhase.DeltaApply,
-                typeof(GASAttributeGroup),
+                typeof(GASCoreSimulationSystemGroup),
                 EGasRuntimeCorePhaseAccess.SpecStream | EGasRuntimeCorePhaseAccess.ActiveEffectStore,
                 EGasRuntimeCorePhaseAccess.AttributeState | EGasRuntimeCorePhaseAccess.DeltaStream,
                 EGasRuntimeCoreStructuralPermission.None),
-            new GASRuntimeCoreFramePhaseContract(
+            new(
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
-                typeof(GASAttributeGroup),
+                typeof(GASCoreSimulationSystemGroup),
                 EGasRuntimeCorePhaseAccess.DeltaStream | EGasRuntimeCorePhaseAccess.AttributeState,
                 EGasRuntimeCorePhaseAccess.FactStream,
                 EGasRuntimeCoreStructuralPermission.None),
-            new GASRuntimeCoreFramePhaseContract(
+            new(
                 EGasRuntimeCoreFramePhase.StructuralPlayback,
-                typeof(GasStructuralPlaybackSystemGroup),
+                typeof(GASStructuralCommitSystemGroup),
                 EGasRuntimeCorePhaseAccess.StructuralMutation,
                 EGasRuntimeCorePhaseAccess.FrameState,
                 EGasRuntimeCoreStructuralPermission.PlaybackOnly),
-            new GASRuntimeCoreFramePhaseContract(
+            new(
                 EGasRuntimeCoreFramePhase.ObservationProjection,
-                typeof(GASCueGroup),
+                typeof(GASBoundaryProjectionSystemGroup),
                 EGasRuntimeCorePhaseAccess.FactStream | EGasRuntimeCorePhaseAccess.AttributeState,
                 EGasRuntimeCorePhaseAccess.Observation,
                 EGasRuntimeCoreStructuralPermission.None,
@@ -153,134 +157,109 @@ namespace GAS.Runtime
 
         private static readonly GASRuntimeCoreFramePhaseSystemContract[] RuntimeCoreFramePhaseSystemContracts =
         {
-            new GASRuntimeCoreFramePhaseSystemContract(
-                typeof(SEffectCommandSpecStreamFramePrepare),
+            new(
+                typeof(GameplayEventBusClearSystem),
                 EGasRuntimeCoreFramePhase.FramePrepare,
-                typeof(GASCommandGroup)),
-            new GASRuntimeCoreFramePhaseSystemContract(
-                typeof(SEffectCommandIngest),
+                typeof(GASFramePrepareSystemGroup)),
+            new(
+                typeof(GASGlobalTimerSystem),
+                EGasRuntimeCoreFramePhase.FramePrepare,
+                typeof(GASFramePrepareSystemGroup)),
+            new(
+                typeof(GEEffectCommandSpecStreamFramePrepareSystem),
+                EGasRuntimeCoreFramePhase.FramePrepare,
+                typeof(GASFramePrepareSystemGroup)),
+            new(
+                typeof(GEEffectCommandIngestSystem),
                 EGasRuntimeCoreFramePhase.CommandIngest,
-                typeof(GASCommandGroup)),
-            new GASRuntimeCoreFramePhaseSystemContract(
-                typeof(SInstantEffectSpecBuild),
-                EGasRuntimeCoreFramePhase.SpecEvaluation,
-                typeof(GASCommandGroup)),
-            new GASRuntimeCoreFramePhaseSystemContract(
-                typeof(SActiveEffectMutationApply),
-                EGasRuntimeCoreFramePhase.ActiveEffectLifecycle,
-                typeof(GASCommandGroup)),
-            new GASRuntimeCoreFramePhaseSystemContract(
-                typeof(SAttributeDeltaApply),
-                EGasRuntimeCoreFramePhase.DeltaApply,
-                typeof(GASCommandGroup)),
-            new GASRuntimeCoreFramePhaseSystemContract(
-                typeof(STypedSimulationFactProjection),
+                typeof(GASCommandResolveSystemGroup)),
+            new(
+                typeof(GameplayFactProjectionSystem),
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
-                typeof(GASCommandGroup)),
-            new GASRuntimeCoreFramePhaseSystemContract(
-                typeof(STypedSimulationFactEventBridge),
+                typeof(GASCoreSimulationSystemGroup)),
+            new(
+                typeof(GameplayFactEventBridgeSystem),
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
-                typeof(GASCommandGroup)),
-            new GASRuntimeCoreFramePhaseSystemContract(
-                typeof(SInstantEffectCueRequestProjection),
+                typeof(GASCoreSimulationSystemGroup)),
+            new(
+                typeof(GEInstantEffectCueRequestProjectionSystem),
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
-                typeof(GASCommandGroup)),
-            new GASRuntimeCoreFramePhaseSystemContract(
-                typeof(SRuntimeCoreDebuggerCounters),
+                typeof(GASCoreSimulationSystemGroup)),
+            new(
+                typeof(DiagnosticsSnapshotSystem),
                 EGasRuntimeCoreFramePhase.ObservationProjection,
-                typeof(GASCueGroup)),
+                typeof(GASBoundaryProjectionSystemGroup)),
         };
 
         private static readonly Type[] FixedStepGroupTypes =
         {
-            typeof(GASCommandGroup),
-            typeof(GASResetDirtyGroup),
-            typeof(GASTagGroup),
-            typeof(GASEffectGroup),
-            typeof(GASAttributeGroup),
-            typeof(GASAbilityGroup),
-            typeof(GASCueGroup),
+            typeof(GASFramePrepareSystemGroup),
+            typeof(GASCommandResolveSystemGroup),
+            typeof(GASCoreSimulationSystemGroup),
+            typeof(GASStructuralCommitSystemGroup),
+            typeof(GASBoundaryProjectionSystemGroup),
         };
 
-        private static readonly Type[] CommandSystemTypes =
+        private static readonly Type[] FramePrepareSystemTypes =
         {
-            typeof(SEventBusClear),
-            typeof(SGlobalTimer),
-            typeof(SASCCreate),
-            typeof(SAscInitializeRequest),
-            typeof(SAscCommandRequest),
-            typeof(SAbilityCommandRequest),
-            typeof(STryActivateAbility),
-            typeof(SAbilityCommit),
-            typeof(SAbilityTimelineAction),
-            typeof(SAbilityTimelineLifecycleRequest),
-            typeof(SEffectCommandSpecStreamFramePrepare),
-            typeof(SEffectCommandIngest),
-            typeof(SInstantEffectSpecBuild),
-            typeof(SActiveEffectMutationApply),
-            typeof(SExecutionCalculation),
-            typeof(GASExecutionCalculationExtensionGroup),
-            typeof(SExecutionCalculationOutputModifier),
-            typeof(SAttributeDeltaApply),
-            typeof(STypedSimulationFactProjection),
-            typeof(STypedSimulationFactEventBridge),
-            typeof(SInstantEffectCueRequestProjection),
-            typeof(SAscDestroyRequest),
+            typeof(GameplayEventBusClearSystem),
+            typeof(GASGlobalTimerSystem),
+            typeof(GEEffectCommandSpecStreamFramePrepareSystem),
+        };
+
+        private static readonly Type[] CommandResolveSystemTypes =
+        {
+            typeof(ASCEntityCreateSystem),
+            typeof(ASCInitializeRequestSystem),
+            typeof(ASCCommandRequestSystem),
+            typeof(AbilityCommandRequestSystem),
+            typeof(AbilityTryActivateSystem),
+            typeof(AbilityCommitSystem),
+            typeof(GEEffectCommandIngestSystem),
+            typeof(ASCDestroyRequestSystem),
+        };
+
+        private static readonly Type[] CoreSimulationSystemTypes =
+        {
+            typeof(GEExecutionCalculationSystem),
+            typeof(GEExecutionCalculationExtensionSystemGroup),
+            typeof(GEExecutionCalculationOutputModifierSystem),
+            typeof(AttributeRecalculateSystem),
+            typeof(AttributeChangeEventProjectionSystem),
+            typeof(GameplayTagChangeProcessSystem),
+            typeof(AbilityStateTickSystem),
+            typeof(AttributeThresholdAbilityLifecycleRequestSystem),
+            typeof(AbilityLifecycleRequestSystem),
+            typeof(AbilityStateCleanupSystem),
+            typeof(GameplayFactProjectionSystem),
+            typeof(GameplayFactEventBridgeSystem),
+            typeof(GEInstantEffectCueRequestProjectionSystem),
+        };
+
+        private static readonly Type[] StructuralCommitSystemTypes =
+        {
+            typeof(BeginGASStructuralCommitECBSystem),
+            typeof(EndGASStructuralCommitECBSystem),
+        };
+
+        private static readonly Type[] BoundaryProjectionSystemTypes =
+        {
+            typeof(PresentationOutboxProjectionSystem),
+            typeof(ReplayLogSystem),
+            typeof(DiagnosticsSnapshotSystem),
+            typeof(CueRequestBridgeSystem),
+            typeof(CueStartSystem),
+            typeof(CueTickSystem),
+            typeof(CueEndSystem),
+            typeof(CueDestroySystem),
+            typeof(ASCDestroyFinalizeSystem),
         };
 
         private static readonly Type[] EffectCommandSpecStreamTargetSystemTypes =
         {
-            typeof(SEffectCommandSpecStreamFramePrepare),
-            typeof(SEffectCommandIngest),
-            typeof(SInstantEffectSpecBuild),
-            typeof(SActiveEffectMutationApply),
-            typeof(SAttributeDeltaApply),
-            typeof(STypedSimulationFactProjection),
-        };
-
-
-
-        private static readonly Type[] ResetDirtySystemTypes =
-        {
-        };
-
-        private static readonly Type[] TagSystemTypes =
-        {
-            typeof(STagChangeProcess),
-        };
-
-        private static readonly Type[] EffectSystemTypes =
-        {
-            typeof(SEffectTick),
-            typeof(SEffectRemove),
-            typeof(SEffectFinalDestroy),
-        };
-
-        private static readonly Type[] AttributeSystemTypes =
-        {
-            typeof(SAttributeRecalculate),
-            typeof(SAttributeChangeEventProjection),
-        };
-
-        private static readonly Type[] AbilitySystemTypes =
-        {
-            typeof(SAbilityTick),
-            typeof(SAttributeThresholdAbilityLifecycleRequest),
-            typeof(SAbilityLifecycleRequest),
-            typeof(SAbilityStateCleanup),
-        };
-
-        private static readonly Type[] CueSystemTypes =
-        {
-            typeof(SPresentationOutboxProjection),
-            typeof(SDebugReplayLogProjection),
-            typeof(SRuntimeCoreDebuggerCounters),
-            typeof(SCueRequestBridge),
-            typeof(SCueStart),
-            typeof(SCueTick),
-            typeof(SCueEnd),
-            typeof(SCueDestroy),
-            typeof(SAscDestroyFinalize),
+            typeof(GEEffectCommandSpecStreamFramePrepareSystem),
+            typeof(GEEffectCommandIngestSystem),
+            typeof(GameplayFactProjectionSystem),
         };
 
         public static IReadOnlyList<Type> FixedStepGroups => FixedStepGroupTypes;
@@ -291,22 +270,18 @@ namespace GAS.Runtime
         public static IReadOnlyList<GASRuntimeCoreFramePhaseSystemContract> RuntimeCoreFramePhaseSystems =>
             RuntimeCoreFramePhaseSystemContracts;
 
-        public static IReadOnlyList<Type> CommandSystems => CommandSystemTypes;
+        public static IReadOnlyList<Type> FramePrepareSystems => FramePrepareSystemTypes;
+
+        public static IReadOnlyList<Type> CommandResolveSystems => CommandResolveSystemTypes;
+
+        public static IReadOnlyList<Type> CoreSimulationSystems => CoreSimulationSystemTypes;
+
+        public static IReadOnlyList<Type> StructuralCommitSystems => StructuralCommitSystemTypes;
+
+        public static IReadOnlyList<Type> BoundaryProjectionSystems => BoundaryProjectionSystemTypes;
 
         public static IReadOnlyList<Type> EffectCommandSpecStreamTargetSystems =>
             EffectCommandSpecStreamTargetSystemTypes;
-        
-        public static IReadOnlyList<Type> ResetDirtySystems => ResetDirtySystemTypes;
-
-        public static IReadOnlyList<Type> TagSystems => TagSystemTypes;
-
-        public static IReadOnlyList<Type> EffectSystems => EffectSystemTypes;
-
-        public static IReadOnlyList<Type> AttributeSystems => AttributeSystemTypes;
-
-        public static IReadOnlyList<Type> AbilitySystems => AbilitySystemTypes;
-
-        public static IReadOnlyList<Type> CueSystems => CueSystemTypes;
 
         public static bool TryGetRuntimeCoreFramePhase(
             Type systemType,
@@ -331,49 +306,45 @@ namespace GAS.Runtime
             FixedStepSimulationSystemGroup fixedStepSimulation)
         {
             var groups = new GASSystemGroups(
-                world.CreateSystemManaged<GASCommandGroup>(),
-                world.CreateSystemManaged<GASExecutionCalculationExtensionGroup>(),
-                world.CreateSystemManaged<GASResetDirtyGroup>(),
-                world.CreateSystemManaged<GASTagGroup>(),
-                world.CreateSystemManaged<GASEffectGroup>(),
-                world.CreateSystemManaged<GASAttributeGroup>(),
-                world.CreateSystemManaged<GASAbilityGroup>(),
-                world.CreateSystemManaged<GASCueGroup>());
+                world.CreateSystemManaged<GASFramePrepareSystemGroup>(),
+                world.CreateSystemManaged<GASCommandResolveSystemGroup>(),
+                world.CreateSystemManaged<GASCoreSimulationSystemGroup>(),
+                world.CreateSystemManaged<GEExecutionCalculationExtensionSystemGroup>(),
+                world.CreateSystemManaged<GASStructuralCommitSystemGroup>(),
+                world.CreateSystemManaged<BeginGASStructuralCommitECBSystem>(),
+                world.CreateSystemManaged<EndGASStructuralCommitECBSystem>(),
+                world.CreateSystemManaged<GASBoundaryProjectionSystemGroup>());
 
-            fixedStepSimulation.AddSystemToUpdateList(groups.Command);
-            fixedStepSimulation.AddSystemToUpdateList(groups.ResetDirty);
-            fixedStepSimulation.AddSystemToUpdateList(groups.Tag);
-            fixedStepSimulation.AddSystemToUpdateList(groups.Effect);
-            fixedStepSimulation.AddSystemToUpdateList(groups.Attribute);
-            fixedStepSimulation.AddSystemToUpdateList(groups.Ability);
-            fixedStepSimulation.AddSystemToUpdateList(groups.Cue);
+            fixedStepSimulation.AddSystemToUpdateList(groups.FramePrepare);
+            fixedStepSimulation.AddSystemToUpdateList(groups.CommandResolve);
+            fixedStepSimulation.AddSystemToUpdateList(groups.CoreSimulation);
+            fixedStepSimulation.AddSystemToUpdateList(groups.StructuralCommit);
+            fixedStepSimulation.AddSystemToUpdateList(groups.BoundaryProjection);
 
             return groups;
         }
 
         public static void RegisterSystems(World world, GASSystemGroups groups)
         {
-            AddCommandSystems(world, groups);
-            AddSystems(world, groups.ResetDirty, ResetDirtySystemTypes);
-            AddSystems(world, groups.Tag, TagSystemTypes);
-            AddSystems(world, groups.Effect, EffectSystemTypes);
-            AddSystems(world, groups.Attribute, AttributeSystemTypes);
-            AddSystems(world, groups.Ability, AbilitySystemTypes);
-            AddSystems(world, groups.Cue, CueSystemTypes);
+            AddSystems(world, groups.FramePrepare, FramePrepareSystemTypes);
+            AddSystems(world, groups.CommandResolve, CommandResolveSystemTypes);
+            AddCoreSimulationSystems(world, groups);
+            TryRegisterGeneratedRuntimeSystems(world, groups);
+            groups.StructuralCommit.AddSystemToUpdateList(groups.BeginStructuralCommitECB);
+            groups.StructuralCommit.AddSystemToUpdateList(groups.EndStructuralCommitECB);
+            AddSystems(world, groups.BoundaryProjection, BoundaryProjectionSystemTypes);
         }
 
         public static void SortSystems(
             FixedStepSimulationSystemGroup fixedStepSimulation,
             GASSystemGroups groups)
         {
+            groups.FramePrepare.SortSystems();
+            groups.CommandResolve.SortSystems();
             groups.ExecutionCalculationExtension.SortSystems();
-            groups.Command.SortSystems();
-            groups.ResetDirty.SortSystems();
-            groups.Tag.SortSystems();
-            groups.Effect.SortSystems();
-            groups.Attribute.SortSystems();
-            groups.Ability.SortSystems();
-            groups.Cue.SortSystems();
+            groups.CoreSimulation.SortSystems();
+            groups.StructuralCommit.SortSystems();
+            groups.BoundaryProjection.SortSystems();
             fixedStepSimulation.SortSystems();
         }
 
@@ -386,58 +357,74 @@ namespace GAS.Runtime
                 group.AddSystemToUpdateList(world.CreateSystem(systemTypes[i]));
         }
 
-        private static void AddCommandSystems(World world, GASSystemGroups groups)
+        private static void AddCoreSimulationSystems(World world, GASSystemGroups groups)
         {
-            for (var i = 0; i < CommandSystemTypes.Length; i++)
+            for (var i = 0; i < CoreSimulationSystemTypes.Length; i++)
             {
-                var systemType = CommandSystemTypes[i];
-                if (systemType == typeof(GASExecutionCalculationExtensionGroup))
+                var systemType = CoreSimulationSystemTypes[i];
+                if (systemType == typeof(GEExecutionCalculationExtensionSystemGroup))
                 {
-                    groups.Command.AddSystemToUpdateList(groups.ExecutionCalculationExtension);
+                    groups.CoreSimulation.AddSystemToUpdateList(groups.ExecutionCalculationExtension);
                     continue;
                 }
 
-                groups.Command.AddSystemToUpdateList(world.CreateSystem(systemType));
+                groups.CoreSimulation.AddSystemToUpdateList(world.CreateSystem(systemType));
             }
+        }
+
+        private static bool TryRegisterGeneratedRuntimeSystems(World world, GASSystemGroups groups)
+        {
+            var registrationType = Type.GetType(GeneratedRuntimeRegistrationTypeName);
+            if (registrationType == null)
+                return false;
+
+            var method = registrationType.GetMethod(
+                GeneratedRuntimeRegistrationMethodName,
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            if (method == null)
+                return false;
+
+            method.Invoke(null, new object[] { world, groups });
+            return true;
         }
     }
 
     public readonly struct GASSystemGroups
     {
         public GASSystemGroups(
-            GASCommandGroup command,
-            GASExecutionCalculationExtensionGroup executionCalculationExtension,
-            GASResetDirtyGroup resetDirty,
-            GASTagGroup tag,
-            GASEffectGroup effect,
-            GASAttributeGroup attribute,
-            GASAbilityGroup ability,
-            GASCueGroup cue)
+            GASFramePrepareSystemGroup framePrepare,
+            GASCommandResolveSystemGroup commandResolve,
+            GASCoreSimulationSystemGroup coreSimulation,
+            GEExecutionCalculationExtensionSystemGroup executionCalculationExtension,
+            GASStructuralCommitSystemGroup structuralCommit,
+            BeginGASStructuralCommitECBSystem beginStructuralCommitECB,
+            EndGASStructuralCommitECBSystem endStructuralCommitECB,
+            GASBoundaryProjectionSystemGroup boundaryProjection)
         {
-            Command = command;
+            FramePrepare = framePrepare;
+            CommandResolve = commandResolve;
+            CoreSimulation = coreSimulation;
             ExecutionCalculationExtension = executionCalculationExtension;
-            ResetDirty = resetDirty;
-            Tag = tag;
-            Effect = effect;
-            Attribute = attribute;
-            Ability = ability;
-            Cue = cue;
+            StructuralCommit = structuralCommit;
+            BeginStructuralCommitECB = beginStructuralCommitECB;
+            EndStructuralCommitECB = endStructuralCommitECB;
+            BoundaryProjection = boundaryProjection;
         }
 
-        public GASCommandGroup Command { get; }
+        public GASFramePrepareSystemGroup FramePrepare { get; }
 
-        public GASExecutionCalculationExtensionGroup ExecutionCalculationExtension { get; }
+        public GASCommandResolveSystemGroup CommandResolve { get; }
 
-        public GASResetDirtyGroup ResetDirty { get; }
+        public GASCoreSimulationSystemGroup CoreSimulation { get; }
 
-        public GASTagGroup Tag { get; }
+        public GEExecutionCalculationExtensionSystemGroup ExecutionCalculationExtension { get; }
 
-        public GASEffectGroup Effect { get; }
+        public GASStructuralCommitSystemGroup StructuralCommit { get; }
 
-        public GASAttributeGroup Attribute { get; }
+        public BeginGASStructuralCommitECBSystem BeginStructuralCommitECB { get; }
 
-        public GASAbilityGroup Ability { get; }
+        public EndGASStructuralCommitECBSystem EndStructuralCommitECB { get; }
 
-        public GASCueGroup Cue { get; }
+        public GASBoundaryProjectionSystemGroup BoundaryProjection { get; }
     }
 }

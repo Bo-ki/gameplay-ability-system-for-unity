@@ -1,101 +1,150 @@
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 
 namespace GAS.Runtime
 {
     /// <summary>
-    /// 命令处理组：清理上一 tick 事件流，然后消费 Facade / Ability / GE request。
-    /// 当前 tick 产生的事实事件必须留给后续 Tag/Effect/Attribute/Ability/Cue 组读取。
+    /// Frame preparation domain. Clears previous-frame transient streams, advances frame state,
+    /// and resets frame-local GAS buffers before command resolution begins.
     /// </summary>
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    public partial class GASCommandGroup : ComponentSystemGroup
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+    [UpdateBefore(typeof(GASCommandResolveSystemGroup))]
+    public partial class GASFramePrepareSystemGroup : ComponentSystemGroup
     {
     }
 
     /// <summary>
-    /// ExecutionCalculation 扩展插槽：自定义 ECS system 在这里写 BExecutionCalculationValue。
-    /// 统一 output modifier consumer 会在本组之后消费输出值。
+    /// Boundary command and target resolution domain. External requests are normalized here;
+    /// gameplay simulation state is still changed by later CoreSimulation lanes.
     /// </summary>
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(GASCommandGroup))]
-    [UpdateAfter(typeof(SExecutionCalculation))]
-    [UpdateBefore(typeof(SExecutionCalculationOutputModifier))]
-    public partial class GASExecutionCalculationExtensionGroup : ComponentSystemGroup
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+    [UpdateAfter(typeof(GASFramePrepareSystemGroup))]
+    [UpdateBefore(typeof(GASCoreSimulationSystemGroup))]
+    public partial class GASCommandResolveSystemGroup : ComponentSystemGroup
     {
     }
 
     /// <summary>
-    /// 重置脏标记组：重置属性 Dirty、Tag 变更标记等。
+    /// Core gameplay simulation domain. Effect fan-in, active effect state, attribute reduce,
+    /// tag propagation, ability state, and gameplay fact lanes run here without direct structural playback.
     /// </summary>
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(GASCommandGroup))]
-    public partial class GASResetDirtyGroup : ComponentSystemGroup
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+    [UpdateAfter(typeof(GASCommandResolveSystemGroup))]
+    [UpdateBefore(typeof(GASStructuralCommitSystemGroup))]
+    public partial class GASCoreSimulationSystemGroup : ComponentSystemGroup
     {
     }
 
     /// <summary>
-    /// Tag 计算组：Tag 变化传播，如 GE 授权/移除 Tag。
+    /// ExecutionCalculation extension slot. Project-specific ECS systems may write
+    /// GEExecutionCalculationValueBuffer here before the generated output consumer runs.
     /// </summary>
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(GASResetDirtyGroup))]
-    public partial class GASTagGroup : ComponentSystemGroup
+    [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
+    [UpdateAfter(typeof(GEExecutionCalculationSystem))]
+    [UpdateBefore(typeof(GEExecutionCalculationOutputModifierSystem))]
+    public partial class GEExecutionCalculationExtensionSystemGroup : ComponentSystemGroup
     {
     }
 
     /// <summary>
-    /// GE 计算组：Duration Tick, Period 触发, Stacking 处理。
+    /// Sole GAS hot-path structural commit domain. Systems record structural work before this group;
+    /// ECB playback is constrained between CoreSimulation and BoundaryProjection.
     /// </summary>
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(GASTagGroup))]
-    public partial class GASEffectGroup : ComponentSystemGroup
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+    [UpdateAfter(typeof(GASCoreSimulationSystemGroup))]
+    [UpdateBefore(typeof(GASBoundaryProjectionSystemGroup))]
+    public partial class GASStructuralCommitSystemGroup : ComponentSystemGroup
     {
+    }
+
+    [DisableAutoCreation]
+    [UpdateInGroup(typeof(GASStructuralCommitSystemGroup), OrderFirst = true)]
+    public partial class BeginGASStructuralCommitECBSystem : EntityCommandBufferSystem
+    {
+        public unsafe struct Singleton : IComponentData, IECBSingleton
+        {
+            private UnsafeList<EntityCommandBuffer>* _pendingBuffers;
+            private AllocatorManager.AllocatorHandle _allocator;
+
+            public EntityCommandBuffer CreateCommandBuffer(WorldUnmanaged world)
+            {
+                return EntityCommandBufferSystem.CreateCommandBuffer(ref *_pendingBuffers, _allocator, world);
+            }
+
+            public void SetPendingBufferList(ref UnsafeList<EntityCommandBuffer> buffers)
+            {
+                _pendingBuffers = (UnsafeList<EntityCommandBuffer>*)UnsafeUtility.AddressOf(ref buffers);
+            }
+
+            public void SetAllocator(Allocator allocatorIn)
+            {
+                _allocator = allocatorIn;
+            }
+
+            public void SetAllocator(AllocatorManager.AllocatorHandle allocatorIn)
+            {
+                _allocator = allocatorIn;
+            }
+        }
+
+        protected override void OnCreate()
+        {
+            base.OnCreate();
+            this.RegisterSingleton<Singleton>(ref PendingBuffers, World.Unmanaged);
+        }
+    }
+
+    [DisableAutoCreation]
+    [UpdateInGroup(typeof(GASStructuralCommitSystemGroup), OrderLast = true)]
+    public partial class EndGASStructuralCommitECBSystem : EntityCommandBufferSystem
+    {
+        public unsafe struct Singleton : IComponentData, IECBSingleton
+        {
+            private UnsafeList<EntityCommandBuffer>* _pendingBuffers;
+            private AllocatorManager.AllocatorHandle _allocator;
+
+            public EntityCommandBuffer CreateCommandBuffer(WorldUnmanaged world)
+            {
+                return EntityCommandBufferSystem.CreateCommandBuffer(ref *_pendingBuffers, _allocator, world);
+            }
+
+            public void SetPendingBufferList(ref UnsafeList<EntityCommandBuffer> buffers)
+            {
+                _pendingBuffers = (UnsafeList<EntityCommandBuffer>*)UnsafeUtility.AddressOf(ref buffers);
+            }
+
+            public void SetAllocator(Allocator allocatorIn)
+            {
+                _allocator = allocatorIn;
+            }
+
+            public void SetAllocator(AllocatorManager.AllocatorHandle allocatorIn)
+            {
+                _allocator = allocatorIn;
+            }
+        }
+
+        protected override void OnCreate()
+        {
+            base.OnCreate();
+            this.RegisterSingleton<Singleton>(ref PendingBuffers, World.Unmanaged);
+        }
     }
 
     /// <summary>
-    /// 属性计算组：Modifier → CurrentValue 重算。
+    /// Boundary projection domain. Presentation, replay, debugger, and managed cue bridges consume
+    /// committed simulation facts and must not feed state back into CoreSimulation.
     /// </summary>
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(GASEffectGroup))]
-    public partial class GASAttributeGroup : ComponentSystemGroup
-    {
-    }
-
-    /// <summary>
-    /// Ability 逻辑组：Activate, Tick, End。
-    /// </summary>
-    [DisableAutoCreation]
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(GASAttributeGroup))]
-    public partial class GASAbilityGroup : ComponentSystemGroup
-    {
-    }
-
-    [DisableAutoCreation]
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(GASAbilityGroup))]
-    [UpdateBefore(typeof(GASCueGroup))]
-    public partial class GasStructuralPlaybackSystemGroup : ComponentSystemGroup
-    {
-    }
-
-    [DisableAutoCreation]
-    [UpdateInGroup(typeof(GasStructuralPlaybackSystemGroup), OrderLast = true)]
-    public partial class GasEndStructuralEcbSystem : EntityCommandBufferSystem
-    {
-    }
-
-    /// <summary>
-    /// 表现层组：消费当前 tick 的 ECS 事实事件，驱动 Cue / GameObject / UI 边界。
-    /// Simulation runtime 不应反向依赖本组的托管表现对象。
-    /// </summary>
-    [DisableAutoCreation]
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(GASAbilityGroup))]
-    public partial class GASCueGroup : ComponentSystemGroup
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+    [UpdateAfter(typeof(GASStructuralCommitSystemGroup))]
+    public partial class GASBoundaryProjectionSystemGroup : ComponentSystemGroup
     {
     }
 }

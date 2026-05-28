@@ -9,14 +9,14 @@
 | GAS 概念 | Unity ECS 目标表达 | 权威边界 |
 |---|---|---|
 | ASC | Entity + ASC components / buffers | Simulation |
-| Ability | Ability entity + runtime state + command request | Simulation |
-| GameplayEffect | Effect command / instant spec / active effect store | Simulation |
-| Attribute | per-attribute-type IComponentData + delta buffer stream | Simulation |
+| Ability | Ability entity + cross-frame runtime state；Boundary request entity 或 frame-local command record 承载单次激活上下文 | Simulation |
+| GameplayEffect | Effect fan-in command record / active effect slot / typed fact | Simulation |
+| Attribute | generated AttributeSet family + target-grouped modifier reduce/apply + dirty mask | Simulation |
 | GameplayTag | Dense tag mask / requirement query | Simulation / Definition |
-| TargetData | Target selection request / result buffer | Simulation / Boundary |
+| TargetData | command record target params / `AbilityTargetRecord` NativeStream / request-owned result buffer（低量物化）/ deterministic sort key | Simulation / Boundary |
 | GameplayCue | Cue request + presentation marker | Observation / Presentation |
 | EffectContext | Runtime context metadata | Simulation |
-| Spec | Instant spec stream / active mutation stream | Simulation |
+| Spec / Delta / Fact | 语义链路，不等同全局 stream；目标态由 Effect Fan-In、Attribute Reduce/Apply、Gameplay Fact 分段承载 | Simulation |
 | Debug / Replay | Derived facts and diagnostics | Observation |
 
 ## UML 概念图
@@ -25,25 +25,39 @@
 classDiagram
     class AbilitySystemComponent {
         Entity AscEntity
-        AttributeComponent attributes
+        AttributeSetComponent attributes
         TagMaskComponent tags
     }
     class AbilityRuntime {
         AbilityStateComponent state
-        AbilityCommandRequest command
+        AbilitySlotBuffer slotRef
     }
-    class EffectRuntime {
-        EffectCommand command
-        InstantEffectSpec spec
-        ActiveEffectRecord active
+    class AbilityActivationCommand {
+        AbilityActivationRequestComponent request
+        AbilityCommandComponent command
+        AbilityActivationCommandRecord commandRecord
+        TargetDataBuffer targets
     }
-    class AttributeRuntime {
-        AttributeDelta delta
-        AttributeChangedFact fact
+    class EffectFanInKernel {
+        NativeStream commands
+        CompactCommandRange ownerRange
+        ActiveEffectMutation mutation
+    }
+    class ActiveEffectStore {
+        ActiveGameplayEffectBuffer slot
+        StateFlags flags
+        PeriodCursor cursor
+    }
+    class AttributeReduceApplyKernel {
+        TargetGroupedModifierRange modifiers
+        AttributeSetComponent writes
+        AttributeDirtyMaskComponent dirtyMask
+        TagStatusFlagsComponent statusCache
     }
     class TargetData {
-        TargetAcquisitionComponent request
-        TargetDataBuffer resultBuffer
+        AbilityTargetRecord targetRecord
+        TargetMode targetMode
+        TargetSortKey sortKey
     }
     class Observation {
         GameplayFact fact
@@ -52,20 +66,24 @@ classDiagram
     }
 
     AbilitySystemComponent "1" --> "*" AbilityRuntime
-    AbilityRuntime --> TargetData : resolves targets
-    TargetData --> EffectRuntime : provides target set
-    AbilityRuntime --> EffectRuntime : emits command
-    EffectRuntime --> AttributeRuntime : produces delta
-    AttributeRuntime --> Observation : projects facts
+    AbilityActivationCommand --> AbilityRuntime : reads granted state
+    AbilityActivationCommand --> TargetData : resolves targets
+    TargetData --> EffectFanInKernel : writes command records
+    AbilityActivationCommand --> EffectFanInKernel : emits boundary/core intent
+    EffectFanInKernel --> ActiveEffectStore : duration/stack mutation
+    EffectFanInKernel --> AttributeReduceApplyKernel : instant modifiers
+    ActiveEffectStore --> EffectFanInKernel : period/overflow derived command
+    AttributeReduceApplyKernel --> Observation : emits typed facts
 ```
 
 ## 不变量
 
-1. Ability 产生意图并解析目标，不直接写 Attribute。
-2. TargetData 承载目标选择结果，从 Ability 流入 EffectCommand，每个 target 可独立产生 effect 实例。
-3. GameplayEffect 改变状态，但 instant effect 不应默认创建 runtime GE entity。
-4. Attribute / Tag 是判定和聚合结果，不是 OOP callback 入口。
-5. Cue / Presentation 观察事实，不决定 gameplay。
+1. Ability Entity 保存 granted ability 的跨帧状态，不承载单次激活上下文，也不直接写 Attribute。
+2. TargetData 承载目标选择结果和确定性排序键，从 frame-local command/target record 或 request/command entity 流入 Effect Fan-In；每个 target 可以产生 command record，但不等于每个 target 创建 request/runtime entity。
+3. GameplayEffect 改变状态，但 instant effect 不应默认创建 runtime GE entity；duration/stack/period 默认进入 ASC owner-local active effect slot。
+4. Attribute / Tag 是判定和聚合结果，不是 OOP callback 入口；Attribute 默认按真实 DOTS 热路径生成 AttributeSet family，不按每个属性生成一套 component/system；高频 status 默认进入 bitmask / status flags。
+5. Spec / Delta / Fact 是语义链路，不是一个全局 bus；物理上分别归 Effect Fan-In、Attribute Reduce/Apply、Gameplay Fact kernel。
+6. Cue / Presentation 观察事实，不决定 gameplay。
 ## 历史方案定位
 
 1. Ability / Effect / Attribute / Tag 作为 ECS Core 的概念切分来自 `../历史方案参考/方案11.md:20-43`。

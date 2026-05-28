@@ -50,11 +50,6 @@ namespace GAS.Runtime.Generated
             ComponentType.ReadWrite<GASDefinitionCodeComponent>()
         );
 
-        public static readonly ComponentTypeSet TimelineDefinitionComponentTypes = new ComponentTypeSet(
-            ComponentType.ReadWrite<GASGeneratedDefinitionBlobComponent<TimelineDefinitionBlob>>(),
-            ComponentType.ReadWrite<GASDefinitionCodeComponent>()
-        );
-
         public static readonly ComponentTypeSet UnitDefinitionComponentTypes = new ComponentTypeSet(
             ComponentType.ReadWrite<GASGeneratedDefinitionBlobComponent<UnitDefinitionBlob>>(),
             ComponentType.ReadWrite<GASDefinitionCodeComponent>()

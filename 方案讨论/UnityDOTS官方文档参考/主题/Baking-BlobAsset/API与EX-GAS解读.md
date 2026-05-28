@@ -4,7 +4,7 @@
 
 ### Baker
 
-Baker 是 authoring GameObject 到 ECS component 的转换入口，**每个 authoring GameObject 对应一个 Baker 实例**，只在 Editor 中执行。
+Baker 是 authoring GameObject 到 ECS component 的转换入口，只在 Editor 中执行。PackageCache `baking-baker-overview.md` 明确 Baker 实例会被复用，`Bake()` 会被多次、无序调用，因此 Baker 必须无状态，不能在实例字段或 static 字段缓存跨调用数据。
 
 ```csharp
 public class AbilityAuthoringBaker : Baker<AbilityAuthoring>
@@ -46,7 +46,7 @@ public partial struct AbilityDefinitionBakingSystem : ISystem
 
 ### BlobAsset
 
-BlobAsset 是 immutable、reference-counted 的只读数据结构，支持多 entity 共享引用。
+BlobAsset 是 immutable 的只读数据结构，支持多 entity 共享引用。生命周期要看来源：运行时通过 `BlobBuilder.CreateBlobAssetReference()` 创建的 Blob 必须由创建者手动 `Dispose()`；Baker / Entity Scene 路径通过 BlobAssetStore 和引用计数释放。
 
 ```csharp
 public struct AbilityDefinitionBlob
@@ -66,7 +66,7 @@ builder.Dispose();
 
 **关键特性：**
 - Immutable：创建后不可修改
-- Reference-counted：`BlobAssetReference<T>` 自动管理生命周期，不可手动 `Dispose`（除非创建者且不再传递）
+- Lifetime-aware：运行时创建者负责释放；Baker / Entity Scene 输出由 BlobAssetStore / 引用计数释放
 - Burst-friendly：可在 job 中直接访问
 - 多 entity 共享：同一 blob 引用可赋给多个 entity
 
@@ -81,7 +81,7 @@ builder.Dispose();
 ```
 Luban Excel/JSON → SourceGenerator → .gen.cs → Baker → BlobAsset / Entity
                          ↓
-                  GASDefinitionTable（static lookup）
+                  GASDefinitionCatalogBlob / generated static lookup
                          ↓
                   Runtime Core（BlobRef + component lookup only）
 ```
@@ -89,7 +89,7 @@ Luban Excel/JSON → SourceGenerator → .gen.cs → Baker → BlobAsset / Entit
 **当前差距：**
 - `AbilityConfigRegistry`／`GameplayEffectConfigRegistry` 仍偏托管
 - managed config 对象作为运行时入口，未被 Blob/Prototype 完全替代
-- 目标态：Runtime hot path 只消费 `BlobAssetReference<T>` 或 generated static table
+- 目标态：Runtime hot path 只消费 `BlobAssetReference<T>`、只读 Catalog Blob 或 generated O(1)/O(log n) static lookup
 
 ### EX-GAS 中 Baker 的职责边界
 
@@ -117,9 +117,9 @@ Luban Excel/JSON → SourceGenerator → .gen.cs → Baker → BlobAsset / Entit
 
 ## 常见陷阱
 
-1. **BlobArray 不能嵌套 BlobArray**：只能 `BlobArray<T>`，T 不能包含另一个 `BlobArray`。需展平为多维索引或使用子 blob 引用模式。
+1. **含内部指针的 Blob 数据不能按值复制**：`BlobArray`、`BlobString`、`BlobPtr` 必须通过 `BlobBuilder` 构建，并通过 `ref` 或 `BlobAssetReference<T>` 访问。EX-GAS 多层配置默认展平为 range/index；只有能证明按 `ref` 构建和访问正确时才允许嵌套形态。
 2. **Baker 持有状态**：static 字段会在多次 Baking 间残留；实例字段在单例 Baker 中跨 `Bake()` 调用残留。
-3. **BlobAssetReference 的 Dispose**：完全由引用计数管理，不要手动调用 `Dispose`（除非是创建者且不再传递），否则导致悬挂引用或 double-free。
+3. **BlobAssetReference 的 Dispose**：运行时创建的 Blob 必须由创建者手动 `Dispose`；Entity Scene 载入或 Baker `AddBlobAsset()` 注册的 Blob 不要手动释放。
 4. **Full Baking vs Incremental Baking 的 entity 顺序不同**：不能依赖 chunk 顺序的一致性，必须使用确定性索引（如 `[ChunkIndexInQuery]`）否则 output 不可重现。
 5. **Baking System 创建的 entity 不进入 baked scene**：该 entity 仅存在于 Baking World 的系统间数据传递，不会序列化到磁盘。如需输出到 scene 必须在 Baker 中创建。
 6. **`DependsOn` 放在 early-out 之后**：当 external reference 为 null 时 `DependsOn` 未执行，之后引用被赋值时 Baker 不会重新触发。违反 CASE-31 模式约束。
@@ -132,6 +132,6 @@ Luban Excel/JSON → SourceGenerator → .gen.cs → Baker → BlobAsset / Entit
 | `baking-baker-overview.md` | Baker 必须无状态；依赖通过 API 声明；Baker 是单例实例 | BAKE-02, CASE-40 |
 | `baking-phases.md` | Baker 间无依赖；Baker 只添加不读取；Baking phases 顺序 | BAKE-01, CASE-39 |
 | `baking-baking-systems-overview.md` | Baking System 不自动追踪依赖；需手动增量还原；entity 不进入 baked scene | BAKE-03, CASE-41 |
-| `blob-assets-create.md` | BlobAsset immutable、reference-counted、Burst-friendly；必须向 Baker 注册；TryGetBlobAssetReference 去重 | BLOB-01, BLOB-02, CASE-24 |
+| `blob-assets-create.md` | BlobAsset immutable、Burst-friendly；含内部指针的数据必须用 `ref` / `BlobAssetReference<T>` 访问；运行时创建的 Blob 需手动 Dispose；Baker 创建的 Blob 必须向 Baker 注册；`TryGetBlobAssetReference` + custom hash 去重 | BLOB-01, BLOB-02, CASE-24 |
 | `baking-prefabs.md` | Prefab 需 Baker 注册；runtime 通过 EntityPrefabReference 加载 | BAKE-01 (context) |
 | `components-buffer-introducing.html` | DynamicBuffer 用于可变数据对比 BlobAsset 不可变语义 | BLOB-01 |

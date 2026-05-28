@@ -10,7 +10,6 @@ namespace GAS.Runtime
         AbilityCommandRequest = 2,
         AbilityCommitGate = 3,
         AbilityTickLifecycle = 4,
-        AbilityTimelineRuntime = 5,
         GameplayEffectApplyRequest = 6,
         GameplayEffectActiveRuntime = 7,
         ExecutionCalculationPipeline = 8,
@@ -108,8 +107,6 @@ namespace GAS.Runtime
         AbilityConfig = 10,
         AbilityRuntimeState = 11,
         AbilityActive = 12,
-        AbilityTimelineRef = 13,
-        AbilityTimelineRuntime = 14,
         ApplyGameplayEffectRequest = 15,
         TargetData = 16,
         EffectContext = 17,
@@ -361,10 +358,10 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.ActiveEffectStore,
                         GASRuntimeLayoutComponentSlot.ActiveEffectSlotBuffer,
                     },
-                    typeof(SASCCreate),
-                    typeof(SAscInitializeRequest),
-                    typeof(SAscDestroyRequest),
-                    typeof(SAscDestroyFinalize)),
+                    typeof(ASCEntityCreateSystem),
+                    typeof(ASCInitializeRequestSystem),
+                    typeof(ASCDestroyRequestSystem),
+                    typeof(ASCDestroyFinalizeSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.AbilityCommandRequest,
                     GASRuntimeLayoutDomain.Ability,
@@ -382,8 +379,8 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.AbilityCommandRequest,
                     },
                     Array.Empty<GASRuntimeLayoutComponentSlot>(),
-                    typeof(SAbilityCommandRequest),
-                    typeof(STryActivateAbility)),
+                    typeof(AbilityCommandRequestSystem),
+                    typeof(AbilityTryActivateSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.AbilityCommitGate,
                     GASRuntimeLayoutDomain.Ability,
@@ -414,7 +411,7 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.AttributeBuffer,
                         GASRuntimeLayoutComponentSlot.TagMask,
                     },
-                    typeof(SAbilityCommit)),
+                    typeof(AbilityCommitSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.AbilityTickLifecycle,
                     GASRuntimeLayoutDomain.Ability,
@@ -436,36 +433,9 @@ namespace GAS.Runtime
                     {
                         GASRuntimeLayoutComponentSlot.AbilityActive,
                     },
-                    typeof(SAbilityTick),
-                    typeof(SAbilityLifecycleRequest),
-                    typeof(SAbilityStateCleanup)),
-                Entry(
-                    GASRuntimeQueryLayoutEntryId.AbilityTimelineRuntime,
-                    GASRuntimeLayoutDomain.Ability,
-                    GASRuntimeEntityKind.AbilityRuntime,
-                    GASRuntimeLayoutCapability.QueryBased
-                    | GASRuntimeLayoutCapability.EcbMigrationCandidate
-                    | GASRuntimeLayoutCapability.RequiresMainThreadEntityManager
-                    | GASRuntimeLayoutCapability.StructuralChanges
-                    | GASRuntimeLayoutCapability.ReadsDefinitionData
-                    | GASRuntimeLayoutCapability.WritesSimulationState,
-                    GASRuntimeLayoutBoundary.CrossEntityLookup
-                    | GASRuntimeLayoutBoundary.DefinitionRuntimeBoundary
-                    | GASRuntimeLayoutBoundary.StructuralEntityManagerHotspot,
-                    GASRuntimeLayoutDecision.NeedsEcbMigration,
-                    new[]
-                    {
-                        GASRuntimeLayoutComponentSlot.AbilityActive,
-                        GASRuntimeLayoutComponentSlot.AbilityBaseInfo,
-                        GASRuntimeLayoutComponentSlot.AbilityRuntimeState,
-                        GASRuntimeLayoutComponentSlot.AbilityTimelineRef,
-                    },
-                    new[]
-                    {
-                        GASRuntimeLayoutComponentSlot.AbilityTimelineRuntime,
-                    },
-                    typeof(SAbilityTimelineAction),
-                    typeof(SAbilityTimelineLifecycleRequest)),
+                    typeof(AbilityStateTickSystem),
+                    typeof(AbilityLifecycleRequestSystem),
+                    typeof(AbilityStateCleanupSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.GameplayEffectCommandSpecStream,
                     GASRuntimeLayoutDomain.GameplayEffect,
@@ -494,13 +464,10 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.EffectCommandSetByCallerBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectMutationBuffer,
                     },
-                    typeof(SEffectCommandIngest),
-                    typeof(SInstantEffectSpecBuild),
-                    typeof(SActiveEffectMutationApply),
-                    typeof(SAttributeDeltaApply),
-                    typeof(STypedSimulationFactProjection),
-                    typeof(STypedSimulationFactEventBridge),
-                    typeof(SInstantEffectCueRequestProjection)),
+                    typeof(GEEffectCommandIngestSystem),
+                    typeof(GameplayFactProjectionSystem),
+                    typeof(GameplayFactEventBridgeSystem),
+                    typeof(GEInstantEffectCueRequestProjectionSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.ActiveEffectStore,
                     GASRuntimeLayoutDomain.GameplayEffect,
@@ -562,9 +529,7 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.EffectFinalDestroy,
                         GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexStableRow,
                     },
-                    typeof(SEffectRemove),
-                    typeof(SEffectFinalDestroy),
-                    typeof(SEffectTick)),
+                    Array.Empty<Type>()),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.ExecutionCalculationPipeline,
                     GASRuntimeLayoutDomain.GameplayEffect,
@@ -592,9 +557,9 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.ExecutionCalculationValueBuffer,
                         GASRuntimeLayoutComponentSlot.ResolvedModifierBuffer,
                     },
-                    typeof(SExecutionCalculation),
-                    typeof(GASExecutionCalculationExtensionGroup),
-                    typeof(SExecutionCalculationOutputModifier)),
+                    typeof(GEExecutionCalculationSystem),
+                    typeof(GEExecutionCalculationExtensionSystemGroup),
+                    typeof(GEExecutionCalculationOutputModifierSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.AttributeRecalculate,
                     GASRuntimeLayoutDomain.Attribute,
@@ -615,7 +580,7 @@ namespace GAS.Runtime
                     {
                         GASRuntimeLayoutComponentSlot.ActiveModifierBuffer,
                     },
-                    typeof(SAttributeRecalculate)),
+                    typeof(AttributeRecalculateSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.AttributeFactProjection,
                     GASRuntimeLayoutDomain.Attribute,
@@ -633,7 +598,7 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.GameplayEventBus,
                     },
                     Array.Empty<GASRuntimeLayoutComponentSlot>(),
-                    typeof(SAttributeChangeEventProjection)),
+                    typeof(AttributeChangeEventProjectionSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.TagMaskRuntime,
                     GASRuntimeLayoutDomain.GameplayTag,
@@ -650,7 +615,7 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.TagMask,
                     },
                     Array.Empty<GASRuntimeLayoutComponentSlot>(),
-                    typeof(STagChangeProcess)),
+                    typeof(GameplayTagChangeProcessSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.ObservationReplayAndOutbox,
                     GASRuntimeLayoutDomain.Observation,
@@ -671,9 +636,9 @@ namespace GAS.Runtime
                     {
                         GASRuntimeLayoutComponentSlot.TypedSimulationFactBuffer,
                     },
-                    typeof(SEventBusClear),
-                    typeof(SPresentationOutboxProjection),
-                    typeof(SDebugReplayLogProjection)),
+                    typeof(GameplayEventBusClearSystem),
+                    typeof(PresentationOutboxProjectionSystem),
+                    typeof(ReplayLogSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.ManagedCuePresentation,
                     GASRuntimeLayoutDomain.GameplayCue,
@@ -691,11 +656,11 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.CueEnableableState,
                     },
                     Array.Empty<GASRuntimeLayoutComponentSlot>(),
-                    typeof(SCueRequestBridge),
-                    typeof(SCueStart),
-                    typeof(SCueTick),
-                    typeof(SCueEnd),
-                    typeof(SCueDestroy)),
+                    typeof(CueRequestBridgeSystem),
+                    typeof(CueStartSystem),
+                    typeof(CueTickSystem),
+                    typeof(CueEndSystem),
+                    typeof(CueDestroySystem)),
             });
         }
 

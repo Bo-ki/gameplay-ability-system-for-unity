@@ -32,10 +32,10 @@ ActiveEffectStore 的目标不是“把每个 active effect 都实体化”，�
 | 状态类型 | 推荐承载 | 说明 |
 |---|---|---|
 | active effect slot | ASC entity 上的 DynamicBuffer slot / stable child entity | 高频读写优先稳定布局 |
-| inhibited / ready / expired | `IEnableableComponent` 或 slot state flag | 频繁开关不触发 archetype 迁移 |
-| period due | enableable marker / frame command | 到期时派生 `EffectCommand` |
+| inhibited / ready / expired | slot enum / bit flags | 默认不为每个轻量状态建 enableable component |
+| period due | slot flag / frame command；enableable 仅作 profiler 证明后的 chunk skip 优化 | 到期时派生 `EffectCommand` |
 | stack count / remaining time | unmanaged component / buffer element | 不混入 definition |
-| granted tag / granted ability owner | owner id + cleanup command | cleanup 进入 structural playback phase |
+| granted tag / granted ability owner | owner id + cleanup command | cleanup 进入 `GASStructuralCommitSystemGroup` |
 
 结构变化只允许发生在明确 lifecycle 边界，例如首次创建 owner state、最终 cleanup、grant ability 等；普通 tick / inhibited 切换 / period due 不应 add / remove component。
 
@@ -62,7 +62,7 @@ ActiveEffectStore 不再讨论“buffer 还是 entity”二选一，而是拆成
    **修正策略 —— 按 FSM 职责拆分 Job（不增加 Archetype）：**
    ```
    Job A: Duration lifecycle FSM（读 RemainingDuration，写 State/Flags）
-   Job B: Period cursor FSM（读 PeriodAccumulator，写 PeriodDueTag）
+   Job B: Period cursor FSM（读 PeriodAccumulator，写 slot PeriodDue flag / 派生命令候选）
    Job C: Stack overflow check（读 StackCount，写 ActiveEffectMutationBuffer）
    Job D: Granted tag/ability cleanup（读 Flags.PendingRemove，写 ECB）
 
@@ -73,6 +73,8 @@ ActiveEffectStore 不再讨论“buffer 还是 entity”二选一，而是拆成
    ```
 
    **不拆分 Entity 的原因**：拆分为独立 Entity 会增加 archetype 数量和 entity 数量，与 Archetype < 10 目标矛盾。拆分 Job 保持同一 Entity/Archetype，仅通过 Job 依赖链管理 FSM 间的数据依赖。每个 Job 只读写自己关心的字段，依赖链清晰，可独立 Profile。
+7. ActiveEffect 的默认状态表达是 slot 内 enum / bit flags；禁止为 `PendingApply / Active / Inhibited / PendingRemove / Removed` 等轻量状态各建一个 enableable component。
+8. Status / Buff / Debuff 类标记由 granted tag / active effect store 聚合到 bitmask 或 status flags；禁止每种 status 一个 tag component 或 enableable component。
 
 ## ActiveEffectStore API 选型矩阵
 
@@ -82,7 +84,7 @@ ActiveEffectStore 不能预设为“每个 active effect 一个 entity”或“�
 |---|---|---|---|
 | ASC `DynamicBuffer` slot | 每个 ASC active effect 数量有限、按 owner 顺序批处理 | buffer spill、slot compact、并行写冲突 | slot count、capacity、spill、compact count |
 | stable active effect entity | 每个 effect 状态复杂、需要独立 query / timer / stack | entity 数量增加、query 数增加、生命周期 cleanup | active entity count、archetype count、query match |
-| enableable marker | inhibited、period due、ready 等高频开关 | query enabled state 成本、状态语义不足 | enabled count、ignore-filter count |
+| enableable marker（可选） | 大量 idle / not-due entity 需要整 chunk/entity skip，且 profiler 证明收益 | query enabled state 成本、同步等待、状态语义不足；禁止替代 slot enum/bit flags | enabled count、ignore-filter count、wait ms |
 | enum state / bit field | 状态很多但每状态工作轻、适合同一 job 分支 | 分支影响 vectorization、可读性下降 | branch distribution、job cost |
 | Cleanup Component | owner destroy 后仍需释放 granted tag / ability / cue | cleanup 生命周期必须明确移除 | cleanup retained count、cleanup latency |
 | Chunk Component / chunk counters | 大量 idle/no-op effect 可整体跳过 | 只适合 per-chunk 优化事实，不替代 per-entity state | chunk skip count、matched chunk reduction |
@@ -94,16 +96,16 @@ ActiveEffectStore 不能预设为“每个 active effect 一个 entity”或“�
 
 **适用场景 —— ASC Entity 销毁时的级联清理：**
 - 当 ASC Entity 被销毁时，其所有 Ability Entity 也应当被销毁
-- 使用 `LinkedEntityGroup` 后，`EntityManager.DestroyEntity(ascEntity)` 自动级联销毁所有 Ability Entity
+- 使用 `LinkedEntityGroup` 后，`GASStructuralCommitSystemGroup` 中通过 ECB / bulk destroy 销毁 `ascEntity` 时可自动级联销毁所有 Ability Entity
 - 替代当前需要 `SAscDestroyRequest` System 手动查找并销毁的 O(N_abilities_global) 操作
 
 **不适用场景：**
 - 需要按特定顺序逐 Ability Entity 执行清理逻辑（如先 revoke 后 destroy）
 - `PRF-31`：Child Buffer 迭代顺序不保证确定，不应依赖 sibling index 做排序
 
-**当前状态**：Spec 已在 "不进入 Core hot path 决策" 中提及 `LinkedEntityGroup`。目标态建议在 ASC Entity 创建时将 Ability Entity 加入 `LinkedEntityGroup`，销毁时利用级联机制减少手动清理代码。此选项应在 Structural Playback phase 中实现，不影响 hot path 性能。
+**当前状态**：Spec 已在 "不进入 Core hot path 决策" 中提及 `LinkedEntityGroup`。目标态建议在 ASC Entity 创建时将 Ability Entity 加入 `LinkedEntityGroup`，销毁时利用级联机制减少手动清理代码。此选项应在 `GASStructuralCommitSystemGroup` 中实现，不影响 hot path 性能。
 
-AM5 验收必须能证明：普通 tick、period due、inhibit 切换不触发 archetype churn；grant/remove/cleanup 进入 structural playback；Debugger 能解释 slot pressure、enabled state、cleanup 和 chunk skip。
+AM5 验收必须能证明：普通 tick、period due、inhibit 切换不触发 archetype churn；grant/remove/cleanup 进入 `GASStructuralCommitSystemGroup`；Debugger 能解释 slot pressure、optional enableable state、cleanup 和 chunk skip。
 
 ## AM5 第一落点约束
 

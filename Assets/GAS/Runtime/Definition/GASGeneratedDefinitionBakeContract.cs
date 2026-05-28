@@ -32,7 +32,6 @@ namespace GAS.Runtime
         GameplayEffectStaticDefinitionBlobCache = 3,
         RuntimeArchetypeTemplate = 4,
         RuntimeLifecycleSystems = 5,
-        RuntimeTimelineSystems = 6,
         ManagedPresentationBridge = 7,
         GameplayEffectCacheLifecycleOwner = 8,
     }
@@ -58,7 +57,6 @@ namespace GAS.Runtime
         TagRequirementData = 1 << 3,
         AttributeDefaultData = 1 << 4,
         DefinitionReferenceEdges = 1 << 5,
-        TimelineReferenceKey = 1 << 6,
         StaticDefinitionBlobReferenceSlot = 1 << 7,
         PresentationCueKey = 1 << 8,
     }
@@ -221,18 +219,6 @@ namespace GAS.Runtime
                 AppendDeferredBoundaryWrites(entry, writes);
             }
 
-            if (plan.TimelineDefinitionCount > 0)
-            {
-                writes.Add(new GASGeneratedDefinitionBakeWrite(
-                    GASDefinitionKind.TimelineAbility,
-                    0,
-                    GASGeneratedDefinitionBakeWriteKind.DeferredBoundary,
-                    GASGeneratedDefinitionBakeWritePhase.RuntimeSystem,
-                    GASGeneratedDefinitionBakeWriteTarget.RuntimeTimelineSystems,
-                    GASGeneratedDefinitionBakingBoundary.RuntimeTimeline,
-                    false));
-            }
-
             if (plan.HasDeferredBoundary(GASGeneratedDefinitionBakingBoundary.MissingGameplayEffectConfigProvider))
             {
                 writes.Add(new GASGeneratedDefinitionBakeWrite(
@@ -355,8 +341,6 @@ namespace GAS.Runtime
                         GASGeneratedDefinitionArchetypeSlot.StaticBufferData
                         | GASGeneratedDefinitionArchetypeSlot.TagRequirementData
                         | GASGeneratedDefinitionArchetypeSlot.DefinitionReferenceEdges;
-                    if (entry.HasDeferredBoundary(GASGeneratedDefinitionBakingBoundary.RuntimeTimeline))
-                        slots |= GASGeneratedDefinitionArchetypeSlot.TimelineReferenceKey;
                     break;
                 case GASDefinitionKind.GameplayEffect:
                     slots |=
@@ -397,12 +381,6 @@ namespace GAS.Runtime
                 GASGeneratedDefinitionBakingBoundary.RuntimeLifecycle,
                 GASGeneratedDefinitionBakeWritePhase.RuntimeSystem,
                 GASGeneratedDefinitionBakeWriteTarget.RuntimeLifecycleSystems,
-                writes);
-            AppendDeferredBoundaryWrite(
-                entry,
-                GASGeneratedDefinitionBakingBoundary.RuntimeTimeline,
-                GASGeneratedDefinitionBakeWritePhase.RuntimeSystem,
-                GASGeneratedDefinitionBakeWriteTarget.RuntimeTimelineSystems,
                 writes);
             AppendDeferredBoundaryWrite(
                 entry,

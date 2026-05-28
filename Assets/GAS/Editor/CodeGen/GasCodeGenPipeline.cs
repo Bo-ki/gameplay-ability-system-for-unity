@@ -14,6 +14,8 @@ namespace GAS.Editor
             new DefinitionIndexPhase(),
             new BlobSchemaPhase(),
             new StaticLookupPhase(),
+            new DefinitionCatalogPhase(),
+            new RuntimeDefinitionGluePhase(),
             new BakerGluePhase(),
             new ComponentTypeSetPhase(),
             new QueryLayoutPhase(),

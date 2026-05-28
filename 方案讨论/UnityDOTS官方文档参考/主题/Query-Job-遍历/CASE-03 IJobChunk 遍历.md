@@ -23,7 +23,14 @@ public struct EffectSpecChunkJob : IJobChunk
         var specs = chunk.GetNativeArray(ref SpecRequestHandle);
         var attrs = chunk.GetNativeArray(ref AttributeHandle);
 
-        var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+        if (!useEnabledMask)
+        {
+            for (var i = 0; i < chunk.Count; i++)
+                attrs[i] = ApplySpec(attrs[i], specs[i]);
+            return;
+        }
+
+        var enumerator = new ChunkEntityEnumerator(true, chunkEnabledMask, chunk.Count);
         while (enumerator.NextEntityIndex(out var i))
         {
             attrs[i] = ApplySpec(attrs[i], specs[i]);

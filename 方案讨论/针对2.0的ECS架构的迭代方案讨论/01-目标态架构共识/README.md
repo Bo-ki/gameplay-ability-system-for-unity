@@ -20,7 +20,7 @@
 | [01-GAS概念模型Spec](01-GAS概念模型Spec.md) | GAS 概念到 Unity ECS 的映射 |
 | [02-四层架构Spec](02-四层架构Spec.md) | Application Shell / Runtime Boundary / GAS Runtime Core / Definition & Generation |
 | [03-RuntimeCore管线Spec](03-RuntimeCore管线Spec.md) | Runtime Core phase、stream 和 SystemGroup 目标 |
-| [04-EffectCommand-SpecStream-AttributeDeltaSpec](04-EffectCommand-SpecStream-AttributeDeltaSpec.md) | Effect Command、Instant Spec、Attribute Delta |
+| [04-EffectCommand-SpecStream-AttributeDeltaSpec](04-EffectCommand-SpecStream-AttributeDeltaSpec.md) | Effect Command、Spec/Delta/Fact 语义链、目标态 fan-in 承载 |
 | [05-ActiveEffectStoreSpec](05-ActiveEffectStoreSpec.md) | Duration / Stack / Period / Granted state |
 | [06-Observation-Presentation-ReplaySpec](06-Observation-Presentation-ReplaySpec.md) | Observation、Presentation、Replay 分层 |
 | [07-RuntimeCoreDebuggerSpec](07-RuntimeCoreDebuggerSpec.md) | Runtime Core Debugger 诊断事实与图表 |
@@ -56,4 +56,3 @@ Unity DOTS 官方依据不再维护在本目录内。所有 Runtime Core、Debug
 4. 任务树节点必须引用本目录中的具体 Spec；找不到对应 Spec 时先补目标态设计再拆任务。
 5. Runtime Core 相关 Spec 必须先引用 `../../UnityDOTS官方文档参考/README.md`。
 6. 新增 Unity 官方文档结论时，先通过 `../../UnityDOTS官方文档参考/README.md` 判断归属，再反哺对应业务 Spec。
-

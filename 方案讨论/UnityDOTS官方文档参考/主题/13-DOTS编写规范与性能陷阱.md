@@ -140,11 +140,12 @@ GasStructuralPlaybackSystemGroup（唯一结构变化点）
 
 **来自官方文档：**
 > `performance-sync-points.md`: "Sync points can also happen when you use Run to run a job, or when you use idiomatic foreach"
+> `upgrade-guide.md`: `SystemAPI.Query` 可在不需要 job 的遍历中使用，并可在合适上下文 Burst 编译。
 
 **为什么严重：**
-- 主线程 foreach 先触发 sync point（等待所有相关 job）→ 再串行遍历
+- 主线程 foreach 前自动完成必要依赖（相关 job 未完成时等待）→ 再串行遍历
 - 同时间内所有 worker 线程空闲
-- 失去 Burst 编译（托管代码性能 10-100x 慢）
+- 即使 `SystemAPI.Query` 被 Burst 编译，仍没有 worker-thread 并行度；hot path 主要损失是 dependency completion + 主线程串行遍历
 
 **检查方法：**
 - Grep 搜索 `SystemAPI.Query` 在 Runtime Core system 目录中的出现

@@ -166,7 +166,7 @@ namespace GAS.Editor
         private static void RefreshAscEntitiesCache()
         {
             _cachedAscEntities.Clear();
-            var ascEntities = EntityQueryHelper.GetAllEntitiesWithComponent<CAscBasicData>();
+            var ascEntities = EntityQueryHelper.GetAllEntitiesWithComponent<ASCIdentityComponent>();
             foreach (var ascEntity in ascEntities)
                 _cachedAscEntities.Add((GASManager.EntityManager.GetName(ascEntity), ascEntity));
             _ascEntityChoices = new ValueDropdownItem[_cachedAscEntities.Count];
@@ -253,8 +253,8 @@ namespace GAS.Editor
         {
             var em = GASManager.EntityManager;
             var gt = em.GetComponentData<GlobalTimer>(GASManager.EntityGlobalTimer);
-            var lvl = em.HasComponent<CAscBasicData>(entityWatching)
-                ? em.GetComponentData<CAscBasicData>(entityWatching).Level
+            var lvl = em.HasComponent<ASCIdentityComponent>(entityWatching)
+                ? em.GetComponentData<ASCIdentityComponent>(entityWatching).Level
                 : 0;
             _globalInfoText =
                 $"<b>Frame</b>:{gt.Frame}  <b>Turn</b>:{gt.Turn}  <b>ASC Lv</b>:{lvl}  <b>Entity</b>:{EntityHelper.GetEntityName(entityWatching)}";
@@ -265,13 +265,13 @@ namespace GAS.Editor
         {
             _ascAttributes.Clear();
             var em = GASManager.EntityManager;
-            if (!em.HasBuffer<BAttribute>(entityWatching))
+            if (!em.HasBuffer<AttributeValueBuffer>(entityWatching))
             {
                 _ascAttributes.Add("<color=#888>无</color>");
                 return;
             }
 
-            var buf = em.GetBuffer<BAttribute>(entityWatching);
+            var buf = em.GetBuffer<AttributeValueBuffer>(entityWatching);
             foreach (var a in buf)
             {
                 var diff = Math.Abs(a.CurrentValue - a.BaseValue) > 0.001f;
@@ -287,19 +287,19 @@ namespace GAS.Editor
         {
             _ascTags.Clear();
             var em = GASManager.EntityManager;
-            var fixedMask = em.HasComponent<CFixedTagMask>(entityWatching)
-                ? em.GetComponentData<CFixedTagMask>(entityWatching).Mask
+            var fixedMask = em.HasComponent<TagFixedMaskComponent>(entityWatching)
+                ? em.GetComponentData<TagFixedMaskComponent>(entityWatching).Mask
                 : default;
 
             _ascTags.Add($"<b>固有({CountDenseTags(fixedMask)})</b>");
             AppendMaskTags(_ascTags, fixedMask);
-            if (!em.HasBuffer<BTempTagSource>(entityWatching))
+            if (!em.HasBuffer<TagTemporarySourceBuffer>(entityWatching))
             {
                 _ascTags.Add("<b>临时(0)</b>");
                 return;
             }
 
-            var tmpBuf = em.GetBuffer<BTempTagSource>(entityWatching);
+            var tmpBuf = em.GetBuffer<TagTemporarySourceBuffer>(entityWatching);
             _ascTags.Add($"<b>临时({tmpBuf.Length})</b>");
             foreach (var t in tmpBuf)
             {
@@ -309,7 +309,7 @@ namespace GAS.Editor
             }
         }
 
-        private static int CountDenseTags(in CTagMask mask)
+        private static int CountDenseTags(in TagMaskComponent mask)
         {
             var count = 0;
             for (var i = 0; i < 256; i++)
@@ -318,7 +318,7 @@ namespace GAS.Editor
             return count;
         }
 
-        private static void AppendMaskTags(List<string> output, in CTagMask mask)
+        private static void AppendMaskTags(List<string> output, in TagMaskComponent mask)
         {
             for (var i = 0; i < 256; i++)
             {
@@ -340,8 +340,7 @@ namespace GAS.Editor
         {
             _ascAbilities.Clear();
             var em = GASManager.EntityManager;
-            var gt = em.GetComponentData<GlobalTimer>(GASManager.EntityGlobalTimer);
-            var buf = em.GetBuffer<BGrantedAbility>(entityWatching);
+            var buf = em.GetBuffer<AbilitySlotBuffer>(entityWatching);
             if (buf.Length == 0)
             {
                 _ascAbilities.Add("<color=#888>无</color>");
@@ -351,119 +350,40 @@ namespace GAS.Editor
             foreach (var ab in buf)
             {
                 var ent = ab.AbilityEntity;
-                if (!em.Exists(ent) || !em.HasComponent<CAbilityConfig>(ent)) continue;
-                var info = em.GetComponentData<CAbilityBaseInfo>(ent);
-                var configRef = em.GetComponentData<CAbilityConfig>(ent).Config;
-                if (!configRef.IsCreated) continue;
-                ref var config = ref configRef.Value;
-                var aName = GetAbilityNameByCode(config.Code);
+                if (!em.Exists(ent) || !em.HasComponent<AbilityStateComponent>(ent)) continue;
+                var info = em.GetComponentData<AbilityStateComponent>(ent);
+                var aName = GetAbilityNameByCode(info.Code);
                 var eName = EntityHelper.GetEntityName(ent);
-                var phase = em.HasComponent<CAbilityRuntimeState>(ent)
-                    ? em.GetComponentData<CAbilityRuntimeState>(ent).Phase
+                var phase = em.HasComponent<AbilityStateComponent>(ent)
+                    ? em.GetComponentData<AbilityStateComponent>(ent).Phase
                     : EAbilityPhase.Ready;
                 var active = phase is EAbilityPhase.Activating or EAbilityPhase.Active;
                 var actStr = active ? $" <color=lime>[{phase}]</color>" : $" <color=#888>[{phase}]</color>";
                 _ascAbilities.Add(
                     $"<b><color=#ffcc44>{aName}</color></b> Lv.{info.Level} [{eName}]{actStr}");
 
-                // --- CD ---
-                if (config.Cooldown > 0f)
-                {
-                    if (!config.CooldownTags.IsEmpty)
-                    {
-                        var tagNames = GetDenseTagNames(config.CooldownTags);
-                        _ascAbilities.Add(
-                            $"  <color=#cc8888>CDTag: {string.Join(", ", tagNames)}</color>");
-
-                        var owner = info.Owner;
-                        var inCd = HasAnyDenseTag(em, owner, config.CooldownTags);
-                        if (inCd)
-                        {
-                            var cdRem = -1;
-                            var cdTotal = config.Cooldown;
-                            var cdUnit = "帧";
-                            var geBuffer = em.GetBuffer<BGameplayEffect>(owner);
-                            for (var gi = 0; gi < geBuffer.Length; gi++)
-                            {
-                                var ge = geBuffer[gi].GameplayEffect;
-                                if (!em.Exists(ge) || !em.HasBuffer<BGrantedTagConfig>(ge))
-                                    continue;
-                                var gTags = em.GetBuffer<BGrantedTagConfig>(ge);
-                                var match = HasAnyDenseTag(gTags, config.CooldownTags);
-                                if (match && em.HasComponent<CDurationRuntime>(ge))
-                                {
-                                    var dur = em.GetComponentData<CDurationRuntime>(ge);
-                                    var definition = em.HasComponent<CDurationDefinition>(ge)
-                                        ? em.GetComponentData<CDurationDefinition>(ge)
-                                        : default;
-                                    cdUnit = dur.ResolvedTimeUnit == TimeUnit.Frame ? "帧" : "回合";
-                                    var curTime = dur.ResolvedTimeUnit == TimeUnit.Frame ? gt.Frame : gt.Turn;
-                                    if (definition.StopTickWhenDeactivated && !dur.Active)
-                                        cdRem = dur.RemainingTime;
-                                    else
-                                        cdRem = dur.ResolvedDuration > 0
-                                            ? Math.Max(0, dur.ResolvedDuration - (curTime - dur.ActiveTime))
-                                            : -1;
-                                    cdTotal = dur.ResolvedDuration;
-                                    break;
-                                }
-                            }
-                            if (cdRem >= 0)
-                                _ascAbilities.Add(
-                                    $"  <color=red>CD: {cdRem}/{cdTotal}{cdUnit}</color>");
-                            else
-                                _ascAbilities.Add(
-                                    $"  <color=red>冷却中 (配置:{config.Cooldown})</color>");
-                        }
-                        else
-                        {
-                            _ascAbilities.Add(
-                                $"  <color=lime>CD就绪</color> (配置:{config.Cooldown})");
-                        }
-                    }
-                    else
-                    {
-                        _ascAbilities.Add(
-                            $"  <color=#888>CD配置:{config.Cooldown} (无冷却Tag)</color>");
-                    }
-                }
-
-                // --- ActivationOwnedTags ---
-                if (!config.ActivationOwnedTags.IsEmpty)
-                {
-                    var names = GetDenseTagNames(config.ActivationOwnedTags);
-                    _ascAbilities.Add(
-                        $"  <color=#88dd88>激活授予Tag: {string.Join(", ", names)}</color>");
-                }
-
                 // --- ECS 执行配置 ---
-                if (em.HasBuffer<BAbilityEffectOnActivate>(ent))
+                if (em.HasBuffer<AbilityOwnerEffectOnActivateBuffer>(ent))
                 {
-                    var effects = em.GetBuffer<BAbilityEffectOnActivate>(ent);
+                    var effects = em.GetBuffer<AbilityOwnerEffectOnActivateBuffer>(ent);
                     var effectCodes = new List<string>();
                     for (var ei = 0; ei < effects.Length; ei++)
                         effectCodes.Add(effects[ei].EffectCode.ToString());
                     _ascAbilities.Add($"  <color=#aaaaaa>激活效果: {string.Join(", ", effectCodes)}</color>");
                 }
 
-                if (em.HasComponent<CAbilityTimelineRef>(ent))
+                if (em.HasComponent<AbilityMoveInputComponent>(ent))
                 {
-                    var timeline = em.GetComponentData<CAbilityTimelineRef>(ent);
-                    _ascAbilities.Add($"  <color=#aaaaaa>TimelineRef: {timeline.TimelineId}</color>");
-                }
-
-                if (em.HasComponent<CAbilityMoveInput>(ent))
-                {
-                    var move = em.GetComponentData<CAbilityMoveInput>(ent);
+                    var move = em.GetComponentData<AbilityMoveInputComponent>(ent);
                     _ascAbilities.Add($"  <color=#aaaaaa>MoveInput.RotationOffset: {move.RotationOffset}</color>");
                 }
             }
         }
 
-        private static List<string> GetDenseTagNames(in CTagMask mask)
+        private static List<string> GetDenseTagNames(in TagMaskComponent mask)
         {
             var names = new List<string>();
-            for (var tagIndex = 0; tagIndex < CTagMask.Capacity; tagIndex++)
+            for (var tagIndex = 0; tagIndex < TagMaskComponent.Capacity; tagIndex++)
             {
                 if (mask.HasTag(tagIndex))
                     names.Add(GetDenseTagName(tagIndex));
@@ -472,14 +392,14 @@ namespace GAS.Editor
             return names;
         }
 
-        private static bool HasAnyDenseTag(EntityManager em, Entity asc, in CTagMask denseTags)
+        private static bool HasAnyDenseTag(EntityManager em, Entity asc, in TagMaskComponent denseTags)
         {
-            if (!em.Exists(asc) || !em.HasComponent<CTagMask>(asc)) return false;
-            var mask = em.GetComponentData<CTagMask>(asc);
+            if (!em.Exists(asc) || !em.HasComponent<TagMaskComponent>(asc)) return false;
+            var mask = em.GetComponentData<TagMaskComponent>(asc);
             return mask.HasAnyTag(denseTags);
         }
 
-        private static bool HasAnyDenseTag(DynamicBuffer<BGrantedTagConfig> grantedTags, in CTagMask denseTags)
+        private static bool HasAnyDenseTag(DynamicBuffer<GEGrantedTagConfigBuffer> grantedTags, in TagMaskComponent denseTags)
         {
             for (var i = 0; i < grantedTags.Length; i++)
             {
@@ -495,7 +415,7 @@ namespace GAS.Editor
             _ascGameplayEffects.Clear();
             var em = GASManager.EntityManager;
             var gt = em.GetComponentData<GlobalTimer>(GASManager.EntityGlobalTimer);
-            var geBuf = em.GetBuffer<BGameplayEffect>(entityWatching);
+            var geBuf = em.GetBuffer<LegacyGameplayEffectEntityBuffer>(entityWatching);
 
             if (geBuf.Length == 0)
             {
@@ -516,20 +436,20 @@ namespace GAS.Editor
                 }
 
                 // 基本信息
-                var context = em.GetComponentData<CEffectContext>(geEntity);
+                var context = em.GetComponentData<GEContextComponent>(geEntity);
                 var source = EntityHelper.GetEntityName(context.SourceAsc);
-                var level = em.HasComponent<CEffectSpecData>(geEntity)
-                    ? em.GetComponentData<CEffectSpecData>(geEntity).Level
+                var level = em.HasComponent<GEEffectSpecComponent>(geEntity)
+                    ? em.GetComponentData<GEEffectSpecComponent>(geEntity).Level
                     : 0;
                 _ascGameplayEffects.Add(
                     $"<b><color=#ffcc44>[{i}] {geName}</color></b>  Lv.{level}  <color=#888>来源:{source}</color>");
 
                 // Duration
-                if (em.HasComponent<CDurationRuntime>(geEntity))
+                if (em.HasComponent<GEDurationRuntimeComponent>(geEntity))
                 {
-                    var dur = em.GetComponentData<CDurationRuntime>(geEntity);
-                    var definition = em.HasComponent<CDurationDefinition>(geEntity)
-                        ? em.GetComponentData<CDurationDefinition>(geEntity)
+                    var dur = em.GetComponentData<GEDurationRuntimeComponent>(geEntity);
+                    var definition = em.HasComponent<GEDurationDefinitionComponent>(geEntity)
+                        ? em.GetComponentData<GEDurationDefinitionComponent>(geEntity)
                         : default;
                     var actStr = dur.Active
                         ? "<color=lime>[激活]</color>"
@@ -554,11 +474,11 @@ namespace GAS.Editor
                 }
 
                 // Stacking
-                if (em.HasComponent<CStackingDefinition>(geEntity))
+                if (em.HasComponent<GEStackingDefinitionComponent>(geEntity))
                 {
-                    var definition = em.GetComponentData<CStackingDefinition>(geEntity);
-                    var runtime = em.HasComponent<CStackingRuntime>(geEntity)
-                        ? em.GetComponentData<CStackingRuntime>(geEntity)
+                    var definition = em.GetComponentData<GEStackingDefinitionComponent>(geEntity);
+                    var runtime = em.HasComponent<GEStackingRuntimeComponent>(geEntity)
+                        ? em.GetComponentData<GEStackingRuntimeComponent>(geEntity)
                         : default;
                     var stackCount = runtime.StackCount > 0 ? runtime.StackCount : 1;
                     var stType = definition.StackType == EffectStackType.AggregateBySource
@@ -569,13 +489,13 @@ namespace GAS.Editor
                 }
 
                 // Period
-                if (em.HasComponent<CPeriodDefinition>(geEntity))
+                if (em.HasComponent<GEPeriodDefinitionComponent>(geEntity))
                 {
-                    var per = em.GetComponentData<CPeriodDefinition>(geEntity);
+                    var per = em.GetComponentData<GEPeriodDefinitionComponent>(geEntity);
                     var unit = "帧";
-                    if (em.HasComponent<CDurationRuntime>(geEntity))
+                    if (em.HasComponent<GEDurationRuntimeComponent>(geEntity))
                     {
-                        var dur = em.GetComponentData<CDurationRuntime>(geEntity);
+                        var dur = em.GetComponentData<GEDurationRuntimeComponent>(geEntity);
                         unit = dur.ResolvedTimeUnit == TimeUnit.Frame ? "帧" : "回合";
                     }
                     _ascGameplayEffects.Add(
@@ -583,9 +503,9 @@ namespace GAS.Editor
                 }
 
                 // GrantedTags
-                if (em.HasComponent<CEffectGrantedTags>(geEntity))
+                if (em.HasComponent<GEGrantedTagsComponent>(geEntity))
                 {
-                    var tags = em.GetComponentData<CEffectGrantedTags>(geEntity);
+                    var tags = em.GetComponentData<GEGrantedTagsComponent>(geEntity);
                     if (!tags.Tags.IsEmpty)
                     {
                         var names = GetDenseTagNames(tags.Tags);
@@ -595,9 +515,9 @@ namespace GAS.Editor
                 }
 
                 // AssetTags
-                if (em.HasComponent<CEffectAssetTags>(geEntity))
+                if (em.HasComponent<GEAssetTagsComponent>(geEntity))
                 {
-                    var tags = em.GetComponentData<CEffectAssetTags>(geEntity);
+                    var tags = em.GetComponentData<GEAssetTagsComponent>(geEntity);
                     if (!tags.Tags.IsEmpty)
                     {
                         var names = GetDenseTagNames(tags.Tags);
@@ -607,9 +527,9 @@ namespace GAS.Editor
                 }
 
                 // Modifiers
-                if (em.HasBuffer<BModifierConfig>(geEntity))
+                if (em.HasBuffer<GEModifierConfigBuffer>(geEntity))
                 {
-                    var mods = em.GetBuffer<BModifierConfig>(geEntity);
+                    var mods = em.GetBuffer<GEModifierConfigBuffer>(geEntity);
                     if (mods.Length > 0)
                     {
                         var parts = new List<string>();

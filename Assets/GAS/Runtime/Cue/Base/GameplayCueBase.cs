@@ -68,11 +68,11 @@ namespace GAS.Runtime
         {
             if (CanPlay())
             {
-                EntityManager.SetComponentEnabled<ECCuePlayable>(_cueEntity, true);
+                SetCueState<CuePlayableTag>(true);
                 if (replay)
                 {
                     Reset();
-                    EntityManager.SetComponentEnabled<ECCuePlaying>(_cueEntity, false);
+                    SetCueState<CuePlayingTag>(false);
                 }
             }
         }
@@ -83,14 +83,14 @@ namespace GAS.Runtime
         /// <param name="immediate"> 是否立即停止 </param>
         public void Stop(bool immediate = false)
         {
-            EntityManager.SetComponentEnabled<ECCuePlayable>(_cueEntity, false);
+            SetCueState<CuePlayableTag>(false);
         }
 
         public void StopImmediate() => Stop(true);
 
         public void KillSelf()
         {
-            EntityManager.SetComponentEnabled<ECKillCue>(_cueEntity, true);
+            SetCueState<CueKillRequestTag>(true);
         }
 
         public void RemoveSelf()
@@ -111,6 +111,17 @@ namespace GAS.Runtime
             if (_sourceType != CueSourceType.GameplayAbility) return Entity.Null;
             if (_sourceEntity == Entity.Null || !EntityManager.Exists(_sourceEntity)) return Entity.Null;
             return _sourceEntity;
+        }
+
+        private void SetCueState<T>(bool enabled)
+            where T : unmanaged, IComponentData, IEnableableComponent
+        {
+            if (_cueEntity != Entity.Null
+                && EntityManager.Exists(_cueEntity)
+                && EntityManager.HasComponent<T>(_cueEntity))
+            {
+                EntityManager.SetComponentEnabled<T>(_cueEntity, enabled);
+            }
         }
 
         #region system function

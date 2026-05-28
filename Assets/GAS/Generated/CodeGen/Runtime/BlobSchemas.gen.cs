@@ -135,18 +135,6 @@ namespace GAS.Runtime.Generated
     }
 
     /// <summary>
-    /// BlobAsset definition generated for Timeline.
-    /// </summary>
-    public struct TimelineDefinitionBlob
-    {
-        public int TimelineId;
-        public BlobString Name;
-        public int GameplayEffectCode;
-        public int SecondaryGameplayEffectCode;
-        public BlobString TargetCatcherName;
-    }
-
-    /// <summary>
     /// BlobAsset definition generated for Unit.
     /// </summary>
     public struct UnitDefinitionBlob

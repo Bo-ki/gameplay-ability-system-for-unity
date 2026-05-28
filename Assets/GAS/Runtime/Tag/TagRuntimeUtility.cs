@@ -9,14 +9,14 @@ namespace GAS.Runtime
             Entity asc,
             int tagIndex)
         {
-            if (!entityManager.Exists(asc) || !entityManager.HasComponent<CTagMask>(asc))
+            if (!entityManager.Exists(asc) || !entityManager.HasComponent<TagMaskComponent>(asc))
                 return;
 
             if (HasFixedTagIndex(entityManager, asc, tagIndex)
                 || HasAnyTemporarySourceForTag(entityManager, asc, tagIndex))
                 return;
 
-            var mask = entityManager.GetComponentData<CTagMask>(asc);
+            var mask = entityManager.GetComponentData<TagMaskComponent>(asc);
             mask.RemoveTag(tagIndex);
             entityManager.SetComponentData(asc, mask);
         }
@@ -24,16 +24,16 @@ namespace GAS.Runtime
         private static bool HasFixedTagIndex(EntityManager entityManager, Entity asc, int tagIndex)
         {
             return entityManager.Exists(asc)
-                   && entityManager.HasComponent<CFixedTagMask>(asc)
-                   && entityManager.GetComponentData<CFixedTagMask>(asc).Mask.HasTag(tagIndex);
+                   && entityManager.HasComponent<TagFixedMaskComponent>(asc)
+                   && entityManager.GetComponentData<TagFixedMaskComponent>(asc).Mask.HasTag(tagIndex);
         }
 
         private static bool HasAnyTemporarySourceForTag(EntityManager entityManager, Entity asc, int tagIndex)
         {
-            if (!entityManager.Exists(asc) || !entityManager.HasBuffer<BTempTagSource>(asc))
+            if (!entityManager.Exists(asc) || !entityManager.HasBuffer<TagTemporarySourceBuffer>(asc))
                 return false;
 
-            var temporaryTags = entityManager.GetBuffer<BTempTagSource>(asc);
+            var temporaryTags = entityManager.GetBuffer<TagTemporarySourceBuffer>(asc);
             for (var i = 0; i < temporaryTags.Length; i++)
                 if (temporaryTags[i].TagIndex == tagIndex)
                     return true;

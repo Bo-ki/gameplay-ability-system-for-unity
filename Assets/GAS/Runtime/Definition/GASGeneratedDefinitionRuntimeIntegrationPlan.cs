@@ -31,7 +31,6 @@ namespace GAS.Runtime
         MissingRuntimeLayoutEntry = 1 << 1,
         MissingStructuralChangeEntry = 1 << 2,
         RuntimeLifecycleDeferred = 1 << 3,
-        RuntimeTimelineDeferred = 1 << 4,
         ManagedPresentationDeferred = 1 << 5,
         GameplayEffectCacheLifecycleOwner = 1 << 6,
         MissingGameplayEffectConfigProvider = 1 << 7,
@@ -459,9 +458,7 @@ namespace GAS.Runtime
             switch (definitionKind)
             {
                 case GASDefinitionKind.Ability:
-                    return target == GASGeneratedDefinitionRuntimeIntegrationTarget.DeferredBoundary
-                        ? GASRuntimeQueryLayoutEntryId.AbilityTimelineRuntime
-                        : GASRuntimeQueryLayoutEntryId.AbilityTickLifecycle;
+                    return GASRuntimeQueryLayoutEntryId.AbilityTickLifecycle;
                 case GASDefinitionKind.GameplayEffect:
                     return GASRuntimeQueryLayoutEntryId.GameplayEffectActiveRuntime;
                 case GASDefinitionKind.AttributeSet:
@@ -472,8 +469,6 @@ namespace GAS.Runtime
                     return GASRuntimeQueryLayoutEntryId.TagMaskRuntime;
                 case GASDefinitionKind.GameplayCue:
                     return GASRuntimeQueryLayoutEntryId.ManagedCuePresentation;
-                case GASDefinitionKind.TimelineAbility:
-                    return GASRuntimeQueryLayoutEntryId.AbilityTimelineRuntime;
                 default:
                     return GASRuntimeQueryLayoutEntryId.None;
             }
@@ -487,8 +482,6 @@ namespace GAS.Runtime
                 boundaries |= GASGeneratedDefinitionRuntimeIntegrationBoundary.BakePipelineNotReady;
             if ((deferredBoundaries & GASGeneratedDefinitionBakingBoundary.RuntimeLifecycle) != 0)
                 boundaries |= GASGeneratedDefinitionRuntimeIntegrationBoundary.RuntimeLifecycleDeferred;
-            if ((deferredBoundaries & GASGeneratedDefinitionBakingBoundary.RuntimeTimeline) != 0)
-                boundaries |= GASGeneratedDefinitionRuntimeIntegrationBoundary.RuntimeTimelineDeferred;
             if ((deferredBoundaries & GASGeneratedDefinitionBakingBoundary.ManagedPresentation) != 0)
                 boundaries |= GASGeneratedDefinitionRuntimeIntegrationBoundary.ManagedPresentationDeferred;
             if ((deferredBoundaries & GASGeneratedDefinitionBakingBoundary.GameplayEffectCacheLifecycleOwner) != 0)

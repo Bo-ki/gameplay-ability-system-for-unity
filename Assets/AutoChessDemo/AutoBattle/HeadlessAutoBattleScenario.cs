@@ -171,10 +171,6 @@ namespace GAS.Runtime
         public const int GameplayEffectAttackCooldown = 9206;
         public const int GameplayEffectPlayerExecute = 9207;
 
-        public const int TimelinePlayerAttack = 9301;
-        public const int TimelineEnemyAttack = 9302;
-        public const int TimelinePlayerExecute = 9303;
-
         public const int ExecutionCalculationExecuteDamage = 9401;
         public const int ExecutionCalculationExecuteDamageOutput = 9402;
 
@@ -260,7 +256,6 @@ namespace GAS.Runtime
         private static void RegisterConfigs()
         {
             AbilityConfigRegistry.RegisterGetConfigByIDFunc(CreateAbilityConfig);
-            TimelineAbilityConfigRegistry.RegisterGetConfigByIDFunc(CreateTimelineConfig);
             GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(CreateGameplayEffectConfig);
             GameplayCueConfigRegistry.RegisterGetConfigByIDFunc(_ => null);
         }
@@ -268,7 +263,6 @@ namespace GAS.Runtime
         private static void ClearConfigProviders()
         {
             AbilityConfigRegistry.RegisterGetConfigByIDFunc(null);
-            TimelineAbilityConfigRegistry.RegisterGetConfigByIDFunc(null);
             GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(null);
             GameplayCueConfigRegistry.RegisterGetConfigByIDFunc(null);
         }
@@ -279,18 +273,18 @@ namespace GAS.Runtime
             {
                 AbilityPlayerAttack => CreateAttackAbility(
                     AbilityPlayerAttack,
-                    TimelinePlayerAttack),
+                    GameplayEffectPlayerBurn),
                 AbilityEnemyAttack => CreateAttackAbility(
                     AbilityEnemyAttack,
-                    TimelineEnemyAttack),
+                    GameplayEffectEnemyBurn),
                 AbilityPlayerExecute => CreateAttackAbility(
                     AbilityPlayerExecute,
-                    TimelinePlayerExecute),
+                    GameplayEffectPlayerExecute),
                 _ => null,
             };
         }
 
-        private static AbilityConfig CreateAttackAbility(int abilityCode, int timelineId)
+        private static AbilityConfig CreateAttackAbility(int abilityCode, int targetEffectCode)
         {
             return new AbilityConfig(new AbilityComponentConfig[]
             {
@@ -309,62 +303,12 @@ namespace GAS.Runtime
                     GameplayEffectCode = GameplayEffectAttackCooldown,
                     Cooldown = 2,
                 },
-                new ConfAbilityTimelineRef
+                new ConfAbilityTargetEffectsOnActivate
                 {
-                    TimelineId = timelineId,
+                    EffectCodes = new[] { targetEffectCode },
+                    AutoEndOnCommit = true,
                 },
             });
-        }
-
-        private static XParamTimeline CreateTimelineConfig(int timelineId)
-        {
-            return timelineId switch
-            {
-                TimelinePlayerAttack => CreateAttackTimeline(
-                    TimelinePlayerAttack,
-                    "PlayerAttack",
-                    GameplayEffectPlayerBurn),
-                TimelineEnemyAttack => CreateAttackTimeline(
-                    TimelineEnemyAttack,
-                    "EnemyAttack",
-                    GameplayEffectEnemyBurn),
-                TimelinePlayerExecute => CreateAttackTimeline(
-                    TimelinePlayerExecute,
-                    "PlayerExecute",
-                    GameplayEffectPlayerExecute),
-                _ => null,
-            };
-        }
-
-        private static XParamTimeline CreateAttackTimeline(int id, string name, int burnEffectCode)
-        {
-            var applyEffects = new XParamApplyEffects(new[] { burnEffectCode });
-            applyEffects.SetCatcherType(TargetCatcherName);
-            applyEffects.SetParam(new XParamNone());
-
-            return new XParamTimeline(
-                id,
-                name,
-                1,
-                false,
-                new List<Track>
-                {
-                    new Track
-                    {
-                        Name = "ApplyTargetBurn",
-                        ActionClips = new List<TimelineActionClipData>
-                        {
-                            new TimelineActionClipData
-                            {
-                                Name = "ApplyBurn",
-                                StartTime = 0,
-                                EndTime = 1,
-                                ActionType = "ApplyEffects",
-                                Parameter = applyEffects,
-                            },
-                        },
-                    },
-                });
         }
 
         private static GameplayEffectConfig CreateGameplayEffectConfig(int gameplayEffectCode)
@@ -559,8 +503,8 @@ namespace GAS.Runtime
             for (var i = 0; i < state.Units.Length; i++)
             {
                 var definition = state.Units[i].Definition;
-                var facade = AbilitySystemFacade.Create();
-                facade.Init(
+                var commandGateway = ASCCommandGateway.Create();
+                commandGateway.Init(
                     Array.Empty<int>(),
                     new[]
                     {
@@ -587,8 +531,8 @@ namespace GAS.Runtime
                     definition.CreateAbilityCodes(),
                     1);
 
-                AddAutoBattleUnitComponent(facade.Entity, definition);
-                state.Units[i] = state.Units[i].WithFacade(facade);
+                AddAutoBattleUnitComponent(commandGateway.Entity, definition);
+                state.Units[i] = state.Units[i].WithCommandGateway(commandGateway);
             }
 
             state.DriverEntity = CreateAutoBattleDriver();
@@ -693,8 +637,8 @@ namespace GAS.Runtime
             }
 
             var em = GASManager.EntityManager;
-            var log = em.GetBuffer<BDebugReplayEvent>(GASManager.EntityEventLogSink);
-            var sinkState = em.GetComponentData<CGameplayEventLogSink>(GASManager.EntityEventLogSink);
+            var log = em.GetBuffer<ReplayLogEventBuffer>(GASManager.EntityEventLogSink);
+            var sinkState = em.GetComponentData<GameplayEventLogSinkComponent>(GASManager.EntityEventLogSink);
             var snapshot = GasStructuredLogExporter.CreateSnapshot(log, sinkState);
             var assertionLog = GasStructuredLogExporter.ExportToText(
                 snapshot,
@@ -718,7 +662,7 @@ namespace GAS.Runtime
         }
 
         private static HeadlessAutoBattleEventCounts CountEvents(
-            DynamicBuffer<BDebugReplayEvent> replayLog,
+            DynamicBuffer<ReplayLogEventBuffer> replayLog,
             int structuredLogEntries)
         {
             var abilityCommitSucceeded = 0;
@@ -783,22 +727,20 @@ namespace GAS.Runtime
         private static void TickRuntime()
         {
             var world = GASManager.ExWorld;
-            world.GetExistingSystemManaged<GASCommandGroup>().Update();
-            world.GetExistingSystemManaged<GASResetDirtyGroup>().Update();
-            world.GetExistingSystemManaged<GASTagGroup>().Update();
-            world.GetExistingSystemManaged<GASEffectGroup>().Update();
-            world.GetExistingSystemManaged<GASAttributeGroup>().Update();
-            world.GetExistingSystemManaged<GASAbilityGroup>().Update();
-            world.GetExistingSystemManaged<GASCueGroup>().Update();
+            world.GetExistingSystemManaged<GASFramePrepareSystemGroup>().Update();
+            world.GetExistingSystemManaged<GASCommandResolveSystemGroup>().Update();
+            world.GetExistingSystemManaged<GASCoreSimulationSystemGroup>().Update();
+            world.GetExistingSystemManaged<GASStructuralCommitSystemGroup>().Update();
+            world.GetExistingSystemManaged<GASBoundaryProjectionSystemGroup>().Update();
         }
 
         private static float GetAttribute(Entity asc, int attributeCode)
         {
             var em = GASManager.EntityManager;
-            if (asc == Entity.Null || !em.Exists(asc) || !em.HasBuffer<BAttribute>(asc))
+            if (asc == Entity.Null || !em.Exists(asc) || !em.HasBuffer<AttributeValueBuffer>(asc))
                 return 0f;
 
-            var attributes = em.GetBuffer<BAttribute>(asc);
+            var attributes = em.GetBuffer<AttributeValueBuffer>(asc);
             for (var i = 0; i < attributes.Length; i++)
             {
                 var attribute = attributes[i];
@@ -819,9 +761,9 @@ namespace GAS.Runtime
                 : default;
         }
 
-        private static CTagMask CreateDenseMask(IEnumerable<int> tagIndices)
+        private static TagMaskComponent CreateDenseMask(IEnumerable<int> tagIndices)
         {
-            var mask = new CTagMask();
+            var mask = new TagMaskComponent();
             if (tagIndices == null)
                 return mask;
 
@@ -839,20 +781,20 @@ namespace GAS.Runtime
 
             if (em.Exists(GASManager.EntityEventBus))
             {
-                em.SetComponentData(GASManager.EntityEventBus, new CGameplayEventBus());
-                if (em.HasComponent<CPresentationOutboxProjectionState>(GASManager.EntityEventBus))
-                    em.SetComponentData(GASManager.EntityEventBus, new CPresentationOutboxProjectionState());
-                ClearBuffer<BDamageEvent>(em, GASManager.EntityEventBus);
-                ClearBuffer<BTagChangeEvent>(em, GASManager.EntityEventBus);
-                ClearBuffer<BGameplayEvent>(em, GASManager.EntityEventBus);
-                ClearBuffer<BAttributeChangeEvent>(em, GASManager.EntityEventBus);
-                ClearBuffer<BCueRequest>(em, GASManager.EntityEventBus);
+                em.SetComponentData(GASManager.EntityEventBus, new GameplayEventBusComponent());
+                if (em.HasComponent<PresentationOutboxProjectionStateComponent>(GASManager.EntityEventBus))
+                    em.SetComponentData(GASManager.EntityEventBus, new PresentationOutboxProjectionStateComponent());
+                ClearBuffer<DamageEventBuffer>(em, GASManager.EntityEventBus);
+                ClearBuffer<TagChangeEventBuffer>(em, GASManager.EntityEventBus);
+                ClearBuffer<GameplayEventBusEventBuffer>(em, GASManager.EntityEventBus);
+                ClearBuffer<AttributeChangeEventBuffer>(em, GASManager.EntityEventBus);
+                ClearBuffer<CueRequestBuffer>(em, GASManager.EntityEventBus);
             }
 
             if (em.Exists(GASManager.EntityEventLogSink))
             {
-                em.SetComponentData(GASManager.EntityEventLogSink, new CGameplayEventLogSink());
-                ClearBuffer<BDebugReplayEvent>(em, GASManager.EntityEventLogSink);
+                em.SetComponentData(GASManager.EntityEventLogSink, new GameplayEventLogSinkComponent());
+                ClearBuffer<ReplayLogEventBuffer>(em, GASManager.EntityEventLogSink);
             }
         }
 
@@ -871,7 +813,7 @@ namespace GAS.Runtime
 
             for (var i = 0; i < state.Units.Length; i++)
             {
-                var asc = state.Units[i].Facade.Entity;
+                var asc = state.Units[i].CommandGateway.Entity;
                 if (asc == Entity.Null || !em.Exists(asc))
                     continue;
 
@@ -883,10 +825,10 @@ namespace GAS.Runtime
 
         private static void DestroyGrantedAbilities(EntityManager em, Entity asc)
         {
-            if (!em.HasBuffer<BGrantedAbility>(asc))
+            if (!em.HasBuffer<AbilitySlotBuffer>(asc))
                 return;
 
-            var abilities = em.GetBuffer<BGrantedAbility>(asc);
+            var abilities = em.GetBuffer<AbilitySlotBuffer>(asc);
             var abilityEntities = new NativeArray<Entity>(abilities.Length, Allocator.Temp);
             for (var i = 0; i < abilities.Length; i++)
                 abilityEntities[i] = abilities[i].AbilityEntity;
@@ -899,13 +841,6 @@ namespace GAS.Runtime
                     if (ability == Entity.Null || !em.Exists(ability))
                         continue;
 
-                    if (em.HasComponent<CAbilityConfig>(ability))
-                    {
-                        var config = em.GetComponentData<CAbilityConfig>(ability).Config;
-                        if (config.IsCreated)
-                            config.Dispose();
-                    }
-
                     em.DestroyEntity(ability);
                 }
             }
@@ -917,10 +852,10 @@ namespace GAS.Runtime
 
         private static void DestroyActiveEffects(EntityManager em, Entity asc)
         {
-            if (!em.HasBuffer<BGameplayEffect>(asc))
+            if (!em.HasBuffer<LegacyGameplayEffectEntityBuffer>(asc))
                 return;
 
-            var effects = em.GetBuffer<BGameplayEffect>(asc);
+            var effects = em.GetBuffer<LegacyGameplayEffectEntityBuffer>(asc);
             var effectEntities = new NativeArray<Entity>(effects.Length, Allocator.Temp);
             for (var i = 0; i < effects.Length; i++)
                 effectEntities[i] = effects[i].GameplayEffect;
@@ -988,7 +923,7 @@ namespace GAS.Runtime
         private readonly struct UnitRuntime
         {
             public readonly UnitDefinition Definition;
-            public readonly AbilitySystemFacade Facade;
+            public readonly ASCCommandGateway CommandGateway;
             public readonly float Health;
             public readonly float Energy;
             public readonly bool Alive;
@@ -1000,28 +935,28 @@ namespace GAS.Runtime
 
             private UnitRuntime(
                 UnitDefinition definition,
-                AbilitySystemFacade facade,
+                ASCCommandGateway commandGateway,
                 float health,
                 float energy,
                 bool alive)
             {
                 Definition = definition;
-                Facade = facade;
+                CommandGateway = commandGateway;
                 Health = health;
                 Energy = energy;
                 Alive = alive;
             }
 
-            public UnitRuntime WithFacade(AbilitySystemFacade facade)
+            public UnitRuntime WithCommandGateway(ASCCommandGateway commandGateway)
             {
-                return new UnitRuntime(Definition, facade, Health, Energy, true);
+                return new UnitRuntime(Definition, commandGateway, Health, Energy, true);
             }
 
             public UnitRuntime Refresh()
             {
-                var health = GetAttribute(Facade.Entity, AttributeHealth);
-                var energy = GetAttribute(Facade.Entity, AttributeEnergy);
-                return new UnitRuntime(Definition, Facade, health, energy, health > 0f);
+                var health = GetAttribute(CommandGateway.Entity, AttributeHealth);
+                var energy = GetAttribute(CommandGateway.Entity, AttributeEnergy);
+                return new UnitRuntime(Definition, CommandGateway, health, energy, health > 0f);
             }
         }
 
@@ -1040,7 +975,7 @@ namespace GAS.Runtime
 
         private sealed class DirectMaskAbilityTagsConfig : AbilityComponentConfig
         {
-            private readonly CTagMask _tags;
+            private readonly TagMaskComponent _tags;
 
             public DirectMaskAbilityTagsConfig(IEnumerable<int> tagIndices)
             {
@@ -1049,7 +984,7 @@ namespace GAS.Runtime
 
             public override void LoadToGameplayAbilityEntity(Entity ability)
             {
-                _entityManager.AddComponentData(ability, new CAbilityActivationOwnedTags
+                _entityManager.AddComponentData(ability, new AbilityActivationOwnedTagsComponent
                 {
                     Tags = _tags,
                 });
@@ -1058,7 +993,7 @@ namespace GAS.Runtime
 
         private sealed class DirectMaskGrantedTagsConfig : GameplayEffectComponentConfig
         {
-            private readonly CTagMask _tags;
+            private readonly TagMaskComponent _tags;
 
             public DirectMaskGrantedTagsConfig(IEnumerable<int> tagIndices)
             {
@@ -1067,7 +1002,7 @@ namespace GAS.Runtime
 
             public override void LoadToGameplayEffectEntity(Entity ge)
             {
-                _entityManager.AddComponentData(ge, new CEffectGrantedTags
+                _entityManager.AddComponentData(ge, new GEGrantedTagsComponent
                 {
                     Tags = _tags,
                 });
@@ -1113,10 +1048,10 @@ namespace GAS.Runtime
                     MaxDamage = _maxDamage,
                 });
 
-                var definitions = _entityManager.HasBuffer<BExecutionCalculationOutputModifierDefinition>(ge)
-                    ? _entityManager.GetBuffer<BExecutionCalculationOutputModifierDefinition>(ge)
-                    : _entityManager.AddBuffer<BExecutionCalculationOutputModifierDefinition>(ge);
-                definitions.Add(new BExecutionCalculationOutputModifierDefinition
+                var definitions = _entityManager.HasBuffer<GEExecutionCalculationOutputModifierDefinitionBuffer>(ge)
+                    ? _entityManager.GetBuffer<GEExecutionCalculationOutputModifierDefinitionBuffer>(ge)
+                    : _entityManager.AddBuffer<GEExecutionCalculationOutputModifierDefinitionBuffer>(ge);
+                definitions.Add(new GEExecutionCalculationOutputModifierDefinitionBuffer
                 {
                     CalculationCode = _calculationCode,
                     OutputKey = _outputKey,

@@ -93,7 +93,7 @@ namespace GAS.Runtime
 
         public static GasReplayEventFilter All => default;
 
-        public bool Matches(in BDebugReplayEvent evt)
+        public bool Matches(in ReplayLogEventBuffer evt)
         {
             return GasReplaySinkPolicy.Matches(evt, this);
         }
@@ -103,14 +103,14 @@ namespace GAS.Runtime
     {
         public const int UnlimitedRetention = 0;
 
-        public static GasReplayRetentionPolicy GetRetentionPolicy(in CGameplayEventLogSink sinkState)
+        public static GasReplayRetentionPolicy GetRetentionPolicy(in GameplayEventLogSinkComponent sinkState)
         {
             return new GasReplayRetentionPolicy(sinkState.MaxRetainedEvents);
         }
 
         public static GasReplaySinkStats GetStats(
-            in CGameplayEventLogSink sinkState,
-            DynamicBuffer<BDebugReplayEvent> log)
+            in GameplayEventLogSinkComponent sinkState,
+            DynamicBuffer<ReplayLogEventBuffer> log)
         {
             var retainedCount = log.Length;
             var firstRetainedLogIndex = retainedCount > 0
@@ -140,8 +140,8 @@ namespace GAS.Runtime
         }
 
         public static void ApplyRetention(
-            DynamicBuffer<BDebugReplayEvent> log,
-            ref CGameplayEventLogSink sinkState)
+            DynamicBuffer<ReplayLogEventBuffer> log,
+            ref GameplayEventLogSinkComponent sinkState)
         {
             var retentionPolicy = GetRetentionPolicy(sinkState);
             if (retentionPolicy.IsUnlimited)
@@ -159,7 +159,7 @@ namespace GAS.Runtime
             SyncFirstRetainedIndex(log, ref sinkState);
         }
 
-        public static bool Matches(in BDebugReplayEvent evt, in GasReplayEventFilter filter)
+        public static bool Matches(in ReplayLogEventBuffer evt, in GasReplayEventFilter filter)
         {
             if (filter.HasMinLogIndex && evt.LogIndex < filter.MinLogIndex)
                 return false;
@@ -195,8 +195,8 @@ namespace GAS.Runtime
         }
 
         private static void SyncFirstRetainedIndex(
-            DynamicBuffer<BDebugReplayEvent> log,
-            ref CGameplayEventLogSink sinkState)
+            DynamicBuffer<ReplayLogEventBuffer> log,
+            ref GameplayEventLogSinkComponent sinkState)
         {
             sinkState.FirstRetainedLogIndex = log.Length > 0
                 ? log[0].LogIndex

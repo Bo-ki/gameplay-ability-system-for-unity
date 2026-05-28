@@ -10,7 +10,6 @@ namespace GAS.Runtime
         AbilityCommandRequestConsumption = 2,
         AbilityCommitGateMutation = 3,
         AbilityLifecycleCleanup = 4,
-        AbilityTimelineRuntimeMutation = 5,
         GameplayEffectApplyRequestConsumption = 6,
         GameplayEffectActiveRuntimeMutation = 7,
         ExecutionCalculationOutputMutation = 8,
@@ -412,7 +411,7 @@ namespace GAS.Runtime
                 | GASRuntimeStructuralOperation.SetComponent
                 | GASRuntimeStructuralOperation.QueryMaterialization
                 | GASRuntimeStructuralOperation.DynamicBufferMutation,
-                GASRuntimeStructuralMigrationStep.EcbFirst
+                GASRuntimeStructuralMigrationStep.AlreadyEcb
                 | GASRuntimeStructuralMigrationStep.EnableableAfterEcb,
                 GASRuntimeStructuralEligibility.CanUseEcb
                 | GASRuntimeStructuralEligibility.CanUseEnableableTransientMarker
@@ -486,37 +485,6 @@ namespace GAS.Runtime
                 GASRuntimeLayoutComponentSlot.AbilityRuntimeState,
                 GASRuntimeLayoutComponentSlot.AbilityActive,
                 GASRuntimeLayoutComponentSlot.EffectDestroy);
-
-            AddIfLayoutEntryExists(
-                entries,
-                layoutPlan,
-                GASRuntimeStructuralChangeEntryId.AbilityTimelineRuntimeMutation,
-                GASRuntimeQueryLayoutEntryId.AbilityTimelineRuntime,
-                GASRuntimeStructuralOperation.CreateEntity
-                | GASRuntimeStructuralOperation.AddComponent
-                | GASRuntimeStructuralOperation.SetComponent
-                | GASRuntimeStructuralOperation.SetComponentEnabled
-                | GASRuntimeStructuralOperation.ManagedComponentWrite
-                | GASRuntimeStructuralOperation.DynamicBufferMutation
-                | GASRuntimeStructuralOperation.QueryMaterialization,
-                GASRuntimeStructuralMigrationStep.EcbFirst
-                | GASRuntimeStructuralMigrationStep.EnableableAfterEcb,
-                GASRuntimeStructuralEligibility.CanUseEcb
-                | GASRuntimeStructuralEligibility.CanUseEnableableTransientMarker
-                | GASRuntimeStructuralEligibility.RequiresSemanticDecision
-                | GASRuntimeStructuralEligibility.MirrorsLayoutStructuralHotspot,
-                GASRuntimeStructuralBoundary.DefinitionRuntimeTransition
-                | GASRuntimeStructuralBoundary.ManagedPresentation
-                | GASRuntimeStructuralBoundary.CrossEntityLookup
-                | GASRuntimeStructuralBoundary.DynamicBufferMutation,
-                GASRuntimeDirtyPipelineSignal.None,
-                GASRuntimeEnableableScope.TransientCommandMarker
-                | GASRuntimeEnableableScope.ManagedPresentationState,
-                GASRuntimeLayoutComponentSlot.AbilityActive,
-                GASRuntimeLayoutComponentSlot.AbilityTimelineRef,
-                GASRuntimeLayoutComponentSlot.AbilityTimelineRuntime,
-                GASRuntimeLayoutComponentSlot.ManagedCueComponent,
-                GASRuntimeLayoutComponentSlot.CueEnableableState);
 
             AddIfLayoutEntryExists(
                 entries,

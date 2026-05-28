@@ -2,7 +2,7 @@ using Unity.Entities;
 
 namespace GAS.Runtime
 {
-    [UpdateInGroup(typeof(GASExecutionCalculationExtensionGroup))]
+    [UpdateInGroup(typeof(GEExecutionCalculationExtensionSystemGroup))]
     public partial struct SHeadlessAutoBattleExecuteCalculation : ISystem
     {
         public void OnCreate(ref SystemState state) { }

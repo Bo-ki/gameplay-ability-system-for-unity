@@ -40,11 +40,6 @@ namespace GAS.Runtime
             return CreateGeneratedRegistrySnapshot().CreateGameplayEffectCodes();
         }
 
-        public static int[] CreateTimelineIds()
-        {
-            return CreateGeneratedRegistrySnapshot().CreateTimelineIds();
-        }
-
         public static int[] CreateGameplayCueCodes()
         {
             return CreateGeneratedRegistrySnapshot().CreateGameplayCueCodes();
@@ -89,7 +84,6 @@ namespace GAS.Runtime
         public static void RegisterRuntimeProviders()
         {
             AbilityConfigRegistry.RegisterGetConfigByIDFunc(CreateAbilityConfig);
-            TimelineAbilityConfigRegistry.RegisterGetConfigByIDFunc(CreateTimelineConfig);
             GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(CreateGameplayEffectConfig);
             GameplayCueConfigRegistry.RegisterGetConfigByIDFunc(CreateGameplayCueConfig);
             WarmupGameplayEffectPrototypes();
@@ -98,7 +92,6 @@ namespace GAS.Runtime
         public static void ClearRuntimeProviders()
         {
             AbilityConfigRegistry.RegisterGetConfigByIDFunc(null);
-            TimelineAbilityConfigRegistry.RegisterGetConfigByIDFunc(null);
             GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(null);
             GameplayCueConfigRegistry.RegisterGetConfigByIDFunc(null);
         }
@@ -107,13 +100,6 @@ namespace GAS.Runtime
         {
             return RuntimeProviderSnapshot.TryFindAbilityRow(abilityCode, out var row)
                 ? CreateAbilityConfig(row)
-                : null;
-        }
-
-        public static XParamTimeline CreateTimelineConfig(int timelineId)
-        {
-            return RuntimeProviderSnapshot.TryFindTimelineRow(timelineId, out var row)
-                ? CreateApplyEffectTimeline(row)
                 : null;
         }
 
@@ -194,37 +180,6 @@ namespace GAS.Runtime
             }
 
             return new AbilityConfig(components.ToArray());
-        }
-
-        private static XParamTimeline CreateApplyEffectTimeline(in HeadlessAutoChessTimelineDefinitionRow row)
-        {
-            var applyEffects = new XParamApplyEffects(row.CreateGameplayEffectCodes());
-            applyEffects.SetCatcherType(row.TargetCatcherName);
-            applyEffects.SetParam(new XParamNone());
-
-            return new XParamTimeline(
-                row.TimelineId,
-                row.Name,
-                1,
-                false,
-                new List<Track>
-                {
-                    new Track
-                    {
-                        Name = "ApplyTargetEffect",
-                        ActionClips = new List<TimelineActionClipData>
-                        {
-                            new TimelineActionClipData
-                            {
-                                Name = "ApplyEffect",
-                                StartTime = 0,
-                                EndTime = 1,
-                                ActionType = "ApplyEffects",
-                                Parameter = applyEffects,
-                            },
-                        },
-                    },
-                });
         }
 
         private static GameplayEffectConfig CreateGameplayEffectConfig(
@@ -349,9 +304,9 @@ namespace GAS.Runtime
             return new GameplayCueConfig(typeof(HeadlessAutoChessNoopCue), new XParamNone());
         }
 
-        private static CTagMask CreateDenseMask(IEnumerable<int> tagIndices)
+        private static TagMaskComponent CreateDenseMask(IEnumerable<int> tagIndices)
         {
-            var mask = new CTagMask();
+            var mask = new TagMaskComponent();
             if (tagIndices == null)
                 return mask;
 
@@ -365,7 +320,7 @@ namespace GAS.Runtime
             AbilityComponentConfig,
             IGASDefinitionAbilityActivationOwnedTagsProvider
         {
-            private readonly CTagMask _tags;
+            private readonly TagMaskComponent _tags;
 
             public HeadlessAutoChessDirectMaskAbilityTagsConfig(IEnumerable<int> tagIndices)
             {
@@ -374,13 +329,13 @@ namespace GAS.Runtime
 
             public override void LoadToGameplayAbilityEntity(Entity ability)
             {
-                _entityManager.AddComponentData(ability, new CAbilityActivationOwnedTags
+                _entityManager.AddComponentData(ability, new AbilityActivationOwnedTagsComponent
                 {
                     Tags = _tags,
                 });
             }
 
-            public bool TryGetDefinitionActivationOwnedTags(out CTagMask tags)
+            public bool TryGetDefinitionActivationOwnedTags(out TagMaskComponent tags)
             {
                 tags = _tags;
                 return !tags.IsEmpty;
@@ -391,7 +346,7 @@ namespace GAS.Runtime
             GameplayEffectComponentConfig,
             IGASDefinitionGameplayEffectGrantedTagsProvider
         {
-            private readonly CTagMask _tags;
+            private readonly TagMaskComponent _tags;
 
             public HeadlessAutoChessDirectMaskGrantedTagsConfig(IEnumerable<int> tagIndices)
             {
@@ -400,13 +355,13 @@ namespace GAS.Runtime
 
             public override void LoadToGameplayEffectEntity(Entity ge)
             {
-                _entityManager.AddComponentData(ge, new CEffectGrantedTags
+                _entityManager.AddComponentData(ge, new GEGrantedTagsComponent
                 {
                     Tags = _tags,
                 });
             }
 
-            public bool TryGetDefinitionGrantedTags(out CTagMask tags)
+            public bool TryGetDefinitionGrantedTags(out TagMaskComponent tags)
             {
                 tags = _tags;
                 return !tags.IsEmpty;
@@ -417,7 +372,7 @@ namespace GAS.Runtime
             GameplayEffectComponentConfig,
             IGASDefinitionGameplayEffectRemoveTagsProvider
         {
-            private readonly CTagMask _tags;
+            private readonly TagMaskComponent _tags;
 
             public HeadlessAutoChessDirectMaskRemoveEffectWithTagsConfig(IEnumerable<int> tagIndices)
             {
@@ -426,7 +381,7 @@ namespace GAS.Runtime
 
             public override void LoadToGameplayEffectEntity(Entity ge)
             {
-                _entityManager.AddComponentData(ge, new CRemoveEffectWithTags
+                _entityManager.AddComponentData(ge, new GERemoveEffectWithTagsComponent
                 {
                     requirement = new TagRequirementMask
                     {
@@ -487,10 +442,10 @@ namespace GAS.Runtime
                     BaseDamage = _baseDamage,
                 });
 
-                var definitions = _entityManager.HasBuffer<BExecutionCalculationOutputModifierDefinition>(ge)
-                    ? _entityManager.GetBuffer<BExecutionCalculationOutputModifierDefinition>(ge)
-                    : _entityManager.AddBuffer<BExecutionCalculationOutputModifierDefinition>(ge);
-                definitions.Add(new BExecutionCalculationOutputModifierDefinition
+                var definitions = _entityManager.HasBuffer<GEExecutionCalculationOutputModifierDefinitionBuffer>(ge)
+                    ? _entityManager.GetBuffer<GEExecutionCalculationOutputModifierDefinitionBuffer>(ge)
+                    : _entityManager.AddBuffer<GEExecutionCalculationOutputModifierDefinitionBuffer>(ge);
+                definitions.Add(new GEExecutionCalculationOutputModifierDefinitionBuffer
                 {
                     CalculationCode = _gameplayEffectCode,
                     OutputKey = HeadlessAutoChessScenario.ExecutionCalculationShieldDamageOutput,
@@ -500,7 +455,7 @@ namespace GAS.Runtime
                     FallbackMagnitude = 0f,
                     Coefficient = 1f,
                 });
-                definitions.Add(new BExecutionCalculationOutputModifierDefinition
+                definitions.Add(new GEExecutionCalculationOutputModifierDefinitionBuffer
                 {
                     CalculationCode = _gameplayEffectCode,
                     OutputKey = HeadlessAutoChessScenario.ExecutionCalculationHealthDamageOutput,
@@ -524,10 +479,10 @@ namespace GAS.Runtime
 
             public override void LoadToGameplayEffectEntity(Entity ge)
             {
-                var definitions = _entityManager.HasBuffer<BMagnitudeDefinition>(ge)
-                    ? _entityManager.GetBuffer<BMagnitudeDefinition>(ge)
-                    : _entityManager.AddBuffer<BMagnitudeDefinition>(ge);
-                definitions.Add(new BMagnitudeDefinition
+                var definitions = _entityManager.HasBuffer<GEMagnitudeDefinitionBuffer>(ge)
+                    ? _entityManager.GetBuffer<GEMagnitudeDefinitionBuffer>(ge)
+                    : _entityManager.AddBuffer<GEMagnitudeDefinitionBuffer>(ge);
+                definitions.Add(new GEMagnitudeDefinitionBuffer
                 {
                     ModifierIndex = 0,
                     Source = _row.ModifierMagnitudeSource,

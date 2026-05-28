@@ -28,7 +28,7 @@ namespace GAS.Runtime
             {
                 if (denseIndex >= 256)
                 {
-                    Debug.LogError("[EX-GAS] CTagMask currently supports at most 256 gameplay tags. Regenerate a wider mask or reduce tag count.");
+                    Debug.LogError("[EX-GAS] TagMaskComponent currently supports at most 256 gameplay tags. Regenerate a wider mask or reduce tag count.");
                     break;
                 }
 
@@ -63,7 +63,7 @@ namespace GAS.Runtime
             return _tagDenseIndexToCode != null && _tagDenseIndexToCode.TryGetValue(denseIndex, out tagCode);
         }
 
-        public static bool TryAddTagToMask(ref CTagMask mask, int tagCode, bool includeParents = true)
+        public static bool TryAddTagToMask(ref TagMaskComponent mask, int tagCode, bool includeParents = true)
         {
             if (!TryGetDenseIndex(tagCode, out var denseIndex))
                 return false;
@@ -80,9 +80,9 @@ namespace GAS.Runtime
             return true;
         }
 
-        public static CTagMask BuildMask(IEnumerable<int> tagCodes, bool includeParents = true)
+        public static TagMaskComponent BuildMask(IEnumerable<int> tagCodes, bool includeParents = true)
         {
-            var mask = new CTagMask();
+            var mask = new TagMaskComponent();
             if (tagCodes == null) return mask;
 
             foreach (var tagCode in tagCodes)
@@ -126,12 +126,12 @@ namespace GAS.Runtime
             return result.ToArray();
         }
 
-        public static int[] ToDenseIndices(in CTagMask mask)
+        public static int[] ToDenseIndices(in TagMaskComponent mask)
         {
             if (mask.IsEmpty) return Array.Empty<int>();
 
             var result = new List<int>();
-            for (var i = 0; i < CTagMask.Capacity; i++)
+            for (var i = 0; i < TagMaskComponent.Capacity; i++)
                 if (mask.HasTag(i))
                     result.Add(i);
             return result.ToArray();

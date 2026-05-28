@@ -8,11 +8,11 @@ namespace GAS.Runtime
     /// </summary>
     public class AbilitySystemBinding : MonoBehaviour
     {
-        private AbilitySystemFacade _abilitySystem;
+        private ASCCommandGateway _abilitySystem;
 
         private void Awake()
         {
-            _abilitySystem = AbilitySystemFacade.Create();
+            _abilitySystem = ASCCommandGateway.Create();
         }
 
         private void OnDestroy()
@@ -35,7 +35,7 @@ namespace GAS.Runtime
             _abilitySystem.Init(config);
         }
 
-        public AbilitySystemFacade Facade => _abilitySystem;
+        public ASCCommandGateway CommandGateway => _abilitySystem;
 
         public Entity Entity => _abilitySystem.Entity;
     }

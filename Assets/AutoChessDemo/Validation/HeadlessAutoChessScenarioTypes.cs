@@ -644,7 +644,7 @@ namespace GAS.Runtime
             + CueMarkers
             + SettlementMarkers;
 
-        public void Accumulate(in BPresentationEvent evt)
+        public void Accumulate(in PresentationEventBuffer evt)
         {
             TotalEvents++;
             if (evt.Kind == EPresentationEventKind.CueRequest)

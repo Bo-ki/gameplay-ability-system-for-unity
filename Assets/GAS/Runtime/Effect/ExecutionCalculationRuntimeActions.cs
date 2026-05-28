@@ -11,7 +11,7 @@ namespace GAS.Runtime
         public static bool SetOutputValue(
             EntityManager em,
             Entity ge,
-            in CEffectContext context,
+            in GEContextComponent context,
             int outputKey,
             float value,
             int calculationCode = 0)
@@ -37,7 +37,7 @@ namespace GAS.Runtime
         public static bool SetOutputValue(
             EntityManager em,
             Entity ge,
-            in CEffectContext context,
+            in GEContextComponent context,
             int outputKey,
             float value,
             ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
@@ -64,15 +64,16 @@ namespace GAS.Runtime
             if (ge == Entity.Null || !em.Exists(ge))
                 return false;
 
-            var values = em.HasBuffer<BExecutionCalculationValue>(ge)
-                ? em.GetBuffer<BExecutionCalculationValue>(ge)
-                : em.AddBuffer<BExecutionCalculationValue>(ge);
+            if (!em.HasBuffer<GEExecutionCalculationValueBuffer>(ge))
+                return false;
+
+            var values = em.GetBuffer<GEExecutionCalculationValueBuffer>(ge);
 
             return WriteOutputValue(values, outputKey, value);
         }
 
         public static bool TryGetOutputValue(
-            DynamicBuffer<BExecutionCalculationValue> values,
+            DynamicBuffer<GEExecutionCalculationValueBuffer> values,
             int outputKey,
             out float value)
         {
@@ -92,7 +93,7 @@ namespace GAS.Runtime
         public static void EnqueueOutputUpdatedFact(
             EntityManager em,
             Entity ge,
-            in CEffectContext context,
+            in GEContextComponent context,
             int eventCode,
             float value)
         {
@@ -115,7 +116,7 @@ namespace GAS.Runtime
         public static void EnqueueOutputUpdatedFact(
             ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
             Entity ge,
-            in CEffectContext context,
+            in GEContextComponent context,
             int eventCode,
             float value)
         {
@@ -129,7 +130,7 @@ namespace GAS.Runtime
         }
 
         public static bool WriteOutputValue(
-            DynamicBuffer<BExecutionCalculationValue> values,
+            DynamicBuffer<GEExecutionCalculationValueBuffer> values,
             int outputKey,
             float value)
         {
@@ -141,7 +142,7 @@ namespace GAS.Runtime
                 if (values[i].Value == value)
                     return false;
 
-                values[i] = new BExecutionCalculationValue
+                values[i] = new GEExecutionCalculationValueBuffer
                 {
                     Key = outputKey,
                     Value = value,
@@ -149,7 +150,7 @@ namespace GAS.Runtime
                 return true;
             }
 
-            values.Add(new BExecutionCalculationValue
+            values.Add(new GEExecutionCalculationValueBuffer
             {
                 Key = outputKey,
                 Value = value,
@@ -165,7 +166,7 @@ namespace GAS.Runtime
         private static void EnqueueExecutionFact(
             ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
             Entity ge,
-            in CEffectContext context,
+            in GEContextComponent context,
             EGameplayEventType type,
             int eventCode,
             float value)
@@ -173,7 +174,7 @@ namespace GAS.Runtime
             if (!eventBusWriter.IsCreated)
                 return;
 
-            eventBusWriter.EnqueueGameplayEvent(new BGameplayEvent
+            eventBusWriter.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
             {
                 Type = type,
                 SourceAsc = context.SourceAsc,

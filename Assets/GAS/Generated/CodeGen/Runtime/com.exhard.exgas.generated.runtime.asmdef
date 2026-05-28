@@ -4,7 +4,8 @@
     "references": [
         "com.exhard.exgas.runtime",
         "Unity.Collections",
-        "Unity.Entities"
+        "Unity.Entities",
+        "Unity.Burst"
     ],
     "includePlatforms": [
     ],
