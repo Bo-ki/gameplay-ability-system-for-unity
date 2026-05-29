@@ -1,15 +1,35 @@
 using System;
+using System.Text;
 using UnityEngine;
+using GAS.Runtime;
 
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
-namespace GAS.Runtime
+namespace GAS.AutoChessDemo
 {
     public static class HeadlessAutoChessRuntimeRunner
     {
         private const string RunArgument = "-gasAutoChessHeadless";
+
+        public static void RunHeadlessAutoBattleOnce()
+        {
+            var result = RunAutoBattleOnce();
+            if (!result.Completed
+                || result.DriverIssuedCommands <= 0
+                || result.EventCounts.AttributeChanges <= 0
+                || result.EventCounts.ExecutionCalculationOutputUpdated <= 0
+                || result.EventCounts.CueRequests <= 0
+                || result.RuntimeDiagnostics.EventCount <= 0
+                || HasBlockingDiagnosticErrors(result.RuntimeDiagnostics)
+                || !result.OfficialToolDiff.JournalingCaptured)
+            {
+                throw new InvalidOperationException(
+                    "AutoBattle minimal Runtime Core validation failed: "
+                    + CreateSummary(result));
+            }
+        }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void RunOnPlayerLaunch()
@@ -17,7 +37,294 @@ namespace GAS.Runtime
             if (!HasArgument(RunArgument))
                 return;
 
-            Debug.Log("HeadlessAutoChessRuntimeRunner: scenario runtime removed pending destructive refactor — see AutoChessDemo事实.md");
+            RunAutoBattleOnce();
+        }
+
+        private static HeadlessAutoBattleResult RunAutoBattleOnce()
+        {
+            try
+            {
+                var result = HeadlessAutoBattleScenario.RunDefault(new HeadlessAutoBattleOptions(
+                    maxTicks: 96,
+                    postVictoryFlushTicks: 4));
+
+                Debug.Log("HeadlessAutoChessRuntimeRunner: " + CreateSummary(result));
+                Debug.Log("HeadlessAutoChessRuntimeDebugger: " + CreateDebuggerSummary(result));
+                Debug.Log("HeadlessAutoChessRuntimeTiming: " + CreateTimingSummary(result.RuntimeDiagnostics));
+                Debug.Log("HeadlessAutoChessOfficialToolDiff: " + CreateOfficialToolDiffSummary(result));
+                Debug.Log("HeadlessAutoChessRuntimeDataFlow:\n" + CreateDataFlowDiagram(result));
+                Debug.Log("HeadlessAutoChessRuntimeSequence:\n" + CreateSequenceDiagram(result));
+                Debug.Log("HeadlessAutoChessRuntimeDiagnostics:\n" + result.RuntimeDiagnosticsLog);
+                return result;
+            }
+            finally
+            {
+                HeadlessAutoBattleScenario.ShutdownRuntime();
+            }
+        }
+
+        private static string CreateSummary(HeadlessAutoBattleResult result)
+        {
+            var factsHash = CalculateFactsHash(result.StructuredLogSnapshot);
+            var summaryHash = CalculateSummaryHash(result, factsHash);
+            return $"completed={result.Completed}, "
+                   + $"winner={result.Winner}, "
+                   + $"battleTicks={result.BattleTicks}, "
+                   + $"totalTicks={result.TotalTicks}, "
+                   + $"warmupDroppedTicks={result.WarmupDroppedTicks}, "
+                   + $"measuredTicks={result.MeasuredTicks}, "
+                   + $"commands={result.DriverIssuedCommands}, "
+                   + $"finishers={result.DriverIssuedFinisherCommands}, "
+                   + $"attributeChanges={result.EventCounts.AttributeChanges}, "
+                   + $"executionOutputs={result.EventCounts.ExecutionCalculationOutputUpdated}, "
+                   + $"cueRequests={result.EventCounts.CueRequests}, "
+                   + $"debugEvents={result.RuntimeDiagnostics.EventCount}, "
+                   + $"debugWarnings={result.RuntimeDiagnostics.Stats.WarningCount}, "
+                   + $"debugErrors={result.RuntimeDiagnostics.Stats.ErrorCount}, "
+                   + $"blockingDebugErrors={CountBlockingDiagnosticErrors(result.RuntimeDiagnostics)}, "
+                   + $"coreRequests={result.RuntimeDiagnostics.CoreCounters.RequestCount}, "
+                   + $"coreFacts={result.RuntimeDiagnostics.CoreCounters.FactCount}, "
+                   + $"coreDeltas={result.RuntimeDiagnostics.CoreCounters.DeltaCount}, "
+                   + $"coreCues={result.RuntimeDiagnostics.CoreCounters.CueCount}, "
+                   + $"peakEventBus={result.RuntimeDiagnostics.CoreCounters.PeakEventBusBufferLength}, "
+                   + $"replayLag={result.RuntimeDiagnostics.CoreCounters.PeakReplayCursorLag}, "
+                   + $"journalingRecords={result.OfficialToolDiff.JournalingWorldRecordCount}, "
+                   + $"totalElapsedMs={result.ElapsedMilliseconds:0.000}, "
+                   + $"factsHash=0x{factsHash:X8}, "
+                   + $"summaryHash=0x{summaryHash:X8}, "
+                   + $"avgTickMs={result.AverageTickMilliseconds:0.000}";
+        }
+
+        private static string CreateDebuggerSummary(HeadlessAutoBattleResult result)
+        {
+            var stats = result.RuntimeDiagnostics.Stats;
+            var counters = result.RuntimeDiagnostics.CoreCounters;
+            var backbone = result.RuntimeDiagnostics.FrameBackboneCounters;
+            return $"runtimeDiagnostics events={stats.RetainedEventCount}, "
+                   + $"dropped={stats.DroppedEventCount}, "
+                   + $"warnings={stats.WarningCount}, "
+                   + $"errors={stats.ErrorCount}, "
+                   + $"blockingErrors={CountBlockingDiagnosticErrors(result.RuntimeDiagnostics)}, "
+                   + $"requests={counters.RequestCount}, "
+                   + $"specs={counters.SpecCount}, "
+                   + $"deltas={counters.DeltaCount}, "
+                   + $"facts={counters.FactCount}, "
+                   + $"cues={counters.CueCount}, "
+                   + $"presentation={counters.PresentationCount}, "
+                   + $"activeEffectOwners={counters.ActiveEffectStoreOwnerCount}, "
+                   + $"activeEffectSlots={counters.ActiveEffectSlotCount}, "
+                   + $"queryBudget={counters.QueryBudget}, "
+                   + $"lookupBudget={counters.LookupUpdateBudget}, "
+                   + $"randomLookupBudget={counters.RandomLookupBudget}, "
+                   + $"syncQueryBudget={counters.SyncQueryBudget}, "
+                   + $"frameBackbonePhases={backbone.PhaseCount}, "
+                   + $"streams={backbone.StreamCount}, "
+                   + $"migrationCarriers={backbone.MigrationCarrierCount}, "
+                   + $"profilerMarkerContracts={backbone.ProfilerMarkerCount}, "
+                   + $"journalingMarkerContracts={backbone.JournalingMarkerCount}";
+        }
+
+        private static string CreateTimingSummary(GasRuntimeDiagnosticSnapshot diagnostics)
+        {
+            var builder = new StringBuilder(512);
+            builder.Append("ecsRuntimeTickOnly=true");
+            AppendTiming(builder, diagnostics, "GASTickTotal");
+            AppendTiming(builder, diagnostics, nameof(GASFramePrepareSystemGroup));
+            AppendTiming(builder, diagnostics, nameof(GASCommandResolveSystemGroup));
+            AppendTiming(builder, diagnostics, nameof(GASCoreSimulationSystemGroup));
+            AppendTiming(builder, diagnostics, nameof(GASStructuralCommitSystemGroup));
+            AppendTiming(builder, diagnostics, nameof(GASBoundaryProjectionSystemGroup));
+            return builder.ToString();
+        }
+
+        private static void AppendTiming(
+            StringBuilder builder,
+            in GasRuntimeDiagnosticSnapshot diagnostics,
+            string systemName)
+        {
+            var events = diagnostics.Events ?? Array.Empty<GASRuntimeDiagnosticEventBuffer>();
+            var samples = 0;
+            var totalMicroseconds = 0L;
+            var maxMicroseconds = 0;
+            for (var i = 0; i < events.Length; i++)
+            {
+                var evt = events[i];
+                if (evt.Kind != EGasRuntimeDiagnosticKind.SystemTiming)
+                    continue;
+
+                if (!string.Equals(evt.SystemName.ToString(), systemName, StringComparison.Ordinal))
+                    continue;
+
+                samples++;
+                totalMicroseconds += evt.TotalMicroseconds != 0 ? evt.TotalMicroseconds : evt.ElapsedMicroseconds;
+                if (evt.ElapsedMicroseconds > maxMicroseconds)
+                    maxMicroseconds = evt.ElapsedMicroseconds;
+            }
+
+            var avgMs = samples > 0 ? totalMicroseconds / (double)samples / 1000d : 0d;
+            var maxMs = maxMicroseconds / 1000d;
+            builder.Append(" | ")
+                .Append(systemName)
+                .Append("(samples=")
+                .Append(samples)
+                .Append(",avgMs=")
+                .Append(avgMs.ToString("0.000"))
+                .Append(",maxMs=")
+                .Append(maxMs.ToString("0.000"))
+                .Append(')');
+        }
+
+        private static string CreateOfficialToolDiffSummary(HeadlessAutoBattleResult result)
+        {
+            var official = result.OfficialToolDiff;
+            var runtime = result.RuntimeDiagnostics.CoreCounters;
+            var runtimeStructural = runtime.EntityCreateCount + runtime.EntityDestroyCount;
+            var officialStructural = official.JournalingStructuralRecordCount;
+            return $"runtimeSelfDiagnostics=events:{result.RuntimeDiagnostics.EventCount}, "
+                   + $"journalingAvailable={official.JournalingAvailable}, "
+                   + $"journalingCaptured={official.JournalingCaptured}, "
+                   + $"journalingWorldRecords={official.JournalingWorldRecordCount}, "
+                   + $"runtimeStructuralApprox={runtimeStructural}, "
+                   + $"journalingStructural={officialStructural}, "
+                   + $"deltaStructural={runtimeStructural - officialStructural}, "
+                   + $"runtimeCreates={runtime.EntityCreateCount}, "
+                   + $"journalingCreates={official.JournalingCreateEntityCount}, "
+                   + $"deltaCreates={runtime.EntityCreateCount - official.JournalingCreateEntityCount}, "
+                   + $"runtimeDestroys={runtime.EntityDestroyCount}, "
+                   + $"journalingDestroys={official.JournalingDestroyEntityCount}, "
+                   + $"deltaDestroys={runtime.EntityDestroyCount - official.JournalingDestroyEntityCount}, "
+                   + $"journalingAddComponents={official.JournalingAddComponentCount}, "
+                   + $"journalingRemoveComponents={official.JournalingRemoveComponentCount}, "
+                   + $"journalingSetComponentData={official.JournalingSetComponentDataCount}, "
+                   + $"journalingSetBuffer={official.JournalingSetBufferCount}, "
+                   + $"journalingGetComponentDataRW={official.JournalingGetComponentDataRwCount}, "
+                   + $"journalingGetBufferRW={official.JournalingGetBufferRwCount}, "
+                   + $"profilerAvailable={official.ProfilerAvailable}, "
+                   + $"profilerEnabled={official.ProfilerEnabled}, "
+                   + $"structuralProfilerCategoryEnabled={official.StructuralChangesProfilerCategoryEnabled}, "
+                   + $"memoryProfilerCategoryEnabled={official.MemoryProfilerCategoryEnabled}, "
+                   + $"profilerCaptureState={official.ProfilerCaptureState}";
+        }
+
+        private static bool HasBlockingDiagnosticErrors(GasRuntimeDiagnosticSnapshot diagnostics)
+        {
+            return CountBlockingDiagnosticErrors(diagnostics) > 0;
+        }
+
+        private static int CountBlockingDiagnosticErrors(GasRuntimeDiagnosticSnapshot diagnostics)
+        {
+            var events = diagnostics.Events ?? Array.Empty<GASRuntimeDiagnosticEventBuffer>();
+            var count = 0;
+            for (var i = 0; i < events.Length; i++)
+            {
+                var evt = events[i];
+                if (evt.Severity < EGasRuntimeDiagnosticSeverity.Error)
+                    continue;
+
+                if (evt.Kind == EGasRuntimeDiagnosticKind.SystemTiming
+                    || evt.Kind == EGasRuntimeDiagnosticKind.TickSummary)
+                {
+                    continue;
+                }
+
+                count++;
+            }
+
+            return count;
+        }
+
+        private static string CreateDataFlowDiagram(HeadlessAutoBattleResult result)
+        {
+            return "```mermaid\n"
+                   + "flowchart LR\n"
+                   + $"    CommandDrive[\"AutoBattleCommandDriveSystem\\ncommands: {result.DriverIssuedCommands}\"] --> AbilityBuffer[\"AbilityCommandBuffer\\nrequest entities avoided\"]\n"
+                   + $"    AbilityBuffer --> RuntimeCore[\"GAS Runtime Core\\nrequests: {result.RuntimeDiagnostics.CoreCounters.RequestCount}\"]\n"
+                   + $"    RuntimeCore --> GEStream[\"GEEffectCommandBuffer / Spec / Delta\\ndeltas: {result.RuntimeDiagnostics.CoreCounters.DeltaCount}\"]\n"
+                   + $"    GEStream --> Execution[\"AutoBattleExecuteDamageCalculationSystem\\nexecution outputs: {result.EventCounts.ExecutionCalculationOutputUpdated}\"]\n"
+                   + $"    Execution --> Attribute[\"AttributeModifierBuffer + AttributeValueBuffer\\nattribute changes: {result.EventCounts.AttributeChanges}\"]\n"
+                   + $"    Attribute --> Facts[\"GameplayEventBuffer typed facts\\nfacts: {result.RuntimeDiagnostics.CoreCounters.FactCount}\"]\n"
+                   + $"    Facts --> Projection[\"Replay / Presentation / Layer 2 Diagnostics\\nreplay events: {result.EventCounts.ReplayEvents}\"]\n"
+                   + $"    Projection --> OfficialDiff[\"Official tool diff\\njournaling records: {result.OfficialToolDiff.JournalingWorldRecordCount}\"]\n"
+                   + "```";
+        }
+
+        private static string CreateSequenceDiagram(HeadlessAutoBattleResult result)
+        {
+            return "```mermaid\n"
+                   + "sequenceDiagram\n"
+                   + "    participant Runner as Headless Runner\n"
+                   + "    participant Drive as AutoBattle Command Drive\n"
+                   + "    participant Core as GAS Runtime Core\n"
+                   + "    participant Exec as Execution Calculation\n"
+                   + "    participant Obs as Replay / Projection\n"
+                   + "    participant Debug as Layer 2 DiagnosticsSink\n"
+                   + "    participant Unity as Unity Journaling / Profiler\n"
+                   + $"    Runner->>Drive: fixed ticks {result.TotalTicks}, battle ticks {result.BattleTicks}\n"
+                   + $"    Drive->>Core: AbilityCommandBuffer commands {result.DriverIssuedCommands}\n"
+                   + $"    Core->>Exec: execute GE commands, finishers {result.DriverIssuedFinisherCommands}\n"
+                   + $"    Exec->>Core: modifier + typed fact outputs {result.EventCounts.ExecutionCalculationOutputUpdated}\n"
+                   + $"    Core->>Obs: attribute changes {result.EventCounts.AttributeChanges}, cue requests {result.EventCounts.CueRequests}\n"
+                   + $"    Obs->>Debug: counters {result.RuntimeDiagnostics.EventCount}, warnings {result.RuntimeDiagnostics.Stats.WarningCount}, errors {result.RuntimeDiagnostics.Stats.ErrorCount}\n"
+                   + $"    Debug->>Unity: read EntitiesJournaling records and profiler category state\n"
+                   + $"    Unity-->>Debug: journaling structural records {result.OfficialToolDiff.JournalingStructuralRecordCount}, profiler state {result.OfficialToolDiff.ProfilerCaptureState}\n"
+                   + "```";
+        }
+
+        private static uint CalculateFactsHash(in GasStructuredLogExportSnapshot snapshot)
+        {
+            unchecked
+            {
+                var hash = 2166136261u;
+                var entries = snapshot.Entries ?? Array.Empty<GasStructuredLogEntry>();
+                for (var i = 0; i < entries.Length; i++)
+                {
+                    var entry = entries[i];
+                    hash = AppendHash(hash, entry.Frame);
+                    hash = AppendHash(hash, entry.Sequence);
+                    hash = AppendHash(hash, (int)entry.ReplayKind);
+                    hash = AppendHash(hash, (int)entry.GameplayEventType);
+                    hash = AppendHash(hash, entry.EventCode);
+                    hash = AppendHash(hash, entry.ReasonCode);
+                    hash = AppendHash(hash, entry.RelatedAbilityCode);
+                    hash = AppendHash(hash, entry.ContextId);
+                    hash = AppendHash(hash, entry.AttrSetCode);
+                    hash = AppendHash(hash, entry.AttributeCode);
+                    hash = AppendHash(hash, entry.TagIndex);
+                    hash = AppendHash(hash, entry.SourceAsc.Index);
+                    hash = AppendHash(hash, entry.TargetAsc.Index);
+                    hash = AppendHash(hash, entry.SourceAbility.Index);
+                    hash = AppendHash(hash, entry.GameplayEffect.Index);
+                }
+
+                return hash;
+            }
+        }
+
+        private static uint CalculateSummaryHash(HeadlessAutoBattleResult result, uint factsHash)
+        {
+            unchecked
+            {
+                var hash = AppendHash(2166136261u, (int)factsHash);
+                hash = AppendHash(hash, result.Completed ? 1 : 0);
+                hash = AppendHash(hash, (int)result.Winner);
+                hash = AppendHash(hash, result.BattleTicks);
+                hash = AppendHash(hash, result.DriverIssuedCommands);
+                hash = AppendHash(hash, result.EventCounts.AttributeChanges);
+                hash = AppendHash(hash, result.EventCounts.ExecutionCalculationOutputUpdated);
+                hash = AppendHash(hash, result.EventCounts.CueRequests);
+                hash = AppendHash(hash, result.RuntimeDiagnostics.EventCount);
+                hash = AppendHash(hash, result.OfficialToolDiff.JournalingWorldRecordCount);
+                return hash;
+            }
+        }
+
+        private static uint AppendHash(uint hash, int value)
+        {
+            unchecked
+            {
+                hash ^= (uint)value;
+                return hash * 16777619u;
+            }
         }
 
         private static bool HasArgument(string argument)

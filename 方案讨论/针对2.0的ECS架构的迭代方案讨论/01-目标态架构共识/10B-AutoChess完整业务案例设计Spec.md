@@ -6,6 +6,8 @@
 
 本 Spec 的格式对齐历史方案 12/13/14/15 的"完整案例详细设计"风格：包含具名单位、真实 Excel 配置行、完整 C# System 代码、Mermaid 时序图和逐步业务走查。它与 `10-AutoChess无头验收Spec.md` 的关系是：10 定义验收基础设施和门槛，10B 定义验收用的具体业务内容；与 `11-AutoChessDemo-Luban配置方案Spec.md` 的关系是：11 定义配置表结构和生成链路，10B 提供填入这些表的真实数据行。
 
+当前实现状态：`Assets/AutoChessDemo` 已先按破坏性重构落地 `AutoBattle` 2v2 最小 Runtime Core 验证链，旧 `HeadlessAutoChess*` 代码不再作为过渡兼容对象。10B 仍是完整业务案例目标态；它不能被当前 2v2 最小切片替代，也不能要求当前切片保留旧 OOP config registry / scenario 巨类。
+
 ## 范围
 
 1. 棋子设计：4 种棋子类型，具名、具属性、具技能

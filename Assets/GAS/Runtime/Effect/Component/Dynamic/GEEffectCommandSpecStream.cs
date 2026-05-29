@@ -53,7 +53,7 @@ namespace GAS.Runtime
         public int CueProjectionSpecCursor;
     }
 
-    [InternalBufferCapacity(64)]
+    [InternalBufferCapacity(0)]
     public struct GEEffectCommandBuffer : IBufferElementData
     {
         public int Sequence;
@@ -77,7 +77,7 @@ namespace GAS.Runtime
         public int Flags;
     }
 
-    [InternalBufferCapacity(16)]
+    [InternalBufferCapacity(0)]
     public struct GESetByCallerValueBuffer : IBufferElementData
     {
         public int CommandSequence;
@@ -86,7 +86,7 @@ namespace GAS.Runtime
         public float Value;
     }
 
-    [InternalBufferCapacity(64)]
+    [InternalBufferCapacity(0)]
     public struct GEEffectSpecBuffer : IBufferElementData
     {
         public int Sequence;
@@ -111,7 +111,7 @@ namespace GAS.Runtime
         public int Flags;
     }
 
-    [InternalBufferCapacity(128)]
+    [InternalBufferCapacity(0)]
     public struct AttributeModifierBuffer : IBufferElementData
     {
         public int Sequence;
@@ -135,7 +135,7 @@ namespace GAS.Runtime
         public int Flags;
     }
 
-    [InternalBufferCapacity(32)]
+    [InternalBufferCapacity(0)]
     public struct ActiveEffectMutationBuffer : IBufferElementData
     {
         public int Sequence;
@@ -156,7 +156,7 @@ namespace GAS.Runtime
         public int Flags;
     }
 
-    [InternalBufferCapacity(128)]
+    [InternalBufferCapacity(0)]
     public struct GameplayEventBuffer : IBufferElementData
     {
         public int Sequence;
@@ -388,6 +388,7 @@ namespace GAS.Runtime
                 return false;
 
             return em.HasBuffer<GEEffectCommandBuffer>(streamEntity)
+                   && em.HasBuffer<AbilityCommandBuffer>(streamEntity)
                    && em.HasBuffer<GESetByCallerValueBuffer>(streamEntity)
                    && em.HasBuffer<GEEffectSpecBuffer>(streamEntity)
                    && em.HasBuffer<AttributeModifierBuffer>(streamEntity)
@@ -585,6 +586,7 @@ namespace GAS.Runtime
 
             if (!HasRequiredBuffers(em, streamEntity))
                 return;
+            em.GetBuffer<AbilityCommandBuffer>(streamEntity).Clear();
             em.GetBuffer<GEEffectCommandBuffer>(streamEntity).Clear();
             em.GetBuffer<GESetByCallerValueBuffer>(streamEntity).Clear();
             em.GetBuffer<GEEffectSpecBuffer>(streamEntity).Clear();
@@ -616,6 +618,7 @@ namespace GAS.Runtime
 
             var commands = em.GetBuffer<GEEffectCommandBuffer>(streamEntity);
             var setByCallerValues = em.GetBuffer<GESetByCallerValueBuffer>(streamEntity);
+            em.GetBuffer<AbilityCommandBuffer>(streamEntity).Clear();
             CompactConsumedCommands(
                 commands,
                 setByCallerValues,

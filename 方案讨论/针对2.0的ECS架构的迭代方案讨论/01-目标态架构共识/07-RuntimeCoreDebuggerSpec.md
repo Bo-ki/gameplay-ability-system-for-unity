@@ -2,16 +2,21 @@
 
 ## 目的
 
-Runtime Core Debugger 用于回答“哪里慢、哪里压力大、哪里有结构变化风险”。它是 Observation / Diagnostics Plane，不是 simulation input。
+Runtime Core Debugger 用于回答“哪里慢、哪里压力大、哪里有结构变化风险”。在四层架构中，它的 Runtime 采样、snapshot、official tool diff 和 replay/export API 归属 **Layer 2 Runtime Boundary Layer** 的 `DiagnosticsSink` / `ReplaySink`，不是 simulation input。
+
+Editor Debugger Window 归属 **Layer 1 Application Shell Layer** 的 Editor Extension；无头 runner 也归属 Layer 1。二者必须消费同一套 Layer 2 `RuntimeDiagnosticsSnapshot` / official diff API，不能把窗口实现放入 Demo，也不能让 Demo 私有化 Debugger 数据链。
 
 ## 数据流图
 
 ```mermaid
 flowchart TD
-    RuntimeSystems["Runtime Systems"] --> Counters["Debugger Counters"]
-    Counters --> Snapshot["RuntimeDiagnosticsSnapshot"]
-    Snapshot --> Report["Validation Summary / Export"]
-    Snapshot --> Editor["Editor Runtime Debug Window"]
+    Core["Layer 3 Runtime Core\nfacts / counters / markers"] --> Sink["Layer 2 DiagnosticsSink\nRuntime Debugger + ReplaySink"]
+    Sink --> Snapshot["RuntimeDiagnosticsSnapshot"]
+    Sink --> Official["OfficialToolDiff\nEntities Journaling / Profiler category state"]
+    Snapshot --> Headless["Layer 1 Headless Runner\nbatchmode summary"]
+    Snapshot --> Editor["Layer 1 Editor Debug Window\nEditor extension"]
+    Official --> Headless
+    Official --> Editor
 ```
 
 ## UML 类图
@@ -55,18 +60,26 @@ classDiagram
 
 ```mermaid
 sequenceDiagram
-    participant Scenario
-    participant Runtime
-    participant Debugger
-    participant Report
+    participant Shell as Layer 1 Runner / Editor Window
+    participant Boundary as Layer 2 DiagnosticsSink
+    participant Runtime as Layer 3 Runtime Core
+    participant Unity as Unity Profiler / Journaling
 
-    Scenario->>Runtime: TickRuntime
-    Runtime->>Debugger: Record request/spec/delta/fact counts
-    Runtime->>Debugger: Record ECB playback / entity lifecycle
-    Runtime->>Debugger: Record buffer pressure / cursor lag
-    Debugger->>Report: Export runtimeDiagnostics
-    Report->>Scenario: Validate scale gate
+    Shell->>Runtime: Tick Runtime through normal SystemGroup chain
+    Runtime->>Boundary: Emit request/spec/delta/fact counters
+    Runtime->>Boundary: Emit ECB / entity lifecycle / buffer pressure / cursor lag
+    Boundary->>Unity: Enable/Read Entities Journaling when available
+    Boundary-->>Shell: RuntimeDiagnosticsSnapshot + OfficialToolDiff
+    Shell->>Shell: Editor window render or headless validation summary
 ```
+
+## 四层职责边界
+
+1. **Layer 3 Runtime Core**：只产出数值 counter、typed fact、presentation marker、replay marker，不读取 Debugger 结果改变 gameplay。
+2. **Layer 2 Runtime Boundary**：维护 `GasRuntimeDebugger`、`RuntimeDiagnosticsSnapshot`、`GasRuntimeOfficialToolDiffCapture` 等采样与导出 API；可读 Unity Entities Journaling，Profiler module 未启用时只能输出 disabled reason。
+3. **Layer 1 Editor Extension**：实现 Debugger Window、图表、筛选、导出按钮；窗口不得直接写 Runtime Core component / buffer。
+4. **Layer 1 Headless Runner**：复用 Layer 2 API 输出 batchmode log、Mermaid 数据流图、时序图和 CI gate；它不是 Debugger 数据源。
+5. **AutoChessDemo**：作为 Layer 1 业务验收 Demo，只消费 DiagnosticsSink，不拥有 Runtime Debugger 模块。
 
 ## 必备 counters
 
@@ -100,6 +113,13 @@ Runtime Core Debugger 是项目内证据源，但必须能与 Unity 官方工具
 | query match | matched chunks / matched entities |
 
 Debugger 不直接替代 Unity Profiler；它负责把 GAS 语义计数与 Unity ECS 机制计数绑定起来。
+
+本轮 PackageCache 官方文档交叉检查后的硬约束：
+
+1. Entities Journaling 可通过 `Unity.Entities.EntitiesJournaling` API 程序化读取，因此是当前无头链路的最小官方差分来源。
+2. Unity Profiler / Entities Profiler Modules 是官方性能证据源，但 module 未启用时不会收集可用数据；无头 runner 只能输出 `profilerEnabled=false`、category 状态和 disabled reason，不能标记为 captured。
+3. Runtime Debugger 是项目自诊断，不能替代 Profiler / Entities Journaling / Burst Inspector；结论必须保留两套证据的差异。
+4. Entities Journaling 会分配自己的记录内存；Layer 2 无头 official diff 若在 batchmode 中临时开启 Journaling，结束时必须恢复状态并清理本次采样产生的官方工具持久状态，避免污染 Runtime Core leak 验证。
 
 ## DOTS API 选型健康指标
 
@@ -189,6 +209,57 @@ Debugger 必须先对齐 `UnityDOTS官方文档参考/README.md`，再吸收 `Un
 | prefab 加载状态缺失 | Entity prefab / SceneSystem 文档 | 对照 RequestEntityPrefabLoaded、PrefabLoadResult、IncludePrefab query policy |
 | 物理输入错帧或过慢 | Unity Physics pipeline / singleton / event 文档 | 对照 physics step、query broadphase、Simulation event window、event dropped / converted count |
 | 渲染成本混入 Core tick | Entities Graphics performance / Frame Debugger / Profiler | 对照 draw command、instances per draw、BRG markers、presentation marker cost 和 render cost |
+
+## 当前 AutoBattle 无头证据
+
+2026-05-29 使用 `GAS.AutoChessDemo.HeadlessAutoChessRuntimeRunner.RunHeadlessAutoBattleOnce` 跑通 Functional x1 普通 batchmode。当前证据采用 warmup-dropped 口径：bootstrap / ASC 创建 / Ability grant / 首帧 SystemGroup 初始化 / Journaling 启用 / Burst 与 Editor warmup 不计入 `avgTickMs`，Runtime Debugger 只从 frame 4 开始记录 measured `SystemTiming`。
+
+```text
+completed=True, winner=Player, battleTicks=9, totalTicks=10,
+warmupDroppedTicks=3, measuredTicks=7, commands=18, finishers=8,
+attributeChanges=21, executionOutputs=5, cueRequests=8,
+debugEvents=62, debugWarnings=22, debugErrors=0, blockingDebugErrors=0,
+coreRequests=54, coreFacts=96, coreDeltas=34, coreCues=8,
+peakEventBus=26, replayLag=0, journalingRecords=2128,
+totalElapsedMs=169.515, factsHash=0x7C84FE91,
+summaryHash=0x53F70297, avgTickMs=0.599
+```
+
+Timing snapshot：
+
+```text
+ecsRuntimeTickOnly=true
+GASTickTotal(samples=7, avgMs=0.489, maxMs=0.876)
+GASFramePrepareSystemGroup(samples=7, avgMs=0.036, maxMs=0.161)
+GASCommandResolveSystemGroup(samples=7, avgMs=0.082, maxMs=0.203)
+GASCoreSimulationSystemGroup(samples=7, avgMs=0.227, maxMs=0.321)
+GASStructuralCommitSystemGroup(samples=7, avgMs=0.013, maxMs=0.024)
+GASBoundaryProjectionSystemGroup(samples=7, avgMs=0.131, maxMs=0.187)
+```
+
+Official tool diff：
+
+```text
+journalingAvailable=True, journalingCaptured=True, journalingWorldRecords=2128,
+runtimeStructuralApprox=18, journalingStructural=286, deltaStructural=-268,
+runtimeCreates=18, journalingCreates=33, deltaCreates=-15,
+runtimeDestroys=0, journalingDestroys=22, deltaDestroys=-22,
+journalingAddComponents=5, journalingRemoveComponents=0,
+journalingSetComponentData=0, journalingSetBuffer=0,
+journalingGetComponentDataRW=349, journalingGetBufferRW=1493,
+profilerAvailable=True, profilerEnabled=False,
+structuralProfilerCategoryEnabled=False, memoryProfilerCategoryEnabled=False,
+profilerCaptureState=profiler disabled; Entities profiler modules collect no data
+```
+
+解释：
+
+1. `blockingDebugErrors=0` 表示功能 gate 没有非 timing 类诊断错误；`debugErrors=0` 表示慢 timing 事件已经从错误语义中拆出。`SystemTiming` / `TickSummary` 最高只产生 Warning，用 slow timing / TopN 解释性能，不污染功能错误计数。
+2. 旧 `avgTickMs=15.377` / `GASTickTotal avgMs=13.257 maxMs=77.879` 是错误口径：`Stopwatch` 从 bootstrap 前开始，`SystemTiming` 记录了 frame 1-3 的初始化和 warmup 尖峰。该数据只能作为“采样污染”反例，不再作为当前性能结论。
+3. 新口径只采样 measured ticks；Functional x1 的 AutoBattle 业务侧已按官方 `ecs-workflow-intro.md` / `job-overhead.md` 建议移除 4 单位小规模下的 `NativeStream + job schedule + Complete` 固定成本，`GASCommandResolveSystemGroup` 从 `0.112ms` 回落到 `0.082ms`。剩余热点集中在 `GASCoreSimulationSystemGroup` 和 Boundary Projection，后续 x50/x100 要继续用 CPU Profiler 与 Runtime Debugger counters 做差分。
+4. Journaling 记录数明显高于项目 `runtimeStructuralApprox`，说明当前项目 counter 只覆盖 Core 自认结构变化，官方记录还包含 bootstrap / cleanup / package 内部读写；后续 x50 需要按 world/system/source 细分。
+5. Profiler module 明确未采集，当前只能保留 disabled reason；后续 Editor Debugger Window 或 profiling profile 才能展示 Profiler modules 的 live 对照。
+6. `UNITY_JOBS_NATIVE_LEAK_DETECTION_MODE=2` 复跑通过：同一链路输出 `completed=True`、`summaryHash=0x53F70297`、`debugErrors=0`、`blockingDebugErrors=0`，日志中没有 `Leak Detected` 或 Native Collection 未释放提示。此前定位到的 Persistent allocates 属于本次 official diff 临时启用 Entities Journaling 后遗留的官方工具状态，不是 Runtime Core Blob / NativeContainer 泄漏；当前 Layer 2 capture 已在 batchmode 结束时清理。
 
 ## AM-1 baseline 采样口径
 

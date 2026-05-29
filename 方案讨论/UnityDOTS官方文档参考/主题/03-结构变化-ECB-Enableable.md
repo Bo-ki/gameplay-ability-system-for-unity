@@ -195,10 +195,11 @@ public partial struct DisableFinishedAbilityJob : IJobEntity
 
 | 场景 | 推荐 | 原因 |
 |---|---|---|
-| 高频状态开关（每帧可能多次） | Enableable | 无结构变化，无 sync point，无 archetype 迁移 |
+| 高频 query 可见性开关（每帧可能变化且需要整 entity/chunk skip） | Enableable | 无结构变化，无 archetype 迁移；但同步 query 可能等待 enableable 写 job |
+| buffer slot / owner-local 状态开关 | enum / bit flags | Enableable 是 component/entity 级开关，不是 buffer slot 开关；避免把局部状态升格为 component type |
 | 低频生命周期（创建/销毁时一次） | Add/Remove Component | 语义更明确，减少 query 复杂度 |
-| active/inactive 标记 | Enableable | 一次写入，所有依赖 query 自动反应 |
-| tag/role 授予 | Enableable 或 owner-local bitset | 避免每个 tag 创建一个 component 类型 |
+| active/inactive 派生 skip cache | Enableable（需 profiler 证明） | 只有当大量 entity 长期 idle 且 skip 收益大于过滤等待时使用 |
+| tag/role 授予 | owner-local bitset；少数热点 tag 可选 Enableable / Chunk Component | 避免每个 tag 创建一个 component 类型，也避免把低频生命周期状态误做高频 enableable |
 
 **Enableable 的查询成本：**
 - 同步 EntityQuery 操作（如 `CalculateEntityCount()`）在有 enableable 写 job 未完成时，会触发 sync point
@@ -272,7 +273,7 @@ EntityManager.AddComponent<CDead>(query);  // 一次操作，内部批量处理
 ## 使用模式与反模式
 
 **正确模式：**
-- Hot path 状态切换用 Enableable
+- Hot path 状态切换先判断是不是 query 可见性问题；局部 slot 状态用 enum / bit flags，整 entity/chunk skip cache 才评估 Enableable
 - 结构变化集中在 ECB playback phase
 - 结构变化后立即重取所有 handle
 - 大批量同类结构变化优先 EntityQuery bulk
@@ -294,9 +295,9 @@ EntityManager.AddComponent<CDead>(query);  // 一次操作，内部批量处理
 
 1. **Instant GE 不应创建 runtime GE entity**：当前 instant GE 走 `CApplyGameplayEffectRequest -> runtime GE entity -> SEffectApply -> destroy`，导致大量 entity churn。目标态应直接走 `EffectCommand -> Spec Resolve -> Attribute Delta`，不创建 entity。
 
-2. **Active Effect Store 应用 enableable + slot**：duration/stack/period/granted state 进入 owner-local DynamicBuffer slot，用 enableable 标记 active，避免 per-frame entity create/destroy。
+2. **Active Effect Store 默认 slot enum/bit flags**：duration/stack/period/granted state 进入 owner-local DynamicBuffer slot，不用 runtime GE entity 表示生命周期。`PeriodDueTag` / Chunk Component 只作为 profiler 证明后的 skip cache，不能替代 slot 内权威状态。
 
-3. **ECB playback 唯一结构变化点**：`GasStructuralPlaybackSystemGroup` 是 hot path 中唯一允许结构变化的位置。Debugger 必须报告每帧 ECB command 数量和来源 system。
+3. **ECB playback 唯一结构变化点**：`GASStructuralCommitSystemGroup` 是 hot path 中唯一允许结构变化的位置。Debugger 必须报告每帧 ECB command 数量和来源 system。
 
 4. **Presentation outbox 不创建 entity**：Cue/UI/VFX/SFX marker 是 transient stream，不应创建 entity。
 

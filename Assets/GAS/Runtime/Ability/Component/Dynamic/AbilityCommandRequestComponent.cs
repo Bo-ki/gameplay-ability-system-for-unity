@@ -19,4 +19,10 @@ namespace GAS.Runtime
         public int AbilityCode;
         public EAbilityCommandType CommandType;
     }
+
+    [InternalBufferCapacity(0)]
+    public struct AbilityCommandBuffer : IBufferElementData
+    {
+        public AbilityCommandRequestComponent Command;
+    }
 }

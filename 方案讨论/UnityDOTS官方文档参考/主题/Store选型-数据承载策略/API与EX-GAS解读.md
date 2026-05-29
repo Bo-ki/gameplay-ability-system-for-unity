@@ -128,17 +128,17 @@ EX-GAS 的完整数据分类映射：
 
 ```
 Gameplay（参与 battle hash）：
-  - BActiveEffectSlot          DynamicBuffer, per-ASC
-  - BAttribute (current/base)  IComponentData, per-ASC
-  - BGrantedTagMask             IComponentData, per-ASC
-  - BAbilityCooldown            DynamicBuffer, per-ASC
-  - CActiveEffectEnableable     IEnableableComponent, per-ASC
+  - ActiveGameplayEffectBuffer DynamicBuffer slot, per-ASC
+  - AttributeSet current/base   IComponentData, per-ASC
+  - TagMaskComponent            IComponentData bitmask, per-ASC
+  - AbilityStateComponent       IComponentData state/flags, per-ability entity
+  - PeriodDueTag / ChunkComponent optional skip cache, only after profiler proof
 
 Transient（帧内，用于 gameplay 但不跨帧持久）：
-  - CEffectCommandEntry         NativeStream segment -> per-target buffer
-  - BAttributeDelta             DynamicBuffer, per-target, per-frame clear
-  - BTypedFact                  DynamicBuffer on singleton, per-frame clear
-  - EffectCommand merge result  NativeList, sorted
+  - GEEffectCommandRecord       NativeStream segment -> deterministic merge
+  - AttributeModifierRecord     NativeStream / target grouped range
+  - GameplayFactRecord          NativeStream / owner-local fact range
+  - EffectCommand merge result  NativeList, sorted by target/sequence
 
 Telemetry（诊断，不参与 gameplay）：
   - Debug frame metrics         NativeList(Allocator.Persistent), sampled

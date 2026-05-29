@@ -82,12 +82,16 @@ SimulationSystemGroup        (PlayerLoop Update 末尾)
 PresentationSystemGroup      (PlayerLoop PreLateUpdate 末尾)
 ```
 
+**FixedStepSimulationSystemGroup：**
+
+`FixedStepSimulationSystemGroup` 是 `SimulationSystemGroup` 下的固定步模拟域。PackageCache `systems-time.md` 明确说明固定步系统按固定时间间隔更新，并且一帧可能运行多次。EX-GAS Runtime Core 若以 battle tick / frame index / replay hash 为权威时序，核心物理执行域默认挂在 `FixedStepSimulationSystemGroup` 下；variable-step profile 必须额外给出确定性证据。
+
 **自定义 SystemGroup：**
 
 ```csharp
-[UpdateInGroup(typeof(SimulationSystemGroup))]
-[UpdateBefore(typeof(GASSpecEvaluationSystemGroup))]
-public partial class GASCommandIngestSystemGroup : ComponentSystemGroup { }
+[UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+[UpdateBefore(typeof(GASCoreSimulationSystemGroup))]
+public partial class GASCommandResolveSystemGroup : ComponentSystemGroup { }
 ```
 
 **排序控制优先级：**
@@ -109,18 +113,17 @@ public partial class GASCommandIngestSystemGroup : ComponentSystemGroup { }
 
 ### Runtime Core Phase 设计
 
-目标态 Runtime Core SystemGroup 映射：
+目标态 Runtime Core SystemGroup 映射采用 FixedStep 下的少量物理执行域，不再按每个 GAS 语义阶段建立 group：
 
-| GAS Phase | SystemGroup | 挂载位置 | 结构变化权限 |
+| 物理执行域 | 默认挂载位置 | 承载的 kernel lane | 结构变化权限 |
 |-----------|-------------|----------|--------------|
-| Frame Arena / Query Prep | `GasRuntimeFramePrepareSystemGroup` | Simulation 最前 | 禁止 |
-| Command Ingest | `GasCommandIngestSystemGroup` | Frame Prep 之后 | 只读 request；不 playback |
-| Spec Evaluation | `GasSpecEvaluationSystemGroup` | Command Ingest 之后 | 禁止 |
-| Delta Apply | `GasDeltaApplySystemGroup` | Spec Eval 之后 | 禁止 |
-| Active Effect Lifecycle | `GasActiveEffectLifecycleSystemGroup` | Delta 之后 | 禁止直接结构变化 |
-| Typed Fact Projection | `GasTypedFactProjectionSystemGroup` | Active Lifecycle 之后 | 禁止 |
-| Structural Playback | `GasStructuralPlaybackSystemGroup` | 以上之后 | **唯一 hot path 结构变化点** |
-| Observation Projection | `GasObservationProjectionSystemGroup` | 最后 | 只读 |
+| `GASFramePrepareSystemGroup` | `FixedStepSimulationSystemGroup` 最前 | frame clock、allocator / budget、debug counters；query 由 owner system 创建 | 禁止 |
+| `GASCommandResolveSystemGroup` | FramePrepare 之后 | Boundary Command Ingest、Target Resolve | 禁止 |
+| `GASCoreSimulationSystemGroup` | CommandResolve 之后 | Effect Fan-In、State Evaluate、Attribute Reduce/Apply、Gameplay Fact | 禁止直接结构变化 |
+| `GASStructuralCommitSystemGroup` | CoreSimulation 之后 | grant/remove/spawn/destroy/cleanup 的 ECB playback 或 EntityQuery bulk | **唯一 hot path 结构变化点** |
+| `GASBoundaryProjectionSystemGroup` | StructuralCommit 之后 | ReadModel、Presentation outbox、Replay、Debugger | 只读 |
+
+旧 `SpecEvaluation / DeltaApply / TypedFactProjection` 是 GAS 语义链，不是 DOTS 物理边界。只有新边界对应独立同步点、结构变化点、固定步策略或投影边界时，才允许新增 `ComponentSystemGroup`。
 
 ### 当前代码对齐
 

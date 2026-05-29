@@ -71,6 +71,30 @@ namespace GAS.Runtime
             IsRunning = false;
         }
 
+        public static void Shutdown()
+        {
+            if (!IsInitialized)
+                return;
+
+            Stop();
+
+            if (ExWorld != null && ExWorld.IsCreated)
+            {
+                ScriptBehaviourUpdateOrder.RemoveWorldFromCurrentPlayerLoop(ExWorld);
+                ExWorld.Dispose();
+            }
+
+            ExWorld = null;
+            EntityManager = default;
+            EntityGlobalTimer = Entity.Null;
+            EntityEffectCommandSpecStream = Entity.Null;
+            EntityActiveEffectGlobalIndex = Entity.Null;
+            EntityEventBus = Entity.Null;
+            EntityEventLogSink = Entity.Null;
+            EntityRuntimeDebugger = Entity.Null;
+            IsInitialized = false;
+        }
+
         private static void CreateSystems()
         {
             // 基础系统组

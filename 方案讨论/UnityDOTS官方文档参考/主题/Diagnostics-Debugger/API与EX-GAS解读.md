@@ -13,8 +13,11 @@
 ### Entities Journaling
 
 记录 ECS 操作流水，用于回放排查 bug：
-- 记录内容：entity create/destroy、component add/remove、system update
-- 输出：可导出为 JSON，支持 frame-by-frame 回放
+- 记录内容：world/entity create/destroy、system add/remove、component add/remove、`GetComponentDataRW` / `GetBufferRW` 等 RW access
+- 输出：Journaling window 或 `Unity.Entities.EntitiesJournaling` API
+- 记录使用 FIFO 内存，Preferences > Entities > Journaling 的 Total Memory MB 决定保留窗口
+- 记录包含执行 system、ECB origin system、frame index、record index、record type、world、entity、component type 和关联数据
+- RW access 不是字段级 diff；官方窗口会根据相邻 RW 记录推断可能的 set 来源
 - **有显著的运行时开销，不应在性能测试中开启**
 - 与手写 Debugger counters 互补：Journaling 用于深度排查，counters 用于日常监控
 
@@ -24,6 +27,7 @@
 - 每帧 entity create/destroy 数量
 - Add/Remove Component 数量
 - 按 system 归类结构变化来源
+- Profiler module 未启用时不采集数据；profiling 后再启用 module 不会回填历史帧
 
 ### 手写 Runtime Core Debugger 的最小指标集
 
@@ -70,6 +74,13 @@ AutoChess 运行
     → 异常阈值触发告警
     → 如果需要深度排查 → Profiler + Journaling
 ```
+
+### Headless official diff 口径
+
+- Functional x1 可由 Layer 2 `OfficialToolDiff` 临时启用 Entities Journaling 并读取记录，输出与 Runtime Debugger counters 的差分。
+- 该口径不能用于性能 benchmark；benchmark 必须关闭 Journaling。
+- batchmode official diff 结束后必须恢复 Journaling 开关，并清理本次采样产生的官方工具持久状态，避免污染 Native leak trace。
+- Profiler modules 未启用时只能输出 disabled reason，不能伪造 profiler capture。
 
 ### RuntimeDiagnostics IComponentData
 
@@ -125,7 +136,8 @@ public struct RuntimeDiagnostics : IComponentData
 
 | 官方文档文件 | 关键结论 | 关联规则编号 |
 |---|---|---|
-| `entities-journaling.md` | Journaling 记录 ECS 操作流水，有显著开销，默认关闭 | DBG-01, DBG-02 |
+| `entities-journaling.md` | Journaling 记录 world/entity/system/component/RW access 操作，可通过窗口或 API 检查，有显著开销 | DBG-01, DBG-02 |
+| `profiler-modules-entities-introduction.md` | Entities Profiler modules 未启用时不采集数据 | DBG-01, DBG-03 |
 | `profiler-module-structural-changes.md` | Profiler 可观察结构变化来源，按 system 归类 | DBG-01, DBG-03 |
 | `performance-sync-points.md` | sync point 是性能诊断核心对象 | DBG-03, DBG-04 |
 | `systems-optimizing.md` | system / type handle / lookup 数量是成本源 | DBG-05 |

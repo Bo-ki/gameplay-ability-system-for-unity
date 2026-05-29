@@ -93,6 +93,22 @@ AutoChessDemo 的配置必须服务“精链路”，不能靠堆机制证明完
 
 新增机制必须说明它覆盖哪个 GAS 概念缺口；不能只是”让 Demo 更丰富”。
 
+## 当前最小 Runtime Core 验证 Catalog
+
+本轮 AutoBattle 最小链路已经从旧 `HeadlessAutoChess*` 手写配置源切断。当前可执行验证使用 `Assets/AutoChessDemo/AutoBattle/AutoBattleDefinitionCatalogBuilder.cs` 在运行时安装最小 `GASDefinitionCatalogBlob`，用于证明 Runtime Core 调用链可用：
+
+| Code | 类型 | 目的 |
+|---:|---|---|
+| `9101` | Ability | 己方普攻，primary GE 指向 `9201` |
+| `9102` | Ability | 敌方普攻，primary GE 指向 `9202` |
+| `9103` | Ability | 己方斩杀，primary GE 指向 `9207` |
+| `9201` | Instant GE | 己方普攻扣 Health `12`，进入 generated instant spec / attribute delta |
+| `9202` | Instant GE | 敌方普攻扣 Health `8`，进入 generated instant spec / attribute delta |
+| `9207` | ActiveMutation GE | 斩杀命令，不带 modifier，由 `AutoBattleExecuteDamageCalculationSystem` 消费 GE command stream 并输出 `ExecutionCalculationOutputUpdated` typed fact / attribute delta；event bus 仅镜像 fact |
+| `9301` | Cue | 最小 hit cue code，用于验证 cue request 投影 |
+
+这个 builder 不是长期配置方案，只是 x1 Runtime Core 验证入口。长期目标仍然是 Luban / SourceGenerator 生成同构 `GASDefinitionCatalogBlob`、validation expectation 和 schema manifest；当生成链可用后，运行时 builder 应删除或降级为测试 fixture。
+
 ## 默认精链路配置数据示例
 
 以下每个表的示例数据对应 `10B-AutoChess完整业务案例设计Spec.md` 中的默认验收战斗（x1 精链路：4v4，含剑士/法师/刺客/牧师 4 种职业）。这些是 Luban Excel 表中的实际数据行，由 SourceGenerator 读取后生成 BlobAsset 和 static lookup。完整业务逻辑解读见 10B。

@@ -169,6 +169,7 @@ namespace GAS.Runtime
             {
                 _effectCommandStream = em.CreateArchetype(
                     ComponentType.ReadWrite<GEEffectCommandStreamComponent>(),
+                    ComponentType.ReadWrite<AbilityCommandBuffer>(),
                     ComponentType.ReadWrite<GEEffectCommandBuffer>(),
                     ComponentType.ReadWrite<GESetByCallerValueBuffer>(),
                     ComponentType.ReadWrite<GEEffectSpecBuffer>(),

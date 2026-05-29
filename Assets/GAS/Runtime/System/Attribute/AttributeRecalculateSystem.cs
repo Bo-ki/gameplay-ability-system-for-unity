@@ -1,4 +1,5 @@
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -117,12 +118,11 @@ namespace GAS.Runtime
             _query = SystemAPI.QueryBuilder()
                 .WithAll<AttributeValueBuffer>()
                 .Build();
+            state.RequireForUpdate(_query);
         }
 
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency.Complete();
-
             if (!SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var eventBusEntity))
                 return;
 
@@ -130,34 +130,93 @@ namespace GAS.Runtime
             if (!em.Exists(eventBusEntity) || !em.HasBuffer<AttributeChangeEventBuffer>(eventBusEntity))
                 return;
 
-            var attributeEvents = em.GetBuffer<AttributeChangeEventBuffer>(eventBusEntity);
-            foreach (var (attributeBuffer, asc) in SystemAPI.Query<DynamicBuffer<AttributeValueBuffer>>()
-                         .WithEntityAccess())
+            var chunkCount = _query.CalculateChunkCount();
+            if (chunkCount <= 0)
+                return;
+
+            var eventStream = new NativeStream(chunkCount, Allocator.TempJob);
+
+            try
             {
-                var attributes = attributeBuffer;
-                for (var j = 0; j < attributes.Length; j++)
+                var collectJob = new AttributeChangeEventCollectJob
                 {
-                    var attr = attributes[j];
-                    if (!attr.CurrentValueChangePending)
-                        continue;
+                    EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
+                    AttributeTypeHandle = SystemAPI.GetBufferTypeHandle<AttributeValueBuffer>(isReadOnly: false),
+                    EventWriter = eventStream.AsWriter(),
+                };
 
-                    if (attr.PreviousCurrentValue != attr.CurrentValue)
+                state.Dependency = collectJob.ScheduleParallel(_query, state.Dependency);
+                state.Dependency.Complete();
+
+                AppendCollectedEvents(eventStream.AsReader(), em.GetBuffer<AttributeChangeEventBuffer>(eventBusEntity));
+            }
+            finally
+            {
+                eventStream.Dispose();
+            }
+        }
+
+        private static void AppendCollectedEvents(
+            NativeStream.Reader eventReader,
+            DynamicBuffer<AttributeChangeEventBuffer> attributeEvents)
+        {
+            for (var streamIndex = 0; streamIndex < eventReader.ForEachCount; streamIndex++)
+            {
+                var eventCount = eventReader.BeginForEachIndex(streamIndex);
+                for (var i = 0; i < eventCount; i++)
+                    attributeEvents.Add(eventReader.Read<AttributeChangeEventBuffer>());
+                eventReader.EndForEachIndex();
+            }
+        }
+
+        [BurstCompile]
+        private struct AttributeChangeEventCollectJob : IJobChunk
+        {
+            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
+            public BufferTypeHandle<AttributeValueBuffer> AttributeTypeHandle;
+            public NativeStream.Writer EventWriter;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                EventWriter.BeginForEachIndex(unfilteredChunkIndex);
+
+                var entities = chunk.GetNativeArray(EntityTypeHandle);
+                var attributeBuffers = chunk.GetBufferAccessor(ref AttributeTypeHandle);
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    var attributes = attributeBuffers[entityIndex];
+                    for (var attributeIndex = 0; attributeIndex < attributes.Length; attributeIndex++)
                     {
-                        attributeEvents.Add(new AttributeChangeEventBuffer
-                        {
-                            ASC = asc,
-                            AttrSetCode = attr.AttrSetCode,
-                            AttributeCode = attr.Code,
-                            OldValue = attr.PreviousCurrentValue,
-                            NewValue = attr.CurrentValue,
-                            IsBaseValue = false,
-                        });
-                    }
+                        var attr = attributes[attributeIndex];
+                        if (!attr.CurrentValueChangePending)
+                            continue;
 
-                    attr.PreviousCurrentValue = attr.CurrentValue;
-                    attr.CurrentValueChangePending = false;
-                    attributes[j] = attr;
+                        if (attr.PreviousCurrentValue != attr.CurrentValue)
+                        {
+                            EventWriter.Write(new AttributeChangeEventBuffer
+                            {
+                                ASC = entities[entityIndex],
+                                AttrSetCode = attr.AttrSetCode,
+                                AttributeCode = attr.Code,
+                                OldValue = attr.PreviousCurrentValue,
+                                NewValue = attr.CurrentValue,
+                                IsBaseValue = false,
+                            });
+                        }
+
+                        attr.PreviousCurrentValue = attr.CurrentValue;
+                        attr.CurrentValueChangePending = false;
+                        attributes[attributeIndex] = attr;
+                    }
                 }
+
+                EventWriter.EndForEachIndex();
             }
         }
     }

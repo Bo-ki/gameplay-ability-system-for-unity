@@ -442,7 +442,7 @@ public struct OptionalComponentJob : IJobChunk
 
 **Attribute Delta 归并：** 优先按 target ASC 分组后顺序 apply，避免 random lookup 散落。
 
-**ActiveEffectStore 周期 tick：** 用 enableable 标记 active/inactive，IJobEntity 只遍历 active slot。禁止用 `ToEntityArray` 全量扫。
+**ActiveEffectStore 周期 tick：** 默认遍历 owner-local `ActiveGameplayEffectBuffer` slot，并用 enum / bit flags 表达 active、inhibited、expired、period due；当大量 ASC 长期 idle 且 profiler 证明 chunk/entity skip 收益大于 enableable 过滤等待时，才引入 `PeriodDueTag` / Chunk Component 作为 query skip cache。禁止用 `ToEntityArray` 全量扫。
 
 **Tag query / 目标扫描：** 用 `WithChangeFilter` + cached query result 减少重复扫描。
 

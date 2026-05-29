@@ -6,16 +6,21 @@
 
 无头只表示默认不接真实角色、美术、UI、VFX、SFX 资源，不表示省略真实 Demo 应有的表现交互架构和业务流程。UI、特效、音效、飘字和 GameplayCue 必须通过日志 marker、presentation outbox 或 replay facts 完整占位；后续接入真实资源时只能替换表现桥或资源绑定，不能重写业务链路。
 
-## 当前问题
+## 当前状态与剩余问题
 
-1. 当前 AutoChess 代码位于 `Assets/GAS/Runtime/Demo/AutoChess`，这是错误边界。Demo 业务不能放在 Runtime Core 包内，否则 Runtime Core 会反向依赖验收业务形态。
-2. 当前 Demo 目录结构过于简陋，`HeadlessAutoChessScenario.cs` 超过 5000 行，`HeadlessAutoChessGeneratedDefinitionRows.cs` 超过 3000 行，表现、逻辑、配置、报告和 bootstrap 混杂在巨类中。
-3. 当前验收文档更像测试链路说明，没有定义理想 Demo 的工程结构、业务写法、配置链路、表现层占位和自动验收门槛。
-4. 方案12/13/14/15 中已有大量业务案例、配置生成、Debugger workflow 和自走棋闭环设计，需要先被吸收到本 Spec，再拆成任务。
-5. 当前业务覆盖倾向“机制很多”，但验收 Demo 更需要“链路精”：少数代表性机制必须打穿 Ability、GE、Attribute、Tag、Cue、Debugger、Validation 和规模压力，而不是堆叠大量不成体系的小机制。
-6. 官方案例深挖后，AutoChess 验收还必须对齐 `UnityDOTS官方文档参考/主题/12-官方案例模式.md`：性能测试采用 warmup / measurement / allocator cleanup 口径，配置与资源链路采用 Baker / Blob / WeakObjectReference / Boundary 模式，Simulation hot path 不照搬入门 `SystemAPI.Query` foreach。
-7. 官方文档查缺补漏后，AutoChess 验收还必须先对齐 `UnityDOTS官方文档参考/README.md`，再对齐 `UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md`：summary 需要覆盖 world time / fixed step、custom world、allocator rewind、chunk fragmentation、buffer externalized、weak resource load / release、Transform stale-data policy、LinkedEntityGroup、deterministic RNG 和 Unity 官方工具对照。
-8. Unity Physics 与 Entities Graphics 接入后，AutoChess 必须区分 headless default、physics-enabled profile 和 rendered profile。默认无头可以不启用真实物理和渲染，但必须输出 disabled reason；开启时必须拆分 physics fixed-step cost、presentation marker cost 和 render cost。
+已完成的旧问题不再保留为当前风险：
+
+1. AutoChess 验收代码已经从 Runtime Core 包边界移出，当前可执行入口位于 `Assets/AutoChessDemo`。
+2. 旧 `HeadlessAutoChess*` 配置源、组件堆叠、scale/profile DTO 已从 AutoChessDemo 编译面清除；当前不再把旧 `C*` / `B*` / `S*` Demo 类型作为命名或架构样例。
+3. 当前可执行切片收敛为 `AutoBattle` 2v2 最小 Runtime Core 验证链，先证明 AbilityCommand、DefinitionCatalog、GE command stream、Attribute delta、ExecutionCalculation typed fact、Cue / Replay projection 能闭环。
+
+仍然保留的目标态问题：
+
+1. 完整 4v4 自走棋、Luban 表、SourceGenerator 生成 catalog、ScaleProfile、Presentation outbox 和 Physics / Graphics profile 仍未落地。
+2. 当前 `AutoBattleDefinitionCatalogBuilder` 是运行时安装的最小 catalog，用于验证 Runtime Core 链路；它不是 Luban / SourceGenerator 的长期替代。
+3. 当前最小链路只保留 x1 functional gate，尚未输出 x50+ scale 指标、allocator / chunk / buffer pressure 曲线和官方工具证据。
+4. 官方案例和文档约束仍适用：性能测试要采用 warmup / measurement / allocator cleanup 口径，配置和资源链路目标态必须走 Blob / Baker / Boundary，Simulation hot path 不照搬入门 `SystemAPI.Query` foreach。
+5. Unity Physics 与 Entities Graphics 仍是可选 profile；默认无头可以 disabled，但目标 summary 必须输出 disabled reason，启用时必须拆分 physics fixed-step cost、presentation marker cost 和 render cost。
 
 ## 目标目录
 
@@ -94,12 +99,14 @@ AutoChessDemo 默认无画面运行，但必须像真实 Demo 一样组织文件
 7. PhysicsBridge 是可选 profile。默认精品链路使用纯 ECS target / hit 数据；physics-enabled profile 才用 `PhysicsWorldSingleton` / `SimulationSingleton` 验证空间 query 和 event 转换。
 8. EntitiesGraphicsBridge 是可选 rendered profile。默认无头链路输出 marker；rendered profile 才验证 `RenderMeshArray`、`MaterialMeshInfo`、material override、draw command 和 BRG / Profiler 证据。
 
-## 四层 Demo 模型
+## Layer 1 业务验收模型
+
+`AutoChessDemo` 整体属于项目四层架构中的 **Layer 1 Application Shell Layer / 业务验收层**。本节的 Config / Simulation / Observation / Presentation / Validation 是 Demo 内部业务链路分段，不是项目主四层的重新命名；Runtime Core 仍属于 Layer 3，Runtime Debugger snapshot / official tool diff 仍属于 Layer 2。
 
 ```mermaid
 flowchart TD
     Config["Config Layer\nLuban tables + generated constants + generated blobs"] --> Sim["Simulation Layer\nboard / unit / ability / GE / synergy systems"]
-    Sim --> Obs["Observation Layer\ntyped facts / debugger counters / replay stream"]
+    Sim --> Obs["Observation Segment\ntyped facts / diagnostics snapshot / replay stream"]
     Obs --> Pres["Presentation Layer\nUI/VFX/SFX/FloatingText/Cue log markers"]
     Obs --> Val["Validation Layer\nheadless runner / scene runner / scale gates"]
     Val --> Report["Validation Report\npassed / metrics / diagnostics / replay summary"]
@@ -134,18 +141,18 @@ flowchart TD
 2. 用全局 EventBus 作为 high-frequency reaction 主输入。
 3. 通过 MonoBehaviour / managed callback 驱动 Simulation hot path。
 
-### Observation Layer
+### Observation Segment
 
 职责：
 
-1. 将 Simulation facts 投影为 Debugger counters、Replay 片段、validation facts 和 presentation outbox。
+1. 将 Simulation facts 投影为 Replay 片段、validation facts、presentation outbox，并消费 Layer 2 Diagnostics snapshot。
 2. 明确 core simulation tick、observation projection tick、presentation marker tick、export / bootstrap tick 的统计口径。
 3. 为 x1、x50、x100、x1000 规模门槛提供机器可读 summary。
 
 禁止：
 
 1. Observation 反向修改 gameplay state。
-2. 让 Debugger 或 Replay 成为业务路由。
+2. 让 Debugger、Replay 或 Layer 2 Diagnostics snapshot 成为业务路由。
 3. 用人读日志替代 structured counters。
 
 ### Presentation Layer
@@ -177,7 +184,30 @@ flowchart TD
 
 ## 业务覆盖
 
-业务链路原则：精而不是多。AutoChessDemo 只保留少数能覆盖 GAS 核心概念和工程边界的代表性链路，每条链路都必须贯穿 Config、Simulation、Observation、Presentation、Debugger、Validation。
+业务链路原则：精而不是多。AutoChessDemo 只保留少数能覆盖 GAS 核心概念和工程边界的代表性链路，每条链路都必须贯穿 Demo config、Demo simulation、Layer 2 diagnostics/replay snapshot、presentation marker 和 validation summary。
+
+### 本轮最小 Runtime Core 验证切片
+
+当前 Runtime Core 正在从主线程 buffer/EntityManager 链路迁移到 chunk/job/record 链路，因此 AutoChessDemo 的第一条可执行验收不直接扩成完整 4v4，而是以 `Assets/AutoChessDemo/AutoBattle` 的 2v2 精链路先证明新 Core API 可用。该切片是目标态 AutoChess 的 Functional x1 前置门，不替代完整自走棋业务案例。
+
+本轮实现采用破坏性收敛：旧 `HeadlessAutoChess*` 巨型配置源、旧组件堆叠和 scale DTO 不进入最小链路；当前只保留 AutoBattle、runtime bootstrap、headless runner 和 presentation 占位。
+
+最小切片必须覆盖：
+
+1. Bootstrap：`HeadlessAutoChessRuntimeSystemBootstrap` 把 Demo 专用 system 注册进 GAS 固定步进组，而不是依赖默认 world 自动发现。
+2. Definition：`AutoBattleDefinitionCatalogBuilder` 运行时安装最小 `GASDefinitionCatalogBlob`。长期目标仍是 Luban / SourceGenerator 生成 catalog，本 builder 只用于当前 Runtime Core 验证。
+3. Command Drive：Functional x1 业务 AI 用 `SystemAPI.Query` 收集 ASC 单位快照，生成 frame-local `AutoBattleUnitTargetStateRecord`，再写入 `AbilityCommandBuffer`；AutoBattle hot path 不再为每个单位指令创建 request entity，也不为 4 单位链路支付 `NativeStream + job schedule + Complete` 固定成本。
+4. Ability / GE：Runtime Core 消费 `AbilityCommandBuffer`，继续执行 Ability grant / activate、generated catalog commit、GE command stream、instant modifier、cue request 和 replay projection。
+5. ExecutionCalculation：`AutoBattleExecuteDamageCalculationSystem` 在 `GEExecutionCalculationExtensionSystemGroup` 中消费 `GEEffectCommandBuffer` 的斩杀 GE 命令，用 ECS query 顺序扫描目标 ASC 并写入 `AttributeModifierBuffer` 与 `GameplayEventBuffer{ExecutionCalculationOutputUpdated}` typed fact；event bus 只镜像 typed fact，`SourceFactSequence` 必须指向 fact sequence，不能复用 attribute delta sequence。
+6. Attribute Projection：属性变化必须进入 `GameplayFactProjectionSystem` / `GameplayFactEventBridgeSystem` / `ReplayLogSystem` 的统一 fact 链路，再由 structured log 汇总。
+7. Runner Summary：无头 runner 至少输出 `commands`、`attributeChanges`、`executionOutputs`、`cueRequests`、`battleTicks`、`avgTickMs`、`blockingDebugErrors`、`OfficialToolDiff`，并在失败时抛出包含 summary 的异常。
+
+官方文档约束：
+
+- Functional x1 只有 4 个单位，按 `ecs-workflow-intro.md` / `job-overhead.md`，小数据量 job 调度开销可能超过并行收益；因此当前 x1 使用直接 ECS query。x50+ 如切换回 chunk/job 路径，则必须按 `iterating-data-ijobchunk-implement.md` 通过 `ChunkEntityEnumerator` 安全处理 enableable mask，不能使用裸 chunk for-loop 假设。
+- 同一文档说明 `ComponentLookup` / `BufferLookup` 是随机访问且效率最低；当前最小链路的选敌与 execution damage 都优先使用快照 record / chunk scan，暂不引入 random lookup。
+- `systems-entitymanager.md` 说明 `EntityManager` 结构变化会产生 sync point，且不能在 jobs 中使用；AutoBattle AI 高频指令必须写 frame-local buffer/record，结构变化只能留在 Runtime Core commit / cleanup phase。
+- `systems-time.md` 说明 `FixedStepSimulationSystemGroup` 固定间隔且一帧可多次更新；AutoChess 验收 summary 必须把该 fixed-step policy 作为默认 Simulation 时间口径。
 
 核心链路：
 
@@ -225,7 +255,7 @@ AutoChessDemo 从设计上必须考虑十万实体和百万实体压力测试，
 3. `coreTickMs` 只代表 Simulation + GAS Runtime Core；`runtimeTickMs` 代表 `core + observation + presentation + debugger counters`，不包含 export / log flush。
 4. `physicsStepMs`、`physicsQueryMs`、`physicsEventConsumeMs` 和 `renderMs` 必须单独统计；默认 headless profile 中这些字段可以为 0，但必须输出 `physicsDisabledReason` / `entitiesGraphicsDisabledReason`。
 5. x1 / SceneRuntime 可以保留完整 marker；x50 以上必须关闭逐条人读日志，只保留结构化 counters、采样 facts 和 marker 计数。
-6. 每个性能 profile 必须先 warmup，再采样。x1 如果战斗 tick 过短，应重复运行多局汇总；x50 以上建议至少采样 256 个 measured ticks，丢弃前 10% warmup ticks。
+6. 每个性能 profile 必须先 warmup，再采样。`avgTickMs` 只能由 measured ticks 计算；bootstrap、ASC 创建、配置加载、首帧 group 初始化、Journaling 启用、Burst / Editor warmup 和 cleanup 只能进入单独的 total / setup / teardown 字段。x1 如果战斗 tick 过短，应重复运行多局汇总；x50 以上建议至少采样 256 个 measured ticks，丢弃前 10% warmup ticks。
 7. 性能指标必须同时输出 `avg`、`p95`、`max`、`perSystemTopN`、`entityCount`、`commandCount`、`factCount`、`structuralChangeCount`、`syncPointCount`、`gcAllocBytesPerTick`。
 8. idle tick 不参与“优秀”判断。每个 profile 必须满足配置中的 `ExpectedCommandRange`、`ExpectedFactRange` 和核心链路覆盖要求，否则只能说明空转性能，不算 GAS 业务性能验收。
 9. API 健康指标必须随性能指标一起输出，至少包含 global buffer spill、NativeStream merge cost、chunk skip ratio、lookup update count、random lookup count、query bulk structural count、ECB per-entity command count。
@@ -321,26 +351,30 @@ AutoChessDemo 是 API 选型的自动验收场，不只是业务验收场。每�
 ```mermaid
 sequenceDiagram
     participant Runner as Headless Runner
-    participant Config as Generated Config Registry
-    participant Sim as AutoChess Simulation Systems
+    participant Catalog as GASDefinitionCatalogBlob
+    participant Sim as AutoBattle DOTS Systems
     participant GAS as GAS Runtime Core
-    participant Obs as Boundary Projection
-    participant Pres as Presentation Markers
-    participant Debug as Runtime Core Debugger
+    participant Exec as ExecutionCalculation Extension
+    participant Obs as Layer 2 Replay / Boundary Projection
+    participant Debug as Layer 2 DiagnosticsSink
+    participant Unity as Unity Journaling / Profiler
     participant Report as Validation Summary
 
-    Runner->>Config: Load generated demo tables and blobs
-    Runner->>Sim: Spawn board and units
+    Runner->>Catalog: Install runtime minimal catalog
+    Runner->>Sim: Spawn ASC units and AutoBattle driver
     loop Battle Tick
-        Sim->>GAS: Emit EffectCommand / AbilityCommand
-        GAS->>GAS: Evaluate Spec/Delta/Fact 语义链 / ActiveEffectStore / AttributeDelta
-        GAS-->>Obs: Typed facts and counters
-        Obs-->>Pres: UI / VFX / SFX / FloatingText / Cue markers
-        Obs-->>Debug: Diagnostics counters and replay slices
+        Sim->>GAS: Append AbilityCommandBuffer
+        GAS->>GAS: Commit Ability and append GEEffectCommandBuffer
+        Exec->>GAS: Consume execute command and append AttributeModifierBuffer
+        GAS->>GAS: Apply instant GE and project facts / cue requests
+        GAS-->>Obs: Typed facts, counters and markers
+        Obs-->>Debug: Diagnostics snapshot and replay slices
     end
-    Debug-->>Report: Hotspot and pressure summary
-    Pres-->>Report: Presentation marker counts
-    Runner-->>Report: pass/fail and deterministic result
+    Debug-->>Unity: Read EntitiesJournaling records and profiler category state
+    Unity-->>Debug: OfficialToolDiff, disabled reason when profiler modules are off
+    Debug-->>Report: Hotspot, pressure and official diff summary
+    Obs-->>Report: Attribute / execution / cue counts
+    Runner-->>Report: pass/fail and deterministic summary
 ```
 
 ## 类图
@@ -372,9 +406,10 @@ classDiagram
         +SynergySystems
         +CombatSystems
     }
-    class AutoChessObservationSystems {
+    class Layer2DiagnosticsSink {
         +FactProjection
-        +DebuggerCounters
+        +RuntimeDiagnosticsSnapshot
+        +OfficialToolDiff
         +ReplayExport
     }
     class AutoChessPresentationMarkers {
@@ -392,10 +427,61 @@ classDiagram
     AutoChessDemoBootstrap --> GASDefinitionCatalogBlob
     AutoChessDemoBootstrap --> AutoChessBattleState
     AutoChessSimulationSystems --> AutoChessBattleState
-    AutoChessSimulationSystems --> AutoChessObservationSystems
-    AutoChessObservationSystems --> AutoChessPresentationMarkers
-    AutoChessObservationSystems --> AutoChessValidationRunner
+    AutoChessSimulationSystems --> Layer2DiagnosticsSink
+    Layer2DiagnosticsSink --> AutoChessPresentationMarkers
+    Layer2DiagnosticsSink --> AutoChessValidationRunner
 ```
+
+## 当前 Functional x1 跑通证据
+
+2026-05-29 使用 `GAS.AutoChessDemo.HeadlessAutoChessRuntimeRunner.RunHeadlessAutoBattleOnce` 跑通 AutoBattle 2v2 最小链路。该链路属于 **Layer 1 Application Shell Layer / 业务验收层**，只通过 Layer 2 Diagnostics snapshot / official diff 观察 Runtime Core，不把 Demo 或 Debugger 放进 Layer 3。当前性能数据已采用 warmup-dropped 口径；旧 `15ms+` 平均值混入 bootstrap 与 frame 1-3 warmup，已废弃：
+
+```text
+completed=True, winner=Player, battleTicks=9, totalTicks=10,
+warmupDroppedTicks=3, measuredTicks=7, commands=18, finishers=8,
+attributeChanges=21, executionOutputs=5, cueRequests=8,
+debugEvents=62, debugWarnings=22, debugErrors=0, blockingDebugErrors=0,
+coreRequests=54, coreFacts=96, coreDeltas=34, coreCues=8,
+peakEventBus=26, replayLag=0, journalingRecords=2128,
+totalElapsedMs=169.515, factsHash=0x7C84FE91,
+summaryHash=0x53F70297, avgTickMs=0.599
+```
+
+`debugErrors=0` 表示 Runtime Debugger 的错误语义不再被慢 timing 事件污染；`SystemTiming` / `TickSummary` 只用 Warning 暴露当前实现仍有可优化耗时。Functional x1 的阻断失败口径是 `blockingDebugErrors=0`。
+
+```text
+HeadlessAutoChessRuntimeTiming:
+ecsRuntimeTickOnly=true
+GASTickTotal(samples=7, avgMs=0.489, maxMs=0.876)
+GASFramePrepareSystemGroup(samples=7, avgMs=0.036, maxMs=0.161)
+GASCommandResolveSystemGroup(samples=7, avgMs=0.082, maxMs=0.203)
+GASCoreSimulationSystemGroup(samples=7, avgMs=0.227, maxMs=0.321)
+GASStructuralCommitSystemGroup(samples=7, avgMs=0.013, maxMs=0.024)
+GASBoundaryProjectionSystemGroup(samples=7, avgMs=0.131, maxMs=0.187)
+```
+
+```text
+HeadlessAutoChessOfficialToolDiff:
+journalingAvailable=True, journalingCaptured=True,
+journalingWorldRecords=2128, runtimeStructuralApprox=18,
+journalingStructural=286, deltaStructural=-268,
+runtimeCreates=18, journalingCreates=33, deltaCreates=-15,
+runtimeDestroys=0, journalingDestroys=22, deltaDestroys=-22,
+journalingGetComponentDataRW=349, journalingGetBufferRW=1493,
+profilerAvailable=True, profilerEnabled=False,
+structuralProfilerCategoryEnabled=False, memoryProfilerCategoryEnabled=False,
+profilerCaptureState=profiler disabled; Entities profiler modules collect no data
+```
+
+Native leak trace 复跑结果：
+
+```text
+UNITY_JOBS_NATIVE_LEAK_DETECTION_MODE=2
+completed=True, summaryHash=0x53F70297, debugErrors=0, blockingDebugErrors=0
+Leak Detected: none
+```
+
+结论：最小链路已经证明 Runtime Core 可以被 Layer 1 业务 Demo 通过 Layer 2 boundary 打穿，且本轮无头 official diff 不再留下 NativeContainer / Persistent 泄漏。当前 measured hot path 已回落到 `0.X ms`，AutoBattle 业务侧已移除小规模 `NativeStream + Complete` 固定成本，`GASCommandResolveSystemGroup` 回落到 `0.082ms`。剩余优化应优先收敛 `GASCoreSimulationSystemGroup`、Boundary Projection 和 official diff 的 structural attribution，并在 x50/x100 下用 CPU Profiler 与 Runtime Debugger counters 做差分。
 
 ## 自动验收门槛
 
@@ -415,16 +501,16 @@ classDiagram
 2. x50 热点不能只靠 systemTiming 排序解释，必须有 Runtime Core Debugger counters。
 3. 表现 marker 缺失视为验收失败，即使数值结算正确。
 4. x10w / x100w 允许使用采样 presentation 和 synthetic workload，但不能绕过 GAS Runtime Core contracts。
-5. `Assets/GAS/Runtime/Demo/AutoChess` 清空或迁移前，任何新增 AutoChess 业务都应进入 `Assets/AutoChessDemo` 目标结构。
+5. `Assets/GAS/Runtime/Demo/AutoChess` 已从当前编译面移除；任何新增 AutoChess 业务都必须进入 `Assets/AutoChessDemo`，并保持 `GAS.AutoChessDemo` 命名空间。
 6. “性能指标优秀”必须以 `实机性能指标参考` 的分档阈值为准，不能用单次 `avgTickMs` 或未拆分口径的总耗时替代。
 
 ## 迁移规则
 
-1. 第一阶段只建立 `Assets/AutoChessDemo` 目标目录和 asmdef / README / bootstrap 骨架，不改 Runtime Core 语义。
-2. 第二阶段拆出 Config / Generated / Validation，把 `HeadlessAutoChessGeneratedDefinitionRows` 从巨类变成生成链或表驱动入口。
-3. 第三阶段拆出 Simulation systems：Board、AI、Combat、Synergy、Ability、Effect reaction 独立文件和测试。
-4. 第四阶段拆出 Observation / Presentation / Debugging，保证表现 marker 不污染 core simulation tick。
-5. 第五阶段删除或降级 `Assets/GAS/Runtime/Demo/AutoChess`，Runtime Core 不再包含 Demo 业务。
+1. 已完成破坏性迁出：AutoChess 业务代码位于 `Assets/AutoChessDemo`，命名空间为 `GAS.AutoChessDemo`；Runtime Core 不再包含 Demo 业务。
+2. 已完成最小链路收敛：旧手写配置源、旧组件堆叠、scale/profile DTO 退出编译面，当前以 AutoBattle 2v2 跑通 Runtime Core 前置门。
+3. 下一阶段恢复目标态 Config / Generated / Validation 时，`HeadlessAutoChessGeneratedDefinitionRows` 必须变成 Luban / SourceGenerator 表驱动入口，不能回到巨类。
+4. 下一阶段扩展 Simulation systems：Board、AI、Combat、Synergy、Ability、Effect reaction 独立文件和测试。
+5. Observation / Presentation / Debugging 必须继续分层：AutoChessDemo 消费 Layer 2 Diagnostics snapshot 和 presentation outbox；Editor Debugger Window 作为 Layer 1 Editor Extension 单独实现，不放入 Demo。
 
 ## 设计预演定位
 

@@ -161,13 +161,15 @@ ActiveEffectStore 不应是 "GE entity 镜像到 owner buffer"。正确的物理
 ASC Entity
   +-- BActiveEffectSlot[N]    (DynamicBuffer, InternalBufferCapacity=16)
   |    每个 slot: EffectCode, StackCount, RemainingDuration, PeriodTimer, Flags
-  +-- BGrantedTagMask          (CTagMask, IComponentData)
-  +-- CActiveEffectEnableable  (IEnableableComponent, per-effect-type)
+  +-- TagMaskComponent         (IComponentData bitmask)
+  +-- TagStatusFlagsComponent  (可选派生 cache，同 archetype)
+  +-- PeriodDueTag / ChunkComponent（可选 skip cache，必须有 profiler 证据）
 ```
 
 - 每个 ASC entity 持有一个固定容量的 `BActiveEffectSlot` buffer
 - 不创建独立的 GE runtime entity
-- `CActiveEffectEnableable` 用于 per-effect-type 的状态开关
+- `IEnableableComponent` 不是 buffer slot 的默认开关；slot 内 active、inhibited、expired、period due 默认使用 enum / bit flags
+- 只有当大量 ASC / ability / active-effect slot 长期 idle，且 profiler 证明 query skip 收益大于 enableable 同步等待和额外 component 成本时，才把派生状态升格为 `PeriodDueTag` 或 Chunk Component
 
 ### EffectCommand fan-in 的数据流
 

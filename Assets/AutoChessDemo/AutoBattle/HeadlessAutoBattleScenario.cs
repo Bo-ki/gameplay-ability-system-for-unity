@@ -1,10 +1,10 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using Unity.Collections;
 using Unity.Entities;
+using GAS.Runtime;
 
-namespace GAS.Runtime
+namespace GAS.AutoChessDemo
 {
     public enum HeadlessAutoBattleTeam : byte
     {
@@ -103,15 +103,22 @@ namespace GAS.Runtime
         public readonly HeadlessAutoBattleTeam Winner;
         public readonly int BattleTicks;
         public readonly int TotalTicks;
+        public readonly int WarmupDroppedTicks;
+        public readonly int MeasuredTicks;
         public readonly int DriverIssuedCommands;
         public readonly int DriverIssuedPrimaryCommands;
         public readonly int DriverIssuedFinisherCommands;
         public readonly int DriverLowestHealthTargetSelections;
         public readonly long ElapsedTicks;
         public readonly double ElapsedMilliseconds;
+        public readonly long MeasuredElapsedTicks;
+        public readonly double MeasuredElapsedMilliseconds;
         public readonly double AverageTickMilliseconds;
         public readonly HeadlessAutoBattleUnitResult[] Units;
         public readonly HeadlessAutoBattleEventCounts EventCounts;
+        public readonly GasRuntimeDiagnosticSnapshot RuntimeDiagnostics;
+        public readonly string RuntimeDiagnosticsLog;
+        public readonly GasRuntimeOfficialToolDiffSnapshot OfficialToolDiff;
         public readonly GasStructuredLogExportSnapshot StructuredLogSnapshot;
         public readonly string AssertionLog;
 
@@ -120,14 +127,21 @@ namespace GAS.Runtime
             HeadlessAutoBattleTeam winner,
             int battleTicks,
             int totalTicks,
+            int warmupDroppedTicks,
+            int measuredTicks,
             int driverIssuedCommands,
             int driverIssuedPrimaryCommands,
             int driverIssuedFinisherCommands,
             int driverLowestHealthTargetSelections,
             long elapsedTicks,
             double elapsedMilliseconds,
+            long measuredElapsedTicks,
+            double measuredElapsedMilliseconds,
             HeadlessAutoBattleUnitResult[] units,
             HeadlessAutoBattleEventCounts eventCounts,
+            GasRuntimeDiagnosticSnapshot runtimeDiagnostics,
+            string runtimeDiagnosticsLog,
+            GasRuntimeOfficialToolDiffSnapshot officialToolDiff,
             GasStructuredLogExportSnapshot structuredLogSnapshot,
             string assertionLog)
         {
@@ -135,15 +149,22 @@ namespace GAS.Runtime
             Winner = winner;
             BattleTicks = battleTicks;
             TotalTicks = totalTicks;
+            WarmupDroppedTicks = warmupDroppedTicks;
+            MeasuredTicks = measuredTicks;
             DriverIssuedCommands = driverIssuedCommands;
             DriverIssuedPrimaryCommands = driverIssuedPrimaryCommands;
             DriverIssuedFinisherCommands = driverIssuedFinisherCommands;
             DriverLowestHealthTargetSelections = driverLowestHealthTargetSelections;
             ElapsedTicks = elapsedTicks;
             ElapsedMilliseconds = elapsedMilliseconds;
-            AverageTickMilliseconds = totalTicks > 0 ? elapsedMilliseconds / totalTicks : 0d;
+            MeasuredElapsedTicks = measuredElapsedTicks;
+            MeasuredElapsedMilliseconds = measuredElapsedMilliseconds;
+            AverageTickMilliseconds = measuredTicks > 0 ? measuredElapsedMilliseconds / measuredTicks : 0d;
             Units = units ?? Array.Empty<HeadlessAutoBattleUnitResult>();
             EventCounts = eventCounts;
+            RuntimeDiagnostics = runtimeDiagnostics;
+            RuntimeDiagnosticsLog = runtimeDiagnosticsLog ?? string.Empty;
+            OfficialToolDiff = officialToolDiff;
             StructuredLogSnapshot = structuredLogSnapshot;
             AssertionLog = assertionLog ?? string.Empty;
         }
@@ -163,38 +184,35 @@ namespace GAS.Runtime
         public const int AbilityEnemyAttack = 9102;
         public const int AbilityPlayerExecute = 9103;
 
-        public const int GameplayEffectPlayerBurn = 9201;
-        public const int GameplayEffectEnemyBurn = 9202;
-        public const int GameplayEffectPlayerPeriodDamage = 9203;
-        public const int GameplayEffectEnemyPeriodDamage = 9204;
-        public const int GameplayEffectAttackCost = 9205;
-        public const int GameplayEffectAttackCooldown = 9206;
+        public const int GameplayEffectPlayerAttackDamage = 9201;
+        public const int GameplayEffectEnemyAttackDamage = 9202;
         public const int GameplayEffectPlayerExecute = 9207;
 
         public const int ExecutionCalculationExecuteDamage = 9401;
         public const int ExecutionCalculationExecuteDamageOutput = 9402;
 
-        public const int TagAbilityAttacking = 0;
         public const int TagAttackCooldown = 1;
-        public const int TagBurning = 2;
-
-        private const string TargetCatcherName = "HeadlessAutoBattle.Target";
+        private const int WarmupRuntimeTicks = 3;
 
         public static HeadlessAutoBattleResult RunDefault(HeadlessAutoBattleOptions options = default)
         {
             var normalized = options.Normalize();
             EnsureRuntimeInitialized();
-            RegisterTargetCatcher();
-            RegisterConfigs();
             ResetObservationState();
 
+            var officialToolDiffCapture = GasRuntimeOfficialToolDiffCapture.Begin(GASManager.ExWorld);
+            var officialToolDiffClosed = false;
             var stopwatch = Stopwatch.StartNew();
+            var measuredElapsedTicks = 0L;
+            var measuredTicks = 0;
+            var droppedWarmupTicks = 0;
             var state = new ScenarioState(CreateDefaultUnits());
 
             try
             {
                 BootstrapUnits(state);
-                TickRuntime();
+                TickRuntime(recordTiming: false);
+                droppedWarmupTicks++;
 
                 var battleTicks = 0;
                 var totalTicks = 1;
@@ -203,7 +221,19 @@ namespace GAS.Runtime
 
                 for (var i = 0; i < normalized.MaxTicks; i++)
                 {
-                    TickRuntime();
+                    var shouldRecordTiming = droppedWarmupTicks >= WarmupRuntimeTicks;
+                    var tickStart = shouldRecordTiming ? Stopwatch.GetTimestamp() : 0L;
+                    TickRuntime(recordTiming: shouldRecordTiming);
+                    if (shouldRecordTiming)
+                    {
+                        measuredElapsedTicks += Stopwatch.GetTimestamp() - tickStart;
+                        measuredTicks++;
+                    }
+                    else
+                    {
+                        droppedWarmupTicks++;
+                    }
+
                     totalTicks++;
                     battleTicks++;
                     RefreshUnits(state);
@@ -222,229 +252,49 @@ namespace GAS.Runtime
 
                 stopwatch.Stop();
                 var driverStats = GetDriverStats(state);
+                var officialToolDiff = officialToolDiffCapture.End();
+                officialToolDiffClosed = true;
                 return BuildResult(
                     state,
                     winner != HeadlessAutoBattleTeam.None && winner != HeadlessAutoBattleTeam.Draw,
                     winner,
                     battleTicks,
                     totalTicks,
+                    droppedWarmupTicks,
+                    measuredTicks,
                     driverStats,
                     stopwatch.ElapsedTicks,
-                    stopwatch.Elapsed.TotalMilliseconds);
+                    stopwatch.Elapsed.TotalMilliseconds,
+                    measuredElapsedTicks,
+                    ToMilliseconds(measuredElapsedTicks),
+                    officialToolDiff);
             }
             finally
             {
+                if (!officialToolDiffClosed)
+                    officialToolDiffCapture.End();
+
                 CleanupUnits(state);
-                ClearConfigProviders();
             }
+        }
+
+        public static void ShutdownRuntime()
+        {
+            if (!GASManager.IsInitialized)
+                return;
+
+            AutoBattleDefinitionCatalogBuilder.Uninstall(GASManager.EntityManager);
+            HeadlessAutoChessRuntimeSystemBootstrap.Reset();
+            GASManager.Shutdown();
         }
 
         private static void EnsureRuntimeInitialized()
         {
             if (!GASManager.IsInitialized)
                 GASManager.Initialize();
-        }
 
-        private static void RegisterTargetCatcher()
-        {
-            TargetCatcherHelper.RegisterTargetCatcher(
-                TargetCatcherName,
-                typeof(CatchTarget),
-                typeof(XParamNone));
-        }
-
-        private static void RegisterConfigs()
-        {
-            AbilityConfigRegistry.RegisterGetConfigByIDFunc(CreateAbilityConfig);
-            GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(CreateGameplayEffectConfig);
-            GameplayCueConfigRegistry.RegisterGetConfigByIDFunc(_ => null);
-        }
-
-        private static void ClearConfigProviders()
-        {
-            AbilityConfigRegistry.RegisterGetConfigByIDFunc(null);
-            GameplayEffectConfigRegistry.RegisterGetConfigByIDFunc(null);
-            GameplayCueConfigRegistry.RegisterGetConfigByIDFunc(null);
-        }
-
-        private static AbilityConfig CreateAbilityConfig(int abilityCode)
-        {
-            return abilityCode switch
-            {
-                AbilityPlayerAttack => CreateAttackAbility(
-                    AbilityPlayerAttack,
-                    GameplayEffectPlayerBurn),
-                AbilityEnemyAttack => CreateAttackAbility(
-                    AbilityEnemyAttack,
-                    GameplayEffectEnemyBurn),
-                AbilityPlayerExecute => CreateAttackAbility(
-                    AbilityPlayerExecute,
-                    GameplayEffectPlayerExecute),
-                _ => null,
-            };
-        }
-
-        private static AbilityConfig CreateAttackAbility(int abilityCode, int targetEffectCode)
-        {
-            return new AbilityConfig(new AbilityComponentConfig[]
-            {
-                new ConfAbilityBaseInfo
-                {
-                    Code = abilityCode,
-                    Level = 1,
-                },
-                new DirectMaskAbilityTagsConfig(new[] { TagAbilityAttacking }),
-                new ConfAbilityCost
-                {
-                    GameplayEffectCode = GameplayEffectAttackCost,
-                },
-                new ConfAbilityCooldown
-                {
-                    GameplayEffectCode = GameplayEffectAttackCooldown,
-                    Cooldown = 2,
-                },
-                new ConfAbilityTargetEffectsOnActivate
-                {
-                    EffectCodes = new[] { targetEffectCode },
-                    AutoEndOnCommit = true,
-                },
-            });
-        }
-
-        private static GameplayEffectConfig CreateGameplayEffectConfig(int gameplayEffectCode)
-        {
-            return gameplayEffectCode switch
-            {
-                GameplayEffectPlayerBurn => CreateBurnEffect(
-                    "PlayerBurn",
-                    GameplayEffectPlayerPeriodDamage),
-                GameplayEffectEnemyBurn => CreateBurnEffect(
-                    "EnemyBurn",
-                    GameplayEffectEnemyPeriodDamage),
-                GameplayEffectPlayerPeriodDamage => CreateInstantDamageEffect("PlayerPeriodDamage", 12f),
-                GameplayEffectEnemyPeriodDamage => CreateInstantDamageEffect("EnemyPeriodDamage", 8f),
-                GameplayEffectAttackCost => CreateCostEffect(),
-                GameplayEffectAttackCooldown => CreateCooldownEffect(),
-                GameplayEffectPlayerExecute => CreateExecuteEffect(),
-                _ => null,
-            };
-        }
-
-        private static GameplayEffectConfig CreateBurnEffect(string name, int periodDamageEffectCode)
-        {
-            return new GameplayEffectConfig(new GameplayEffectComponentConfig[]
-            {
-                new ConfEffectBasicInfo
-                {
-                    Name = name,
-                },
-                new ConfDuration
-                {
-                    duration = 3,
-                    timeUnit = TimeUnit.Frame,
-                    ResetStartTimeWhenActivated = true,
-                    StopTickWhenDeactivated = false,
-                },
-                new ConfPeriod
-                {
-                    Period = 1,
-                    ResetTimeCountWhenDeactivated = false,
-                    GameplayEffectCodes = new[] { periodDamageEffectCode },
-                },
-                new DirectMaskGrantedTagsConfig(new[] { TagBurning }),
-                new ConfCueOnApply
-                {
-                    cues = new[]
-                    {
-                        new GameplayCueConfig(typeof(HeadlessAutoBattleNoopCue), new XParamNone()),
-                    },
-                },
-            });
-        }
-
-        private static GameplayEffectConfig CreateInstantDamageEffect(string name, float damage)
-        {
-            return new GameplayEffectConfig(new GameplayEffectComponentConfig[]
-            {
-                new ConfEffectBasicInfo
-                {
-                    Name = name,
-                },
-                new ConfModifierConfig
-                {
-                    ModifierSettings = new[]
-                    {
-                        new ModifierDefinitionSetting
-                        {
-                            AttrSetCode = AttributeSetCombat,
-                            AttrCode = AttributeHealth,
-                            Operation = EModifierOp.Subtract,
-                            Magnitude = damage,
-                        },
-                    },
-                },
-            });
-        }
-
-        private static GameplayEffectConfig CreateExecuteEffect()
-        {
-            return new GameplayEffectConfig(new GameplayEffectComponentConfig[]
-            {
-                new ConfEffectBasicInfo
-                {
-                    Name = "PlayerExecute",
-                },
-                new DirectExecuteCalculationConfig(
-                    ExecutionCalculationExecuteDamage,
-                    ExecutionCalculationExecuteDamageOutput,
-                    baseDamage: 10f,
-                    missingHealthCoefficient: 0.5f,
-                    minDamage: 10f,
-                    maxDamage: 36f),
-            });
-        }
-
-        private static GameplayEffectConfig CreateCostEffect()
-        {
-            return new GameplayEffectConfig(new GameplayEffectComponentConfig[]
-            {
-                new ConfEffectBasicInfo
-                {
-                    Name = "AttackCost",
-                },
-                new ConfModifierConfig
-                {
-                    ModifierSettings = new[]
-                    {
-                        new ModifierDefinitionSetting
-                        {
-                            AttrSetCode = AttributeSetCombat,
-                            AttrCode = AttributeEnergy,
-                            Operation = EModifierOp.Subtract,
-                            Magnitude = 1f,
-                        },
-                    },
-                },
-            });
-        }
-
-        private static GameplayEffectConfig CreateCooldownEffect()
-        {
-            return new GameplayEffectConfig(new GameplayEffectComponentConfig[]
-            {
-                new ConfEffectBasicInfo
-                {
-                    Name = "AttackCooldown",
-                },
-                new ConfDuration
-                {
-                    duration = 2,
-                    timeUnit = TimeUnit.Frame,
-                    ResetStartTimeWhenActivated = true,
-                    StopTickWhenDeactivated = false,
-                },
-                new DirectMaskGrantedTagsConfig(new[] { TagAttackCooldown }),
-            });
+            HeadlessAutoChessRuntimeSystemBootstrap.RegisterSystems(GASManager.ExWorld);
+            AutoBattleDefinitionCatalogBuilder.Install(GASManager.EntityManager);
         }
 
         private static UnitDefinition[] CreateDefaultUnits()
@@ -459,9 +309,9 @@ namespace GAS.Runtime
                     8f,
                     AbilityPlayerAttack,
                     AbilityPlayerExecute,
-                    32f,
-                    HeadlessAutoBattleTargetPolicy.Frontline,
-                    HeadlessAutoBattleTargetPolicy.LowestHealth),
+                    44f,
+                    AutoBattleTargetPolicy.Frontline,
+                    AutoBattleTargetPolicy.LowestHealth),
                 new UnitDefinition(
                     "player-ranger",
                     HeadlessAutoBattleTeam.Player,
@@ -470,9 +320,9 @@ namespace GAS.Runtime
                     8f,
                     AbilityPlayerAttack,
                     AbilityPlayerExecute,
-                    32f,
-                    HeadlessAutoBattleTargetPolicy.LowestHealth,
-                    HeadlessAutoBattleTargetPolicy.LowestHealth),
+                    44f,
+                    AutoBattleTargetPolicy.LowestHealth,
+                    AutoBattleTargetPolicy.LowestHealth),
                 new UnitDefinition(
                     "enemy-brute",
                     HeadlessAutoBattleTeam.Enemy,
@@ -482,8 +332,8 @@ namespace GAS.Runtime
                     AbilityEnemyAttack,
                     0,
                     0f,
-                    HeadlessAutoBattleTargetPolicy.Frontline,
-                    HeadlessAutoBattleTargetPolicy.Frontline),
+                    AutoBattleTargetPolicy.Frontline,
+                    AutoBattleTargetPolicy.Frontline),
                 new UnitDefinition(
                     "enemy-caster",
                     HeadlessAutoBattleTeam.Enemy,
@@ -493,8 +343,8 @@ namespace GAS.Runtime
                     AbilityEnemyAttack,
                     0,
                     0f,
-                    HeadlessAutoBattleTargetPolicy.Frontline,
-                    HeadlessAutoBattleTargetPolicy.Frontline),
+                    AutoBattleTargetPolicy.Frontline,
+                    AutoBattleTargetPolicy.Frontline),
             };
         }
 
@@ -544,7 +394,7 @@ namespace GAS.Runtime
             if (asc == Entity.Null || !em.Exists(asc))
                 return;
 
-            em.AddComponentData(asc, new CHeadlessAutoBattleUnit
+            em.AddComponentData(asc, new AutoBattleUnitComponent
             {
                 Team = definition.Team,
                 Slot = definition.Slot,
@@ -565,11 +415,12 @@ namespace GAS.Runtime
         {
             var em = GASManager.EntityManager;
             var driver = em.CreateEntity();
-            em.SetName(driver, "HeadlessAutoBattleDriver");
-            em.AddComponentData(driver, new CHeadlessAutoBattleDriver
+            em.SetName(driver, "AutoBattleCommandDriver");
+            em.AddComponentData(driver, new AutoBattleCommandDriverComponent
             {
                 Enabled = true,
                 LastDecisionFrame = -1,
+                LastExecutionFrame = -1,
             });
             return driver;
         }
@@ -617,9 +468,14 @@ namespace GAS.Runtime
             HeadlessAutoBattleTeam winner,
             int battleTicks,
             int totalTicks,
-            CHeadlessAutoBattleDriver driverStats,
+            int warmupDroppedTicks,
+            int measuredTicks,
+            AutoBattleCommandDriverComponent driverStats,
             long elapsedTicks,
-            double elapsedMilliseconds)
+            double elapsedMilliseconds,
+            long measuredElapsedTicks,
+            double measuredElapsedMilliseconds,
+            GasRuntimeOfficialToolDiffSnapshot officialToolDiff)
         {
             RefreshUnits(state);
 
@@ -643,20 +499,29 @@ namespace GAS.Runtime
             var assertionLog = GasStructuredLogExporter.ExportToText(
                 snapshot,
                 GasStructuredLogFormatOptions.AssertionText);
+            var runtimeDiagnostics = GasRuntimeDebugger.CreateSnapshot(em, GASManager.EntityRuntimeDebugger);
+            var runtimeDiagnosticsLog = GasRuntimeDebugger.ExportToText(runtimeDiagnostics, maxEvents: 96);
 
             return new HeadlessAutoBattleResult(
                 completed,
                 winner,
                 battleTicks,
                 totalTicks,
+                warmupDroppedTicks,
+                measuredTicks,
                 driverStats.IssuedCommandCount,
                 driverStats.IssuedPrimaryCommandCount,
                 driverStats.IssuedFinisherCommandCount,
                 driverStats.LowestHealthTargetCount,
                 elapsedTicks,
                 elapsedMilliseconds,
+                measuredElapsedTicks,
+                measuredElapsedMilliseconds,
                 units,
                 CountEvents(log, snapshot.EntryCount),
+                runtimeDiagnostics,
+                runtimeDiagnosticsLog,
+                officialToolDiff,
                 snapshot,
                 assertionLog);
         }
@@ -724,14 +589,111 @@ namespace GAS.Runtime
                 cueRequests);
         }
 
-        private static void TickRuntime()
+        private static void TickRuntime(bool recordTiming)
         {
             var world = GASManager.ExWorld;
-            world.GetExistingSystemManaged<GASFramePrepareSystemGroup>().Update();
-            world.GetExistingSystemManaged<GASCommandResolveSystemGroup>().Update();
-            world.GetExistingSystemManaged<GASCoreSimulationSystemGroup>().Update();
-            world.GetExistingSystemManaged<GASStructuralCommitSystemGroup>().Update();
-            world.GetExistingSystemManaged<GASBoundaryProjectionSystemGroup>().Update();
+            var framePrepareTicks = UpdateTimed(world.GetExistingSystemManaged<GASFramePrepareSystemGroup>());
+            var commandResolveTicks = UpdateTimed(world.GetExistingSystemManaged<GASCommandResolveSystemGroup>());
+            var coreSimulationTicks = UpdateTimed(world.GetExistingSystemManaged<GASCoreSimulationSystemGroup>());
+            var structuralCommitTicks = UpdateTimed(world.GetExistingSystemManaged<GASStructuralCommitSystemGroup>());
+            var boundaryProjectionTicks = UpdateTimed(world.GetExistingSystemManaged<GASBoundaryProjectionSystemGroup>());
+
+            if (recordTiming)
+            {
+                RecordRuntimeTickTiming(
+                    framePrepareTicks,
+                    commandResolveTicks,
+                    coreSimulationTicks,
+                    structuralCommitTicks,
+                    boundaryProjectionTicks);
+            }
+        }
+
+        private static long UpdateTimed(ComponentSystemGroup group)
+        {
+            var start = Stopwatch.GetTimestamp();
+            group.Update();
+            return Stopwatch.GetTimestamp() - start;
+        }
+
+        private static double ToMilliseconds(long stopwatchTicks)
+        {
+            return stopwatchTicks * 1000d / Stopwatch.Frequency;
+        }
+
+        private static void RecordRuntimeTickTiming(
+            long framePrepareTicks,
+            long commandResolveTicks,
+            long coreSimulationTicks,
+            long structuralCommitTicks,
+            long boundaryProjectionTicks)
+        {
+            var em = GASManager.EntityManager;
+            if (!em.Exists(GASManager.EntityRuntimeDebugger))
+                return;
+
+            var frame = GASRuntimeFrameContext.ResolveCurrentFrame(em);
+            var totalTicks = framePrepareTicks
+                             + commandResolveTicks
+                             + coreSimulationTicks
+                             + structuralCommitTicks
+                             + boundaryProjectionTicks;
+            var frequency = Stopwatch.Frequency;
+
+            GasRuntimeDebugger.RecordSystemTimingAggregate(
+                em,
+                GASManager.EntityRuntimeDebugger,
+                frame,
+                "PhysicalGroup",
+                "GASTickTotal",
+                1,
+                totalTicks,
+                frequency);
+            GasRuntimeDebugger.RecordSystemTimingAggregate(
+                em,
+                GASManager.EntityRuntimeDebugger,
+                frame,
+                "PhysicalGroup",
+                nameof(GASFramePrepareSystemGroup),
+                1,
+                framePrepareTicks,
+                frequency);
+            GasRuntimeDebugger.RecordSystemTimingAggregate(
+                em,
+                GASManager.EntityRuntimeDebugger,
+                frame,
+                "PhysicalGroup",
+                nameof(GASCommandResolveSystemGroup),
+                1,
+                commandResolveTicks,
+                frequency);
+            GasRuntimeDebugger.RecordSystemTimingAggregate(
+                em,
+                GASManager.EntityRuntimeDebugger,
+                frame,
+                "PhysicalGroup",
+                nameof(GASCoreSimulationSystemGroup),
+                1,
+                coreSimulationTicks,
+                frequency);
+            GasRuntimeDebugger.RecordSystemTimingAggregate(
+                em,
+                GASManager.EntityRuntimeDebugger,
+                frame,
+                "PhysicalGroup",
+                nameof(GASStructuralCommitSystemGroup),
+                1,
+                structuralCommitTicks,
+                frequency);
+            GasRuntimeDebugger.RecordSystemTimingAggregate(
+                em,
+                GASManager.EntityRuntimeDebugger,
+                frame,
+                "PhysicalGroup",
+                nameof(GASBoundaryProjectionSystemGroup),
+                1,
+                boundaryProjectionTicks,
+                frequency);
         }
 
         private static float GetAttribute(Entity asc, int attributeCode)
@@ -751,26 +713,14 @@ namespace GAS.Runtime
             return 0f;
         }
 
-        private static CHeadlessAutoBattleDriver GetDriverStats(ScenarioState state)
+        private static AutoBattleCommandDriverComponent GetDriverStats(ScenarioState state)
         {
             var em = GASManager.EntityManager;
             return state.DriverEntity != Entity.Null
                    && em.Exists(state.DriverEntity)
-                   && em.HasComponent<CHeadlessAutoBattleDriver>(state.DriverEntity)
-                ? em.GetComponentData<CHeadlessAutoBattleDriver>(state.DriverEntity)
+                   && em.HasComponent<AutoBattleCommandDriverComponent>(state.DriverEntity)
+                ? em.GetComponentData<AutoBattleCommandDriverComponent>(state.DriverEntity)
                 : default;
-        }
-
-        private static TagMaskComponent CreateDenseMask(IEnumerable<int> tagIndices)
-        {
-            var mask = new TagMaskComponent();
-            if (tagIndices == null)
-                return mask;
-
-            foreach (var tagIndex in tagIndices)
-                mask.AddTag(tagIndex);
-
-            return mask;
         }
 
         private static void ResetObservationState()
@@ -795,6 +745,17 @@ namespace GAS.Runtime
             {
                 em.SetComponentData(GASManager.EntityEventLogSink, new GameplayEventLogSinkComponent());
                 ClearBuffer<ReplayLogEventBuffer>(em, GASManager.EntityEventLogSink);
+            }
+
+            if (em.Exists(GASManager.EntityRuntimeDebugger))
+            {
+                GasRuntimeDebugger.Reset(em, GASManager.EntityRuntimeDebugger);
+                GasRuntimeDebugger.Configure(
+                    em,
+                    GASManager.EntityRuntimeDebugger,
+                    enabled: true,
+                    captureSystemTimings: true,
+                    captureBufferPressure: true);
             }
         }
 
@@ -885,8 +846,8 @@ namespace GAS.Runtime
             public readonly int PrimaryAbilityCode;
             public readonly int FinisherAbilityCode;
             public readonly float FinisherHealthThreshold;
-            public readonly HeadlessAutoBattleTargetPolicy PrimaryTargetPolicy;
-            public readonly HeadlessAutoBattleTargetPolicy FinisherTargetPolicy;
+            public readonly AutoBattleTargetPolicy PrimaryTargetPolicy;
+            public readonly AutoBattleTargetPolicy FinisherTargetPolicy;
 
             public UnitDefinition(
                 string id,
@@ -897,8 +858,8 @@ namespace GAS.Runtime
                 int primaryAbilityCode,
                 int finisherAbilityCode,
                 float finisherHealthThreshold,
-                HeadlessAutoBattleTargetPolicy primaryTargetPolicy,
-                HeadlessAutoBattleTargetPolicy finisherTargetPolicy)
+                AutoBattleTargetPolicy primaryTargetPolicy,
+                AutoBattleTargetPolicy finisherTargetPolicy)
             {
                 Id = id;
                 Team = team;
@@ -973,99 +934,5 @@ namespace GAS.Runtime
             }
         }
 
-        private sealed class DirectMaskAbilityTagsConfig : AbilityComponentConfig
-        {
-            private readonly TagMaskComponent _tags;
-
-            public DirectMaskAbilityTagsConfig(IEnumerable<int> tagIndices)
-            {
-                _tags = CreateDenseMask(tagIndices);
-            }
-
-            public override void LoadToGameplayAbilityEntity(Entity ability)
-            {
-                _entityManager.AddComponentData(ability, new AbilityActivationOwnedTagsComponent
-                {
-                    Tags = _tags,
-                });
-            }
-        }
-
-        private sealed class DirectMaskGrantedTagsConfig : GameplayEffectComponentConfig
-        {
-            private readonly TagMaskComponent _tags;
-
-            public DirectMaskGrantedTagsConfig(IEnumerable<int> tagIndices)
-            {
-                _tags = CreateDenseMask(tagIndices);
-            }
-
-            public override void LoadToGameplayEffectEntity(Entity ge)
-            {
-                _entityManager.AddComponentData(ge, new GEGrantedTagsComponent
-                {
-                    Tags = _tags,
-                });
-            }
-        }
-
-        private sealed class DirectExecuteCalculationConfig : GameplayEffectComponentConfig
-        {
-            private readonly int _calculationCode;
-            private readonly int _outputKey;
-            private readonly float _baseDamage;
-            private readonly float _missingHealthCoefficient;
-            private readonly float _minDamage;
-            private readonly float _maxDamage;
-
-            public DirectExecuteCalculationConfig(
-                int calculationCode,
-                int outputKey,
-                float baseDamage,
-                float missingHealthCoefficient,
-                float minDamage,
-                float maxDamage)
-            {
-                _calculationCode = calculationCode;
-                _outputKey = outputKey;
-                _baseDamage = baseDamage;
-                _missingHealthCoefficient = missingHealthCoefficient;
-                _minDamage = minDamage;
-                _maxDamage = maxDamage;
-            }
-
-            public override void LoadToGameplayEffectEntity(Entity ge)
-            {
-                _entityManager.AddComponentData(ge, new CHeadlessAutoBattleExecuteCalculation
-                {
-                    CalculationCode = _calculationCode,
-                    OutputKey = _outputKey,
-                    HealthAttrSetCode = AttributeSetCombat,
-                    HealthAttrCode = AttributeHealth,
-                    BaseDamage = _baseDamage,
-                    MissingHealthCoefficient = _missingHealthCoefficient,
-                    MinDamage = _minDamage,
-                    MaxDamage = _maxDamage,
-                });
-
-                var definitions = _entityManager.HasBuffer<GEExecutionCalculationOutputModifierDefinitionBuffer>(ge)
-                    ? _entityManager.GetBuffer<GEExecutionCalculationOutputModifierDefinitionBuffer>(ge)
-                    : _entityManager.AddBuffer<GEExecutionCalculationOutputModifierDefinitionBuffer>(ge);
-                definitions.Add(new GEExecutionCalculationOutputModifierDefinitionBuffer
-                {
-                    CalculationCode = _calculationCode,
-                    OutputKey = _outputKey,
-                    AttrSetCode = AttributeSetCombat,
-                    AttributeCode = AttributeHealth,
-                    Op = EModifierOp.Subtract,
-                    FallbackMagnitude = _baseDamage,
-                    Coefficient = 1f,
-                });
-            }
-        }
-    }
-
-    public sealed class HeadlessAutoBattleNoopCue : GameplayCueBase<XParamNone>
-    {
     }
 }

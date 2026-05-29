@@ -40,6 +40,51 @@
 4. **SystemGroup 按物理执行域切，System/Job lane 按数据依赖切。** 一个物理域内可串联多个 lane system，但新增 system/group 必须证明减少依赖复杂度或提高 chunk locality，否则会增加 TypeHandle / Lookup / Dependency 固定成本。
 5. **Frame Prepare 不是中心 manager。** EntityQuery 由各 `ISystem.OnCreate` 通过 `SystemState.GetEntityQuery` 创建；Frame Prepare 只负责 allocator、lookup refresh budget、dependency/debug counters，不集中保存 query registry。
 
+## 2026-05-29 PackageCache 原文再审查后的追加修正
+
+本轮直接复核 `Library/PackageCache/com.unity.entities@e90944159b94/Documentation~` 后，目标态再收紧三点：
+
+1. **Runtime Core 默认挂 `FixedStepSimulationSystemGroup`，不是直接挂 `SimulationSystemGroup`。** `systems-time.md` 明确 `FixedStepSimulationSystemGroup` 按固定间隔运行且一帧可多次 update。真实 GAS 战斗以 battle tick、frame index、replay hash 为权威时序，默认应跟固定步模拟绑定；variable-step profile 只能作为显式 profile，必须输出 `worldTimePolicy`、fixed-step count 和 hash 证据。
+2. **当前实现的 5 个物理执行域方向正确，但 lane 仍未完全 scale-ready。** `GASGroups.cs` 已建立 `GASFramePrepareSystemGroup -> GASCommandResolveSystemGroup -> GASCoreSimulationSystemGroup -> GASStructuralCommitSystemGroup -> GASBoundaryProjectionSystemGroup`，并且当前代码已挂在 `FixedStepSimulationSystemGroup`。本轮已把 `GEExecutionCalculationOutputModifierSystem` 从逐 effect 主线程 target buffer 写入改为 target-grouped modifier reduce，把 `AttributeChangeEventProjectionSystem` 从主线程全量属性扫描改为 `IJobChunk + NativeStream` 收集。剩余迁移态集中在 `GEEffectCommandSpecStream` singleton DynamicBuffer proof、`GameplayEventBusComponent` 全局 observation/fallback buffer，以及 `AbilityCommandRequestSystem`、`AbilityTryActivateSystem`、`GEExecutionCalculationSystem` 这类“job 收集后主线程语义处理”的 lane。
+3. **重新划分后的深 Module 不是“SpecStream 系统”，而是“GAS Frame Kernel”。** 其 Interface 是少量 lane contract：command records、target records、effect command records、active slot mutation、attribute modifier range、gameplay fact range 和 structural intents；Implementation 内部可使用多个 job、`NativeStream`、owner-local buffer、ECB/bulk commit。这样删除 singleton stream 后，复杂度不会回流到每个 producer；删除旧 EventBus 后，Core reaction 与 Boundary observation 也不会互相污染。
+
+### 当前实现调用链问题
+
+```text
+ASCCommandGateway / AbilityRuntimeActions / Period / Overflow
+  -> GEEffectCommandSpecStream singleton DynamicBuffer
+  -> GEEffectCommandSpecStreamFramePrepareSystem 清空上一帧
+  -> GEExecutionCalculationOutputModifierSystem / AttributeRecalculateSystem / GameplayFactProjectionSystem
+  -> GameplayFactEventBridgeSystem / GEInstantEffectCueRequestProjectionSystem
+  -> GameplayEventBusComponent singleton + Presentation / Replay / Cue bridge
+```
+
+这条链的主要问题不是“缺少 phase 名称”，而是 Interface 过浅：调用者仍需要知道 singleton stream entity、cursor、buffer 容量、legacy EventBus bridge、frame context 和回退路径。按 Module 的 deletion test 看，删掉 `GEEffectCommandSpecStream` 后，这些细节会散落回 producer、effect、attribute、fact、presentation 多个调用点，说明它承载了一些行为；但它的 Interface 也几乎暴露了 Implementation 的所有复杂度，因此还不够 deep。
+
+### 目标态调用链
+
+```text
+Boundary / AI / Passive / Period producers
+  -> AbilityActivationCommandRecord / GEEffectCommandRecord NativeStream producers
+  -> deterministic merge by (TargetSortKey, Sequence, ProducerIndex, LocalIndex)
+  -> target-grouped modifier range
+  -> owner-local AttributeSet write + ActiveGameplayEffectBuffer slot mutation
+  -> Core GameplayFact range
+  -> next-frame reaction seed + Boundary Projection
+  -> Structural Commit ECB / EntityQuery bulk only for real structural changes
+```
+
+新的 Interface 只暴露“写什么 record、按什么排序、谁拥有生命周期、在哪个 lane 消费、何时清理”。具体使用 `NativeStream`、`NativeList`、compact owner-local buffer 或 ECB append，是 Implementation 内部的 API selection；每条 lane 必须在任务交付时给出拒绝其它 API 的理由和重新选型触发条件。
+
+### 2026-05-29 Runtime 修复回写
+
+本轮实现收敛了两个具体反模式：
+
+1. `AttributeChangeEventProjectionSystem` 不再使用 `SystemAPI.Query<DynamicBuffer<AttributeValueBuffer>>()` 主线程 foreach 扫描全量 ASC 属性。当前实现改为 `IJobChunk + NativeStream` 并行收集 `AttributeChangeEventBuffer`，在 job 内清理 `CurrentValueChangePending`，主线程只保留一次 legacy `GameplayEventBusComponent` append。
+2. `GEExecutionCalculationOutputModifierSystem` 不再逐 effect 回到主线程通过 `EntityManager` 随机写 target ASC 属性。当前实现先在 effect chunk job 内解析输出 modifier 并写入 frame-local record，再按 `TargetAsc` 排序建 range，由 ASC chunk job 只写自己 chunk 内的 `AttributeValueBuffer`，最后主线程仅为旧 `AttributeModifierBuffer` 分配 sequence 并通过 ECB 标记 `GEExecutionCalculationOutputModifierAppliedComponent`。
+
+这两个切片仍保留 `GEEffectCommandSpecStream` / EventBus 兼容层，因此不是最终 `Core fact range -> Boundary outbox` 形态；后续债务收敛为：把 EventBus append 下沉到 Boundary Projection outbox，把 `GEExecutionCalculationSystem` 的输出计算迁移到 effect chunk job + read-only lookup，并把 Ability command lane 的主线程语义处理改成 command record merge。
+
 ## 数据流
 
 ```mermaid
@@ -76,43 +121,42 @@ flowchart LR
 
 ## SystemGroup 层级 — DOTS 物理执行域
 
-以下 Mermaid 图定义 Runtime Core 在 Unity `SimulationSystemGroup` 中的目标态嵌套结构和 UpdateOrder。SystemGroup 是物理执行域 owner（`SYS-02`），不是 OOP scheduler，也不是业务目录；业务 kernel lane 以 `ISystem` + `IJobChunk` / `IJobEntity` / `NativeStream` 组织在执行域内部，避免 `SYS-03` / `PRF-07` 指出的过度 system/group 拆分成本。
+以下 Mermaid 图定义 Runtime Core 在 Unity `FixedStepSimulationSystemGroup` 中的目标态嵌套结构和 UpdateOrder。SystemGroup 是物理执行域 owner（`SYS-02`），不是 OOP scheduler，也不是业务目录；业务 kernel lane 以 `ISystem` + `IJobChunk` / `IJobEntity` / `NativeStream` 组织在执行域内部，避免 `SYS-03` / `PRF-07` 指出的过度 system/group 拆分成本。
 
 ```mermaid
 flowchart TD
     subgraph UnityPlayerLoop["Unity Player Loop"]
         InitGroup["InitializationSystemGroup"]
         SimGroup["SimulationSystemGroup"]
+        FixedStepGroup["FixedStepSimulationSystemGroup"]
         PresGroup["PresentationSystemGroup"]
     end
 
-    subgraph SimGroup
-        BeginSimECB["BeginSimulationEntityCommandBufferSystem"]
+    SimGroup --> FixedStepGroup
+
+    subgraph FixedStepGroup
         GasFramePrepare["GASFramePrepareSystemGroup\nframe clock / allocator / budget"]
         GasCommandResolve["GASCommandResolveSystemGroup\nBoundary Command + Target Resolve lanes"]
         GasCoreSimulation["GASCoreSimulationSystemGroup\nEffect Fan-In + State + Attribute + Fact lanes"]
         GasStructural["GASStructuralCommitSystemGroup\n[UpdateAfter: CoreSimulation, UpdateBefore: BoundaryProjection]"]
         GasProjection["GASBoundaryProjectionSystemGroup"]
-        EndSimECB["EndSimulationEntityCommandBufferSystem"]
     end
 
-    BeginSimECB --> GasFramePrepare
     GasFramePrepare --> GasCommandResolve
     GasCommandResolve --> GasCoreSimulation
     GasCoreSimulation --> GasStructural
     GasStructural --> GasProjection
-    GasProjection --> EndSimECB
 ```
 
 ### SystemGroup 职责与排序声明
 
 | SystemGroup | 父 Group | UpdateOrder 约束 | 职责 | 结构变化 |
 |---|---|---|---|---|
-| `GASFramePrepareSystemGroup` | `SimulationSystemGroup` | `UpdateBefore: GASCommandResolveSystemGroup` | frame allocator、lookup refresh budget、dependency/debug counters；不集中管理 query | **禁止** |
-| `GASCommandResolveSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GASFramePrepareSystemGroup, UpdateBefore: GASCoreSimulationSystemGroup` | Boundary request 规范化 + Target Resolve；输入归一、目标解析、target sort key | **禁止** |
-| `GASCoreSimulationSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GASCommandResolveSystemGroup, UpdateBefore: GASStructuralCommitSystemGroup` | Effect Fan-In、State Evaluate、Attribute Reduce/Apply、Gameplay Fact 的 lane system / job chain | 禁止直接结构变化；仅 State lane 可维护 enableable/chunk skip |
-| `GASStructuralCommitSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GASCoreSimulationSystemGroup, UpdateBefore: GASBoundaryProjectionSystemGroup` | 唯一 hot path 结构变化屏障；grant/remove/spawn/destroy/cleanup | **唯一允许**（ECB playback / EntityQuery bulk） |
-| `GASBoundaryProjectionSystemGroup` | `SimulationSystemGroup` | `UpdateAfter: GASStructuralCommitSystemGroup` | 只读投影到 ReadModel / Presentation outbox / Replay / Debugger | **禁止**（不反写 simulation） |
+| `GASFramePrepareSystemGroup` | `FixedStepSimulationSystemGroup` | `UpdateBefore: GASCommandResolveSystemGroup` | frame allocator、lookup refresh budget、dependency/debug counters；不集中管理 query | **禁止** |
+| `GASCommandResolveSystemGroup` | `FixedStepSimulationSystemGroup` | `UpdateAfter: GASFramePrepareSystemGroup, UpdateBefore: GASCoreSimulationSystemGroup` | Boundary request 规范化 + Target Resolve；输入归一、目标解析、target sort key | **禁止** |
+| `GASCoreSimulationSystemGroup` | `FixedStepSimulationSystemGroup` | `UpdateAfter: GASCommandResolveSystemGroup, UpdateBefore: GASStructuralCommitSystemGroup` | Effect Fan-In、State Evaluate、Attribute Reduce/Apply、Gameplay Fact 的 lane system / job chain | 禁止直接结构变化；仅 State lane 可维护 enableable/chunk skip |
+| `GASStructuralCommitSystemGroup` | `FixedStepSimulationSystemGroup` | `UpdateAfter: GASCoreSimulationSystemGroup, UpdateBefore: GASBoundaryProjectionSystemGroup` | 唯一 hot path 结构变化屏障；grant/remove/spawn/destroy/cleanup | **唯一允许**（ECB playback / EntityQuery bulk） |
+| `GASBoundaryProjectionSystemGroup` | `FixedStepSimulationSystemGroup` | `UpdateAfter: GASStructuralCommitSystemGroup` | 只读投影到 ReadModel / Presentation outbox / Replay / Debugger | **禁止**（不反写 simulation） |
 
 ### ECB System 摆放
 
@@ -957,21 +1001,21 @@ using Unity.Mathematics;
 
 namespace GAS.Runtime
 {
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateBefore(typeof(GASCommandResolveSystemGroup))]
     public partial class GASFramePrepareSystemGroup : ComponentSystemGroup { }
 
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(GASFramePrepareSystemGroup))]
     [UpdateBefore(typeof(GASCoreSimulationSystemGroup))]
     public partial class GASCommandResolveSystemGroup : ComponentSystemGroup { }
 
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(GASCommandResolveSystemGroup))]
     [UpdateBefore(typeof(GASStructuralCommitSystemGroup))]
     public partial class GASCoreSimulationSystemGroup : ComponentSystemGroup { }
 
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(GASCoreSimulationSystemGroup))]
     [UpdateBefore(typeof(GASBoundaryProjectionSystemGroup))]
     public partial class GASStructuralCommitSystemGroup : ComponentSystemGroup { }
@@ -979,7 +1023,7 @@ namespace GAS.Runtime
     [UpdateInGroup(typeof(GASStructuralCommitSystemGroup), OrderLast = true)]
     public partial class EndGASStructuralCommitECBSystem : EntityCommandBufferSystem { }
 
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(GASStructuralCommitSystemGroup))]
     public partial class GASBoundaryProjectionSystemGroup : ComponentSystemGroup { }
 }
@@ -3102,6 +3146,7 @@ Debugger 在 `GASBoundaryProjectionSystemGroup` 中执行轻量级采样验证�
 |---|---|---|---|
 | Effect Fan-In | `GASEffectFanInSystem` | 计划中 | 多来源 command producer → `NativeStream` → deterministic merge |
 | Effect Fan-In | `GEEffectSpecBuildSystem` | 已落地（迁移期） | command + GE definition → resolved modifier candidate；后续并入 fan-in / attribute reduce |
+| Effect Fan-In / Attribute Reduce | `GEExecutionCalculationOutputModifierSystem` | 已落地（迁移期，已 target-grouped） | execution output → resolved modifier record → target ASC chunk job apply；仍通过旧 `AttributeModifierBuffer` / applied marker 兼容 |
 | Effect Fan-In | `PeriodOverflowCommandDeriveSystem` | 已落地（迁移期） | period / overflow producer，目标态作为 fan-in producer |
 | State Evaluate / PreTick | `GASActiveEffectPreTickSystem` 或 `GASEffectFanInSystem` 内 producer job | 计划中 | owner-local active effect period / expire seed → Effect Fan-In producer；是否独立 system 由 `SYS-03` / `PRF-07` 决定 |
 | State Evaluate / PostApply | `GASActiveEffectPostApplySystem` | 计划中 | owner-local active effect slot enum / duration / stack / inhibit / chunk skip |
@@ -3109,7 +3154,7 @@ Debugger 在 `GASBoundaryProjectionSystemGroup` 中执行轻量级采样验证�
 | State Evaluate | `ChunkComponentMaintainSystem` | 计划中 | 维护 `AllIdleChunkComponent` / `NoActiveEffectsChunkComponent` |
 | State Evaluate | `ActiveEffectSlotSyncSystem` | 已落地（迁移期） | 旧 runtime GE entity 状态 → `ActiveGameplayEffectBuffer` 镜像同步 |
 | Attribute Reduce/Apply | `GASAttributeSetReduceApplySystem` | 计划中 | target-grouped AttributeSet modifier reduce / apply |
-| Attribute Reduce/Apply | `AttributeModifierApplySystem` | 已落地（迁移期） | `AttributeModifierBuffer` → Attribute 写入；后续收敛到 target-grouped apply |
+| Attribute Reduce/Apply | `AttributeModifierApplySystem` | 已落地（迁移期） | legacy `AttributeModifierBuffer` → Attribute 写入；新 execution output 已按 target ASC 分组，旧通用 buffer apply 后续继续收敛 |
 | Gameplay Fact | `GameplayFactProjectionSystem` | 已落地（迁移期） | Attribute / Cue / Damage fact projection |
 | Gameplay Fact | `GameplayReactionSystem` | 计划中 | Core reaction：Ability trigger / reactive GE command seed（默认 next-frame，不进入 Boundary） |
 | Gameplay Fact | `CueRequestProjectionSystem` | 已落地（迁移期） | Cue fact 进入 boundary fact，不直接表现 side effect |

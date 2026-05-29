@@ -15,43 +15,59 @@ namespace GAS.Runtime
             _query = SystemAPI.QueryBuilder()
                 .WithAll<AbilityCommandRequestComponent>()
                 .Build();
-            state.RequireForUpdate(_query);
+            state.RequireForUpdate<AbilityCommandBuffer>();
         }
 
         public void OnUpdate(ref SystemState state)
         {
             var requestChunkCount = _query.CalculateChunkCount();
-            if (requestChunkCount <= 0)
-                return;
 
             var em = state.EntityManager;
-            var requestRecordStream = new NativeStream(requestChunkCount, Allocator.TempJob);
+            var requestRecordStream = requestChunkCount > 0
+                ? new NativeStream(requestChunkCount, Allocator.TempJob)
+                : default;
             var requestRecords = new NativeList<AbilityCommandRequestRecord>(Allocator.Temp);
             var ecb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
             var catalog = SystemAPI.TryGetSingleton<GASDefinitionCatalogComponent>(out var catalogComponent)
                 ? catalogComponent.Catalog
                 : default;
+            var streamEntity = SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var resolvedStreamEntity)
+                ? resolvedStreamEntity
+                : Entity.Null;
+            var streamCommands = streamEntity != Entity.Null
+                                 && em.Exists(streamEntity)
+                                 && em.HasBuffer<AbilityCommandBuffer>(streamEntity)
+                ? em.GetBuffer<AbilityCommandBuffer>(streamEntity)
+                : default;
 
             try
             {
-                var scanJob = new AbilityCommandRequestScanJob
+                if (requestChunkCount > 0)
                 {
-                    EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
-                    RequestTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityCommandRequestComponent>(isReadOnly: true),
-                    RequestRecordWriter = requestRecordStream.AsWriter(),
-                };
-                state.Dependency = scanJob.ScheduleParallel(_query, state.Dependency);
-                state.Dependency.Complete();
+                    var scanJob = new AbilityCommandRequestScanJob
+                    {
+                        EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
+                        RequestTypeHandle =
+                            SystemAPI.GetComponentTypeHandle<AbilityCommandRequestComponent>(isReadOnly: true),
+                        RequestRecordWriter = requestRecordStream.AsWriter(),
+                    };
+                    state.Dependency = scanJob.ScheduleParallel(_query, state.Dependency);
+                    state.Dependency.Complete();
 
-                var requestRecordReader = requestRecordStream.AsReader();
-                for (var streamIndex = 0; streamIndex < requestRecordReader.ForEachCount; streamIndex++)
-                {
-                    var recordCount = requestRecordReader.BeginForEachIndex(streamIndex);
-                    for (var i = 0; i < recordCount; i++)
-                        requestRecords.Add(requestRecordReader.Read<AbilityCommandRequestRecord>());
-                    requestRecordReader.EndForEachIndex();
+                    var requestRecordReader = requestRecordStream.AsReader();
+                    for (var streamIndex = 0; streamIndex < requestRecordReader.ForEachCount; streamIndex++)
+                    {
+                        var recordCount = requestRecordReader.BeginForEachIndex(streamIndex);
+                        for (var i = 0; i < recordCount; i++)
+                            requestRecords.Add(requestRecordReader.Read<AbilityCommandRequestRecord>());
+                        requestRecordReader.EndForEachIndex();
+                    }
                 }
+
+                AppendStreamCommands(streamCommands, requestRecords);
+                if (requestRecords.Length == 0)
+                    return;
 
                 for (var i = 0; i < requestRecords.Length; i++)
                 {
@@ -71,13 +87,18 @@ namespace GAS.Runtime
                     if (request.Owner != Entity.Null && em.Exists(request.Owner))
                         ProcessRuntimeRequest(em, ref ecb, request);
 
-                    ecb.DestroyEntity(requestRecord.RequestEntity);
+                    if (requestRecord.RequestEntity != Entity.Null)
+                        ecb.DestroyEntity(requestRecord.RequestEntity);
                 }
+
+                if (streamCommands.IsCreated)
+                    streamCommands.Clear();
             }
             finally
             {
                 requestRecords.Dispose();
-                requestRecordStream.Dispose();
+                if (requestRecordStream.IsCreated)
+                    requestRecordStream.Dispose();
             }
         }
 
@@ -119,6 +140,23 @@ namespace GAS.Runtime
             }
         }
 
+        private static void AppendStreamCommands(
+            DynamicBuffer<AbilityCommandBuffer> streamCommands,
+            NativeList<AbilityCommandRequestRecord> requestRecords)
+        {
+            if (!streamCommands.IsCreated)
+                return;
+
+            for (var i = 0; i < streamCommands.Length; i++)
+            {
+                requestRecords.Add(new AbilityCommandRequestRecord
+                {
+                    RequestEntity = Entity.Null,
+                    Request = streamCommands[i].Command,
+                });
+            }
+        }
+
         private static void ProcessGrantRequest(
             EntityManager em,
             ref EntityCommandBuffer ecb,
@@ -135,13 +173,18 @@ namespace GAS.Runtime
                 return;
 
             var abilityEntity = request.AbilityEntity;
-            if ((abilityEntity == Entity.Null || !em.Exists(abilityEntity)) && request.AbilityCode > 0)
+            if ((abilityEntity == Entity.Null || (!IsDeferredEntity(abilityEntity) && !em.Exists(abilityEntity)))
+                && request.AbilityCode > 0)
+            {
                 abilityEntity = CreateAbilityEntity(em, ref ecb, request.Owner, request.AbilityCode, catalog);
+            }
 
             if (abilityEntity == Entity.Null)
                 return;
 
-            if (em.Exists(abilityEntity) && em.HasComponent<AbilityStateComponent>(abilityEntity))
+            if (!IsDeferredEntity(abilityEntity)
+                && em.Exists(abilityEntity)
+                && em.HasComponent<AbilityStateComponent>(abilityEntity))
             {
                 var info = em.GetComponentData<AbilityStateComponent>(abilityEntity);
                 info.Owner = request.Owner;
@@ -181,8 +224,18 @@ namespace GAS.Runtime
                     abilityDefinition.Level,
                     owner));
             ecb.SetComponent(ability, new AbilityMainTargetComponent { TargetAsc = Entity.Null });
+            if (ShouldAutoEndOnCatalogCommit(in abilityDefinition))
+                ecb.SetComponentEnabled<AbilityAutoEndOnCommitComponent>(ability, true);
 
             return ability;
+        }
+
+        private static bool ShouldAutoEndOnCatalogCommit(in GASCatalogAbilityDefinitionBlob abilityDefinition)
+        {
+            return abilityDefinition.PrimaryGameplayEffectCode > 0
+                   || abilityDefinition.SecondaryGameplayEffectCode > 0
+                   || abilityDefinition.CostGameplayEffectCode > 0
+                   || abilityDefinition.CooldownGameplayEffectCode > 0;
         }
 
         private static bool TryGetAbilityDefinition(
@@ -276,6 +329,7 @@ namespace GAS.Runtime
                 if (granted == abilityEntity)
                     return true;
                 if (abilityCode <= 0
+                    || IsDeferredEntity(granted)
                     || !em.Exists(granted)
                     || !em.HasComponent<AbilityStateComponent>(granted))
                 {
@@ -287,6 +341,11 @@ namespace GAS.Runtime
             }
 
             return false;
+        }
+
+        private static bool IsDeferredEntity(Entity entity)
+        {
+            return entity.Index < 0;
         }
 
         private static void SetMainTarget(

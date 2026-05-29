@@ -40,8 +40,8 @@ Step 4: 设定重新选型触发条件
 | EffectCommand | 是 | 本帧 | 可预测 | NativeStream + deterministic sort |
 | InstantSpec | 是 | 本帧 | 可预测 | IJobChunk scratch |
 | AttributeDelta | 是 | 本帧 | 可预测 | per-owner buffer + reduce |
-| TypedFacts | 是 | 本帧 | 可预测 | singleton buffer + 排序 |
-| ActiveEffectStore | 是 | 跨帧 | 固定 slot 上限 | owner-local Buffer + Enableable |
+| TypedFacts | 是 | 本帧 | 可预测 | Core reaction facts 用 `NativeStream` / per-owner fact range + deterministic merge；Boundary observation 可投影到 outbox / replay sink |
+| ActiveEffectStore | 是 | 跨帧 | 固定 slot 上限 | owner-local `DynamicBuffer` slot + enum/bit flags；Enableable / Chunk Component 仅作 profiler 证明后的 skip cache |
 | Cue/Presentation outbox | 否 | 本帧 | 可变 | NativeStream → boundary queue |
 | Debug telemetry | 否 | Persistent | 截断 | sampled NativeList + periodic export |
 
@@ -52,8 +52,8 @@ Step 4: 设定重新选型触发条件
 | **Ability command ingest** | request entity / owner buffer / NativeStream | Boundary request → Core command；禁止 OOP callback | command count、structural mutation | command count > 1000/frame |
 | **Effect command fan-in** | NativeStream + deterministic sort | 高规模并行 stream + 按 target ASC 排序 merge | stream segment count、merge cost | merge cost > spec eval cost |
 | **Instant effect apply** | IJobChunk / IJobEntity + chunk-local scratch | chunk 批处理，禁止 per-entity managed dispatch | chunk utilization、skip rate | utilization < 50% |
-| **Active effect lifecycle** | owner-local DynamicBuffer + Enableable slot | 固定容量 slot（如 64），enableable 标记 active | buffer externalized ratio、expired slot ratio | externalized > 30% |
-| **Granted tag/ability** | Enableable / owner-local bitset / delta stream | 高频状态优先 enableable；低频用 tag delta | enableable wait time、tag delta count | enableable sync > 1ms |
+| **Active effect lifecycle** | owner-local DynamicBuffer slot / optional active-effect query entity / optional enableable skip cache | 默认固定容量 slot + enum/bit flags；只有大量 idle 且 profiler 证明 chunk/entity skip 收益时才加 enableable 或 Chunk Component | buffer externalized ratio、expired slot ratio、idle distribution、enableable wait time | externalized > 30% 或 idle skip 收益 > enableable wait |
+| **Granted tag/ability** | owner-local bitset / Ability Entity + slot buffer / optional enableable query cache | grant/revoke 是低频生命周期变化，走 Structural Commit；cooldown/blocked/executable 默认 enum/bit flags，enableable 只作 query skip cache | tag delta count、ability slot count、enableable wait time、query skip count | enableable wait > skip benefit 或 ability slot scan 成为 TopN |
 | **Attribute delta** | per-target buffer + deterministic reduce | 按 target 分组后线性 reduce；禁止无序 writer | delta count per frame、merge order | random lookup 成本 > 顺序 merge |
 | **Cue / Presentation** | presentation outbox → log marker / Entities Graphics | Boundary 派生，Core 不依赖资源 | outbox count per frame | outbox count > fact count (异常重复) |
 | **Debug telemetry** | sampled counter buffer + periodic export | 可关闭、低侵入、分组归因 | overhead (ns per counter) | overhead > 1% coreTickMs |
@@ -87,7 +87,7 @@ Step 4: 设定重新选型触发条件
 |---|---|---|
 | Instant GE → runtime entity → destroy | entity churn；结构变化散落 | EffectCommand → Spec + Delta (无 entity) |
 | `ToEntityArray` 全量 scan (Driver) | 每 tick O(n) 全扫描 | stable read model + chunk/jobified cursor |
-| `CGameplayEventBus` singleton buffer | 全局串行瓶颈 | typed facts per-owner buffer |
+| `CGameplayEventBus` / `GameplayEventBusComponent` singleton buffer | 全局串行瓶颈；只能作为迁移期 observation/proof 出口 | Core typed facts 用 per-owner fact range 或 `NativeStream` deterministic merge；Boundary 再投影到 presentation / replay / debugger |
 | managed `AbilityConfig` lookup | hot path 托管分配 | BlobAsset / generated static lookup |
 | `EntityHelper` 全局 ECB | 隐式结构变化，不可追踪 | 显式 ECB playback phase |
 
@@ -109,7 +109,8 @@ Step 4: 设定重新选型触发条件
 2. **Allocator 选择未明确定义**：Temp 还是 TempJob 还是 Persistent
 3. **确定性假设未验证**：假设 foreach 顺序是稳定的
 4. **重新选型条件缺失**：不知道什么时候该从简单方案切换到复杂方案
-5. **EntityManager.GetComponentData 误用于热路径读取单例**：`EntityManager.GetComponentData<T>()` 触发 sync point（等待所有写 T 的 job 完成），而 `SystemAPI.GetSingleton<T>()` 不触发 sync。主线程读取单例配置时优先使用 SystemAPI 避免不必要同步（参见 `SEL-05`）
+5. **EntityManager.GetComponentData 误用于热路径读取单例**：`EntityManager.GetComponentData<T>()` 会等待所有写 `T` 的 job 完成；`SystemAPI.GetSingleton<T>()` 不自动完成依赖。主线程读取只读 singleton 配置时可优先使用 `SystemAPI.GetSingleton<T>()` 避免不必要同步，但若读取的是可被 job 写入的 singleton，必须先手动完成依赖或重构数据依赖（参见 `SEL-05` / `PRF-29`）。
+6. **把 FixedStep 当作实现细节**：固定步不是简单调度偏好。GAS Runtime Core 若以 battle tick / frame index 为权威时序，物理执行域默认挂 `FixedStepSimulationSystemGroup`，并输出 fixed-step 次数、world time policy 和 deterministic hash；variable step profile 必须显式证明不会破坏 replay / battle hash。
 
 ## 验收指标
 

@@ -296,9 +296,12 @@ var commandBuffer = SystemAPI.GetSingletonBuffer<CCommandEntry>();
 ASC Entity
   ├── BActiveEffectSlot[N]    (DynamicBuffer, InternalBufferCapacity=16)
   │    每个 slot: EffectCode, StackCount, RemainingDuration, PeriodTimer, Flags
-  ├── BGrantedTagMask          (CTagMask, IComponentData)
-  └── CActiveEffectEnableable  (IEnableableComponent, per-effect-type)
+  ├── TagMaskComponent         (IComponentData bitmask)
+  ├── TagStatusFlagsComponent  (可选派生 cache，同 archetype)
+  └── PeriodDueTag / ChunkComponent（可选 skip cache，必须有 profiler 证据）
 ```
+
+`IEnableableComponent` 在这里不是“per-effect slot”的默认表达。Unity enableable 是 component/entity 级开关，不是 `DynamicBuffer` 内某个 slot 的开关；slot 内状态默认用 enum / bit flags。只有当 query 过滤收益明确大于 enableable 同步等待和额外 component 成本时，才把某个派生状态升格为 enableable 或 chunk-level cache。
 
 **Store 命名必须表达职责：**
 - `OwnerLocalStore`：per-ASC，同 chunk 内访问

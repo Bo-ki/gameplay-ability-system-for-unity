@@ -1,13 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Unity.Burst;
 using Unity.Entities;
 using UnityEngine;
 
 namespace GAS.Runtime
 {
-    [BurstCompile]
     public static class CueHelper
     {
         public static GameplayCueBase TryCreateCue(GameplayCueConfig param)
@@ -102,7 +100,6 @@ namespace GAS.Runtime
 
         #endregion
 
-        [BurstCompile]
         public static void StopCue(Entity cueEntity,EntityManager entityManager)
         {
             if (cueEntity != Entity.Null
@@ -115,7 +112,6 @@ namespace GAS.Runtime
             }
         }
 
-        [BurstCompile]
         public static void PlayCue(Entity cueEntity,EntityManager entityManager)
         {
             if (cueEntity != Entity.Null

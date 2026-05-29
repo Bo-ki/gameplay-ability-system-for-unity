@@ -574,18 +574,17 @@ namespace GAS.Runtime
                 layoutPlan,
                 GASRuntimeStructuralChangeEntryId.ExecutionCalculationOutputMutation,
                 GASRuntimeQueryLayoutEntryId.ExecutionCalculationPipeline,
-                GASRuntimeStructuralOperation.AddBuffer
-                | GASRuntimeStructuralOperation.SetComponent
-                | GASRuntimeStructuralOperation.QueryMaterialization
+                GASRuntimeStructuralOperation.SetComponent
+                | GASRuntimeStructuralOperation.SetComponentEnabled
                 | GASRuntimeStructuralOperation.DynamicBufferMutation,
-                GASRuntimeStructuralMigrationStep.EcbFirst
+                GASRuntimeStructuralMigrationStep.AlreadyEcb
                 | GASRuntimeStructuralMigrationStep.DirtyTrackingCandidate,
-                GASRuntimeStructuralEligibility.CanUseEcb
+                GASRuntimeStructuralEligibility.AlreadyUsesEcb
+                | GASRuntimeStructuralEligibility.CanUseEnableableTransientMarker
                 | GASRuntimeStructuralEligibility.CanUseDirtyPipeline
-                | GASRuntimeStructuralEligibility.MirrorsLayoutStructuralHotspot,
+                | GASRuntimeStructuralEligibility.NoSimulationStructuralMigration,
                 GASRuntimeStructuralBoundary.DefinitionRuntimeTransition
                 | GASRuntimeStructuralBoundary.AttributeDirtyPropagation
-                | GASRuntimeStructuralBoundary.CrossEntityLookup
                 | GASRuntimeStructuralBoundary.DynamicBufferMutation,
                 GASRuntimeDirtyPipelineSignal.ExecutionCalculationOutputDirty
                 | GASRuntimeDirtyPipelineSignal.GameplayEffectModifierDirty

@@ -17,6 +17,14 @@
 
 层级编号沿用历史方案的表达习惯，不代表调用方向。目标态调用方向只有两条：应用壳层通过运行时边界层写入命令，GAS Runtime Core 只消费定义与生成层的不可变输入并输出事实。
 
+## Debugger 与 AutoChessDemo 定位
+
+1. Runtime Debugger 的采样、counter、timing、buffer pressure、official tool diff 和 replay export 归属 **Layer 2 Runtime Boundary Layer**，具体职责是 `DiagnosticsSink` / `ReplaySink` / read-only observation，不是 Runtime Core 输入。
+2. Editor Debugger Window 归属 **Layer 1 Application Shell Layer** 的 Editor Extension。窗口只能消费 Layer 2 snapshot / export API，不直接写 Runtime Core component / buffer，也不放入 AutoChessDemo。
+3. Headless runner 同样归属 **Layer 1 Application Shell Layer**，它和 Editor 窗口共享 Layer 2 Runtime Debugger 数据出口；区别只在输出目标是 batchmode log / CI summary，而不是编辑器窗口。
+4. `Assets/AutoChessDemo` 整体归属 **Layer 1 Application Shell Layer** 的业务验收 Demo。它可以编排业务 AI、场景和验证 runner，但不能成为 GAS Runtime Core 的一部分，也不能私有化 Debugger 窗口。
+5. Layer 3 只负责产出 Debugger 所需的只读事实、数值 counter 和 outbox marker；任何 Debugger / Replay / Presentation 结果都不得反向驱动 simulation。
+
 ## 总体数据流
 
 ```mermaid
@@ -24,13 +32,13 @@ flowchart TB
     Definition["Layer 4: Definition & Generation\nLuban / SourceGenerator / Static Lookup / Bake Plan"]
     Core["Layer 3: GAS Runtime Core\nASC / Ability / Effect / Attribute / Tag / GameplayFact"]
     Boundary["Layer 2: Runtime Boundary\nCommandGateway / ReadModel / PresentationOutboxBridge / DiagnosticsSink"]
-    Shell["Layer 1: Application Shell\nUI / AI / Input / Network / Demo Runner / Resource Binding"]
+    Shell["Layer 1: Application Shell\nUI / AI / Input / Network / Demo Runner / Editor Debug Window"]
 
     Definition -->|"immutable definitions"| Core
     Shell -->|"intent, no EntityManager"| Boundary
     Boundary -->|"request entity / command stream"| Core
     Core -->|"typed facts / deltas / diagnostics facts"| Boundary
-    Boundary -->|"read model / markers / replay / logs"| Shell
+    Boundary -->|"read model / markers / replay / logs / debugger snapshot"| Shell
 ```
 
 ## Unity Entities 校准
@@ -85,6 +93,7 @@ flowchart TB
 2. `ReadModel`：提供只读镜像，不暴露 `EntityManager`、`EntityQuery`、runtime buffer 可写句柄。
 3. `PresentationOutboxBridge`：消费 Core facts，输出 UI/Cue/VFX/SFX/log marker；无头 Demo 也必须走同一 outbox 语义。
 4. `DiagnosticsSink` / `ReplaySink`：导出结构化日志、timing、buffer pressure、fact count、scale profile，不参与 gameplay routing。
+5. `OfficialToolDiff`：在 Editor / Development 可用时用 Entities Journaling 形成官方差分；Unity Profiler modules 未启用时只记录 category / disabled reason，不伪造 captured 数据。
 
 ### 禁止
 
@@ -99,6 +108,7 @@ flowchart TB
 1. 面向产品、Demo、自动验收和真实资源接入，组织 UI、输入、AI、网络、场景、MonoBehaviour、Prefab、Timeline 等外部模块。
 2. 调用运行时边界层 API 发起意图，订阅 read model、presentation marker、structured log。
 3. AutoChess 无头验收 Demo 虽然没有真实画面资源，也必须完整保留 UI/Cue/VFX/SFX/FloatingText marker 逻辑。
+4. Editor Debugger Window 属于本层 Editor Extension，只读消费 Layer 2 diagnostics snapshot；无头 runner 也属于本层业务验证入口。
 
 ### 禁止
 
@@ -122,7 +132,7 @@ flowchart TB
 2. Runtime 验收：Core hot path 不依赖 Editor / GameObject / Odin / managed gameplay object；system tick 目标保持 `0.0X - 0.X ms` 级别。
 3. 边界验收：CommandGateway 只写命令，ReadModel 只读，PresentationOutboxBridge / Diagnostics / Replay 不反向写 simulation。
 4. 配置验收：Luban + SourceGenerator 只输出 Definition & Generation Layer artifact，不生成 runtime lifecycle。
-5. Demo 验收：AutoChessDemo 位于 Runtime Core 外部，走真实业务流程，同时支持无头自动结算和十万级以上压力测试预演。
+5. Demo 验收：AutoChessDemo 位于 Runtime Core 外部的 Application Shell Layer，走真实业务流程，同时支持无头自动结算和十万级以上压力测试预演。
 
 ## 历史方案定位
 

@@ -97,13 +97,17 @@ SimulationSystemGroup        (PlayerLoop Update 末尾)
 PresentationSystemGroup      (PlayerLoop PreLateUpdate 末尾)
 ```
 
+**FixedStepSimulationSystemGroup：**
+
+`FixedStepSimulationSystemGroup` 是 `SimulationSystemGroup` 下的固定步模拟域。PackageCache `systems-time.md` 明确说明它按固定时间间隔更新，并且当固定步长小于渲染帧间隔时，一帧内可能更新多次。EX-GAS 这种以 battle tick / frame index 为权威时序的 Runtime Core，默认应把核心物理执行域挂在 `FixedStepSimulationSystemGroup` 下；若某个 profile 改用 variable step，必须在 validation summary 中输出 `worldTimePolicy`、fixed step 次数和 deterministic hash 证据。
+
 **自定义 SystemGroup：**
 
 ```csharp
 // 定义 EX-GAS 自己的 phase group
-[UpdateInGroup(typeof(SimulationSystemGroup))]
-[UpdateBefore(typeof(GASSpecEvaluationSystemGroup))]
-public partial class GASCommandIngestSystemGroup : ComponentSystemGroup { }
+[UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+[UpdateBefore(typeof(GASCoreSimulationSystemGroup))]
+public partial class GASCommandResolveSystemGroup : ComponentSystemGroup { }
 ```
 
 **排序控制优先级：**
@@ -144,6 +148,7 @@ public partial struct SCostValidation : ISystem { }
 | `concepts-worlds.md` | World 是 entity ID 唯一性和系统调度边界 |
 | `systems-intro.md` | ISystem 是 unmanaged 首选，SystemBase 逐步退居 managed 场景 |
 | `systems-update-order.html` | SystemGroup 提供分层排序；三层根 Group 对应 PlayerLoop 阶段 |
+| `systems-time.md` | `FixedStepSimulationSystemGroup` 使用固定时间间隔；一帧可能运行多次 |
 | `systems-optimizing.html` | 每个 system 的 type handle + lookup + dependency 链产生线性 CPU 成本 |
 | `systems-isystem.html` | ISystem 回调签名使用 `ref SystemState`；Burst 友好 |
 
@@ -151,13 +156,15 @@ public partial struct SCostValidation : ISystem { }
 
 **正确模式：**
 - System 只调度 job，job 做实际计算
-- SystemGroup 显式定义 phase 边界
+- SystemGroup 显式定义物理执行域和 update order；业务 kernel 用 lane system / job 表达
+- 确定性 battle tick 默认挂 `FixedStepSimulationSystemGroup`，并记录 fixed-step policy
 - 多 phase 共享数据通过 singleton component 或 native container 传递
 - Runtime Core system 全部用 ISystem + Burst
 
 **反模式：**
 - 在 `OnUpdate` 中写主线程业务逻辑
-- 为每个细小职责创建一个新 system（system 爆炸）
+- 为每个细小职责创建一个新 system / group（system/group 爆炸）
+- 把 SystemGroup 当成 OOP 业务目录，而不是同步、结构变化和投影的物理边界
 - 用 `World.GetOrCreateSystem` 替代 `CreateAfter` 控制创建顺序
 - 把 `DefaultWorldInitialization.AutoGetAndRegisterSystems` 作为 GAS 核心调度来源
 
@@ -165,18 +172,17 @@ public partial struct SCostValidation : ISystem { }
 
 ### 对 Runtime Core Phase 设计的影响
 
-目标态 Runtime Core SystemGroup 映射：
+目标态 Runtime Core SystemGroup 映射采用 **FixedStep 下的少量物理执行域 + lane system**，不再是一业务阶段一个 `ComponentSystemGroup`：
 
-| GAS Phase | SystemGroup | 挂载位置 | 结构变化权限 |
+| 物理执行域 | 默认挂载位置 | 承载的 kernel lane | 结构变化权限 |
 |---|---|---|---|
-| Frame Arena / Query Prep | `GasRuntimeFramePrepareSystemGroup` | Simulation 最前 | 禁止 |
-| Command Ingest | `GasCommandIngestSystemGroup` | Frame Prep 之后 | 只读 request；不 playback |
-| Spec Evaluation | `GasSpecEvaluationSystemGroup` | Command Ingest 之后 | 禁止 |
-| Delta Apply | `GasDeltaApplySystemGroup` | Spec Eval 之后 | 禁止 |
-| Active Effect Lifecycle | `GasActiveEffectLifecycleSystemGroup` | Delta 之后 | 禁止直接结构变化 |
-| Typed Fact Projection | `GasTypedFactProjectionSystemGroup` | Active Lifecycle 之后 | 禁止 |
-| Structural Playback | `GasStructuralPlaybackSystemGroup` | 以上之后 | **唯一 hot path 结构变化点** |
-| Observation Projection | `GasObservationProjectionSystemGroup` | 最后 | 只读 |
+| `GASFramePrepareSystemGroup` | `FixedStepSimulationSystemGroup` 最前 | frame clock、allocator / budget、debug counters；query 仍由 owner system 创建 | 禁止 |
+| `GASCommandResolveSystemGroup` | FramePrepare 之后 | Boundary Command Ingest、Target Resolve | 禁止 |
+| `GASCoreSimulationSystemGroup` | CommandResolve 之后 | Effect Fan-In、State Evaluate、Attribute Reduce/Apply、Gameplay Fact | 禁止直接结构变化 |
+| `GASStructuralCommitSystemGroup` | CoreSimulation 之后 | grant/remove/spawn/destroy/cleanup 的 ECB playback 或 EntityQuery bulk | **唯一 hot path 结构变化点** |
+| `GASBoundaryProjectionSystemGroup` | StructuralCommit 之后 | ReadModel、Presentation outbox、Replay、Debugger | 只读 |
+
+拒绝旧映射的原因：`SpecEvaluation / DeltaApply / TypedFactProjection` 是 GAS 语义链，不是天然的 DOTS 物理边界。若每个语义阶段都升格为 Group，会引入更多 TypeHandle refresh、Lookup update、Dependency 链和排序复杂度；只有当新边界对应独立同步点、结构变化点、固定步策略或投影边界时，才允许新增 Group。
 
 ### 现有代码对齐
 

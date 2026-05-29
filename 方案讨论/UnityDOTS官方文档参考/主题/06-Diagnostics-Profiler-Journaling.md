@@ -20,13 +20,16 @@
 
 ```csharp
 // 开启方式：Window > Entities > Journaling
-// 记录内容：entity create/destroy、component add/remove、system update
-// 输出：可导出为 JSON，支持 frame-by-frame 回放
+// 记录内容：world/entity create/destroy、system add/remove、component add/remove、RW component access
+// 输出：Journaling window 或 Unity.Entities.EntitiesJournaling API
 ```
 
 **关键事实：**
 - 有显著的运行时开销，不应在性能测试中开启
-- 是排查"哪个 system 做了不该做的结构变化"的终极工具
+- 记录使用 FIFO 内存；Preferences > Entities > Journaling 的 Total Memory MB 会影响记录保留窗口
+- 可记录 `GetComponentDataRW` / `GetBufferRW` 访问，但官方文档说明它不是字段级 diff；Unity 会根据相邻记录推断可能的 setter
+- 记录包含执行 system、ECB origin system、frame index、record index、record type、world、entity 和 component type 等信息
+- 是排查"哪个 system 做了不该做的结构变化或 RW 访问"的官方工具
 - 与手写 Debugger counters 互补：Journaling 用于深度排查，counters 用于日常监控
 
 ### Structural Changes Profiler Module
@@ -35,6 +38,7 @@
 - 每帧 entity create/destroy 数量
 - Add/Remove Component 数量
 - 按 system 归类结构变化来源
+- Profiler module 未启用时不会收集数据；profiling 后再启用 module 也不会回填历史数据
 
 **使用流程：**
 ```
@@ -84,7 +88,8 @@ public struct RuntimeDiagnostics : IComponentData
 
 | 证据 | 结论 |
 |---|---|
-| `entities-journaling.md` | Journaling 记录 ECS 操作流水，可回放排查 |
+| `entities-journaling.md` | Journaling 记录 world/entity/system/component/RW access 操作，可通过窗口或 API 检查；记录使用 FIFO 内存 |
+| `profiler-modules-entities-introduction.md` | Entities Structural Changes / Entities Memory 是 Profiler modules；module 未启用时不采集数据 |
 | `profiler-module-structural-changes.md` | Profiler 可观察结构变化来源 |
 | `performance-sync-points.md` | sync point 是性能诊断核心对象 |
 | `systems-optimizing.md` | system / type handle / lookup 数量是成本源 |
@@ -122,6 +127,13 @@ AutoChess 运行
     → 异常阈值触发告警
     → 如果需要深度排查 → Profiler + Journaling
 ```
+
+### Headless official diff 口径
+
+1. Functional x1 可以临时启用 Entities Journaling 做 official diff，但这不是性能 benchmark。
+2. 临时采样必须恢复原 `EntitiesJournaling.Enabled` 状态；batchmode 中还要清理本次 official diff 产生的 Journaling 持久状态，否则 Native leak trace 会把官方工具缓存误判为 Runtime Core 泄漏。
+3. Profiler modules 在无头命令中未启用时，只能输出 `profilerEnabled=false`、category 状态和 disabled reason，不能声明 profiler captured。
+4. Debugger 数据、Journaling 数据和 Profiler modules 数据必须并列展示差分，不得互相替代。
 
 ### 性能报告的口径拆分
 

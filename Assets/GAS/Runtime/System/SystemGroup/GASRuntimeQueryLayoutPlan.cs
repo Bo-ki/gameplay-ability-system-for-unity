@@ -535,16 +535,17 @@ namespace GAS.Runtime
                     GASRuntimeLayoutDomain.GameplayEffect,
                     GASRuntimeEntityKind.GameplayEffectRuntime,
                     GASRuntimeLayoutCapability.QueryBased
+                    | GASRuntimeLayoutCapability.JobCandidate
+                    | GASRuntimeLayoutCapability.BurstCandidate
                     | GASRuntimeLayoutCapability.GeneratedArchetypeCandidate
                     | GASRuntimeLayoutCapability.EcbMigrationCandidate
                     | GASRuntimeLayoutCapability.RequiresMainThreadEntityManager
-                    | GASRuntimeLayoutCapability.StructuralChanges
                     | GASRuntimeLayoutCapability.ReadsDefinitionData
                     | GASRuntimeLayoutCapability.WritesSimulationState,
                     GASRuntimeLayoutBoundary.CrossEntityLookup
                     | GASRuntimeLayoutBoundary.DynamicBufferMutation
                     | GASRuntimeLayoutBoundary.DefinitionRuntimeBoundary
-                    | GASRuntimeLayoutBoundary.StructuralEntityManagerHotspot,
+                    | GASRuntimeLayoutBoundary.RuntimeCoreStreamBoundary,
                     GASRuntimeLayoutDecision.NeedsEcbMigration,
                     new[]
                     {
@@ -586,10 +587,12 @@ namespace GAS.Runtime
                     GASRuntimeLayoutDomain.Attribute,
                     GASRuntimeEntityKind.EventBus,
                     GASRuntimeLayoutCapability.QueryBased
+                    | GASRuntimeLayoutCapability.JobCandidate
+                    | GASRuntimeLayoutCapability.BurstCandidate
                     | GASRuntimeLayoutCapability.ObservationOnly
                     | GASRuntimeLayoutCapability.RequiresMainThreadEntityManager,
                     GASRuntimeLayoutBoundary.ObservationReadBoundary
-                    | GASRuntimeLayoutBoundary.CrossEntityLookup
+                    | GASRuntimeLayoutBoundary.RuntimeCoreStreamBoundary
                     | GASRuntimeLayoutBoundary.DynamicBufferMutation,
                     GASRuntimeLayoutDecision.ObservationOnly,
                     new[]

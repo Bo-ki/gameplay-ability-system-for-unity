@@ -2,7 +2,7 @@ using System;
 using System.Collections;
 using UnityEngine;
 
-namespace GAS.Runtime
+namespace GAS.AutoChessDemo
 {
     public sealed class HeadlessAutoChessDemoSceneRunner : MonoBehaviour
     {

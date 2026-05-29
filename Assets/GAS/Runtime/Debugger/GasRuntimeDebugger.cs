@@ -2354,9 +2354,7 @@ namespace GAS.Runtime
             if (warningThreshold <= 0 || elapsedMicroseconds < warningThreshold)
                 return EGasRuntimeDiagnosticSeverity.Trace;
 
-            return elapsedMicroseconds >= warningThreshold * 4
-                ? EGasRuntimeDiagnosticSeverity.Error
-                : EGasRuntimeDiagnosticSeverity.Warning;
+            return EGasRuntimeDiagnosticSeverity.Warning;
         }
 
         private static EGasRuntimeDiagnosticSeverity SeverityForPressure(
