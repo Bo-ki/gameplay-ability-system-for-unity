@@ -13,6 +13,8 @@ namespace GAS.Runtime
     [BurstCompile]
     public partial struct AttributeRecalculateSystem : ISystem
     {
+        private const int MainThreadEntityThreshold = 64;
+
         private EntityQuery _query;
 
         public void OnCreate(ref SystemState state)
@@ -25,6 +27,18 @@ namespace GAS.Runtime
         public void OnUpdate(ref SystemState state)
         {
             var modifierLookup = SystemAPI.GetBufferLookup<AttributeActiveModifierBuffer>(true);
+            if (_query.CalculateEntityCount() <= MainThreadEntityThreshold)
+            {
+                foreach (var (attributes, entity) in SystemAPI
+                             .Query<DynamicBuffer<AttributeValueBuffer>>()
+                             .WithAll<TagMaskComponent>()
+                             .WithEntityAccess())
+                {
+                    RecalculateAttributes(entity, attributes, modifierLookup);
+                }
+
+                return;
+            }
 
             state.Dependency = new AttributeRecalculateJob
             {
@@ -46,61 +60,73 @@ namespace GAS.Runtime
                 Entity entity,
                 DynamicBuffer<AttributeValueBuffer> attributes)
             {
-                bool hasModifiers = ModifierBufferLookup.HasBuffer(entity);
-
-                for (int i = 0; i < attributes.Length; i++)
-                {
-                    var attr = attributes[i];
-                    if (!attr.Dirty) continue;
-
-                    var eventPreviousValue = attr.CurrentValueChangePending
-                        ? attr.PreviousCurrentValue
-                        : attr.CurrentValue;
-                    attr.CurrentValue = attr.BaseValue;
-
-                    if (hasModifiers)
-                    {
-                        var modifiers = ModifierBufferLookup[entity];
-                        for (int j = 0; j < modifiers.Length; j++)
-                        {
-                            var mod = modifiers[j];
-                            if (mod.AttrSetCode != attr.AttrSetCode || mod.AttributeCode != attr.Code) continue;
-
-                            attr.CurrentValue = ApplyModifier(attr.CurrentValue, mod.Op, mod.Magnitude);
-                        }
-                    }
-
-                    if (attr.IsClampMin) attr.CurrentValue = math.max(attr.CurrentValue, attr.MinValue);
-                    if (attr.IsClampMax) attr.CurrentValue = math.min(attr.CurrentValue, attr.MaxValue);
-
-                    if (eventPreviousValue != attr.CurrentValue)
-                    {
-                        attr.PreviousCurrentValue = eventPreviousValue;
-                        attr.CurrentValueChangePending = true;
-                    }
-                    else
-                    {
-                        attr.PreviousCurrentValue = attr.CurrentValue;
-                        attr.CurrentValueChangePending = false;
-                    }
-
-                    attr.Dirty = false;
-                    attributes[i] = attr;
-                }
+                RecalculateAttributes(entity, attributes, ModifierBufferLookup);
             }
+        }
 
-            private static float ApplyModifier(float currentValue, EModifierOp op, float magnitude)
+        private static void RecalculateAttributes(
+            Entity entity,
+            DynamicBuffer<AttributeValueBuffer> attributes,
+            BufferLookup<AttributeActiveModifierBuffer> modifierLookup)
+        {
+            var hasModifiers = modifierLookup.HasBuffer(entity);
+
+            for (var i = 0; i < attributes.Length; i++)
             {
-                return op switch
+                var attr = attributes[i];
+                if (!attr.Dirty)
+                    continue;
+
+                var eventPreviousValue = attr.CurrentValueChangePending
+                    ? attr.PreviousCurrentValue
+                    : attr.CurrentValue;
+                attr.CurrentValue = attr.BaseValue;
+
+                if (hasModifiers)
                 {
-                    EModifierOp.Add => currentValue + magnitude,
-                    EModifierOp.Subtract => currentValue - magnitude,
-                    EModifierOp.Multiply => currentValue * magnitude,
-                    EModifierOp.Divide => currentValue / magnitude,
-                    EModifierOp.Override => magnitude,
-                    _ => currentValue,
-                };
+                    var modifiers = modifierLookup[entity];
+                    for (var j = 0; j < modifiers.Length; j++)
+                    {
+                        var mod = modifiers[j];
+                        if (mod.AttrSetCode != attr.AttrSetCode || mod.AttributeCode != attr.Code)
+                            continue;
+
+                        attr.CurrentValue = ApplyModifier(attr.CurrentValue, mod.Op, mod.Magnitude);
+                    }
+                }
+
+                if (attr.IsClampMin)
+                    attr.CurrentValue = math.max(attr.CurrentValue, attr.MinValue);
+                if (attr.IsClampMax)
+                    attr.CurrentValue = math.min(attr.CurrentValue, attr.MaxValue);
+
+                if (eventPreviousValue != attr.CurrentValue)
+                {
+                    attr.PreviousCurrentValue = eventPreviousValue;
+                    attr.CurrentValueChangePending = true;
+                }
+                else
+                {
+                    attr.PreviousCurrentValue = attr.CurrentValue;
+                    attr.CurrentValueChangePending = false;
+                }
+
+                attr.Dirty = false;
+                attributes[i] = attr;
             }
+        }
+
+        private static float ApplyModifier(float currentValue, EModifierOp op, float magnitude)
+        {
+            return op switch
+            {
+                EModifierOp.Add => currentValue + magnitude,
+                EModifierOp.Subtract => currentValue - magnitude,
+                EModifierOp.Multiply => currentValue * magnitude,
+                EModifierOp.Divide => currentValue / magnitude,
+                EModifierOp.Override => magnitude,
+                _ => currentValue,
+            };
         }
     }
 
@@ -111,6 +137,8 @@ namespace GAS.Runtime
     [UpdateAfter(typeof(AttributeRecalculateSystem))]
     public partial struct AttributeChangeEventProjectionSystem : ISystem
     {
+        private const int MainThreadChunkThreshold = 2;
+
         private EntityQuery _query;
 
         public void OnCreate(ref SystemState state)
@@ -133,6 +161,19 @@ namespace GAS.Runtime
             var chunkCount = _query.CalculateChunkCount();
             if (chunkCount <= 0)
                 return;
+
+            if (chunkCount <= MainThreadChunkThreshold)
+            {
+                var attributeEvents = em.GetBuffer<AttributeChangeEventBuffer>(eventBusEntity);
+                foreach (var (attributes, entity) in SystemAPI
+                             .Query<DynamicBuffer<AttributeValueBuffer>>()
+                             .WithEntityAccess())
+                {
+                    AppendAttributeChangeEvents(entity, attributes, attributeEvents);
+                }
+
+                return;
+            }
 
             var eventStream = new NativeStream(chunkCount, Allocator.TempJob);
 
@@ -199,15 +240,7 @@ namespace GAS.Runtime
 
                         if (attr.PreviousCurrentValue != attr.CurrentValue)
                         {
-                            EventWriter.Write(new AttributeChangeEventBuffer
-                            {
-                                ASC = entities[entityIndex],
-                                AttrSetCode = attr.AttrSetCode,
-                                AttributeCode = attr.Code,
-                                OldValue = attr.PreviousCurrentValue,
-                                NewValue = attr.CurrentValue,
-                                IsBaseValue = false,
-                            });
+                            EventWriter.Write(CreateAttributeChangeEvent(entities[entityIndex], in attr));
                         }
 
                         attr.PreviousCurrentValue = attr.CurrentValue;
@@ -218,6 +251,41 @@ namespace GAS.Runtime
 
                 EventWriter.EndForEachIndex();
             }
+        }
+
+        private static void AppendAttributeChangeEvents(
+            Entity entity,
+            DynamicBuffer<AttributeValueBuffer> attributes,
+            DynamicBuffer<AttributeChangeEventBuffer> attributeEvents)
+        {
+            for (var attributeIndex = 0; attributeIndex < attributes.Length; attributeIndex++)
+            {
+                var attr = attributes[attributeIndex];
+                if (!attr.CurrentValueChangePending)
+                    continue;
+
+                if (attr.PreviousCurrentValue != attr.CurrentValue)
+                    attributeEvents.Add(CreateAttributeChangeEvent(entity, in attr));
+
+                attr.PreviousCurrentValue = attr.CurrentValue;
+                attr.CurrentValueChangePending = false;
+                attributes[attributeIndex] = attr;
+            }
+        }
+
+        private static AttributeChangeEventBuffer CreateAttributeChangeEvent(
+            Entity asc,
+            in AttributeValueBuffer attr)
+        {
+            return new AttributeChangeEventBuffer
+            {
+                ASC = asc,
+                AttrSetCode = attr.AttrSetCode,
+                AttributeCode = attr.Code,
+                OldValue = attr.PreviousCurrentValue,
+                NewValue = attr.CurrentValue,
+                IsBaseValue = false,
+            };
         }
     }
 }

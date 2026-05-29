@@ -237,27 +237,24 @@ namespace GAS.Runtime
             Entity asc,
             PresentationEventBuffer evt)
         {
-            if (eventBusEntity != Entity.Null
+            if (asc == Entity.Null
+                || !entityManager.Exists(asc)
+                || !entityManager.HasBuffer<PresentationEventBuffer>(asc))
+            {
+                return;
+            }
+
+            var outbox = entityManager.GetBuffer<PresentationEventBuffer>(asc);
+            if (outbox.Length == 0
+                && eventBusEntity != Entity.Null
                 && entityManager.Exists(eventBusEntity)
                 && entityManager.HasBuffer<PresentationOutboxOwnerBuffer>(eventBusEntity))
             {
-                var owners = entityManager.GetBuffer<PresentationOutboxOwnerBuffer>(eventBusEntity);
-                var alreadyOwned = false;
-                for (var i = 0; i < owners.Length; i++)
-                {
-                    if (owners[i].ASC != asc)
-                        continue;
-
-                    alreadyOwned = true;
-                    break;
-                }
-
-                if (!alreadyOwned)
-                    owners.Add(new PresentationOutboxOwnerBuffer { ASC = asc });
+                entityManager.GetBuffer<PresentationOutboxOwnerBuffer>(eventBusEntity)
+                    .Add(new PresentationOutboxOwnerBuffer { ASC = asc });
             }
 
-            if (asc != Entity.Null && entityManager.Exists(asc) && entityManager.HasBuffer<PresentationEventBuffer>(asc))
-                entityManager.GetBuffer<PresentationEventBuffer>(asc).Add(evt);
+            outbox.Add(evt);
         }
 
         public static NativeArray<T> CopyBufferRange<T>(

@@ -18,9 +18,10 @@
 
 1. 完整 4v4 自走棋、Luban 表、SourceGenerator 生成 catalog、ScaleProfile、Presentation outbox 和 Physics / Graphics profile 仍未落地。
 2. 当前 `AutoBattleDefinitionCatalogBuilder` 是运行时安装的最小 catalog，用于验证 Runtime Core 链路；它不是 Luban / SourceGenerator 的长期替代。
-3. 当前最小链路只保留 x1 functional gate，尚未输出 x50+ scale 指标、allocator / chunk / buffer pressure 曲线和官方工具证据。
+3. 当前最小链路已经具备 x1 functional gate 和 x50 diagnostic gate；x50 通过 AIBridge 驱动真实 Unity Editor，并保存 Unity Profiler 官方 `.data` capture。后续仍缺 x100 / x1000 曲线、allocator / chunk / buffer pressure 更细分统计和 Player / AOT 口径。
 4. 官方案例和文档约束仍适用：性能测试要采用 warmup / measurement / allocator cleanup 口径，配置和资源链路目标态必须走 Blob / Baker / Boundary，Simulation hot path 不照搬入门 `SystemAPI.Query` foreach。
 5. Unity Physics 与 Entities Graphics 仍是可选 profile；默认无头可以 disabled，但目标 summary 必须输出 disabled reason，启用时必须拆分 physics fixed-step cost、presentation marker cost 和 render cost。
+6. Debugger 不再扩展为项目自研 Profiler。Runtime Core 只输出 GAS 语义 counters、Layer 2 diagnostics snapshot 和 official tool diff；性能 Timeline、TopN、结构变化归因和内存视图优先使用 Unity Profiler、Entities Profiler Modules、Entities Journaling 与 AIBridge 驱动的真实 Editor / Player 工具链。
 
 ## 目标目录
 
@@ -481,7 +482,61 @@ completed=True, summaryHash=0x53F70297, debugErrors=0, blockingDebugErrors=0
 Leak Detected: none
 ```
 
-结论：最小链路已经证明 Runtime Core 可以被 Layer 1 业务 Demo 通过 Layer 2 boundary 打穿，且本轮无头 official diff 不再留下 NativeContainer / Persistent 泄漏。当前 measured hot path 已回落到 `0.X ms`，AutoBattle 业务侧已移除小规模 `NativeStream + Complete` 固定成本，`GASCommandResolveSystemGroup` 回落到 `0.082ms`。剩余优化应优先收敛 `GASCoreSimulationSystemGroup`、Boundary Projection 和 official diff 的 structural attribution，并在 x50/x100 下用 CPU Profiler 与 Runtime Debugger counters 做差分。
+结论：最小链路已经证明 Runtime Core 可以被 Layer 1 业务 Demo 通过 Layer 2 boundary 打穿，且本轮无头 official diff 不再留下 NativeContainer / Persistent 泄漏。当前 measured hot path 已回落到 `0.X ms`，AutoBattle 业务侧已移除小规模 `NativeStream + Complete` 固定成本，`GASCommandResolveSystemGroup` 回落到 `0.082ms`。x50 规模证据见下一节；后续优化不再依赖自研 Profiler UI，而是用 Unity Profiler `.data`、Entities Journaling 和 Runtime Debugger counters 做差分。
+
+## 当前 Diagnostic x50 实机 Editor 证据
+
+2026-05-29 使用 AIBridge 1.4.1 驱动真实 Unity Editor，调用 `GAS.AutoChessDemo.HeadlessAutoChessRuntimeRunner.RunHeadlessAutoBattleOnce` 跑通 50 组独立 2v2（共 200 units）。AIBridge 只属于 Layer 1 工具链，Runtime Core 不依赖它；Profiler 证据来自 Unity 官方 `Window/Analysis/Profiler` 和 `UnityEditorInternal.ProfilerDriver`。
+
+```text
+completed=True, winner=Player, scale=50, units=200,
+battleTicks=9, totalTicks=10, warmupDroppedTicks=3, measuredTicks=7,
+commands=900, finishers=400, attributeChanges=1050,
+executionOutputs=250, cueRequests=400,
+debugEvents=62, debugWarnings=27, debugErrors=0, blockingDebugErrors=0,
+coreRequests=2700, coreFacts=4800, coreDeltas=1700, coreCues=400,
+peakEventBus=1300, replayLag=0, journalingRecords=48288,
+processWarmupRuns=1, totalElapsedMs=36.488,
+factsHash=0xA5CD85FF, summaryHash=0x69F5175B, avgTickMs=2.646
+```
+
+```text
+HeadlessAutoChessRuntimeTiming:
+ecsRuntimeTickOnly=true
+GASTickTotal(samples=7, avgMs=2.628, maxMs=6.696)
+GASFramePrepareSystemGroup(samples=7, avgMs=0.061, maxMs=0.100)
+GASCommandResolveSystemGroup(samples=7, avgMs=0.853, maxMs=2.055)
+GASCoreSimulationSystemGroup(samples=7, avgMs=1.114, maxMs=2.912)
+GASStructuralCommitSystemGroup(samples=7, avgMs=0.026, maxMs=0.056)
+GASBoundaryProjectionSystemGroup(samples=7, avgMs=0.573, maxMs=1.572)
+```
+
+```text
+HeadlessAutoChessOfficialToolDiff:
+journalingAvailable=True, journalingCaptured=True, journalingWorldRecords=48288,
+runtimeStructuralApprox=900, journalingStructural=14202, deltaStructural=-13302,
+runtimeCreates=900, journalingCreates=1601, deltaCreates=-701,
+runtimeDestroys=0, journalingDestroys=1100, deltaDestroys=-1100,
+journalingAddComponents=201, journalingRemoveComponents=0,
+journalingSetComponentData=0, journalingSetBuffer=0,
+journalingGetComponentDataRW=6791, journalingGetBufferRW=27295,
+profilerAvailable=True, profilerEnabled=True,
+structuralProfilerCategoryEnabled=True, memoryProfilerCategoryEnabled=True,
+profilerCaptureState=profiler enabled; module counter data not exported by headless runner
+```
+
+官方 capture：
+
+```text
+Temp/AutoChessDemo-AIBridge-X50-EditorProfile.data
+```
+
+结论：
+
+1. x50 已从“待输出指标”更新为当前已跑通的日常热点放大 gate；数据量是 50 组互不混敌的独立 2v2，用数量模拟真实游戏规模，避免 Demo 全局 `O(n^2)` 选敌污染 Runtime Core 判断。
+2. `blockingDebugErrors=0` 表示功能链路通过；慢 timing 只保留为 Warning / TopN 线索，不进入功能错误计数。
+3. 当前 x50 未达到目标态优秀线，热点集中在 `GASCoreSimulationSystemGroup`、`GASCommandResolveSystemGroup` 和 `GASBoundaryProjectionSystemGroup`。下一轮性能归因以 Unity Profiler Timeline / Entities module / Journaling 为准，项目 Debugger 只做 GAS 语义映射。
+4. Journaling 记录显著高于项目 `runtimeStructuralApprox`，说明项目 counter 只覆盖 GAS Runtime 自认结构变化，官方记录还包含 bootstrap / cleanup / package 内部读写；结构变化结论以官方工具为主。
 
 ## 自动验收门槛
 
@@ -489,7 +544,7 @@ Leak Detected: none
 |---|---|---|
 | x1 默认链路 | 业务闭环正确 | pass/fail、胜负、关键 facts、Cue marker 汇总 |
 | SceneRuntime | Unity 实机场景可运行 | scene runner summary，与 headless runner 结果一致 |
-| x50 profile | 放大热点 | core / observation / presentation / export 分项 tick，Runtime diagnostics counters |
+| x50 profile | 放大热点 | core / observation / presentation / export 分项 tick，Runtime diagnostics counters，Unity Profiler `.data` capture，Entities Journaling diff |
 | x100 / x1000 | 早期规模曲线 | 规模曲线、实体数、facts 数、buffer pressure、ECB / structural change counters |
 | x10w / x100w | 目标架构压力设计 | chunk/query/stream/counter 曲线、采样策略、降级策略、瓶颈归因 |
 | PerformanceExcellent | Goal 自动停止参考 | Functional x1、SceneRuntime x1、x50、x100 优秀线，x1000 通过线，0 GC / 0 sync point / 0 hot path structural change |

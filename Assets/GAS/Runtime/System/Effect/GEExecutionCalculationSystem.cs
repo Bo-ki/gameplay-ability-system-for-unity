@@ -8,6 +8,8 @@ namespace GAS.Runtime
     [UpdateBefore(typeof(GEExecutionCalculationExtensionSystemGroup))]
     public partial struct GEExecutionCalculationSystem : ISystem
     {
+        private const int MainThreadChunkThreshold = 2;
+
         private EntityQuery _definitionQuery;
 
         public void OnCreate(ref SystemState state)
@@ -38,6 +40,22 @@ namespace GAS.Runtime
 
             try
             {
+                if (effectChunkCount <= MainThreadChunkThreshold)
+                {
+                    foreach (var (_, effect) in SystemAPI
+                                 .Query<RefRO<GEEffectSpecComponent>>()
+                                 .WithAll<
+                                     GEContextComponent,
+                                     GEExecutionCalculationDefinitionBuffer,
+                                     GEExecutionCalculationValueBuffer>()
+                                 .WithEntityAccess())
+                    {
+                        EvaluateEffect(em, effect, ref eventWriter);
+                    }
+
+                    return;
+                }
+
                 var scanJob = new GEExecutionCalculationScanJob
                 {
                     EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),

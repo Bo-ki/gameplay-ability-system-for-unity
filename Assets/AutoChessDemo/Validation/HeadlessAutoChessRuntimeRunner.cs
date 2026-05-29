@@ -12,6 +12,10 @@ namespace GAS.AutoChessDemo
     public static class HeadlessAutoChessRuntimeRunner
     {
         private const string RunArgument = "-gasAutoChessHeadless";
+        private const int ProcessWarmupRuns = 1;
+        private const int ValidationScale = 50;
+        private const int ValidationMaxTicks = 96;
+        private const int ValidationPostVictoryFlushTicks = 4;
 
         public static void RunHeadlessAutoBattleOnce()
         {
@@ -44,9 +48,14 @@ namespace GAS.AutoChessDemo
         {
             try
             {
-                var result = HeadlessAutoBattleScenario.RunDefault(new HeadlessAutoBattleOptions(
-                    maxTicks: 96,
-                    postVictoryFlushTicks: 4));
+                RunProcessWarmupBattles();
+
+                var result = RunScenario(captureOfficialToolDiff: false);
+                HeadlessAutoBattleScenario.ShutdownRuntime();
+
+                var officialDiffResult = RunScenario(captureOfficialToolDiff: true);
+                ValidateOfficialDiffRun(result, officialDiffResult);
+                result = result.WithOfficialToolDiff(officialDiffResult.OfficialToolDiff);
 
                 Debug.Log("HeadlessAutoChessRuntimeRunner: " + CreateSummary(result));
                 Debug.Log("HeadlessAutoChessRuntimeDebugger: " + CreateDebuggerSummary(result));
@@ -69,6 +78,8 @@ namespace GAS.AutoChessDemo
             var summaryHash = CalculateSummaryHash(result, factsHash);
             return $"completed={result.Completed}, "
                    + $"winner={result.Winner}, "
+                   + $"scale={result.ScenarioScale}, "
+                   + $"units={result.Units.Length}, "
                    + $"battleTicks={result.BattleTicks}, "
                    + $"totalTicks={result.TotalTicks}, "
                    + $"warmupDroppedTicks={result.WarmupDroppedTicks}, "
@@ -89,6 +100,7 @@ namespace GAS.AutoChessDemo
                    + $"peakEventBus={result.RuntimeDiagnostics.CoreCounters.PeakEventBusBufferLength}, "
                    + $"replayLag={result.RuntimeDiagnostics.CoreCounters.PeakReplayCursorLag}, "
                    + $"journalingRecords={result.OfficialToolDiff.JournalingWorldRecordCount}, "
+                   + $"processWarmupRuns={ProcessWarmupRuns}, "
                    + $"totalElapsedMs={result.ElapsedMilliseconds:0.000}, "
                    + $"factsHash=0x{factsHash:X8}, "
                    + $"summaryHash=0x{summaryHash:X8}, "
@@ -137,6 +149,54 @@ namespace GAS.AutoChessDemo
             return builder.ToString();
         }
 
+        private static void RunProcessWarmupBattles()
+        {
+            for (var i = 0; i < ProcessWarmupRuns; i++)
+            {
+                try
+                {
+                    HeadlessAutoBattleScenario.RunDefault(new HeadlessAutoBattleOptions(
+                        ValidationMaxTicks,
+                        ValidationPostVictoryFlushTicks,
+                        ValidationScale,
+                        captureOfficialToolDiff: false));
+                }
+                finally
+                {
+                    HeadlessAutoBattleScenario.ShutdownRuntime();
+                }
+            }
+        }
+
+        private static HeadlessAutoBattleResult RunScenario(bool captureOfficialToolDiff)
+        {
+            return HeadlessAutoBattleScenario.RunDefault(new HeadlessAutoBattleOptions(
+                ValidationMaxTicks,
+                ValidationPostVictoryFlushTicks,
+                ValidationScale,
+                captureOfficialToolDiff));
+        }
+
+        private static void ValidateOfficialDiffRun(
+            in HeadlessAutoBattleResult performanceResult,
+            in HeadlessAutoBattleResult officialDiffResult)
+        {
+            if (performanceResult.Completed != officialDiffResult.Completed
+                || performanceResult.Winner != officialDiffResult.Winner
+                || performanceResult.BattleTicks != officialDiffResult.BattleTicks
+                || performanceResult.DriverIssuedCommands != officialDiffResult.DriverIssuedCommands
+                || performanceResult.EventCounts.AttributeChanges != officialDiffResult.EventCounts.AttributeChanges
+                || performanceResult.EventCounts.ExecutionCalculationOutputUpdated != officialDiffResult.EventCounts.ExecutionCalculationOutputUpdated
+                || performanceResult.EventCounts.CueRequests != officialDiffResult.EventCounts.CueRequests)
+            {
+                throw new InvalidOperationException(
+                    "AutoBattle official diff pass diverged from performance pass: "
+                    + CreateSummary(performanceResult)
+                    + " | official="
+                    + CreateSummary(officialDiffResult));
+            }
+        }
+
         private static void AppendTiming(
             StringBuilder builder,
             in GasRuntimeDiagnosticSnapshot diagnostics,
@@ -181,6 +241,7 @@ namespace GAS.AutoChessDemo
             var runtimeStructural = runtime.EntityCreateCount + runtime.EntityDestroyCount;
             var officialStructural = official.JournalingStructuralRecordCount;
             return $"runtimeSelfDiagnostics=events:{result.RuntimeDiagnostics.EventCount}, "
+                   + "officialDiffSeparatePass=True, "
                    + $"journalingAvailable={official.JournalingAvailable}, "
                    + $"journalingCaptured={official.JournalingCaptured}, "
                    + $"journalingWorldRecords={official.JournalingWorldRecordCount}, "
@@ -237,14 +298,14 @@ namespace GAS.AutoChessDemo
         {
             return "```mermaid\n"
                    + "flowchart LR\n"
-                   + $"    CommandDrive[\"AutoBattleCommandDriveSystem\\ncommands: {result.DriverIssuedCommands}\"] --> AbilityBuffer[\"AbilityCommandBuffer\\nrequest entities avoided\"]\n"
+                   + $"    CommandDrive[\"AutoBattleCommandDriveSystem\\nscale: {result.ScenarioScale}, units: {result.Units.Length}\\ncommands: {result.DriverIssuedCommands}\"] --> AbilityBuffer[\"AbilityCommandBuffer\\nrequest entities avoided\"]\n"
                    + $"    AbilityBuffer --> RuntimeCore[\"GAS Runtime Core\\nrequests: {result.RuntimeDiagnostics.CoreCounters.RequestCount}\"]\n"
                    + $"    RuntimeCore --> GEStream[\"GEEffectCommandBuffer / Spec / Delta\\ndeltas: {result.RuntimeDiagnostics.CoreCounters.DeltaCount}\"]\n"
                    + $"    GEStream --> Execution[\"AutoBattleExecuteDamageCalculationSystem\\nexecution outputs: {result.EventCounts.ExecutionCalculationOutputUpdated}\"]\n"
                    + $"    Execution --> Attribute[\"AttributeModifierBuffer + AttributeValueBuffer\\nattribute changes: {result.EventCounts.AttributeChanges}\"]\n"
                    + $"    Attribute --> Facts[\"GameplayEventBuffer typed facts\\nfacts: {result.RuntimeDiagnostics.CoreCounters.FactCount}\"]\n"
                    + $"    Facts --> Projection[\"Replay / Presentation / Layer 2 Diagnostics\\nreplay events: {result.EventCounts.ReplayEvents}\"]\n"
-                   + $"    Projection --> OfficialDiff[\"Official tool diff\\njournaling records: {result.OfficialToolDiff.JournalingWorldRecordCount}\"]\n"
+                   + $"    Projection --> OfficialDiff[\"Official tool diff\\nseparate pass, journaling records: {result.OfficialToolDiff.JournalingWorldRecordCount}\"]\n"
                    + "```";
         }
 
@@ -259,13 +320,13 @@ namespace GAS.AutoChessDemo
                    + "    participant Obs as Replay / Projection\n"
                    + "    participant Debug as Layer 2 DiagnosticsSink\n"
                    + "    participant Unity as Unity Journaling / Profiler\n"
-                   + $"    Runner->>Drive: fixed ticks {result.TotalTicks}, battle ticks {result.BattleTicks}\n"
+                   + $"    Runner->>Drive: fixed ticks {result.TotalTicks}, battle ticks {result.BattleTicks}, scale {result.ScenarioScale}\n"
                    + $"    Drive->>Core: AbilityCommandBuffer commands {result.DriverIssuedCommands}\n"
                    + $"    Core->>Exec: execute GE commands, finishers {result.DriverIssuedFinisherCommands}\n"
                    + $"    Exec->>Core: modifier + typed fact outputs {result.EventCounts.ExecutionCalculationOutputUpdated}\n"
                    + $"    Core->>Obs: attribute changes {result.EventCounts.AttributeChanges}, cue requests {result.EventCounts.CueRequests}\n"
                    + $"    Obs->>Debug: counters {result.RuntimeDiagnostics.EventCount}, warnings {result.RuntimeDiagnostics.Stats.WarningCount}, errors {result.RuntimeDiagnostics.Stats.ErrorCount}\n"
-                   + $"    Debug->>Unity: read EntitiesJournaling records and profiler category state\n"
+                   + $"    Debug->>Unity: read EntitiesJournaling records in a separate official-diff pass\n"
                    + $"    Unity-->>Debug: journaling structural records {result.OfficialToolDiff.JournalingStructuralRecordCount}, profiler state {result.OfficialToolDiff.ProfilerCaptureState}\n"
                    + "```";
         }
@@ -307,6 +368,7 @@ namespace GAS.AutoChessDemo
                 var hash = AppendHash(2166136261u, (int)factsHash);
                 hash = AppendHash(hash, result.Completed ? 1 : 0);
                 hash = AppendHash(hash, (int)result.Winner);
+                hash = AppendHash(hash, result.ScenarioScale);
                 hash = AppendHash(hash, result.BattleTicks);
                 hash = AppendHash(hash, result.DriverIssuedCommands);
                 hash = AppendHash(hash, result.EventCounts.AttributeChanges);

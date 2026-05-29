@@ -11,6 +11,9 @@ namespace GAS.Runtime
     [UpdateAfter(typeof(GEExecutionCalculationExtensionSystemGroup))]
     public partial struct GEExecutionCalculationOutputModifierSystem : ISystem
     {
+        private const int MainThreadEffectThreshold = 32;
+        private const int MainThreadAttributeThreshold = 64;
+
         private EntityQuery _outputQuery;
         private EntityQuery _attributeQuery;
 
@@ -46,6 +49,14 @@ namespace GAS.Runtime
             var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
             var deltas = em.GetBuffer<AttributeModifierBuffer>(streamEntity);
             var frame = GASRuntimeFrameContext.ResolveCurrentFrame(em);
+            var effectEntityCount = _outputQuery.CalculateEntityCount();
+            if (effectEntityCount <= MainThreadEffectThreshold
+                && _attributeQuery.CalculateEntityCount() <= MainThreadAttributeThreshold)
+            {
+                ApplyOutputModifiersOnMainThread(ref state, em, streamEntity, ref stream, deltas, frame);
+                return;
+            }
+
             var effectStream = new NativeStream(effectChunkCount, Allocator.TempJob);
             var modifierStream = new NativeStream(effectChunkCount, Allocator.TempJob);
             var pendingEffects = new NativeList<PendingOutputEffectRecord>(Allocator.TempJob);
@@ -142,6 +153,112 @@ namespace GAS.Runtime
         }
 
         public void OnDestroy(ref SystemState state) { }
+
+        private void ApplyOutputModifiersOnMainThread(
+            ref SystemState state,
+            EntityManager em,
+            Entity streamEntity,
+            ref GEEffectCommandStreamComponent stream,
+            DynamicBuffer<AttributeModifierBuffer> deltas,
+            int frame)
+        {
+            var ecb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
+                .CreateCommandBuffer(state.WorldUnmanaged);
+
+            foreach (var (contextRef, specRef, values, definitions, resolvedModifiers, effect)
+                     in SystemAPI
+                         .Query<
+                             RefRO<GEContextComponent>,
+                             RefRO<GEEffectSpecComponent>,
+                             DynamicBuffer<GEExecutionCalculationValueBuffer>,
+                             DynamicBuffer<GEExecutionCalculationOutputModifierDefinitionBuffer>,
+                             DynamicBuffer<GEResolvedModifierBuffer>>()
+                         .WithDisabled<GEExecutionCalculationOutputModifierAppliedComponent>()
+                         .WithEntityAccess())
+            {
+                var context = contextRef.ValueRO;
+                var spec = specRef.ValueRO;
+                var deltaCount = 0;
+                var hasTargetAttributes = context.TargetAsc != Entity.Null
+                                          && em.Exists(context.TargetAsc)
+                                          && em.HasBuffer<AttributeValueBuffer>(context.TargetAsc);
+                var targetAttributes = hasTargetAttributes
+                    ? em.GetBuffer<AttributeValueBuffer>(context.TargetAsc)
+                    : default;
+
+                resolvedModifiers.Clear();
+                for (var definitionIndex = 0; definitionIndex < definitions.Length; definitionIndex++)
+                {
+                    var definition = definitions[definitionIndex];
+                    var magnitude = ResolveOutputMagnitude(values, definition);
+                    resolvedModifiers.Add(new GEResolvedModifierBuffer
+                    {
+                        AttrSetCode = definition.AttrSetCode,
+                        AttributeCode = definition.AttributeCode,
+                        Op = definition.Op,
+                        Magnitude = magnitude,
+                        SourceEffect = effect,
+                    });
+
+                    if (!hasTargetAttributes
+                        || !ApplyModifierDelta(
+                            targetAttributes,
+                            definition.AttrSetCode,
+                            definition.AttributeCode,
+                            definition.Op,
+                            magnitude,
+                            out var oldValue,
+                            out var newValue))
+                    {
+                        continue;
+                    }
+
+                    deltas.Add(new AttributeModifierBuffer
+                    {
+                        Sequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextDeltaSequence),
+                        Frame = frame,
+                        SourceAsc = context.SourceAsc,
+                        TargetAsc = context.TargetAsc,
+                        SourceAbility = context.SourceAbility,
+                        SourceEffect = effect,
+                        GameplayEffectCode = spec.GameplayEffectCode,
+                        ContextId = context.ContextId,
+                        ParentContextId = context.ParentContextId,
+                        AttrSetCode = definition.AttrSetCode,
+                        AttributeCode = definition.AttributeCode,
+                        Op = definition.Op,
+                        ValueKind = AttributeDeltaValueKind.BaseValue,
+                        Magnitude = magnitude,
+                        OldValue = oldValue,
+                        NewValue = newValue,
+                    });
+                    deltaCount++;
+                }
+
+                ecb.SetComponent(effect, new GEExecutionCalculationOutputModifierAppliedComponent
+                {
+                    Frame = frame,
+                    DeltaCount = deltaCount,
+                });
+                ecb.SetComponentEnabled<GEExecutionCalculationOutputModifierAppliedComponent>(effect, true);
+            }
+
+            em.SetComponentData(streamEntity, stream);
+        }
+
+        private static float ResolveOutputMagnitude(
+            DynamicBuffer<GEExecutionCalculationValueBuffer> values,
+            in GEExecutionCalculationOutputModifierDefinitionBuffer definition)
+        {
+            var rawMagnitude = TryGetOutputValue(values, definition.OutputKey, out var outputValue)
+                ? outputValue
+                : definition.FallbackMagnitude;
+            return ApplyTransform(
+                rawMagnitude,
+                definition.Coefficient,
+                definition.PreAdd,
+                definition.PostAdd);
+        }
 
         private struct PendingOutputEffectRecord
         {

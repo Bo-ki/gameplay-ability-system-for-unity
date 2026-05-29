@@ -28,6 +28,13 @@ namespace GAS.Runtime
         private static EntityArchetype _gameplayEffectPrototype;
         private static EntityArchetype _cueRuntime;
 
+        public static void ResetCache()
+        {
+            _hasCachedWorld = false;
+            _cachedEntityManager = default;
+            ResetCachedArchetypes();
+        }
+
         public static EntityArchetype ASC(EntityManager em)
         {
             ResetIfWorldChanged(em);
@@ -484,6 +491,11 @@ namespace GAS.Runtime
 
             _hasCachedWorld = true;
             _cachedEntityManager = em;
+            ResetCachedArchetypes();
+        }
+
+        private static void ResetCachedArchetypes()
+        {
             _asc = default;
             _ability = default;
             _grantedAbility = default;
@@ -500,6 +512,7 @@ namespace GAS.Runtime
             _activeEffectGlobalIndex = default;
             _activeEffectGlobalIndexBucket = default;
             _gasRunningTag = default;
+            _geRemoveRequest = default;
             _gameplayEffectRuntime = default;
             _gameplayEffectPrototype = default;
             _cueRuntime = default;

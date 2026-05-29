@@ -48,6 +48,7 @@ namespace GAS.Runtime
             }
 
             TurnController ??= new TurnController();
+            GASRuntimeEntityArchetypes.ResetCache();
             ExWorld = new World("EX_GAS_World");
             EntityManager = ExWorld.EntityManager;
             CreateSystems();
@@ -92,6 +93,7 @@ namespace GAS.Runtime
             EntityEventBus = Entity.Null;
             EntityEventLogSink = Entity.Null;
             EntityRuntimeDebugger = Entity.Null;
+            GASRuntimeEntityArchetypes.ResetCache();
             IsInitialized = false;
         }
 

@@ -38,7 +38,12 @@ namespace GAS.AutoChessDemo
             if (driver.LastDecisionFrame == frame)
                 return;
 
-            using (var units = new NativeList<AutoBattleUnitTargetStateRecord>(Allocator.Temp))
+            var unitCapacity = _unitQuery.CalculateEntityCount();
+            if (unitCapacity < 1)
+                unitCapacity = 1;
+
+            using (var units = new NativeList<AutoBattleUnitTargetStateRecord>(unitCapacity, Allocator.Temp))
+            using (var groupIndex = new NativeParallelMultiHashMap<int, int>(unitCapacity, Allocator.Temp))
             {
                 foreach (var (unit, tags, attributes, entity)
                          in SystemAPI.Query<
@@ -59,6 +64,7 @@ namespace GAS.AutoChessDemo
                     units.Add(new AutoBattleUnitTargetStateRecord
                     {
                         Asc = entity,
+                        BattleGroup = unitValue.BattleGroup,
                         Team = unitValue.Team,
                         Slot = unitValue.Slot,
                         PrimaryAbilityCode = unitValue.PrimaryAbilityCode,
@@ -74,10 +80,11 @@ namespace GAS.AutoChessDemo
                             unitValue.EnergyAttrSetCode,
                             unitValue.EnergyAttrCode),
                     });
+                    groupIndex.Add(unitValue.BattleGroup, units.Length - 1);
                 }
 
                 if (units.Length > 0)
-                    FlushCommandRequests(state.EntityManager, units.AsArray(), ref driver);
+                    FlushCommandRequests(state.EntityManager, units.AsArray(), groupIndex, ref driver);
 
                 driver.LastDecisionFrame = frame;
                 SystemAPI.SetComponent(driverEntity, driver);
@@ -91,6 +98,7 @@ namespace GAS.AutoChessDemo
         private static void FlushCommandRequests(
             EntityManager em,
             NativeArray<AutoBattleUnitTargetStateRecord> units,
+            NativeParallelMultiHashMap<int, int> groupIndex,
             ref AutoBattleCommandDriverComponent driver)
         {
             var issuedPrimary = 0;
@@ -107,6 +115,7 @@ namespace GAS.AutoChessDemo
                 if (!TrySelectCommand(
                         source,
                         units,
+                        groupIndex,
                         out var abilityCode,
                         out var target,
                         out var policy,
@@ -159,6 +168,7 @@ namespace GAS.AutoChessDemo
         private static bool TrySelectCommand(
             in AutoBattleUnitTargetStateRecord source,
             NativeArray<AutoBattleUnitTargetStateRecord> units,
+            NativeParallelMultiHashMap<int, int> groupIndex,
             out int abilityCode,
             out Entity target,
             out AutoBattleTargetPolicy policy,
@@ -170,7 +180,7 @@ namespace GAS.AutoChessDemo
             isFinisher = false;
 
             if (source.FinisherAbilityCode > 0
-                && TryFindAliveEnemy(source, units, source.FinisherTargetPolicy, out var finisherTarget)
+                && TryFindAliveEnemy(source, units, groupIndex, source.FinisherTargetPolicy, out var finisherTarget)
                 && finisherTarget.Health <= source.FinisherHealthThreshold)
             {
                 abilityCode = source.FinisherAbilityCode;
@@ -181,7 +191,7 @@ namespace GAS.AutoChessDemo
             }
 
             if (source.PrimaryAbilityCode <= 0
-                || !TryFindAliveEnemy(source, units, source.PrimaryTargetPolicy, out var primaryTarget))
+                || !TryFindAliveEnemy(source, units, groupIndex, source.PrimaryTargetPolicy, out var primaryTarget))
             {
                 return false;
             }
@@ -195,15 +205,24 @@ namespace GAS.AutoChessDemo
         private static bool TryFindAliveEnemy(
             in AutoBattleUnitTargetStateRecord source,
             NativeArray<AutoBattleUnitTargetStateRecord> units,
+            NativeParallelMultiHashMap<int, int> groupIndex,
             AutoBattleTargetPolicy policy,
             out AutoBattleUnitTargetStateRecord target)
         {
             target = default;
             var found = false;
 
-            for (var i = 0; i < units.Length; i++)
+            if (!groupIndex.TryGetFirstValue(
+                    source.BattleGroup,
+                    out var unitIndex,
+                    out NativeParallelMultiHashMapIterator<int> iterator))
             {
-                var candidate = units[i];
+                return false;
+            }
+
+            do
+            {
+                var candidate = units[unitIndex];
                 if (candidate.Team == source.Team
                     || candidate.Asc == Entity.Null
                     || candidate.Health <= 0f)
@@ -217,6 +236,7 @@ namespace GAS.AutoChessDemo
                     found = true;
                 }
             }
+            while (groupIndex.TryGetNextValue(out unitIndex, ref iterator));
 
             return found;
         }

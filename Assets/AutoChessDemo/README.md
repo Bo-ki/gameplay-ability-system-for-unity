@@ -16,6 +16,7 @@
 6. `AutoBattleExecuteDamageCalculationSystem` 读取 `GEEffectCommandBuffer` 中的斩杀 GE 命令，用 ECS query 顺序扫描目标 ASC 并修改 `AttributeValueBuffer`，追加 `AttributeModifierBuffer` 和 `GameplayEventBuffer{ExecutionCalculationOutputUpdated}` typed fact；event bus 只保留同一 fact 的镜像。
 7. `GameplayFactProjectionSystem` / `ReplayLogSystem` 统一收集 attribute changes、execution outputs、cue requests，`GAS.AutoChessDemo.HeadlessAutoChessRuntimeRunner.RunHeadlessAutoBattleOnce()` 用这些事实做无头断言。
 8. Runtime Debugger 数据来自 Layer 2 `GasRuntimeDebugger` / `GasRuntimeOfficialToolDiffCapture`；Editor Debugger Window 是 Layer 1 Editor Extension，不放在 Demo 内。
+9. 实机性能验证通过 AIBridge 驱动真实 Unity Editor / Player，并优先使用 Unity Profiler、Entities Profiler Modules、Entities Journaling 等官方工具；Demo 不重复实现 Debugger UI 或 Profiler。
 
 ## DOTS 约束
 
@@ -38,6 +39,18 @@
 ```powershell
 E:\Unity\UnityEditor\6000.3.14f1\Editor\Unity.exe -batchmode -quit -projectPath E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity -executeMethod GAS.AutoChessDemo.HeadlessAutoChessRuntimeRunner.RunHeadlessAutoBattleOnce -logFile E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Temp\AutoBattleValidation.log
 ```
+
+真实 Editor + 官方 Profiler 链路使用 AIBridge：
+
+```powershell
+$CLI = 'Library\PackageCache\cn.lys.aibridge@f203de2ec848\Tools~\CLI\win-x64\AIBridgeCLI.exe'
+& $CLI compile unity --timeout 120000 --pretty
+& $CLI menu_item invoke --menuPath 'Window/Analysis/Profiler' --timeout 30000 --pretty
+& $CLI code execute --file '.aibridge/code/run_autochess_official_profile.csx' --timeout 180000 --pretty
+& $CLI get_logs --logType Error --count 50 --pretty
+```
+
+`.aibridge/code/run_autochess_official_profile.csx` 是一次性本地 Editor 诊断脚本，允许调用 `UnityEditorInternal.ProfilerDriver` 包装 `GAS.AutoChessDemo.HeadlessAutoChessRuntimeRunner.RunHeadlessAutoBattleOnce()` 并保存 `.data`。`.aibridge/` 和 `Temp/` 都是本地运行目录，不纳入版本控制。
 
 一次有效跑通至少需要满足：
 
@@ -106,8 +119,45 @@ structuralProfilerCategoryEnabled=False, memoryProfilerCategoryEnabled=False,
 profilerCaptureState=profiler disabled; Entities profiler modules collect no data
 ```
 
-当前真实热路径仍不是最终优秀态：Functional x1 只有 4 个单位，AutoBattle 业务侧已移除 `NativeStream + Complete` 固定成本，`GASCommandResolveSystemGroup` 回落到 `0.082ms`；剩余热点主要在 `GASCoreSimulationSystemGroup` 和 Boundary Projection。后续 x50/x100 profile 必须用 CPU Profiler 与 Runtime Debugger counters 做差分，再决定 Runtime Core 内部哪些 `NativeStream` fan-in、sync query 和 observation projection 需要合并或改为更粗粒度批处理。
+当前真实热路径仍不是最终优秀态：Functional x1 只有 4 个单位，AutoBattle 业务侧已移除 `NativeStream + Complete` 固定成本，`GASCommandResolveSystemGroup` 回落到 `0.082ms`；剩余热点主要在 `GASCoreSimulationSystemGroup` 和 Boundary Projection。x50 已通过 AIBridge 跑通真实 Editor + 官方 Profiler capture，后续 x100 / Player profile 必须继续用 Unity Profiler 与 Runtime Debugger counters 做差分，再决定 Runtime Core 内部哪些 `NativeStream` fan-in、sync query 和 observation projection 需要合并或改为更粗粒度批处理。
 
 Leak trace 复跑使用 `UNITY_JOBS_NATIVE_LEAK_DETECTION_MODE=2`，同一链路得到 `completed=True`、`summaryHash=0x53F70297`、`debugErrors=0`、`blockingDebugErrors=0`，日志中没有 `Leak Detected` 或 Native Collection 未释放提示。Layer 2 official diff 在 batchmode 临时启用 Entities Journaling 后会恢复状态并释放本次采样产生的 Journaling 持久状态，避免把官方工具缓存误判为 Runtime Core 泄漏。
 
 按 `Library/PackageCache/com.unity.entities@e90944159b94/Documentation~/profiler-modules-entities-introduction.md`，Entities Profiler module 未启用时不会采集数据；因此当前只声明 Profiler disabled reason，不声明 profiler captured。Entities Journaling 则按 `entities-journaling.md` 的 `Unity.Entities.EntitiesJournaling` API 作为无头官方差分来源。
+
+## 当前 Diagnostic x50 数据
+
+2026-05-29 使用 AIBridge 1.4.1 驱动真实 Unity Editor，打开 Unity Profiler，并通过 `ProfilerDriver` 保存官方 capture 到 `Temp/AutoChessDemo-AIBridge-X50-EditorProfile.data`。该文件属于本机证据，不提交。
+
+```text
+completed=True, winner=Player, scale=50, units=200,
+battleTicks=9, totalTicks=10, warmupDroppedTicks=3, measuredTicks=7,
+commands=900, finishers=400, attributeChanges=1050,
+executionOutputs=250, cueRequests=400,
+debugEvents=62, debugWarnings=27, debugErrors=0, blockingDebugErrors=0,
+coreRequests=2700, coreFacts=4800, coreDeltas=1700, coreCues=400,
+peakEventBus=1300, replayLag=0, journalingRecords=48288,
+processWarmupRuns=1, totalElapsedMs=36.488,
+factsHash=0xA5CD85FF, summaryHash=0x69F5175B, avgTickMs=2.646
+```
+
+```text
+GASTickTotal(samples=7, avgMs=2.628, maxMs=6.696)
+GASFramePrepareSystemGroup(samples=7, avgMs=0.061, maxMs=0.100)
+GASCommandResolveSystemGroup(samples=7, avgMs=0.853, maxMs=2.055)
+GASCoreSimulationSystemGroup(samples=7, avgMs=1.114, maxMs=2.912)
+GASStructuralCommitSystemGroup(samples=7, avgMs=0.026, maxMs=0.056)
+GASBoundaryProjectionSystemGroup(samples=7, avgMs=0.573, maxMs=1.572)
+```
+
+```text
+journalingCaptured=True, journalingWorldRecords=48288,
+runtimeStructuralApprox=900, journalingStructural=14202,
+journalingCreates=1601, journalingDestroys=1100,
+journalingAddComponents=201, journalingGetComponentDataRW=6791,
+journalingGetBufferRW=27295, profilerAvailable=True,
+profilerEnabled=True, structuralProfilerCategoryEnabled=True,
+memoryProfilerCategoryEnabled=True
+```
+
+x50 是 50 组独立 2v2，共 200 units。该数据用于放大 Runtime Core 热点，不替代 Unity Profiler Timeline / Entities module 的最终归因；项目 Debugger 只保留 GAS 语义 counters、official diff 和无头导出。

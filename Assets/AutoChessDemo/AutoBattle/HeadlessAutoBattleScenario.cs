@@ -18,18 +18,30 @@ namespace GAS.AutoChessDemo
     {
         public readonly int MaxTicks;
         public readonly int PostVictoryFlushTicks;
+        public readonly int Scale;
+        private readonly byte _captureOfficialToolDiff;
 
-        public HeadlessAutoBattleOptions(int maxTicks, int postVictoryFlushTicks)
+        public bool CaptureOfficialToolDiff => _captureOfficialToolDiff != 2;
+
+        public HeadlessAutoBattleOptions(
+            int maxTicks,
+            int postVictoryFlushTicks,
+            int scale = 1,
+            bool captureOfficialToolDiff = true)
         {
             MaxTicks = maxTicks;
             PostVictoryFlushTicks = postVictoryFlushTicks;
+            Scale = scale;
+            _captureOfficialToolDiff = captureOfficialToolDiff ? (byte)1 : (byte)2;
         }
 
         public HeadlessAutoBattleOptions Normalize()
         {
             return new HeadlessAutoBattleOptions(
                 MaxTicks > 0 ? MaxTicks : 64,
-                PostVictoryFlushTicks >= 0 ? PostVictoryFlushTicks : 4);
+                PostVictoryFlushTicks >= 0 ? PostVictoryFlushTicks : 4,
+                Scale > 0 ? Scale : 1,
+                CaptureOfficialToolDiff);
         }
     }
 
@@ -101,6 +113,7 @@ namespace GAS.AutoChessDemo
     {
         public readonly bool Completed;
         public readonly HeadlessAutoBattleTeam Winner;
+        public readonly int ScenarioScale;
         public readonly int BattleTicks;
         public readonly int TotalTicks;
         public readonly int WarmupDroppedTicks;
@@ -125,6 +138,7 @@ namespace GAS.AutoChessDemo
         public HeadlessAutoBattleResult(
             bool completed,
             HeadlessAutoBattleTeam winner,
+            int scenarioScale,
             int battleTicks,
             int totalTicks,
             int warmupDroppedTicks,
@@ -147,6 +161,7 @@ namespace GAS.AutoChessDemo
         {
             Completed = completed;
             Winner = winner;
+            ScenarioScale = scenarioScale;
             BattleTicks = battleTicks;
             TotalTicks = totalTicks;
             WarmupDroppedTicks = warmupDroppedTicks;
@@ -167,6 +182,33 @@ namespace GAS.AutoChessDemo
             OfficialToolDiff = officialToolDiff;
             StructuredLogSnapshot = structuredLogSnapshot;
             AssertionLog = assertionLog ?? string.Empty;
+        }
+
+        public HeadlessAutoBattleResult WithOfficialToolDiff(GasRuntimeOfficialToolDiffSnapshot officialToolDiff)
+        {
+            return new HeadlessAutoBattleResult(
+                Completed,
+                Winner,
+                ScenarioScale,
+                BattleTicks,
+                TotalTicks,
+                WarmupDroppedTicks,
+                MeasuredTicks,
+                DriverIssuedCommands,
+                DriverIssuedPrimaryCommands,
+                DriverIssuedFinisherCommands,
+                DriverLowestHealthTargetSelections,
+                ElapsedTicks,
+                ElapsedMilliseconds,
+                MeasuredElapsedTicks,
+                MeasuredElapsedMilliseconds,
+                Units,
+                EventCounts,
+                RuntimeDiagnostics,
+                RuntimeDiagnosticsLog,
+                officialToolDiff,
+                StructuredLogSnapshot,
+                AssertionLog);
         }
     }
 
@@ -200,13 +242,15 @@ namespace GAS.AutoChessDemo
             EnsureRuntimeInitialized();
             ResetObservationState();
 
-            var officialToolDiffCapture = GasRuntimeOfficialToolDiffCapture.Begin(GASManager.ExWorld);
+            var officialToolDiffCapture = normalized.CaptureOfficialToolDiff
+                ? GasRuntimeOfficialToolDiffCapture.Begin(GASManager.ExWorld)
+                : default;
             var officialToolDiffClosed = false;
             var stopwatch = Stopwatch.StartNew();
             var measuredElapsedTicks = 0L;
             var measuredTicks = 0;
             var droppedWarmupTicks = 0;
-            var state = new ScenarioState(CreateDefaultUnits());
+            var state = new ScenarioState(CreateDefaultUnits(normalized.Scale));
 
             try
             {
@@ -252,12 +296,15 @@ namespace GAS.AutoChessDemo
 
                 stopwatch.Stop();
                 var driverStats = GetDriverStats(state);
-                var officialToolDiff = officialToolDiffCapture.End();
+                var officialToolDiff = normalized.CaptureOfficialToolDiff
+                    ? officialToolDiffCapture.End()
+                    : GasRuntimeOfficialToolDiffSnapshot.Unavailable;
                 officialToolDiffClosed = true;
                 return BuildResult(
                     state,
                     winner != HeadlessAutoBattleTeam.None && winner != HeadlessAutoBattleTeam.Draw,
                     winner,
+                    normalized.Scale,
                     battleTicks,
                     totalTicks,
                     droppedWarmupTicks,
@@ -271,7 +318,7 @@ namespace GAS.AutoChessDemo
             }
             finally
             {
-                if (!officialToolDiffClosed)
+                if (normalized.CaptureOfficialToolDiff && !officialToolDiffClosed)
                     officialToolDiffCapture.End();
 
                 CleanupUnits(state);
@@ -297,12 +344,13 @@ namespace GAS.AutoChessDemo
             AutoBattleDefinitionCatalogBuilder.Install(GASManager.EntityManager);
         }
 
-        private static UnitDefinition[] CreateDefaultUnits()
+        private static UnitDefinition[] CreateDefaultUnits(int scale)
         {
-            return new[]
+            var baseUnits = new[]
             {
                 new UnitDefinition(
                     "player-knight",
+                    0,
                     HeadlessAutoBattleTeam.Player,
                     0,
                     72f,
@@ -314,6 +362,7 @@ namespace GAS.AutoChessDemo
                     AutoBattleTargetPolicy.LowestHealth),
                 new UnitDefinition(
                     "player-ranger",
+                    0,
                     HeadlessAutoBattleTeam.Player,
                     1,
                     54f,
@@ -325,6 +374,7 @@ namespace GAS.AutoChessDemo
                     AutoBattleTargetPolicy.LowestHealth),
                 new UnitDefinition(
                     "enemy-brute",
+                    0,
                     HeadlessAutoBattleTeam.Enemy,
                     0,
                     48f,
@@ -336,6 +386,7 @@ namespace GAS.AutoChessDemo
                     AutoBattleTargetPolicy.Frontline),
                 new UnitDefinition(
                     "enemy-caster",
+                    0,
                     HeadlessAutoBattleTeam.Enemy,
                     1,
                     42f,
@@ -346,6 +397,21 @@ namespace GAS.AutoChessDemo
                     AutoBattleTargetPolicy.Frontline,
                     AutoBattleTargetPolicy.Frontline),
             };
+
+            if (scale <= 1)
+                return baseUnits;
+
+            var units = new UnitDefinition[baseUnits.Length * scale];
+            var index = 0;
+            for (var group = 0; group < scale; group++)
+            {
+                for (var i = 0; i < baseUnits.Length; i++)
+                {
+                    units[index++] = baseUnits[i].WithScaleGroup(group);
+                }
+            }
+
+            return units;
         }
 
         private static void BootstrapUnits(ScenarioState state)
@@ -396,6 +462,7 @@ namespace GAS.AutoChessDemo
 
             em.AddComponentData(asc, new AutoBattleUnitComponent
             {
+                BattleGroup = definition.BattleGroup,
                 Team = definition.Team,
                 Slot = definition.Slot,
                 PrimaryAbilityCode = definition.PrimaryAbilityCode,
@@ -466,6 +533,7 @@ namespace GAS.AutoChessDemo
             ScenarioState state,
             bool completed,
             HeadlessAutoBattleTeam winner,
+            int scenarioScale,
             int battleTicks,
             int totalTicks,
             int warmupDroppedTicks,
@@ -505,6 +573,7 @@ namespace GAS.AutoChessDemo
             return new HeadlessAutoBattleResult(
                 completed,
                 winner,
+                scenarioScale,
                 battleTicks,
                 totalTicks,
                 warmupDroppedTicks,
@@ -839,6 +908,7 @@ namespace GAS.AutoChessDemo
         private readonly struct UnitDefinition
         {
             public readonly string Id;
+            public readonly int BattleGroup;
             public readonly HeadlessAutoBattleTeam Team;
             public readonly int Slot;
             public readonly float Health;
@@ -851,6 +921,7 @@ namespace GAS.AutoChessDemo
 
             public UnitDefinition(
                 string id,
+                int battleGroup,
                 HeadlessAutoBattleTeam team,
                 int slot,
                 float health,
@@ -862,6 +933,7 @@ namespace GAS.AutoChessDemo
                 AutoBattleTargetPolicy finisherTargetPolicy)
             {
                 Id = id;
+                BattleGroup = battleGroup;
                 Team = team;
                 Slot = slot;
                 Health = health;
@@ -871,6 +943,25 @@ namespace GAS.AutoChessDemo
                 FinisherHealthThreshold = finisherHealthThreshold;
                 PrimaryTargetPolicy = primaryTargetPolicy;
                 FinisherTargetPolicy = finisherTargetPolicy;
+            }
+
+            public UnitDefinition WithScaleGroup(int battleGroup)
+            {
+                if (battleGroup == BattleGroup)
+                    return this;
+
+                return new UnitDefinition(
+                    Id + "-g" + battleGroup,
+                    battleGroup,
+                    Team,
+                    Slot,
+                    Health,
+                    Energy,
+                    PrimaryAbilityCode,
+                    FinisherAbilityCode,
+                    FinisherHealthThreshold,
+                    PrimaryTargetPolicy,
+                    FinisherTargetPolicy);
             }
 
             public int[] CreateAbilityCodes()

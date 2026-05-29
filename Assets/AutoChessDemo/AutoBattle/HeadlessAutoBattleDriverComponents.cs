@@ -22,6 +22,7 @@ namespace GAS.AutoChessDemo
 
     public struct AutoBattleUnitComponent : IComponentData
     {
+        public int BattleGroup;
         public HeadlessAutoBattleTeam Team;
         public int Slot;
         public int PrimaryAbilityCode;
@@ -51,6 +52,7 @@ namespace GAS.AutoChessDemo
     public struct AutoBattleUnitTargetStateRecord
     {
         public Entity Asc;
+        public int BattleGroup;
         public HeadlessAutoBattleTeam Team;
         public int Slot;
         public int PrimaryAbilityCode;

@@ -508,6 +508,11 @@ namespace GAS.Runtime
             return Count(EffectSpecs);
         }
 
+        public int CountActiveEffectStoreOwners()
+        {
+            return Count(ActiveEffectStores);
+        }
+
         public int CountApplyRequestEntities()
         {
             return 0;
@@ -1076,26 +1081,6 @@ namespace GAS.Runtime
                 out var attributeDeltaCount,
                 out var typedFactCount);
             var currentFrame = ResolveCurrentFrame(em);
-            ReadActiveEffectStoreCounters(
-                em,
-                queries.ActiveEffectStores,
-                currentFrame,
-                out var activeEffectStoreOwnerCount,
-                out var activeEffectSlotCount,
-                out var activeEffectSlotCapacity,
-                out var activeEffectSlotPendingApplyCount,
-                out var activeEffectSlotActiveCount,
-                out var activeEffectSlotInhibitedCount,
-                out var activeEffectSlotPendingRemoveCount,
-                out var activeEffectSlotLegacyBackedCount,
-                out var activeEffectSlotExternalizedOwnerCount,
-                out var activeEffectSlotGrantedTagCount,
-                out var activeEffectSlotGrantedAbilityCount,
-                out var activeEffectChunkSkipMatchedSlotCount,
-                out var activeEffectChunkSkipSkippedSlotCount,
-                out var activeEffectChunkSkipDuePeriodSlotCount,
-                out var activeEffectChunkSkipNoopSlotCount,
-                out var activeEffectChunkSkipOwnerCount);
             ReadActiveEffectGlobalIndexCounters(
                 em,
                 currentFrame,
@@ -1112,6 +1097,46 @@ namespace GAS.Runtime
                 out var activeEffectGlobalIndexMaxBucketLength,
                 out var activeEffectGlobalIndexStableRowCount,
                 out var activeEffectGlobalIndexStaleStableRowCount);
+            var activeEffectStoreOwnerCount = queries.CountActiveEffectStoreOwners();
+            var activeEffectSlotCount = 0;
+            var activeEffectSlotCapacity = activeEffectStoreOwnerCount * ActiveEffectStore.InlineSlotCapacity;
+            var activeEffectSlotPendingApplyCount = 0;
+            var activeEffectSlotActiveCount = 0;
+            var activeEffectSlotInhibitedCount = 0;
+            var activeEffectSlotPendingRemoveCount = 0;
+            var activeEffectSlotLegacyBackedCount = 0;
+            var activeEffectSlotExternalizedOwnerCount = 0;
+            var activeEffectSlotGrantedTagCount = 0;
+            var activeEffectSlotGrantedAbilityCount = 0;
+            var activeEffectChunkSkipMatchedSlotCount = 0;
+            var activeEffectChunkSkipSkippedSlotCount = 0;
+            var activeEffectChunkSkipDuePeriodSlotCount = 0;
+            var activeEffectChunkSkipNoopSlotCount = 0;
+            var activeEffectChunkSkipOwnerCount = activeEffectStoreOwnerCount;
+
+            if (activeEffectEntityCount > 0 || activeEffectGlobalIndexCount > 0)
+            {
+                ReadActiveEffectStoreCounters(
+                    em,
+                    queries.ActiveEffectStores,
+                    currentFrame,
+                    out activeEffectStoreOwnerCount,
+                    out activeEffectSlotCount,
+                    out activeEffectSlotCapacity,
+                    out activeEffectSlotPendingApplyCount,
+                    out activeEffectSlotActiveCount,
+                    out activeEffectSlotInhibitedCount,
+                    out activeEffectSlotPendingRemoveCount,
+                    out activeEffectSlotLegacyBackedCount,
+                    out activeEffectSlotExternalizedOwnerCount,
+                    out activeEffectSlotGrantedTagCount,
+                    out activeEffectSlotGrantedAbilityCount,
+                    out activeEffectChunkSkipMatchedSlotCount,
+                    out activeEffectChunkSkipSkippedSlotCount,
+                    out activeEffectChunkSkipDuePeriodSlotCount,
+                    out activeEffectChunkSkipNoopSlotCount,
+                    out activeEffectChunkSkipOwnerCount);
+            }
 
             var factCount = gameplayEventCount
                             + attributeChangeCount
