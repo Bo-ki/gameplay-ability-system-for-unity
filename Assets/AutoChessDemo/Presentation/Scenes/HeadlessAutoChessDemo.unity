@@ -161,8 +161,13 @@ MonoBehaviour:
   runOnStart: 1
   maxTicks: 128
   postVictoryFlushTicks: 4
+  scenarioScale: 50
+  captureOfficialToolDiff: 1
   exportLogs: 1
   exportDirectory: TestResults/AutoChess/T6-CHESS-AF-SceneRuntime
-  collectSystemTimings: 0
+  profilePlayMode: 1
+  profileCapturePath: Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data
+  profilerPreRunFrames: 1
+  profilerPostRunFrames: 1
   quitPlayerOnComplete: 1
   stopEditorPlayModeOnComplete: 1

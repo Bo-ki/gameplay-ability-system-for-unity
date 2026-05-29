@@ -72,7 +72,7 @@ namespace GAS.AutoChessDemo
             }
         }
 
-        private static string CreateSummary(HeadlessAutoBattleResult result)
+        internal static string CreateSummary(HeadlessAutoBattleResult result)
         {
             var factsHash = CalculateFactsHash(result.StructuredLogSnapshot);
             var summaryHash = CalculateSummaryHash(result, factsHash);
@@ -107,7 +107,7 @@ namespace GAS.AutoChessDemo
                    + $"avgTickMs={result.AverageTickMilliseconds:0.000}";
         }
 
-        private static string CreateDebuggerSummary(HeadlessAutoBattleResult result)
+        internal static string CreateDebuggerSummary(HeadlessAutoBattleResult result)
         {
             var stats = result.RuntimeDiagnostics.Stats;
             var counters = result.RuntimeDiagnostics.CoreCounters;
@@ -136,7 +136,7 @@ namespace GAS.AutoChessDemo
                    + $"journalingMarkerContracts={backbone.JournalingMarkerCount}";
         }
 
-        private static string CreateTimingSummary(GasRuntimeDiagnosticSnapshot diagnostics)
+        internal static string CreateTimingSummary(GasRuntimeDiagnosticSnapshot diagnostics)
         {
             var builder = new StringBuilder(512);
             builder.Append("ecsRuntimeTickOnly=true");
@@ -177,7 +177,7 @@ namespace GAS.AutoChessDemo
                 captureOfficialToolDiff));
         }
 
-        private static void ValidateOfficialDiffRun(
+        internal static void ValidateOfficialDiffRun(
             in HeadlessAutoBattleResult performanceResult,
             in HeadlessAutoBattleResult officialDiffResult)
         {
@@ -234,7 +234,7 @@ namespace GAS.AutoChessDemo
                 .Append(')');
         }
 
-        private static string CreateOfficialToolDiffSummary(HeadlessAutoBattleResult result)
+        internal static string CreateOfficialToolDiffSummary(HeadlessAutoBattleResult result)
         {
             var official = result.OfficialToolDiff;
             var runtime = result.RuntimeDiagnostics.CoreCounters;
@@ -267,7 +267,7 @@ namespace GAS.AutoChessDemo
                    + $"profilerCaptureState={official.ProfilerCaptureState}";
         }
 
-        private static bool HasBlockingDiagnosticErrors(GasRuntimeDiagnosticSnapshot diagnostics)
+        internal static bool HasBlockingDiagnosticErrors(GasRuntimeDiagnosticSnapshot diagnostics)
         {
             return CountBlockingDiagnosticErrors(diagnostics) > 0;
         }
@@ -294,7 +294,7 @@ namespace GAS.AutoChessDemo
             return count;
         }
 
-        private static string CreateDataFlowDiagram(HeadlessAutoBattleResult result)
+        internal static string CreateDataFlowDiagram(HeadlessAutoBattleResult result)
         {
             return "```mermaid\n"
                    + "flowchart LR\n"
@@ -309,7 +309,7 @@ namespace GAS.AutoChessDemo
                    + "```";
         }
 
-        private static string CreateSequenceDiagram(HeadlessAutoBattleResult result)
+        internal static string CreateSequenceDiagram(HeadlessAutoBattleResult result)
         {
             return "```mermaid\n"
                    + "sequenceDiagram\n"

@@ -218,32 +218,32 @@ Debugger 必须先对齐 `UnityDOTS官方文档参考/README.md`，再吸收 `Un
 | 物理输入错帧或过慢 | Unity Physics pipeline / singleton / event 文档 | 对照 physics step、query broadphase、Simulation event window、event dropped / converted count |
 | 渲染成本混入 Core tick | Entities Graphics performance / Frame Debugger / Profiler | 对照 draw command、instances per draw、BRG markers、presentation marker cost 和 render cost |
 
-## 当前 AutoBattle 无头证据
+## 当前 AutoBattle PlayMode 实机证据
 
-2026-05-29 使用 AIBridge 1.4.1 驱动真实 Unity Editor，调用 `GAS.AutoChessDemo.HeadlessAutoChessRuntimeRunner.RunHeadlessAutoBattleOnce` 跑通 Diagnostic x50。当前证据采用 warmup-dropped 口径：bootstrap / ASC 创建 / Ability grant / 首帧 SystemGroup 初始化 / Journaling 启用 / Burst 与 Editor warmup 不计入 `avgTickMs`，Runtime Debugger 只从 measured tick 开始记录 `SystemTiming`。
+2026-05-29 使用 AIBridge 1.4.1 驱动真实 Unity Editor PlayMode，加载 `Assets/AutoChessDemo/Presentation/Scenes/HeadlessAutoChessDemo.unity`，由 `HeadlessAutoChessDemoSceneRunner` 在 MonoBehaviour Coroutine 内控制 Unity Profiler 采集窗口并跑通 Diagnostic x50。当前证据采用 warmup-dropped 口径：PlayMode enter / warmup pass / ASC 创建 / Ability grant / 首帧 SystemGroup 初始化 / Journaling official-diff pass 不计入 `avgTickMs`，Runtime Debugger 只从 measured tick 开始记录 `SystemTiming`。
 
 ```text
 completed=True, winner=Player, scale=50, units=200,
 battleTicks=9, totalTicks=10, warmupDroppedTicks=3, measuredTicks=7,
 commands=900, finishers=400, attributeChanges=1050,
 executionOutputs=250, cueRequests=400,
-debugEvents=62, debugWarnings=27, debugErrors=0, blockingDebugErrors=0,
+debugEvents=62, debugWarnings=30, debugErrors=0, blockingDebugErrors=0,
 coreRequests=2700, coreFacts=4800, coreDeltas=1700, coreCues=400,
 peakEventBus=1300, replayLag=0, journalingRecords=48288,
-processWarmupRuns=1, totalElapsedMs=36.488,
-factsHash=0xA5CD85FF, summaryHash=0x69F5175B, avgTickMs=2.646
+processWarmupRuns=1, totalElapsedMs=37.345,
+factsHash=0xBA1E575F, summaryHash=0x0A96B07B, avgTickMs=2.614
 ```
 
 Timing snapshot：
 
 ```text
 ecsRuntimeTickOnly=true
-GASTickTotal(samples=7, avgMs=2.628, maxMs=6.696)
-GASFramePrepareSystemGroup(samples=7, avgMs=0.061, maxMs=0.100)
-GASCommandResolveSystemGroup(samples=7, avgMs=0.853, maxMs=2.055)
-GASCoreSimulationSystemGroup(samples=7, avgMs=1.114, maxMs=2.912)
-GASStructuralCommitSystemGroup(samples=7, avgMs=0.026, maxMs=0.056)
-GASBoundaryProjectionSystemGroup(samples=7, avgMs=0.573, maxMs=1.572)
+GASTickTotal(samples=7, avgMs=2.586, maxMs=6.285)
+GASFramePrepareSystemGroup(samples=7, avgMs=0.117, maxMs=0.416)
+GASCommandResolveSystemGroup(samples=7, avgMs=0.970, maxMs=2.682)
+GASCoreSimulationSystemGroup(samples=7, avgMs=0.960, maxMs=2.070)
+GASStructuralCommitSystemGroup(samples=7, avgMs=0.028, maxMs=0.056)
+GASBoundaryProjectionSystemGroup(samples=7, avgMs=0.511, maxMs=1.061)
 ```
 
 Official tool diff：
@@ -261,14 +261,37 @@ structuralProfilerCategoryEnabled=True, memoryProfilerCategoryEnabled=True,
 profilerCaptureState=profiler enabled; module counter data not exported by headless runner
 ```
 
+Unity Profiler `.data` capture：
+
+```text
+Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data
+saved=True, firstFrameIndex=0, lastFrameIndex=1, profileEditor=False, size=14046560 bytes
+```
+
+官方 RawFrameDataView 中 `EX_GAS_World` TopN（ProfilerDriver `profileEditor=False`，只保留 PlayMode Runtime capture）：
+
+```text
+GASCommandResolveSystemGroup totalMs=82.738 maxMs=32.582 count=10
+GASCoreSimulationSystemGroup totalMs=67.072 maxMs=32.510 count=10
+GASBoundaryProjectionSystemGroup totalMs=32.601 maxMs=20.781 count=10
+AbilityCommandRequestSystem totalMs=20.332 maxMs=10.406 count=20
+GEExecutionCalculationExtensionSystemGroup totalMs=19.033 maxMs=12.140 count=10
+AutoBattleExecuteDamageCalculationSystem totalMs=18.973 maxMs=12.123 count=10
+DiagnosticsSnapshotSystem totalMs=18.149 maxMs=15.076 count=10
+ASCInitializeRequestSystem totalMs=17.662 maxMs=16.385 count=11
+AbilityCatalogCommitSystem totalMs=16.597 maxMs=13.989 count=10
+AutoBattleCommandDriveSystem totalMs=15.491 maxMs=11.341 count=10
+```
+
 解释：
 
 1. `blockingDebugErrors=0` 表示功能 gate 没有非 timing 类诊断错误；`debugErrors=0` 表示慢 timing 事件已经从错误语义中拆出。`SystemTiming` / `TickSummary` 最高只产生 Warning，用 slow timing / TopN 解释性能，不污染功能错误计数。
 2. x50 当前代表 50 组独立 2v2 并行跑在同一个 ECS World，用数量模拟真实游戏规模；AutoBattle AI 已按 BattleGroup 分组索引选敌，避免 Demo O(n^2) 全局搜敌污染 Runtime Core 判断。
-3. 新口径只采样 measured ticks；AutoBattle 业务侧已按官方 `ecs-workflow-intro.md` / `job-overhead.md` 建议，把小批量 `NativeStream + job schedule + Complete` 固定成本切回主线程直通，大批量保留 chunk/job 路径。剩余热点集中在 `GASCoreSimulationSystemGroup`、`GASCommandResolveSystemGroup` 和 Boundary Projection，需要用 Unity Profiler `.data` 的 Timeline / Entities module TopN 继续定位。
-4. AIBridge 1.4.1 已接入项目并通过真实 Unity Editor 跑通：`compile unity` 成功、Error 日志 0、`Window/Analysis/Profiler` 可由 CLI 打开，`ProfilerDriver` 已保存官方 capture 到 `Temp/AutoChessDemo-AIBridge-X50-EditorProfile.data`。该文件位于 ignored `Temp/`，作为本轮本机证据，不纳入版本控制。
+3. Runtime Debugger `SystemTiming` 只采样 measured ticks；Unity RawFrameDataView `count=10` 对应本次 capture 中的完整 runtime ticks。二者口径不同，不能把 `samples=7` 和 `count=10` 互相替代。
+4. AIBridge 1.4.1 已接入项目并通过真实 Unity Editor PlayMode 跑通：`compile unity` 成功、Error 日志 0、`Window/Analysis/Profiler` 可由 CLI 打开，`HeadlessAutoChessDemoSceneRunner` 通过 `ProfilerDriver.profileEditor=False` 保存 Runtime-only 官方 capture 到 `Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data`。该文件位于 ignored `Temp/`，作为本轮本机证据，不纳入版本控制。
 5. Journaling 记录数明显高于项目 `runtimeStructuralApprox`，说明当前项目 counter 只覆盖 Core 自认结构变化，官方记录还包含 bootstrap / cleanup / package 内部读写；结构变化归因以 Unity Entities Structural Changes Profiler / Journaling 为准，项目 counter 只做 GAS 语义映射。
-6. 后续 Debugger 不再扩展成自研 profiler UI。Layer 2 保留无头 snapshot 和 official diff；Layer 1 Editor Extension / AIBridge / Unity Profiler 负责可视化、timeline、TopN、Profiler capture 和实机工具差分。
+6. PlayMode capture 必须使用 Runtime-only 模式；若 `profileEditor=True`，`.data` 会混入 Editor / package 样本并导致文件膨胀，不能用于 Runtime Core 归因。
+7. 后续 Debugger 不再扩展成自研 profiler UI。Layer 2 保留无头 snapshot 和 official diff；Layer 1 Editor Extension / AIBridge / Unity Profiler 负责可视化、timeline、TopN、Profiler capture 和实机工具差分。
 
 ## AM-1 baseline 采样口径
 

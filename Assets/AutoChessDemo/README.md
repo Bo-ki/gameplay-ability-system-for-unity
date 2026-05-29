@@ -40,17 +40,19 @@
 E:\Unity\UnityEditor\6000.3.14f1\Editor\Unity.exe -batchmode -quit -projectPath E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity -executeMethod GAS.AutoChessDemo.HeadlessAutoChessRuntimeRunner.RunHeadlessAutoBattleOnce -logFile E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Temp\AutoBattleValidation.log
 ```
 
-真实 Editor + 官方 Profiler 链路使用 AIBridge：
+真实 Editor PlayMode + 官方 Profiler 链路使用 AIBridge。Profiler 采集窗口由 `HeadlessAutoChessDemoSceneRunner` 这个 MonoBehaviour 控制，不再用 Editor code execute 包住 runner：
 
 ```powershell
 $CLI = 'Library\PackageCache\cn.lys.aibridge@f203de2ec848\Tools~\CLI\win-x64\AIBridgeCLI.exe'
 & $CLI compile unity --timeout 120000 --pretty
+& $CLI scene load --scenePath 'Assets/AutoChessDemo/Presentation/Scenes/HeadlessAutoChessDemo.unity' --mode single --on-dialog discard --timeout 60000 --pretty
 & $CLI menu_item invoke --menuPath 'Window/Analysis/Profiler' --timeout 30000 --pretty
-& $CLI code execute --file '.aibridge/code/run_autochess_official_profile.csx' --timeout 180000 --pretty
+& $CLI editor play --timeout 30000 --pretty
+& $CLI get_logs --regex 'HeadlessAutoChessPlayMode|Exception|Error|failed|Profiler' --count 80 --pretty
 & $CLI get_logs --logType Error --count 50 --pretty
 ```
 
-`.aibridge/code/run_autochess_official_profile.csx` 是一次性本地 Editor 诊断脚本，允许调用 `UnityEditorInternal.ProfilerDriver` 包装 `GAS.AutoChessDemo.HeadlessAutoChessRuntimeRunner.RunHeadlessAutoBattleOnce()` 并保存 `.data`。`.aibridge/` 和 `Temp/` 都是本地运行目录，不纳入版本控制。
+PlayMode runner 会以 `ProfilerDriver.profileEditor=False` 保存 Runtime-only 官方 capture 到 `Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data`，并导出 `TestResults/AutoChess/T6-CHESS-AF-SceneRuntime/AutoChessPlayModeProfileSummary.txt`。这两个目录都是本地运行产物，不纳入版本控制。
 
 一次有效跑通至少需要满足：
 
@@ -119,35 +121,35 @@ structuralProfilerCategoryEnabled=False, memoryProfilerCategoryEnabled=False,
 profilerCaptureState=profiler disabled; Entities profiler modules collect no data
 ```
 
-当前真实热路径仍不是最终优秀态：Functional x1 只有 4 个单位，AutoBattle 业务侧已移除 `NativeStream + Complete` 固定成本，`GASCommandResolveSystemGroup` 回落到 `0.082ms`；剩余热点主要在 `GASCoreSimulationSystemGroup` 和 Boundary Projection。x50 已通过 AIBridge 跑通真实 Editor + 官方 Profiler capture，后续 x100 / Player profile 必须继续用 Unity Profiler 与 Runtime Debugger counters 做差分，再决定 Runtime Core 内部哪些 `NativeStream` fan-in、sync query 和 observation projection 需要合并或改为更粗粒度批处理。
+Functional x1 稳态样本只证明最小链路已避开小规模 `NativeStream + Complete` 固定成本；它不能代表真实规模优秀态。x50 已通过 AIBridge 跑通真实 Editor + Runtime-only 官方 Profiler capture，后续 x100 / Player profile 必须继续用 Unity Profiler 与 Runtime Debugger counters 做差分，再决定 Runtime Core 内部哪些 `NativeStream` fan-in、sync query 和 observation projection 需要合并或改为更粗粒度批处理。
 
 Leak trace 复跑使用 `UNITY_JOBS_NATIVE_LEAK_DETECTION_MODE=2`，同一链路得到 `completed=True`、`summaryHash=0x53F70297`、`debugErrors=0`、`blockingDebugErrors=0`，日志中没有 `Leak Detected` 或 Native Collection 未释放提示。Layer 2 official diff 在 batchmode 临时启用 Entities Journaling 后会恢复状态并释放本次采样产生的 Journaling 持久状态，避免把官方工具缓存误判为 Runtime Core 泄漏。
 
-按 `Library/PackageCache/com.unity.entities@e90944159b94/Documentation~/profiler-modules-entities-introduction.md`，Entities Profiler module 未启用时不会采集数据；因此当前只声明 Profiler disabled reason，不声明 profiler captured。Entities Journaling 则按 `entities-journaling.md` 的 `Unity.Entities.EntitiesJournaling` API 作为无头官方差分来源。
+按 `Library/PackageCache/com.unity.entities@e90944159b94/Documentation~/profiler-modules-entities-introduction.md`，Entities Profiler module 未启用时不会采集数据；batchmode 无头只声明 disabled reason，真实 Editor PlayMode 则由 `ProfilerDriver` 保存 Runtime-only `.data`。Entities Journaling 按 `entities-journaling.md` 的 `Unity.Entities.EntitiesJournaling` API 作为无头官方差分来源。
 
 ## 当前 Diagnostic x50 数据
 
-2026-05-29 使用 AIBridge 1.4.1 驱动真实 Unity Editor，打开 Unity Profiler，并通过 `ProfilerDriver` 保存官方 capture 到 `Temp/AutoChessDemo-AIBridge-X50-EditorProfile.data`。该文件属于本机证据，不提交。
+2026-05-29 使用 AIBridge 1.4.1 驱动真实 Unity Editor PlayMode，加载 `Assets/AutoChessDemo/Presentation/Scenes/HeadlessAutoChessDemo.unity`，由 `HeadlessAutoChessDemoSceneRunner` 控制 Unity Profiler 采集窗口，并通过 `ProfilerDriver.profileEditor=False` 保存官方 Runtime-only capture 到 `Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data`。该文件属于本机证据，不提交。
 
 ```text
 completed=True, winner=Player, scale=50, units=200,
 battleTicks=9, totalTicks=10, warmupDroppedTicks=3, measuredTicks=7,
 commands=900, finishers=400, attributeChanges=1050,
 executionOutputs=250, cueRequests=400,
-debugEvents=62, debugWarnings=27, debugErrors=0, blockingDebugErrors=0,
+debugEvents=62, debugWarnings=30, debugErrors=0, blockingDebugErrors=0,
 coreRequests=2700, coreFacts=4800, coreDeltas=1700, coreCues=400,
 peakEventBus=1300, replayLag=0, journalingRecords=48288,
-processWarmupRuns=1, totalElapsedMs=36.488,
-factsHash=0xA5CD85FF, summaryHash=0x69F5175B, avgTickMs=2.646
+processWarmupRuns=1, totalElapsedMs=37.345,
+factsHash=0xBA1E575F, summaryHash=0x0A96B07B, avgTickMs=2.614
 ```
 
 ```text
-GASTickTotal(samples=7, avgMs=2.628, maxMs=6.696)
-GASFramePrepareSystemGroup(samples=7, avgMs=0.061, maxMs=0.100)
-GASCommandResolveSystemGroup(samples=7, avgMs=0.853, maxMs=2.055)
-GASCoreSimulationSystemGroup(samples=7, avgMs=1.114, maxMs=2.912)
-GASStructuralCommitSystemGroup(samples=7, avgMs=0.026, maxMs=0.056)
-GASBoundaryProjectionSystemGroup(samples=7, avgMs=0.573, maxMs=1.572)
+GASTickTotal(samples=7, avgMs=2.586, maxMs=6.285)
+GASFramePrepareSystemGroup(samples=7, avgMs=0.117, maxMs=0.416)
+GASCommandResolveSystemGroup(samples=7, avgMs=0.970, maxMs=2.682)
+GASCoreSimulationSystemGroup(samples=7, avgMs=0.960, maxMs=2.070)
+GASStructuralCommitSystemGroup(samples=7, avgMs=0.028, maxMs=0.056)
+GASBoundaryProjectionSystemGroup(samples=7, avgMs=0.511, maxMs=1.061)
 ```
 
 ```text
@@ -161,3 +163,18 @@ memoryProfilerCategoryEnabled=True
 ```
 
 x50 是 50 组独立 2v2，共 200 units。该数据用于放大 Runtime Core 热点，不替代 Unity Profiler Timeline / Entities module 的最终归因；项目 Debugger 只保留 GAS 语义 counters、official diff 和无头导出。
+
+PlayMode 官方 RawFrameDataView 在 Runtime-only capture 中过滤到 `EX_GAS_World` 后的 TopN：
+
+```text
+GASCommandResolveSystemGroup totalMs=82.738 maxMs=32.582 count=10
+GASCoreSimulationSystemGroup totalMs=67.072 maxMs=32.510 count=10
+GASBoundaryProjectionSystemGroup totalMs=32.601 maxMs=20.781 count=10
+AbilityCommandRequestSystem totalMs=20.332 maxMs=10.406 count=20
+GEExecutionCalculationExtensionSystemGroup totalMs=19.033 maxMs=12.140 count=10
+AutoBattleExecuteDamageCalculationSystem totalMs=18.973 maxMs=12.123 count=10
+DiagnosticsSnapshotSystem totalMs=18.149 maxMs=15.076 count=10
+ASCInitializeRequestSystem totalMs=17.662 maxMs=16.385 count=11
+AbilityCatalogCommitSystem totalMs=16.597 maxMs=13.989 count=10
+AutoBattleCommandDriveSystem totalMs=15.491 maxMs=11.341 count=10
+```

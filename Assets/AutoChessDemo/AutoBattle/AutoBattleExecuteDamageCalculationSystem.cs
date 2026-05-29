@@ -54,16 +54,27 @@ namespace GAS.AutoChessDemo
                 CollectExecuteCommands(commands, executeCommands);
                 if (executeCommands.Length > 0)
                 {
+                    executeCommands.Sort(new AutoBattleExecuteCommandTargetComparer());
                     var commandArray = executeCommands.AsArray();
+                    using var targetRanges =
+                        new NativeParallelHashMap<Entity, AutoBattleExecuteCommandRange>(
+                            math.max(1, commandArray.Length),
+                            Allocator.Temp);
+                    BuildTargetRanges(commandArray, targetRanges);
+
                     foreach (var (attributes, targetAsc)
                              in SystemAPI.Query<DynamicBuffer<AttributeValueBuffer>>()
                                  .WithNone<ASCDestroyingComponent>()
                                  .WithEntityAccess())
                     {
+                        if (!targetRanges.TryGetValue(targetAsc, out var range))
+                            continue;
+
                         ApplyExecuteDamageCommands(
                             targetAsc,
                             attributes,
                             commandArray,
+                            range,
                             frame,
                             damageDeltas);
                     }
@@ -125,15 +136,14 @@ namespace GAS.AutoChessDemo
             Entity targetAsc,
             DynamicBuffer<AttributeValueBuffer> attributes,
             NativeArray<AutoBattleExecuteCommandRecord> commands,
+            in AutoBattleExecuteCommandRange range,
             int frame,
             NativeList<AutoBattleExecuteDamageDeltaRecord> damageDeltas)
         {
-            for (var commandIndex = 0; commandIndex < commands.Length; commandIndex++)
+            var end = range.Start + range.Count;
+            for (var commandIndex = range.Start; commandIndex < end; commandIndex++)
             {
                 var command = commands[commandIndex];
-                if (command.TargetAsc != targetAsc)
-                    continue;
-
                 if (!ApplyExecuteDamage(attributes, in command, out var oldValue, out var newValue, out var damage))
                     continue;
 
@@ -157,6 +167,37 @@ namespace GAS.AutoChessDemo
                     NewValue = newValue,
                 });
             }
+        }
+
+        private static void BuildTargetRanges(
+            NativeArray<AutoBattleExecuteCommandRecord> commands,
+            NativeParallelHashMap<Entity, AutoBattleExecuteCommandRange> targetRanges)
+        {
+            if (commands.Length == 0)
+                return;
+
+            var start = 0;
+            var target = commands[0].TargetAsc;
+            for (var i = 1; i < commands.Length; i++)
+            {
+                var command = commands[i];
+                if (command.TargetAsc.Equals(target))
+                    continue;
+
+                targetRanges.TryAdd(target, new AutoBattleExecuteCommandRange
+                {
+                    Start = start,
+                    Count = i - start,
+                });
+                start = i;
+                target = command.TargetAsc;
+            }
+
+            targetRanges.TryAdd(target, new AutoBattleExecuteCommandRange
+            {
+                Start = start,
+                Count = commands.Length - start,
+            });
         }
 
         private static void AppendDamageDeltasAndEvents(
@@ -301,6 +342,12 @@ namespace GAS.AutoChessDemo
             public float NewValue;
         }
 
+        private struct AutoBattleExecuteCommandRange
+        {
+            public int Start;
+            public int Count;
+        }
+
         private static bool ApplyExecuteDamage(
             DynamicBuffer<AttributeValueBuffer> attributes,
             in AutoBattleExecuteCommandRecord command,
@@ -382,6 +429,25 @@ namespace GAS.AutoChessDemo
                 AutoBattleExecuteDamageDeltaRecord x,
                 AutoBattleExecuteDamageDeltaRecord y)
             {
+                return x.Order.CompareTo(y.Order);
+            }
+        }
+
+        private struct AutoBattleExecuteCommandTargetComparer :
+            IComparer<AutoBattleExecuteCommandRecord>
+        {
+            public int Compare(
+                AutoBattleExecuteCommandRecord x,
+                AutoBattleExecuteCommandRecord y)
+            {
+                var targetCompare = x.TargetAsc.Index.CompareTo(y.TargetAsc.Index);
+                if (targetCompare != 0)
+                    return targetCompare;
+
+                targetCompare = x.TargetAsc.Version.CompareTo(y.TargetAsc.Version);
+                if (targetCompare != 0)
+                    return targetCompare;
+
                 return x.Order.CompareTo(y.Order);
             }
         }
