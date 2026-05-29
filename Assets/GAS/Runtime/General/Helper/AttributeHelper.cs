@@ -70,7 +70,21 @@ namespace GAS.Runtime
                 return false;
 
             var attributes = _entityManager.GetBuffer<AttributeValueBuffer>(asc);
-            return MarkCurrentValueDirty(attributes, attrSetCode, attrCode);
+            return MarkCurrentValueDirty(_entityManager, asc, attributes, attrSetCode, attrCode);
+        }
+
+        public static bool MarkCurrentValueDirty(
+            EntityManager entityManager,
+            Entity asc,
+            DynamicBuffer<AttributeValueBuffer> attributes,
+            int attrSetCode,
+            int attrCode)
+        {
+            if (!MarkCurrentValueDirty(attributes, attrSetCode, attrCode))
+                return false;
+
+            MarkOwnerDirty(entityManager, asc);
+            return true;
         }
 
         public static bool MarkCurrentValueDirty(DynamicBuffer<AttributeValueBuffer> attributes, int attrSetCode, int attrCode)
@@ -82,6 +96,89 @@ namespace GAS.Runtime
             attr.Dirty = true;
             attributes[attrIndex] = attr;
             return true;
+        }
+
+        public static void MarkOwnerDirty(EntityManager entityManager, Entity asc)
+        {
+            if (asc == Entity.Null
+                || !entityManager.Exists(asc)
+                || !entityManager.HasComponent<AttributeDirtyComponent>(asc)
+                || entityManager.IsComponentEnabled<AttributeDirtyComponent>(asc))
+            {
+                return;
+            }
+
+            entityManager.SetComponentEnabled<AttributeDirtyComponent>(asc, true);
+        }
+
+        public static void MarkOwnerChangeEventPending(EntityManager entityManager, Entity asc)
+        {
+            if (asc == Entity.Null
+                || !entityManager.Exists(asc)
+                || !entityManager.HasComponent<AttributeChangeEventPendingComponent>(asc)
+                || entityManager.IsComponentEnabled<AttributeChangeEventPendingComponent>(asc))
+            {
+                return;
+            }
+
+            entityManager.SetComponentEnabled<AttributeChangeEventPendingComponent>(asc, true);
+        }
+
+        public static void MarkDirectCurrentValueChanged(
+            EntityManager entityManager,
+            Entity asc,
+            ref AttributeValueBuffer attribute)
+        {
+            if (OwnerHasActiveModifiers(entityManager, asc))
+            {
+                attribute.Dirty = true;
+                MarkOwnerDirty(entityManager, asc);
+                return;
+            }
+
+            attribute.Dirty = false;
+            MarkOwnerChangeEventPending(entityManager, asc);
+        }
+
+        private static bool OwnerHasActiveModifiers(EntityManager entityManager, Entity asc)
+        {
+            if (asc == Entity.Null
+                || !entityManager.Exists(asc)
+                || !entityManager.HasBuffer<AttributeActiveModifierBuffer>(asc))
+            {
+                return false;
+            }
+
+            return entityManager.HasComponent<AttributeActiveModifierPresentComponent>(asc)
+                   && entityManager.IsComponentEnabled<AttributeActiveModifierPresentComponent>(asc);
+        }
+
+        public static void MarkActiveModifierAdded(EntityManager entityManager, Entity asc)
+        {
+            if (asc == Entity.Null
+                || !entityManager.Exists(asc)
+                || !entityManager.HasComponent<AttributeActiveModifierPresentComponent>(asc)
+                || entityManager.IsComponentEnabled<AttributeActiveModifierPresentComponent>(asc))
+            {
+                return;
+            }
+
+            entityManager.SetComponentEnabled<AttributeActiveModifierPresentComponent>(asc, true);
+        }
+
+        public static void RefreshActiveModifierPresence(
+            EntityManager entityManager,
+            Entity asc,
+            DynamicBuffer<AttributeActiveModifierBuffer> modifiers)
+        {
+            if (asc == Entity.Null
+                || !entityManager.Exists(asc)
+                || !entityManager.HasComponent<AttributeActiveModifierPresentComponent>(asc))
+            {
+                return;
+            }
+
+            entityManager.SetComponentEnabled<AttributeActiveModifierPresentComponent>(asc, modifiers.Length > 0);
         }
 
         public static void Clamp(ref AttributeValueBuffer attribute)

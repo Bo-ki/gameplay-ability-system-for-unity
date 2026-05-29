@@ -10,6 +10,7 @@ using Unity.Entities;
 
 namespace GAS.Runtime.Generated
 {
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GASActiveEffectRemoveSystem))]
     [UpdateBefore(typeof(GEEffectSpecBuildSystem))]
@@ -43,6 +44,7 @@ namespace GAS.Runtime.Generated
         }
     }
 
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GEEffectSpecBuildSystem))]
     [UpdateBefore(typeof(GASAttributeSetReduceApplySystem))]
@@ -113,6 +115,7 @@ namespace GAS.Runtime.Generated
         }
     }
 
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup), OrderFirst = true)]
     public partial struct GASActiveEffectPreTickSystem : ISystem
     {
@@ -144,6 +147,22 @@ namespace GAS.Runtime.Generated
             ref var catalog = ref catalogComponent.Catalog.Value;
             var ownerChunkCount = _ownerQuery.CalculateChunkCount();
             if (ownerChunkCount <= 0)
+                return;
+
+            var hasTickWork = false;
+            foreach (var storeRef in SystemAPI.Query<RefRO<ASCActiveEffectsComponent>>())
+            {
+                var store = storeRef.ValueRO;
+                if (store.ChunkSkipMatchedSlotCount > 0
+                    || store.ChunkSkipDuePeriodSlotCount > 0
+                    || store.CleanupRecordCount > 0)
+                {
+                    hasTickWork = true;
+                    break;
+                }
+            }
+
+            if (!hasTickWork)
                 return;
 
             var eventBusEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
@@ -198,6 +217,7 @@ namespace GAS.Runtime.Generated
         }
     }
 
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GASActiveEffectPreTickSystem))]
     public partial struct GASActiveEffectRemoveSystem : ISystem
@@ -888,7 +908,13 @@ namespace GAS.Runtime.Generated
                     Magnitude = magnitude,
                     Op = modifier.Operation,
                 });
-                AttributeHelper.MarkCurrentValueDirty(attributes, modifier.AttributeSetCode, modifier.AttributeCode);
+                AttributeHelper.MarkActiveModifierAdded(em, command.TargetAsc);
+                AttributeHelper.MarkCurrentValueDirty(
+                    em,
+                    command.TargetAsc,
+                    attributes,
+                    modifier.AttributeSetCode,
+                    modifier.AttributeCode);
                 added++;
             }
 
@@ -1008,8 +1034,15 @@ namespace GAS.Runtime.Generated
 
                 modifiers.RemoveAt(i);
                 if (attributes.IsCreated)
-                    AttributeHelper.MarkCurrentValueDirty(attributes, modifier.AttrSetCode, modifier.AttributeCode);
+                    AttributeHelper.MarkCurrentValueDirty(
+                        em,
+                        owner,
+                        attributes,
+                        modifier.AttrSetCode,
+                        modifier.AttributeCode);
             }
+
+            AttributeHelper.RefreshActiveModifierPresence(em, owner, modifiers);
         }
 
         private static int ApplyGrantedTags(
@@ -1513,7 +1546,13 @@ namespace GAS.Runtime.Generated
                     Magnitude = magnitude,
                     Op = modifier.Operation,
                 });
-                AttributeHelper.MarkCurrentValueDirty(attributes, modifier.AttributeSetCode, modifier.AttributeCode);
+                AttributeHelper.MarkActiveModifierAdded(em, slot.TargetAsc);
+                AttributeHelper.MarkCurrentValueDirty(
+                    em,
+                    slot.TargetAsc,
+                    attributes,
+                    modifier.AttributeSetCode,
+                    modifier.AttributeCode);
                 added++;
             }
 

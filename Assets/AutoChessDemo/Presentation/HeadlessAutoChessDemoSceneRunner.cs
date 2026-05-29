@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
+using UnityEngine.Profiling;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -13,10 +14,14 @@ namespace GAS.AutoChessDemo
 {
     public sealed class HeadlessAutoChessDemoSceneRunner : MonoBehaviour
     {
+        private const int WarmupMaxTicks = 32;
+
         [SerializeField] private bool runOnStart = true;
-        [SerializeField] private int maxTicks = 96;
+        [SerializeField] private int maxTicks = 100000;
         [SerializeField] private int postVictoryFlushTicks = 4;
         [SerializeField] private int scenarioScale = 50;
+        [SerializeField] private float scenarioHealthMultiplier = 2048f;
+        [SerializeField] private float minimumProfileSeconds = 30f;
         [SerializeField] private bool captureOfficialToolDiff = true;
         [SerializeField] private bool exportLogs = true;
         [SerializeField] private string exportDirectory = "TestResults/AutoChess/T6-CHESS-AF-SceneRuntime";
@@ -29,6 +34,7 @@ namespace GAS.AutoChessDemo
 
         public bool HasResult { get; private set; }
         public HeadlessAutoBattleResult LastResult { get; private set; }
+        public HeadlessAutoBattleResult LastDiagnosticResult { get; private set; }
 
 #if UNITY_EDITOR
         private bool hasPreviousProfilerState;
@@ -36,6 +42,9 @@ namespace GAS.AutoChessDemo
         private object previousProfileGpu;
         private object previousDeepProfiling;
         private object previousProfilingEnabled;
+        private bool previousProfilerEnabled;
+        private bool previousBinaryLogEnabled;
+        private string previousProfilerLogFile;
 #endif
 
         private IEnumerator Start()
@@ -49,6 +58,7 @@ namespace GAS.AutoChessDemo
         public IEnumerator RunPlayModeProfile()
         {
             var profilerStarted = false;
+            var profilerCaptureCompleted = false;
             var profilerSummary = "profilerStarted=False";
 
             try
@@ -58,39 +68,57 @@ namespace GAS.AutoChessDemo
 
                 RunWarmupPass();
 
-                if (profilePlayMode)
-                {
-                    profilerStarted = TryBeginProfilerCapture();
-                    for (var i = 0; i < profilerPreRunFrames; i++)
-                        yield return null;
-                }
+                var profileHooks = profilePlayMode
+                    ? new HeadlessAutoBattleProfileHooks(
+                        () =>
+                        {
+                            profilerStarted = TryBeginProfilerCapture();
+                        },
+                        () =>
+                        {
+                            if (!profilerStarted)
+                                return;
 
-                var performanceResult = HeadlessAutoBattleScenario.RunDefault(
+                            profilerCaptureCompleted = true;
+                        })
+                    : default;
+
+                var performanceResult = default(HeadlessAutoBattleResult);
+                yield return HeadlessAutoBattleScenario.RunDefaultStepped(
                     new HeadlessAutoBattleOptions(
                         maxTicks,
                         postVictoryFlushTicks,
                         scenarioScale,
-                        captureOfficialToolDiff: false));
+                        captureOfficialToolDiff: false,
+                        debuggerEnabled: false,
+                        captureSystemTimings: false,
+                        captureBufferPressure: false,
+                        healthMultiplier: scenarioHealthMultiplier,
+                        minimumBattleSeconds: minimumProfileSeconds),
+                    profileHooks,
+                    result => performanceResult = result);
 
-                if (profilerStarted)
+                if (profilerCaptureCompleted)
                 {
                     for (var i = 0; i < profilerPostRunFrames; i++)
                         yield return null;
 
-                    profilerSummary = SaveProfilerCapture();
                     StopProfilerCapture();
                     profilerStarted = false;
+                    profilerSummary = SaveProfilerCapture();
                 }
 
+                var diagnosticResult = RunDiagnosticPass(performanceResult);
                 LastResult = captureOfficialToolDiff
                     ? RunOfficialDiffPass(performanceResult)
                     : performanceResult;
+                LastDiagnosticResult = diagnosticResult;
                 HasResult = true;
 
-                ValidateResult(LastResult, captureOfficialToolDiff);
-                LogResult(LastResult, profilerSummary);
+                ValidateResult(LastResult, LastDiagnosticResult, captureOfficialToolDiff);
+                LogResult(LastResult, LastDiagnosticResult, profilerSummary);
                 if (exportLogs)
-                    ExportResult(LastResult, profilerSummary);
+                    ExportResult(LastResult, LastDiagnosticResult, profilerSummary);
             }
             finally
             {
@@ -111,10 +139,14 @@ namespace GAS.AutoChessDemo
             {
                 HeadlessAutoBattleScenario.RunDefault(
                     new HeadlessAutoBattleOptions(
-                        maxTicks,
+                        WarmupMaxTicks,
                         postVictoryFlushTicks,
                         scenarioScale,
-                        captureOfficialToolDiff: false));
+                        captureOfficialToolDiff: false,
+                        debuggerEnabled: false,
+                        captureSystemTimings: false,
+                        captureBufferPressure: false,
+                        healthMultiplier: 1f));
             }
             finally
             {
@@ -122,22 +154,47 @@ namespace GAS.AutoChessDemo
             }
         }
 
+        private HeadlessAutoBattleResult RunDiagnosticPass(
+            in HeadlessAutoBattleResult performanceResult)
+        {
+            HeadlessAutoBattleScenario.ShutdownRuntime();
+            var replayTicks = Mathf.Max(1, performanceResult.BattleTicks);
+            var diagnosticResult = HeadlessAutoBattleScenario.RunDefault(
+                new HeadlessAutoBattleOptions(
+                    replayTicks,
+                    postVictoryFlushTicks,
+                    scenarioScale,
+                    captureOfficialToolDiff: false,
+                    debuggerEnabled: true,
+                    captureSystemTimings: true,
+                    captureBufferPressure: true,
+                    healthMultiplier: scenarioHealthMultiplier));
+            HeadlessAutoChessRuntimeRunner.ValidateOfficialDiffRun(performanceResult, diagnosticResult);
+            return diagnosticResult;
+        }
+
         private HeadlessAutoBattleResult RunOfficialDiffPass(
             in HeadlessAutoBattleResult performanceResult)
         {
             HeadlessAutoBattleScenario.ShutdownRuntime();
+            var replayTicks = Mathf.Max(1, performanceResult.BattleTicks);
             var officialDiffResult = HeadlessAutoBattleScenario.RunDefault(
                 new HeadlessAutoBattleOptions(
-                    maxTicks,
+                    replayTicks,
                     postVictoryFlushTicks,
                     scenarioScale,
-                    captureOfficialToolDiff: true));
+                    captureOfficialToolDiff: true,
+                    debuggerEnabled: false,
+                    captureSystemTimings: false,
+                    captureBufferPressure: false,
+                    healthMultiplier: scenarioHealthMultiplier));
             HeadlessAutoChessRuntimeRunner.ValidateOfficialDiffRun(performanceResult, officialDiffResult);
             return performanceResult.WithOfficialToolDiff(officialDiffResult.OfficialToolDiff);
         }
 
         private static void ValidateResult(
             in HeadlessAutoBattleResult result,
+            in HeadlessAutoBattleResult diagnosticResult,
             bool requireOfficialToolDiff)
         {
             if (result.Completed
@@ -145,8 +202,8 @@ namespace GAS.AutoChessDemo
                 && result.EventCounts.AttributeChanges > 0
                 && result.EventCounts.ExecutionCalculationOutputUpdated > 0
                 && result.EventCounts.CueRequests > 0
-                && result.RuntimeDiagnostics.EventCount > 0
-                && !HeadlessAutoChessRuntimeRunner.HasBlockingDiagnosticErrors(result.RuntimeDiagnostics)
+                && diagnosticResult.RuntimeDiagnostics.EventCount > 0
+                && !HeadlessAutoChessRuntimeRunner.HasBlockingDiagnosticErrors(diagnosticResult.RuntimeDiagnostics)
                 && (!requireOfficialToolDiff || result.OfficialToolDiff.JournalingCaptured))
             {
                 return;
@@ -159,25 +216,30 @@ namespace GAS.AutoChessDemo
 
         private static void LogResult(
             in HeadlessAutoBattleResult result,
+            in HeadlessAutoBattleResult diagnosticResult,
             string profilerSummary)
         {
-            Debug.Log("HeadlessAutoChessPlayModeRunner: "
+            Debug.Log("HeadlessAutoChessPlayModeRunnerPerformance: "
                       + HeadlessAutoChessRuntimeRunner.CreateSummary(result));
             Debug.Log("HeadlessAutoChessPlayModeTiming: "
-                      + HeadlessAutoChessRuntimeRunner.CreateTimingSummary(result.RuntimeDiagnostics));
+                      + HeadlessAutoChessRuntimeRunner.CreateTimingSummary(result));
             Debug.Log("HeadlessAutoChessPlayModeDebugger: "
-                      + HeadlessAutoChessRuntimeRunner.CreateDebuggerSummary(result));
+                      + HeadlessAutoChessRuntimeRunner.CreateDebuggerSummary(diagnosticResult));
             Debug.Log("HeadlessAutoChessPlayModeOfficialToolDiff: "
                       + HeadlessAutoChessRuntimeRunner.CreateOfficialToolDiffSummary(result));
             Debug.Log("HeadlessAutoChessPlayModeProfiler: " + profilerSummary);
+            Debug.Log("HeadlessAutoChessPlayModeDiagnosticRunner: "
+                      + HeadlessAutoChessRuntimeRunner.CreateSummary(diagnosticResult));
+            var diagnosticWithOfficialDiff = diagnosticResult.WithOfficialToolDiff(result.OfficialToolDiff);
             Debug.Log("HeadlessAutoChessPlayModeDataFlow:\n"
-                      + HeadlessAutoChessRuntimeRunner.CreateDataFlowDiagram(result));
+                      + HeadlessAutoChessRuntimeRunner.CreateDataFlowDiagram(diagnosticWithOfficialDiff));
             Debug.Log("HeadlessAutoChessPlayModeSequence:\n"
-                      + HeadlessAutoChessRuntimeRunner.CreateSequenceDiagram(result));
+                      + HeadlessAutoChessRuntimeRunner.CreateSequenceDiagram(diagnosticWithOfficialDiff));
         }
 
         private void ExportResult(
             in HeadlessAutoBattleResult result,
+            in HeadlessAutoBattleResult diagnosticResult,
             string profilerSummary)
         {
             if (string.IsNullOrWhiteSpace(exportDirectory))
@@ -185,15 +247,17 @@ namespace GAS.AutoChessDemo
 
             Directory.CreateDirectory(exportDirectory);
             var builder = new StringBuilder(1024);
-            builder.AppendLine("HeadlessAutoChessPlayModeRunner: "
+            builder.AppendLine("HeadlessAutoChessPlayModeRunnerPerformance: "
                                + HeadlessAutoChessRuntimeRunner.CreateSummary(result));
             builder.AppendLine("HeadlessAutoChessPlayModeTiming: "
-                               + HeadlessAutoChessRuntimeRunner.CreateTimingSummary(result.RuntimeDiagnostics));
+                               + HeadlessAutoChessRuntimeRunner.CreateTimingSummary(result));
             builder.AppendLine("HeadlessAutoChessPlayModeDebugger: "
-                               + HeadlessAutoChessRuntimeRunner.CreateDebuggerSummary(result));
+                               + HeadlessAutoChessRuntimeRunner.CreateDebuggerSummary(diagnosticResult));
             builder.AppendLine("HeadlessAutoChessPlayModeOfficialToolDiff: "
                                + HeadlessAutoChessRuntimeRunner.CreateOfficialToolDiffSummary(result));
             builder.AppendLine("HeadlessAutoChessPlayModeProfiler: " + profilerSummary);
+            builder.AppendLine("HeadlessAutoChessPlayModeDiagnosticRunner: "
+                               + HeadlessAutoChessRuntimeRunner.CreateSummary(diagnosticResult));
             File.WriteAllText(
                 Path.Combine(exportDirectory, "AutoChessPlayModeProfileSummary.txt"),
                 builder.ToString());
@@ -218,11 +282,19 @@ namespace GAS.AutoChessDemo
             try
             {
                 CaptureProfilerState();
+                var path = Path.GetFullPath(profileCapturePath);
+                var directory = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(directory))
+                    Directory.CreateDirectory(directory);
+
                 CallProfiler("SetMaxFrameHistoryLength", 512);
                 CallProfiler("ClearAllFrames");
                 SetProfilerProperty("profileEditor", false);
                 SetProfilerProperty("profileGPU", false);
                 SetProfilerProperty("deepProfiling", false);
+                Profiler.logFile = path;
+                Profiler.enableBinaryLog = true;
+                Profiler.enabled = true;
                 CallProfiler("SetProfilingEnabled", true);
                 return true;
             }
@@ -248,10 +320,15 @@ namespace GAS.AutoChessDemo
 
                 var firstFrame = GetProfilerIntProperty("firstFrameIndex");
                 var lastFrame = GetProfilerIntProperty("lastFrameIndex");
-                var saved = firstFrame >= 0
-                            && lastFrame >= firstFrame
-                            && (bool)CallProfiler("SaveProfile", path);
+                var driverSaved = firstFrame >= 0
+                                  && lastFrame >= firstFrame
+                                  && (bool)CallProfiler("SaveProfile", path);
+                var binaryLogExists = File.Exists(path);
+                var binaryLogBytes = binaryLogExists ? new FileInfo(path).Length : 0L;
+                var saved = driverSaved || binaryLogBytes > 0L;
                 return "saved=" + saved
+                       + ", driverSaved=" + driverSaved
+                       + ", binaryLogBytes=" + binaryLogBytes
                        + ", path=" + path
                        + ", firstFrameIndex=" + firstFrame
                        + ", lastFrameIndex=" + lastFrame
@@ -274,6 +351,8 @@ namespace GAS.AutoChessDemo
             try
             {
                 CallProfiler("SetProfilingEnabled", false);
+                Profiler.enabled = false;
+                Profiler.enableBinaryLog = false;
             }
             catch (Exception ex)
             {
@@ -289,6 +368,9 @@ namespace GAS.AutoChessDemo
             previousProfileGpu = GetProfilerProperty("profileGPU");
             previousDeepProfiling = GetProfilerProperty("deepProfiling");
             previousProfilingEnabled = CallProfiler("IsProfilingEnabled");
+            previousProfilerEnabled = Profiler.enabled;
+            previousBinaryLogEnabled = Profiler.enableBinaryLog;
+            previousProfilerLogFile = Profiler.logFile;
             hasPreviousProfilerState = true;
         }
 
@@ -300,6 +382,9 @@ namespace GAS.AutoChessDemo
             TryRestoreProfilerProperty("profileEditor", previousProfileEditor);
             TryRestoreProfilerProperty("profileGPU", previousProfileGpu);
             TryRestoreProfilerProperty("deepProfiling", previousDeepProfiling);
+            Profiler.logFile = previousProfilerLogFile;
+            Profiler.enableBinaryLog = previousBinaryLogEnabled;
+            Profiler.enabled = previousProfilerEnabled;
             if (previousProfilingEnabled is bool wasProfiling)
             {
                 try

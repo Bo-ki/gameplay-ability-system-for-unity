@@ -251,9 +251,12 @@ namespace GAS.Runtime
                     Magnitude = modifier.Magnitude,
                     Op = modifier.Op,
                 });
+                AttributeHelper.MarkActiveModifierAdded(em, context.TargetAsc);
 
                 if (attributes.IsCreated)
                     AttributeHelper.MarkCurrentValueDirty(
+                        em,
+                        context.TargetAsc,
                         attributes,
                         modifier.AttrSetCode,
                         modifier.AttributeCode);
@@ -286,10 +289,14 @@ namespace GAS.Runtime
                 modifiers.RemoveAt(i);
                 if (attributes.IsCreated)
                     AttributeHelper.MarkCurrentValueDirty(
+                        em,
+                        owner,
                         attributes,
                         modifier.AttrSetCode,
                         modifier.AttributeCode);
             }
+
+            AttributeHelper.RefreshActiveModifierPresence(em, owner, modifiers);
         }
 
         public static void RemoveGrantedTagsForEffect(

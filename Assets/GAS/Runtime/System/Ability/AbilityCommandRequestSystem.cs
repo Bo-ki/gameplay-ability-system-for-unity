@@ -1,9 +1,8 @@
-using Unity.Burst.Intrinsics;
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
 {
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
     [UpdateBefore(typeof(AbilityTryActivateSystem))]
     public partial struct AbilityCommandRequestSystem : ISystem
@@ -15,146 +14,59 @@ namespace GAS.Runtime
             _query = SystemAPI.QueryBuilder()
                 .WithAll<AbilityCommandRequestComponent>()
                 .Build();
-            state.RequireForUpdate<AbilityCommandBuffer>();
+            state.RequireForUpdate(_query);
         }
 
         public void OnUpdate(ref SystemState state)
         {
-            var requestChunkCount = _query.CalculateChunkCount();
-
             var em = state.EntityManager;
-            var requestRecordStream = requestChunkCount > 0
-                ? new NativeStream(requestChunkCount, Allocator.TempJob)
-                : default;
-            var requestRecords = new NativeList<AbilityCommandRequestRecord>(Allocator.Temp);
-            var ecb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
-                .CreateCommandBuffer(state.WorldUnmanaged);
-            var catalog = SystemAPI.TryGetSingleton<GASDefinitionCatalogComponent>(out var catalogComponent)
-                ? catalogComponent.Catalog
-                : default;
-            var streamEntity = SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var resolvedStreamEntity)
-                ? resolvedStreamEntity
-                : Entity.Null;
-            var streamCommands = streamEntity != Entity.Null
-                                 && em.Exists(streamEntity)
-                                 && em.HasBuffer<AbilityCommandBuffer>(streamEntity)
-                ? em.GetBuffer<AbilityCommandBuffer>(streamEntity)
-                : default;
+            var requestCount = _query.CalculateEntityCount();
+            if (requestCount == 0)
+                return;
 
-            try
+            var ecb = default(EntityCommandBuffer);
+            var ecbCreated = false;
+
+            if (requestCount > 0)
             {
-                if (requestChunkCount > 0)
-                {
-                    var scanJob = new AbilityCommandRequestScanJob
-                    {
-                        EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
-                        RequestTypeHandle =
-                            SystemAPI.GetComponentTypeHandle<AbilityCommandRequestComponent>(isReadOnly: true),
-                        RequestRecordWriter = requestRecordStream.AsWriter(),
-                    };
-                    state.Dependency = scanJob.ScheduleParallel(_query, state.Dependency);
-                    state.Dependency.Complete();
+                ecb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
+                    .CreateCommandBuffer(state.WorldUnmanaged);
+                ecbCreated = true;
+                var catalog = SystemAPI.TryGetSingleton<GASDefinitionCatalogComponent>(out var catalogComponent)
+                    ? catalogComponent.Catalog
+                    : default;
 
-                    var requestRecordReader = requestRecordStream.AsReader();
-                    for (var streamIndex = 0; streamIndex < requestRecordReader.ForEachCount; streamIndex++)
+                foreach (var request in SystemAPI
+                             .Query<RefRO<AbilityCommandRequestComponent>>())
+                {
+                    var command = request.ValueRO;
+                    if (command.CommandType == EAbilityCommandType.Grant
+                        && command.Owner != Entity.Null
+                        && em.Exists(command.Owner))
                     {
-                        var recordCount = requestRecordReader.BeginForEachIndex(streamIndex);
-                        for (var i = 0; i < recordCount; i++)
-                            requestRecords.Add(requestRecordReader.Read<AbilityCommandRequestRecord>());
-                        requestRecordReader.EndForEachIndex();
+                        ProcessGrantRequest(em, ref ecb, command, catalog);
                     }
                 }
-
-                AppendStreamCommands(streamCommands, requestRecords);
-                if (requestRecords.Length == 0)
-                    return;
-
-                for (var i = 0; i < requestRecords.Length; i++)
-                {
-                    var request = requestRecords[i].Request;
-                    if (request.CommandType == EAbilityCommandType.Grant
-                        && request.Owner != Entity.Null
-                        && em.Exists(request.Owner))
-                    {
-                        ProcessGrantRequest(em, ref ecb, request, catalog);
-                    }
-                }
-
-                for (var i = 0; i < requestRecords.Length; i++)
-                {
-                    var requestRecord = requestRecords[i];
-                    var request = requestRecord.Request;
-                    if (request.Owner != Entity.Null && em.Exists(request.Owner))
-                        ProcessRuntimeRequest(em, ref ecb, request);
-
-                    if (requestRecord.RequestEntity != Entity.Null)
-                        ecb.DestroyEntity(requestRecord.RequestEntity);
-                }
-
-                if (streamCommands.IsCreated)
-                    streamCommands.Clear();
             }
-            finally
+
+            if (requestCount > 0)
             {
-                requestRecords.Dispose();
-                if (requestRecordStream.IsCreated)
-                    requestRecordStream.Dispose();
+                foreach (var (request, requestEntity) in SystemAPI
+                             .Query<RefRO<AbilityCommandRequestComponent>>()
+                             .WithEntityAccess())
+                {
+                    var command = request.ValueRO;
+                    if (command.Owner != Entity.Null && em.Exists(command.Owner))
+                        ProcessRuntimeRequest(em, ref ecb, command);
+
+                    ecb.DestroyEntity(requestEntity);
+                }
             }
+
         }
 
         public void OnDestroy(ref SystemState state)
         {
-        }
-
-        private struct AbilityCommandRequestRecord
-        {
-            public Entity RequestEntity;
-            public AbilityCommandRequestComponent Request;
-        }
-
-        private struct AbilityCommandRequestScanJob : IJobChunk
-        {
-            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
-            [ReadOnly] public ComponentTypeHandle<AbilityCommandRequestComponent> RequestTypeHandle;
-            public NativeStream.Writer RequestRecordWriter;
-
-            public void Execute(
-                in ArchetypeChunk chunk,
-                int unfilteredChunkIndex,
-                bool useEnabledMask,
-                in v128 chunkEnabledMask)
-            {
-                RequestRecordWriter.BeginForEachIndex(unfilteredChunkIndex);
-                var requestEntities = chunk.GetNativeArray(EntityTypeHandle);
-                var requests = chunk.GetNativeArray(ref RequestTypeHandle);
-                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
-                while (enumerator.NextEntityIndex(out var entityIndex))
-                {
-                    RequestRecordWriter.Write(new AbilityCommandRequestRecord
-                    {
-                        RequestEntity = requestEntities[entityIndex],
-                        Request = requests[entityIndex],
-                    });
-                }
-                RequestRecordWriter.EndForEachIndex();
-            }
-        }
-
-        private static void AppendStreamCommands(
-            DynamicBuffer<AbilityCommandBuffer> streamCommands,
-            NativeList<AbilityCommandRequestRecord> requestRecords)
-        {
-            if (!streamCommands.IsCreated)
-                return;
-
-            for (var i = 0; i < streamCommands.Length; i++)
-            {
-                requestRecords.Add(new AbilityCommandRequestRecord
-                {
-                    RequestEntity = Entity.Null,
-                    Request = streamCommands[i].Command,
-                });
-            }
         }
 
         private static void ProcessGrantRequest(
@@ -264,12 +176,17 @@ namespace GAS.Runtime
         {
             if (request.CommandType == EAbilityCommandType.Grant)
                 return;
+            if (request.CommandType == EAbilityCommandType.Activate
+                && TryProcessResolvedActivation(em, request))
+            {
+                return;
+            }
             if (!ASCEntityFactory.HasASCRuntimeCoreComponents(em, request.Owner))
                 return;
             if (ASCEntityFactory.IsDestroying(em, request.Owner))
                 return;
 
-            var ability = FindAbility(em, request.Owner, request.AbilityCode);
+            var ability = ResolveRequestedAbility(em, request);
             if (ability == Entity.Null)
                 return;
 
@@ -297,6 +214,34 @@ namespace GAS.Runtime
             }
         }
 
+        private static bool TryProcessResolvedActivation(
+            EntityManager em,
+            AbilityCommandRequestComponent request)
+        {
+            if (!IsUsableRequestedAbility(em, request.AbilityEntity, request.Owner, request.AbilityCode))
+                return false;
+
+            if (em.HasComponent<AbilityCommitRequestComponent>(request.AbilityEntity))
+            {
+                em.SetComponentData(request.AbilityEntity, new AbilityCommitRequestComponent
+                {
+                    TargetAsc = request.TargetAsc,
+                });
+                if (!em.IsComponentEnabled<AbilityCommitRequestComponent>(request.AbilityEntity))
+                    em.SetComponentEnabled<AbilityCommitRequestComponent>(request.AbilityEntity, true);
+                return true;
+            }
+
+            if (em.HasComponent<AbilityMainTargetComponent>(request.AbilityEntity))
+                em.SetComponentData(request.AbilityEntity, new AbilityMainTargetComponent
+                {
+                    TargetAsc = request.TargetAsc,
+                });
+            if (!em.IsComponentEnabled<AbilityActivationPendingComponent>(request.AbilityEntity))
+                em.SetComponentEnabled<AbilityActivationPendingComponent>(request.AbilityEntity, true);
+            return true;
+        }
+
         private static Entity FindAbility(EntityManager em, Entity owner, int abilityCode)
         {
             if (abilityCode <= 0 || !em.HasBuffer<AbilitySlotBuffer>(owner))
@@ -315,6 +260,38 @@ namespace GAS.Runtime
             }
 
             return Entity.Null;
+        }
+
+        private static Entity ResolveRequestedAbility(
+            EntityManager em,
+            AbilityCommandRequestComponent request)
+        {
+            if (IsUsableRequestedAbility(em, request.AbilityEntity, request.Owner, request.AbilityCode))
+                return request.AbilityEntity;
+
+            return FindAbility(em, request.Owner, request.AbilityCode);
+        }
+
+        private static bool IsUsableRequestedAbility(
+            EntityManager em,
+            Entity ability,
+            Entity expectedOwner,
+            int expectedAbilityCode)
+        {
+            if (ability == Entity.Null
+                || !em.Exists(ability)
+                || !em.HasComponent<AbilityStateComponent>(ability)
+                || !em.HasComponent<AbilityMainTargetComponent>(ability)
+                || !em.HasComponent<AbilityActivationPendingComponent>(ability))
+            {
+                return false;
+            }
+
+            var runtime = em.GetComponentData<AbilityStateComponent>(ability);
+            if (expectedAbilityCode > 0 && runtime.Code != expectedAbilityCode)
+                return false;
+
+            return expectedOwner == Entity.Null || runtime.Owner == expectedOwner;
         }
 
         private static bool HasGrantedAbility(
@@ -420,7 +397,7 @@ namespace GAS.Runtime
         private static void EnableMarker<T>(EntityManager em, ref EntityCommandBuffer ecb, Entity entity)
             where T : unmanaged, IComponentData, IEnableableComponent
         {
-            if (em.HasComponent<T>(entity))
+            if (em.HasComponent<T>(entity) && !em.IsComponentEnabled<T>(entity))
                 em.SetComponentEnabled<T>(entity, true);
         }
 

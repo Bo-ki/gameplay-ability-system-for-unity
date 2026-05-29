@@ -11,9 +11,9 @@
 1. `HeadlessAutoBattleScenario` 创建 4 个 ASC，初始化 Health / Energy，授予普攻与斩杀 Ability。
 2. `AutoBattleDefinitionCatalogBuilder` 安装最小 `GASDefinitionCatalogBlob`：普攻 GE 走 instant modifier，斩杀 GE 走 active mutation + demo execution extension。
 3. `HeadlessAutoChessRuntimeSystemBootstrap` 把 `AutoBattleCommandDriveSystem` 注册到 `GASCommandResolveSystemGroup`，把 `AutoBattleExecuteDamageCalculationSystem` 注册到 `GEExecutionCalculationExtensionSystemGroup`。
-4. `AutoBattleCommandDriveSystem` 在 Functional x1 使用 `SystemAPI.Query` 收集 ASC 快照到 frame-local `NativeList`，直接批量写入 `AbilityCommandBuffer`，不再为 4 个单位的小规模链路支付 `NativeStream + job schedule + Complete` 固定成本。
+4. `AutoBattleCommandDriveSystem` 使用 `SystemAPI.Query` 收集 ASC 快照到 frame-local `NativeList`，按 BattleGroup 构建 frontline / lowest-health 目标缓存，O(1) 选择目标后直接批量写入 `AbilityCommandBuffer`，不再为小规模链路支付 `NativeStream + job schedule + Complete` 固定成本。
 5. Runtime Core 消费 `AbilityCommandBuffer`，执行 Ability grant / activate、generated catalog commit、GE command stream、instant attribute delta、cue request、replay projection。
-6. `AutoBattleExecuteDamageCalculationSystem` 读取 `GEEffectCommandBuffer` 中的斩杀 GE 命令，用 ECS query 顺序扫描目标 ASC 并修改 `AttributeValueBuffer`，追加 `AttributeModifierBuffer` 和 `GameplayEventBuffer{ExecutionCalculationOutputUpdated}` typed fact；event bus 只保留同一 fact 的镜像。
+6. `AutoBattleExecuteDamageCalculationSystem` 读取 `GEEffectCommandBuffer` 中的斩杀 GE 命令，用 `BufferLookup<AttributeValueBuffer>` 按 TargetAsc 直接写目标属性，追加 `AttributeModifierBuffer` 和 `GameplayEventBuffer{ExecutionCalculationOutputUpdated}` typed fact；event bus 只保留同一 fact 的镜像。
 7. `GameplayFactProjectionSystem` / `ReplayLogSystem` 统一收集 attribute changes、execution outputs、cue requests，`GAS.AutoChessDemo.HeadlessAutoChessRuntimeRunner.RunHeadlessAutoBattleOnce()` 用这些事实做无头断言。
 8. Runtime Debugger 数据来自 Layer 2 `GasRuntimeDebugger` / `GasRuntimeOfficialToolDiffCapture`；Editor Debugger Window 是 Layer 1 Editor Extension，不放在 Demo 内。
 9. 实机性能验证通过 AIBridge 驱动真实 Unity Editor / Player，并优先使用 Unity Profiler、Entities Profiler Modules、Entities Journaling 等官方工具；Demo 不重复实现 Debugger UI 或 Profiler。
@@ -22,7 +22,7 @@
 
 - Functional x1 数据量很小，按 Entities 官方 job overhead 建议优先使用直接 ECS query，避免调度成本超过业务计算本身；x50+ 规模 profile 才切换或补充 `IJobChunk + ChunkEntityEnumerator` 路径。
 - AutoBattle AI 不在单位循环中调用 `EntityManager` 做结构变化；高频 command 使用 singleton DynamicBuffer 作为 frame-local stream，结构变化保留在 Runtime Core commit / cleanup phase。
-- 当前最小 execution calculation 不使用 `BufferLookup` 随机访问目标；它按目标 ASC chunk 顺序扫描并匹配 command record，优先验证线性 DOTS 数据流。
+- 当前最小 execution calculation 使用 `BufferLookup` 只处理 GE command 已解析出的少量 TargetAsc，避免 target x command 嵌套扫描；该随机访问边界必须保留在业务 execution extension 内，不能扩散成 Runtime Core 默认数据访问模式。
 - `ExecutionCalculationOutputUpdated` 必须先作为 `GameplayEventBuffer` typed fact 进入 replay；event bus 镜像的 `SourceFactSequence` 指向该 fact sequence，不能复用属性 delta sequence。
 - `GASDefinitionCatalogBlob` 是当前 Runtime Core 的权威定义入口；Luban / SourceGenerator 生成链仍是目标态，但本轮用运行时安装的最小 catalog 做闭环验证。
 
@@ -50,9 +50,12 @@ $CLI = 'Library\PackageCache\cn.lys.aibridge@f203de2ec848\Tools~\CLI\win-x64\AIB
 & $CLI editor play --timeout 30000 --pretty
 & $CLI get_logs --regex 'HeadlessAutoChessPlayMode|Exception|Error|failed|Profiler' --count 80 --pretty
 & $CLI get_logs --logType Error --count 50 --pretty
+& .\Tools\Diagnostics\Analyze-AutoChessProfile.ps1 -PrintMarkdown
 ```
 
 PlayMode runner 会以 `ProfilerDriver.profileEditor=False` 保存 Runtime-only 官方 capture 到 `Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data`，并导出 `TestResults/AutoChess/T6-CHESS-AF-SceneRuntime/AutoChessPlayModeProfileSummary.txt`。这两个目录都是本地运行产物，不纳入版本控制。
+
+`Tools/Diagnostics/Analyze-AutoChessProfile.ps1` 负责把 summary 文本解析为 `TestResults/AutoChess/Analysis/AutoChessProfileAnalysis.json` 和 `.md`，自动计算 cost split、RW lookup / enableable toggle 每 tick、Journaling TopN、Debugger drop rate 和反推架构失误。直接读原始 summary 会浪费上下文，后续性能复盘默认先看脚本报告。
 
 一次有效跑通至少需要满足：
 
@@ -129,52 +132,68 @@ Leak trace 复跑使用 `UNITY_JOBS_NATIVE_LEAK_DETECTION_MODE=2`，同一链路
 
 ## 当前 Diagnostic x50 数据
 
-2026-05-29 使用 AIBridge 1.4.1 驱动真实 Unity Editor PlayMode，加载 `Assets/AutoChessDemo/Presentation/Scenes/HeadlessAutoChessDemo.unity`，由 `HeadlessAutoChessDemoSceneRunner` 控制 Unity Profiler 采集窗口，并通过 `ProfilerDriver.profileEditor=False` 保存官方 Runtime-only capture 到 `Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data`。该文件属于本机证据，不提交。
+2026-05-29 已将 x50 PlayMode 从 7 个 measured tick 的短样本改为 30 秒真实 Editor PlayMode 采样：`HeadlessAutoChessDemoSceneRunner` 逐帧推进 Runtime tick，场景序列化为 `scale=50`、`scenarioHealthMultiplier=2048`、`minimumProfileSeconds=30`，Profiler 使用 Runtime-only binary log + `ProfilerDriver.profileEditor=False` 保存到 `Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data`。该文件属于本机证据，不提交。
 
 ```text
 completed=True, winner=Player, scale=50, units=200,
-battleTicks=9, totalTicks=10, warmupDroppedTicks=3, measuredTicks=7,
-commands=900, finishers=400, attributeChanges=1050,
-executionOutputs=250, cueRequests=400,
-debugEvents=62, debugWarnings=30, debugErrors=0, blockingDebugErrors=0,
-coreRequests=2700, coreFacts=4800, coreDeltas=1700, coreCues=400,
-peakEventBus=1300, replayLag=0, journalingRecords=48288,
-processWarmupRuns=1, totalElapsedMs=37.345,
-factsHash=0xBA1E575F, summaryHash=0x0A96B07B, avgTickMs=2.614
+battleTicks=4130, totalTicks=4131, warmupDroppedTicks=3, measuredTicks=4128,
+commands=478300, finishers=244800, attributeChanges=478250,
+executionOutputs=244750, cueRequests=233500,
+debugErrors=0, blockingDebugErrors=0,
+totalElapsedMs=30004.994, avgTickMs=1.561
 ```
 
 ```text
-GASTickTotal(samples=7, avgMs=2.586, maxMs=6.285)
-GASFramePrepareSystemGroup(samples=7, avgMs=0.117, maxMs=0.416)
-GASCommandResolveSystemGroup(samples=7, avgMs=0.970, maxMs=2.682)
-GASCoreSimulationSystemGroup(samples=7, avgMs=0.960, maxMs=2.070)
-GASStructuralCommitSystemGroup(samples=7, avgMs=0.028, maxMs=0.056)
-GASBoundaryProjectionSystemGroup(samples=7, avgMs=0.511, maxMs=1.061)
+GASTickTotal(samples=4128, avgMs=1.548, maxMs=34.517)
+GASFramePrepareSystemGroup(samples=4128, avgMs=0.042, maxMs=0.262)
+GASCommandResolveSystemGroup(samples=4128, avgMs=0.612, maxMs=2.056)
+GASCoreSimulationSystemGroup(samples=4128, avgMs=0.747, maxMs=2.202)
+GASStructuralCommitSystemGroup(samples=4128, avgMs=0.020, maxMs=0.169)
+GASBoundaryProjectionSystemGroup(samples=4128, avgMs=0.128, maxMs=32.746)
 ```
 
 ```text
-journalingCaptured=True, journalingWorldRecords=48288,
-runtimeStructuralApprox=900, journalingStructural=14202,
-journalingCreates=1601, journalingDestroys=1100,
-journalingAddComponents=201, journalingGetComponentDataRW=6791,
-journalingGetBufferRW=27295, profilerAvailable=True,
-profilerEnabled=True, structuralProfilerCategoryEnabled=True,
-memoryProfilerCategoryEnabled=True
+Profiler capture:
+saved=True, driverSaved=True, binaryLogBytes=44620948,
+firstFrameIndex=3616, lastFrameIndex=4127,
+profileEditor=False, profilingEnabled=False
 ```
 
-x50 是 50 组独立 2v2，共 200 units。该数据用于放大 Runtime Core 热点，不替代 Unity Profiler Timeline / Entities module 的最终归因；项目 Debugger 只保留 GAS 语义 counters、official diff 和无头导出。
-
-PlayMode 官方 RawFrameDataView 在 Runtime-only capture 中过滤到 `EX_GAS_World` 后的 TopN：
+同一 PlayMode run 的 Diagnostic pass 会打开 Runtime Debugger 和 presentation raw fact 投影，用于输出数据流图、时序图和 Layer 2 counters；它不作为性能 pass 的 `avgTickMs`：
 
 ```text
-GASCommandResolveSystemGroup totalMs=82.738 maxMs=32.582 count=10
-GASCoreSimulationSystemGroup totalMs=67.072 maxMs=32.510 count=10
-GASBoundaryProjectionSystemGroup totalMs=32.601 maxMs=20.781 count=10
-AbilityCommandRequestSystem totalMs=20.332 maxMs=10.406 count=20
-GEExecutionCalculationExtensionSystemGroup totalMs=19.033 maxMs=12.140 count=10
-AutoBattleExecuteDamageCalculationSystem totalMs=18.973 maxMs=12.123 count=10
-DiagnosticsSnapshotSystem totalMs=18.149 maxMs=15.076 count=10
-ASCInitializeRequestSystem totalMs=17.662 maxMs=16.385 count=11
-AbilityCatalogCommitSystem totalMs=16.597 maxMs=13.989 count=10
-AutoBattleCommandDriveSystem totalMs=15.491 maxMs=11.341 count=10
+debugEvents=4096, dropped=18262, warnings=2052, errors=0, blockingErrors=0,
+requests=1191000, specs=233500, deltas=956500, facts=3103100,
+cues=233500, presentation=2869600, peakEventBus=1300, replayLag=0
 ```
+
+Official tool diff 仍使用独立 pass，且本轮已经确认 Runtime hot window 内 create/destroy/add/remove 结构变化为 0；`EnableComponent` / `DisableComponent` 单独按 enableable toggle 解释，不再误算为 structural change：
+
+```text
+journalingWorldRecords=524288, journalingStructural=0,
+journalingCreates=0, journalingDestroys=0,
+journalingAddComponents=0, journalingRemoveComponents=0,
+journalingEnableComponents=80400, journalingDisableComponents=40305,
+journalingGetComponentDataRW=210478, journalingGetBufferRW=193105,
+journalingRecordTopN=GetComponentDataRW=210478;GetBufferRW=193105;EnableComponent=80400;DisableComponent=40305
+```
+
+`journalingWorldRecords=524288` 已触达 Entities Journaling 当前记录上限，因此它只能用于 TopN 与热点方向，不能把绝对记录数当作完整总量。旧版 `journalingStructural=13502 / creates=1601 / destroys=1100` 是采样窗口污染和 enableable 误归类后的过时结论，已废弃。
+
+x50 是 50 组独立 2v2，共 200 units。该数据用于放大 Runtime Core 热点，不替代 Unity Profiler Timeline / Entities module 的最终归因；项目 Debugger 只保留 GAS 语义 counters、official diff 和无头导出。性能 pass 明确关闭 Runtime Debugger 和 presentation raw fact 投影；Diagnostic pass 再打开完整 Layer 2 观测链，避免把 Debugger / presentation 成本误判为 Core Simulation 成本。
+
+本轮定位到旧数据“不像 DOTS”的直接原因：
+
+1. 7 个 measured tick 太短，无法形成稳定性能曲线；当前已改为 30 秒、4128 个 measured ticks。
+2. 旧 scene runner 每 tick 在 `HeadlessAutoBattleScenario.RefreshUnits` 用 `EntityManager.GetBuffer` 刷新单位结果，污染 `NoExecutingSystem` 下的 `GetBufferRW`；当前胜负判断改由 `AutoBattleCommandDriveSystem` 在 ECS 内写 driver alive counters。
+3. 旧 official diff 把 enableable toggle 当 structural change；当前 `EnableComponent` / `DisableComponent` 单列，create/destroy/add/remove 为 0。
+4. ProfilerDriver frame history 在 Unity 6 Editor 内不能单独保证 `.data` 保存；当前以官方 `UnityEngine.Profiling.Profiler` binary log 为主，ProfilerDriver 保存为补充。
+
+本轮修复结论：
+
+1. 默认 World 自动创建、PlayerLoop 双推进、Profiler 采样窗口污染和 presentation raw fact 投影污染都已拆开；剩余性能数据才可用于 Runtime Core 归因。
+2. 内部 `AbilityCommandBuffer` 是可信 Runtime command stream，不再每 tick 创建 request entity、读 Catalog 或为所有 stream command 做 Grant 扫描；外部 Grant 仍走请求实体路径。
+3. AutoBattle 业务层不再用全局 hash 或 target x command 嵌套扫描模拟真实游戏规模；BattleGroup 目标缓存和 TargetAsc BufferLookup 使 Demo 成本不再遮蔽 GAS Core。
+4. 当前 x50 仍未达到目标态 DOTS 性能线：`GASCoreSimulationSystemGroup avgMs=0.747`、`GASCommandResolveSystemGroup avgMs=0.612`、`GASTickTotal avgMs=1.548`。剩余热点是真实架构问题：`AbilityCatalogCommitSystem`、`AbilityCommandRequestSystem`、`AbilityStateCleanupSystem`、`AttributeRecalculateSystem` 和 frame stream prepare 仍有主线程随机访问 / enableable 写入 / replay fact 投影成本；后续应继续向 chunk-local batch、generated lookup cache、dirty attribute set 和更粗粒度 command fan-in 推进。
+5. 脚本反推的核心错误不是“结构变化还很多”，而是 Phase / SystemGroup 已命名但模块 seam 不够深：CommandResolve + CoreSimulation 占 `87.8%`，StructuralCommit 只有 `1.3%`；Journaling 显示 `GetComponentDataRW=51.0/tick`、`GetBufferRW=46.8/tick`、enableable toggle `29.2/tick`。这说明当前设计仍把低层 ECS lookup、Ability 生命周期 marker flip 和属性重算细节泄漏给多个系统。
+6. `AttributeValueBuffer` 是最大 component RW 热点（`95,150` 次），说明 Attribute store 仍缺少 dirty owner / dirty attribute set；`Debugger drop rate=81.7%` 且 Journaling 达到 `524,288` 上限，说明诊断层也必须默认聚合 counters，raw trace 只做短窗口采样。

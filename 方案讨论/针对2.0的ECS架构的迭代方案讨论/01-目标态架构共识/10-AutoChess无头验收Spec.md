@@ -206,7 +206,7 @@ flowchart TD
 官方文档约束：
 
 - Functional x1 只有 4 个单位，按 `ecs-workflow-intro.md` / `job-overhead.md`，小数据量 job 调度开销可能超过并行收益；因此当前 x1 使用直接 ECS query。x50+ 如切换回 chunk/job 路径，则必须按 `iterating-data-ijobchunk-implement.md` 通过 `ChunkEntityEnumerator` 安全处理 enableable mask，不能使用裸 chunk for-loop 假设。
-- 同一文档说明 `ComponentLookup` / `BufferLookup` 是随机访问且效率最低；当前最小链路的选敌与 execution damage 都优先使用快照 record / chunk scan，暂不引入 random lookup。
+- 同一文档说明 `ComponentLookup` / `BufferLookup` 是随机访问且效率最低；当前最小链路只在 execution extension 对已解析出的少量 TargetAsc 使用 `BufferLookup<AttributeValueBuffer>`，用来替代 target x command 嵌套扫描。选敌仍使用 BattleGroup 快照缓存，不把 random lookup 扩散成 Runtime Core 默认访问模式。
 - `systems-entitymanager.md` 说明 `EntityManager` 结构变化会产生 sync point，且不能在 jobs 中使用；AutoBattle AI 高频指令必须写 frame-local buffer/record，结构变化只能留在 Runtime Core commit / cleanup phase。
 - `systems-time.md` 说明 `FixedStepSimulationSystemGroup` 固定间隔且一帧可多次更新；AutoChess 验收 summary 必须把该 fixed-step policy 作为默认 Simulation 时间口径。
 
@@ -486,75 +486,80 @@ Leak Detected: none
 
 ## 当前 Diagnostic x50 PlayMode 实机证据
 
-2026-05-29 使用 AIBridge 1.4.1 驱动真实 Unity Editor PlayMode，加载 `Assets/AutoChessDemo/Presentation/Scenes/HeadlessAutoChessDemo.unity`，由 `HeadlessAutoChessDemoSceneRunner` 在 MonoBehaviour Coroutine 内控制 Unity Profiler 采集窗口，跑通 50 组独立 2v2（共 200 units）。AIBridge 只属于 Layer 1 工具链，Runtime Core 不依赖它；Profiler 证据来自 Unity 官方 `Window/Analysis/Profiler` 和 `UnityEditorInternal.ProfilerDriver`。
+2026-05-29 使用 AIBridge 1.4.1 驱动真实 Unity Editor PlayMode，加载 `Assets/AutoChessDemo/Presentation/Scenes/HeadlessAutoChessDemo.unity`，由 `HeadlessAutoChessDemoSceneRunner` 在 MonoBehaviour Coroutine 内控制 Unity Profiler 采集窗口，跑通 50 组独立 2v2（共 200 units）。AIBridge 只属于 Layer 1 工具链，Runtime Core 不依赖它；Profiler 证据来自 Unity 官方 `Window/Analysis/Profiler`、`UnityEngine.Profiling.Profiler` binary log 和 `UnityEditorInternal.ProfilerDriver`。
+
+性能 pass 关闭 Runtime Debugger 和 presentation raw fact 投影，只保留 replay / required facts；Diagnostic pass 再打开完整 Layer 2 观测链，用来输出数据流图、时序图、Runtime Debugger counters 和 presentation count。该分离是本轮修复重点，避免把 Debugger / presentation 成本误判为 Runtime Core hot path。
 
 ```text
 completed=True, winner=Player, scale=50, units=200,
-battleTicks=9, totalTicks=10, warmupDroppedTicks=3, measuredTicks=7,
-commands=900, finishers=400, attributeChanges=1050,
-executionOutputs=250, cueRequests=400,
-debugEvents=62, debugWarnings=30, debugErrors=0, blockingDebugErrors=0,
-coreRequests=2700, coreFacts=4800, coreDeltas=1700, coreCues=400,
-peakEventBus=1300, replayLag=0, journalingRecords=48288,
-processWarmupRuns=1, totalElapsedMs=37.345,
-factsHash=0xBA1E575F, summaryHash=0x0A96B07B, avgTickMs=2.614
+battleTicks=4130, totalTicks=4131, warmupDroppedTicks=3, measuredTicks=4128,
+commands=478300, finishers=244800, attributeChanges=478250,
+executionOutputs=244750, cueRequests=233500,
+debugEvents=0, debugWarnings=0, debugErrors=0, blockingDebugErrors=0,
+coreRequests=0, coreFacts=0, coreDeltas=0, coreCues=0,
+peakEventBus=0, replayLag=0, journalingRecords=524288,
+processWarmupRuns=1, totalElapsedMs=30004.994,
+factsHash=0xEBE6E5B3, summaryHash=0x94F5D7CC, avgTickMs=1.561
 ```
 
 ```text
 HeadlessAutoChessRuntimeTiming:
 ecsRuntimeTickOnly=true
-GASTickTotal(samples=7, avgMs=2.586, maxMs=6.285)
-GASFramePrepareSystemGroup(samples=7, avgMs=0.117, maxMs=0.416)
-GASCommandResolveSystemGroup(samples=7, avgMs=0.970, maxMs=2.682)
-GASCoreSimulationSystemGroup(samples=7, avgMs=0.960, maxMs=2.070)
-GASStructuralCommitSystemGroup(samples=7, avgMs=0.028, maxMs=0.056)
-GASBoundaryProjectionSystemGroup(samples=7, avgMs=0.511, maxMs=1.061)
+GASTickTotal(samples=4128, avgMs=1.548, maxMs=34.517)
+GASFramePrepareSystemGroup(samples=4128, avgMs=0.042, maxMs=0.262)
+GASCommandResolveSystemGroup(samples=4128, avgMs=0.612, maxMs=2.056)
+GASCoreSimulationSystemGroup(samples=4128, avgMs=0.747, maxMs=2.202)
+GASStructuralCommitSystemGroup(samples=4128, avgMs=0.020, maxMs=0.169)
+GASBoundaryProjectionSystemGroup(samples=4128, avgMs=0.128, maxMs=32.746)
 ```
 
 ```text
 HeadlessAutoChessOfficialToolDiff:
-journalingAvailable=True, journalingCaptured=True, journalingWorldRecords=48288,
-runtimeStructuralApprox=900, journalingStructural=14202, deltaStructural=-13302,
-runtimeCreates=900, journalingCreates=1601, deltaCreates=-701,
-runtimeDestroys=0, journalingDestroys=1100, deltaDestroys=-1100,
-journalingAddComponents=201, journalingRemoveComponents=0,
+journalingAvailable=True, journalingCaptured=True, journalingWorldRecords=524288,
+runtimeStructuralApprox=0, journalingStructural=0, deltaStructural=0,
+runtimeCreates=0, journalingCreates=0, deltaCreates=0,
+runtimeDestroys=0, journalingDestroys=0, deltaDestroys=0,
+journalingAddComponents=0, journalingRemoveComponents=0,
+journalingEnableComponents=80400, journalingDisableComponents=40305,
 journalingSetComponentData=0, journalingSetBuffer=0,
-journalingGetComponentDataRW=6791, journalingGetBufferRW=27295,
-profilerAvailable=True, profilerEnabled=True,
+journalingGetComponentDataRW=210478, journalingGetBufferRW=193105,
+profilerAvailable=True, profilerEnabled=False,
 structuralProfilerCategoryEnabled=True, memoryProfilerCategoryEnabled=True,
-profilerCaptureState=profiler enabled; module counter data not exported by headless runner
+profilerCaptureState=profiler disabled; Entities profiler modules collect no data
 ```
 
 官方 capture：
 
 ```text
 Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data
-saved=True, firstFrameIndex=0, lastFrameIndex=1, profileEditor=False, size=14046560 bytes
-```
-
-官方 RawFrameDataView 中 `EX_GAS_World` TopN：
-
-```text
-GASCommandResolveSystemGroup totalMs=82.738 maxMs=32.582 count=10
-GASCoreSimulationSystemGroup totalMs=67.072 maxMs=32.510 count=10
-GASBoundaryProjectionSystemGroup totalMs=32.601 maxMs=20.781 count=10
-AbilityCommandRequestSystem totalMs=20.332 maxMs=10.406 count=20
-GEExecutionCalculationExtensionSystemGroup totalMs=19.033 maxMs=12.140 count=10
-AutoBattleExecuteDamageCalculationSystem totalMs=18.973 maxMs=12.123 count=10
-DiagnosticsSnapshotSystem totalMs=18.149 maxMs=15.076 count=10
-ASCInitializeRequestSystem totalMs=17.662 maxMs=16.385 count=11
-AbilityCatalogCommitSystem totalMs=16.597 maxMs=13.989 count=10
-AutoBattleCommandDriveSystem totalMs=15.491 maxMs=11.341 count=10
+saved=True, driverSaved=True, binaryLogBytes=44620948,
+firstFrameIndex=3616, lastFrameIndex=4127,
+profileEditor=False, profilingEnabled=False
 ```
 
 结论：
 
-1. x50 已从“待输出指标”更新为当前已跑通的日常热点放大 gate；数据量是 50 组互不混敌的独立 2v2，用数量模拟真实游戏规模，避免 Demo 全局 `O(n^2)` 选敌污染 Runtime Core 判断。
+1. x50 已从“待输出指标”更新为当前已跑通的日常热点放大 gate；数据量是 50 组互不混敌的独立 2v2，用数量模拟真实游戏规模。
 2. `blockingDebugErrors=0` 表示功能链路通过；慢 timing 只保留为 Warning / TopN 线索，不进入功能错误计数。
-3. 当前 x50 未达到目标态优秀线，热点集中在 `GASCommandResolveSystemGroup`、`GASCoreSimulationSystemGroup` 和 `GASBoundaryProjectionSystemGroup`。PlayMode 官方 RawFrameDataView 使用 `profileEditor=False` 的 Runtime-only capture；`count=10` 对应完整 runtime ticks，Runtime Debugger timing 的 `samples=7` 是剔除 warmup 后的 measured ticks。
-4. 本轮已把 `AutoBattleExecuteDamageCalculationSystem` 从 target x command 嵌套扫描改为按 TargetAsc range 处理；Runtime-only PlayMode TopN 中该 Demo system 为 `18.973ms total / 12.123ms max / count=10`，仍需随 `GEExecutionCalculationExtensionSystemGroup` 一起继续观察，但不再高于三大 Runtime Core group。
-5. Journaling 记录显著高于项目 `runtimeStructuralApprox`，说明项目 counter 只覆盖 GAS Runtime 自认结构变化，官方记录还包含 bootstrap / cleanup / package 内部读写；结构变化结论以官方工具为主。
-6. PlayMode capture 必须限制为 Runtime-only；若 `profileEditor=True`，`.data` 会混入 Editor / package 样本并导致文件膨胀，不能用于 Runtime Core 归因。
+3. 当前 x50 已修正几个会让数据“不像 DOTS”的根因：7 tick 短样本、Profiler 0-1 frame、`RefreshUnits` system 外 `EntityManager.GetBuffer` 观测污染、Debugger/presentation 投影混入性能 pass、Demo 业务层 target x command 扫描和 per-command request entity。
+4. 旧 `journalingStructural=13502 / creates=1601 / destroys=1100` 已废弃；当前 Runtime hot window 内 create/destroy/add/remove 结构变化为 0，`EnableComponent` / `DisableComponent` 作为 enableable toggle 单独解释。
+5. 剩余 x50 热点集中在真实 Runtime Core 和业务 command resolve：`AbilityCatalogCommitSystem`、`AbilityCommandRequestSystem`、`AbilityStateCleanupSystem`、`AttributeRecalculateSystem`、stream frame prepare、replay/fact projection。后续优化方向是 generated lookup cache、dirty attribute set、chunk-local batch、减少主线程随机 EntityManager/lookup 访问和合并短系统，而不是继续扩展自研 Debugger UI。
+6. `journalingWorldRecords=524288` 已到 Entities Journaling 记录上限；official diff 只能用于 TopN 热点方向，不能把绝对记录数当完整总量。
+7. PlayMode capture 必须限制为 Runtime-only；若 `profileEditor=True`，`.data` 会混入 Editor / package 样本并导致文件膨胀，不能用于 Runtime Core 归因。
+
+Profile summary 不再人工直读。`Tools/Diagnostics/Analyze-AutoChessProfile.ps1` 是 x50 以上性能复盘的默认入口：
+
+```powershell
+.\Tools\Diagnostics\Analyze-AutoChessProfile.ps1 -PrintMarkdown
+```
+
+脚本会把 `AutoChessPlayModeProfileSummary.txt` 转成 `TestResults/AutoChess/Analysis/AutoChessProfileAnalysis.json` / `.md`，并固定输出 cost split、RW lookup/tick、enableable toggle/tick、Journaling TopN、Debugger drop rate、ProfilerDriver frame window 和反推架构失误。本轮脚本输出的关键推论如下：
+
+1. `CommandResolve + CoreSimulation = 87.8%`，`StructuralCommit = 1.3%`，说明后续不应继续把“结构变化数”当主要优化目标；Runtime Core 真正的问题是数据访问和生命周期解析成本。
+2. `GetComponentDataRW=51.0/tick`、`GetBufferRW=46.8/tick`，且 TopN 指向 `AbilityCatalogCommitSystem`、`AttributeRecalculateSystem`、`AbilityStateCleanupSystem`，说明当前 GAS Core 模块没有形成足够深的 owner-local / chunk-local seam。
+3. `EnableComponent + DisableComponent = 29.2/tick`，说明 enableable 只解决了 structural change，不代表生命周期协议优秀；Ability commit/end 应减少 per-command marker flip。
+4. `AttributeValueBuffer=95,150` 次 RW 是最大 component 热点，AttributeRecalculate 必须以 dirty owner / dirty attribute set 为后续重构目标。
+5. `Debugger drop rate=81.7%`、Journaling 达上限，说明 Debugger 层默认应做聚合 counters / TopN，raw event trace 只能短窗口采样。
 
 ## 自动验收门槛
 
@@ -562,7 +567,7 @@ AutoBattleCommandDriveSystem totalMs=15.491 maxMs=11.341 count=10
 |---|---|---|
 | x1 默认链路 | 业务闭环正确 | pass/fail、胜负、关键 facts、Cue marker 汇总 |
 | SceneRuntime | Unity 实机场景可运行 | scene runner summary，与 headless runner 结果一致 |
-| x50 profile | 放大热点 | core / observation / presentation / export 分项 tick，Runtime diagnostics counters，Unity Profiler `.data` capture，Entities Journaling diff |
+| x50 profile | 放大热点 | core / observation / presentation / export 分项 tick，Runtime diagnostics counters，Unity Profiler `.data` capture，Entities Journaling diff，`Analyze-AutoChessProfile.ps1` JSON/Markdown 分析 |
 | x100 / x1000 | 早期规模曲线 | 规模曲线、实体数、facts 数、buffer pressure、ECB / structural change counters |
 | x10w / x100w | 目标架构压力设计 | chunk/query/stream/counter 曲线、采样策略、降级策略、瓶颈归因 |
 | PerformanceExcellent | Goal 自动停止参考 | Functional x1、SceneRuntime x1、x50、x100 优秀线，x1000 通过线，0 GC / 0 sync point / 0 hot path structural change |

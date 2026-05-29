@@ -159,9 +159,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   runOnStart: 1
-  maxTicks: 128
+  maxTicks: 100000
   postVictoryFlushTicks: 4
   scenarioScale: 50
+  scenarioHealthMultiplier: 2048
+  minimumProfileSeconds: 30
   captureOfficialToolDiff: 1
   exportLogs: 1
   exportDirectory: TestResults/AutoChess/T6-CHESS-AF-SceneRuntime

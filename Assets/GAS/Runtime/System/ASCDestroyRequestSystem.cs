@@ -4,6 +4,7 @@ using Unity.Entities;
 
 namespace GAS.Runtime
 {
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
     [UpdateBefore(typeof(ASCInitializeRequestSystem))]
     [UpdateBefore(typeof(ASCCommandRequestSystem))]

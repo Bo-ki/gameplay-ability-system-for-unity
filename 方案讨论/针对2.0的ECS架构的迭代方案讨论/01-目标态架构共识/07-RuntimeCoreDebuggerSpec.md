@@ -220,78 +220,95 @@ Debugger 必须先对齐 `UnityDOTS官方文档参考/README.md`，再吸收 `Un
 
 ## 当前 AutoBattle PlayMode 实机证据
 
-2026-05-29 使用 AIBridge 1.4.1 驱动真实 Unity Editor PlayMode，加载 `Assets/AutoChessDemo/Presentation/Scenes/HeadlessAutoChessDemo.unity`，由 `HeadlessAutoChessDemoSceneRunner` 在 MonoBehaviour Coroutine 内控制 Unity Profiler 采集窗口并跑通 Diagnostic x50。当前证据采用 warmup-dropped 口径：PlayMode enter / warmup pass / ASC 创建 / Ability grant / 首帧 SystemGroup 初始化 / Journaling official-diff pass 不计入 `avgTickMs`，Runtime Debugger 只从 measured tick 开始记录 `SystemTiming`。
+2026-05-29 使用 AIBridge 1.4.1 驱动真实 Unity Editor PlayMode，加载 `Assets/AutoChessDemo/Presentation/Scenes/HeadlessAutoChessDemo.unity`，由 `HeadlessAutoChessDemoSceneRunner` 在 MonoBehaviour Coroutine 内控制 Unity Profiler 采集窗口并跑通 x50。当前证据采用 warmup-dropped + 30 秒 Runtime-only PlayMode 口径：PlayMode enter / warmup pass / ASC 创建 / Ability grant / 首帧 SystemGroup 初始化 / Journaling official-diff pass 不计入 `avgTickMs`，Runtime Debugger 只在 Diagnostic pass 打开。
+
+性能 pass 关闭 Runtime Debugger 和 presentation raw fact 投影，只保留 replay / required facts；Diagnostic pass 再打开完整 Layer 2 观测链，用来输出数据流图、时序图和 Runtime Debugger counters。这是 Debugger 和 Unity 官方工具的差分边界，避免把 Layer 2 presentation / debugger 成本混入 Runtime Core 性能判断。
 
 ```text
 completed=True, winner=Player, scale=50, units=200,
-battleTicks=9, totalTicks=10, warmupDroppedTicks=3, measuredTicks=7,
-commands=900, finishers=400, attributeChanges=1050,
-executionOutputs=250, cueRequests=400,
-debugEvents=62, debugWarnings=30, debugErrors=0, blockingDebugErrors=0,
-coreRequests=2700, coreFacts=4800, coreDeltas=1700, coreCues=400,
-peakEventBus=1300, replayLag=0, journalingRecords=48288,
-processWarmupRuns=1, totalElapsedMs=37.345,
-factsHash=0xBA1E575F, summaryHash=0x0A96B07B, avgTickMs=2.614
+battleTicks=4130, totalTicks=4131, warmupDroppedTicks=3, measuredTicks=4128,
+commands=478300, finishers=244800, attributeChanges=478250,
+executionOutputs=244750, cueRequests=233500,
+debugEvents=0, debugWarnings=0, debugErrors=0, blockingDebugErrors=0,
+coreRequests=0, coreFacts=0, coreDeltas=0, coreCues=0,
+peakEventBus=0, replayLag=0, journalingRecords=524288,
+processWarmupRuns=1, totalElapsedMs=30004.994,
+factsHash=0xEBE6E5B3, summaryHash=0x94F5D7CC, avgTickMs=1.561
 ```
 
 Timing snapshot：
 
 ```text
 ecsRuntimeTickOnly=true
-GASTickTotal(samples=7, avgMs=2.586, maxMs=6.285)
-GASFramePrepareSystemGroup(samples=7, avgMs=0.117, maxMs=0.416)
-GASCommandResolveSystemGroup(samples=7, avgMs=0.970, maxMs=2.682)
-GASCoreSimulationSystemGroup(samples=7, avgMs=0.960, maxMs=2.070)
-GASStructuralCommitSystemGroup(samples=7, avgMs=0.028, maxMs=0.056)
-GASBoundaryProjectionSystemGroup(samples=7, avgMs=0.511, maxMs=1.061)
+GASTickTotal(samples=4128, avgMs=1.548, maxMs=34.517)
+GASFramePrepareSystemGroup(samples=4128, avgMs=0.042, maxMs=0.262)
+GASCommandResolveSystemGroup(samples=4128, avgMs=0.612, maxMs=2.056)
+GASCoreSimulationSystemGroup(samples=4128, avgMs=0.747, maxMs=2.202)
+GASStructuralCommitSystemGroup(samples=4128, avgMs=0.020, maxMs=0.169)
+GASBoundaryProjectionSystemGroup(samples=4128, avgMs=0.128, maxMs=32.746)
 ```
 
 Official tool diff：
 
 ```text
-journalingAvailable=True, journalingCaptured=True, journalingWorldRecords=48288,
-runtimeStructuralApprox=900, journalingStructural=14202, deltaStructural=-13302,
-runtimeCreates=900, journalingCreates=1601, deltaCreates=-701,
-runtimeDestroys=0, journalingDestroys=1100, deltaDestroys=-1100,
-journalingAddComponents=201, journalingRemoveComponents=0,
+journalingAvailable=True, journalingCaptured=True, journalingWorldRecords=524288,
+runtimeStructuralApprox=0, journalingStructural=0, deltaStructural=0,
+runtimeCreates=0, journalingCreates=0, deltaCreates=0,
+runtimeDestroys=0, journalingDestroys=0, deltaDestroys=0,
+journalingAddComponents=0, journalingRemoveComponents=0,
+journalingEnableComponents=80400, journalingDisableComponents=40305,
 journalingSetComponentData=0, journalingSetBuffer=0,
-journalingGetComponentDataRW=6791, journalingGetBufferRW=27295,
-profilerAvailable=True, profilerEnabled=True,
+journalingGetComponentDataRW=210478, journalingGetBufferRW=193105,
+profilerAvailable=True, profilerEnabled=False,
 structuralProfilerCategoryEnabled=True, memoryProfilerCategoryEnabled=True,
-profilerCaptureState=profiler enabled; module counter data not exported by headless runner
+profilerCaptureState=profiler disabled; Entities profiler modules collect no data
 ```
 
 Unity Profiler `.data` capture：
 
 ```text
 Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data
-saved=True, firstFrameIndex=0, lastFrameIndex=1, profileEditor=False, size=14046560 bytes
-```
-
-官方 RawFrameDataView 中 `EX_GAS_World` TopN（ProfilerDriver `profileEditor=False`，只保留 PlayMode Runtime capture）：
-
-```text
-GASCommandResolveSystemGroup totalMs=82.738 maxMs=32.582 count=10
-GASCoreSimulationSystemGroup totalMs=67.072 maxMs=32.510 count=10
-GASBoundaryProjectionSystemGroup totalMs=32.601 maxMs=20.781 count=10
-AbilityCommandRequestSystem totalMs=20.332 maxMs=10.406 count=20
-GEExecutionCalculationExtensionSystemGroup totalMs=19.033 maxMs=12.140 count=10
-AutoBattleExecuteDamageCalculationSystem totalMs=18.973 maxMs=12.123 count=10
-DiagnosticsSnapshotSystem totalMs=18.149 maxMs=15.076 count=10
-ASCInitializeRequestSystem totalMs=17.662 maxMs=16.385 count=11
-AbilityCatalogCommitSystem totalMs=16.597 maxMs=13.989 count=10
-AutoBattleCommandDriveSystem totalMs=15.491 maxMs=11.341 count=10
+saved=True, driverSaved=True, binaryLogBytes=44620948,
+firstFrameIndex=3616, lastFrameIndex=4127,
+profileEditor=False, profilingEnabled=False
 ```
 
 解释：
 
 1. `blockingDebugErrors=0` 表示功能 gate 没有非 timing 类诊断错误；`debugErrors=0` 表示慢 timing 事件已经从错误语义中拆出。`SystemTiming` / `TickSummary` 最高只产生 Warning，用 slow timing / TopN 解释性能，不污染功能错误计数。
-2. x50 当前代表 50 组独立 2v2 并行跑在同一个 ECS World，用数量模拟真实游戏规模；AutoBattle AI 已按 BattleGroup 分组索引选敌，避免 Demo O(n^2) 全局搜敌污染 Runtime Core 判断。
-3. Runtime Debugger `SystemTiming` 只采样 measured ticks；Unity RawFrameDataView `count=10` 对应本次 capture 中的完整 runtime ticks。二者口径不同，不能把 `samples=7` 和 `count=10` 互相替代。
-4. AIBridge 1.4.1 已接入项目并通过真实 Unity Editor PlayMode 跑通：`compile unity` 成功、Error 日志 0、`Window/Analysis/Profiler` 可由 CLI 打开，`HeadlessAutoChessDemoSceneRunner` 通过 `ProfilerDriver.profileEditor=False` 保存 Runtime-only 官方 capture 到 `Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data`。该文件位于 ignored `Temp/`，作为本轮本机证据，不纳入版本控制。
-5. Journaling 记录数明显高于项目 `runtimeStructuralApprox`，说明当前项目 counter 只覆盖 Core 自认结构变化，官方记录还包含 bootstrap / cleanup / package 内部读写；结构变化归因以 Unity Entities Structural Changes Profiler / Journaling 为准，项目 counter 只做 GAS 语义映射。
+2. x50 当前代表 50 组独立 2v2 并行跑在同一个 ECS World，用数量模拟真实游戏规模；AutoBattle AI 已按 BattleGroup 缓存目标，避免 Demo O(n^2) 全局搜敌污染 Runtime Core 判断。
+3. 旧 7 tick 数据不符合 DOTS 性能判断要求，根因是采样过短、Profiler 只有 0-1 frame、以及 `RefreshUnits` 在 system 外用 `EntityManager.GetBuffer` 污染 `NoExecutingSystem`。当前胜负判断改为 AutoBattle driver 在 ECS 内写 alive counters，30 秒窗口提供稳定曲线。
+4. AIBridge 1.4.1 已接入项目并通过真实 Unity Editor PlayMode 跑通：`compile unity` 成功、Error 日志 0、`Window/Analysis/Profiler` 可由 CLI 打开，`HeadlessAutoChessDemoSceneRunner` 通过 Runtime-only binary log 保存官方 capture 到 `Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data`。该文件位于 ignored `Temp/`，作为本轮本机证据，不纳入版本控制。
+5. 当前 official diff 的 create/destroy/add/remove 结构变化为 0；enable / disable component 是 enableable toggle，不再归入 structural change。`journalingWorldRecords=524288` 已到 Entities Journaling 记录上限，因此只用于 TopN 热点方向，不把绝对值当完整总量。
 6. PlayMode capture 必须使用 Runtime-only 模式；若 `profileEditor=True`，`.data` 会混入 Editor / package 样本并导致文件膨胀，不能用于 Runtime Core 归因。
 7. 后续 Debugger 不再扩展成自研 profiler UI。Layer 2 保留无头 snapshot 和 official diff；Layer 1 Editor Extension / AIBridge / Unity Profiler 负责可视化、timeline、TopN、Profiler capture 和实机工具差分。
+8. 当前剩余性能热点是真实 Runtime/Core 设计问题：generated catalog commit、ability command resolve、ability cleanup、attribute recalculation、stream prepare 和 replay/fact projection 仍有主线程随机访问、enableable 写入与短系统拆分成本；这些应通过 dirty attribute set、chunk-local batch、generated lookup cache 和 command fan-in 架构迭代解决，而不是增加项目自研 profiler。
+
+## Profile Summary 读取分析机制
+
+原始 PlayMode summary / official diff / Debugger 文本不再直接人工阅读。当前统一使用：
+
+```powershell
+.\Tools\Diagnostics\Analyze-AutoChessProfile.ps1 -PrintMarkdown
+```
+
+脚本输入默认是 `TestResults/AutoChess/T6-CHESS-AF-SceneRuntime/AutoChessPlayModeProfileSummary.txt`，输出 ignored 产物 `TestResults/AutoChess/Analysis/AutoChessProfileAnalysis.json` 和 `.md`。它必须完成以下结构化归因：
+
+1. 解析 performance、timing、Debugger、Diagnostic pass、official tool diff、Profiler capture 六类行。
+2. 输出 `CommandResolve / CoreSimulation / StructuralCommit / BoundaryProjection` cost split。
+3. 把 `GetComponentDataRW`、`GetBufferRW`、`EnableComponent`、`DisableComponent` 折算为每 measured tick 预算。
+4. 解析 Journaling `recordTopN / systemTopN / componentTopN`，把热点落到具体 system 与 component。
+5. 计算 Debugger drop rate、Journaling cap、ProfilerDriver frame window，避免把采样工具自身限制误判为 Runtime Core 事实。
+6. 输出 `证据 -> 推断 -> 架构失误 -> 下一步 probe`，供 spec 与后续重构直接引用。
+
+本轮脚本反推的架构失误：
+
+1. **随机 lookup 仍是 Runtime Core 形状问题**：x50 为 `GetComponentDataRW=51.0/tick`、`GetBufferRW=46.8/tick`，TopN 集中在 `AbilityCatalogCommitSystem`、`AttributeRecalculateSystem`、`AbilityStateCleanupSystem`。这与 Entities 官方 `systems-systemapi.md` 对 lookup access / sync 的说明、`systems-optimizing.md` 对 lookup 更新和 system 固定开销的说明一致：当前不是缺 profiler，而是 ability commit / cleanup / attribute store 这些模块的 interface 太浅，调用者仍要理解并支付低层 ECS lookup。
+2. **Enableable 被正确用于避免 structural change，但被错误用成高频生命周期协议**：当前 create/destroy/add/remove 为 0，enableable toggle 为 `29.2/tick`。官方 `structural-changes-enableable-components.md` 明确 enableable 不产生 structural change，但也会影响访问对应 archetype 的 job / system；`components-enableable-use.md` 也要求 random-access enable/disable 避免和其他 job 竞态。当前问题不是“改回 Add/Remove”，而是减少 per-command `AbilityCommitRequestComponent` / `AbilityEndRequestComponent` flip，改为 owner-local command state 或 chunk batch。
+3. **架构优化优先级曾过度盯 structural change**：CommandResolve + CoreSimulation 占 `87.8%`，StructuralCommit 只有 `1.3%`。后续 gate 应优先看 RW lookup budget、dirty-set 大小、command fan-in 成本和 system count，而不是只看 ECB / structural count。
+4. **Attribute store 缺少 dirty owner / dirty attribute set**：`AttributeValueBuffer` 是最大 component RW 热点（`95,150` 次，`23.0/tick`）。这说明 AttributeRecalculate 仍接近“广义 owner buffer 重读写”，没有把 attribute delta 压成最小 dirty 集合。
+5. **诊断层原先偏 raw event log，不适合 x50 常态**：Debugger `events=4096`、`dropped=18262`，drop rate `81.7%`；Journaling 达到 `524,288` 上限。Layer 2 Debugger 必须默认输出聚合 counters / TopN / official diff，raw trace 只能短窗口 opt-in。
+6. **ProfilerDriver metadata 不能单独代表 30 秒全量曲线**：本轮 `firstFrameIndex=3616,lastFrameIndex=4127` 只有 512 frame window；30 秒证据以 `UnityEngine.Profiling.Profiler` binary log 文件存在和大小为主，ProfilerDriver save 只是补充。
 
 ## AM-1 baseline 采样口径
 

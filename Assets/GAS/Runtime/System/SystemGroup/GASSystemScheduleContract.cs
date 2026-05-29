@@ -170,19 +170,7 @@ namespace GAS.Runtime
                 EGasRuntimeCoreFramePhase.FramePrepare,
                 typeof(GASFramePrepareSystemGroup)),
             new(
-                typeof(GEEffectCommandIngestSystem),
-                EGasRuntimeCoreFramePhase.CommandIngest,
-                typeof(GASCommandResolveSystemGroup)),
-            new(
                 typeof(GameplayFactProjectionSystem),
-                EGasRuntimeCoreFramePhase.TypedFactProjection,
-                typeof(GASCoreSimulationSystemGroup)),
-            new(
-                typeof(GameplayFactEventBridgeSystem),
-                EGasRuntimeCoreFramePhase.TypedFactProjection,
-                typeof(GASCoreSimulationSystemGroup)),
-            new(
-                typeof(GEInstantEffectCueRequestProjectionSystem),
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
                 typeof(GASCoreSimulationSystemGroup)),
             new(
@@ -214,8 +202,6 @@ namespace GAS.Runtime
             typeof(ASCCommandRequestSystem),
             typeof(AbilityCommandRequestSystem),
             typeof(AbilityTryActivateSystem),
-            typeof(AbilityCommitSystem),
-            typeof(GEEffectCommandIngestSystem),
             typeof(ASCDestroyRequestSystem),
         };
 
@@ -225,15 +211,12 @@ namespace GAS.Runtime
             typeof(GEExecutionCalculationExtensionSystemGroup),
             typeof(GEExecutionCalculationOutputModifierSystem),
             typeof(AttributeRecalculateSystem),
-            typeof(AttributeChangeEventProjectionSystem),
             typeof(GameplayTagChangeProcessSystem),
             typeof(AbilityStateTickSystem),
             typeof(AttributeThresholdAbilityLifecycleRequestSystem),
             typeof(AbilityLifecycleRequestSystem),
             typeof(AbilityStateCleanupSystem),
             typeof(GameplayFactProjectionSystem),
-            typeof(GameplayFactEventBridgeSystem),
-            typeof(GEInstantEffectCueRequestProjectionSystem),
         };
 
         private static readonly Type[] StructuralCommitSystemTypes =
@@ -258,7 +241,6 @@ namespace GAS.Runtime
         private static readonly Type[] EffectCommandSpecStreamTargetSystemTypes =
         {
             typeof(GEEffectCommandSpecStreamFramePrepareSystem),
-            typeof(GEEffectCommandIngestSystem),
             typeof(GameplayFactProjectionSystem),
         };
 

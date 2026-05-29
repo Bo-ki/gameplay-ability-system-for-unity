@@ -1,6 +1,4 @@
 using Unity.Burst;
-using Unity.Burst.Intrinsics;
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
@@ -9,6 +7,7 @@ namespace GAS.Runtime
     /// Converts try-activate markers into explicit commit requests.
     /// The gameplay commit gate lives in AbilityCommitSystem.
     /// </summary>
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
     [UpdateBefore(typeof(AbilityCommitSystem))]
     [BurstCompile]
@@ -27,48 +26,23 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            var abilityChunkCount = _query.CalculateChunkCount();
-            if (abilityChunkCount <= 0)
-                return;
-
-            var em = state.EntityManager;
-            var abilityRecordStream = new NativeStream(abilityChunkCount, Allocator.TempJob);
-            var ecb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
-                .CreateCommandBuffer(state.WorldUnmanaged);
-
-            try
+            var commitRequests = SystemAPI.GetComponentLookup<AbilityCommitRequestComponent>();
+            foreach (var (target, activationPending, ability) in SystemAPI
+                         .Query<RefRO<AbilityMainTargetComponent>, EnabledRefRW<AbilityActivationPendingComponent>>()
+                         .WithAll<AbilityStateComponent, AbilityActivationPendingComponent>()
+                         .WithEntityAccess())
             {
-                var scanJob = new AbilityTryActivateScanJob
+                if (commitRequests.HasComponent(ability))
                 {
-                    EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
-                    AbilityRecordWriter = abilityRecordStream.AsWriter(),
-                };
-                state.Dependency = scanJob.ScheduleParallel(_query, state.Dependency);
-                state.Dependency.Complete();
-
-                var abilityRecordReader = abilityRecordStream.AsReader();
-                for (var streamIndex = 0; streamIndex < abilityRecordReader.ForEachCount; streamIndex++)
-                {
-                    var recordCount = abilityRecordReader.BeginForEachIndex(streamIndex);
-                    for (var i = 0; i < recordCount; i++)
+                    commitRequests[ability] = new AbilityCommitRequestComponent
                     {
-                        var record = abilityRecordReader.Read<AbilityTryActivateRecord>();
-                        var ability = record.Ability;
-                        if (!em.Exists(ability))
-                            continue;
-
-                        if (em.HasComponent<AbilityCommitRequestComponent>(ability))
-                            em.SetComponentEnabled<AbilityCommitRequestComponent>(ability, true);
-
-                        if (em.HasComponent<AbilityActivationPendingComponent>(ability))
-                            em.SetComponentEnabled<AbilityActivationPendingComponent>(ability, false);
-                    }
-                    abilityRecordReader.EndForEachIndex();
+                        TargetAsc = target.ValueRO.TargetAsc,
+                    };
+                    if (!commitRequests.IsComponentEnabled(ability))
+                        commitRequests.SetComponentEnabled(ability, true);
                 }
-            }
-            finally
-            {
-                abilityRecordStream.Dispose();
+
+                activationPending.ValueRW = false;
             }
         }
 
@@ -77,34 +51,5 @@ namespace GAS.Runtime
         {
         }
 
-        private struct AbilityTryActivateRecord
-        {
-            public Entity Ability;
-        }
-
-        private struct AbilityTryActivateScanJob : IJobChunk
-        {
-            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
-            public NativeStream.Writer AbilityRecordWriter;
-
-            public void Execute(
-                in ArchetypeChunk chunk,
-                int unfilteredChunkIndex,
-                bool useEnabledMask,
-                in v128 chunkEnabledMask)
-            {
-                AbilityRecordWriter.BeginForEachIndex(unfilteredChunkIndex);
-                var abilities = chunk.GetNativeArray(EntityTypeHandle);
-                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
-                while (enumerator.NextEntityIndex(out var entityIndex))
-                {
-                    AbilityRecordWriter.Write(new AbilityTryActivateRecord
-                    {
-                        Ability = abilities[entityIndex],
-                    });
-                }
-                AbilityRecordWriter.EndForEachIndex();
-            }
-        }
     }
 }

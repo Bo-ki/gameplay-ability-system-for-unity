@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -6,20 +5,16 @@ using GAS.Runtime;
 
 namespace GAS.AutoChessDemo
 {
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GEExecutionCalculationExtensionSystemGroup))]
     public partial struct AutoBattleExecuteDamageCalculationSystem : ISystem
     {
         private EntityQuery _driverQuery;
-        private EntityQuery _targetQuery;
 
         public void OnCreate(ref SystemState state)
         {
             _driverQuery = SystemAPI.QueryBuilder()
                 .WithAll<AutoBattleCommandDriverComponent>()
-                .Build();
-            _targetQuery = SystemAPI.QueryBuilder()
-                .WithAll<AttributeValueBuffer>()
-                .WithNone<ASCDestroyingComponent>()
                 .Build();
 
             state.RequireForUpdate<GlobalTimer>();
@@ -46,41 +41,19 @@ namespace GAS.AutoChessDemo
             var eventBusEntity = SystemAPI.GetSingletonEntity<GameplayEventBusComponent>();
 
             var commands = em.GetBuffer<GEEffectCommandBuffer>(streamEntity);
-            var executeCommands = new NativeList<AutoBattleExecuteCommandRecord>(Allocator.Temp);
             var damageDeltas = new NativeList<AutoBattleExecuteDamageDeltaRecord>(Allocator.Temp);
+            var attributesByAsc = SystemAPI.GetBufferLookup<AttributeValueBuffer>();
+            var destroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true);
 
             try
             {
-                CollectExecuteCommands(commands, executeCommands);
-                if (executeCommands.Length > 0)
-                {
-                    executeCommands.Sort(new AutoBattleExecuteCommandTargetComparer());
-                    var commandArray = executeCommands.AsArray();
-                    using var targetRanges =
-                        new NativeParallelHashMap<Entity, AutoBattleExecuteCommandRange>(
-                            math.max(1, commandArray.Length),
-                            Allocator.Temp);
-                    BuildTargetRanges(commandArray, targetRanges);
-
-                    foreach (var (attributes, targetAsc)
-                             in SystemAPI.Query<DynamicBuffer<AttributeValueBuffer>>()
-                                 .WithNone<ASCDestroyingComponent>()
-                                 .WithEntityAccess())
-                    {
-                        if (!targetRanges.TryGetValue(targetAsc, out var range))
-                            continue;
-
-                        ApplyExecuteDamageCommands(
-                            targetAsc,
-                            attributes,
-                            commandArray,
-                            range,
-                            frame,
-                            damageDeltas);
-                    }
-
-                    AppendDamageDeltasAndEvents(em, streamEntity, eventBusEntity, damageDeltas.AsArray());
-                }
+                CollectDamageDeltas(
+                    commands,
+                    attributesByAsc,
+                    destroyingLookup,
+                    frame,
+                    damageDeltas);
+                AppendDamageDeltasAndEvents(em, streamEntity, eventBusEntity, damageDeltas.AsArray());
 
                 driver.LastExecutionFrame = frame;
                 SystemAPI.SetComponent(driverEntity, driver);
@@ -88,7 +61,6 @@ namespace GAS.AutoChessDemo
             finally
             {
                 damageDeltas.Dispose();
-                executeCommands.Dispose();
             }
         }
 
@@ -96,9 +68,12 @@ namespace GAS.AutoChessDemo
         {
         }
 
-        private static void CollectExecuteCommands(
+        private static void CollectDamageDeltas(
             DynamicBuffer<GEEffectCommandBuffer> commands,
-            NativeList<AutoBattleExecuteCommandRecord> executeCommands)
+            BufferLookup<AttributeValueBuffer> attributesByAsc,
+            ComponentLookup<ASCDestroyingComponent> destroyingLookup,
+            int frame,
+            NativeList<AutoBattleExecuteDamageDeltaRecord> damageDeltas)
         {
             for (var i = 0; i < commands.Length; i++)
             {
@@ -109,13 +84,23 @@ namespace GAS.AutoChessDemo
                     continue;
                 }
 
-                executeCommands.Add(new AutoBattleExecuteCommandRecord
+                var targetAsc = command.TargetAsc;
+                if (!attributesByAsc.HasBuffer(targetAsc)
+                    || IsDestroying(destroyingLookup, targetAsc))
                 {
-                    Order = executeCommands.Length,
+                    continue;
+                }
+
+                var attributes = attributesByAsc[targetAsc];
+                if (!ApplyExecuteDamage(attributes, in command, out var oldValue, out var newValue, out var damage))
+                    continue;
+
+                damageDeltas.Add(new AutoBattleExecuteDamageDeltaRecord
+                {
                     CommandSequence = command.Sequence,
-                    Frame = command.Frame,
+                    Frame = command.Frame != 0 ? command.Frame : frame,
                     SourceAsc = command.SourceAsc,
-                    TargetAsc = command.TargetAsc,
+                    TargetAsc = targetAsc,
                     SourceAbility = command.SourceAbility,
                     SourceEffect = command.SourceEffect,
                     GameplayEffectCode = command.GameplayEffectCode,
@@ -124,80 +109,11 @@ namespace GAS.AutoChessDemo
                     AttrSetCode = HeadlessAutoBattleScenario.AttributeSetCombat,
                     AttributeCode = HeadlessAutoBattleScenario.AttributeHealth,
                     OutputKey = HeadlessAutoBattleScenario.ExecutionCalculationExecuteDamageOutput,
-                    BaseDamage = 10f,
-                    MissingHealthCoefficient = 0.5f,
-                    MinDamage = 10f,
-                    MaxDamage = 36f,
-                });
-            }
-        }
-
-        private static void ApplyExecuteDamageCommands(
-            Entity targetAsc,
-            DynamicBuffer<AttributeValueBuffer> attributes,
-            NativeArray<AutoBattleExecuteCommandRecord> commands,
-            in AutoBattleExecuteCommandRange range,
-            int frame,
-            NativeList<AutoBattleExecuteDamageDeltaRecord> damageDeltas)
-        {
-            var end = range.Start + range.Count;
-            for (var commandIndex = range.Start; commandIndex < end; commandIndex++)
-            {
-                var command = commands[commandIndex];
-                if (!ApplyExecuteDamage(attributes, in command, out var oldValue, out var newValue, out var damage))
-                    continue;
-
-                damageDeltas.Add(new AutoBattleExecuteDamageDeltaRecord
-                {
-                    Order = command.Order,
-                    CommandSequence = command.CommandSequence,
-                    Frame = command.Frame != 0 ? command.Frame : frame,
-                    SourceAsc = command.SourceAsc,
-                    TargetAsc = command.TargetAsc,
-                    SourceAbility = command.SourceAbility,
-                    SourceEffect = command.SourceEffect,
-                    GameplayEffectCode = command.GameplayEffectCode,
-                    ContextId = command.ContextId,
-                    ParentContextId = command.ParentContextId,
-                    AttrSetCode = command.AttrSetCode,
-                    AttributeCode = command.AttributeCode,
-                    OutputKey = command.OutputKey,
                     Damage = damage,
                     OldValue = oldValue,
                     NewValue = newValue,
                 });
             }
-        }
-
-        private static void BuildTargetRanges(
-            NativeArray<AutoBattleExecuteCommandRecord> commands,
-            NativeParallelHashMap<Entity, AutoBattleExecuteCommandRange> targetRanges)
-        {
-            if (commands.Length == 0)
-                return;
-
-            var start = 0;
-            var target = commands[0].TargetAsc;
-            for (var i = 1; i < commands.Length; i++)
-            {
-                var command = commands[i];
-                if (command.TargetAsc.Equals(target))
-                    continue;
-
-                targetRanges.TryAdd(target, new AutoBattleExecuteCommandRange
-                {
-                    Start = start,
-                    Count = i - start,
-                });
-                start = i;
-                target = command.TargetAsc;
-            }
-
-            targetRanges.TryAdd(target, new AutoBattleExecuteCommandRange
-            {
-                Start = start,
-                Count = commands.Length - start,
-            });
         }
 
         private static void AppendDamageDeltasAndEvents(
@@ -208,8 +124,6 @@ namespace GAS.AutoChessDemo
         {
             if (damageDeltas.Length == 0)
                 return;
-
-            damageDeltas.Sort(new AutoBattleExecuteDamageDeltaRecordComparer());
 
             var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
             var deltas = em.GetBuffer<AttributeModifierBuffer>(streamEntity);
@@ -243,6 +157,7 @@ namespace GAS.AutoChessDemo
                         OldValue = record.OldValue,
                         NewValue = record.NewValue,
                     });
+                    AttributeHelper.MarkOwnerChangeEventPending(em, record.TargetAsc);
 
                     facts.Add(new GameplayEventBuffer
                     {
@@ -301,30 +216,16 @@ namespace GAS.AutoChessDemo
             return next++;
         }
 
-        private struct AutoBattleExecuteCommandRecord
+        private static bool IsDestroying(
+            ComponentLookup<ASCDestroyingComponent> destroyingLookup,
+            Entity asc)
         {
-            public int Order;
-            public int CommandSequence;
-            public int Frame;
-            public Entity SourceAsc;
-            public Entity TargetAsc;
-            public Entity SourceAbility;
-            public Entity SourceEffect;
-            public int GameplayEffectCode;
-            public int ContextId;
-            public int ParentContextId;
-            public int AttrSetCode;
-            public int AttributeCode;
-            public int OutputKey;
-            public float BaseDamage;
-            public float MissingHealthCoefficient;
-            public float MinDamage;
-            public float MaxDamage;
+            return destroyingLookup.HasComponent(asc)
+                   && destroyingLookup.IsComponentEnabled(asc);
         }
 
         private struct AutoBattleExecuteDamageDeltaRecord
         {
-            public int Order;
             public int CommandSequence;
             public int Frame;
             public Entity SourceAsc;
@@ -342,15 +243,9 @@ namespace GAS.AutoChessDemo
             public float NewValue;
         }
 
-        private struct AutoBattleExecuteCommandRange
-        {
-            public int Start;
-            public int Count;
-        }
-
         private static bool ApplyExecuteDamage(
             DynamicBuffer<AttributeValueBuffer> attributes,
-            in AutoBattleExecuteCommandRecord command,
+            in GEEffectCommandBuffer command,
             out float oldValue,
             out float newValue,
             out float damage)
@@ -359,7 +254,10 @@ namespace GAS.AutoChessDemo
             newValue = 0f;
             damage = 0f;
 
-            var attrIndex = IndexOfAttribute(attributes, command.AttrSetCode, command.AttributeCode);
+            var attrIndex = IndexOfAttribute(
+                attributes,
+                HeadlessAutoBattleScenario.AttributeSetCombat,
+                HeadlessAutoBattleScenario.AttributeHealth);
             if (attrIndex < 0)
                 return false;
 
@@ -372,9 +270,9 @@ namespace GAS.AutoChessDemo
             var maxValue = attribute.IsClampMax ? attribute.MaxValue : oldValue;
             var missingHealth = math.max(0f, maxValue - oldValue);
             damage = math.clamp(
-                command.BaseDamage + missingHealth * command.MissingHealthCoefficient,
-                command.MinDamage,
-                command.MaxDamage);
+                10f + missingHealth * 0.5f,
+                10f,
+                36f);
             newValue = oldValue - damage;
 
             attribute.CurrentValue = newValue;
@@ -388,7 +286,7 @@ namespace GAS.AutoChessDemo
                 return false;
             }
 
-            attribute.Dirty = true;
+            attribute.Dirty = false;
             if (oldCurrentValue != attribute.CurrentValue)
             {
                 attribute.PreviousCurrentValue = oldCurrentValue;
@@ -422,34 +320,5 @@ namespace GAS.AutoChessDemo
                 attribute.CurrentValue = math.min(attribute.CurrentValue, attribute.MaxValue);
         }
 
-        private struct AutoBattleExecuteDamageDeltaRecordComparer :
-            IComparer<AutoBattleExecuteDamageDeltaRecord>
-        {
-            public int Compare(
-                AutoBattleExecuteDamageDeltaRecord x,
-                AutoBattleExecuteDamageDeltaRecord y)
-            {
-                return x.Order.CompareTo(y.Order);
-            }
-        }
-
-        private struct AutoBattleExecuteCommandTargetComparer :
-            IComparer<AutoBattleExecuteCommandRecord>
-        {
-            public int Compare(
-                AutoBattleExecuteCommandRecord x,
-                AutoBattleExecuteCommandRecord y)
-            {
-                var targetCompare = x.TargetAsc.Index.CompareTo(y.TargetAsc.Index);
-                if (targetCompare != 0)
-                    return targetCompare;
-
-                targetCompare = x.TargetAsc.Version.CompareTo(y.TargetAsc.Version);
-                if (targetCompare != 0)
-                    return targetCompare;
-
-                return x.Order.CompareTo(y.Order);
-            }
-        }
     }
 }

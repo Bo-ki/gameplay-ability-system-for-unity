@@ -189,7 +189,8 @@ namespace GAS.Runtime
 
             if (entityManager.HasComponent<AbilityDestroyOnCleanupComponent>(ability))
             {
-                entityManager.SetComponentEnabled<AbilityDestroyOnCleanupComponent>(ability, true);
+                if (!entityManager.IsComponentEnabled<AbilityDestroyOnCleanupComponent>(ability))
+                    entityManager.SetComponentEnabled<AbilityDestroyOnCleanupComponent>(ability, true);
                 return;
             }
 
@@ -222,15 +223,20 @@ namespace GAS.Runtime
             if (!entityManager.Exists(ability))
                 return;
 
-            if (entityManager.HasComponent<AbilityActivationPendingComponent>(ability))
+            if (entityManager.HasComponent<AbilityActivationPendingComponent>(ability)
+                && entityManager.IsComponentEnabled<AbilityActivationPendingComponent>(ability))
                 entityManager.SetComponentEnabled<AbilityActivationPendingComponent>(ability, false);
-            if (entityManager.HasComponent<AbilityCommitRequestComponent>(ability))
+            if (entityManager.HasComponent<AbilityCommitRequestComponent>(ability)
+                && entityManager.IsComponentEnabled<AbilityCommitRequestComponent>(ability))
                 entityManager.SetComponentEnabled<AbilityCommitRequestComponent>(ability, false);
-            if (entityManager.HasComponent<AbilityCancelRequestComponent>(ability))
+            if (entityManager.HasComponent<AbilityCancelRequestComponent>(ability)
+                && entityManager.IsComponentEnabled<AbilityCancelRequestComponent>(ability))
                 entityManager.SetComponentEnabled<AbilityCancelRequestComponent>(ability, false);
-            if (entityManager.HasComponent<AbilityEndRequestComponent>(ability))
+            if (entityManager.HasComponent<AbilityEndRequestComponent>(ability)
+                && entityManager.IsComponentEnabled<AbilityEndRequestComponent>(ability))
                 entityManager.SetComponentEnabled<AbilityEndRequestComponent>(ability, false);
-            if (entityManager.HasComponent<AbilityDestroyOnCleanupComponent>(ability))
+            if (entityManager.HasComponent<AbilityDestroyOnCleanupComponent>(ability)
+                && entityManager.IsComponentEnabled<AbilityDestroyOnCleanupComponent>(ability))
                 entityManager.SetComponentEnabled<AbilityDestroyOnCleanupComponent>(ability, false);
         }
 

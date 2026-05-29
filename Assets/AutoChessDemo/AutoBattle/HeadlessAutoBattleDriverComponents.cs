@@ -14,6 +14,9 @@ namespace GAS.AutoChessDemo
         public bool Enabled;
         public int LastDecisionFrame;
         public int LastExecutionFrame;
+        public int LastOutcomeFrame;
+        public int PlayerAliveCount;
+        public int EnemyAliveCount;
         public int IssuedCommandCount;
         public int IssuedPrimaryCommandCount;
         public int IssuedFinisherCommandCount;
@@ -27,6 +30,8 @@ namespace GAS.AutoChessDemo
         public int Slot;
         public int PrimaryAbilityCode;
         public int FinisherAbilityCode;
+        public Entity PrimaryAbilityEntity;
+        public Entity FinisherAbilityEntity;
         public int HealthAttrSetCode;
         public int HealthAttrCode;
         public int EnergyAttrSetCode;
@@ -57,6 +62,8 @@ namespace GAS.AutoChessDemo
         public int Slot;
         public int PrimaryAbilityCode;
         public int FinisherAbilityCode;
+        public Entity PrimaryAbilityEntity;
+        public Entity FinisherAbilityEntity;
         public int CooldownTagIndex;
         public float FinisherHealthThreshold;
         public AutoBattleTargetPolicy PrimaryTargetPolicy;

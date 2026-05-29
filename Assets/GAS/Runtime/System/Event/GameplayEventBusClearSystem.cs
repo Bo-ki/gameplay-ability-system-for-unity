@@ -5,6 +5,7 @@ namespace GAS.Runtime
     /// <summary>
     /// 清理上一帧事件总线数据。事件总线只保留最近一次 GAS tick 产生的事实事件。
     /// </summary>
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASFramePrepareSystemGroup), OrderFirst = true)]
     public partial struct GameplayEventBusClearSystem : ISystem
     {

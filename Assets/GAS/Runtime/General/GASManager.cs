@@ -22,6 +22,8 @@ namespace GAS.Runtime
 
         public static bool IsInitialized { get; private set; }
 
+        private static bool _attachedToPlayerLoop;
+
         public static Entity EntityGlobalTimer { get; private set; }
 
         public static Entity EntityEffectCommandSpecStream { get; private set; }
@@ -37,7 +39,7 @@ namespace GAS.Runtime
 
         public static int CurrentTurn => EntityManager.GetComponentData<GlobalTimer>(EntityGlobalTimer).Turn;
 
-        public static void Initialize()
+        public static void Initialize(bool attachToPlayerLoop = true)
         {
             if (IsInitialized)
             {
@@ -51,7 +53,7 @@ namespace GAS.Runtime
             GASRuntimeEntityArchetypes.ResetCache();
             ExWorld = new World("EX_GAS_World");
             EntityManager = ExWorld.EntityManager;
-            CreateSystems();
+            CreateSystems(attachToPlayerLoop);
             EntityGlobalTimer = ExWorld.EntityManager.CreateEntity(GASRuntimeEntityArchetypes.GlobalTimer(EntityManager));
             ExWorld.EntityManager.SetName(EntityGlobalTimer, "GAS_GlobalTimer");
             EntityEffectCommandSpecStream = EffectCommandSpecStream.EnsureSingleton(EntityManager);
@@ -81,10 +83,12 @@ namespace GAS.Runtime
 
             if (ExWorld != null && ExWorld.IsCreated)
             {
-                ScriptBehaviourUpdateOrder.RemoveWorldFromCurrentPlayerLoop(ExWorld);
+                if (_attachedToPlayerLoop)
+                    ScriptBehaviourUpdateOrder.RemoveWorldFromCurrentPlayerLoop(ExWorld);
                 ExWorld.Dispose();
             }
 
+            _attachedToPlayerLoop = false;
             ExWorld = null;
             EntityManager = default;
             EntityGlobalTimer = Entity.Null;
@@ -97,7 +101,7 @@ namespace GAS.Runtime
             IsInitialized = false;
         }
 
-        private static void CreateSystems()
+        private static void CreateSystems(bool attachToPlayerLoop)
         {
             // 基础系统组
             ExWorld.CreateSystemManaged<InitializationSystemGroup>();
@@ -111,8 +115,11 @@ namespace GAS.Runtime
             GASSystemScheduleContract.RegisterSystems(ExWorld, gasGroups);
             GASSystemScheduleContract.SortSystems(sgFixedStepSimulation, gasGroups);
 
-            // 同步到 PlayerLoop
-            ScriptBehaviourUpdateOrder.AppendWorldToCurrentPlayerLoop(ExWorld);
+            if (attachToPlayerLoop)
+            {
+                ScriptBehaviourUpdateOrder.AppendWorldToCurrentPlayerLoop(ExWorld);
+                _attachedToPlayerLoop = true;
+            }
         }
 
         public static Entity EntityEventBus { get; private set; }

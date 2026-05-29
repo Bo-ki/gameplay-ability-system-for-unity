@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
+using System.Text;
 using Unity.Entities;
 using UnityEngine;
 
@@ -32,6 +34,9 @@ namespace GAS.Runtime
         public readonly bool StructuralChangesProfilerCategoryEnabled;
         public readonly bool MemoryProfilerCategoryEnabled;
         public readonly string ProfilerCaptureState;
+        public readonly string JournalingRecordTopN;
+        public readonly string JournalingSystemTopN;
+        public readonly string JournalingComponentTopN;
 
         public GasRuntimeOfficialToolDiffSnapshot(
             bool journalingAvailable,
@@ -53,7 +58,10 @@ namespace GAS.Runtime
             bool profilerEnabled,
             bool structuralChangesProfilerCategoryEnabled,
             bool memoryProfilerCategoryEnabled,
-            string profilerCaptureState)
+            string profilerCaptureState,
+            string journalingRecordTopN = "",
+            string journalingSystemTopN = "",
+            string journalingComponentTopN = "")
         {
             JournalingAvailable = journalingAvailable;
             JournalingCaptured = journalingCaptured;
@@ -75,6 +83,9 @@ namespace GAS.Runtime
             StructuralChangesProfilerCategoryEnabled = structuralChangesProfilerCategoryEnabled;
             MemoryProfilerCategoryEnabled = memoryProfilerCategoryEnabled;
             ProfilerCaptureState = profilerCaptureState ?? string.Empty;
+            JournalingRecordTopN = journalingRecordTopN ?? string.Empty;
+            JournalingSystemTopN = journalingSystemTopN ?? string.Empty;
+            JournalingComponentTopN = journalingComponentTopN ?? string.Empty;
         }
 
         public static GasRuntimeOfficialToolDiffSnapshot Unavailable =>
@@ -178,10 +189,16 @@ namespace GAS.Runtime
             var journalingSetBufferCount = 0;
             var journalingGetComponentDataRwCount = 0;
             var journalingGetBufferRwCount = 0;
+            var journalingRecordTopN = string.Empty;
+            var journalingSystemTopN = string.Empty;
+            var journalingComponentTopN = string.Empty;
 
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !DISABLE_ENTITIES_JOURNALING
             if (_journalingCaptureStarted)
             {
+                var recordCounts = new Dictionary<string, int>(32);
+                var systemCounts = new Dictionary<string, int>(64);
+                var componentCounts = new Dictionary<string, int>(64);
                 var records = EntitiesJournaling.GetRecords(EntitiesJournaling.Ordering.Ascending);
                 for (var i = 0; i < records.Length; i++)
                 {
@@ -191,6 +208,13 @@ namespace GAS.Runtime
                         continue;
 
                     journalingWorldRecordCount++;
+                    var recordTypeName = record.RecordType.ToString();
+                    AddCount(recordCounts, recordTypeName);
+                    AddCount(systemCounts, recordTypeName + "@" + SafeName(record.ExecutingSystem.Name, "NoExecutingSystem"));
+                    var componentTypes = record.ComponentTypes;
+                    for (var componentIndex = 0; componentIndex < componentTypes.Length; componentIndex++)
+                        AddCount(componentCounts, recordTypeName + ":" + SafeName(componentTypes[componentIndex].Name, "NoComponent"));
+
                     switch (record.RecordType)
                     {
                         case EntitiesJournaling.RecordType.CreateEntity:
@@ -210,11 +234,9 @@ namespace GAS.Runtime
                             journalingRemoveComponentCount++;
                             break;
                         case EntitiesJournaling.RecordType.EnableComponent:
-                            journalingStructuralRecordCount++;
                             journalingEnableComponentCount++;
                             break;
                         case EntitiesJournaling.RecordType.DisableComponent:
-                            journalingStructuralRecordCount++;
                             journalingDisableComponentCount++;
                             break;
                         case EntitiesJournaling.RecordType.SetComponentData:
@@ -231,6 +253,10 @@ namespace GAS.Runtime
                             break;
                     }
                 }
+
+                journalingRecordTopN = FormatTopN(recordCounts, 6);
+                journalingSystemTopN = FormatTopN(systemCounts, 8);
+                journalingComponentTopN = FormatTopN(componentCounts, 8);
             }
 #endif
 
@@ -254,7 +280,52 @@ namespace GAS.Runtime
                 _profilerEnabled,
                 _structuralChangesCategoryEnabled,
                 _memoryCategoryEnabled,
-                _profilerCaptureState);
+                _profilerCaptureState,
+                journalingRecordTopN,
+                journalingSystemTopN,
+                journalingComponentTopN);
+        }
+
+        private static void AddCount(Dictionary<string, int> counts, string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                key = "Unknown";
+
+            counts.TryGetValue(key, out var count);
+            counts[key] = count + 1;
+        }
+
+        private static string FormatTopN(Dictionary<string, int> counts, int limit)
+        {
+            if (counts == null || counts.Count == 0 || limit <= 0)
+                return string.Empty;
+
+            var entries = new List<KeyValuePair<string, int>>(counts);
+            entries.Sort(static (left, right) =>
+            {
+                var valueCompare = right.Value.CompareTo(left.Value);
+                return valueCompare != 0
+                    ? valueCompare
+                    : string.CompareOrdinal(left.Key, right.Key);
+            });
+
+            var builder = new StringBuilder(256);
+            var count = Math.Min(limit, entries.Count);
+            for (var i = 0; i < count; i++)
+            {
+                if (i > 0)
+                    builder.Append(';');
+                builder.Append(entries[i].Key)
+                    .Append('=')
+                    .Append(entries[i].Value);
+            }
+
+            return builder.ToString();
+        }
+
+        private static string SafeName(string value, string fallback)
+        {
+            return string.IsNullOrEmpty(value) ? fallback : value;
         }
 
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !DISABLE_ENTITIES_JOURNALING

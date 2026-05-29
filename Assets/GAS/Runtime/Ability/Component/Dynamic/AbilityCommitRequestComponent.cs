@@ -7,5 +7,6 @@ namespace GAS.Runtime
     /// </summary>
     public struct AbilityCommitRequestComponent : IComponentData, IEnableableComponent
     {
+        public Entity TargetAsc;
     }
 }

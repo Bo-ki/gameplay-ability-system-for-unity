@@ -4,6 +4,7 @@ using Unity.Entities;
 
 namespace GAS.Runtime
 {
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASBoundaryProjectionSystemGroup))]
     [UpdateAfter(typeof(CueDestroySystem))]
     public partial struct ASCDestroyFinalizeSystem : ISystem

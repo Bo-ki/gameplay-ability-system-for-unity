@@ -4,6 +4,7 @@ using GAS.Runtime;
 
 namespace GAS.AutoChessDemo
 {
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
     [UpdateAfter(typeof(ASCCommandRequestSystem))]
     [UpdateBefore(typeof(AbilityCommandRequestSystem))]
@@ -42,17 +43,23 @@ namespace GAS.AutoChessDemo
             if (unitCapacity < 1)
                 unitCapacity = 1;
 
+            var attributesByAsc = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true);
             using (var units = new NativeList<AutoBattleUnitTargetStateRecord>(unitCapacity, Allocator.Temp))
-            using (var groupIndex = new NativeParallelMultiHashMap<int, int>(unitCapacity, Allocator.Temp))
             {
-                foreach (var (unit, tags, attributes, entity)
+                var maxBattleGroup = -1;
+                var playerAliveCount = 0;
+                var enemyAliveCount = 0;
+                foreach (var (unit, tags, entity)
                          in SystemAPI.Query<
                                  RefRO<AutoBattleUnitComponent>,
-                                 RefRO<TagMaskComponent>,
-                                 DynamicBuffer<AttributeValueBuffer>>()
+                                 RefRO<TagMaskComponent>>()
                              .WithNone<ASCDestroyingComponent>()
                              .WithEntityAccess())
                 {
+                    if (!attributesByAsc.HasBuffer(entity))
+                        continue;
+
+                    var attributes = attributesByAsc[entity];
                     var unitValue = unit.ValueRO;
                     var health = GetAttribute(
                         attributes,
@@ -60,6 +67,11 @@ namespace GAS.AutoChessDemo
                         unitValue.HealthAttrCode);
                     if (health <= 0f)
                         continue;
+
+                    if (unitValue.Team == HeadlessAutoBattleTeam.Player)
+                        playerAliveCount++;
+                    else if (unitValue.Team == HeadlessAutoBattleTeam.Enemy)
+                        enemyAliveCount++;
 
                     units.Add(new AutoBattleUnitTargetStateRecord
                     {
@@ -69,6 +81,8 @@ namespace GAS.AutoChessDemo
                         Slot = unitValue.Slot,
                         PrimaryAbilityCode = unitValue.PrimaryAbilityCode,
                         FinisherAbilityCode = unitValue.FinisherAbilityCode,
+                        PrimaryAbilityEntity = unitValue.PrimaryAbilityEntity,
+                        FinisherAbilityEntity = unitValue.FinisherAbilityEntity,
                         CooldownTagIndex = unitValue.CooldownTagIndex,
                         FinisherHealthThreshold = unitValue.FinisherHealthThreshold,
                         PrimaryTargetPolicy = unitValue.PrimaryTargetPolicy,
@@ -80,13 +94,23 @@ namespace GAS.AutoChessDemo
                             unitValue.EnergyAttrSetCode,
                             unitValue.EnergyAttrCode),
                     });
-                    groupIndex.Add(unitValue.BattleGroup, units.Length - 1);
+                    if (unitValue.BattleGroup > maxBattleGroup)
+                        maxBattleGroup = unitValue.BattleGroup;
                 }
 
                 if (units.Length > 0)
-                    FlushCommandRequests(state.EntityManager, units.AsArray(), groupIndex, ref driver);
+                {
+                    using var targetCache = new NativeArray<AutoBattleGroupTargetCacheRecord>(
+                        maxBattleGroup + 1,
+                        Allocator.Temp);
+                    BuildTargetCache(units.AsArray(), targetCache);
+                    FlushCommandRequests(state.EntityManager, units.AsArray(), targetCache, ref driver);
+                }
 
                 driver.LastDecisionFrame = frame;
+                driver.LastOutcomeFrame = frame;
+                driver.PlayerAliveCount = playerAliveCount;
+                driver.EnemyAliveCount = enemyAliveCount;
                 SystemAPI.SetComponent(driverEntity, driver);
             }
         }
@@ -98,7 +122,7 @@ namespace GAS.AutoChessDemo
         private static void FlushCommandRequests(
             EntityManager em,
             NativeArray<AutoBattleUnitTargetStateRecord> units,
-            NativeParallelMultiHashMap<int, int> groupIndex,
+            NativeArray<AutoBattleGroupTargetCacheRecord> targetCache,
             ref AutoBattleCommandDriverComponent driver)
         {
             var issuedPrimary = 0;
@@ -114,12 +138,12 @@ namespace GAS.AutoChessDemo
 
                 if (!TrySelectCommand(
                         source,
-                        units,
-                        groupIndex,
+                        targetCache,
                         out var abilityCode,
                         out var target,
                         out var policy,
-                        out var isFinisher))
+                        out var isFinisher,
+                        out var abilityEntity))
                 {
                     continue;
                 }
@@ -132,6 +156,7 @@ namespace GAS.AutoChessDemo
                         {
                             Owner = source.Asc,
                             AbilityCode = abilityCode,
+                            AbilityEntity = abilityEntity,
                             CommandType = EAbilityCommandType.Activate,
                             TargetAsc = target,
                         },
@@ -167,23 +192,26 @@ namespace GAS.AutoChessDemo
 
         private static bool TrySelectCommand(
             in AutoBattleUnitTargetStateRecord source,
-            NativeArray<AutoBattleUnitTargetStateRecord> units,
-            NativeParallelMultiHashMap<int, int> groupIndex,
+            NativeArray<AutoBattleGroupTargetCacheRecord> targetCache,
             out int abilityCode,
             out Entity target,
             out AutoBattleTargetPolicy policy,
-            out bool isFinisher)
+            out bool isFinisher,
+            out Entity abilityEntity)
         {
             abilityCode = 0;
             target = Entity.Null;
             policy = AutoBattleTargetPolicy.Frontline;
             isFinisher = false;
+            abilityEntity = Entity.Null;
 
             if (source.FinisherAbilityCode > 0
-                && TryFindAliveEnemy(source, units, groupIndex, source.FinisherTargetPolicy, out var finisherTarget)
+                && source.FinisherAbilityEntity != Entity.Null
+                && TryFindAliveEnemy(source, targetCache, source.FinisherTargetPolicy, out var finisherTarget)
                 && finisherTarget.Health <= source.FinisherHealthThreshold)
             {
                 abilityCode = source.FinisherAbilityCode;
+                abilityEntity = source.FinisherAbilityEntity;
                 target = finisherTarget.Asc;
                 policy = source.FinisherTargetPolicy;
                 isFinisher = true;
@@ -191,12 +219,14 @@ namespace GAS.AutoChessDemo
             }
 
             if (source.PrimaryAbilityCode <= 0
-                || !TryFindAliveEnemy(source, units, groupIndex, source.PrimaryTargetPolicy, out var primaryTarget))
+                || source.PrimaryAbilityEntity == Entity.Null
+                || !TryFindAliveEnemy(source, targetCache, source.PrimaryTargetPolicy, out var primaryTarget))
             {
                 return false;
             }
 
             abilityCode = source.PrimaryAbilityCode;
+            abilityEntity = source.PrimaryAbilityEntity;
             target = primaryTarget.Asc;
             policy = source.PrimaryTargetPolicy;
             return true;
@@ -204,41 +234,85 @@ namespace GAS.AutoChessDemo
 
         private static bool TryFindAliveEnemy(
             in AutoBattleUnitTargetStateRecord source,
-            NativeArray<AutoBattleUnitTargetStateRecord> units,
-            NativeParallelMultiHashMap<int, int> groupIndex,
+            NativeArray<AutoBattleGroupTargetCacheRecord> targetCache,
             AutoBattleTargetPolicy policy,
             out AutoBattleUnitTargetStateRecord target)
         {
             target = default;
-            var found = false;
-
-            if (!groupIndex.TryGetFirstValue(
-                    source.BattleGroup,
-                    out var unitIndex,
-                    out NativeParallelMultiHashMapIterator<int> iterator))
-            {
+            if (source.BattleGroup < 0 || source.BattleGroup >= targetCache.Length)
                 return false;
-            }
 
-            do
+            var cache = targetCache[source.BattleGroup];
+            if (source.Team == HeadlessAutoBattleTeam.Player)
+                return TryResolveCachedTarget(in cache.Enemy, policy, out target);
+            if (source.Team == HeadlessAutoBattleTeam.Enemy)
+                return TryResolveCachedTarget(in cache.Player, policy, out target);
+
+            return false;
+        }
+
+        private static void BuildTargetCache(
+            NativeArray<AutoBattleUnitTargetStateRecord> units,
+            NativeArray<AutoBattleGroupTargetCacheRecord> targetCache)
+        {
+            for (var i = 0; i < units.Length; i++)
             {
-                var candidate = units[unitIndex];
-                if (candidate.Team == source.Team
-                    || candidate.Asc == Entity.Null
-                    || candidate.Health <= 0f)
+                var unit = units[i];
+                if (unit.BattleGroup < 0
+                    || unit.BattleGroup >= targetCache.Length
+                    || unit.Asc == Entity.Null
+                    || unit.Health <= 0f)
                 {
                     continue;
                 }
 
-                if (!found || IsBetterTarget(candidate, target, policy))
-                {
-                    target = candidate;
-                    found = true;
-                }
+                var cache = targetCache[unit.BattleGroup];
+                if (unit.Team == HeadlessAutoBattleTeam.Player)
+                    UpdateTeamTargetCache(ref cache.Player, in unit);
+                else if (unit.Team == HeadlessAutoBattleTeam.Enemy)
+                    UpdateTeamTargetCache(ref cache.Enemy, in unit);
+                targetCache[unit.BattleGroup] = cache;
             }
-            while (groupIndex.TryGetNextValue(out unitIndex, ref iterator));
+        }
 
-            return found;
+        private static void UpdateTeamTargetCache(
+            ref AutoBattleTeamTargetCacheRecord cache,
+            in AutoBattleUnitTargetStateRecord unit)
+        {
+            if (cache.HasFrontline == 0
+                || IsBetterTarget(unit, cache.Frontline, AutoBattleTargetPolicy.Frontline))
+            {
+                cache.Frontline = unit;
+                cache.HasFrontline = 1;
+            }
+
+            if (cache.HasLowestHealth == 0
+                || IsBetterTarget(unit, cache.LowestHealth, AutoBattleTargetPolicy.LowestHealth))
+            {
+                cache.LowestHealth = unit;
+                cache.HasLowestHealth = 1;
+            }
+        }
+
+        private static bool TryResolveCachedTarget(
+            in AutoBattleTeamTargetCacheRecord cache,
+            AutoBattleTargetPolicy policy,
+            out AutoBattleUnitTargetStateRecord target)
+        {
+            if (policy == AutoBattleTargetPolicy.LowestHealth && cache.HasLowestHealth != 0)
+            {
+                target = cache.LowestHealth;
+                return true;
+            }
+
+            if (cache.HasFrontline != 0)
+            {
+                target = cache.Frontline;
+                return true;
+            }
+
+            target = default;
+            return false;
         }
 
         private static bool IsBetterTarget(
@@ -293,6 +367,20 @@ namespace GAS.AutoChessDemo
         {
             return TagMaskComponent.IsValidIndex(denseTagIndex)
                    && tags.HasTag(denseTagIndex);
+        }
+
+        private struct AutoBattleGroupTargetCacheRecord
+        {
+            public AutoBattleTeamTargetCacheRecord Player;
+            public AutoBattleTeamTargetCacheRecord Enemy;
+        }
+
+        private struct AutoBattleTeamTargetCacheRecord
+        {
+            public byte HasFrontline;
+            public byte HasLowestHealth;
+            public AutoBattleUnitTargetStateRecord Frontline;
+            public AutoBattleUnitTargetStateRecord LowestHealth;
         }
     }
 }

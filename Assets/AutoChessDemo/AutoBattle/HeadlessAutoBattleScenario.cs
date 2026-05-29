@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Diagnostics;
 using Unity.Collections;
 using Unity.Entities;
@@ -19,20 +20,38 @@ namespace GAS.AutoChessDemo
         public readonly int MaxTicks;
         public readonly int PostVictoryFlushTicks;
         public readonly int Scale;
+        public readonly float HealthMultiplier;
+        public readonly double MinimumBattleSeconds;
         private readonly byte _captureOfficialToolDiff;
+        private readonly byte _debuggerEnabled;
+        private readonly byte _captureSystemTimings;
+        private readonly byte _captureBufferPressure;
 
         public bool CaptureOfficialToolDiff => _captureOfficialToolDiff != 2;
+        public bool DebuggerEnabled => _debuggerEnabled != 2;
+        public bool CaptureSystemTimings => _captureSystemTimings != 2;
+        public bool CaptureBufferPressure => _captureBufferPressure != 2;
 
         public HeadlessAutoBattleOptions(
             int maxTicks,
             int postVictoryFlushTicks,
             int scale = 1,
-            bool captureOfficialToolDiff = true)
+            bool captureOfficialToolDiff = true,
+            bool debuggerEnabled = true,
+            bool captureSystemTimings = true,
+            bool captureBufferPressure = true,
+            float healthMultiplier = 1f,
+            double minimumBattleSeconds = 0d)
         {
             MaxTicks = maxTicks;
             PostVictoryFlushTicks = postVictoryFlushTicks;
             Scale = scale;
+            HealthMultiplier = healthMultiplier;
+            MinimumBattleSeconds = minimumBattleSeconds;
             _captureOfficialToolDiff = captureOfficialToolDiff ? (byte)1 : (byte)2;
+            _debuggerEnabled = debuggerEnabled ? (byte)1 : (byte)2;
+            _captureSystemTimings = captureSystemTimings ? (byte)1 : (byte)2;
+            _captureBufferPressure = captureBufferPressure ? (byte)1 : (byte)2;
         }
 
         public HeadlessAutoBattleOptions Normalize()
@@ -41,7 +60,26 @@ namespace GAS.AutoChessDemo
                 MaxTicks > 0 ? MaxTicks : 64,
                 PostVictoryFlushTicks >= 0 ? PostVictoryFlushTicks : 4,
                 Scale > 0 ? Scale : 1,
-                CaptureOfficialToolDiff);
+                CaptureOfficialToolDiff,
+                DebuggerEnabled,
+                CaptureSystemTimings,
+                CaptureBufferPressure,
+                HealthMultiplier > 0f ? HealthMultiplier : 1f,
+                MinimumBattleSeconds > 0d ? MinimumBattleSeconds : 0d);
+        }
+    }
+
+    public readonly struct HeadlessAutoBattleProfileHooks
+    {
+        public readonly Action BeforeMeasuredWindow;
+        public readonly Action AfterMeasuredWindow;
+
+        public HeadlessAutoBattleProfileHooks(
+            Action beforeMeasuredWindow,
+            Action afterMeasuredWindow)
+        {
+            BeforeMeasuredWindow = beforeMeasuredWindow;
+            AfterMeasuredWindow = afterMeasuredWindow;
         }
     }
 
@@ -109,6 +147,60 @@ namespace GAS.AutoChessDemo
         }
     }
 
+    public struct HeadlessAutoBattleSystemTiming
+    {
+        public int Samples;
+        public long TotalTicks;
+        public long MaxTicks;
+
+        public double AverageMilliseconds => Samples > 0 ? ToMilliseconds(TotalTicks) / Samples : 0d;
+
+        public double MaxMilliseconds => ToMilliseconds(MaxTicks);
+
+        public void Add(long elapsedTicks)
+        {
+            Samples++;
+            TotalTicks += elapsedTicks;
+            if (elapsedTicks > MaxTicks)
+                MaxTicks = elapsedTicks;
+        }
+
+        private static double ToMilliseconds(long stopwatchTicks)
+        {
+            return stopwatchTicks * 1000d / Stopwatch.Frequency;
+        }
+    }
+
+    public struct HeadlessAutoBattleRuntimeTiming
+    {
+        public HeadlessAutoBattleSystemTiming TickTotal;
+        public HeadlessAutoBattleSystemTiming FramePrepare;
+        public HeadlessAutoBattleSystemTiming CommandResolve;
+        public HeadlessAutoBattleSystemTiming CoreSimulation;
+        public HeadlessAutoBattleSystemTiming StructuralCommit;
+        public HeadlessAutoBattleSystemTiming BoundaryProjection;
+
+        public void Add(
+            long framePrepareTicks,
+            long commandResolveTicks,
+            long coreSimulationTicks,
+            long structuralCommitTicks,
+            long boundaryProjectionTicks)
+        {
+            var totalTicks = framePrepareTicks
+                             + commandResolveTicks
+                             + coreSimulationTicks
+                             + structuralCommitTicks
+                             + boundaryProjectionTicks;
+            TickTotal.Add(totalTicks);
+            FramePrepare.Add(framePrepareTicks);
+            CommandResolve.Add(commandResolveTicks);
+            CoreSimulation.Add(coreSimulationTicks);
+            StructuralCommit.Add(structuralCommitTicks);
+            BoundaryProjection.Add(boundaryProjectionTicks);
+        }
+    }
+
     public readonly struct HeadlessAutoBattleResult
     {
         public readonly bool Completed;
@@ -127,6 +219,7 @@ namespace GAS.AutoChessDemo
         public readonly long MeasuredElapsedTicks;
         public readonly double MeasuredElapsedMilliseconds;
         public readonly double AverageTickMilliseconds;
+        public readonly HeadlessAutoBattleRuntimeTiming RuntimeTiming;
         public readonly HeadlessAutoBattleUnitResult[] Units;
         public readonly HeadlessAutoBattleEventCounts EventCounts;
         public readonly GasRuntimeDiagnosticSnapshot RuntimeDiagnostics;
@@ -151,6 +244,7 @@ namespace GAS.AutoChessDemo
             double elapsedMilliseconds,
             long measuredElapsedTicks,
             double measuredElapsedMilliseconds,
+            HeadlessAutoBattleRuntimeTiming runtimeTiming,
             HeadlessAutoBattleUnitResult[] units,
             HeadlessAutoBattleEventCounts eventCounts,
             GasRuntimeDiagnosticSnapshot runtimeDiagnostics,
@@ -175,6 +269,7 @@ namespace GAS.AutoChessDemo
             MeasuredElapsedTicks = measuredElapsedTicks;
             MeasuredElapsedMilliseconds = measuredElapsedMilliseconds;
             AverageTickMilliseconds = measuredTicks > 0 ? measuredElapsedMilliseconds / measuredTicks : 0d;
+            RuntimeTiming = runtimeTiming;
             Units = units ?? Array.Empty<HeadlessAutoBattleUnitResult>();
             EventCounts = eventCounts;
             RuntimeDiagnostics = runtimeDiagnostics;
@@ -202,6 +297,7 @@ namespace GAS.AutoChessDemo
                 ElapsedMilliseconds,
                 MeasuredElapsedTicks,
                 MeasuredElapsedMilliseconds,
+                RuntimeTiming,
                 Units,
                 EventCounts,
                 RuntimeDiagnostics,
@@ -236,26 +332,32 @@ namespace GAS.AutoChessDemo
         public const int TagAttackCooldown = 1;
         private const int WarmupRuntimeTicks = 3;
 
-        public static HeadlessAutoBattleResult RunDefault(HeadlessAutoBattleOptions options = default)
+        public static HeadlessAutoBattleResult RunDefault(
+            HeadlessAutoBattleOptions options = default,
+            HeadlessAutoBattleProfileHooks profileHooks = default)
         {
             var normalized = options.Normalize();
             EnsureRuntimeInitialized();
-            ResetObservationState();
+            ResetObservationState(normalized);
 
-            var officialToolDiffCapture = normalized.CaptureOfficialToolDiff
-                ? GasRuntimeOfficialToolDiffCapture.Begin(GASManager.ExWorld)
-                : default;
+            var officialToolDiffCapture = default(GasRuntimeOfficialToolDiffCapture);
             var officialToolDiffClosed = false;
+            var officialToolDiffStarted = false;
+            var officialToolDiff = GasRuntimeOfficialToolDiffSnapshot.Unavailable;
+            var measuredWindowOpened = false;
+            var measuredWindowClosed = false;
             var stopwatch = Stopwatch.StartNew();
             var measuredElapsedTicks = 0L;
             var measuredTicks = 0;
             var droppedWarmupTicks = 0;
-            var state = new ScenarioState(CreateDefaultUnits(normalized.Scale));
+            var runtimeTiming = new HeadlessAutoBattleRuntimeTiming();
+            var state = new ScenarioState(CreateDefaultUnits(normalized.Scale, normalized.HealthMultiplier));
 
             try
             {
                 BootstrapUnits(state);
-                TickRuntime(recordTiming: false);
+                TickRuntime(recordTiming: false, ref runtimeTiming);
+                CacheGrantedAbilityEntities(state);
                 droppedWarmupTicks++;
 
                 var battleTicks = 0;
@@ -266,8 +368,22 @@ namespace GAS.AutoChessDemo
                 for (var i = 0; i < normalized.MaxTicks; i++)
                 {
                     var shouldRecordTiming = droppedWarmupTicks >= WarmupRuntimeTicks;
+                    if (shouldRecordTiming && !measuredWindowOpened)
+                    {
+                        if (normalized.CaptureOfficialToolDiff)
+                        {
+                            officialToolDiffCapture = GasRuntimeOfficialToolDiffCapture.Begin(GASManager.ExWorld);
+                            officialToolDiffStarted = true;
+                        }
+
+                        profileHooks.BeforeMeasuredWindow?.Invoke();
+                        measuredWindowOpened = true;
+                    }
+
                     var tickStart = shouldRecordTiming ? Stopwatch.GetTimestamp() : 0L;
-                    TickRuntime(recordTiming: shouldRecordTiming);
+                    TickRuntime(shouldRecordTiming, ref runtimeTiming);
+                    if (!shouldRecordTiming)
+                        CacheGrantedAbilityEntities(state);
                     if (shouldRecordTiming)
                     {
                         measuredElapsedTicks += Stopwatch.GetTimestamp() - tickStart;
@@ -280,15 +396,30 @@ namespace GAS.AutoChessDemo
 
                     totalTicks++;
                     battleTicks++;
-                    RefreshUnits(state);
 
                     if (victoryTick < 0 && TryResolveWinner(state, out winner))
                     {
                         victoryTick = battleTicks;
                     }
 
-                    if (victoryTick >= 0 && battleTicks - victoryTick >= normalized.PostVictoryFlushTicks)
+                    if (victoryTick >= 0
+                        && battleTicks - victoryTick >= normalized.PostVictoryFlushTicks
+                        && HasReachedMinimumBattleSeconds(normalized, stopwatch))
+                    {
                         break;
+                    }
+                }
+
+                if (measuredWindowOpened)
+                {
+                    profileHooks.AfterMeasuredWindow?.Invoke();
+                    measuredWindowClosed = true;
+                }
+
+                if (officialToolDiffStarted)
+                {
+                    officialToolDiff = officialToolDiffCapture.End();
+                    officialToolDiffClosed = true;
                 }
 
                 if (winner == HeadlessAutoBattleTeam.None)
@@ -296,13 +427,9 @@ namespace GAS.AutoChessDemo
 
                 stopwatch.Stop();
                 var driverStats = GetDriverStats(state);
-                var officialToolDiff = normalized.CaptureOfficialToolDiff
-                    ? officialToolDiffCapture.End()
-                    : GasRuntimeOfficialToolDiffSnapshot.Unavailable;
-                officialToolDiffClosed = true;
                 return BuildResult(
                     state,
-                    winner != HeadlessAutoBattleTeam.None && winner != HeadlessAutoBattleTeam.Draw,
+                    IsCompleted(normalized, stopwatch, winner),
                     winner,
                     normalized.Scale,
                     battleTicks,
@@ -314,15 +441,151 @@ namespace GAS.AutoChessDemo
                     stopwatch.Elapsed.TotalMilliseconds,
                     measuredElapsedTicks,
                     ToMilliseconds(measuredElapsedTicks),
+                    runtimeTiming,
                     officialToolDiff);
             }
             finally
             {
-                if (normalized.CaptureOfficialToolDiff && !officialToolDiffClosed)
+                if (measuredWindowOpened && !measuredWindowClosed)
+                    profileHooks.AfterMeasuredWindow?.Invoke();
+
+                if (officialToolDiffStarted && !officialToolDiffClosed)
                     officialToolDiffCapture.End();
 
                 CleanupUnits(state);
             }
+        }
+
+        public static IEnumerator RunDefaultStepped(
+            HeadlessAutoBattleOptions options,
+            HeadlessAutoBattleProfileHooks profileHooks,
+            Action<HeadlessAutoBattleResult> completed)
+        {
+            var normalized = options.Normalize();
+            EnsureRuntimeInitialized();
+            ResetObservationState(normalized);
+
+            var officialToolDiffCapture = default(GasRuntimeOfficialToolDiffCapture);
+            var officialToolDiffClosed = false;
+            var officialToolDiffStarted = false;
+            var officialToolDiff = GasRuntimeOfficialToolDiffSnapshot.Unavailable;
+            var measuredWindowOpened = false;
+            var measuredWindowClosed = false;
+            var stopwatch = Stopwatch.StartNew();
+            var measuredElapsedTicks = 0L;
+            var measuredTicks = 0;
+            var droppedWarmupTicks = 0;
+            var runtimeTiming = new HeadlessAutoBattleRuntimeTiming();
+            var state = new ScenarioState(CreateDefaultUnits(normalized.Scale, normalized.HealthMultiplier));
+            var result = default(HeadlessAutoBattleResult);
+
+            try
+            {
+                BootstrapUnits(state);
+                TickRuntime(recordTiming: false, ref runtimeTiming);
+                CacheGrantedAbilityEntities(state);
+                droppedWarmupTicks++;
+                yield return null;
+
+                var battleTicks = 0;
+                var totalTicks = 1;
+                var winner = HeadlessAutoBattleTeam.None;
+                var victoryTick = -1;
+
+                for (var i = 0; i < normalized.MaxTicks; i++)
+                {
+                    var shouldRecordTiming = droppedWarmupTicks >= WarmupRuntimeTicks;
+                    if (shouldRecordTiming && !measuredWindowOpened)
+                    {
+                        if (normalized.CaptureOfficialToolDiff)
+                        {
+                            officialToolDiffCapture = GasRuntimeOfficialToolDiffCapture.Begin(GASManager.ExWorld);
+                            officialToolDiffStarted = true;
+                        }
+
+                        profileHooks.BeforeMeasuredWindow?.Invoke();
+                        measuredWindowOpened = true;
+                    }
+
+                    var tickStart = shouldRecordTiming ? Stopwatch.GetTimestamp() : 0L;
+                    TickRuntime(shouldRecordTiming, ref runtimeTiming);
+                    if (!shouldRecordTiming)
+                        CacheGrantedAbilityEntities(state);
+                    if (shouldRecordTiming)
+                    {
+                        measuredElapsedTicks += Stopwatch.GetTimestamp() - tickStart;
+                        measuredTicks++;
+                    }
+                    else
+                    {
+                        droppedWarmupTicks++;
+                    }
+
+                    totalTicks++;
+                    battleTicks++;
+
+                    if (victoryTick < 0 && TryResolveWinner(state, out winner))
+                        victoryTick = battleTicks;
+
+                    if (victoryTick >= 0
+                        && battleTicks - victoryTick >= normalized.PostVictoryFlushTicks
+                        && HasReachedMinimumBattleSeconds(normalized, stopwatch))
+                    {
+                        break;
+                    }
+
+                    if (victoryTick < 0 && HasReachedMinimumBattleSeconds(normalized, stopwatch))
+                        break;
+
+                    yield return null;
+                }
+
+                if (measuredWindowOpened)
+                {
+                    profileHooks.AfterMeasuredWindow?.Invoke();
+                    measuredWindowClosed = true;
+                }
+
+                if (officialToolDiffStarted)
+                {
+                    officialToolDiff = officialToolDiffCapture.End();
+                    officialToolDiffClosed = true;
+                }
+
+                if (winner == HeadlessAutoBattleTeam.None)
+                    TryResolveWinner(state, out winner);
+
+                stopwatch.Stop();
+                var driverStats = GetDriverStats(state);
+                result = BuildResult(
+                    state,
+                    IsCompleted(normalized, stopwatch, winner),
+                    winner,
+                    normalized.Scale,
+                    battleTicks,
+                    totalTicks,
+                    droppedWarmupTicks,
+                    measuredTicks,
+                    driverStats,
+                    stopwatch.ElapsedTicks,
+                    stopwatch.Elapsed.TotalMilliseconds,
+                    measuredElapsedTicks,
+                    ToMilliseconds(measuredElapsedTicks),
+                    runtimeTiming,
+                    officialToolDiff);
+            }
+            finally
+            {
+                if (measuredWindowOpened && !measuredWindowClosed)
+                    profileHooks.AfterMeasuredWindow?.Invoke();
+
+                if (officialToolDiffStarted && !officialToolDiffClosed)
+                    officialToolDiffCapture.End();
+
+                CleanupUnits(state);
+            }
+
+            completed?.Invoke(result);
         }
 
         public static void ShutdownRuntime()
@@ -338,14 +601,15 @@ namespace GAS.AutoChessDemo
         private static void EnsureRuntimeInitialized()
         {
             if (!GASManager.IsInitialized)
-                GASManager.Initialize();
+                GASManager.Initialize(attachToPlayerLoop: false);
 
             HeadlessAutoChessRuntimeSystemBootstrap.RegisterSystems(GASManager.ExWorld);
             AutoBattleDefinitionCatalogBuilder.Install(GASManager.EntityManager);
         }
 
-        private static UnitDefinition[] CreateDefaultUnits(int scale)
+        private static UnitDefinition[] CreateDefaultUnits(int scale, float healthMultiplier)
         {
+            var multiplier = healthMultiplier > 0f ? healthMultiplier : 1f;
             var baseUnits = new[]
             {
                 new UnitDefinition(
@@ -353,11 +617,11 @@ namespace GAS.AutoChessDemo
                     0,
                     HeadlessAutoBattleTeam.Player,
                     0,
-                    72f,
+                    72f * multiplier,
                     8f,
                     AbilityPlayerAttack,
                     AbilityPlayerExecute,
-                    44f,
+                    44f * multiplier,
                     AutoBattleTargetPolicy.Frontline,
                     AutoBattleTargetPolicy.LowestHealth),
                 new UnitDefinition(
@@ -365,11 +629,11 @@ namespace GAS.AutoChessDemo
                     0,
                     HeadlessAutoBattleTeam.Player,
                     1,
-                    54f,
+                    54f * multiplier,
                     8f,
                     AbilityPlayerAttack,
                     AbilityPlayerExecute,
-                    44f,
+                    44f * multiplier,
                     AutoBattleTargetPolicy.LowestHealth,
                     AutoBattleTargetPolicy.LowestHealth),
                 new UnitDefinition(
@@ -377,7 +641,7 @@ namespace GAS.AutoChessDemo
                     0,
                     HeadlessAutoBattleTeam.Enemy,
                     0,
-                    48f,
+                    48f * multiplier,
                     8f,
                     AbilityEnemyAttack,
                     0,
@@ -389,7 +653,7 @@ namespace GAS.AutoChessDemo
                     0,
                     HeadlessAutoBattleTeam.Enemy,
                     1,
-                    42f,
+                    42f * multiplier,
                     8f,
                     AbilityEnemyAttack,
                     0,
@@ -467,6 +731,8 @@ namespace GAS.AutoChessDemo
                 Slot = definition.Slot,
                 PrimaryAbilityCode = definition.PrimaryAbilityCode,
                 FinisherAbilityCode = definition.FinisherAbilityCode,
+                PrimaryAbilityEntity = Entity.Null,
+                FinisherAbilityEntity = Entity.Null,
                 HealthAttrSetCode = AttributeSetCombat,
                 HealthAttrCode = AttributeHealth,
                 EnergyAttrSetCode = AttributeSetCombat,
@@ -488,8 +754,63 @@ namespace GAS.AutoChessDemo
                 Enabled = true,
                 LastDecisionFrame = -1,
                 LastExecutionFrame = -1,
+                LastOutcomeFrame = -1,
             });
             return driver;
+        }
+
+        private static void CacheGrantedAbilityEntities(ScenarioState state)
+        {
+            var em = GASManager.EntityManager;
+            for (var i = 0; i < state.Units.Length; i++)
+            {
+                var unit = state.Units[i];
+                var asc = unit.CommandGateway.Entity;
+                if (asc == Entity.Null
+                    || !em.Exists(asc)
+                    || !em.HasComponent<AutoBattleUnitComponent>(asc)
+                    || !em.HasBuffer<AbilitySlotBuffer>(asc))
+                {
+                    continue;
+                }
+
+                var component = em.GetComponentData<AutoBattleUnitComponent>(asc);
+                var abilitySlots = em.GetBuffer<AbilitySlotBuffer>(asc);
+                component.PrimaryAbilityEntity = ResolveGrantedAbilityEntity(
+                    em,
+                    abilitySlots,
+                    component.PrimaryAbilityCode);
+                component.FinisherAbilityEntity = ResolveGrantedAbilityEntity(
+                    em,
+                    abilitySlots,
+                    component.FinisherAbilityCode);
+                em.SetComponentData(asc, component);
+            }
+        }
+
+        private static Entity ResolveGrantedAbilityEntity(
+            EntityManager em,
+            DynamicBuffer<AbilitySlotBuffer> abilitySlots,
+            int abilityCode)
+        {
+            if (abilityCode <= 0)
+                return Entity.Null;
+
+            for (var i = 0; i < abilitySlots.Length; i++)
+            {
+                var ability = abilitySlots[i].AbilityEntity;
+                if (ability == Entity.Null
+                    || !em.Exists(ability)
+                    || !em.HasComponent<AbilityStateComponent>(ability))
+                {
+                    continue;
+                }
+
+                if (em.GetComponentData<AbilityStateComponent>(ability).Code == abilityCode)
+                    return ability;
+            }
+
+            return Entity.Null;
         }
 
         private static void RefreshUnits(ScenarioState state)
@@ -500,6 +821,25 @@ namespace GAS.AutoChessDemo
 
         private static bool TryResolveWinner(ScenarioState state, out HeadlessAutoBattleTeam winner)
         {
+            var driverStats = GetDriverStats(state);
+            if (driverStats.LastOutcomeFrame >= 0)
+            {
+                var playerAliveFromDriver = driverStats.PlayerAliveCount > 0;
+                var enemyAliveFromDriver = driverStats.EnemyAliveCount > 0;
+                if (playerAliveFromDriver && enemyAliveFromDriver)
+                {
+                    winner = HeadlessAutoBattleTeam.None;
+                    return false;
+                }
+
+                winner = playerAliveFromDriver == enemyAliveFromDriver
+                    ? HeadlessAutoBattleTeam.Draw
+                    : playerAliveFromDriver
+                        ? HeadlessAutoBattleTeam.Player
+                        : HeadlessAutoBattleTeam.Enemy;
+                return true;
+            }
+
             var playerAlive = false;
             var enemyAlive = false;
 
@@ -543,6 +883,7 @@ namespace GAS.AutoChessDemo
             double elapsedMilliseconds,
             long measuredElapsedTicks,
             double measuredElapsedMilliseconds,
+            HeadlessAutoBattleRuntimeTiming runtimeTiming,
             GasRuntimeOfficialToolDiffSnapshot officialToolDiff)
         {
             RefreshUnits(state);
@@ -586,6 +927,7 @@ namespace GAS.AutoChessDemo
                 elapsedMilliseconds,
                 measuredElapsedTicks,
                 measuredElapsedMilliseconds,
+                runtimeTiming,
                 units,
                 CountEvents(log, snapshot.EntryCount),
                 runtimeDiagnostics,
@@ -658,7 +1000,7 @@ namespace GAS.AutoChessDemo
                 cueRequests);
         }
 
-        private static void TickRuntime(bool recordTiming)
+        private static void TickRuntime(bool recordTiming, ref HeadlessAutoBattleRuntimeTiming runtimeTiming)
         {
             var world = GASManager.ExWorld;
             var framePrepareTicks = UpdateTimed(world.GetExistingSystemManaged<GASFramePrepareSystemGroup>());
@@ -669,6 +1011,12 @@ namespace GAS.AutoChessDemo
 
             if (recordTiming)
             {
+                runtimeTiming.Add(
+                    framePrepareTicks,
+                    commandResolveTicks,
+                    coreSimulationTicks,
+                    structuralCommitTicks,
+                    boundaryProjectionTicks);
                 RecordRuntimeTickTiming(
                     framePrepareTicks,
                     commandResolveTicks,
@@ -688,6 +1036,26 @@ namespace GAS.AutoChessDemo
         private static double ToMilliseconds(long stopwatchTicks)
         {
             return stopwatchTicks * 1000d / Stopwatch.Frequency;
+        }
+
+        private static bool HasReachedMinimumBattleSeconds(
+            in HeadlessAutoBattleOptions options,
+            Stopwatch stopwatch)
+        {
+            return options.MinimumBattleSeconds <= 0d
+                   || stopwatch.Elapsed.TotalSeconds >= options.MinimumBattleSeconds;
+        }
+
+        private static bool IsCompleted(
+            in HeadlessAutoBattleOptions options,
+            Stopwatch stopwatch,
+            HeadlessAutoBattleTeam winner)
+        {
+            if (winner != HeadlessAutoBattleTeam.None && winner != HeadlessAutoBattleTeam.Draw)
+                return true;
+
+            return options.MinimumBattleSeconds > 0d
+                   && stopwatch.Elapsed.TotalSeconds >= options.MinimumBattleSeconds;
         }
 
         private static void RecordRuntimeTickTiming(
@@ -792,7 +1160,7 @@ namespace GAS.AutoChessDemo
                 : default;
         }
 
-        private static void ResetObservationState()
+        private static void ResetObservationState(in HeadlessAutoBattleOptions options)
         {
             var em = GASManager.EntityManager;
             if (em.Exists(GASManager.EntityGlobalTimer))
@@ -803,6 +1171,14 @@ namespace GAS.AutoChessDemo
                 em.SetComponentData(GASManager.EntityEventBus, new GameplayEventBusComponent());
                 if (em.HasComponent<PresentationOutboxProjectionStateComponent>(GASManager.EntityEventBus))
                     em.SetComponentData(GASManager.EntityEventBus, new PresentationOutboxProjectionStateComponent());
+                if (em.HasComponent<PresentationOutboxProjectionOptionsComponent>(GASManager.EntityEventBus))
+                {
+                    em.SetComponentData(GASManager.EntityEventBus, new PresentationOutboxProjectionOptionsComponent
+                    {
+                        ProjectRawFacts = options.DebuggerEnabled ? (byte)1 : (byte)0,
+                    });
+                }
+
                 ClearBuffer<DamageEventBuffer>(em, GASManager.EntityEventBus);
                 ClearBuffer<TagChangeEventBuffer>(em, GASManager.EntityEventBus);
                 ClearBuffer<GameplayEventBusEventBuffer>(em, GASManager.EntityEventBus);
@@ -822,9 +1198,9 @@ namespace GAS.AutoChessDemo
                 GasRuntimeDebugger.Configure(
                     em,
                     GASManager.EntityRuntimeDebugger,
-                    enabled: true,
-                    captureSystemTimings: true,
-                    captureBufferPressure: true);
+                    options.DebuggerEnabled,
+                    options.CaptureSystemTimings,
+                    options.CaptureBufferPressure);
             }
         }
 

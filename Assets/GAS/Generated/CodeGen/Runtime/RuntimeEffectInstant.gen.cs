@@ -8,6 +8,7 @@ using Unity.Entities;
 
 namespace GAS.Runtime.Generated
 {
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GEEffectCommandCatalogNormalizeSystem))]
     [UpdateBefore(typeof(GASActiveEffectMutationApplySystem))]
@@ -146,6 +147,7 @@ namespace GAS.Runtime.Generated
         }
     }
 
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GASActiveEffectMutationApplySystem))]
     [UpdateAfter(typeof(GEExecutionCalculationOutputModifierSystem))]
@@ -224,12 +226,13 @@ namespace GAS.Runtime.Generated
                 attribute.CurrentValue = newValue;
                 if (newValue != oldValue)
                 {
-                    attribute.Dirty = true;
                     if (oldCurrentValue != attribute.CurrentValue)
                     {
                         attribute.PreviousCurrentValue = oldCurrentValue;
                         attribute.CurrentValueChangePending = true;
                     }
+
+                    AttributeHelper.MarkDirectCurrentValueChanged(em, spec.TargetAsc, ref attribute);
 
                     deltas.Add(new AttributeModifierBuffer
                     {

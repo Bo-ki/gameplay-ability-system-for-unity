@@ -1,5 +1,3 @@
-using Unity.Burst.Intrinsics;
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
@@ -35,41 +33,52 @@ namespace GAS.Runtime
                 return;
 
             var em = state.EntityManager;
-            var abilityRecordStream = new NativeStream(abilityChunkCount, Allocator.TempJob);
             var ecb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
             var gameplayEventWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
 
             try
             {
-                var scanJob = new AbilityStateCleanupScanJob
+                foreach (var (runtime, cancelRequest, ability) in SystemAPI
+                             .Query<RefRO<AbilityStateComponent>, RefRO<AbilityCancelRequestComponent>>()
+                             .WithEntityAccess())
                 {
-                    EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
-                    StateTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityStateComponent>(isReadOnly: true),
-                    TryCancelTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityCancelRequestComponent>(isReadOnly: true),
-                    TryEndTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityEndRequestComponent>(isReadOnly: true),
-                    AbilityRecordWriter = abilityRecordStream.AsWriter(),
-                };
-                state.Dependency = scanJob.ScheduleParallel(_cleanupQuery, state.Dependency);
-                state.Dependency.Complete();
-
-                var abilityRecordReader = abilityRecordStream.AsReader();
-                for (var streamIndex = 0; streamIndex < abilityRecordReader.ForEachCount; streamIndex++)
-                {
-                    var recordCount = abilityRecordReader.BeginForEachIndex(streamIndex);
-                    for (var i = 0; i < recordCount; i++)
-                    {
-                        var abilityRecord = abilityRecordReader.Read<AbilityStateCleanupRecord>();
-                        CleanupAbility(em, ref ecb, ref gameplayEventWriter, in abilityRecord);
-                    }
-                    abilityRecordReader.EndForEachIndex();
+                    CleanupAbility(
+                        em,
+                        ref ecb,
+                        ref gameplayEventWriter,
+                        new AbilityStateCleanupRecord
+                        {
+                            Ability = ability,
+                            State = runtime.ValueRO,
+                            ShouldCancel = true,
+                            CancelRequest = cancelRequest.ValueRO,
+                        });
                 }
 
+                foreach (var (runtime, endRequest, ability) in SystemAPI
+                             .Query<RefRO<AbilityStateComponent>, RefRO<AbilityEndRequestComponent>>()
+                             .WithEntityAccess())
+                {
+                    if (!em.IsComponentEnabled<AbilityEndRequestComponent>(ability))
+                        continue;
+
+                    CleanupAbility(
+                        em,
+                        ref ecb,
+                        ref gameplayEventWriter,
+                        new AbilityStateCleanupRecord
+                        {
+                            Ability = ability,
+                            State = runtime.ValueRO,
+                            ShouldEnd = true,
+                            EndRequest = endRequest.ValueRO,
+                        });
+                }
             }
             finally
             {
                 gameplayEventWriter.Dispose();
-                abilityRecordStream.Dispose();
             }
         }
 
@@ -167,44 +176,6 @@ namespace GAS.Runtime
             public int SourceAbilityCode;
         }
 
-        private struct AbilityStateCleanupScanJob : IJobChunk
-        {
-            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
-            [ReadOnly] public ComponentTypeHandle<AbilityStateComponent> StateTypeHandle;
-            [ReadOnly] public ComponentTypeHandle<AbilityCancelRequestComponent> TryCancelTypeHandle;
-            [ReadOnly] public ComponentTypeHandle<AbilityEndRequestComponent> TryEndTypeHandle;
-            public NativeStream.Writer AbilityRecordWriter;
-
-            public void Execute(
-                in ArchetypeChunk chunk,
-                int unfilteredChunkIndex,
-                bool useEnabledMask,
-                in v128 chunkEnabledMask)
-            {
-                AbilityRecordWriter.BeginForEachIndex(unfilteredChunkIndex);
-                var hasCancel = chunk.Has(ref TryCancelTypeHandle);
-                var hasEnd = chunk.Has(ref TryEndTypeHandle);
-                var abilities = chunk.GetNativeArray(EntityTypeHandle);
-                var states = chunk.GetNativeArray(ref StateTypeHandle);
-                var cancelRequests = hasCancel ? chunk.GetNativeArray(ref TryCancelTypeHandle) : default;
-                var endRequests = hasEnd ? chunk.GetNativeArray(ref TryEndTypeHandle) : default;
-                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
-                while (enumerator.NextEntityIndex(out var entityIndex))
-                {
-                    AbilityRecordWriter.Write(new AbilityStateCleanupRecord
-                    {
-                        Ability = abilities[entityIndex],
-                        State = states[entityIndex],
-                        ShouldCancel = hasCancel && chunk.IsComponentEnabled(ref TryCancelTypeHandle, entityIndex),
-                        ShouldEnd = hasEnd && chunk.IsComponentEnabled(ref TryEndTypeHandle, entityIndex),
-                        CancelRequest = hasCancel ? cancelRequests[entityIndex] : default,
-                        EndRequest = hasEnd ? endRequests[entityIndex] : default,
-                    });
-                }
-                AbilityRecordWriter.EndForEachIndex();
-            }
-        }
-
         private static bool CleanupGrantedAbilityIfNeeded(
             EntityManager em,
             ref EntityCommandBuffer ecb,
@@ -297,7 +268,7 @@ namespace GAS.Runtime
             Entity entity)
             where T : unmanaged, IComponentData, IEnableableComponent
         {
-            if (em.HasComponent<T>(entity))
+            if (em.HasComponent<T>(entity) && em.IsComponentEnabled<T>(entity))
                 em.SetComponentEnabled<T>(entity, false);
         }
     }

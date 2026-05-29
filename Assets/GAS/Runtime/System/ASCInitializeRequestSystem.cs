@@ -1,9 +1,8 @@
-using Unity.Burst.Intrinsics;
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
 {
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
     [UpdateAfter(typeof(ASCEntityCreateSystem))]
     [UpdateBefore(typeof(ASCCommandRequestSystem))]
@@ -21,99 +20,39 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            var requestChunkCount = _query.CalculateChunkCount();
-            if (requestChunkCount <= 0)
+            if (_query.CalculateEntityCount() <= 0)
                 return;
 
             var em = state.EntityManager;
-            var requestRecordStream = new NativeStream(requestChunkCount, Allocator.TempJob);
             var ecb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
 
-            try
+            foreach (var (requestRef, requestEntity) in SystemAPI
+                         .Query<RefRO<ASCInitializeRequestComponent>>()
+                         .WithEntityAccess())
             {
-                var scanJob = new ASCInitializeRequestScanJob
+                var request = requestRef.ValueRO;
+                if (request.ASC != Entity.Null
+                    && em.Exists(request.ASC)
+                    && !ASCEntityFactory.IsDestroying(em, request.ASC))
                 {
-                    EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
-                    RequestTypeHandle = SystemAPI.GetComponentTypeHandle<ASCInitializeRequestComponent>(isReadOnly: true),
-                    RequestRecordWriter = requestRecordStream.AsWriter(),
-                };
-                state.Dependency = scanJob.ScheduleParallel(_query, state.Dependency);
-                state.Dependency.Complete();
-
-                var requestRecordReader = requestRecordStream.AsReader();
-                for (var streamIndex = 0; streamIndex < requestRecordReader.ForEachCount; streamIndex++)
-                {
-                    var recordCount = requestRecordReader.BeginForEachIndex(streamIndex);
-                    for (var i = 0; i < recordCount; i++)
+                    CreateAscCommand(em, ecb, request.ASC, new ASCCommandRequestComponent
                     {
-                        var requestRecord = requestRecordReader.Read<ASCInitializeRequestRecord>();
-                        var requestEntity = requestRecord.RequestEntity;
-                        var request = requestRecord.Request;
+                        CommandType = ASCCommandType.SetLevel,
+                        Level = request.Level,
+                    });
 
-                        if (request.ASC != Entity.Null
-                            && em.Exists(request.ASC)
-                            && !ASCEntityFactory.IsDestroying(em, request.ASC))
-                        {
-                            CreateAscCommand(em, ecb, request.ASC, new ASCCommandRequestComponent
-                            {
-                                CommandType = ASCCommandType.SetLevel,
-                                Level = request.Level,
-                            });
-
-                            CreateFixedTagCommands(em, ecb, requestEntity, request.ASC);
-                            CreateAttributeCommands(em, ecb, requestEntity, request.ASC);
-                            CreateAbilityGrantCommands(em, ecb, requestEntity, request.ASC);
-                        }
-
-                        ecb.DestroyEntity(requestEntity);
-                    }
-                    requestRecordReader.EndForEachIndex();
+                    CreateFixedTagCommands(em, ecb, requestEntity, request.ASC);
+                    CreateAttributeCommands(em, ecb, requestEntity, request.ASC);
+                    CreateAbilityGrantCommands(em, ecb, requestEntity, request.ASC);
                 }
 
-            }
-            finally
-            {
-                requestRecordStream.Dispose();
+                ecb.DestroyEntity(requestEntity);
             }
         }
 
         public void OnDestroy(ref SystemState state)
         {
-        }
-
-        private struct ASCInitializeRequestRecord
-        {
-            public Entity RequestEntity;
-            public ASCInitializeRequestComponent Request;
-        }
-
-        private struct ASCInitializeRequestScanJob : IJobChunk
-        {
-            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
-            [ReadOnly] public ComponentTypeHandle<ASCInitializeRequestComponent> RequestTypeHandle;
-            public NativeStream.Writer RequestRecordWriter;
-
-            public void Execute(
-                in ArchetypeChunk chunk,
-                int unfilteredChunkIndex,
-                bool useEnabledMask,
-                in v128 chunkEnabledMask)
-            {
-                RequestRecordWriter.BeginForEachIndex(unfilteredChunkIndex);
-                var requestEntities = chunk.GetNativeArray(EntityTypeHandle);
-                var requests = chunk.GetNativeArray(ref RequestTypeHandle);
-                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
-                while (enumerator.NextEntityIndex(out var entityIndex))
-                {
-                    RequestRecordWriter.Write(new ASCInitializeRequestRecord
-                    {
-                        RequestEntity = requestEntities[entityIndex],
-                        Request = requests[entityIndex],
-                    });
-                }
-                RequestRecordWriter.EndForEachIndex();
-            }
         }
 
         private static void CreateFixedTagCommands(EntityManager em, EntityCommandBuffer ecb, Entity requestEntity, Entity asc)

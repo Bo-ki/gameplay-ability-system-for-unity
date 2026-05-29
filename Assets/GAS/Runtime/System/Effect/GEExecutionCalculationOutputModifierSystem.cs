@@ -7,6 +7,7 @@ using Unity.Mathematics;
 
 namespace GAS.Runtime
 {
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GEExecutionCalculationExtensionSystemGroup))]
     public partial struct GEExecutionCalculationOutputModifierSystem : ISystem
@@ -119,7 +120,12 @@ namespace GAS.Runtime
                                 state.Dependency = applyJob.ScheduleParallel(_attributeQuery, state.Dependency);
                                 state.Dependency.Complete();
 
-                                AppendPendingDeltas(deltaStream.AsReader(), deltas, ref stream, appliedDeltaCounts);
+                                AppendPendingDeltas(
+                                    em,
+                                    deltaStream.AsReader(),
+                                    deltas,
+                                    ref stream,
+                                    appliedDeltaCounts);
                             }
                         }
                         finally
@@ -232,6 +238,7 @@ namespace GAS.Runtime
                         OldValue = oldValue,
                         NewValue = newValue,
                     });
+                    AttributeHelper.MarkOwnerDirty(em, context.TargetAsc);
                     deltaCount++;
                 }
 
@@ -527,6 +534,7 @@ namespace GAS.Runtime
         }
 
         private static void AppendPendingDeltas(
+            EntityManager em,
             NativeStream.Reader deltaReader,
             DynamicBuffer<AttributeModifierBuffer> deltas,
             ref GEEffectCommandStreamComponent stream,
@@ -569,6 +577,7 @@ namespace GAS.Runtime
                         OldValue = record.OldValue,
                         NewValue = record.NewValue,
                     });
+                    AttributeHelper.MarkOwnerDirty(em, record.TargetAsc);
 
                     IncrementAppliedDeltaCount(appliedDeltaCounts, record.Effect);
                 }

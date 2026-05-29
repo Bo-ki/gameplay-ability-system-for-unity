@@ -1,9 +1,8 @@
-using Unity.Burst.Intrinsics;
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
 {
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
     [UpdateAfter(typeof(ASCEntityCreateSystem))]
     [UpdateBefore(typeof(AbilityCommandRequestSystem))]
@@ -21,84 +20,27 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            var requestChunkCount = _query.CalculateChunkCount();
-            if (requestChunkCount <= 0)
+            if (_query.CalculateEntityCount() <= 0)
                 return;
 
             var em = state.EntityManager;
-            var requestRecordStream = new NativeStream(requestChunkCount, Allocator.TempJob);
             var ecb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
 
-            try
+            foreach (var (requestRef, requestEntity) in SystemAPI
+                         .Query<RefRO<ASCCommandRequestComponent>>()
+                         .WithEntityAccess())
             {
-                var scanJob = new ASCCommandRequestScanJob
-                {
-                    EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
-                    RequestTypeHandle = SystemAPI.GetComponentTypeHandle<ASCCommandRequestComponent>(isReadOnly: true),
-                    RequestRecordWriter = requestRecordStream.AsWriter(),
-                };
-                state.Dependency = scanJob.ScheduleParallel(_query, state.Dependency);
-                state.Dependency.Complete();
+                var request = requestRef.ValueRO;
+                if (request.ASC != Entity.Null && em.Exists(request.ASC))
+                    ProcessRequest(em, request);
 
-                var requestRecordReader = requestRecordStream.AsReader();
-                for (var streamIndex = 0; streamIndex < requestRecordReader.ForEachCount; streamIndex++)
-                {
-                    var recordCount = requestRecordReader.BeginForEachIndex(streamIndex);
-                    for (var i = 0; i < recordCount; i++)
-                    {
-                        var requestRecord = requestRecordReader.Read<ASCCommandRequestRecord>();
-                        if (requestRecord.Request.ASC != Entity.Null && em.Exists(requestRecord.Request.ASC))
-                            ProcessRequest(em, requestRecord.Request);
-
-                        ecb.DestroyEntity(requestRecord.RequestEntity);
-                    }
-                    requestRecordReader.EndForEachIndex();
-                }
-
-            }
-            finally
-            {
-                requestRecordStream.Dispose();
+                ecb.DestroyEntity(requestEntity);
             }
         }
 
         public void OnDestroy(ref SystemState state)
         {
-        }
-
-        private struct ASCCommandRequestRecord
-        {
-            public Entity RequestEntity;
-            public ASCCommandRequestComponent Request;
-        }
-
-        private struct ASCCommandRequestScanJob : IJobChunk
-        {
-            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
-            [ReadOnly] public ComponentTypeHandle<ASCCommandRequestComponent> RequestTypeHandle;
-            public NativeStream.Writer RequestRecordWriter;
-
-            public void Execute(
-                in ArchetypeChunk chunk,
-                int unfilteredChunkIndex,
-                bool useEnabledMask,
-                in v128 chunkEnabledMask)
-            {
-                RequestRecordWriter.BeginForEachIndex(unfilteredChunkIndex);
-                var requestEntities = chunk.GetNativeArray(EntityTypeHandle);
-                var requests = chunk.GetNativeArray(ref RequestTypeHandle);
-                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
-                while (enumerator.NextEntityIndex(out var entityIndex))
-                {
-                    RequestRecordWriter.Write(new ASCCommandRequestRecord
-                    {
-                        RequestEntity = requestEntities[entityIndex],
-                        Request = requests[entityIndex],
-                    });
-                }
-                RequestRecordWriter.EndForEachIndex();
-            }
         }
 
         private static void ProcessRequest(EntityManager em, ASCCommandRequestComponent request)
@@ -259,6 +201,7 @@ namespace GAS.Runtime
                 attr.BaseValue = request.AttributeValue;
                 attr.CurrentValue = attr.BaseValue;
                 attr.Dirty = true;
+                AttributeHelper.MarkOwnerDirty(em, request.ASC);
                 if (oldCurrentValue != attr.CurrentValue)
                 {
                     attr.PreviousCurrentValue = oldCurrentValue;
@@ -295,6 +238,7 @@ namespace GAS.Runtime
                 MaxValue = request.MaxValue,
                 Dirty = true,
             });
+            AttributeHelper.MarkOwnerDirty(em, request.ASC);
         }
 
         private static void EnqueueTagChange(EntityManager em, Entity asc, int tagIndex, bool added)

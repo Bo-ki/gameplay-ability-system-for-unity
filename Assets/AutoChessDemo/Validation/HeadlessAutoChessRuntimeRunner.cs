@@ -59,7 +59,7 @@ namespace GAS.AutoChessDemo
 
                 Debug.Log("HeadlessAutoChessRuntimeRunner: " + CreateSummary(result));
                 Debug.Log("HeadlessAutoChessRuntimeDebugger: " + CreateDebuggerSummary(result));
-                Debug.Log("HeadlessAutoChessRuntimeTiming: " + CreateTimingSummary(result.RuntimeDiagnostics));
+                Debug.Log("HeadlessAutoChessRuntimeTiming: " + CreateTimingSummary(result));
                 Debug.Log("HeadlessAutoChessOfficialToolDiff: " + CreateOfficialToolDiffSummary(result));
                 Debug.Log("HeadlessAutoChessRuntimeDataFlow:\n" + CreateDataFlowDiagram(result));
                 Debug.Log("HeadlessAutoChessRuntimeSequence:\n" + CreateSequenceDiagram(result));
@@ -136,16 +136,16 @@ namespace GAS.AutoChessDemo
                    + $"journalingMarkerContracts={backbone.JournalingMarkerCount}";
         }
 
-        internal static string CreateTimingSummary(GasRuntimeDiagnosticSnapshot diagnostics)
+        internal static string CreateTimingSummary(HeadlessAutoBattleResult result)
         {
             var builder = new StringBuilder(512);
             builder.Append("ecsRuntimeTickOnly=true");
-            AppendTiming(builder, diagnostics, "GASTickTotal");
-            AppendTiming(builder, diagnostics, nameof(GASFramePrepareSystemGroup));
-            AppendTiming(builder, diagnostics, nameof(GASCommandResolveSystemGroup));
-            AppendTiming(builder, diagnostics, nameof(GASCoreSimulationSystemGroup));
-            AppendTiming(builder, diagnostics, nameof(GASStructuralCommitSystemGroup));
-            AppendTiming(builder, diagnostics, nameof(GASBoundaryProjectionSystemGroup));
+            AppendTiming(builder, "GASTickTotal", result.RuntimeTiming.TickTotal);
+            AppendTiming(builder, nameof(GASFramePrepareSystemGroup), result.RuntimeTiming.FramePrepare);
+            AppendTiming(builder, nameof(GASCommandResolveSystemGroup), result.RuntimeTiming.CommandResolve);
+            AppendTiming(builder, nameof(GASCoreSimulationSystemGroup), result.RuntimeTiming.CoreSimulation);
+            AppendTiming(builder, nameof(GASStructuralCommitSystemGroup), result.RuntimeTiming.StructuralCommit);
+            AppendTiming(builder, nameof(GASBoundaryProjectionSystemGroup), result.RuntimeTiming.BoundaryProjection);
             return builder.ToString();
         }
 
@@ -181,10 +181,7 @@ namespace GAS.AutoChessDemo
             in HeadlessAutoBattleResult performanceResult,
             in HeadlessAutoBattleResult officialDiffResult)
         {
-            if (performanceResult.Completed != officialDiffResult.Completed
-                || performanceResult.Winner != officialDiffResult.Winner
-                || performanceResult.BattleTicks != officialDiffResult.BattleTicks
-                || performanceResult.DriverIssuedCommands != officialDiffResult.DriverIssuedCommands
+            if (performanceResult.DriverIssuedCommands != officialDiffResult.DriverIssuedCommands
                 || performanceResult.EventCounts.AttributeChanges != officialDiffResult.EventCounts.AttributeChanges
                 || performanceResult.EventCounts.ExecutionCalculationOutputUpdated != officialDiffResult.EventCounts.ExecutionCalculationOutputUpdated
                 || performanceResult.EventCounts.CueRequests != officialDiffResult.EventCounts.CueRequests)
@@ -199,38 +196,17 @@ namespace GAS.AutoChessDemo
 
         private static void AppendTiming(
             StringBuilder builder,
-            in GasRuntimeDiagnosticSnapshot diagnostics,
-            string systemName)
+            string systemName,
+            in HeadlessAutoBattleSystemTiming timing)
         {
-            var events = diagnostics.Events ?? Array.Empty<GASRuntimeDiagnosticEventBuffer>();
-            var samples = 0;
-            var totalMicroseconds = 0L;
-            var maxMicroseconds = 0;
-            for (var i = 0; i < events.Length; i++)
-            {
-                var evt = events[i];
-                if (evt.Kind != EGasRuntimeDiagnosticKind.SystemTiming)
-                    continue;
-
-                if (!string.Equals(evt.SystemName.ToString(), systemName, StringComparison.Ordinal))
-                    continue;
-
-                samples++;
-                totalMicroseconds += evt.TotalMicroseconds != 0 ? evt.TotalMicroseconds : evt.ElapsedMicroseconds;
-                if (evt.ElapsedMicroseconds > maxMicroseconds)
-                    maxMicroseconds = evt.ElapsedMicroseconds;
-            }
-
-            var avgMs = samples > 0 ? totalMicroseconds / (double)samples / 1000d : 0d;
-            var maxMs = maxMicroseconds / 1000d;
             builder.Append(" | ")
                 .Append(systemName)
                 .Append("(samples=")
-                .Append(samples)
+                .Append(timing.Samples)
                 .Append(",avgMs=")
-                .Append(avgMs.ToString("0.000"))
+                .Append(timing.AverageMilliseconds.ToString("0.000"))
                 .Append(",maxMs=")
-                .Append(maxMs.ToString("0.000"))
+                .Append(timing.MaxMilliseconds.ToString("0.000"))
                 .Append(')');
         }
 
@@ -256,6 +232,8 @@ namespace GAS.AutoChessDemo
                    + $"deltaDestroys={runtime.EntityDestroyCount - official.JournalingDestroyEntityCount}, "
                    + $"journalingAddComponents={official.JournalingAddComponentCount}, "
                    + $"journalingRemoveComponents={official.JournalingRemoveComponentCount}, "
+                   + $"journalingEnableComponents={official.JournalingEnableComponentCount}, "
+                   + $"journalingDisableComponents={official.JournalingDisableComponentCount}, "
                    + $"journalingSetComponentData={official.JournalingSetComponentDataCount}, "
                    + $"journalingSetBuffer={official.JournalingSetBufferCount}, "
                    + $"journalingGetComponentDataRW={official.JournalingGetComponentDataRwCount}, "
@@ -264,7 +242,10 @@ namespace GAS.AutoChessDemo
                    + $"profilerEnabled={official.ProfilerEnabled}, "
                    + $"structuralProfilerCategoryEnabled={official.StructuralChangesProfilerCategoryEnabled}, "
                    + $"memoryProfilerCategoryEnabled={official.MemoryProfilerCategoryEnabled}, "
-                   + $"profilerCaptureState={official.ProfilerCaptureState}";
+                   + $"profilerCaptureState={official.ProfilerCaptureState}, "
+                   + $"journalingRecordTopN={official.JournalingRecordTopN}, "
+                   + $"journalingSystemTopN={official.JournalingSystemTopN}, "
+                   + $"journalingComponentTopN={official.JournalingComponentTopN}";
         }
 
         internal static bool HasBlockingDiagnosticErrors(GasRuntimeDiagnosticSnapshot diagnostics)

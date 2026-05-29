@@ -4,6 +4,7 @@ using Unity.Entities;
 
 namespace GAS.Runtime
 {
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateBefore(typeof(GEExecutionCalculationExtensionSystemGroup))]
     public partial struct GEExecutionCalculationSystem : ISystem

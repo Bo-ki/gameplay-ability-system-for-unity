@@ -7,6 +7,7 @@ namespace GAS.Runtime
     /// Burst 兼容的 Ability 状态推进系统。
     /// 本 System 只负责通用逻辑：运行时状态更新、计时推进。
     /// </summary>
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [BurstCompile]
     public partial struct AbilityStateTickSystem : ISystem

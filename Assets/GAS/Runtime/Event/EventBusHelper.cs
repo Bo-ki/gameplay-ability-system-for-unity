@@ -24,6 +24,11 @@ namespace GAS.Runtime
             private bool _cueRequestCanAppend;
             private bool _tagChangeEventCanAppend;
             private bool _damageEventCanAppend;
+            private DynamicBuffer<GameplayEventBusEventBuffer> _gameplayEvents;
+            private DynamicBuffer<AttributeChangeEventBuffer> _attributeChangeEvents;
+            private DynamicBuffer<CueRequestBuffer> _cueRequests;
+            private DynamicBuffer<TagChangeEventBuffer> _tagChangeEvents;
+            private DynamicBuffer<DamageEventBuffer> _damageEvents;
 
             private GameplayEventBusWriter(
                 EntityManager entityManager,
@@ -35,7 +40,12 @@ namespace GAS.Runtime
                 bool attributeChangeEventCanAppend,
                 bool cueRequestCanAppend,
                 bool tagChangeEventCanAppend,
-                bool damageEventCanAppend)
+                bool damageEventCanAppend,
+                DynamicBuffer<GameplayEventBusEventBuffer> gameplayEvents,
+                DynamicBuffer<AttributeChangeEventBuffer> attributeChangeEvents,
+                DynamicBuffer<CueRequestBuffer> cueRequests,
+                DynamicBuffer<TagChangeEventBuffer> tagChangeEvents,
+                DynamicBuffer<DamageEventBuffer> damageEvents)
             {
                 _entityManager = entityManager;
                 _eventBusEntity = eventBusEntity;
@@ -49,6 +59,11 @@ namespace GAS.Runtime
                 _cueRequestCanAppend = cueRequestCanAppend;
                 _tagChangeEventCanAppend = tagChangeEventCanAppend;
                 _damageEventCanAppend = damageEventCanAppend;
+                _gameplayEvents = gameplayEvents;
+                _attributeChangeEvents = attributeChangeEvents;
+                _cueRequests = cueRequests;
+                _tagChangeEvents = tagChangeEvents;
+                _damageEvents = damageEvents;
             }
 
             public bool IsCreated => _isCreated;
@@ -65,6 +80,11 @@ namespace GAS.Runtime
                     ? entityManager.GetComponentData<GameplayEventBusComponent>(eventBusEntity)
                     : default;
                 var frame = GASRuntimeFrameContext.ResolveCurrentFrame(entityManager);
+                var gameplayEventCanAppend = entityManager.HasBuffer<GameplayEventBusEventBuffer>(eventBusEntity);
+                var attributeChangeEventCanAppend = entityManager.HasBuffer<AttributeChangeEventBuffer>(eventBusEntity);
+                var cueRequestCanAppend = entityManager.HasBuffer<CueRequestBuffer>(eventBusEntity);
+                var tagChangeEventCanAppend = entityManager.HasBuffer<TagChangeEventBuffer>(eventBusEntity);
+                var damageEventCanAppend = entityManager.HasBuffer<DamageEventBuffer>(eventBusEntity);
 
                 return new GameplayEventBusWriter(
                     entityManager,
@@ -72,11 +92,16 @@ namespace GAS.Runtime
                     eventBus,
                     frame,
                     canWriteEventBus,
-                    entityManager.HasBuffer<GameplayEventBusEventBuffer>(eventBusEntity),
-                    entityManager.HasBuffer<AttributeChangeEventBuffer>(eventBusEntity),
-                    entityManager.HasBuffer<CueRequestBuffer>(eventBusEntity),
-                    entityManager.HasBuffer<TagChangeEventBuffer>(eventBusEntity),
-                    entityManager.HasBuffer<DamageEventBuffer>(eventBusEntity));
+                    gameplayEventCanAppend,
+                    attributeChangeEventCanAppend,
+                    cueRequestCanAppend,
+                    tagChangeEventCanAppend,
+                    damageEventCanAppend,
+                    gameplayEventCanAppend ? entityManager.GetBuffer<GameplayEventBusEventBuffer>(eventBusEntity) : default,
+                    attributeChangeEventCanAppend ? entityManager.GetBuffer<AttributeChangeEventBuffer>(eventBusEntity) : default,
+                    cueRequestCanAppend ? entityManager.GetBuffer<CueRequestBuffer>(eventBusEntity) : default,
+                    tagChangeEventCanAppend ? entityManager.GetBuffer<TagChangeEventBuffer>(eventBusEntity) : default,
+                    damageEventCanAppend ? entityManager.GetBuffer<DamageEventBuffer>(eventBusEntity) : default);
             }
 
             public int AllocateGameplayEffectContextId()
@@ -105,31 +130,31 @@ namespace GAS.Runtime
                     evt.Sequence = 0;
                 }
 
-                _entityManager.GetBuffer<GameplayEventBusEventBuffer>(_eventBusEntity).Add(evt);
+                _gameplayEvents.Add(evt);
             }
 
             public void EnqueueAttributeChangeEvent(AttributeChangeEventBuffer evt)
             {
                 if (_attributeChangeEventCanAppend)
-                    _entityManager.GetBuffer<AttributeChangeEventBuffer>(_eventBusEntity).Add(evt);
+                    _attributeChangeEvents.Add(evt);
             }
 
             public void EnqueueCueRequest(CueRequestBuffer evt)
             {
                 if (_cueRequestCanAppend)
-                    _entityManager.GetBuffer<CueRequestBuffer>(_eventBusEntity).Add(evt);
+                    _cueRequests.Add(evt);
             }
 
             public void EnqueueTagChangeEvent(TagChangeEventBuffer evt)
             {
                 if (_tagChangeEventCanAppend)
-                    _entityManager.GetBuffer<TagChangeEventBuffer>(_eventBusEntity).Add(evt);
+                    _tagChangeEvents.Add(evt);
             }
 
             public void EnqueueDamageEvent(DamageEventBuffer evt)
             {
                 if (_damageEventCanAppend)
-                    _entityManager.GetBuffer<DamageEventBuffer>(_eventBusEntity).Add(evt);
+                    _damageEvents.Add(evt);
             }
 
             public void Flush()

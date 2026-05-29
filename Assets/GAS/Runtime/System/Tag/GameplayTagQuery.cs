@@ -49,6 +49,7 @@ namespace GAS.Runtime
     /// <summary>
     /// Tag 变更处理 System。在 GASCoreSimulationSystemGroup 中运行。
     /// </summary>
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     public partial struct GameplayTagChangeProcessSystem : ISystem
     {

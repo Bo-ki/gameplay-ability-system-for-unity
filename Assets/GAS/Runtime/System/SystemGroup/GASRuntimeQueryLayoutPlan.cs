@@ -464,10 +464,7 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.EffectCommandSetByCallerBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectMutationBuffer,
                     },
-                    typeof(GEEffectCommandIngestSystem),
-                    typeof(GameplayFactProjectionSystem),
-                    typeof(GameplayFactEventBridgeSystem),
-                    typeof(GEInstantEffectCueRequestProjectionSystem)),
+                    typeof(GameplayFactProjectionSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.ActiveEffectStore,
                     GASRuntimeLayoutDomain.GameplayEffect,

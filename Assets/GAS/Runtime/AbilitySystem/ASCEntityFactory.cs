@@ -33,6 +33,9 @@ namespace GAS.Runtime
         private static void InitializeCoreComponents(EntityManager entityManager, Entity asc)
         {
             entityManager.SetComponentEnabled<ASCDestroyingComponent>(asc, false);
+            entityManager.SetComponentEnabled<AttributeDirtyComponent>(asc, false);
+            entityManager.SetComponentEnabled<AttributeChangeEventPendingComponent>(asc, false);
+            entityManager.SetComponentEnabled<AttributeActiveModifierPresentComponent>(asc, false);
             entityManager.SetComponentData(asc, ActiveEffectStore.CreateDefault());
             entityManager.GetBuffer<AttributeValueBuffer>(asc).EnsureCapacity(AttributeCapacity);
             entityManager.GetBuffer<AttributeActiveModifierBuffer>(asc).EnsureCapacity(ActiveModifierCapacity);
@@ -49,6 +52,9 @@ namespace GAS.Runtime
         private static void InitializeCoreComponents(EntityCommandBuffer commandBuffer, Entity asc)
         {
             commandBuffer.SetComponentEnabled<ASCDestroyingComponent>(asc, false);
+            commandBuffer.SetComponentEnabled<AttributeDirtyComponent>(asc, false);
+            commandBuffer.SetComponentEnabled<AttributeChangeEventPendingComponent>(asc, false);
+            commandBuffer.SetComponentEnabled<AttributeActiveModifierPresentComponent>(asc, false);
             commandBuffer.SetComponent(asc, ActiveEffectStore.CreateDefault());
             commandBuffer.SetBuffer<AttributeValueBuffer>(asc).EnsureCapacity(AttributeCapacity);
             commandBuffer.SetBuffer<AttributeActiveModifierBuffer>(asc).EnsureCapacity(ActiveModifierCapacity);
@@ -68,6 +74,9 @@ namespace GAS.Runtime
                 && entityManager.Exists(asc)
                 && entityManager.HasComponent<ASCIdentityComponent>(asc)
                 && entityManager.HasComponent<ASCDestroyingComponent>(asc)
+                && entityManager.HasComponent<AttributeDirtyComponent>(asc)
+                && entityManager.HasComponent<AttributeChangeEventPendingComponent>(asc)
+                && entityManager.HasComponent<AttributeActiveModifierPresentComponent>(asc)
                 && entityManager.HasComponent<TagMaskComponent>(asc)
                 && entityManager.HasComponent<TagFixedMaskComponent>(asc)
                 && entityManager.HasBuffer<AttributeValueBuffer>(asc)

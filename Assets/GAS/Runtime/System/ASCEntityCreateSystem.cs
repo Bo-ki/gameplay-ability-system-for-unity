@@ -8,6 +8,7 @@ namespace GAS.Runtime
     /// 创建标准 ASC Entity（含 TagMaskComponent / TagFixedMaskComponent / AttributeValueBuffer / AttributeActiveModifierBuffer / AbilitySlotBuffer / TagTemporarySourceBuffer）。
     /// 在 GASCommandResolveSystemGroup 中运行。
     /// </summary>
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
     [BurstCompile]
     public partial struct ASCEntityCreateSystem : ISystem
