@@ -12,7 +12,7 @@ using UnityEditor;
 
 namespace GAS.AutoChessDemo
 {
-    public sealed class HeadlessAutoChessDemoSceneRunner : MonoBehaviour
+    public sealed class AutoChessDemoSceneRunner : MonoBehaviour
     {
         private const int WarmupMaxTicks = 32;
 
@@ -31,10 +31,20 @@ namespace GAS.AutoChessDemo
         [SerializeField] private int profilerPostRunFrames = 1;
         [SerializeField] private bool quitPlayerOnComplete = true;
         [SerializeField] private bool stopEditorPlayModeOnComplete = true;
+        [SerializeField] private bool showLogScreen = true;
+        [SerializeField] private int logScreenMaxLines = 80;
 
         public bool HasResult { get; private set; }
-        public HeadlessAutoBattleResult LastResult { get; private set; }
-        public HeadlessAutoBattleResult LastDiagnosticResult { get; private set; }
+        public AutoChessBattleResult LastResult { get; private set; }
+        public AutoChessBattleResult LastDiagnosticResult { get; private set; }
+
+        private Vector2 logScrollPosition;
+        private string logScreenStatus = "等待 AutoChess Demo 启动";
+        private string[] logScreenLines = Array.Empty<string>();
+        private GUIStyle logPanelStyle;
+        private GUIStyle logTitleStyle;
+        private GUIStyle logMetaStyle;
+        private GUIStyle logLineStyle;
 
 #if UNITY_EDITOR
         private bool hasPreviousProfilerState;
@@ -64,12 +74,16 @@ namespace GAS.AutoChessDemo
             try
             {
                 HasResult = false;
+                SetLogScreenStatus("正在创建对局房间...");
                 yield return null;
 
                 RunWarmupPass();
+                SetLogScreenStatus("预热完成，正在运行正式战斗...");
+                for (var i = 0; i < profilerPreRunFrames; i++)
+                    yield return null;
 
                 var profileHooks = profilePlayMode
-                    ? new HeadlessAutoBattleProfileHooks(
+                    ? new AutoChessBattleProfileHooks(
                         () =>
                         {
                             profilerStarted = TryBeginProfilerCapture();
@@ -83,9 +97,9 @@ namespace GAS.AutoChessDemo
                         })
                     : default;
 
-                var performanceResult = default(HeadlessAutoBattleResult);
-                yield return HeadlessAutoBattleScenario.RunDefaultStepped(
-                    new HeadlessAutoBattleOptions(
+                var performanceResult = default(AutoChessBattleResult);
+                yield return AutoChessBattleManager.RunDefaultStepped(
+                    new AutoChessBattleOptions(
                         maxTicks,
                         postVictoryFlushTicks,
                         scenarioScale,
@@ -114,6 +128,7 @@ namespace GAS.AutoChessDemo
                     : performanceResult;
                 LastDiagnosticResult = diagnosticResult;
                 HasResult = true;
+                UpdateLogScreen(LastResult);
 
                 ValidateResult(LastResult, LastDiagnosticResult, captureOfficialToolDiff);
                 LogResult(LastResult, LastDiagnosticResult, profilerSummary);
@@ -125,7 +140,7 @@ namespace GAS.AutoChessDemo
                 if (profilerStarted)
                     StopProfilerCapture();
 
-                HeadlessAutoBattleScenario.ShutdownRuntime();
+                AutoChessBattleManager.ShutdownRuntime();
                 RestoreProfilerState();
                 CompletePlayMode();
             }
@@ -137,8 +152,8 @@ namespace GAS.AutoChessDemo
         {
             try
             {
-                HeadlessAutoBattleScenario.RunDefault(
-                    new HeadlessAutoBattleOptions(
+                AutoChessBattleManager.RunDefault(
+                    new AutoChessBattleOptions(
                         WarmupMaxTicks,
                         postVictoryFlushTicks,
                         scenarioScale,
@@ -150,17 +165,17 @@ namespace GAS.AutoChessDemo
             }
             finally
             {
-                HeadlessAutoBattleScenario.ShutdownRuntime();
+                AutoChessBattleManager.ShutdownRuntime();
             }
         }
 
-        private HeadlessAutoBattleResult RunDiagnosticPass(
-            in HeadlessAutoBattleResult performanceResult)
+        private AutoChessBattleResult RunDiagnosticPass(
+            in AutoChessBattleResult performanceResult)
         {
-            HeadlessAutoBattleScenario.ShutdownRuntime();
+            AutoChessBattleManager.ShutdownRuntime();
             var replayTicks = Mathf.Max(1, performanceResult.BattleTicks);
-            var diagnosticResult = HeadlessAutoBattleScenario.RunDefault(
-                new HeadlessAutoBattleOptions(
+            var diagnosticResult = AutoChessBattleManager.RunDefault(
+                new AutoChessBattleOptions(
                     replayTicks,
                     postVictoryFlushTicks,
                     scenarioScale,
@@ -169,17 +184,17 @@ namespace GAS.AutoChessDemo
                     captureSystemTimings: true,
                     captureBufferPressure: true,
                     healthMultiplier: scenarioHealthMultiplier));
-            HeadlessAutoChessRuntimeRunner.ValidateOfficialDiffRun(performanceResult, diagnosticResult);
+            AutoChessRuntimeRunner.ValidateOfficialDiffRun(performanceResult, diagnosticResult);
             return diagnosticResult;
         }
 
-        private HeadlessAutoBattleResult RunOfficialDiffPass(
-            in HeadlessAutoBattleResult performanceResult)
+        private AutoChessBattleResult RunOfficialDiffPass(
+            in AutoChessBattleResult performanceResult)
         {
-            HeadlessAutoBattleScenario.ShutdownRuntime();
+            AutoChessBattleManager.ShutdownRuntime();
             var replayTicks = Mathf.Max(1, performanceResult.BattleTicks);
-            var officialDiffResult = HeadlessAutoBattleScenario.RunDefault(
-                new HeadlessAutoBattleOptions(
+            var officialDiffResult = AutoChessBattleManager.RunDefault(
+                new AutoChessBattleOptions(
                     replayTicks,
                     postVictoryFlushTicks,
                     scenarioScale,
@@ -188,13 +203,13 @@ namespace GAS.AutoChessDemo
                     captureSystemTimings: false,
                     captureBufferPressure: false,
                     healthMultiplier: scenarioHealthMultiplier));
-            HeadlessAutoChessRuntimeRunner.ValidateOfficialDiffRun(performanceResult, officialDiffResult);
+            AutoChessRuntimeRunner.ValidateOfficialDiffRun(performanceResult, officialDiffResult);
             return performanceResult.WithOfficialToolDiff(officialDiffResult.OfficialToolDiff);
         }
 
         private static void ValidateResult(
-            in HeadlessAutoBattleResult result,
-            in HeadlessAutoBattleResult diagnosticResult,
+            in AutoChessBattleResult result,
+            in AutoChessBattleResult diagnosticResult,
             bool requireOfficialToolDiff)
         {
             if (result.Completed
@@ -203,43 +218,44 @@ namespace GAS.AutoChessDemo
                 && result.EventCounts.ExecutionCalculationOutputUpdated > 0
                 && result.EventCounts.CueRequests > 0
                 && diagnosticResult.RuntimeDiagnostics.EventCount > 0
-                && !HeadlessAutoChessRuntimeRunner.HasBlockingDiagnosticErrors(diagnosticResult.RuntimeDiagnostics)
+                && !AutoChessRuntimeRunner.HasBlockingDiagnosticErrors(diagnosticResult.RuntimeDiagnostics)
                 && (!requireOfficialToolDiff || result.OfficialToolDiff.JournalingCaptured))
             {
                 return;
             }
 
             throw new InvalidOperationException(
-                "AutoBattle PlayMode validation failed: "
-                + HeadlessAutoChessRuntimeRunner.CreateSummary(result));
+                "AutoChessBattle PlayMode validation failed: "
+                + AutoChessRuntimeRunner.CreateSummary(result));
         }
 
         private static void LogResult(
-            in HeadlessAutoBattleResult result,
-            in HeadlessAutoBattleResult diagnosticResult,
+            in AutoChessBattleResult result,
+            in AutoChessBattleResult diagnosticResult,
             string profilerSummary)
         {
-            Debug.Log("HeadlessAutoChessPlayModeRunnerPerformance: "
-                      + HeadlessAutoChessRuntimeRunner.CreateSummary(result));
-            Debug.Log("HeadlessAutoChessPlayModeTiming: "
-                      + HeadlessAutoChessRuntimeRunner.CreateTimingSummary(result));
-            Debug.Log("HeadlessAutoChessPlayModeDebugger: "
-                      + HeadlessAutoChessRuntimeRunner.CreateDebuggerSummary(diagnosticResult));
-            Debug.Log("HeadlessAutoChessPlayModeOfficialToolDiff: "
-                      + HeadlessAutoChessRuntimeRunner.CreateOfficialToolDiffSummary(result));
-            Debug.Log("HeadlessAutoChessPlayModeProfiler: " + profilerSummary);
-            Debug.Log("HeadlessAutoChessPlayModeDiagnosticRunner: "
-                      + HeadlessAutoChessRuntimeRunner.CreateSummary(diagnosticResult));
+            Debug.Log("AutoChessDemoPlayModeRunnerPerformance: "
+                      + AutoChessRuntimeRunner.CreateSummary(result));
+            Debug.Log("AutoChessDemoBattleLog:\n" + result.BattleLog.ToText());
+            Debug.Log("AutoChessDemoPlayModeTiming: "
+                      + AutoChessRuntimeRunner.CreateTimingSummary(result));
+            Debug.Log("AutoChessDemoPlayModeDebugger: "
+                      + AutoChessRuntimeRunner.CreateDebuggerSummary(diagnosticResult));
+            Debug.Log("AutoChessDemoPlayModeOfficialToolDiff: "
+                      + AutoChessRuntimeRunner.CreateOfficialToolDiffSummary(result));
+            Debug.Log("AutoChessDemoPlayModeProfiler: " + profilerSummary);
+            Debug.Log("AutoChessDemoPlayModeDiagnosticRunner: "
+                      + AutoChessRuntimeRunner.CreateSummary(diagnosticResult));
             var diagnosticWithOfficialDiff = diagnosticResult.WithOfficialToolDiff(result.OfficialToolDiff);
-            Debug.Log("HeadlessAutoChessPlayModeDataFlow:\n"
-                      + HeadlessAutoChessRuntimeRunner.CreateDataFlowDiagram(diagnosticWithOfficialDiff));
-            Debug.Log("HeadlessAutoChessPlayModeSequence:\n"
-                      + HeadlessAutoChessRuntimeRunner.CreateSequenceDiagram(diagnosticWithOfficialDiff));
+            Debug.Log("AutoChessDemoPlayModeDataFlow:\n"
+                      + AutoChessRuntimeRunner.CreateDataFlowDiagram(diagnosticWithOfficialDiff));
+            Debug.Log("AutoChessDemoPlayModeSequence:\n"
+                      + AutoChessRuntimeRunner.CreateSequenceDiagram(diagnosticWithOfficialDiff));
         }
 
         private void ExportResult(
-            in HeadlessAutoBattleResult result,
-            in HeadlessAutoBattleResult diagnosticResult,
+            in AutoChessBattleResult result,
+            in AutoChessBattleResult diagnosticResult,
             string profilerSummary)
         {
             if (string.IsNullOrWhiteSpace(exportDirectory))
@@ -247,20 +263,98 @@ namespace GAS.AutoChessDemo
 
             Directory.CreateDirectory(exportDirectory);
             var builder = new StringBuilder(1024);
-            builder.AppendLine("HeadlessAutoChessPlayModeRunnerPerformance: "
-                               + HeadlessAutoChessRuntimeRunner.CreateSummary(result));
-            builder.AppendLine("HeadlessAutoChessPlayModeTiming: "
-                               + HeadlessAutoChessRuntimeRunner.CreateTimingSummary(result));
-            builder.AppendLine("HeadlessAutoChessPlayModeDebugger: "
-                               + HeadlessAutoChessRuntimeRunner.CreateDebuggerSummary(diagnosticResult));
-            builder.AppendLine("HeadlessAutoChessPlayModeOfficialToolDiff: "
-                               + HeadlessAutoChessRuntimeRunner.CreateOfficialToolDiffSummary(result));
-            builder.AppendLine("HeadlessAutoChessPlayModeProfiler: " + profilerSummary);
-            builder.AppendLine("HeadlessAutoChessPlayModeDiagnosticRunner: "
-                               + HeadlessAutoChessRuntimeRunner.CreateSummary(diagnosticResult));
+            builder.AppendLine("AutoChessDemoPlayModeRunnerPerformance: "
+                               + AutoChessRuntimeRunner.CreateSummary(result));
+            builder.AppendLine("AutoChessDemoPlayModeTiming: "
+                               + AutoChessRuntimeRunner.CreateTimingSummary(result));
+            builder.AppendLine("AutoChessDemoPlayModeDebugger: "
+                               + AutoChessRuntimeRunner.CreateDebuggerSummary(diagnosticResult));
+            builder.AppendLine("AutoChessDemoPlayModeOfficialToolDiff: "
+                               + AutoChessRuntimeRunner.CreateOfficialToolDiffSummary(result));
+            builder.AppendLine("AutoChessDemoPlayModeProfiler: " + profilerSummary);
+            builder.AppendLine("AutoChessDemoPlayModeDiagnosticRunner: "
+                               + AutoChessRuntimeRunner.CreateSummary(diagnosticResult));
             File.WriteAllText(
                 Path.Combine(exportDirectory, "AutoChessPlayModeProfileSummary.txt"),
                 builder.ToString());
+            File.WriteAllText(
+                Path.Combine(exportDirectory, "AutoChessBattleLog.txt"),
+                result.BattleLog.ToText());
+        }
+
+        private void OnGUI()
+        {
+            if (!showLogScreen)
+                return;
+
+            EnsureLogStyles();
+
+            var margin = 18f;
+            var panelRect = new Rect(
+                margin,
+                margin,
+                Mathf.Max(320f, Screen.width - margin * 2f),
+                Mathf.Max(220f, Screen.height - margin * 2f));
+
+            GUILayout.BeginArea(panelRect, logPanelStyle);
+            GUILayout.Label("AutoChess Demo 战斗日志", logTitleStyle);
+            GUILayout.Label(logScreenStatus, logMetaStyle);
+            logScrollPosition = GUILayout.BeginScrollView(logScrollPosition);
+            for (var i = 0; i < logScreenLines.Length; i++)
+                GUILayout.Label(logScreenLines[i], logLineStyle);
+            GUILayout.EndScrollView();
+            GUILayout.EndArea();
+        }
+
+        private void SetLogScreenStatus(string status)
+        {
+            logScreenStatus = status ?? string.Empty;
+        }
+
+        private void UpdateLogScreen(in AutoChessBattleResult result)
+        {
+            logScreenStatus = "房间 " + result.RoomId
+                              + " | 胜者 " + result.Winner
+                              + " | 帧 " + result.BattleTicks
+                              + " | 命令 " + result.DriverIssuedCommands;
+
+            var sourceLines = result.BattleLog.Lines ?? Array.Empty<AutoChessBattleLogLine>();
+            var maxLines = Mathf.Max(1, logScreenMaxLines);
+            var start = Mathf.Max(0, sourceLines.Length - maxLines);
+            logScreenLines = new string[sourceLines.Length - start];
+            for (var i = start; i < sourceLines.Length; i++)
+                logScreenLines[i - start] = sourceLines[i].ToString();
+            logScrollPosition = Vector2.zero;
+        }
+
+        private void EnsureLogStyles()
+        {
+            if (logPanelStyle != null)
+                return;
+
+            logPanelStyle = new GUIStyle(GUI.skin.box)
+            {
+                padding = new RectOffset(16, 16, 14, 14),
+                alignment = TextAnchor.UpperLeft,
+            };
+            logTitleStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 22,
+                fontStyle = FontStyle.Bold,
+                normal = { textColor = Color.white },
+            };
+            logMetaStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 13,
+                normal = { textColor = new Color(0.78f, 0.86f, 1f, 1f) },
+                wordWrap = true,
+            };
+            logLineStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 14,
+                normal = { textColor = new Color(0.92f, 0.94f, 0.96f, 1f) },
+                wordWrap = true,
+            };
         }
 
         private void CompletePlayMode()
@@ -300,7 +394,7 @@ namespace GAS.AutoChessDemo
             }
             catch (Exception ex)
             {
-                Debug.LogWarning("HeadlessAutoChessPlayModeProfiler: failed to start profiler capture: " + ex.Message);
+                Debug.LogWarning("AutoChessDemoPlayModeProfiler: failed to start profiler capture: " + ex.Message);
                 return false;
             }
 #else
@@ -337,7 +431,7 @@ namespace GAS.AutoChessDemo
             }
             catch (Exception ex)
             {
-                Debug.LogWarning("HeadlessAutoChessPlayModeProfiler: failed to save profiler capture: " + ex.Message);
+                Debug.LogWarning("AutoChessDemoPlayModeProfiler: failed to save profiler capture: " + ex.Message);
                 return "saved=False, error=" + ex.Message;
             }
 #else
@@ -356,7 +450,7 @@ namespace GAS.AutoChessDemo
             }
             catch (Exception ex)
             {
-                Debug.LogWarning("HeadlessAutoChessPlayModeProfiler: failed to stop profiler capture: " + ex.Message);
+                Debug.LogWarning("AutoChessDemoPlayModeProfiler: failed to stop profiler capture: " + ex.Message);
             }
 #endif
         }
@@ -393,7 +487,7 @@ namespace GAS.AutoChessDemo
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogWarning("HeadlessAutoChessPlayModeProfiler: failed to restore profiling state: " + ex.Message);
+                    Debug.LogWarning("AutoChessDemoPlayModeProfiler: failed to restore profiling state: " + ex.Message);
                 }
             }
 
@@ -411,7 +505,7 @@ namespace GAS.AutoChessDemo
             }
             catch (Exception ex)
             {
-                Debug.LogWarning("HeadlessAutoChessPlayModeProfiler: failed to restore profiler property " + name + ": " + ex.Message);
+                Debug.LogWarning("AutoChessDemoPlayModeProfiler: failed to restore profiler property " + name + ": " + ex.Message);
             }
         }
 

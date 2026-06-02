@@ -9,17 +9,17 @@ using UnityEditor;
 
 namespace GAS.AutoChessDemo
 {
-    public static class HeadlessAutoChessRuntimeRunner
+    public static class AutoChessRuntimeRunner
     {
-        private const string RunArgument = "-gasAutoChessHeadless";
+        private const string RunArgument = "-gasAutoChessDemo";
         private const int ProcessWarmupRuns = 1;
         private const int ValidationScale = 50;
         private const int ValidationMaxTicks = 96;
         private const int ValidationPostVictoryFlushTicks = 4;
 
-        public static void RunHeadlessAutoBattleOnce()
+        public static void RunAutoChessBattleOnce()
         {
-            var result = RunAutoBattleOnce();
+            var result = RunAutoChessBattleForValidation();
             if (!result.Completed
                 || result.DriverIssuedCommands <= 0
                 || result.EventCounts.AttributeChanges <= 0
@@ -30,7 +30,7 @@ namespace GAS.AutoChessDemo
                 || !result.OfficialToolDiff.JournalingCaptured)
             {
                 throw new InvalidOperationException(
-                    "AutoBattle minimal Runtime Core validation failed: "
+                    "AutoChessDemo validation failed: "
                     + CreateSummary(result));
             }
         }
@@ -41,38 +41,39 @@ namespace GAS.AutoChessDemo
             if (!HasArgument(RunArgument))
                 return;
 
-            RunAutoBattleOnce();
+            RunAutoChessBattleForValidation();
         }
 
-        private static HeadlessAutoBattleResult RunAutoBattleOnce()
+        private static AutoChessBattleResult RunAutoChessBattleForValidation()
         {
             try
             {
                 RunProcessWarmupBattles();
 
                 var result = RunScenario(captureOfficialToolDiff: false);
-                HeadlessAutoBattleScenario.ShutdownRuntime();
+                AutoChessBattleManager.ShutdownRuntime();
 
                 var officialDiffResult = RunScenario(captureOfficialToolDiff: true);
                 ValidateOfficialDiffRun(result, officialDiffResult);
                 result = result.WithOfficialToolDiff(officialDiffResult.OfficialToolDiff);
 
-                Debug.Log("HeadlessAutoChessRuntimeRunner: " + CreateSummary(result));
-                Debug.Log("HeadlessAutoChessRuntimeDebugger: " + CreateDebuggerSummary(result));
-                Debug.Log("HeadlessAutoChessRuntimeTiming: " + CreateTimingSummary(result));
-                Debug.Log("HeadlessAutoChessOfficialToolDiff: " + CreateOfficialToolDiffSummary(result));
-                Debug.Log("HeadlessAutoChessRuntimeDataFlow:\n" + CreateDataFlowDiagram(result));
-                Debug.Log("HeadlessAutoChessRuntimeSequence:\n" + CreateSequenceDiagram(result));
-                Debug.Log("HeadlessAutoChessRuntimeDiagnostics:\n" + result.RuntimeDiagnosticsLog);
+                Debug.Log("AutoChessDemoRuntimeRunner: " + CreateSummary(result));
+                Debug.Log("AutoChessDemoRuntimeBattleLog:\n" + result.BattleLog.ToText());
+                Debug.Log("AutoChessDemoRuntimeDebugger: " + CreateDebuggerSummary(result));
+                Debug.Log("AutoChessDemoRuntimeTiming: " + CreateTimingSummary(result));
+                Debug.Log("AutoChessDemoOfficialToolDiff: " + CreateOfficialToolDiffSummary(result));
+                Debug.Log("AutoChessDemoRuntimeDataFlow:\n" + CreateDataFlowDiagram(result));
+                Debug.Log("AutoChessDemoRuntimeSequence:\n" + CreateSequenceDiagram(result));
+                Debug.Log("AutoChessDemoRuntimeDiagnostics:\n" + result.RuntimeDiagnosticsLog);
                 return result;
             }
             finally
             {
-                HeadlessAutoBattleScenario.ShutdownRuntime();
+                AutoChessBattleManager.ShutdownRuntime();
             }
         }
 
-        internal static string CreateSummary(HeadlessAutoBattleResult result)
+        internal static string CreateSummary(AutoChessBattleResult result)
         {
             var factsHash = CalculateFactsHash(result.StructuredLogSnapshot);
             var summaryHash = CalculateSummaryHash(result, factsHash);
@@ -107,7 +108,7 @@ namespace GAS.AutoChessDemo
                    + $"avgTickMs={result.AverageTickMilliseconds:0.000}";
         }
 
-        internal static string CreateDebuggerSummary(HeadlessAutoBattleResult result)
+        internal static string CreateDebuggerSummary(AutoChessBattleResult result)
         {
             var stats = result.RuntimeDiagnostics.Stats;
             var counters = result.RuntimeDiagnostics.CoreCounters;
@@ -136,7 +137,7 @@ namespace GAS.AutoChessDemo
                    + $"journalingMarkerContracts={backbone.JournalingMarkerCount}";
         }
 
-        internal static string CreateTimingSummary(HeadlessAutoBattleResult result)
+        internal static string CreateTimingSummary(AutoChessBattleResult result)
         {
             var builder = new StringBuilder(512);
             builder.Append("ecsRuntimeTickOnly=true");
@@ -155,7 +156,7 @@ namespace GAS.AutoChessDemo
             {
                 try
                 {
-                    HeadlessAutoBattleScenario.RunDefault(new HeadlessAutoBattleOptions(
+                    AutoChessBattleManager.RunDefault(new AutoChessBattleOptions(
                         ValidationMaxTicks,
                         ValidationPostVictoryFlushTicks,
                         ValidationScale,
@@ -163,14 +164,14 @@ namespace GAS.AutoChessDemo
                 }
                 finally
                 {
-                    HeadlessAutoBattleScenario.ShutdownRuntime();
+                    AutoChessBattleManager.ShutdownRuntime();
                 }
             }
         }
 
-        private static HeadlessAutoBattleResult RunScenario(bool captureOfficialToolDiff)
+        private static AutoChessBattleResult RunScenario(bool captureOfficialToolDiff)
         {
-            return HeadlessAutoBattleScenario.RunDefault(new HeadlessAutoBattleOptions(
+            return AutoChessBattleManager.RunDefault(new AutoChessBattleOptions(
                 ValidationMaxTicks,
                 ValidationPostVictoryFlushTicks,
                 ValidationScale,
@@ -178,8 +179,8 @@ namespace GAS.AutoChessDemo
         }
 
         internal static void ValidateOfficialDiffRun(
-            in HeadlessAutoBattleResult performanceResult,
-            in HeadlessAutoBattleResult officialDiffResult)
+            in AutoChessBattleResult performanceResult,
+            in AutoChessBattleResult officialDiffResult)
         {
             if (performanceResult.DriverIssuedCommands != officialDiffResult.DriverIssuedCommands
                 || performanceResult.EventCounts.AttributeChanges != officialDiffResult.EventCounts.AttributeChanges
@@ -187,7 +188,7 @@ namespace GAS.AutoChessDemo
                 || performanceResult.EventCounts.CueRequests != officialDiffResult.EventCounts.CueRequests)
             {
                 throw new InvalidOperationException(
-                    "AutoBattle official diff pass diverged from performance pass: "
+                    "AutoChessBattle official diff pass diverged from performance pass: "
                     + CreateSummary(performanceResult)
                     + " | official="
                     + CreateSummary(officialDiffResult));
@@ -197,7 +198,7 @@ namespace GAS.AutoChessDemo
         private static void AppendTiming(
             StringBuilder builder,
             string systemName,
-            in HeadlessAutoBattleSystemTiming timing)
+            in AutoChessBattleSystemTiming timing)
         {
             builder.Append(" | ")
                 .Append(systemName)
@@ -210,7 +211,7 @@ namespace GAS.AutoChessDemo
                 .Append(')');
         }
 
-        internal static string CreateOfficialToolDiffSummary(HeadlessAutoBattleResult result)
+        internal static string CreateOfficialToolDiffSummary(AutoChessBattleResult result)
         {
             var official = result.OfficialToolDiff;
             var runtime = result.RuntimeDiagnostics.CoreCounters;
@@ -275,14 +276,14 @@ namespace GAS.AutoChessDemo
             return count;
         }
 
-        internal static string CreateDataFlowDiagram(HeadlessAutoBattleResult result)
+        internal static string CreateDataFlowDiagram(AutoChessBattleResult result)
         {
             return "```mermaid\n"
                    + "flowchart LR\n"
-                   + $"    CommandDrive[\"AutoBattleCommandDriveSystem\\nscale: {result.ScenarioScale}, units: {result.Units.Length}\\ncommands: {result.DriverIssuedCommands}\"] --> AbilityBuffer[\"AbilityCommandBuffer\\nrequest entities avoided\"]\n"
+                   + $"    CommandDrive[\"AutoChessBattleCommandDriveSystem\\nscale: {result.ScenarioScale}, units: {result.Units.Length}\\ncommands: {result.DriverIssuedCommands}\"] --> AbilityBuffer[\"AbilityCommandBuffer\\nrequest entities avoided\"]\n"
                    + $"    AbilityBuffer --> RuntimeCore[\"GAS Runtime Core\\nrequests: {result.RuntimeDiagnostics.CoreCounters.RequestCount}\"]\n"
                    + $"    RuntimeCore --> GEStream[\"GEEffectCommandBuffer / Spec / Delta\\ndeltas: {result.RuntimeDiagnostics.CoreCounters.DeltaCount}\"]\n"
-                   + $"    GEStream --> Execution[\"AutoBattleExecuteDamageCalculationSystem\\nexecution outputs: {result.EventCounts.ExecutionCalculationOutputUpdated}\"]\n"
+                   + $"    GEStream --> Execution[\"AutoChessExecuteDamageCalculationSystem\\nexecution outputs: {result.EventCounts.ExecutionCalculationOutputUpdated}\"]\n"
                    + $"    Execution --> Attribute[\"AttributeModifierBuffer + AttributeValueBuffer\\nattribute changes: {result.EventCounts.AttributeChanges}\"]\n"
                    + $"    Attribute --> Facts[\"GameplayEventBuffer typed facts\\nfacts: {result.RuntimeDiagnostics.CoreCounters.FactCount}\"]\n"
                    + $"    Facts --> Projection[\"Replay / Presentation / Layer 2 Diagnostics\\nreplay events: {result.EventCounts.ReplayEvents}\"]\n"
@@ -290,12 +291,12 @@ namespace GAS.AutoChessDemo
                    + "```";
         }
 
-        internal static string CreateSequenceDiagram(HeadlessAutoBattleResult result)
+        internal static string CreateSequenceDiagram(AutoChessBattleResult result)
         {
             return "```mermaid\n"
                    + "sequenceDiagram\n"
-                   + "    participant Runner as Headless Runner\n"
-                   + "    participant Drive as AutoBattle Command Drive\n"
+                   + "    participant Runner as AutoChess Demo Runner\n"
+                   + "    participant Drive as AutoChessBattle Command Drive\n"
                    + "    participant Core as GAS Runtime Core\n"
                    + "    participant Exec as Execution Calculation\n"
                    + "    participant Obs as Replay / Projection\n"
@@ -342,7 +343,7 @@ namespace GAS.AutoChessDemo
             }
         }
 
-        private static uint CalculateSummaryHash(HeadlessAutoBattleResult result, uint factsHash)
+        private static uint CalculateSummaryHash(AutoChessBattleResult result, uint factsHash)
         {
             unchecked
             {

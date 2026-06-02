@@ -4,7 +4,7 @@ using GAS.Runtime;
 
 namespace GAS.AutoChessDemo
 {
-    public static class HeadlessAutoChessRuntimeSystemBootstrap
+    public static class AutoChessRuntimeSystemBootstrap
     {
         private static World _registeredWorld;
 
@@ -27,9 +27,9 @@ namespace GAS.AutoChessDemo
                 world.GetExistingSystemManaged<GASBoundaryProjectionSystemGroup>());
             var fixedStepSimulation = world.GetExistingSystemManaged<FixedStepSimulationSystemGroup>();
 
-            groups.CommandResolve.AddSystemToUpdateList(world.CreateSystem(typeof(AutoBattleCommandDriveSystem)));
+            groups.CommandResolve.AddSystemToUpdateList(world.CreateSystem(typeof(AutoChessBattleCommandDriveSystem)));
             groups.ExecutionCalculationExtension.AddSystemToUpdateList(
-                world.CreateSystem(typeof(AutoBattleExecuteDamageCalculationSystem)));
+                world.CreateSystem(typeof(AutoChessExecuteDamageCalculationSystem)));
             GASSystemScheduleContract.SortSystems(fixedStepSimulation, groups);
             _registeredWorld = world;
         }

@@ -8,7 +8,7 @@ namespace GAS.AutoChessDemo
     [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
     [UpdateAfter(typeof(ASCCommandRequestSystem))]
     [UpdateBefore(typeof(AbilityCommandRequestSystem))]
-    public partial struct AutoBattleCommandDriveSystem : ISystem
+    public partial struct AutoChessBattleCommandDriveSystem : ISystem
     {
         private EntityQuery _driverQuery;
         private EntityQuery _unitQuery;
@@ -16,10 +16,10 @@ namespace GAS.AutoChessDemo
         public void OnCreate(ref SystemState state)
         {
             _driverQuery = SystemAPI.QueryBuilder()
-                .WithAll<AutoBattleCommandDriverComponent>()
+                .WithAll<AutoChessBattleDriverComponent>()
                 .Build();
             _unitQuery = SystemAPI.QueryBuilder()
-                .WithAll<AutoBattleUnitComponent, AttributeValueBuffer, TagMaskComponent>()
+                .WithAll<AutoChessBattleUnitComponent, AttributeValueBuffer, TagMaskComponent>()
                 .WithNone<ASCDestroyingComponent>()
                 .Build();
 
@@ -31,7 +31,7 @@ namespace GAS.AutoChessDemo
         public void OnUpdate(ref SystemState state)
         {
             var driverEntity = _driverQuery.GetSingletonEntity();
-            var driver = SystemAPI.GetComponent<AutoBattleCommandDriverComponent>(driverEntity);
+            var driver = SystemAPI.GetComponent<AutoChessBattleDriverComponent>(driverEntity);
             if (!driver.Enabled)
                 return;
 
@@ -44,14 +44,14 @@ namespace GAS.AutoChessDemo
                 unitCapacity = 1;
 
             var attributesByAsc = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true);
-            using (var units = new NativeList<AutoBattleUnitTargetStateRecord>(unitCapacity, Allocator.Temp))
+            using (var units = new NativeList<AutoChessBattleUnitTargetStateRecord>(unitCapacity, Allocator.Temp))
             {
                 var maxBattleGroup = -1;
                 var playerAliveCount = 0;
                 var enemyAliveCount = 0;
                 foreach (var (unit, tags, entity)
                          in SystemAPI.Query<
-                                 RefRO<AutoBattleUnitComponent>,
+                                 RefRO<AutoChessBattleUnitComponent>,
                                  RefRO<TagMaskComponent>>()
                              .WithNone<ASCDestroyingComponent>()
                              .WithEntityAccess())
@@ -68,12 +68,12 @@ namespace GAS.AutoChessDemo
                     if (health <= 0f)
                         continue;
 
-                    if (unitValue.Team == HeadlessAutoBattleTeam.Player)
+                    if (unitValue.Team == AutoChessTeam.Player)
                         playerAliveCount++;
-                    else if (unitValue.Team == HeadlessAutoBattleTeam.Enemy)
+                    else if (unitValue.Team == AutoChessTeam.Enemy)
                         enemyAliveCount++;
 
-                    units.Add(new AutoBattleUnitTargetStateRecord
+                    units.Add(new AutoChessBattleUnitTargetStateRecord
                     {
                         Asc = entity,
                         BattleGroup = unitValue.BattleGroup,
@@ -100,7 +100,7 @@ namespace GAS.AutoChessDemo
 
                 if (units.Length > 0)
                 {
-                    using var targetCache = new NativeArray<AutoBattleGroupTargetCacheRecord>(
+                    using var targetCache = new NativeArray<AutoChessBattleGroupTargetCacheRecord>(
                         maxBattleGroup + 1,
                         Allocator.Temp);
                     BuildTargetCache(units.AsArray(), targetCache);
@@ -121,9 +121,9 @@ namespace GAS.AutoChessDemo
 
         private static void FlushCommandRequests(
             EntityManager em,
-            NativeArray<AutoBattleUnitTargetStateRecord> units,
-            NativeArray<AutoBattleGroupTargetCacheRecord> targetCache,
-            ref AutoBattleCommandDriverComponent driver)
+            NativeArray<AutoChessBattleUnitTargetStateRecord> units,
+            NativeArray<AutoChessBattleGroupTargetCacheRecord> targetCache,
+            ref AutoChessBattleDriverComponent driver)
         {
             var issuedPrimary = 0;
             var issuedFinisher = 0;
@@ -167,7 +167,7 @@ namespace GAS.AutoChessDemo
                     issuedFinisher++;
                 else
                     issuedPrimary++;
-                if (policy == AutoBattleTargetPolicy.LowestHealth)
+                if (policy == AutoChessTargetPolicy.LowestHealth)
                     lowestHealthSelections++;
             }
 
@@ -191,17 +191,17 @@ namespace GAS.AutoChessDemo
         }
 
         private static bool TrySelectCommand(
-            in AutoBattleUnitTargetStateRecord source,
-            NativeArray<AutoBattleGroupTargetCacheRecord> targetCache,
+            in AutoChessBattleUnitTargetStateRecord source,
+            NativeArray<AutoChessBattleGroupTargetCacheRecord> targetCache,
             out int abilityCode,
             out Entity target,
-            out AutoBattleTargetPolicy policy,
+            out AutoChessTargetPolicy policy,
             out bool isFinisher,
             out Entity abilityEntity)
         {
             abilityCode = 0;
             target = Entity.Null;
-            policy = AutoBattleTargetPolicy.Frontline;
+            policy = AutoChessTargetPolicy.Frontline;
             isFinisher = false;
             abilityEntity = Entity.Null;
 
@@ -233,27 +233,27 @@ namespace GAS.AutoChessDemo
         }
 
         private static bool TryFindAliveEnemy(
-            in AutoBattleUnitTargetStateRecord source,
-            NativeArray<AutoBattleGroupTargetCacheRecord> targetCache,
-            AutoBattleTargetPolicy policy,
-            out AutoBattleUnitTargetStateRecord target)
+            in AutoChessBattleUnitTargetStateRecord source,
+            NativeArray<AutoChessBattleGroupTargetCacheRecord> targetCache,
+            AutoChessTargetPolicy policy,
+            out AutoChessBattleUnitTargetStateRecord target)
         {
             target = default;
             if (source.BattleGroup < 0 || source.BattleGroup >= targetCache.Length)
                 return false;
 
             var cache = targetCache[source.BattleGroup];
-            if (source.Team == HeadlessAutoBattleTeam.Player)
+            if (source.Team == AutoChessTeam.Player)
                 return TryResolveCachedTarget(in cache.Enemy, policy, out target);
-            if (source.Team == HeadlessAutoBattleTeam.Enemy)
+            if (source.Team == AutoChessTeam.Enemy)
                 return TryResolveCachedTarget(in cache.Player, policy, out target);
 
             return false;
         }
 
         private static void BuildTargetCache(
-            NativeArray<AutoBattleUnitTargetStateRecord> units,
-            NativeArray<AutoBattleGroupTargetCacheRecord> targetCache)
+            NativeArray<AutoChessBattleUnitTargetStateRecord> units,
+            NativeArray<AutoChessBattleGroupTargetCacheRecord> targetCache)
         {
             for (var i = 0; i < units.Length; i++)
             {
@@ -267,27 +267,27 @@ namespace GAS.AutoChessDemo
                 }
 
                 var cache = targetCache[unit.BattleGroup];
-                if (unit.Team == HeadlessAutoBattleTeam.Player)
+                if (unit.Team == AutoChessTeam.Player)
                     UpdateTeamTargetCache(ref cache.Player, in unit);
-                else if (unit.Team == HeadlessAutoBattleTeam.Enemy)
+                else if (unit.Team == AutoChessTeam.Enemy)
                     UpdateTeamTargetCache(ref cache.Enemy, in unit);
                 targetCache[unit.BattleGroup] = cache;
             }
         }
 
         private static void UpdateTeamTargetCache(
-            ref AutoBattleTeamTargetCacheRecord cache,
-            in AutoBattleUnitTargetStateRecord unit)
+            ref AutoChessTeamTargetCacheRecord cache,
+            in AutoChessBattleUnitTargetStateRecord unit)
         {
             if (cache.HasFrontline == 0
-                || IsBetterTarget(unit, cache.Frontline, AutoBattleTargetPolicy.Frontline))
+                || IsBetterTarget(unit, cache.Frontline, AutoChessTargetPolicy.Frontline))
             {
                 cache.Frontline = unit;
                 cache.HasFrontline = 1;
             }
 
             if (cache.HasLowestHealth == 0
-                || IsBetterTarget(unit, cache.LowestHealth, AutoBattleTargetPolicy.LowestHealth))
+                || IsBetterTarget(unit, cache.LowestHealth, AutoChessTargetPolicy.LowestHealth))
             {
                 cache.LowestHealth = unit;
                 cache.HasLowestHealth = 1;
@@ -295,11 +295,11 @@ namespace GAS.AutoChessDemo
         }
 
         private static bool TryResolveCachedTarget(
-            in AutoBattleTeamTargetCacheRecord cache,
-            AutoBattleTargetPolicy policy,
-            out AutoBattleUnitTargetStateRecord target)
+            in AutoChessTeamTargetCacheRecord cache,
+            AutoChessTargetPolicy policy,
+            out AutoChessBattleUnitTargetStateRecord target)
         {
-            if (policy == AutoBattleTargetPolicy.LowestHealth && cache.HasLowestHealth != 0)
+            if (policy == AutoChessTargetPolicy.LowestHealth && cache.HasLowestHealth != 0)
             {
                 target = cache.LowestHealth;
                 return true;
@@ -316,11 +316,11 @@ namespace GAS.AutoChessDemo
         }
 
         private static bool IsBetterTarget(
-            in AutoBattleUnitTargetStateRecord candidate,
-            in AutoBattleUnitTargetStateRecord current,
-            AutoBattleTargetPolicy policy)
+            in AutoChessBattleUnitTargetStateRecord candidate,
+            in AutoChessBattleUnitTargetStateRecord current,
+            AutoChessTargetPolicy policy)
         {
-            if (policy == AutoBattleTargetPolicy.LowestHealth)
+            if (policy == AutoChessTargetPolicy.LowestHealth)
             {
                 if (candidate.Health < current.Health)
                     return true;
@@ -341,7 +341,7 @@ namespace GAS.AutoChessDemo
             return candidate.Asc.Version < current.Asc.Version;
         }
 
-        private static bool CanActivate(in AutoBattleUnitTargetStateRecord source)
+        private static bool CanActivate(in AutoChessBattleUnitTargetStateRecord source)
         {
             return source.Asc != Entity.Null
                    && source.Energy >= 1f
@@ -369,18 +369,18 @@ namespace GAS.AutoChessDemo
                    && tags.HasTag(denseTagIndex);
         }
 
-        private struct AutoBattleGroupTargetCacheRecord
+        private struct AutoChessBattleGroupTargetCacheRecord
         {
-            public AutoBattleTeamTargetCacheRecord Player;
-            public AutoBattleTeamTargetCacheRecord Enemy;
+            public AutoChessTeamTargetCacheRecord Player;
+            public AutoChessTeamTargetCacheRecord Enemy;
         }
 
-        private struct AutoBattleTeamTargetCacheRecord
+        private struct AutoChessTeamTargetCacheRecord
         {
             public byte HasFrontline;
             public byte HasLowestHealth;
-            public AutoBattleUnitTargetStateRecord Frontline;
-            public AutoBattleUnitTargetStateRecord LowestHealth;
+            public AutoChessBattleUnitTargetStateRecord Frontline;
+            public AutoChessBattleUnitTargetStateRecord LowestHealth;
         }
     }
 }

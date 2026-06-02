@@ -3,13 +3,13 @@ using GAS.Runtime;
 
 namespace GAS.AutoChessDemo
 {
-    public enum AutoBattleTargetPolicy : byte
+    public enum AutoChessTargetPolicy : byte
     {
         Frontline = 0,
         LowestHealth = 1,
     }
 
-    public struct AutoBattleCommandDriverComponent : IComponentData
+    public struct AutoChessBattleDriverComponent : IComponentData
     {
         public bool Enabled;
         public int LastDecisionFrame;
@@ -23,10 +23,10 @@ namespace GAS.AutoChessDemo
         public int LowestHealthTargetCount;
     }
 
-    public struct AutoBattleUnitComponent : IComponentData
+    public struct AutoChessBattleUnitComponent : IComponentData
     {
         public int BattleGroup;
-        public HeadlessAutoBattleTeam Team;
+        public AutoChessTeam Team;
         public int Slot;
         public int PrimaryAbilityCode;
         public int FinisherAbilityCode;
@@ -38,11 +38,11 @@ namespace GAS.AutoChessDemo
         public int EnergyAttrCode;
         public int CooldownTagIndex;
         public float FinisherHealthThreshold;
-        public AutoBattleTargetPolicy PrimaryTargetPolicy;
-        public AutoBattleTargetPolicy FinisherTargetPolicy;
+        public AutoChessTargetPolicy PrimaryTargetPolicy;
+        public AutoChessTargetPolicy FinisherTargetPolicy;
     }
 
-    public struct AutoBattleExecuteDamageCalculationComponent : IComponentData
+    public struct AutoChessExecuteDamageCalculationComponent : IComponentData
     {
         public int CalculationCode;
         public int OutputKey;
@@ -54,11 +54,11 @@ namespace GAS.AutoChessDemo
         public float MaxDamage;
     }
 
-    public struct AutoBattleUnitTargetStateRecord
+    public struct AutoChessBattleUnitTargetStateRecord
     {
         public Entity Asc;
         public int BattleGroup;
-        public HeadlessAutoBattleTeam Team;
+        public AutoChessTeam Team;
         public int Slot;
         public int PrimaryAbilityCode;
         public int FinisherAbilityCode;
@@ -66,19 +66,19 @@ namespace GAS.AutoChessDemo
         public Entity FinisherAbilityEntity;
         public int CooldownTagIndex;
         public float FinisherHealthThreshold;
-        public AutoBattleTargetPolicy PrimaryTargetPolicy;
-        public AutoBattleTargetPolicy FinisherTargetPolicy;
+        public AutoChessTargetPolicy PrimaryTargetPolicy;
+        public AutoChessTargetPolicy FinisherTargetPolicy;
         public TagMaskComponent Tags;
         public float Health;
         public float Energy;
     }
 
-    public struct AutoBattleIssuedCommandRecord
+    public struct AutoChessBattleIssuedCommandRecord
     {
         public Entity SourceAsc;
         public Entity TargetAsc;
         public int AbilityCode;
-        public AutoBattleTargetPolicy TargetPolicy;
+        public AutoChessTargetPolicy TargetPolicy;
         public bool IsFinisher;
     }
 }

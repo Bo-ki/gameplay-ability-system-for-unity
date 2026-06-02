@@ -4,10 +4,10 @@ using GAS.Runtime;
 
 namespace GAS.AutoChessDemo
 {
-    public static class AutoBattleDefinitionCatalogBuilder
+    public static class AutoChessBattleDefinitionCatalogBuilder
     {
         private const int SchemaVersion = 1;
-        private const int CueAutoBattleHit = 9301;
+        private const int CueAutoChessBattleHit = 9301;
 
         private static BlobAssetReference<GASDefinitionCatalogBlob> _installedCatalog;
 
@@ -18,7 +18,7 @@ namespace GAS.AutoChessDemo
 
             _installedCatalog = Build(Allocator.Persistent);
             var catalogEntity = ResolveCatalogEntity(entityManager);
-            entityManager.SetName(catalogEntity, "AutoBattleDefinitionCatalog");
+            entityManager.SetName(catalogEntity, "AutoChessBattleDefinitionCatalog");
             entityManager.SetComponentData(catalogEntity, new GASDefinitionCatalogComponent
             {
                 Catalog = _installedCatalog,
@@ -65,42 +65,42 @@ namespace GAS.AutoChessDemo
                 root.SchemaVersion = SchemaVersion;
 
                 var abilityCodes = builder.Allocate(ref root.AbilityCodes, 3);
-                abilityCodes[0] = HeadlessAutoBattleScenario.AbilityPlayerAttack;
-                abilityCodes[1] = HeadlessAutoBattleScenario.AbilityEnemyAttack;
-                abilityCodes[2] = HeadlessAutoBattleScenario.AbilityPlayerExecute;
+                abilityCodes[0] = AutoChessBattleRules.AbilityPlayerAttack;
+                abilityCodes[1] = AutoChessBattleRules.AbilityEnemyAttack;
+                abilityCodes[2] = AutoChessBattleRules.AbilityPlayerExecute;
 
                 var abilities = builder.Allocate(ref root.Abilities, 3);
                 abilities[0] = CreateAbility(
-                    HeadlessAutoBattleScenario.AbilityPlayerAttack,
-                    HeadlessAutoBattleScenario.GameplayEffectPlayerAttackDamage);
+                    AutoChessBattleRules.AbilityPlayerAttack,
+                    AutoChessBattleRules.GameplayEffectPlayerAttackDamage);
                 abilities[1] = CreateAbility(
-                    HeadlessAutoBattleScenario.AbilityEnemyAttack,
-                    HeadlessAutoBattleScenario.GameplayEffectEnemyAttackDamage);
+                    AutoChessBattleRules.AbilityEnemyAttack,
+                    AutoChessBattleRules.GameplayEffectEnemyAttackDamage);
                 abilities[2] = CreateAbility(
-                    HeadlessAutoBattleScenario.AbilityPlayerExecute,
-                    HeadlessAutoBattleScenario.GameplayEffectPlayerExecute);
+                    AutoChessBattleRules.AbilityPlayerExecute,
+                    AutoChessBattleRules.GameplayEffectPlayerExecute);
 
                 var gameplayEffectCodes = builder.Allocate(ref root.GameplayEffectCodes, 3);
-                gameplayEffectCodes[0] = HeadlessAutoBattleScenario.GameplayEffectPlayerAttackDamage;
-                gameplayEffectCodes[1] = HeadlessAutoBattleScenario.GameplayEffectEnemyAttackDamage;
-                gameplayEffectCodes[2] = HeadlessAutoBattleScenario.GameplayEffectPlayerExecute;
+                gameplayEffectCodes[0] = AutoChessBattleRules.GameplayEffectPlayerAttackDamage;
+                gameplayEffectCodes[1] = AutoChessBattleRules.GameplayEffectEnemyAttackDamage;
+                gameplayEffectCodes[2] = AutoChessBattleRules.GameplayEffectPlayerExecute;
 
                 var gameplayEffects = builder.Allocate(ref root.GameplayEffects, 3);
                 gameplayEffects[0] = CreateInstantModifierEffect(
-                    HeadlessAutoBattleScenario.GameplayEffectPlayerAttackDamage,
+                    AutoChessBattleRules.GameplayEffectPlayerAttackDamage,
                     modifierStart: 0);
                 gameplayEffects[1] = CreateInstantModifierEffect(
-                    HeadlessAutoBattleScenario.GameplayEffectEnemyAttackDamage,
+                    AutoChessBattleRules.GameplayEffectEnemyAttackDamage,
                     modifierStart: 1);
                 gameplayEffects[2] = CreateExecuteEffect();
 
                 var modifiers = builder.Allocate(ref root.Modifiers, 2);
                 modifiers[0] = CreateHealthDamageModifier(
-                    HeadlessAutoBattleScenario.GameplayEffectPlayerAttackDamage,
+                    AutoChessBattleRules.GameplayEffectPlayerAttackDamage,
                     modifierIndex: 0,
                     magnitude: 12f);
                 modifiers[1] = CreateHealthDamageModifier(
-                    HeadlessAutoBattleScenario.GameplayEffectEnemyAttackDamage,
+                    AutoChessBattleRules.GameplayEffectEnemyAttackDamage,
                     modifierIndex: 1,
                     magnitude: 8f);
 
@@ -169,7 +169,7 @@ namespace GAS.AutoChessDemo
             return new GASCatalogGameplayEffectDefinitionBlob
             {
                 GameplayEffectCode = gameplayEffectCode,
-                GameplayCueCode = CueAutoBattleHit,
+                GameplayCueCode = CueAutoChessBattleHit,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
                 ModifierStart = modifierStart,
@@ -181,8 +181,8 @@ namespace GAS.AutoChessDemo
         {
             return new GASCatalogGameplayEffectDefinitionBlob
             {
-                GameplayEffectCode = HeadlessAutoBattleScenario.GameplayEffectPlayerExecute,
-                GameplayCueCode = CueAutoBattleHit,
+                GameplayEffectCode = AutoChessBattleRules.GameplayEffectPlayerExecute,
+                GameplayCueCode = CueAutoChessBattleHit,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
                 ModifierStart = 2,
@@ -199,8 +199,8 @@ namespace GAS.AutoChessDemo
             {
                 GameplayEffectCode = gameplayEffectCode,
                 ModifierIndex = modifierIndex,
-                AttributeSetCode = HeadlessAutoBattleScenario.AttributeSetCombat,
-                AttributeCode = HeadlessAutoBattleScenario.AttributeHealth,
+                AttributeSetCode = AutoChessBattleRules.AttributeSetCombat,
+                AttributeCode = AutoChessBattleRules.AttributeHealth,
                 Operation = EModifierOp.Subtract,
                 BaseMagnitude = magnitude,
                 MagnitudeSource = EMagnitudeSource.Constant,

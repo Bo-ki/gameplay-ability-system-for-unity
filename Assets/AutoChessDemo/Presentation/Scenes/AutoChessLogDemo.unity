@@ -126,7 +126,7 @@ GameObject:
   - component: {fileID: 100001}
   - component: {fileID: 100002}
   m_Layer: 0
-  m_Name: Headless AutoChess Demo Runner
+  m_Name: AutoChess Demo Log Runner
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -173,3 +173,5 @@ MonoBehaviour:
   profilerPostRunFrames: 1
   quitPlayerOnComplete: 1
   stopEditorPlayModeOnComplete: 1
+  showLogScreen: 1
+  logScreenMaxLines: 80

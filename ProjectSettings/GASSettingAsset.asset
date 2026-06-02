@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   CodeGeneratePath: Assets/GAS/Generated/CodeGen
   CodeGenerateRootNamespace: GAS.Runtime.Generated
-  CodeGenerateRowTypePrefixesToStrip: HeadlessAutoChess
+  CodeGenerateRowTypePrefixesToStrip: AutoChess
   TableOutpuPath: Assets/DataGenerated/Luban/Json/GAS
   TableClassCodeOutpuPath: Assets/DataGenerated/Luban/CSharp
   ConfigProjectPath: EX_GAS_Config/ProjectConfigTable/exgas_config

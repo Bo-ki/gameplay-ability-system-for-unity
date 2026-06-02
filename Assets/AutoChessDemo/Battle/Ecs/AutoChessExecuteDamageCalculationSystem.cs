@@ -7,14 +7,14 @@ namespace GAS.AutoChessDemo
 {
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GEExecutionCalculationExtensionSystemGroup))]
-    public partial struct AutoBattleExecuteDamageCalculationSystem : ISystem
+    public partial struct AutoChessExecuteDamageCalculationSystem : ISystem
     {
         private EntityQuery _driverQuery;
 
         public void OnCreate(ref SystemState state)
         {
             _driverQuery = SystemAPI.QueryBuilder()
-                .WithAll<AutoBattleCommandDriverComponent>()
+                .WithAll<AutoChessBattleDriverComponent>()
                 .Build();
 
             state.RequireForUpdate<GlobalTimer>();
@@ -26,7 +26,7 @@ namespace GAS.AutoChessDemo
         public void OnUpdate(ref SystemState state)
         {
             var driverEntity = _driverQuery.GetSingletonEntity();
-            var driver = SystemAPI.GetComponent<AutoBattleCommandDriverComponent>(driverEntity);
+            var driver = SystemAPI.GetComponent<AutoChessBattleDriverComponent>(driverEntity);
             if (!driver.Enabled)
                 return;
 
@@ -41,7 +41,7 @@ namespace GAS.AutoChessDemo
             var eventBusEntity = SystemAPI.GetSingletonEntity<GameplayEventBusComponent>();
 
             var commands = em.GetBuffer<GEEffectCommandBuffer>(streamEntity);
-            var damageDeltas = new NativeList<AutoBattleExecuteDamageDeltaRecord>(Allocator.Temp);
+            var damageDeltas = new NativeList<AutoChessExecuteDamageDeltaRecord>(Allocator.Temp);
             var attributesByAsc = SystemAPI.GetBufferLookup<AttributeValueBuffer>();
             var destroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true);
 
@@ -73,12 +73,12 @@ namespace GAS.AutoChessDemo
             BufferLookup<AttributeValueBuffer> attributesByAsc,
             ComponentLookup<ASCDestroyingComponent> destroyingLookup,
             int frame,
-            NativeList<AutoBattleExecuteDamageDeltaRecord> damageDeltas)
+            NativeList<AutoChessExecuteDamageDeltaRecord> damageDeltas)
         {
             for (var i = 0; i < commands.Length; i++)
             {
                 var command = commands[i];
-                if (command.GameplayEffectCode != HeadlessAutoBattleScenario.GameplayEffectPlayerExecute
+                if (command.GameplayEffectCode != AutoChessBattleRules.GameplayEffectPlayerExecute
                     || command.TargetAsc == Entity.Null)
                 {
                     continue;
@@ -95,7 +95,7 @@ namespace GAS.AutoChessDemo
                 if (!ApplyExecuteDamage(attributes, in command, out var oldValue, out var newValue, out var damage))
                     continue;
 
-                damageDeltas.Add(new AutoBattleExecuteDamageDeltaRecord
+                damageDeltas.Add(new AutoChessExecuteDamageDeltaRecord
                 {
                     CommandSequence = command.Sequence,
                     Frame = command.Frame != 0 ? command.Frame : frame,
@@ -106,9 +106,9 @@ namespace GAS.AutoChessDemo
                     GameplayEffectCode = command.GameplayEffectCode,
                     ContextId = command.ContextId,
                     ParentContextId = command.ParentContextId,
-                    AttrSetCode = HeadlessAutoBattleScenario.AttributeSetCombat,
-                    AttributeCode = HeadlessAutoBattleScenario.AttributeHealth,
-                    OutputKey = HeadlessAutoBattleScenario.ExecutionCalculationExecuteDamageOutput,
+                    AttrSetCode = AutoChessBattleRules.AttributeSetCombat,
+                    AttributeCode = AutoChessBattleRules.AttributeHealth,
+                    OutputKey = AutoChessBattleRules.ExecutionCalculationExecuteDamageOutput,
                     Damage = damage,
                     OldValue = oldValue,
                     NewValue = newValue,
@@ -120,7 +120,7 @@ namespace GAS.AutoChessDemo
             EntityManager em,
             Entity streamEntity,
             Entity eventBusEntity,
-            NativeArray<AutoBattleExecuteDamageDeltaRecord> damageDeltas)
+            NativeArray<AutoChessExecuteDamageDeltaRecord> damageDeltas)
         {
             if (damageDeltas.Length == 0)
                 return;
@@ -176,7 +176,7 @@ namespace GAS.AutoChessDemo
                         GameplayEffectCode = record.GameplayEffectCode,
                         ContextId = record.ContextId,
                         ParentContextId = record.ParentContextId,
-                        EventCode = HeadlessAutoBattleScenario.ExecutionCalculationExecuteDamage,
+                        EventCode = AutoChessBattleRules.ExecutionCalculationExecuteDamage,
                         AttrSetCode = record.AttrSetCode,
                         AttributeCode = record.AttributeCode,
                         ReasonCode = record.OutputKey,
@@ -194,7 +194,7 @@ namespace GAS.AutoChessDemo
                         SourceAbility = record.SourceAbility,
                         GameplayEffect = record.SourceEffect,
                         ContextId = record.ContextId,
-                        EventCode = HeadlessAutoBattleScenario.ExecutionCalculationExecuteDamage,
+                        EventCode = AutoChessBattleRules.ExecutionCalculationExecuteDamage,
                         ReasonCode = record.OutputKey,
                         Value = record.Damage,
                     });
@@ -224,7 +224,7 @@ namespace GAS.AutoChessDemo
                    && destroyingLookup.IsComponentEnabled(asc);
         }
 
-        private struct AutoBattleExecuteDamageDeltaRecord
+        private struct AutoChessExecuteDamageDeltaRecord
         {
             public int CommandSequence;
             public int Frame;
@@ -256,8 +256,8 @@ namespace GAS.AutoChessDemo
 
             var attrIndex = IndexOfAttribute(
                 attributes,
-                HeadlessAutoBattleScenario.AttributeSetCombat,
-                HeadlessAutoBattleScenario.AttributeHealth);
+                AutoChessBattleRules.AttributeSetCombat,
+                AutoChessBattleRules.AttributeHealth);
             if (attrIndex < 0)
                 return false;
 
