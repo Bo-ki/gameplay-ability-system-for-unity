@@ -93,9 +93,22 @@ AutoChessDemo 的配置必须服务“精链路”，不能靠堆机制证明完
 
 新增机制必须说明它覆盖哪个 GAS 概念缺口；不能只是”让 Demo 更丰富”。
 
-## 当前最小 Runtime Core 验证 Catalog
+## 当前 Runtime Core 验证 Catalog
 
-本轮 AutoBattle 最小链路已经从旧 `HeadlessAutoChess*` 手写配置源切断。当前可执行验证使用 `Assets/AutoChessDemo/AutoBattle/AutoBattleDefinitionCatalogBuilder.cs` 在运行时安装最小 `GASDefinitionCatalogBlob`，用于证明 Runtime Core 调用链可用：
+当前 AutoChessDemo 已从旧 `HeadlessAutoChess*` 手写配置源切断，也不再由 demo builder 手写 Ability/GE/Modifier catalog。当前可执行验证链路是：
+
+```text
+EX_GAS_Config Excel
+  -> Luban JSON/C# export
+  -> LubanDefinitionRowProvider normalized rows
+  -> GasCodeGenPipeline / DefinitionCatalogPhase
+  -> GASGeneratedDefinitionCatalogBuilder.BuildCatalog()
+  -> AutoChessBattleDefinitionCatalogBuilder.Install()
+  -> GASDefinitionCatalogComponent
+  -> generated Runtime Core systems
+```
+
+本轮已验证的 runtime catalog 关键 code：
 
 | Code | 类型 | 目的 |
 |---:|---|---|
@@ -104,10 +117,27 @@ AutoChessDemo 的配置必须服务“精链路”，不能靠堆机制证明完
 | `9103` | Ability | 己方斩杀，primary GE 指向 `9207` |
 | `9201` | Instant GE | 己方普攻扣 Health `12`，进入 generated instant spec / attribute delta |
 | `9202` | Instant GE | 敌方普攻扣 Health `8`，进入 generated instant spec / attribute delta |
-| `9207` | ActiveMutation GE | 斩杀命令，不带 modifier，由 `AutoBattleExecuteDamageCalculationSystem` 消费 GE command stream 并输出 `ExecutionCalculationOutputUpdated` typed fact / attribute delta；event bus 仅镜像 fact |
+| `9207` | ActiveMutation GE | 斩杀命令，不带 modifier，由 `AutoChessExecuteDamageCalculationSystem` 消费 GE command stream 并输出 `ExecutionCalculationOutputUpdated` typed fact / attribute delta；event bus 仅镜像 fact |
 | `9301` | Cue | 最小 hit cue code，用于验证 cue request 投影 |
 
-这个 builder 不是长期配置方案，只是 x1 Runtime Core 验证入口。长期目标仍然是 Luban / SourceGenerator 生成同构 `GASDefinitionCatalogBlob`、validation expectation 和 schema manifest；当生成链可用后，运行时 builder 应删除或降级为测试 fixture。
+`Assets/AutoChessDemo/Battle/Ecs/AutoChessBattleDefinitionCatalogBuilder.cs` 当前只是 Application boundary 的 catalog installer：它调用 `GASGeneratedDefinitionCatalogBuilder.BuildCatalog(Allocator.Persistent)` 并写入 `GASDefinitionCatalogComponent`。它仍负责 runtime-created Blob 的 Dispose，以及低频 singleton catalog entity 查询。
+
+当前仍未完成的 Spec 11 范围是：unit/scenario/scale profile/validation expectation 还没有完整配置化；runtime authoring/Baker / BlobAssetStore 目标态仍需要实际产物证明。因此本段只能作为“Luban/sourcegen catalog 已贯通到 AutoChess Runtime Core”的验收口径，不能扩展成“AutoChess 全部配置链已完成”。
+
+## 当前审查后的配置缺口
+
+2026-06-06 的 AutoChessDemo 业务复审结论是：GAS ability / GE catalog 已经进入 generated catalog 链路，但 AutoChess 业务输入仍没有完全配置化。后续任务不能把 `AutoChessGeneratedConfig.gen.cs` 中的 managed row array、`AutoChessGameRoomFactory.CreateDefaultRoom()` 中的 scale group 展开、runner 中的 validation scenario 常量误判为目标态。
+
+| 缺口 | 当前表现 | 目标生成物 | 约束 |
+|---|---|---|---|
+| unit / room authority | `AutoChessGeneratedConfig.CreateBaseUnitRows()` + `AutoChessGameRoomFactory` 组装 managed array | `AutoChessUnitLookup.g.cs` / unit blob / spawn archetype plan | GameRoom 只做业务展示 adapter，不做数据事实源 |
+| scenario authority | 默认房间和单位布阵仍由代码构造 | `AutoChessScenarioBuildPlan.g.cs` | scenario 表输出 deterministic spawn plan、seed、player seat、board group |
+| scale profile authority | scale、health multiplier、measurement 等分散在 runner/options/serialized fields | `AutoChessScaleProfile.g.cs` | x1/x50/x100/x1000 的 warmup、measurement、采样率和 disabled reason 来自 profile |
+| validation expectation | runner 只比较少量 count / expected winner | `AutoChessValidationExpectations.g.cs` | required facts、required cue markers、threshold、proof-only API trigger 必须机器可读 |
+| execution calculation | `AutoChessExecuteDamageCalculationSystem` 中硬编码 GE code 与公式 | `AutoChessExecutionEvaluator.g.cs` / `AutoChessMmcEvaluator.g.cs` | calculation code -> generated static switch；system 按 calculation type batch |
+| validation evidence model | summary 主要是字符串拼接 | `AutoChessValidationEvidence` runtime model + generated threshold constants | headless / scene runner 共享，同一模型导出 log / json / markdown |
+
+配置链完成前，AutoChessDemo 只能宣称“GAS generated catalog 已贯通”，不能宣称“AutoChess 业务配置链已完成”。任何新增业务机制如果继续写入 `CreateBaseUnitRows()`、runner 常量或手写 switch，必须标记为 proof-only，并附迁移到对应表和生成物的任务入口。
 
 ## 默认精链路配置数据示例
 
@@ -306,10 +336,13 @@ flowchart TD
 | `AutoChessStaticLookups.g.cs` | id -> blob / compact lookup；Runtime Core 只读 | 不读取原始 JSON；不使用托管数组 / dictionary 作为 hot path lookup |
 | `AutoChessBlobBuilders.g.cs` | Unit / Ability / GE / TagRequirement / Cue marker blob 构建，输入来自 row / generated definition | 不从 prototype entity 或 runtime state 构建静态 definition |
 | `AutoChessMmcEvaluator.g.cs` | `MmcTypeId` 常量和 `MmcEvaluator.Evaluate()` static switch | 不生成托管 delegate、`Func<>` 或可变 registry |
+| `AutoChessExecutionEvaluator.g.cs` | execution calculation code、公式参数、输出 fact/reason code 的 static switch 和 batch evaluator | 不把 calculation formula 写死在 ECS system；不生成托管 delegate 或 runtime strategy object |
 | `AutoChessBakers.g.cs` | `Baker<TAuthoring>`、`DependsOn()`、`AddBlobAsset()` / custom hash glue | 不生成静态 ECB Baker 方法；不读取其他 Baker 输出 |
 | `AutoChessBakePlan.g.cs` | bake-time 依赖、BlobAssetStore、Baking world / phase 输出计划 | 不参与 Runtime Core tick |
 | `AutoChessScenarioBuildPlan.g.cs` | 根据 scenario 表生成 spawn plan、board plan、seed | 不直接操作 Runtime Core 私有结构 |
+| `AutoChessScaleProfile.g.cs` | x1/x50/x100/x1000/x10w/x100w profile、warmup/measurement、采样率、Physics/Graphics disabled reason | 不把性能阈值和采样策略硬编码在 runner / scene serialized fields |
 | `AutoChessValidationExpectations.g.cs` | expected summary、facts hash、thresholds | 不把测试结果写死为实现逻辑 |
+| `AutoChessValidationEvidence.g.cs` / runtime model | 统一 headless / scene runner evidence 字段、proof-only API、reselect trigger、world time policy、official tool diff 摘要 | 不替代 Runtime Core Debugger；不把字符串日志作为唯一事实源 |
 | `AutoChessConfigDiagnostics.g.cs` | Editor / CI 配置诊断 | 不参与 runtime hot path |
 
 ## ScaleProfile 设计
@@ -356,6 +389,9 @@ flowchart TD
 | `AllocatorCleanupPolicy` | WorldUpdateAllocator / group allocator / TempJob / Persistent 的 cleanup 策略 |
 | `PhysicsProfileId` | 可选 Unity Physics profile；默认 `disabled`，启用时必须输出 query/event counters |
 | `RenderProfileId` | 可选 Entities Graphics profile；默认 `headless_log`，启用时必须输出 draw / BRG / render counters |
+| `ProofOnlyApiPolicy` | 当前 profile 允许的 proof-only API 列表和解释 |
+| `ReselectTrigger` | 触发 API 重选型的 command count、fact count、lookup count、buffer pressure 或 scale gate |
+| `WorldTimePolicy` | FixedStep / variable step / Editor frame delta 的显式策略 |
 
 高规模 profile 允许 synthetic workload，但必须满足：
 
@@ -436,6 +472,9 @@ ValidationExpectation 用于自动验收，不用于驱动 gameplay。
 | `DiagnosticsThresholdId` | 关联诊断阈值 |
 | `ExpectedPhysicsDisabledReason` | 默认无头 profile 下必须出现的 Physics disabled reason；启用 Physics 时设为 disabled |
 | `ExpectedEntitiesGraphicsDisabledReason` | 默认无头 profile 下必须出现的 Entities Graphics disabled reason；启用 rendered profile 时设为 disabled |
+| `AllowedProofOnlyApis` | 本 expectation 允许存在的 proof-only API，空表示必须全 scale-ready |
+| `RequiredReselectTriggers` | 若 proof-only API 存在，summary 必须输出的重选型触发条件 |
+| `RequiredWorldTimePolicy` | 期望的 world time / fixed-step 策略 |
 
 ## 配置到运行时链路
 
@@ -470,6 +509,9 @@ sequenceDiagram
 9. AutoChess lookup 必须证明 O(1) 或 O(log n)，并在生成报告中输出数据规模、排序/哈希策略和 Burst / Player AOT 可见性。
 10. `AutoChessBakers.g.cs` 必须能映射到 `Baker<TAuthoring>` / `DependsOn()` / `AddBlobAsset()` / custom hash 规则；不得用静态 ECB helper 冒充 Baker。
 11. 生成 manifest 必须能清理删除表行后遗留的 `.g.cs`，并证明输出路径没有逃逸 `Assets/AutoChessDemo/Config` 或约定 generated root。
+12. `AutoChessGameRoomFactory`、headless runner 和 scene runner 不得长期持有 unit/scenario/scale/validation 的权威常量；它们只能消费 generated build plan / profile / expectation。
+13. execution calculation system 不得长期硬编码 calculation code 与公式；公式、输出 fact code、reason code 和 batch policy 必须来自 generated evaluator。
+14. headless runner 与 scene runner 必须导出同一 `AutoChessValidationEvidence` 结构；字符串 summary 只是展示格式，不能作为唯一机器事实源。
 
 ## 历史方案定位
 

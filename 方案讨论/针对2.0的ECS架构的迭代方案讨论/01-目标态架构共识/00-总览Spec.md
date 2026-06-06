@@ -26,6 +26,22 @@ flowchart TD
 | Layer 3 | GAS 运行时核心层 | GAS 权威状态、规则计算、phase/stream、typed facts |
 | Layer 4 | 定义与生成层 | Luban、SourceGenerator、静态定义、BakePlan、validation |
 
+## 现实代码锚点与方案16吸收边界
+
+截至 2026-06-02，目标态 Spec 不能再引用旧“当前架构事实”作为完成证明。当前锚点按现实代码重新定义：
+
+1. **物理 backbone 已有正向基础**：`GASManager` 通过 `GASSystemScheduleContract` 注册 `GASFramePrepareSystemGroup -> GASCommandResolveSystemGroup -> GASCoreSimulationSystemGroup -> GASStructuralCommitSystemGroup -> GASBoundaryProjectionSystemGroup`。这是 `SYS-02` 的当前代码基础。
+2. **generated runtime 不是完成证明，而是当前 P0 风险面**：`RuntimeSystemRegistration.gen.cs`、`RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs` 已经生成并注册 Ability commit、Effect spec build、Attribute reduce/apply、ActiveEffect mutation/tick/remove 等 Runtime lifecycle system。它们只能作为迁移期 evidence，不能作为目标态主线。目标态必须把这些 lifecycle owner 收回到手写 ECS Runtime Core System；SourceGenerator 只保留 definition / blob / lookup / pure glue。
+3. **Command/Spec/Delta/Fact 不是纯纸面 Contract**：`GEEffectCommandBuffer -> GEEffectSpecBuffer -> AttributeModifierBuffer -> GameplayEventBuffer` 已有 generated/runtime 执行链，但当前仍是 singleton DynamicBuffer proof carrier，不是 `BUF-02` 意义上的 scale-ready fan-in。
+4. **StructuralCommit gate 已有物理承载，但完成度未证明**：`GASStructuralCommitSystemGroup` 和 Begin/End ECB systems 已存在；是否真正收口结构变化必须用 `GasRuntimeOfficialToolDiff` / Entities Journaling / Profiler 证明。
+5. **方案16可吸收的部分只进入目标约束，不进入完成清单**：Contract-first、结构变化集中、singleton proof-only、NativeStream deterministic merge、Blob/generated catalog、Journaling 验证均可保留；但原方案中“DOTS 参考目录为空”“架构方向已正确只是实现欠债”“6 个 stream 无条件统一迁移”等判断必须废弃或收窄。
+
+因此，本 Spec 的后续任务拆解必须遵守三个限制：
+
+1. 不把 Contract 字段当实现完成度。
+2. 不把 generated code 当黑盒。generated runtime 中的 `ISystem`、system registration、`SystemAPI.Query`、`ComponentLookup` / `BufferLookup`、`EntityManager`、ECB、singleton access、`Complete()` 与 handwritten runtime 接受同一套 DOTS 规则审查；除非标记为 `MigrationProofOnly` 且任务树包含移除计划，否则视为目标态违规。
+3. 不把 `RuntimeForbiddenDependencyHits = 0` 当成 SourceGenerator 职责边界完成。generated runtime 还必须证明没有 lifecycle system、system registration、隐藏 query、隐藏 ECB / `EntityManager` 写入和 NativeContainer owner 越权。
+
 ## AM 阶段编号定义
 
 本路线使用 AM（Architecture Milestone）作为目标态演进的阶段标记。每个 AM 代表一个可验收的架构里程碑，不表示简单的功能迭代。
@@ -59,7 +75,10 @@ AM 编号只表示目标态递进顺序，不代表严格的前置依赖。例�
 13. Runtime Core 落地顺序遵守 `DOTS Physical Backbone First`：先建立少量物理执行域 SystemGroup / Frame Prepare / Query ownership / Lookup / Allocator / Dependency / Structural Commit / Debugger evidence，再继续扩展 Target Resolve、Effect Fan-In、State Evaluate、Attribute Reduce/Apply 等 GAS kernel lane。（`SYS-01` `SYS-02` `SYS-03` `PRF-04` `PRF-07` `CASE-16`）
 14. Runtime Core 新任务必须按业务 kernel lane 归属，而不是按 OOP 类或旧 SpecStream phase 归属；默认 lane 为 Boundary Command Ingest、Target Resolve、Effect Fan-In、State Evaluate、Attribute Reduce/Apply、Gameplay Fact、Structural Commit、Boundary Projection；但 lane 不默认升格为 `ComponentSystemGroup`。
 15. EffectCommand / Spec / Delta / Fact 是语义链，不是全局总线；scale-ready 默认是 `NativeStream` deterministic merge + compact owner-local buffer，proof-only singleton DynamicBuffer 不得固化为目标态。（`CASE-12` `NAT-03` `MAT-05` `BUF-02`）
-16. Luban / SourceGenerator 进入 Runtime Core 的目标形态是 `GASDefinitionCatalogBlob` + generated code->index lookup + Generated Runtime Glue；Runtime lane 消费 `AbilityActivationPlanRecord`、`GECommandSeedRecord`、`ResolvedModifierRecord` 等 frame-local record，不反查 managed row / JSON / `Dictionary`。
+16. Luban / SourceGenerator 进入 Runtime Core 的目标形态是 `GASDefinitionCatalogBlob` + generated code->index lookup + Generated Runtime Glue；Runtime lane 消费 `AbilityActivationPlanRecord`、`GECommandSeedRecord`、`ResolvedModifierRecord` 等 frame-local record，不反查 managed row / JSON / `Dictionary`。这不是审美选择：`BLOB-01` 要求静态定义进入 immutable Blob，`BLOB-02` 要求 `BlobBuilder` 只在 Baking / 初始化期，`SYS-01` 要求权威计算落在 ECS System/Job 数据流，`SYS-03` 指出 system 数量本身是成本源，`QRY-01` / `QRY-04` 要求 hot path job 化并避免高频 random lookup，`SC-01` / `ECB-03` 要求结构变化和 ECB playback 归属明确 phase，`NAT-03` 要求 NativeStream fan-in 有确定性 merge 和预算，`BUR-01` 要求 hot path Burst 且无托管依赖。因此 SourceGenerator 不得生成 Runtime Core lifecycle system、system registration、query owner、ECB owner、EntityManager write 或 NativeContainer owner。
+17. SourceGenerator 只能生成 definition / Blob / lookup / pure glue / validation / Baker 或 Bootstrap artifact；不得生成 Runtime Core lifecycle system、system registration、隐藏结构变化、隐藏 query、NativeContainer owner 或 gameplay schedule owner。具体论证见 `15-Luban-SourceGenerator链路复审与目标重划.md`。
+18. AutoChessDemo 是 Layer 1 业务验收 Demo，不是 Runtime Core 样例或测试 harness。它允许拥有一个面向业务的 Battle Runtime Adapter seam，但该 seam 必须是薄 interface、深 implementation：对外只暴露 battle runtime 动作，对内分类承载 RuntimeHost、CatalogSession、BattleEntityLifecycle、ObservationGateway；不得把 `EntityManager`、Debugger、catalog、业务决策和 validation policy 混成万能 adapter。
+19. Validation evidence 是一等事实模型，不是字符串日志。Headless runner、scene runner、Profiler pass 和 official diff pass 必须导出同构 evidence，包含 world time policy、proof-only API、reselect trigger、官方工具证据、API health 和业务验收字段。
 
 ## Runtime Core 物理执行域与 Kernel Lane 划分
 
@@ -95,11 +114,12 @@ AM 编号只表示目标态递进顺序，不代表严格的前置依赖。例�
 4. [07-RuntimeCoreDebuggerSpec](07-RuntimeCoreDebuggerSpec.md)
 5. [08-Luban-SourceGenerator配置生成链路Spec](08-Luban-SourceGenerator配置生成链路Spec.md)
 6. [14-CodeGen到Runtime新链路重构计划](14-CodeGen到Runtime新链路重构计划.md)
-7. [12-命名规范Spec](12-命名规范Spec.md)
-8. [UnityDOTS官方文档参考](../UnityDOTS官方文档参考/README.md)
-9. [GAS Runtime Core API 选型基线](../UnityDOTS官方文档参考/主题/20-GASRuntimeCore-API选型基线.md)
-10. [官方文档覆盖与流程闭环](../UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md)
-11. [DOTS编写规范与性能陷阱](../UnityDOTS官方文档参考/主题/13-DOTS编写规范与性能陷阱.md)
+7. [15-Luban-SourceGenerator链路复审与目标重划](15-Luban-SourceGenerator链路复审与目标重划.md)
+8. [12-命名规范Spec](12-命名规范Spec.md)
+9. [UnityDOTS官方文档参考](../UnityDOTS官方文档参考/README.md)
+10. [GAS Runtime Core API 选型基线](../UnityDOTS官方文档参考/主题/20-GASRuntimeCore-API选型基线.md)
+11. [官方文档覆盖与流程闭环](../UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md)
+12. [DOTS编写规范与性能陷阱](../UnityDOTS官方文档参考/主题/13-DOTS编写规范与性能陷阱.md)
 
 ## 禁止方向
 
@@ -116,6 +136,8 @@ AM 编号只表示目标态递进顺序，不代表严格的前置依赖。例�
 11. 不把官方文档结论只停留在摘要；必须通过 `../UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md` 的覆盖矩阵和 `ODF-*` 规则进入行动报告、任务树和验收指标。
 12. 不把 Frame Arena 写成 query/lookup/service registry；Runtime Core 不接受中央 manager 型 ECS 抽象。
 13. 不把大容量全局 singleton DynamicBuffer 或大容量 per-ASC frame buffer 当作默认 scale-ready fan-in 方案。
+14. 不把 AutoChessDemo 的 `GameRoomFactory`、runner serialized fields 或 generated managed row array 当作 unit/scenario/scale/validation 的长期事实源；这些必须迁入 Luban / SourceGenerator 生成物。
+15. 不把 hard-coded execution calculation code / formula 写在 Demo ECS system 中作为目标态；execution formula 必须进入 generated evaluator / batch path。
 
 ## 历史方案定位
 

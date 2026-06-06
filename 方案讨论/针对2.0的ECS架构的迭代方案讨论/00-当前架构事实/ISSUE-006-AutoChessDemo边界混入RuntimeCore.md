@@ -18,8 +18,8 @@
 ## 仍成立风险
 
 1. `AutoChessGasCoreBridge` 直接创建/销毁 battle driver、ASC、ability、active effect。
-2. Demo catalog 由代码安装最小 blob，不是配置驱动链。
-3. Demo ECS systems 仍是主线程 query/loop，不是高规模 DOTS 证明。
+2. Demo catalog 已由代码安装通用 generated blob，但安装 owner 仍是 demo adapter；unit/scenario/scale/validation expectation 还不是配置驱动链。
+3. Demo ECS systems 主体已迁到 scheduled job，但仍是 demo extension；不能把它当作 Runtime Core 通用高规模证明。
 
 ## 代码证据
 

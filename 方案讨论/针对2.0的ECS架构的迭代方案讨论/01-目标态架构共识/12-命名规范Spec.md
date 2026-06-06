@@ -339,7 +339,7 @@ Luban / SourceGenerator 生成的 Runtime-visible 类型也必须遵守职责命
 1. `AbilitySystemFacade` 位于 `Assets/GAS/Runtime/AbilitySystem/AbilitySystemFacade.cs:7-27`，同时暴露 Entity、GameObject 和 Observation，后续应拆成应用壳层 API、CommandGateway 和 ReadModel。
 2. `EventBusHelper` 位于 `Assets/GAS/Runtime/Event/EventBusHelper.cs:7-45`，实际职责是 fact append / sequence / batch capability，不应继续以 Helper 掩盖边界写入语义。
 3. `GASManager` 位于 `Assets/GAS/Runtime/General/GASManager.cs:6-36`，承担 world host、entity manager、global singleton、bootstrap 多种职责，命名过宽。
-4. 旧 `HeadlessAutoChessScenario` 已从 `Assets/GAS/Runtime/Demo/AutoChess` 迁出；当前 `Assets/AutoChessDemo` 类型必须保持 `GAS.AutoChessDemo` 命名空间，并把最小链路拆成 `HeadlessAutoBattleScenario`、`AutoBattleCommandDriveSystem`、`AutoBattleDefinitionCatalogBuilder`、`HeadlessAutoChessRuntimeRunner` 等可定位职责。
+4. 旧 `HeadlessAutoChessScenario` 已从 `Assets/GAS/Runtime/Demo/AutoChess` 迁出；当前 `Assets/AutoChessDemo` 类型必须保持 `GAS.AutoChessDemo` 命名空间，并按真实业务 owner 拆分为 `AutoChessGameRoomDefinition`、`AutoChessBattleManager`、`AutoChessBattleSession`、`AutoChessRuntimeRunner`、`AutoChessRuntimeSystemBootstrap`、`AutoChessBattleCommandDriveSystem`、`AutoChessBattleDefinitionCatalogBuilder`、`AutoChessDemoSceneRunner` 等可定位职责。禁止把新链路重新命名为 `AutoBattle*` 或 `HeadlessAutoChess*`。
 5. 历史方案中 `ShadowMark` “实为 Debuff 却放 Buff 命名空间”是配置命名与职责不符的典型反例：`../历史方案参考/方案14.md:1251-1258`。
 
 ## 任务命名规范

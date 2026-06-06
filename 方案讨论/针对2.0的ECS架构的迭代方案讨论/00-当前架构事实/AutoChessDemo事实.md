@@ -23,7 +23,7 @@
 | runtime-extension | `Battle/Ecs` 两个 `ISystem` | command drive 与 execute calculation 已插入当前 GAS group，并已迁到 scheduled job 路径 | 仍是 demo extension，不是通用 Runtime Core 终局证明 |
 | bridge/direct-EM | `Integration/GasCore/AutoChessGasCoreBridge` | GAS init/tick/catalog/ASC lifecycle 已集中到 adapter | 内部直接 `EntityManager` 是集中后的风险，不是目标态完成 |
 | observation-only | Replay/Diagnostics/Official diff/structured log/result builder | 能导出日志和结果，方便业务验证 | 不等于 CoreSimulation 性能证明 |
-| demo-only catalog | `AutoChessBattleDefinitionCatalogBuilder` | 手写最小 `GASDefinitionCatalogBlob` 已能驱动 demo | 不能替代 Luban/SourceGenerator/Baker 配置链 |
+| generated catalog consumer | `AutoChessBattleDefinitionCatalogBuilder` | 安装通用 `GASGeneratedDefinitionCatalogBuilder.BuildCatalog()`，Ability/GE catalog 来自 Luban/sourcegen | 不能替代 unit/scenario/scale/validation expectation 配置链 |
 
 ## 官方规则对照
 
@@ -33,7 +33,7 @@
 | runtime-extension systems | `SYS-02`、`QRY-01`、`PRF-05`、`PRF-09`、`CASE-01/02/03` | 插入当前 GAS groups 是正向事实；主线程单位扫描和执行伤害 buffer 写入已迁到 scheduled job |
 | bridge/direct-EM | `SC-01`、`PRF-02`、`PRF-04`、`ECB-03` | adapter 集中可接受，但 unit/effect cleanup 不应长期绕过 structural commit owner |
 | observation/export | `SYS-04`、`SYS-05`、`DBG-01..05` | Replay/Diagnostics/Official diff 必须和 CoreSimulation 分组报告 |
-| demo catalog | `BLOB-01/02`、`CASE-24`、`SEL-02` | 手写 catalog 是 demo proof；不能替代配置生成/Baker 验收 |
+| generated catalog consumer | `CAT-01`、`BLOB-01/02`、`CASE-24`、`SEL-02` | AutoChess 已消费 generated catalog；runtime-created Blob 仍需明确安装/Dispose owner |
 
 ## 当前目录事实
 
@@ -73,9 +73,9 @@ flowchart TD
    - `AutoChessBattleCommandDriveSystem` 加入 `GASCommandResolveSystemGroup`
    - `AutoChessExecuteDamageCalculationSystem` 加入 `GEExecutionCalculationExtensionSystemGroup`
 2. `AutoChessGasCoreBridge.EnsureRuntimeInitialized()` 调用 `GASManager.Initialize(attachToPlayerLoop: false)`，注册 Demo systems，并安装 demo catalog。
-3. `AutoChessBattleDefinitionCatalogBuilder` 直接构建并安装最小 `GASDefinitionCatalogBlob`，为 demo 提供 ability / GE / modifier / requirement / tag mask / granted ability catalog。
+3. `AutoChessBattleDefinitionCatalogBuilder` 通过 `GASGeneratedDefinitionCatalogBuilder.BuildCatalog(Allocator.Persistent)` 安装通用 GAS generated catalog；AutoChess ability `9101/9102/9103` 和 GE `9201/9202/9207` 已来自 Luban JSON / normalized row / generated catalog 链。
 4. `AutoChessBattleCommandDriveSystem` 是 `ISystem`，使用预创建 `_driverQuery` / `_unitQuery`，通过 scheduled `IJobChunk` 收集存活单位，并由 scheduled `IJob` 按 battle group target cache 写入 source ASC owner-local `AbilityCommandBuffer`、启用 `ASCCommandPendingComponent`。
-5. `AutoChessExecuteDamageCalculationSystem` 是 `ISystem`，位于 execution extension slot，通过 scheduled `IJob` 读取 `GEEffectCommandBuffer`，处理 demo 斩杀伤害，写入 `AttributeValueBuffer` / `AttributeModifierBuffer` / `GameplayEventBuffer`，并通过 lookup 写 legacy EventBus 兼容 observation。
+5. `AutoChessExecuteDamageCalculationSystem` 是 `ISystem`，位于 execution extension slot，通过 scheduled `IJob` 读取 `GEEffectCommandBuffer`，处理 demo 斩杀伤害，写入 `AttributeValueBuffer` / `AttributeModifierBuffer` / `GameplayEventBuffer`；当前不再写 legacy EventBus 兼容 observation。
 6. `AutoChessBattleSession` 负责创建/缓存/销毁本场单位句柄，业务层不直接散落 `GASManager` 调用。
 7. `AutoChessBattleResultBuilder` 与 `AutoChessBattleLogBuilder` 消费 runtime structured log 和 result snapshot，输出中文战斗叙述。
 8. `AutoChessDemoSceneRunner` 只消费 `AutoChessBattleResult.BattleLog`，不会重新遍历 ECS World 推导表现状态。
@@ -92,9 +92,10 @@ flowchart TD
 | command drive 使用 scheduled `FlushCommandRequestsJob` 写 ASC owner-local `AbilityCommandBuffer` 并启用 pending marker | `Assets/AutoChessDemo/Battle/Ecs/AutoChessBattleCommandDriveSystem.cs:62-80`、`:152-236` | runtime-extension |
 | execute calculation 插入 execution extension slot | `Assets/AutoChessDemo/Battle/Ecs/AutoChessExecuteDamageCalculationSystem.cs:8-10` | runtime-extension |
 | execute calculation 使用 scheduled `ExecuteDamageCalculationJob` 读取 GE command、写 attribute/delta/fact | `Assets/AutoChessDemo/Battle/Ecs/AutoChessExecuteDamageCalculationSystem.cs:42-59`、`:66-213` | runtime-extension |
-| execute calculation 仍写 legacy EventBus | `Assets/AutoChessDemo/Battle/Ecs/AutoChessExecuteDamageCalculationSystem.cs:98-106`、`:182-202` | migration-bridge |
-| demo catalog 用 `BlobBuilder` 手写构建 | `Assets/AutoChessDemo/Battle/Ecs/AutoChessBattleDefinitionCatalogBuilder.cs:59-112` | demo-only |
-| demo catalog singleton 查找使用 `ToEntityArray` | `Assets/AutoChessDemo/Battle/Ecs/AutoChessBattleDefinitionCatalogBuilder.cs:122-141` | init-only risk |
+| execute calculation 已停止写 legacy EventBus | `Assets/AutoChessDemo/Battle/Ecs/AutoChessExecuteDamageCalculationSystem.cs:98-106`、`:182-202` | typed-fact-only |
+| demo 安装 generated catalog | `Assets/AutoChessDemo/Battle/Ecs/AutoChessBattleDefinitionCatalogBuilder.cs:12-24` | app-boundary/init |
+| generated catalog 由 codegen 输出 | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionCatalog.gen.cs:81`、`Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs:833-856` | sourcegen-active |
+| demo catalog singleton 查找使用 `ToEntityArray` | `Assets/AutoChessDemo/Battle/Ecs/AutoChessBattleDefinitionCatalogBuilder.cs:57-88` | init-only risk |
 | bridge 直接创建/销毁 driver 和 ASC 相关 entity | `Assets/AutoChessDemo/Integration/GasCore/AutoChessGasCoreBridge.cs:145-211`、`:317-360` | bridge/direct-EM |
 | bridge observation reset/export 直接读写 singleton/buffer | `Assets/AutoChessDemo/Integration/GasCore/AutoChessGasCoreBridge.cs:67-75`、`:236-254`、`:507-511` | observation-only |
 
@@ -107,7 +108,7 @@ flowchart TD
 | Job 化 | command drive 与 execute calculation 主体已改为 scheduled job，避免主线程 `SystemAPI.Query` 和属性 buffer dependency 冲突 | 正向，但仍是 demo extension |
 | `ToEntityArray` | 只在 `AutoChessBattleDefinitionCatalogBuilder` 安装/卸载 catalog 时查询 singleton entity | 低频初始化路径，可接受但需后续 owner 化 |
 | 结构变化 | `AutoChessGasCoreBridge` 创建/销毁 driver、ASC、granted ability、active effect 时直接用 `EntityManager` | Demo 集成层 P1/P0 边界风险 |
-| Definition | 代码安装最小 catalog，不依赖旧 Headless generated rows | 当前事实已变更 |
+| Definition | 安装通用 generated catalog，不依赖旧 Headless generated rows | Luban/sourcegen catalog 链路已进入 AutoChess |
 | Observation | 使用 Replay/Diagnostics/Official diff/structured log | 正向，但 observation 不等于性能证明 |
 
 ## 当前风险
@@ -134,13 +135,13 @@ flowchart TD
 | `DestroyBattleUnit()` / granted ability / active effect cleanup | `AutoChessGasCoreBridge.cs:202-211`、`:317-360` | 接近 Core lifecycle P0 边界 | 统一为 ASC destroy request 链 |
 | `ResetObservationState()` / `ClearBuffer<T>()` | `AutoChessGasCoreBridge.cs:67-75`、`:507-511` | observation-only | 不计入 CoreSimulation 成本 |
 
-### AC-02：Demo command drive 仍是主线程扫描
+### AC-02：Demo command drive 已 job 化，但仍是 demo extension
 
-`AutoChessBattleCommandDriveSystem` 使用 `SystemAPI.Query` 遍历所有 battle unit，并通过 `NativeList`/`NativeArray` 做目标缓存。当前实现能表达业务，但不是 Burst job / chunk pipeline 终局。
+`AutoChessBattleCommandDriveSystem` 已从主线程 `SystemAPI.Query` 单位扫描迁到 scheduled jobs：`CollectUnitTargetStatesJob` 读取单位/属性，`FlushCommandRequestsJob` 写 ASC owner-local `AbilityCommandBuffer` 并启用 pending marker。
 
-需要注意的是，它已经避免了逐单位创建 request entity，并改为向 ASC owner-local `AbilityCommandBuffer` 追加 command；这是正向变化。但 `SystemAPI.Query`、`CalculateEntityCount()`、`NativeList(Allocator.Temp)` 和 direct buffer resolve 仍说明它是迁移期 Demo extension，不是 Runtime Core 的高规模模板。
+需要注意的是，它已经避免了逐单位创建 request entity，也不再用主线程 query 作为 command drive 主体；但它仍是 Demo extension，不是 Runtime Core 的通用高规模模板。后续审查重点应放在 battle target cache 的容量、ordering、dependency policy 和 bridge 侧结构变化，而不是继续用“主线程扫描”旧口径描述。
 
-### AC-03：Execution extension 同时写 delta/fact/legacy event
+### AC-03：Execution extension 写 delta/fact
 
 `AutoChessExecuteDamageCalculationSystem` 在 execution extension 中：
 
@@ -148,17 +149,17 @@ flowchart TD
 2. 直接修改目标 `AttributeValueBuffer`
 3. 写 `AttributeModifierBuffer`
 4. 写 `GameplayEventBuffer`
-5. 用 `EventBusHelper.BeginGameplayEventBatch()` 写 legacy event
+5. 不再写 legacy gameplay EventBus
 
-这符合迁移期“typed fact + legacy bridge”现实，但后续需要明确 execution extension 的写权限和 deterministic ordering。
+这符合“typed fact 作为 execution observation 输出”的目标方向，但后续仍需要明确 execution extension 的写权限和 deterministic ordering。
 
-这里不是单纯的 Demo 风险：execution extension 已插入 `GEExecutionCalculationExtensionSystemGroup`，会与 CoreSimulation 中的 generated GE/attribute systems 同步工作。后续需要把 extension 的允许写入对象收窄到“execution output/delta/fact”，并明确 legacy EventBus 只是观察兼容层。
+这里不是单纯的 Demo 风险：execution extension 已插入 `GEExecutionCalculationExtensionSystemGroup`，会与 CoreSimulation 中的 generated GE/attribute systems 同步工作。当前 legacy gameplay EventBus 已退场，extension 的允许写入对象应继续收窄到“execution output/delta/fact”；Attribute/Cue/Tag/Damage 等边界缓冲只能作为观察/表现派生层。
 
-### AC-04：Catalog 安装仍是代码内最小样本
+### AC-04：Catalog 已来自 SourceGenerator，但安装 owner 仍是 demo adapter
 
-`AutoChessBattleDefinitionCatalogBuilder` 是当前 demo 的最小 catalog builder，不是完整 Luban/SourceGenerator 链路。旧 `HeadlessAutoChessGeneratedDefinitionRows.cs`、`HeadlessAutoChessDefinitionSource.cs` 不存在，不能再作为当前 AutoChess facts。
+`AutoChessBattleDefinitionCatalogBuilder` 不再手写 Ability/GE/Modifier catalog。它当前调用 `GASGeneratedDefinitionCatalogBuilder.BuildCatalog()`，并用 `GASGeneratedDefinitionCatalogInfo.SchemaVersion` 写入 `GASDefinitionCatalogComponent.Revision`。旧 `HeadlessAutoChessGeneratedDefinitionRows.cs`、`HeadlessAutoChessDefinitionSource.cs` 不存在，不能再作为当前 AutoChess facts。
 
-它当前最有价值的证据是：demo 不是依赖 managed registry 临时跑通，而是实际安装了 `GASDefinitionCatalogBlob`。它当前最大的限制是：catalog 内容是手写常量和 builder 代码，且 install/uninstall 仍通过临时 query 定位 singleton catalog entity。
+它当前最有价值的证据是：demo 不依赖 managed registry，也不依赖手写 catalog 临时跑通，而是实际消费 Luban/sourcegen 生成的 `GASDefinitionCatalogBlob`。它当前最大的限制是：install/uninstall 仍通过临时 query 定位 singleton catalog entity；业务房间、单位阵容、scale profile 和 validation expectation 仍不是配置表驱动。
 
 ### AC-05：业务设计已稳定为日志可视化 demo，不是资源表现 demo
 
@@ -181,7 +182,7 @@ AutoChessDemo 已经不是“已删除后待重构”的状态。它现在是一
 但它仍不是 DOTS 目标态证明：
 
 1. Bridge 内直接 `EntityManager` 是当前最集中的边界风险。
-2. 两个 Demo ECS 系统还没有 job/chunk 化。
-3. execution extension 同时写 delta/fact/legacy event，需要纳入 Runtime 写权限治理。
-4. Demo catalog 是代码安装的最小样本，不是完整 generated/baking 配置链。
+2. 两个 Demo ECS 系统主体已 job 化，但仍是 demo extension，需要独立 query/dependency/ordering 证据。
+3. execution extension 同时写 delta/fact，需要纳入 Runtime 写权限治理。
+4. Demo catalog 已来自 generated builder；未完成的是 unit/scenario/scale/validation expectation 与 Baker/BlobAssetStore 目标态。
 5. 当前日志场景证明业务可读性，不证明资源表现、不证明高规模性能。

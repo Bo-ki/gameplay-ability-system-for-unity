@@ -14,19 +14,24 @@
 4. `GasGlueCodeGenPhases.WriteRuntimeAbilityActivationSystem()` 已同步到当前 owner-local commit marker 形态，不再生成 `NativeStream + state.Dependency.Complete() + Allocator.Temp ECB.Playback` 的旧 ability commit 模板。
 5. `RuntimeActiveEffectSystemsTemplate` 已与当前 `RuntimeActiveEffect.gen.cs` 对齐，不再在 codegen 层回滚到 `new EntityCommandBuffer(Allocator.Temp)` / 手动 `Playback(em)` 形态。
 6. `RuntimeEffectInstant.gen.cs` 当前 spec-build 与 attribute reduce 已由 codegen 模板生成 scheduled `IJob` 路径；不能再把它们写作主线程 spec/reduce 残留。
-7. `AbilityCatalogCommitJob` 已使用 `CommitRequestTypeHandle` + `chunk.GetEnabledMask(ref ...)` 关闭当前 chunk 内 commit request，不再使用 `ComponentLookup.SetComponentEnabled` 做同实体随机 enableable 开关。
+7. `AbilityCatalogCommitJob` 已使用 `CommitRequestTypeHandle` + `chunk.GetEnabledMask(ref ...)` 关闭当前 chunk 内 commit request，并用 `EndRequestTypeHandle` + chunk `EnabledMask` 写 auto-end 请求，不再使用 `ComponentLookup.SetComponentEnabled` 做当前 ability 同实体随机 enableable 开关。
 8. `RuntimeEffectInstant.gen.cs` 已输出 `using Unity.Burst`，`InstantSpecBuildJob` 与 `AttributeSetReduceApplyJob` 均标注 `[BurstCompile]`。
 9. `CanBuildInstantSpec` 已允许 `ModifierCount > 0 || GameplayCueCode > 0`，cue-only instant GE 不再被 spec build 丢弃。
 10. `IsDestroyingAsc` 已按 `ASCDestroyingComponent` enabled bit 判定销毁态，不再把默认 disabled 的正常 ASC 误判为 destroying。
+11. `GASActiveEffectMutationApplySystem` 已调度 `GASGeneratedActiveEffectRuntime.GEActiveEffectMutationApplyJob : IJob`，旧 public/static `TryApplyActiveMutation(EntityManager, ...)` helper 已退场。
+12. `AbilityCatalogCommitSystem` 已移除 per-frame `NativeList<GECommandSeedRecord>(Allocator.TempJob)` scratch；模板现在直接构造单条 seed 并 append command。
+13. `GasCodeGenValidationReport.md` 已加入 generated runtime hot path gate；当前 `GeneratedHotPathRegressionHits: 0`，可阻断 `Complete()`、`.Run()`、legacy EventBus writer、旧 active mutation helper、ability seed scratch、hot path `Allocator.Temp`、`HasComponent<ASCDestroyingComponent>`、旧 ability lifecycle lookup、旧 `AttributeDirtyLookup` / `ActiveModifierPresentLookup`、generated/template `GASManager.EntityManager` 回流。
+14. generated active effect granted-ability cleanup 不再直接写 `AbilityCancelRequestLookup` / `AbilityDestroyOnCleanupLookup`；模板和生成结果均改为写 `AbilityLifecycleRequestBuffer`，由 `AbilityLifecycleRequestSystem` 在 ability chunk 内统一应用 cancel/destroy-on-cleanup marker。
+15. generated active effect 对 ASC dirty / active modifier present 的写入不再使用 `AttributeDirtyLookup` / `ActiveModifierPresentLookup`；模板和生成结果均改为写 `AttributeOwnerMarkerRequestBuffer`，由 `AttributeOwnerMarkerRequestSystem` 在 ASC chunk 内统一应用。
 
 ## 新风险
 
 1. generated systems 修改 runtime state，不能被视为“只读生成物”。
-2. generated output 中 `Complete()` 已清零；但 `GASActiveEffectMutationApplySystem` 仍存在主线程 buffer for loop、`EntityManager` 过渡 helper、singleton stream 写入和 legacy EventBus writer。
-3. generated active lifecycle 虽已 job 化，仍存在 `ComponentLookup.SetComponentEnabled(...)` 随机 enableable 开关，需要按 `EN-03` / `CASE-20` 收口为 owner-local state、`EnabledRefRW` 或 chunk `EnabledMask`。
+2. generated output 中 `Complete()` 已清零；`GASActiveEffectMutationApplySystem` 已 job 化，但仍是单 stream owner serial command loop，并通过大量 BufferLookup/ComponentLookup random access 写 active store、attribute、tag、ability、mutation 与 typed fact。
+3. generated active lifecycle 的 ability cancel/destroy cleanup 已通过 frame-local lifecycle request buffer 收口；active modifier present / attribute dirty 已通过 frame-local attribute owner marker request buffer 收口。当前 `ComponentLookup.SetComponentEnabled(...)` 随机 enableable 风险不再集中于这些 marker，而是需要继续扫描未来模板是否回流。
 4. generated active effect lifecycle 与 handwritten ExecutionCalculation/Attribute/Fact projection 的 ordering、capacity、deterministic merge 需要证据。
 5. generated catalog lookup 的 revision/lifecycle owner 需要明确。
-6. 缺少 codegen static validation：需要自动阻断无 `[BurstCompile]` hot job、hot path random `ComponentLookup.SetComponentEnabled`、`HasComponent<ASCDestroyingComponent>` 销毁误判、Temp ECB playback 和 `state.Dependency.Complete()` 回流。
+6. codegen static validation 已有第一道 gate，并覆盖 ability lifecycle / ASC dirty-present 旧 lookup 与 global EntityManager facade 回流；后续还需要继续扩展到 generated active mutation singleton serial store、unchecked Buffer/ComponentLookup random write、无 `[BurstCompile]` hot job、Temp ECB playback 和 `state.Dependency.Complete()`。
 
 ## 代码证据
 
@@ -35,16 +40,19 @@
 | generated registration | `RuntimeSystemRegistration.gen.cs` |
 | catalog lookup | `DefinitionCatalog.gen.cs` |
 | runtime glue | `RuntimeDefinitionGlue.gen.cs` |
-| ability activation uses chunk enabled mask | `RuntimeAbilityActivation.gen.cs:56`, `:80`, `:123-124`, `:138` |
+| ability activation uses chunk enabled mask | `RuntimeAbilityActivation.gen.cs:55-58`, `:83-85`, `:115-117`, `:136-138` |
 | instant effect Burst job + cue-only spec | `RuntimeEffectInstant.gen.cs:7`, `:49-50`, `:138-139`, `:242-243`, `:426-430` |
-| active mutation residual | `RuntimeActiveEffect.gen.cs:97-145` |
-| active lifecycle random enableable residual | `RuntimeActiveEffect.gen.cs:395`, `:852`, `:871`, `:1090`, `:1100`, `:1120` |
+| active mutation scheduled job residual | `RuntimeActiveEffect.gen.cs:80-145`, `:305-377` |
+| active lifecycle request aggregation | `AbilityLifecycleRequestBuffer`、`AbilityLifecycleRequestSystem`、`RuntimeActiveEffect.gen.cs` |
+| attribute owner marker aggregation | `AttributeOwnerMarkerRequestBuffer`、`AttributeOwnerMarkerRequestSystem`、`RuntimeActiveEffect.gen.cs` |
 | ability activation template | `Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs:1689`, `:1713-1714`, `:1756-1757`, `:1771` |
 | instant effect template | `Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs:2206`, `:2269-2270`, `:2453-2454` |
+| active mutation template + hot path gate | `Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs:2961`, `:3186`, `:6238-6278` |
+| validation report | `Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md` |
 
 ## 退出条件
 
 1. Generated runtime 纳入每次 Runtime 审查范围。
 2. 每个 generated system 标注 phase、reads/writes、query pattern、dependency policy。
-3. generated output 有 static validation 或 codegen report，证明不会重新生成已退场的 request entity / Temp ECB playback / legacy bridge。
-4. generated active mutation 的 serial buffer loop 迁入可解释的 job/store chain 或 deterministic merge；已 job 化的 ability commit、normalize/spec-build/reduce、pre-tick/remove 需要补 static validation 防回流。
+3. generated output 的 static validation / codegen report 保持通过，并继续扩展到 active mutation singleton serial store / random lookup 写入等未完成规则。
+4. generated active mutation 的 singleton serial job 迁入可解释的 store chain 或 deterministic merge；已 job 化的 ability commit、normalize/spec-build/reduce、pre-tick/remove/mutation 需要补 dependency/order/capacity 证据。

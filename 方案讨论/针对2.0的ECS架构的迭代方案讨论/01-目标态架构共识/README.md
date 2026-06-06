@@ -23,14 +23,16 @@
 | [04-EffectCommand-SpecStream-AttributeDeltaSpec](04-EffectCommand-SpecStream-AttributeDeltaSpec.md) | Effect Command、Spec/Delta/Fact 语义链、目标态 fan-in 承载 |
 | [05-ActiveEffectStoreSpec](05-ActiveEffectStoreSpec.md) | Duration / Stack / Period / Granted state |
 | [06-Observation-Presentation-ReplaySpec](06-Observation-Presentation-ReplaySpec.md) | Observation、Presentation、Replay 分层 |
-| [07-RuntimeCoreDebuggerSpec](07-RuntimeCoreDebuggerSpec.md) | Runtime Core Debugger 诊断事实与图表 |
+| [07-RuntimeCoreDebuggerSpec](07-RuntimeCoreDebuggerSpec.md) | Runtime Core Debugger 诊断事实、ValidationEvidence 与图表 |
 | [08-Luban-SourceGenerator配置生成链路Spec](08-Luban-SourceGenerator配置生成链路Spec.md) | Luban / SourceGenerator / Definition / Bake 链路 |
 | [09-Authoring-EditorSpec](09-Authoring-EditorSpec.md) | UI Toolkit authoring 与 Editor 边界 |
-| [10-AutoChess无头验收Spec](10-AutoChess无头验收Spec.md) | AutoChessDemo 验收 Demo 目标态、目录架构、业务链路和自动验收 |
+| [10-AutoChess无头验收Spec](10-AutoChess无头验收Spec.md) | AutoChessDemo 验收 Demo 目标态、Battle Runtime Adapter、业务链路和自动验收 |
 | [10B-AutoChess完整业务案例设计Spec](10B-AutoChess完整业务案例设计Spec.md) | 完整 GAS 设计预演：具名棋子、具体 Excel 配置、C# System 实现、业务流程走查和交互矩阵 |
 | [11-AutoChessDemo-Luban配置方案Spec](11-AutoChessDemo-Luban配置方案Spec.md) | AutoChessDemo Luban 表、SourceGenerator 输出、ScaleProfile 和自动验收配置 |
 | [12-命名规范Spec](12-命名规范Spec.md) | 四层职责命名、后缀语义、限制词和任务命名规范 |
 | [13-EntityComponent物理布局Spec](13-EntityComponent物理布局Spec.md) | Entity/Component 物理布局、Archetype 审计、Buffer 容量策略 |
+| [14-CodeGen到Runtime新链路重构计划](14-CodeGen到Runtime新链路重构计划.md) | 通用 CodeGen Core 到 Runtime generated catalog / glue 的收口计划 |
+| [15-Luban-SourceGenerator链路复审与目标重划](15-Luban-SourceGenerator链路复审与目标重划.md) | Luban / SourceGenerator 当前链路复审、生成器职责收权、Catalog/Blob/Runtime Core 新边界 |
 | [90-目标态不变量](90-目标态不变量.md) | 全局不变量 |
 | [91-术语表](91-术语表.md) | 术语和缩写 |
 
@@ -43,6 +45,7 @@ Unity DOTS 官方依据不再维护在本目录内。所有 Runtime Core、Debug
 | [UnityDOTS官方文档参考](../../UnityDOTS官方文档参考/README.md) | PackageCache 版本、单主题索引、DOTS API 规则、官方案例、流程闭环 |
 | [规则编号索引](../../UnityDOTS官方文档参考/主题/90-规则编号索引.md) | `SYS/JOB/QRY/SC/ECB/BUF/SEL/CASE/ODF` 等规则族入口 |
 | [GAS Runtime Core API 选型基线](../../UnityDOTS官方文档参考/主题/20-GASRuntimeCore-API选型基线.md) | Runtime Core 任务执行前的 API selection checkpoint |
+| [Luban / SourceGenerator 收权论证](15-Luban-SourceGenerator链路复审与目标重划.md) | 将官方 DOTS 规则映射到生成器职责边界，说明为什么 generated lifecycle 不是目标态 |
 
 ## 维护规则
 

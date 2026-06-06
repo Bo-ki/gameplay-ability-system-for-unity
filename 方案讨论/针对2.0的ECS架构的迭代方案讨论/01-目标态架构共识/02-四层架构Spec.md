@@ -24,6 +24,8 @@
 3. Headless runner 同样归属 **Layer 1 Application Shell Layer**，它和 Editor 窗口共享 Layer 2 Runtime Debugger 数据出口；区别只在输出目标是 batchmode log / CI summary，而不是编辑器窗口。
 4. `Assets/AutoChessDemo` 整体归属 **Layer 1 Application Shell Layer** 的业务验收 Demo。它可以编排业务 AI、场景和验证 runner，但不能成为 GAS Runtime Core 的一部分，也不能私有化 Debugger 窗口。
 5. Layer 3 只负责产出 Debugger 所需的只读事实、数值 counter 和 outbox marker；任何 Debugger / Replay / Presentation 结果都不得反向驱动 simulation。
+6. AutoChessDemo 允许拥有面向业务的 Battle Runtime Adapter seam，但该 seam 只能负责把 Layer 1 业务流程接到 Layer 2 / Layer 3 运行时入口。它不是新的 OOP 中间层，也不能把 gameplay calculation、target selection、damage formula、validation policy 和 Runtime Core lifecycle 混成一个万能 `Adapter`。
+7. Battle Runtime Adapter 的目标 interface 必须比 implementation 更窄：外部只看到 runtime init / battle open / fixed tick / battle close / snapshot export 这类业务动作；内部 direct `EntityManager`、catalog install/dispose、ASC/unit lifecycle、official diff 和 observation reset 必须按 owner 分类并被 validation evidence 标注。
 
 ## 总体数据流
 
@@ -100,6 +102,7 @@ flowchart TB
 1. 不做伤害、治疗、Tag requirement、Cooldown、Cost、Stack、Period 等 gameplay 计算。
 2. 不把 `Adapter` 写成“边界 + 缓存 + 业务反应 + 调试日志”的混合对象。
 3. 不把 `Debugger` / `Logger` / `Replay` 作为 Runtime Core 的实时输入。
+4. 不把 `EntityManager` / `GASManager` 作为 Layer 1 可以直接持有的工具。若某个 Application Shell Demo 需要创建/销毁 ASC、driver、catalog 或观测 singleton，必须通过 Battle Runtime Adapter seam，并标注该操作是否属于 bootstrap、structural lifecycle、observation-only 或 core tick。
 
 ## Layer 1: Application Shell Layer
 
@@ -109,12 +112,14 @@ flowchart TB
 2. 调用运行时边界层 API 发起意图，订阅 read model、presentation marker、structured log。
 3. AutoChess 无头验收 Demo 虽然没有真实画面资源，也必须完整保留 UI/Cue/VFX/SFX/FloatingText marker 逻辑。
 4. Editor Debugger Window 属于本层 Editor Extension，只读消费 Layer 2 diagnostics snapshot；无头 runner 也属于本层业务验证入口。
+5. AutoChess headless runner 与 scene runner 必须共享同一个 battle run loop Module。启动方式、输出路径、Profiler 驱动和资源 bridge 可以不同；warmup、measured window、official diff、completion rule、result build 和 validation evidence 不得复制两套。
 
 ### 禁止
 
 1. 不直接写 Runtime Core component / buffer。
 2. 不持有 GAS 权威状态副本。
 3. 不通过 log/replay 反向修正 gameplay 结果。
+4. 不把业务 Demo 退化为测试 harness。无头只替换最终表现 side effect，不删除真实业务流程、资源 marker、Cue marker、validation expectation 或 scale profile。
 
 ## 旧五平面到四层的吸收关系
 
@@ -133,6 +138,7 @@ flowchart TB
 3. 边界验收：CommandGateway 只写命令，ReadModel 只读，PresentationOutboxBridge / Diagnostics / Replay 不反向写 simulation。
 4. 配置验收：Luban + SourceGenerator 只输出 Definition & Generation Layer artifact，不生成 runtime lifecycle。
 5. Demo 验收：AutoChessDemo 位于 Runtime Core 外部的 Application Shell Layer，走真实业务流程，同时支持无头自动结算和十万级以上压力测试预演。
+6. Adapter 验收：AutoChess Battle Runtime Adapter 对外 interface 不得暴露 GAS implementation 细节；direct `EntityManager` 使用面必须集中、分类、可审计，并且不能进入 `coreTickMs`。
 
 ## 历史方案定位
 
