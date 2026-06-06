@@ -12,6 +12,7 @@ GeneratedHotPathRegressionHits: `0`
 GeneratedDuplicateMethodHits: `0`
 LubanNormalizedRowBoundaryHits: `0`
 AutoChessConfigBoundaryHits: `0`
+GeneratedAbilityCommitQueryHits: `0`
 
 ## Rows
 
@@ -90,6 +91,12 @@ AutoChessConfigBoundaryHits: `0`
 | Rule | Hit | File | Line | Evidence |
 | --- | --- | --- | ---: | --- |
 | `QRY-01` / `PRF-05` / `BUR-01` / `EN-03` | none | - | - | generated runtime passed static hot path regression gate |
+
+## Generated Ability Commit Query Gate
+
+| Rule | File | Line | Evidence |
+| --- | --- | ---: | --- |
+| `EN-03/ABILITY-COMMIT-01` | - | - | ability commit query ignores enableable state and filters by enabled `AbilityCommitRequestComponent` mask inside the job |
 
 ## Generated Duplicate Method Gate
 

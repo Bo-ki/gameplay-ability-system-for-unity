@@ -6245,6 +6245,7 @@ namespace __ROOT_NAMESPACE__
             var duplicateMethodHits = CollectGeneratedDuplicateMethodHits(context, manifest);
             var lubanBoundaryHits = CollectLubanNormalizedRowBoundaryHits(context, manifest);
             var autoChessBoundaryHits = CollectAutoChessConfigBoundaryHits(context, manifest);
+            var abilityCommitQueryHits = CollectGeneratedAbilityCommitQueryHits(context);
 
             using var writer = new StreamWriter(path);
 
@@ -6262,6 +6263,7 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine($"GeneratedDuplicateMethodHits: `{duplicateMethodHits.Count}`");
             writer.WriteLine($"LubanNormalizedRowBoundaryHits: `{lubanBoundaryHits.Count}`");
             writer.WriteLine($"AutoChessConfigBoundaryHits: `{autoChessBoundaryHits.Count}`");
+            writer.WriteLine($"GeneratedAbilityCommitQueryHits: `{abilityCommitQueryHits.Count}`");
             writer.WriteLine();
             writer.WriteLine("## Rows");
             writer.WriteLine();
@@ -6347,6 +6349,27 @@ namespace __ROOT_NAMESPACE__
                 throw new InvalidOperationException($"Generated Runtime hot path regression gate failed: {hotPathHits.Count} hit(s). See {path}.");
             if (runtimeForbiddenDependencyHits > 0)
                 throw new InvalidOperationException($"Runtime forbidden dependency gate failed: {runtimeForbiddenDependencyHits} hit(s). See {path}.");
+
+            writer.WriteLine();
+            writer.WriteLine("## Generated Ability Commit Query Gate");
+            writer.WriteLine();
+            writer.WriteLine("| Rule | File | Line | Evidence |");
+            writer.WriteLine("| --- | --- | ---: | --- |");
+            if (abilityCommitQueryHits.Count == 0)
+            {
+                writer.WriteLine("| `EN-03/ABILITY-COMMIT-01` | - | - | ability commit query ignores enableable state and filters by enabled `AbilityCommitRequestComponent` mask inside the job |");
+            }
+            else
+            {
+                foreach (var hit in abilityCommitQueryHits)
+                {
+                    writer.WriteLine(
+                        $"| `{hit.Rule}` | `{ToProjectRelativePath(context, hit.Path)}` | `{hit.Line}` | `{EscapeMarkdown(hit.Evidence)}` |");
+                }
+            }
+
+            if (abilityCommitQueryHits.Count > 0)
+                throw new InvalidOperationException($"Generated ability commit query gate failed: {abilityCommitQueryHits.Count} hit(s). See {path}.");
 
             writer.WriteLine();
             writer.WriteLine("## Generated Duplicate Method Gate");
@@ -6535,6 +6558,68 @@ namespace __ROOT_NAMESPACE__
             }
 
             return hits;
+        }
+
+        private static IReadOnlyList<GeneratedBoundaryHit> CollectGeneratedAbilityCommitQueryHits(
+            GasCodeGenContext context)
+        {
+            var path = Path.Combine(context.OutputDir, "Runtime", "RuntimeAbilityActivation.gen.cs");
+            var hits = new List<GeneratedBoundaryHit>();
+            if (!File.Exists(path))
+            {
+                hits.Add(new GeneratedBoundaryHit(
+                    "EN-03/ABILITY-COMMIT-01",
+                    path,
+                    0,
+                    "RuntimeAbilityActivation.gen.cs is missing"));
+                return hits;
+            }
+
+            var lines = File.ReadAllLines(path);
+            if (!Contains(lines, "Options = EntityQueryOptions.IgnoreComponentEnabledState", out var optionsLine))
+            {
+                hits.Add(new GeneratedBoundaryHit(
+                    "EN-03/ABILITY-COMMIT-01",
+                    path,
+                    0,
+                    "AbilityCatalogCommitSystem query must ignore enableable component state"));
+            }
+
+            if (!Contains(lines, "if (!commitRequestMask[entityIndex])", out var maskLine))
+            {
+                hits.Add(new GeneratedBoundaryHit(
+                    "EN-03/ABILITY-COMMIT-01",
+                    path,
+                    optionsLine,
+                    "AbilityCatalogCommitJob must filter by enabled AbilityCommitRequestComponent mask"));
+            }
+
+            if (maskLine > 0 && Contains(lines, "var commitRequest = commitRequests[entityIndex];", out var requestLine)
+                && maskLine > requestLine)
+            {
+                hits.Add(new GeneratedBoundaryHit(
+                    "EN-03/ABILITY-COMMIT-01",
+                    path,
+                    maskLine,
+                    "AbilityCommitRequestComponent mask check must run before reading and applying the request"));
+            }
+
+            return hits;
+        }
+
+        private static bool Contains(IReadOnlyList<string> lines, string needle, out int lineNumber)
+        {
+            for (var i = 0; i < lines.Count; i++)
+            {
+                if (lines[i].IndexOf(needle, StringComparison.Ordinal) < 0)
+                    continue;
+
+                lineNumber = i + 1;
+                return true;
+            }
+
+            lineNumber = 0;
+            return false;
         }
 
         private static bool IsGeneratedRuntimeHotPathFile(string path)
@@ -7145,6 +7230,22 @@ namespace __ROOT_NAMESPACE__
             {
                 Rule = rule;
                 Kind = kind;
+                Path = path;
+                Line = line;
+                Evidence = evidence;
+            }
+        }
+
+        private readonly struct GeneratedBoundaryHit
+        {
+            public readonly string Rule;
+            public readonly string Path;
+            public readonly int Line;
+            public readonly string Evidence;
+
+            public GeneratedBoundaryHit(string rule, string path, int line, string evidence)
+            {
+                Rule = rule;
                 Path = path;
                 Line = line;
                 Evidence = evidence;
