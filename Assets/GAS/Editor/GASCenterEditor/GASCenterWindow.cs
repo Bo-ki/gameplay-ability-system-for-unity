@@ -1,3 +1,4 @@
+#if EX_GAS_ENABLE_ODIN_LEGACY_EDITOR
 using GAS.General;
 using GAS.Runtime;
 using Sirenix.OdinInspector.Editor;
@@ -19,7 +20,7 @@ namespace GAS.Editor
         private static GASCenterViewAbility _viewAbility;
         private static GASCenterViewAsc _viewAsc;
         
-        [MenuItem("EXTool/EX-GAS/GAS中心管理器")]
+        [MenuItem("EXTool/EX-GAS/Legacy/GAS中心管理器(Odin)")]
         public static void OpenWindow()
         {
             var window = GetWindow<GASCenterWindow>();
@@ -89,3 +90,4 @@ namespace GAS.Editor
         }
     }
 }
+#endif

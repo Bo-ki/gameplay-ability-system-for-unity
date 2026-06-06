@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using GAS.General;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Sirenix.OdinInspector;
 using UnityEngine;
 
 namespace GAS.Editor
@@ -27,12 +27,12 @@ namespace GAS.Editor
             ReadAllAndCache();
         }
         
-        private static ValueDropdownItem[] _tagChoices;
-        public static ValueDropdownItem[] TagChoices()
+        private static GasChoiceItem[] _tagChoices;
+        public static GasChoiceItem[] TagChoices()
         {
             return _tagChoices ??= _tags
                 .Where(t => t != null)
-                .Select(t => new ValueDropdownItem(string.IsNullOrWhiteSpace(t.name) ? $"Tag_{t.id}" : t.name, t.id))
+                .Select(t => new GasChoiceItem(string.IsNullOrWhiteSpace(t.name) ? $"Tag_{t.id}" : t.name, t.id))
                 .ToArray();
         }
         
@@ -55,7 +55,7 @@ namespace GAS.Editor
             _tags = SafeDeserializeArray<TagInEditor>(jsonContent, "Tag");
             _tagChoices = _tags
                 .Where(t => t != null)
-                .Select(t => new ValueDropdownItem(string.IsNullOrWhiteSpace(t.name) ? $"Tag_{t.id}" : t.name, t.id))
+                .Select(t => new GasChoiceItem(string.IsNullOrWhiteSpace(t.name) ? $"Tag_{t.id}" : t.name, t.id))
                 .ToArray();
             return _tags;
         }
@@ -188,65 +188,29 @@ namespace GAS.Editor
     
     public class AttrSetInEditor
     {
-        [HorizontalGroup("A",Width = 200)]
-        [TitleGroup("A/基本信息",BoldTitle = false,Order = 1)]
-        [LabelText("属性集ID")]
-        [DisplayAsString]
         public int id;
         
-        [TitleGroup("A/基本信息")]
-        [LabelText("属性集名")]
-        [DisplayAsString]
         public string name;
         
-        [TitleGroup("A/基本信息")]
-        [LabelText("属性集描述")]
-        [DisplayAsString]
         public string desc;
         
-        [TitleGroup("A/包含属性",BoldTitle = false,Order = 2)]
-        [LabelText(" ")]
-        [TableList(AlwaysExpanded = true,IsReadOnly = true)]
         public AttrInSetInEditor[] attribute;
     }
 
     public class AttrInSetInEditor
     {
-        [VerticalGroup("属性ID")]
-        [HorizontalGroup("属性ID/A")]
-        [HideLabel][DisplayAsString]
         public int id;
         
-        [VerticalGroup("属性初始值")]
-        [HideLabel][DisplayAsString]
         public float initValue;
         
-        [VerticalGroup("属性最小值")]
-        [HorizontalGroup("属性最小值/H",Width=50)]
-        [LabelText("启用"),LabelWidth(30)]
         public bool useMinValue;
         
-        [VerticalGroup("属性最大值")]
-        [HorizontalGroup("属性最大值/H",Width=50)]
-        [LabelText("启用"),LabelWidth(30)]
         public bool useMaxValue;
         
-        [HorizontalGroup("属性最小值/H")]
-        [DisplayAsString]
-        [HideLabel]
-        [ShowIf(nameof(useMinValue))]
         public float minValue;
         
-        [HorizontalGroup("属性最大值/H")]
-        [DisplayAsString]
-        [HideLabel]
-        [ShowIf(nameof(useMaxValue))]
         public float maxValue;
 
-        [HorizontalGroup("属性ID/A")]
-        [ShowInInspector]
-        [HideLabel]
-        [DisplayAsString(EnableRichText = true)]
         public string AttrName
         {
             get

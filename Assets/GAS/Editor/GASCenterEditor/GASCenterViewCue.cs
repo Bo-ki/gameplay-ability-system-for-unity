@@ -1,3 +1,4 @@
+#if EX_GAS_ENABLE_ODIN_LEGACY_EDITOR
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -222,7 +223,7 @@ namespace GAS.Editor
             Param = EditorCueHelper.CreateCueParameter(type);
         }
 
-        public ValueDropdownItem[] TagChoices => GasJsonReader.TagChoices();
+        public ValueDropdownItem[] TagChoices => GasOdinChoice.JsonTags();
 
         private void OnSelectedIdChanged()
         {
@@ -355,3 +356,4 @@ namespace GAS.Editor
         #endregion
     }
 }
+#endif

@@ -1,19 +1,23 @@
 using System.Collections.Generic;
 using System.IO;
+using GAS.General;
 using OfficeOpenXml;
+
+#if EX_GAS_ENABLE_ODIN_LEGACY_EDITOR
 using Sirenix.OdinInspector;
+#endif
 
 namespace GAS.Editor
 {
     public static class GasXlsxChoice
     {
-        private static List<ValueDropdownItem> _cues;
-        private static List<ValueDropdownItem> _effects;
-        private static List<ValueDropdownItem> _abilities;
-        private static List<ValueDropdownItem> _ascs;
-        private static List<ValueDropdownItem> _tags;
-        private static List<ValueDropdownItem> _attrSets;
-        private static Dictionary<int,List<ValueDropdownItem>> _attrs;
+        private static List<GasChoiceItem> _cues;
+        private static List<GasChoiceItem> _effects;
+        private static List<GasChoiceItem> _abilities;
+        private static List<GasChoiceItem> _ascs;
+        private static List<GasChoiceItem> _tags;
+        private static List<GasChoiceItem> _attrSets;
+        private static Dictionary<int,List<GasChoiceItem>> _attrs;
         
         public static void LoadChoices()
         {
@@ -28,24 +32,24 @@ namespace GAS.Editor
             
             // 属性集，属性需要特殊处理，读Json
             GasJsonReader.ReadAllAndCache();
-            _attrSets = new List<ValueDropdownItem>();
-            _attrs = new Dictionary<int, List<ValueDropdownItem>>();
+            _attrSets = new List<GasChoiceItem>();
+            _attrs = new Dictionary<int, List<GasChoiceItem>>();
             var attrSetMap = GasJsonReader.AttrSetMap();
             foreach (var kv in attrSetMap)
             {
-                _attrSets.Add(new ValueDropdownItem(kv.Value.name,kv.Key));
-                _attrs.Add(kv.Key,new List<ValueDropdownItem>());
+                _attrSets.Add(new GasChoiceItem(kv.Value.name,kv.Key));
+                _attrs.Add(kv.Key,new List<GasChoiceItem>());
                 var attributes = kv.Value.attribute ?? System.Array.Empty<AttrInSetInEditor>();
                 foreach (var attr in attributes)
                 {
-                    _attrs[kv.Key].Add(new ValueDropdownItem(attr.GetAttrName(),attr.id));
+                    _attrs[kv.Key].Add(new GasChoiceItem(attr.GetAttrName(),attr.id));
                 }
             }
         }
 
-        private static List<ValueDropdownItem> LoadChoiceListFromExcel(string path, string label, bool showIdInName)
+        private static List<GasChoiceItem> LoadChoiceListFromExcel(string path, string label, bool showIdInName)
         {
-            var result = new List<ValueDropdownItem>();
+            var result = new List<GasChoiceItem>();
             if (string.IsNullOrWhiteSpace(path))
             {
                 UnityEngine.Debug.LogWarning($"[EX-GAS] {label} Excel 路径为空。");
@@ -83,7 +87,7 @@ namespace GAS.Editor
 
                     var name = worksheet.Cells[row, 3].Value?.ToString() ?? string.Empty;
                     var showName = showIdInName ? $"[{id}]{name}" : name;
-                    result.Add(new ValueDropdownItem(showName, id));
+                    result.Add(new GasChoiceItem(showName, id));
                     row++;
                 }
             }
@@ -95,55 +99,120 @@ namespace GAS.Editor
             return result;
         }
 
-        public static List<ValueDropdownItem> Cues()
+        public static List<GasChoiceItem> Cues()
         {
             if (_cues == null)
                 LoadChoices();
             return _cues;
         }
         
-        public static List<ValueDropdownItem> Effects()
+        public static List<GasChoiceItem> Effects()
         {
             if (_effects == null)
                 LoadChoices();
             return _effects;
         }
         
-        public static List<ValueDropdownItem> Abilities()
+        public static List<GasChoiceItem> Abilities()
         {
             if (_abilities == null)
                 LoadChoices();
             return _abilities;
         }
         
-        public static List<ValueDropdownItem> Ascs()
+        public static List<GasChoiceItem> Ascs()
         {
             if (_ascs == null)
                 LoadChoices();
             return _ascs;
         }
         
-        public static List<ValueDropdownItem> Tags()
+        public static List<GasChoiceItem> Tags()
         {
             if (_tags == null)
                 LoadChoices();
             return _tags;
         }
         
-        public static List<ValueDropdownItem> AttrSets()
+        public static List<GasChoiceItem> AttrSets()
         {
             if (_attrSets == null)
                 LoadChoices();
             return _attrSets;
         }
         
-        public static List<ValueDropdownItem> Attributes(int attrSetId)
+        public static List<GasChoiceItem> Attributes(int attrSetId)
         {
             if (_attrs == null)
                 LoadChoices();
             if (_attrs != null && _attrs.TryGetValue(attrSetId, out var choices))
                 return choices;
-            return new List<ValueDropdownItem>();
+            return new List<GasChoiceItem>();
         }
     }
+
+#if EX_GAS_ENABLE_ODIN_LEGACY_EDITOR
+    public static class GasOdinChoice
+    {
+        public static List<ValueDropdownItem> Cues()
+        {
+            return ToDropdownItems(GasXlsxChoice.Cues());
+        }
+
+        public static List<ValueDropdownItem> Effects()
+        {
+            return ToDropdownItems(GasXlsxChoice.Effects());
+        }
+
+        public static List<ValueDropdownItem> Abilities()
+        {
+            return ToDropdownItems(GasXlsxChoice.Abilities());
+        }
+
+        public static List<ValueDropdownItem> Ascs()
+        {
+            return ToDropdownItems(GasXlsxChoice.Ascs());
+        }
+
+        public static List<ValueDropdownItem> Tags()
+        {
+            return ToDropdownItems(GasXlsxChoice.Tags());
+        }
+
+        public static List<ValueDropdownItem> AttrSets()
+        {
+            return ToDropdownItems(GasXlsxChoice.AttrSets());
+        }
+
+        public static List<ValueDropdownItem> Attributes(int attrSetId)
+        {
+            return ToDropdownItems(GasXlsxChoice.Attributes(attrSetId));
+        }
+
+        public static ValueDropdownItem[] JsonTags()
+        {
+            var choices = GasJsonReader.TagChoices();
+            var result = new ValueDropdownItem[choices?.Length ?? 0];
+            if (choices == null)
+                return result;
+
+            for (var i = 0; i < choices.Length; i++)
+                result[i] = new ValueDropdownItem(choices[i].Text, choices[i].Value);
+
+            return result;
+        }
+
+        private static List<ValueDropdownItem> ToDropdownItems(IReadOnlyList<GasChoiceItem> choices)
+        {
+            var result = new List<ValueDropdownItem>(choices?.Count ?? 0);
+            if (choices == null)
+                return result;
+
+            for (var i = 0; i < choices.Count; i++)
+                result.Add(new ValueDropdownItem(choices[i].Text, choices[i].Value));
+
+            return result;
+        }
+    }
+#endif
 }

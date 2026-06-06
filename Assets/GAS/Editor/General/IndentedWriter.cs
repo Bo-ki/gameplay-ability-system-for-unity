@@ -1,7 +1,6 @@
 ﻿using System;
 using System.IO;
 
-#if UNITY_EDITOR
 namespace GAS.Editor
 {
     public sealed class IndentedWriter : IDisposable
@@ -67,4 +66,3 @@ namespace GAS.Editor
         }
     }
 }
-#endif

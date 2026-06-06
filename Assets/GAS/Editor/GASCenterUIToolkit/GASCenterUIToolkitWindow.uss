@@ -1,0 +1,201 @@
+.gas-root {
+    flex-grow: 1;
+    background-color: rgb(32, 32, 32);
+}
+
+.gas-header {
+    height: 34px;
+    padding-left: 10px;
+    padding-right: 10px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(58, 58, 58);
+}
+
+.gas-header-title {
+    font-size: 15px;
+    -unity-font-style: bold;
+    color: rgb(225, 225, 225);
+}
+
+.gas-spacer {
+    flex-grow: 1;
+}
+
+.gas-body {
+    flex-grow: 1;
+}
+
+.gas-navigation {
+    background-color: rgb(38, 38, 38);
+    border-right-width: 1px;
+    border-right-color: rgb(62, 62, 62);
+    padding-top: 8px;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.gas-nav-button {
+    height: 30px;
+    margin-bottom: 4px;
+    -unity-text-align: middle-left;
+}
+
+.gas-nav-button-selected {
+    background-color: rgb(63, 86, 121);
+    color: rgb(255, 255, 255);
+}
+
+.gas-content-panel {
+    flex-grow: 1;
+    padding: 14px;
+}
+
+.gas-page-title {
+    font-size: 18px;
+    -unity-font-style: bold;
+    color: rgb(238, 238, 238);
+    margin-bottom: 2px;
+}
+
+.gas-page-description {
+    color: rgb(168, 168, 168);
+    margin-bottom: 10px;
+}
+
+.gas-content-host {
+    flex-grow: 1;
+}
+
+.gas-page {
+    flex-grow: 1;
+}
+
+.gas-section-title {
+    -unity-font-style: bold;
+    color: rgb(220, 220, 220);
+    margin-top: 12px;
+    margin-bottom: 6px;
+}
+
+.gas-property-field {
+    margin-bottom: 5px;
+}
+
+.gas-path-summary {
+    min-height: 190px;
+    margin-bottom: 8px;
+}
+
+.gas-button-row {
+    flex-wrap: wrap;
+    white-space: normal;
+}
+
+.gas-primary-button {
+    width: 220px;
+    margin-top: 10px;
+}
+
+.gas-page-toolbar {
+    height: 32px;
+    margin-bottom: 8px;
+}
+
+.gas-search-field {
+    width: 240px;
+    margin-left: 10px;
+}
+
+.gas-count-label {
+    min-width: 70px;
+    -unity-text-align: middle-right;
+    color: rgb(180, 180, 180);
+}
+
+.gas-tag-split {
+    flex-grow: 1;
+    min-height: 360px;
+}
+
+.gas-table-split {
+    flex-grow: 1;
+    min-height: 360px;
+}
+
+.gas-tag-list {
+    flex-grow: 1;
+    border-right-width: 1px;
+    border-right-color: rgb(62, 62, 62);
+}
+
+.gas-table-list {
+    flex-grow: 1;
+    border-right-width: 1px;
+    border-right-color: rgb(62, 62, 62);
+}
+
+.gas-tag-list-item {
+    height: 24px;
+    -unity-text-align: middle-left;
+}
+
+.gas-table-list-item {
+    height: 25px;
+    -unity-text-align: middle-left;
+}
+
+.gas-detail-panel {
+    flex-grow: 1;
+    padding-left: 14px;
+}
+
+#tag-detail-title {
+    -unity-font-style: bold;
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.gas-detail-title {
+    -unity-font-style: bold;
+    font-size: 14px;
+    margin-bottom: 8px;
+    color: rgb(230, 230, 230);
+}
+
+.gas-readonly-field {
+    margin-bottom: 8px;
+}
+
+.gas-detail-foldout {
+    margin-bottom: 4px;
+}
+
+.gas-form {
+    max-width: 920px;
+}
+
+.gas-form TextField,
+.gas-form IntegerField {
+    margin-bottom: 8px;
+}
+
+.gas-inline-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.gas-id-popup {
+    width: 260px;
+    margin-right: 8px;
+}
+
+.gas-new-id-field {
+    width: 160px;
+    margin-right: 8px;
+}
+
+.gas-status-label {
+    margin-top: 10px;
+    color: rgb(184, 210, 184);
+}

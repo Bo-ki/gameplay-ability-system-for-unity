@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
 using GAS.Runtime;
-using Sirenix.OdinInspector;
-using Sirenix.OdinInspector.Editor;
 using Unity.Entities;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 #if UNITY_EDITOR
 namespace GAS.Editor
 {
-    public class GASWatcher : OdinEditorWindow
+    public class GASWatcher : EditorWindow
     {
         private const string OpenWindow_MenuItemName = "EXTool/EX-GAS/监测台";
 #if EX_GAS_ENABLE_HOT_KEYS
@@ -19,134 +19,295 @@ namespace GAS.Editor
         private const string OpenWindow_MenuItemNameEnh = OpenWindow_MenuItemName;
 #endif
 
+        private static readonly List<(string Name, Entity Entity)> _cachedAscEntities = new();
+        private static readonly Dictionary<int, string> _abilityNameCache = new();
+        private static readonly Dictionary<int, string> _attributeNameCache = new();
+        private static readonly Dictionary<int, string> _attrSetNameCache = new();
+
+        private readonly List<string> _ascAttributes = new();
+        private readonly List<string> _ascTags = new();
+        private readonly List<string> _ascAbilities = new();
+        private readonly List<string> _ascGameplayEffects = new();
+
+        private Entity _entityWatching = Entity.Null;
+        private string _globalInfoText = string.Empty;
+        private double _lastRefreshTime;
+
+        private Label _countLabel;
+        private Label _ascNameLabel;
+        private Label _globalInfoLabel;
+        private VisualElement _bodyHost;
+        private VisualElement _selectorHost;
+        private Foldout _attributesFoldout;
+        private Foldout _tagsFoldout;
+        private Foldout _abilitiesFoldout;
+        private Foldout _gameplayEffectsFoldout;
+
+        private const double RefreshInterval = 0.1;
+
         [MenuItem(OpenWindow_MenuItemNameEnh, priority = 3)]
         private static void OpenWindow()
         {
             var window = GetWindow<GASWatcher>();
             window.titleContent = new GUIContent("EX-GAS监测台");
+            window.minSize = new Vector2(560, 460);
             window.Show();
         }
 
-        // ======================== 提示 ========================
-        [BoxGroup("Tip")]
-        [HideIf(nameof(IsEditorPlaying))]
-        [DisplayAsString(false, 16, TextAlignment.Center, true)]
-        [ShowInInspector]
-        [HideLabel]
-        public string Tip = "<b><color=#ff6988>EX-GAS监测台仅在游戏运行时生效。</color></b>";
+        private void OnEnable()
+        {
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+        }
 
-        // ======================== ASC 选择器 ========================
-        [VerticalGroup("ASC")]
-        [HorizontalGroup("ASC/Top")]
-        [ValueDropdown(nameof(AscEntityChoices), IsUniqueList = true, HideChildProperties = true)]
-        [ShowIf(nameof(IsEditorPlaying))]
-        [ShowInInspector]
-        [HideLabel]
-        [OnValueChanged(nameof(OnWatchEntityChanged))]
-        public Entity entityWatching = Entity.Null;
+        private void OnDisable()
+        {
+            EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+        }
 
-        [HorizontalGroup("ASC/Top", order: 0)]
-        [ShowIf(nameof(IsEditorPlaying))]
-        [DisplayAsString(EnableRichText = true)]
-        [ShowInInspector]
-        [HideLabel]
-        public string ascName =>
-            $"<b><color=yellow>{(entityWatching == Entity.Null ? "NULL" : EntityHelper.GetEntityName(entityWatching))}</color></b>";
+        public void CreateGUI()
+        {
+            rootVisualElement.Clear();
+            rootVisualElement.style.flexGrow = 1;
+            rootVisualElement.style.paddingLeft = 8;
+            rootVisualElement.style.paddingRight = 8;
+            rootVisualElement.style.paddingTop = 8;
+            rootVisualElement.style.paddingBottom = 8;
 
-        // ======================== 全局信息栏 ========================
-        [VerticalGroup("ASC")]
-        [ShowIf(nameof(IsEntityValid))]
-        [ShowInInspector]
-        [DisplayAsString(EnableRichText = true)]
-        [HideLabel]
-        public string GlobalInfo => _globalInfoText;
-        private string _globalInfoText = "";
+            var toolbar = new Toolbar();
+            toolbar.Add(new ToolbarButton(() =>
+            {
+                RefreshAscEntitiesCache();
+                if (_entityWatching != Entity.Null && !ContainsCachedEntity(_entityWatching))
+                    _entityWatching = Entity.Null;
+                RebuildBody();
+            })
+            {
+                text = "刷新当前ASC列表"
+            });
 
-        // ======================== 属性区块 ========================
-        [FoldoutGroup("ASC/属性", expanded: true)]
-        [ShowIf(nameof(IsEntityValid))]
-        [ShowInInspector]
-        [DisplayAsString(EnableRichText = true)]
-        [HideLabel]
-        [ListDrawerSettings(IsReadOnly = true, Expanded = true)]
-        private List<string> _ascAttributes = new();
+            var spacer = new VisualElement();
+            spacer.style.flexGrow = 1;
+            toolbar.Add(spacer);
 
-        // ======================== 标签区块 ========================
-        [FoldoutGroup("ASC/标签", expanded: true)]
-        [ShowIf(nameof(IsEntityValid))]
-        [ShowInInspector]
-        [DisplayAsString(EnableRichText = true)]
-        [HideLabel]
-        [ListDrawerSettings(IsReadOnly = true, Expanded = true)]
-        private List<string> _ascTags = new();
+            _countLabel = new Label();
+            _countLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+            _countLabel.style.minWidth = 80;
+            toolbar.Add(_countLabel);
+            rootVisualElement.Add(toolbar);
 
-        // ======================== 能力区块 ========================
-        [FoldoutGroup("ASC/能力", expanded: true)]
-        [ShowIf(nameof(IsEntityValid))]
-        [ShowInInspector]
-        [DisplayAsString(EnableRichText = true)]
-        [HideLabel]
-        [ListDrawerSettings(IsReadOnly = true, Expanded = true)]
-        private List<string> _ascAbilities = new();
+            _bodyHost = new VisualElement();
+            _bodyHost.style.flexGrow = 1;
+            _bodyHost.style.marginTop = 8;
+            rootVisualElement.Add(_bodyHost);
 
-        // ======================== GE效果区块 ========================
-        [FoldoutGroup("ASC/GE效果(Buff)", expanded: true)]
-        [ShowIf(nameof(IsEntityValid))]
-        [ShowInInspector]
-        [DisplayAsString(EnableRichText = true)]
-        [HideLabel]
-        [ListDrawerSettings(IsReadOnly = true, Expanded = true)]
-        private List<string> _ascGameplayEffects = new();
-
-        // ======================== 刷新控制 ========================
-        private double _lastRepaintTime;
-        private const double RepaintInterval = 0.1; // 100ms
+            RebuildBody();
+        }
 
         private void Update()
         {
-            if (!IsEntityValid()) return;
+            if (!IsEntityValid())
+                return;
 
             var now = EditorApplication.timeSinceStartup;
-            if (now - _lastRepaintTime < RepaintInterval) return;
-            _lastRepaintTime = now;
+            if (now - _lastRefreshTime < RefreshInterval)
+                return;
 
+            _lastRefreshTime = now;
             RefreshASCContent();
+            UpdateDataViews();
         }
 
-        public bool IsEditorPlaying() => Application.isPlaying;
-
-        public bool IsEntityValid()
+        private void RebuildBody()
         {
-            return IsEditorPlaying()
-                   && entityWatching != Entity.Null
-                   && GASManager.EntityManager.Exists(entityWatching);
+            if (_bodyHost == null)
+                return;
+
+            _bodyHost.Clear();
+            UpdateCountLabel();
+
+            if (!Application.isPlaying)
+            {
+                _bodyHost.Add(new HelpBox("EX-GAS监测台仅在游戏运行时生效。", HelpBoxMessageType.Info));
+                return;
+            }
+
+            _selectorHost = new VisualElement();
+            _selectorHost.style.marginBottom = 8;
+            _bodyHost.Add(_selectorHost);
+            RebuildAscSelector();
+
+            _ascNameLabel = RichLabel(string.Empty);
+            _ascNameLabel.style.marginBottom = 8;
+            _bodyHost.Add(_ascNameLabel);
+
+            if (!IsEntityValid())
+            {
+                UpdateAscNameLabel();
+                _bodyHost.Add(new HelpBox("请选择一个有效的 ASC Entity。", HelpBoxMessageType.Info));
+                return;
+            }
+
+            RefreshASCContent();
+
+            var scrollView = new ScrollView();
+            scrollView.style.flexGrow = 1;
+            _bodyHost.Add(scrollView);
+
+            _globalInfoLabel = RichLabel(string.Empty);
+            _globalInfoLabel.style.marginBottom = 8;
+            scrollView.Add(_globalInfoLabel);
+
+            _attributesFoldout = CreateFoldout("属性");
+            _tagsFoldout = CreateFoldout("标签");
+            _abilitiesFoldout = CreateFoldout("能力");
+            _gameplayEffectsFoldout = CreateFoldout("GE效果(Buff)");
+
+            scrollView.Add(_attributesFoldout);
+            scrollView.Add(_tagsFoldout);
+            scrollView.Add(_abilitiesFoldout);
+            scrollView.Add(_gameplayEffectsFoldout);
+
+            UpdateDataViews();
+        }
+
+        private void RebuildAscSelector()
+        {
+            _selectorHost.Clear();
+
+            if (_cachedAscEntities.Count == 0)
+            {
+                _selectorHost.Add(new HelpBox("当前没有缓存 ASC Entity，点击刷新当前ASC列表。", HelpBoxMessageType.Warning));
+                return;
+            }
+
+            var choices = new List<string> { "<未选择>" };
+            foreach (var item in _cachedAscEntities)
+                choices.Add(item.Name);
+
+            var selectedIndex = 0;
+            for (var i = 0; i < _cachedAscEntities.Count; i++)
+            {
+                if (_cachedAscEntities[i].Entity == _entityWatching)
+                {
+                    selectedIndex = i + 1;
+                    break;
+                }
+            }
+
+            var popup = new PopupField<string>("当前 ASC", choices, selectedIndex);
+            popup.RegisterValueChangedCallback(evt =>
+            {
+                var index = choices.IndexOf(evt.newValue);
+                _entityWatching = index <= 0 ? Entity.Null : _cachedAscEntities[index - 1].Entity;
+                OnWatchEntityChanged();
+                RebuildBody();
+            });
+            _selectorHost.Add(popup);
+        }
+
+        private static Foldout CreateFoldout(string title)
+        {
+            var foldout = new Foldout
+            {
+                text = title,
+                value = true
+            };
+            foldout.style.marginTop = 6;
+            return foldout;
+        }
+
+        private void UpdateDataViews()
+        {
+            UpdateCountLabel();
+            UpdateAscNameLabel();
+
+            if (_globalInfoLabel == null)
+                return;
+
+            _globalInfoLabel.text = _globalInfoText;
+            FillFoldout(_attributesFoldout, _ascAttributes);
+            FillFoldout(_tagsFoldout, _ascTags);
+            FillFoldout(_abilitiesFoldout, _ascAbilities);
+            FillFoldout(_gameplayEffectsFoldout, _ascGameplayEffects);
+        }
+
+        private void UpdateCountLabel()
+        {
+            if (_countLabel != null)
+                _countLabel.text = $"ASC: {_cachedAscEntities.Count}";
+        }
+
+        private void UpdateAscNameLabel()
+        {
+            if (_ascNameLabel == null)
+                return;
+
+            _ascNameLabel.text =
+                $"<b><color=yellow>{(_entityWatching == Entity.Null ? "NULL" : EntityHelper.GetEntityName(_entityWatching))}</color></b>";
+        }
+
+        private static void FillFoldout(Foldout foldout, List<string> lines)
+        {
+            if (foldout == null)
+                return;
+
+            foldout.Clear();
+            if (lines.Count == 0)
+            {
+                foldout.Add(RichLabel("<color=#888>无</color>"));
+                return;
+            }
+
+            foreach (var line in lines)
+                foldout.Add(RichLabel(line));
+        }
+
+        private static Label RichLabel(string text)
+        {
+            var label = new Label(text);
+            label.enableRichText = true;
+            label.style.whiteSpace = WhiteSpace.Normal;
+            label.style.marginBottom = 2;
+            return label;
+        }
+
+        private bool IsEntityValid()
+        {
+            return Application.isPlaying
+                   && _entityWatching != Entity.Null
+                   && GASManager.EntityManager.Exists(_entityWatching);
         }
 
         private void OnWatchEntityChanged()
         {
             ClearAllCaches();
-            if (IsEntityValid()) RefreshASCContent();
-        }
-
-        protected override void OnEnable()
-        {
-            base.OnEnable();
-            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
-        }
-
-        protected override void OnDisable()
-        {
-            base.OnDisable();
-            EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+            if (IsEntityValid())
+                RefreshASCContent();
         }
 
         private void OnPlayModeStateChanged(PlayModeStateChange state)
         {
             if (state != PlayModeStateChange.EnteredPlayMode &&
-                state != PlayModeStateChange.ExitingPlayMode) return;
+                state != PlayModeStateChange.ExitingPlayMode)
+            {
+                return;
+            }
+
             _cachedAscEntities.Clear();
-            entityWatching = Entity.Null;
+            _entityWatching = Entity.Null;
             ClearAllCaches();
+            RebuildBody();
+        }
+
+        private static bool ContainsCachedEntity(Entity entity)
+        {
+            foreach (var item in _cachedAscEntities)
+            {
+                if (item.Entity == entity)
+                    return true;
+            }
+
+            return false;
         }
 
         private static void ClearAllCaches()
@@ -156,35 +317,13 @@ namespace GAS.Editor
             _attrSetNameCache.Clear();
         }
 
-        #region ASC列表 & 名称缓存
-
-        private static readonly List<(string, Entity)> _cachedAscEntities = new();
-
-        [HorizontalGroup("ASC/Top", width: 200)]
-        [Button("刷新当前ASC列表")]
-        [ShowIf(nameof(IsEditorPlaying))]
         private static void RefreshAscEntitiesCache()
         {
             _cachedAscEntities.Clear();
             var ascEntities = EntityQueryHelper.GetAllEntitiesWithComponent<ASCIdentityComponent>();
             foreach (var ascEntity in ascEntities)
                 _cachedAscEntities.Add((GASManager.EntityManager.GetName(ascEntity), ascEntity));
-            _ascEntityChoices = new ValueDropdownItem[_cachedAscEntities.Count];
-            for (var i = 0; i < _cachedAscEntities.Count; i++)
-            {
-                var (name, entity) = _cachedAscEntities[i];
-                _ascEntityChoices[i] = new ValueDropdownItem(name, entity);
-            }
         }
-
-        private static ValueDropdownItem[] _ascEntityChoices;
-        private static IEnumerable<ValueDropdownItem> AscEntityChoices =>
-            _ascEntityChoices ?? new ValueDropdownItem[] { };
-
-        // ---------- 名称缓存 ----------
-        private static readonly Dictionary<int, string> _abilityNameCache = new();
-        private static readonly Dictionary<int, string> _attributeNameCache = new();
-        private static readonly Dictionary<int, string> _attrSetNameCache = new();
 
         private static string GetAbilityNameByCode(int code)
         {
@@ -213,9 +352,6 @@ namespace GAS.Editor
             return r;
         }
 
-        private static string GetTagName(int tagCode) =>
-            TagHelper.GetTagFullName(tagCode) ?? $"Tag({tagCode})";
-
         private static string OpName(EModifierOp op) => op switch
         {
             EModifierOp.Add => "+",
@@ -225,10 +361,6 @@ namespace GAS.Editor
             EModifierOp.Override => "=",
             _ => op.ToString()
         };
-
-        #endregion
-
-        #region 数据刷新
 
         private void RefreshASCContent()
         {
@@ -245,33 +377,30 @@ namespace GAS.Editor
             {
                 Debug.LogWarning($"[GASWatcher] Refresh: {e.Message}");
             }
-            Repaint();
         }
 
-        // ---------- 全局信息 ----------
         private void RefreshGlobalInfo()
         {
             var em = GASManager.EntityManager;
             var gt = em.GetComponentData<GlobalTimer>(GASManager.EntityGlobalTimer);
-            var lvl = em.HasComponent<ASCIdentityComponent>(entityWatching)
-                ? em.GetComponentData<ASCIdentityComponent>(entityWatching).Level
+            var lvl = em.HasComponent<ASCIdentityComponent>(_entityWatching)
+                ? em.GetComponentData<ASCIdentityComponent>(_entityWatching).Level
                 : 0;
             _globalInfoText =
-                $"<b>Frame</b>:{gt.Frame}  <b>Turn</b>:{gt.Turn}  <b>ASC Lv</b>:{lvl}  <b>Entity</b>:{EntityHelper.GetEntityName(entityWatching)}";
+                $"<b>Frame</b>:{gt.Frame}  <b>Turn</b>:{gt.Turn}  <b>ASC Lv</b>:{lvl}  <b>Entity</b>:{EntityHelper.GetEntityName(_entityWatching)}";
         }
 
-        // ---------- 属性 ----------
         private void RefreshAttributes()
         {
             _ascAttributes.Clear();
             var em = GASManager.EntityManager;
-            if (!em.HasBuffer<AttributeValueBuffer>(entityWatching))
+            if (!em.HasBuffer<AttributeValueBuffer>(_entityWatching))
             {
                 _ascAttributes.Add("<color=#888>无</color>");
                 return;
             }
 
-            var buf = em.GetBuffer<AttributeValueBuffer>(entityWatching);
+            var buf = em.GetBuffer<AttributeValueBuffer>(_entityWatching);
             foreach (var a in buf)
             {
                 var diff = Math.Abs(a.CurrentValue - a.BaseValue) > 0.001f;
@@ -282,24 +411,23 @@ namespace GAS.Editor
             }
         }
 
-        // ---------- 标签 ----------
         private void RefreshTags()
         {
             _ascTags.Clear();
             var em = GASManager.EntityManager;
-            var fixedMask = em.HasComponent<TagFixedMaskComponent>(entityWatching)
-                ? em.GetComponentData<TagFixedMaskComponent>(entityWatching).Mask
+            var fixedMask = em.HasComponent<TagFixedMaskComponent>(_entityWatching)
+                ? em.GetComponentData<TagFixedMaskComponent>(_entityWatching).Mask
                 : default;
 
             _ascTags.Add($"<b>固有({CountDenseTags(fixedMask)})</b>");
             AppendMaskTags(_ascTags, fixedMask);
-            if (!em.HasBuffer<TagTemporarySourceBuffer>(entityWatching))
+            if (!em.HasBuffer<TagTemporarySourceBuffer>(_entityWatching))
             {
                 _ascTags.Add("<b>临时(0)</b>");
                 return;
             }
 
-            var tmpBuf = em.GetBuffer<TagTemporarySourceBuffer>(entityWatching);
+            var tmpBuf = em.GetBuffer<TagTemporarySourceBuffer>(_entityWatching);
             _ascTags.Add($"<b>临时({tmpBuf.Length})</b>");
             foreach (var t in tmpBuf)
             {
@@ -313,8 +441,11 @@ namespace GAS.Editor
         {
             var count = 0;
             for (var i = 0; i < 256; i++)
+            {
                 if (mask.HasTag(i))
                     count++;
+            }
+
             return count;
         }
 
@@ -335,12 +466,11 @@ namespace GAS.Editor
                 : $"TagIndex({denseIndex})";
         }
 
-        // ---------- 能力 ----------
         private void RefreshAbilities()
         {
             _ascAbilities.Clear();
             var em = GASManager.EntityManager;
-            var buf = em.GetBuffer<AbilitySlotBuffer>(entityWatching);
+            var buf = em.GetBuffer<AbilitySlotBuffer>(_entityWatching);
             if (buf.Length == 0)
             {
                 _ascAbilities.Add("<color=#888>无</color>");
@@ -362,13 +492,13 @@ namespace GAS.Editor
                 _ascAbilities.Add(
                     $"<b><color=#ffcc44>{aName}</color></b> Lv.{info.Level} [{eName}]{actStr}");
 
-                // --- ECS 执行配置 ---
                 if (em.HasBuffer<AbilityOwnerEffectOnActivateBuffer>(ent))
                 {
                     var effects = em.GetBuffer<AbilityOwnerEffectOnActivateBuffer>(ent);
                     var effectCodes = new List<string>();
                     for (var ei = 0; ei < effects.Length; ei++)
                         effectCodes.Add(effects[ei].EffectCode.ToString());
+
                     _ascAbilities.Add($"  <color=#aaaaaa>激活效果: {string.Join(", ", effectCodes)}</color>");
                 }
 
@@ -392,30 +522,12 @@ namespace GAS.Editor
             return names;
         }
 
-        private static bool HasAnyDenseTag(EntityManager em, Entity asc, in TagMaskComponent denseTags)
-        {
-            if (!em.Exists(asc) || !em.HasComponent<TagMaskComponent>(asc)) return false;
-            var mask = em.GetComponentData<TagMaskComponent>(asc);
-            return mask.HasAnyTag(denseTags);
-        }
-
-        private static bool HasAnyDenseTag(DynamicBuffer<GEGrantedTagConfigBuffer> grantedTags, in TagMaskComponent denseTags)
-        {
-            for (var i = 0; i < grantedTags.Length; i++)
-            {
-                if (denseTags.HasTag(grantedTags[i].TagIndex))
-                    return true;
-            }
-            return false;
-        }
-
-        // ---------- GE效果 ----------
         private void RefreshGameplayEffects()
         {
             _ascGameplayEffects.Clear();
             var em = GASManager.EntityManager;
             var gt = em.GetComponentData<GlobalTimer>(GASManager.EntityGlobalTimer);
-            var geBuf = em.GetBuffer<LegacyGameplayEffectEntityBuffer>(entityWatching);
+            var geBuf = em.GetBuffer<LegacyGameplayEffectEntityBuffer>(_entityWatching);
 
             if (geBuf.Length == 0)
             {
@@ -430,12 +542,10 @@ namespace GAS.Editor
 
                 if (geName == null || geName == "ENTITY_NOT_FOUND")
                 {
-                    _ascGameplayEffects.Add(
-                        "<color=red>ERROR: GE已被销毁，但未被移出容器！</color>");
+                    _ascGameplayEffects.Add("<color=red>ERROR: GE已被销毁，但未被移出容器！</color>");
                     continue;
                 }
 
-                // 基本信息
                 var context = em.GetComponentData<GEContextComponent>(geEntity);
                 var source = EntityHelper.GetEntityName(context.SourceAsc);
                 var level = em.HasComponent<GEEffectSpecComponent>(geEntity)
@@ -444,17 +554,14 @@ namespace GAS.Editor
                 _ascGameplayEffects.Add(
                     $"<b><color=#ffcc44>[{i}] {geName}</color></b>  Lv.{level}  <color=#888>来源:{source}</color>");
 
-                // Duration
                 if (em.HasComponent<GEDurationRuntimeComponent>(geEntity))
                 {
                     var dur = em.GetComponentData<GEDurationRuntimeComponent>(geEntity);
                     var definition = em.HasComponent<GEDurationDefinitionComponent>(geEntity)
                         ? em.GetComponentData<GEDurationDefinitionComponent>(geEntity)
                         : default;
-                    var actStr = dur.Active
-                        ? "<color=lime>[激活]</color>"
-                        : "<color=red>[失活]</color>";
-                    var unit = dur.ResolvedTimeUnit == TimeUnit.Frame ? "帧" : "回合";
+                    var actStr = dur.Active ? "<color=lime>[激活]</color>" : "<color=red>[失活]</color>";
+                    var unit = dur.ResolvedTimeUnit == GAS.Runtime.TimeUnit.Frame ? "帧" : "回合";
                     string durStr;
                     if (dur.ResolvedDuration <= 0)
                     {
@@ -462,18 +569,19 @@ namespace GAS.Editor
                     }
                     else
                     {
-                        var cur = dur.ResolvedTimeUnit == TimeUnit.Frame ? gt.Frame : gt.Turn;
+                        var cur = dur.ResolvedTimeUnit == GAS.Runtime.TimeUnit.Frame ? gt.Frame : gt.Turn;
                         int rem;
                         if (definition.StopTickWhenDeactivated && !dur.Active)
                             rem = dur.RemainingTime;
                         else
                             rem = Math.Max(0, dur.ResolvedDuration - (cur - dur.ActiveTime));
+
                         durStr = $"剩余:{rem}/{dur.ResolvedDuration}{unit}";
                     }
+
                     _ascGameplayEffects.Add($"    {actStr} {durStr}");
                 }
 
-                // Stacking
                 if (em.HasComponent<GEStackingDefinitionComponent>(geEntity))
                 {
                     var definition = em.GetComponentData<GEStackingDefinitionComponent>(geEntity);
@@ -481,14 +589,11 @@ namespace GAS.Editor
                         ? em.GetComponentData<GEStackingRuntimeComponent>(geEntity)
                         : default;
                     var stackCount = runtime.StackCount > 0 ? runtime.StackCount : 1;
-                    var stType = definition.StackType == EffectStackType.AggregateBySource
-                        ? "BySource"
-                        : "ByTarget";
+                    var stType = definition.StackType == EffectStackType.AggregateBySource ? "BySource" : "ByTarget";
                     _ascGameplayEffects.Add(
                         $"    <color=#cc99ff>层数:{stackCount}/{definition.LimitCount} ({stType})</color>");
                 }
 
-                // Period
                 if (em.HasComponent<GEPeriodDefinitionComponent>(geEntity))
                 {
                     var per = em.GetComponentData<GEPeriodDefinitionComponent>(geEntity);
@@ -496,13 +601,12 @@ namespace GAS.Editor
                     if (em.HasComponent<GEDurationRuntimeComponent>(geEntity))
                     {
                         var dur = em.GetComponentData<GEDurationRuntimeComponent>(geEntity);
-                        unit = dur.ResolvedTimeUnit == TimeUnit.Frame ? "帧" : "回合";
+                        unit = dur.ResolvedTimeUnit == GAS.Runtime.TimeUnit.Frame ? "帧" : "回合";
                     }
-                    _ascGameplayEffects.Add(
-                        $"    <color=#99cccc>周期:{per.Period}{unit}</color>");
+
+                    _ascGameplayEffects.Add($"    <color=#99cccc>周期:{per.Period}{unit}</color>");
                 }
 
-                // GrantedTags
                 if (em.HasComponent<GEGrantedTagsComponent>(geEntity))
                 {
                     var tags = em.GetComponentData<GEGrantedTagsComponent>(geEntity);
@@ -514,7 +618,6 @@ namespace GAS.Editor
                     }
                 }
 
-                // AssetTags
                 if (em.HasComponent<GEAssetTagsComponent>(geEntity))
                 {
                     var tags = em.GetComponentData<GEAssetTagsComponent>(geEntity);
@@ -526,7 +629,6 @@ namespace GAS.Editor
                     }
                 }
 
-                // Modifiers
                 if (em.HasBuffer<GEModifierConfigBuffer>(geEntity))
                 {
                     var mods = em.GetBuffer<GEModifierConfigBuffer>(geEntity);
@@ -538,20 +640,16 @@ namespace GAS.Editor
                             parts.Add(
                                 $"{GetAttrSetNameByCode(m.AttrSetCode)}.{GetAttributeNameByCode(m.AttributeCode)} [{OpName(m.Op)}] {m.Magnitude:F2}");
                         }
+
                         _ascGameplayEffects.Add(
                             $"    <color=#ddaa66>Modifiers: {string.Join(" | ", parts)}</color>");
                     }
                 }
 
-                // 分隔线
                 if (i < geBuf.Length - 1)
-                    _ascGameplayEffects.Add(
-                        "<color=#444>────────────────────────────────</color>");
+                    _ascGameplayEffects.Add("<color=#444>────────────────────────────────</color>");
             }
         }
-
-        #endregion
     }
 }
 #endif
-

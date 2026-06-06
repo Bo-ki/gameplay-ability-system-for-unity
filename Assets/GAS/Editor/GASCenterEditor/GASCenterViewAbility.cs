@@ -1,3 +1,4 @@
+#if EX_GAS_ENABLE_ODIN_LEGACY_EDITOR
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -191,7 +192,7 @@ namespace GAS.Editor
             return _data == null ? new List<int>() : _data.Keys;
         }
 
-        public List<ValueDropdownItem> TagChoices => GasXlsxChoice.Tags();
+        public List<ValueDropdownItem> TagChoices => GasOdinChoice.Tags();
         public IEnumerable<AbilityEditComponent> ComponentChoice => EditorAbilityHelper.ComponentTypes();
         public IEnumerable<string> AbilityExecutionChoice => EditorAbilityHelper.GetAbilityExecutionTypeNames();
 
@@ -392,13 +393,13 @@ namespace GAS.Editor
         [TabGroup(T_G_TAB,"详情")]
         [Title("消耗", Bold = false)]
         [ShowIf("@HasComponent(AbilityEditComponent.Cost)")]
-        [ValueDropdown("@GasXlsxChoice.Effects()", IsUniqueList = true)]
+        [ValueDropdown("@GasOdinChoice.Effects()", IsUniqueList = true)]
         [LabelText("消耗效果")]
         public int Cost;
         
         [TitleGroup(T_G_A_B_CD, BoldTitle = false)]
         [ShowIf("@HasComponent(AbilityEditComponent.Cooldown)")]
-        [ValueDropdown("@GasXlsxChoice.Effects()", IsUniqueList = true)]
+        [ValueDropdown("@GasOdinChoice.Effects()", IsUniqueList = true)]
         [LabelText("CD效果")]
         public int CDEffect;
         
@@ -452,3 +453,4 @@ namespace GAS.Editor
         #endregion
     }
 }
+#endif

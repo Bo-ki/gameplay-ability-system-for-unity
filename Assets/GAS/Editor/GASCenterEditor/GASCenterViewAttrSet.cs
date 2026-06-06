@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+#if EX_GAS_ENABLE_ODIN_LEGACY_EDITOR
 using Sirenix.OdinInspector;
 using UnityEditor;
 using System.IO;
@@ -79,3 +80,4 @@ namespace GAS.Editor
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if EX_GAS_ENABLE_ODIN_LEGACY_EDITOR
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -285,7 +286,7 @@ namespace GAS.Editor
             return _data == null ? new List<int>() : _data.Keys;
         }
 
-        public List<ValueDropdownItem> TagChoices => GasXlsxChoice.Tags();
+        public List<ValueDropdownItem> TagChoices => GasOdinChoice.Tags();
         public IEnumerable<EffectEditComponent> ComponentChoice => EditorEffectHelper.ComponentTypes();
 
         private int MaxRowForNewID()
@@ -664,42 +665,42 @@ namespace GAS.Editor
         [Title("应用时触发的Cue", Bold = false)]
         [ShowIf("@HasComponent(EffectEditComponent.CueOnApply)")]
         [LabelText(" ")]
-        [ValueDropdown("@GasXlsxChoice.Cues()", IsUniqueList = true)]
+        [ValueDropdown("@GasOdinChoice.Cues()", IsUniqueList = true)]
         public List<int> CueOnApply;
 
         [TabGroup(T_G_TAB,"详情")]
         [Title("帧更新的Cue", Bold = false)]
         [ShowIf("@HasComponent(EffectEditComponent.CueOnTick)")]
         [LabelText(" ")]
-        [ValueDropdown("@GasXlsxChoice.Cues()", IsUniqueList = true)]
+        [ValueDropdown("@GasOdinChoice.Cues()", IsUniqueList = true)]
         public List<int> CueOnTick;
 
         [TabGroup(T_G_TAB,"详情")]
         [Title("添加时触发的Cue", Bold = false)]
         [ShowIf("@HasComponent(EffectEditComponent.CueOnAdd)")]
         [LabelText(" ")]
-        [ValueDropdown("@GasXlsxChoice.Cues()", IsUniqueList = true)]
+        [ValueDropdown("@GasOdinChoice.Cues()", IsUniqueList = true)]
         public List<int> CueOnAdd;
 
         [TabGroup(T_G_TAB,"详情")]
         [Title("移除时触发的Cue", Bold = false)]
         [ShowIf("@HasComponent(EffectEditComponent.CueOnRemove)")]
         [LabelText(" ")]
-        [ValueDropdown("@GasXlsxChoice.Cues()", IsUniqueList = true)]
+        [ValueDropdown("@GasOdinChoice.Cues()", IsUniqueList = true)]
         public List<int> CueOnRemove;
 
         [TabGroup(T_G_TAB,"详情")]
         [Title("激活时触发的Cue", Bold = false)]
         [ShowIf("@HasComponent(EffectEditComponent.CueOnActivate)")]
         [LabelText(" ")]
-        [ValueDropdown("@GasXlsxChoice.Cues()", IsUniqueList = true)]
+        [ValueDropdown("@GasOdinChoice.Cues()", IsUniqueList = true)]
         public List<int> CueOnActivate;
 
         [TabGroup(T_G_TAB,"详情")]
         [Title("失活时触发的Cue", Bold = false)]
         [ShowIf("@HasComponent(EffectEditComponent.CueOnDeactivate)")]
         [LabelText(" ")]
-        [ValueDropdown("@GasXlsxChoice.Cues()", IsUniqueList = true)]
+        [ValueDropdown("@GasOdinChoice.Cues()", IsUniqueList = true)]
         public List<int> CueOnDeactivate;
 
         [TabGroup(T_G_TAB,"详情")]
@@ -720,4 +721,5 @@ namespace GAS.Editor
         #endregion
     }
 }
+#endif
 

@@ -1,3 +1,4 @@
+#if EX_GAS_ENABLE_ODIN_LEGACY_EDITOR
 using System.IO;
 using Sirenix.OdinInspector;
 using Sirenix.OdinInspector.Editor;
@@ -199,3 +200,4 @@ namespace GAS.Editor
         }
     }
 }
+#endif

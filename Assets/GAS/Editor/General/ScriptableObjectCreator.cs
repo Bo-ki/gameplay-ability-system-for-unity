@@ -1,94 +1,193 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 namespace GAS.Editor
 {
     using System;
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
-    using Sirenix.OdinInspector.Editor;
-    using Sirenix.Utilities;
     using UnityEditor;
+    using UnityEditor.UIElements;
     using UnityEngine;
-    
+    using UnityEngine.UIElements;
+
     public static class ScriptableObjectCreator
     {
         public static void ShowDialog<T>(string defaultDestinationPath, Action<T> onScritpableObjectCreated = null)
             where T : ScriptableObject
         {
-            var selector = new ScriptableObjectSelector<T>(defaultDestinationPath, onScritpableObjectCreated);
+            var scriptableObjectTypes = TypeCache.GetTypesDerivedFrom<T>()
+                .Where(type => type.IsClass && !type.IsAbstract)
+                .OrderBy(type => type.Name)
+                .ToArray();
 
-            if (selector.SelectionTree.EnumerateTree().Count() == 1)
+            if (scriptableObjectTypes.Length == 0)
             {
-                // If there is only one scriptable object to choose from in the selector, then 
-                // we'll automatically select it and confirm the selection. 
-                selector.SelectionTree.EnumerateTree().First().Select();
-                selector.SelectionTree.Selection.ConfirmSelection();
+                EditorUtility.DisplayDialog(
+                    "Create ScriptableObject",
+                    $"没有找到继承自 {typeof(T).Name} 的可创建类型。",
+                    "确定");
+                return;
             }
-            else
+
+            if (scriptableObjectTypes.Length == 1)
             {
-                // Else, we'll open up the selector in a popup and let the user choose.
-                selector.ShowInPopup(300);
+                CreateAsset(scriptableObjectTypes[0], defaultDestinationPath, onScritpableObjectCreated);
+                return;
             }
+
+            ScriptableObjectCreatorWindow.Show(
+                typeof(T).Name,
+                scriptableObjectTypes,
+                type => CreateAsset(type, defaultDestinationPath, onScritpableObjectCreated));
         }
 
-        // Here is the actual ScriptableObjectSelector which inherits from OdinSelector.
-        // You can learn more about those in the documentation: http://sirenix.net/odininspector/documentation/sirenix/odininspector/editor/odinselector(t)
-        // This one builds a menu-tree of all types that inherit from T, and when the selection is confirmed, it then prompts the user
-        // with a dialog to save the newly created scriptable object.
-
-        private class ScriptableObjectSelector<T> : OdinSelector<Type> where T : ScriptableObject
+        private static void CreateAsset<T>(
+            Type type,
+            string defaultDestinationPath,
+            Action<T> onScritpableObjectCreated)
+            where T : ScriptableObject
         {
-            private Action<T> onScritpableObjectCreated;
-            private string defaultDestinationPath;
+            var destinationPath = string.IsNullOrWhiteSpace(defaultDestinationPath)
+                ? "Assets"
+                : defaultDestinationPath.TrimEnd('/', '\\');
 
-            public ScriptableObjectSelector(string defaultDestinationPath, Action<T> onScritpableObjectCreated = null)
+            if (!Directory.Exists(destinationPath))
             {
-                this.onScritpableObjectCreated = onScritpableObjectCreated;
-                this.defaultDestinationPath = defaultDestinationPath;
-                this.SelectionConfirmed += this.ShowSaveFileDialog;
+                Directory.CreateDirectory(destinationPath);
+                AssetDatabase.Refresh();
             }
 
-            protected override void BuildSelectionTree(OdinMenuTree tree)
-            {
-                var scriptableObjectTypes = AssemblyUtilities.GetTypes(AssemblyCategory.ProjectSpecific)
-                    .Where(x => x.IsClass && !x.IsAbstract && x.InheritsFrom(typeof(T)));
+            var assetPath = EditorUtility.SaveFilePanelInProject(
+                "Save object as",
+                $"New {type.Name}.asset",
+                "asset",
+                "选择 ScriptableObject 保存路径。",
+                destinationPath);
 
-                tree.Selection.SupportsMultiSelect = false;
-                tree.Config.DrawSearchToolbar = true;
-                tree.Config.SelectMenuItemsOnMouseDown = true;
-                tree.AddRange(scriptableObjectTypes, x => x.GetNiceName())
-                    .AddThumbnailIcons();
+            if (string.IsNullOrEmpty(assetPath))
+                return;
+
+            var obj = ScriptableObject.CreateInstance(type) as T;
+            if (obj == null)
+            {
+                EditorUtility.DisplayDialog(
+                    "Create ScriptableObject",
+                    $"无法创建 {type.FullName}。",
+                    "确定");
+                return;
             }
 
-            private void ShowSaveFileDialog(IEnumerable<Type> selection)
+            AssetDatabase.CreateAsset(obj, assetPath);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Selection.activeObject = obj;
+            onScritpableObjectCreated?.Invoke(obj);
+        }
+    }
+
+    internal sealed class ScriptableObjectCreatorWindow : EditorWindow
+    {
+        private readonly List<Type> _allTypes = new();
+        private readonly List<Type> _filteredTypes = new();
+
+        private Action<Type> _onSelected;
+        private ListView _listView;
+        private Label _description;
+        private Type _selectedType;
+
+        public static void Show(string baseTypeName, IReadOnlyList<Type> types, Action<Type> onSelected)
+        {
+            var window = CreateInstance<ScriptableObjectCreatorWindow>();
+            window.titleContent = new GUIContent($"Create {baseTypeName}");
+            window.minSize = new Vector2(360, 420);
+            window._allTypes.AddRange(types);
+            window._filteredTypes.AddRange(types);
+            window._onSelected = onSelected;
+            window.ShowUtility();
+        }
+
+        public void CreateGUI()
+        {
+            rootVisualElement.style.flexGrow = 1;
+            rootVisualElement.style.paddingLeft = 8;
+            rootVisualElement.style.paddingRight = 8;
+            rootVisualElement.style.paddingTop = 8;
+            rootVisualElement.style.paddingBottom = 8;
+
+            var search = new ToolbarSearchField();
+            search.style.marginBottom = 6;
+            search.RegisterValueChangedCallback(evt => ApplyFilter(evt.newValue));
+            rootVisualElement.Add(search);
+
+            _listView = new ListView
             {
-                var obj = ScriptableObject.CreateInstance(selection.FirstOrDefault()) as T;
-
-                string dest = this.defaultDestinationPath.TrimEnd('/');
-
-                if (!Directory.Exists(dest))
+                itemsSource = _filteredTypes,
+                fixedItemHeight = 24,
+                selectionType = SelectionType.Single,
+                makeItem = () => new Label(),
+                bindItem = (element, index) =>
                 {
-                    Directory.CreateDirectory(dest);
-                    AssetDatabase.Refresh();
+                    ((Label)element).text = _filteredTypes[index].Name;
                 }
+            };
+            _listView.style.flexGrow = 1;
+            _listView.selectionChanged += OnSelectionChanged;
+            rootVisualElement.Add(_listView);
 
-                dest = EditorUtility.SaveFilePanel("Save object as", dest, "New " + typeof(T).Name, "asset");
+            _description = new Label("选择一个 ScriptableObject 类型。");
+            _description.style.whiteSpace = WhiteSpace.Normal;
+            _description.style.marginTop = 8;
+            _description.style.marginBottom = 8;
+            rootVisualElement.Add(_description);
 
-                if (!string.IsNullOrEmpty(dest) && PathUtilities.TryMakeRelative(Path.GetDirectoryName(Application.dataPath), dest, out dest))
+            var row = new Toolbar();
+            row.Add(new ToolbarButton(Close) { text = "取消" });
+
+            var spacer = new VisualElement();
+            spacer.style.flexGrow = 1;
+            row.Add(spacer);
+
+            row.Add(new ToolbarButton(CreateSelected) { text = "创建" });
+            rootVisualElement.Add(row);
+        }
+
+        private void ApplyFilter(string keyword)
+        {
+            _filteredTypes.Clear();
+            var normalized = keyword?.Trim();
+            foreach (var type in _allTypes)
+            {
+                if (string.IsNullOrEmpty(normalized) ||
+                    type.Name.IndexOf(normalized, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    (type.FullName?.IndexOf(normalized, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
                 {
-                    AssetDatabase.CreateAsset(obj, dest);
-                    AssetDatabase.Refresh();
-
-                    if (this.onScritpableObjectCreated != null)
-                    {
-                        this.onScritpableObjectCreated(obj);
-                    }
-                }
-                else
-                {
-                    UnityEngine.Object.DestroyImmediate(obj);
+                    _filteredTypes.Add(type);
                 }
             }
+
+            _selectedType = null;
+            _description.text = _filteredTypes.Count == 0
+                ? "没有匹配的类型。"
+                : "选择一个 ScriptableObject 类型。";
+            _listView.Rebuild();
+        }
+
+        private void OnSelectionChanged(IEnumerable<object> selection)
+        {
+            _selectedType = selection.OfType<Type>().FirstOrDefault();
+            _description.text = _selectedType == null
+                ? "选择一个 ScriptableObject 类型。"
+                : _selectedType.FullName;
+        }
+
+        private void CreateSelected()
+        {
+            if (_selectedType == null)
+                return;
+
+            var selected = _selectedType;
+            Close();
+            _onSelected?.Invoke(selected);
         }
     }
 }

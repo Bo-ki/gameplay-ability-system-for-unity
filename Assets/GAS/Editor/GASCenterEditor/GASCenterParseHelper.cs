@@ -35,5 +35,42 @@ namespace GAS.Editor
 
             return result;
         }
+
+        public static bool TryNormalizeIntList(string raw, out string normalized, out string error, bool positiveOnly = true)
+        {
+            normalized = string.Empty;
+            error = string.Empty;
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return true;
+            }
+
+            var parts = Regex.Split(raw.Trim(), @"[;,\s]+");
+            var result = new List<int>();
+            foreach (var part in parts)
+            {
+                if (string.IsNullOrWhiteSpace(part))
+                {
+                    continue;
+                }
+
+                if (!int.TryParse(part, out var value))
+                {
+                    error = $"无法解析 ID: {part}";
+                    return false;
+                }
+
+                if (positiveOnly && value <= 0)
+                {
+                    error = $"ID 必须是正整数: {value}";
+                    return false;
+                }
+
+                result.Add(value);
+            }
+
+            normalized = string.Join(";", result);
+            return true;
+        }
     }
 }

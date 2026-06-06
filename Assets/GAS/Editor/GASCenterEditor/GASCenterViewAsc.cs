@@ -1,3 +1,4 @@
+#if EX_GAS_ENABLE_ODIN_LEGACY_EDITOR
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -199,9 +200,9 @@ namespace GAS.Editor
             return GASCenterParseHelper.ParseIntListLoose(str);
         }
 
-        public List<ValueDropdownItem> TagChoices => GasXlsxChoice.Tags();
-        public List<ValueDropdownItem> AttrSetChoices => GasXlsxChoice.AttrSets();
-        public List<ValueDropdownItem> AbilityChoices => GasXlsxChoice.Abilities();
+        public List<ValueDropdownItem> TagChoices => GasOdinChoice.Tags();
+        public List<ValueDropdownItem> AttrSetChoices => GasOdinChoice.AttrSets();
+        public List<ValueDropdownItem> AbilityChoices => GasOdinChoice.Abilities();
 
         private void OnSelectedIdChanged()
         {
@@ -344,3 +345,4 @@ namespace GAS.Editor
         #endregion
     }
 }
+#endif
