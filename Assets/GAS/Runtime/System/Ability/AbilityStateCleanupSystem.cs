@@ -22,8 +22,8 @@ namespace GAS.Runtime
                 },
                 Any = new[]
                 {
-                    ComponentType.ReadOnly<AbilityCancelRequestComponent>(),
-                    ComponentType.ReadOnly<AbilityEndRequestComponent>(),
+                    ComponentType.ReadWrite<AbilityCancelRequestComponent>(),
+                    ComponentType.ReadWrite<AbilityEndRequestComponent>(),
                 },
             });
             state.RequireForUpdate(_cleanupQuery);
@@ -38,6 +38,9 @@ namespace GAS.Runtime
             var eventBusEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
                 ? resolvedEventBus
                 : Entity.Null;
+            var streamEntity = SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var resolvedStream)
+                ? resolvedStream
+                : Entity.Null;
             var frame = SystemAPI.TryGetSingleton<GlobalTimer>(out var timer)
                 ? timer.Frame
                 : 0;
@@ -49,12 +52,12 @@ namespace GAS.Runtime
             {
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
                 StateTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityStateComponent>(),
-                CancelRequestLookup = SystemAPI.GetComponentLookup<AbilityCancelRequestComponent>(),
-                EndRequestLookup = SystemAPI.GetComponentLookup<AbilityEndRequestComponent>(),
-                ActivationPendingLookup = SystemAPI.GetComponentLookup<AbilityActivationPendingComponent>(),
-                CommitRequestLookup = SystemAPI.GetComponentLookup<AbilityCommitRequestComponent>(),
-                DestroyOnCleanupLookup = SystemAPI.GetComponentLookup<AbilityDestroyOnCleanupComponent>(),
-                MainTargetLookup = SystemAPI.GetComponentLookup<AbilityMainTargetComponent>(),
+                CancelRequestTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityCancelRequestComponent>(),
+                EndRequestTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityEndRequestComponent>(),
+                ActivationPendingTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityActivationPendingComponent>(),
+                CommitRequestTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityCommitRequestComponent>(),
+                DestroyOnCleanupTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityDestroyOnCleanupComponent>(),
+                MainTargetTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityMainTargetComponent>(),
                 GrantedByEffectLookup = SystemAPI.GetComponentLookup<AbilityGrantedByEffectComponent>(isReadOnly: true),
                 AbilitySlotLookup = SystemAPI.GetBufferLookup<AbilitySlotBuffer>(),
                 GrantedAbilityRuntimeLookup = SystemAPI.GetBufferLookup<GEGrantedAbilityRuntimeBuffer>(),
@@ -65,9 +68,10 @@ namespace GAS.Runtime
                 TagMaskLookup = SystemAPI.GetComponentLookup<TagMaskComponent>(),
                 FixedTagMaskLookup = SystemAPI.GetComponentLookup<TagFixedMaskComponent>(isReadOnly: true),
                 EventBusEntity = eventBusEntity,
+                StreamEntity = streamEntity,
                 Frame = frame,
-                EventBusLookup = SystemAPI.GetComponentLookup<GameplayEventBusComponent>(),
-                GameplayEventLookup = SystemAPI.GetBufferLookup<GameplayEventBusEventBuffer>(),
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
+                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
                 StructuralEcb = structuralEcb,
             }.Schedule(_cleanupQuery, state.Dependency);
         }
@@ -81,12 +85,12 @@ namespace GAS.Runtime
         {
             [ReadOnly] public EntityTypeHandle EntityTypeHandle;
             public ComponentTypeHandle<AbilityStateComponent> StateTypeHandle;
-            public ComponentLookup<AbilityCancelRequestComponent> CancelRequestLookup;
-            public ComponentLookup<AbilityEndRequestComponent> EndRequestLookup;
-            public ComponentLookup<AbilityActivationPendingComponent> ActivationPendingLookup;
-            public ComponentLookup<AbilityCommitRequestComponent> CommitRequestLookup;
-            public ComponentLookup<AbilityDestroyOnCleanupComponent> DestroyOnCleanupLookup;
-            public ComponentLookup<AbilityMainTargetComponent> MainTargetLookup;
+            public ComponentTypeHandle<AbilityCancelRequestComponent> CancelRequestTypeHandle;
+            public ComponentTypeHandle<AbilityEndRequestComponent> EndRequestTypeHandle;
+            public ComponentTypeHandle<AbilityActivationPendingComponent> ActivationPendingTypeHandle;
+            public ComponentTypeHandle<AbilityCommitRequestComponent> CommitRequestTypeHandle;
+            public ComponentTypeHandle<AbilityDestroyOnCleanupComponent> DestroyOnCleanupTypeHandle;
+            public ComponentTypeHandle<AbilityMainTargetComponent> MainTargetTypeHandle;
             [ReadOnly] public ComponentLookup<AbilityGrantedByEffectComponent> GrantedByEffectLookup;
             public BufferLookup<AbilitySlotBuffer> AbilitySlotLookup;
             public BufferLookup<GEGrantedAbilityRuntimeBuffer> GrantedAbilityRuntimeLookup;
@@ -97,9 +101,10 @@ namespace GAS.Runtime
             public ComponentLookup<TagMaskComponent> TagMaskLookup;
             [ReadOnly] public ComponentLookup<TagFixedMaskComponent> FixedTagMaskLookup;
             public Entity EventBusEntity;
+            public Entity StreamEntity;
             public int Frame;
-            public ComponentLookup<GameplayEventBusComponent> EventBusLookup;
-            public BufferLookup<GameplayEventBusEventBuffer> GameplayEventLookup;
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            public BufferLookup<GameplayEventBuffer> FactLookup;
             public EntityCommandBuffer.ParallelWriter StructuralEcb;
 
             public void Execute(
@@ -110,24 +115,45 @@ namespace GAS.Runtime
             {
                 var abilities = chunk.GetNativeArray(EntityTypeHandle);
                 var states = chunk.GetNativeArray(ref StateTypeHandle);
+                var cancelRequests = chunk.GetNativeArray(ref CancelRequestTypeHandle);
+                var endRequests = chunk.GetNativeArray(ref EndRequestTypeHandle);
+                var mainTargets = chunk.GetNativeArray(ref MainTargetTypeHandle);
+                var cancelRequestMask = chunk.GetEnabledMask(ref CancelRequestTypeHandle);
+                var endRequestMask = chunk.GetEnabledMask(ref EndRequestTypeHandle);
+                var activationPendingMask = chunk.GetEnabledMask(ref ActivationPendingTypeHandle);
+                var commitRequestMask = chunk.GetEnabledMask(ref CommitRequestTypeHandle);
+                var destroyOnCleanupMask = chunk.GetEnabledMask(ref DestroyOnCleanupTypeHandle);
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
                     var ability = abilities[entityIndex];
                     var state = states[entityIndex];
-                    if (!TryResolveCleanupRequest(ability, out var cleanupRequest))
+                    if (!TryResolveCleanupRequest(
+                            entityIndex,
+                            cancelRequests,
+                            endRequests,
+                            cancelRequestMask,
+                            endRequestMask,
+                            out var cleanupRequest))
+                    {
                         continue;
+                    }
 
                     var owner = state.Owner;
                     RemoveActivationOwnedTags(owner, ability);
-                    var destroyOnCleanup = CleanupGrantedAbilityIfNeeded(ability, owner, cleanupRequest.ShouldCancel);
+                    var destroyOnCleanupEnabled = destroyOnCleanupMask[entityIndex];
+                    var destroyOnCleanup = CleanupGrantedAbilityIfNeeded(
+                        ability,
+                        owner,
+                        cleanupRequest.ShouldCancel,
+                        ref destroyOnCleanupEnabled);
 
-                    DisableComponentIfPresent(ref ActivationPendingLookup, ability);
-                    DisableComponentIfPresent(ref CommitRequestLookup, ability);
-                    DisableComponentIfPresent(ref CancelRequestLookup, ability);
-                    DisableComponentIfPresent(ref EndRequestLookup, ability);
-                    if (MainTargetLookup.HasComponent(ability))
-                        MainTargetLookup[ability] = new AbilityMainTargetComponent { TargetAsc = Entity.Null };
+                    activationPendingMask[entityIndex] = false;
+                    commitRequestMask[entityIndex] = false;
+                    cancelRequestMask[entityIndex] = false;
+                    endRequestMask[entityIndex] = false;
+                    destroyOnCleanupMask[entityIndex] = destroyOnCleanupEnabled;
+                    mainTargets[entityIndex] = new AbilityMainTargetComponent { TargetAsc = Entity.Null };
 
                     state.Phase = EAbilityPhase.Ready;
                     state.Timer = 0f;
@@ -136,18 +162,23 @@ namespace GAS.Runtime
 
                     EnqueueLifecycleEvent(ability, owner, in state, in cleanupRequest);
 
-                    if (destroyOnCleanup || IsDestroyOnCleanupEnabled(ability))
+                    if (destroyOnCleanup || destroyOnCleanupEnabled)
                         StructuralEcb.DestroyEntity(unfilteredChunkIndex, ability);
                 }
             }
 
-            private bool TryResolveCleanupRequest(Entity ability, out AbilityLifecycleCleanupRequest cleanupRequest)
+            private static bool TryResolveCleanupRequest(
+                int entityIndex,
+                NativeArray<AbilityCancelRequestComponent> cancelRequests,
+                NativeArray<AbilityEndRequestComponent> endRequests,
+                EnabledMask cancelRequestMask,
+                EnabledMask endRequestMask,
+                out AbilityLifecycleCleanupRequest cleanupRequest)
             {
                 cleanupRequest = default;
-                if (CancelRequestLookup.HasComponent(ability)
-                    && CancelRequestLookup.IsComponentEnabled(ability))
+                if (cancelRequestMask[entityIndex])
                 {
-                    var cancelRequest = CancelRequestLookup[ability];
+                    var cancelRequest = cancelRequests[entityIndex];
                     cleanupRequest = new AbilityLifecycleCleanupRequest
                     {
                         ShouldCancel = true,
@@ -159,10 +190,9 @@ namespace GAS.Runtime
                     return true;
                 }
 
-                if (EndRequestLookup.HasComponent(ability)
-                    && EndRequestLookup.IsComponentEnabled(ability))
+                if (endRequestMask[entityIndex])
                 {
-                    var endRequest = EndRequestLookup[ability];
+                    var endRequest = endRequests[entityIndex];
                     cleanupRequest = new AbilityLifecycleCleanupRequest
                     {
                         ShouldEnd = true,
@@ -177,7 +207,11 @@ namespace GAS.Runtime
                 return false;
             }
 
-            private bool CleanupGrantedAbilityIfNeeded(Entity ability, Entity owner, bool canceled)
+            private bool CleanupGrantedAbilityIfNeeded(
+                Entity ability,
+                Entity owner,
+                bool canceled,
+                ref bool destroyOnCleanupEnabled)
             {
                 if (!GrantedByEffectLookup.HasComponent(ability))
                     return false;
@@ -188,7 +222,7 @@ namespace GAS.Runtime
                     GrantedAbilityRemovePolicy.WhenEnd => !canceled,
                     GrantedAbilityRemovePolicy.WhenCancel => canceled,
                     GrantedAbilityRemovePolicy.WhenCancelOrEnd => true,
-                    GrantedAbilityRemovePolicy.SyncWithEffect => IsDestroyOnCleanupEnabled(ability),
+                    GrantedAbilityRemovePolicy.SyncWithEffect => destroyOnCleanupEnabled,
                     _ => false,
                 };
 
@@ -198,7 +232,7 @@ namespace GAS.Runtime
                 RemoveAbilityFromAsc(owner, ability);
                 ClearRuntimeGrantedAbility(granted.SourceEffect, ability);
                 RefreshGrantedAbilityStoreState(granted.SourceEffect);
-                EnableDestroyOnCleanup(ability);
+                destroyOnCleanupEnabled = true;
                 return true;
             }
 
@@ -335,50 +369,49 @@ namespace GAS.Runtime
                 TagMaskLookup[owner] = mask;
             }
 
-            private void EnableDestroyOnCleanup(Entity ability)
-            {
-                if (DestroyOnCleanupLookup.HasComponent(ability))
-                    DestroyOnCleanupLookup.SetComponentEnabled(ability, true);
-            }
-
-            private bool IsDestroyOnCleanupEnabled(Entity ability)
-            {
-                return DestroyOnCleanupLookup.HasComponent(ability)
-                       && DestroyOnCleanupLookup.IsComponentEnabled(ability);
-            }
-
             private void EnqueueLifecycleEvent(
                 Entity ability,
                 Entity owner,
                 in AbilityStateComponent state,
                 in AbilityLifecycleCleanupRequest cleanupRequest)
             {
-                if (EventBusEntity == Entity.Null
-                    || !EventBusLookup.HasComponent(EventBusEntity)
-                    || !GameplayEventLookup.HasBuffer(EventBusEntity))
+                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
                     return;
 
-                var eventBus = EventBusLookup[EventBusEntity];
-                var events = GameplayEventLookup[EventBusEntity];
-                events.Add(new GameplayEventBusEventBuffer
+                var fact = new GameplayEventBuffer
                 {
                     Frame = Frame,
-                    Sequence = eventBus.NextSequence,
-                    Type = cleanupRequest.ShouldCancel
+                    EventType = cleanupRequest.ShouldCancel
                         ? EGameplayEventType.AbilityCanceled
                         : EGameplayEventType.AbilityEnded,
+                    Domain = EGameplayFactDomain.Ability,
+                    Category = EGameplayFactCategory.StateChange,
+                    Severity = EGameplayFactSeverity.Info,
                     SourceAsc = owner,
                     TargetAsc = owner,
                     SourceAbility = ability,
-                    GameplayEffect = cleanupRequest.SourceEffect,
-                    RelatedAbility = cleanupRequest.SourceAbility,
+                    SourceEffect = cleanupRequest.SourceEffect,
                     EventCode = state.Code,
                     ReasonCode = (int)cleanupRequest.Reason,
-                    RelatedAbilityCode = cleanupRequest.SourceAbilityCode,
                     Value = cleanupRequest.SourceAbilityCode,
-                });
-                eventBus.NextSequence++;
-                EventBusLookup[EventBusEntity] = eventBus;
+                };
+                if (StreamLookup.HasComponent(StreamEntity))
+                {
+                    var stream = StreamLookup[StreamEntity];
+                    fact.Sequence = Allocate(ref stream.NextFactSequence);
+                    StreamLookup[StreamEntity] = stream;
+                }
+
+                FactLookup[StreamEntity].Add(fact);
+            }
+
+            private static int Allocate(ref int next)
+            {
+                var value = next;
+                next++;
+                if (next <= 0)
+                    next = 1;
+                return value <= 0 ? Allocate(ref next) : value;
             }
 
             private static int FindSlot(DynamicBuffer<ActiveGameplayEffectBuffer> slots, Entity effect)
@@ -398,15 +431,6 @@ namespace GAS.Runtime
             public Entity SourceAbility;
             public Entity SourceEffect;
             public int SourceAbilityCode;
-        }
-
-        private static void DisableComponentIfPresent<T>(
-            ref ComponentLookup<T> lookup,
-            Entity entity)
-            where T : unmanaged, IComponentData, IEnableableComponent
-        {
-            if (lookup.HasComponent(entity) && lookup.IsComponentEnabled(entity))
-                lookup.SetComponentEnabled(entity, false);
         }
     }
 }

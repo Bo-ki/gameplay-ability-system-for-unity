@@ -14,13 +14,16 @@ namespace GAS.Runtime
 
         public void OnCreate(ref SystemState state)
         {
-            _definitionQuery = SystemAPI.QueryBuilder()
-                .WithAll<
-                    GEContextComponent,
-                    GEEffectSpecComponent,
-                    GEExecutionCalculationDefinitionBuffer,
-                    GEExecutionCalculationValueBuffer>()
-                .Build();
+            _definitionQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<GEContextComponent>(),
+                    ComponentType.ReadOnly<GEEffectSpecComponent>(),
+                    ComponentType.ReadOnly<GEExecutionCalculationDefinitionBuffer>(),
+                    ComponentType.ReadWrite<GEExecutionCalculationValueBuffer>(),
+                },
+            });
         }
 
         public void OnUpdate(ref SystemState state)
@@ -29,8 +32,8 @@ namespace GAS.Runtime
             if (effectChunkCount <= 0)
                 return;
 
-            var eventBusEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
-                ? resolvedEventBus
+            var streamEntity = SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var resolvedStream)
+                ? resolvedStream
                 : Entity.Null;
             var factEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged)
@@ -47,7 +50,7 @@ namespace GAS.Runtime
                 SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerRequestValueBuffer>(isReadOnly: true),
                 CaptureLookup = SystemAPI.GetBufferLookup<GEAttributeCaptureValueBuffer>(isReadOnly: true),
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true),
-                EventBusEntity = eventBusEntity,
+                StreamEntity = streamEntity,
                 FactEcb = factEcb,
             };
             state.Dependency = calculationJob.ScheduleParallel(_definitionQuery, state.Dependency);
@@ -67,7 +70,7 @@ namespace GAS.Runtime
             [ReadOnly] public BufferLookup<GESetByCallerRequestValueBuffer> SetByCallerLookup;
             [ReadOnly] public BufferLookup<GEAttributeCaptureValueBuffer> CaptureLookup;
             [ReadOnly] public BufferLookup<AttributeValueBuffer> AttributeLookup;
-            public Entity EventBusEntity;
+            public Entity StreamEntity;
             public EntityCommandBuffer.ParallelWriter FactEcb;
 
             public void Execute(
@@ -318,16 +321,19 @@ namespace GAS.Runtime
                 int eventCode,
                 float value)
             {
-                if (EventBusEntity == Entity.Null)
+                if (StreamEntity == Entity.Null)
                     return;
 
-                FactEcb.AppendToBuffer(sortKey, EventBusEntity, new GameplayEventBusEventBuffer
+                FactEcb.AppendToBuffer(sortKey, StreamEntity, new GameplayEventBuffer
                 {
-                    Type = EGameplayEventType.ExecutionCalculationOutputUpdated,
+                    EventType = EGameplayEventType.ExecutionCalculationOutputUpdated,
+                    Domain = EGameplayFactDomain.ExecutionCalculation,
+                    Category = EGameplayFactCategory.StateChange,
+                    Severity = EGameplayFactSeverity.Info,
                     SourceAsc = context.SourceAsc,
                     TargetAsc = context.TargetAsc,
                     SourceAbility = context.SourceAbility,
-                    GameplayEffect = effect,
+                    SourceEffect = effect,
                     ContextId = context.ContextId,
                     EventCode = eventCode,
                     Value = value,

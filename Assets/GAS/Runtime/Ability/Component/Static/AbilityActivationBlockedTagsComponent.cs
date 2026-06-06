@@ -14,13 +14,13 @@ namespace GAS.Runtime
         public int[] any;
         public int[] none;
 
-        public override void LoadToGameplayAbilityEntity(Entity ability)
+        public override void LoadToGameplayAbilityEntity(EntityManager entityManager, Entity ability)
         {
-            _entityManager.SetComponentData(ability, new AbilityActivationBlockedTagsComponent
+            entityManager.SetComponentData(ability, new AbilityActivationBlockedTagsComponent
             {
                 requirement = TagHelper.BuildRequirementMask(all, any, none ?? tags)
             });
-            _entityManager.SetComponentEnabled<AbilityActivationBlockedTagsComponent>(ability, true);
+            entityManager.SetComponentEnabled<AbilityActivationBlockedTagsComponent>(ability, true);
         }
     }
 }

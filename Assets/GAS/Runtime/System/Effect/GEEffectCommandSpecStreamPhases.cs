@@ -1,4 +1,5 @@
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using static GAS.Runtime.EffectCommandSpecStreamPhaseUtility;
@@ -80,21 +81,6 @@ namespace GAS.Runtime
     }
 
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
-    [UpdateAfter(typeof(AbilityTryActivateSystem))]
-    public partial struct GEEffectCommandIngestSystem : ISystem
-    {
-        public void OnCreate(ref SystemState state)
-        {
-            state.RequireForUpdate<GEEffectCommandStreamComponent>();
-        }
-
-        public void OnUpdate(ref SystemState state)
-        {
-        }
-    }
-
-    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GEExecutionCalculationOutputModifierSystem))]
     [BurstCompile]
@@ -111,24 +97,16 @@ namespace GAS.Runtime
         public void OnUpdate(ref SystemState state)
         {
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
-            var eventBusEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
-                ? resolvedEventBus
-                : Entity.Null;
             var frame = SystemAPI.GetSingleton<GlobalTimer>().Frame;
 
             state.Dependency = new GameplayFactProjectionJob
             {
                 StreamEntity = streamEntity,
-                EventBusEntity = eventBusEntity,
                 Frame = frame,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(isReadOnly: true),
                 SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(isReadOnly: true),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
-                EventBusLookup = SystemAPI.GetComponentLookup<GameplayEventBusComponent>(isReadOnly: false),
-                GameplayEventLookup = SystemAPI.GetBufferLookup<GameplayEventBusEventBuffer>(isReadOnly: false),
-                AttributeEventLookup = SystemAPI.GetBufferLookup<AttributeChangeEventBuffer>(isReadOnly: false),
-                CueRequestLookup = SystemAPI.GetBufferLookup<CueRequestBuffer>(isReadOnly: false),
             }.Schedule(state.Dependency);
         }
 
@@ -136,16 +114,11 @@ namespace GAS.Runtime
         private struct GameplayFactProjectionJob : IJob
         {
             public Entity StreamEntity;
-            public Entity EventBusEntity;
             public int Frame;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<AttributeModifierBuffer> DeltaLookup;
             public BufferLookup<GEEffectSpecBuffer> SpecLookup;
             public BufferLookup<GameplayEventBuffer> FactLookup;
-            public ComponentLookup<GameplayEventBusComponent> EventBusLookup;
-            public BufferLookup<GameplayEventBusEventBuffer> GameplayEventLookup;
-            public BufferLookup<AttributeChangeEventBuffer> AttributeEventLookup;
-            public BufferLookup<CueRequestBuffer> CueRequestLookup;
 
             public void Execute()
             {
@@ -162,9 +135,6 @@ namespace GAS.Runtime
                 var deltas = DeltaLookup[StreamEntity];
                 var specs = SpecLookup[StreamEntity];
                 var facts = FactLookup[StreamEntity];
-                var eventWriter = CreateEventWriter();
-
-                BridgeExistingAttributeFacts(facts, ClampCursor(stream.EventBridgeFactCursor, facts.Length), ref eventWriter);
 
                 var deltaStart = ClampCursor(stream.FactProjectionDeltaCursor, deltas.Length);
                 for (var i = deltaStart; i < deltas.Length; i++)
@@ -195,108 +165,22 @@ namespace GAS.Runtime
                         NewValue = delta.NewValue,
                     };
                     facts.Add(fact);
-                    BridgeAttributeFact(in fact, ref eventWriter);
                 }
 
                 var cueStart = ClampCursor(stream.CueProjectionSpecCursor, specs.Length);
                 for (var i = cueStart; i < specs.Length; i++)
-                    ProjectCueRequest(specs[i], facts, ref stream, ref eventWriter);
+                    ProjectCueRequest(specs[i], facts, ref stream);
 
                 stream.FactProjectionDeltaCursor = deltas.Length;
-                stream.EventBridgeFactCursor = facts.Length;
                 stream.CueProjectionSpecCursor = specs.Length;
                 StreamLookup[StreamEntity] = stream;
-                FlushEventWriter(ref eventWriter);
             }
-
-            private ProjectionEventWriter CreateEventWriter()
-            {
-                if (EventBusEntity == Entity.Null)
-                    return default;
-
-                var writer = new ProjectionEventWriter
-                {
-                    EventBusEntity = EventBusEntity,
-                    Frame = Frame,
-                };
-
-                if (EventBusLookup.HasComponent(EventBusEntity))
-                {
-                    writer.HasEventBus = true;
-                    writer.EventBus = EventBusLookup[EventBusEntity];
-                }
-
-                if (GameplayEventLookup.HasBuffer(EventBusEntity))
-                {
-                    writer.HasGameplayEvents = true;
-                    writer.GameplayEvents = GameplayEventLookup[EventBusEntity];
-                }
-
-                if (AttributeEventLookup.HasBuffer(EventBusEntity))
-                {
-                    writer.HasAttributeEvents = true;
-                    writer.AttributeEvents = AttributeEventLookup[EventBusEntity];
-                }
-
-                if (CueRequestLookup.HasBuffer(EventBusEntity))
-                {
-                    writer.HasCueRequests = true;
-                    writer.CueRequests = CueRequestLookup[EventBusEntity];
-                }
-
-                return writer;
-            }
-
-            private void FlushEventWriter(ref ProjectionEventWriter writer)
-            {
-                if (writer.HasEventBus && writer.EventBusDirty)
-                    EventBusLookup[writer.EventBusEntity] = writer.EventBus;
-            }
-        }
-
-        private static void BridgeExistingAttributeFacts(
-            DynamicBuffer<GameplayEventBuffer> facts,
-            int start,
-            ref ProjectionEventWriter eventBusWriter)
-        {
-            for (var i = start; i < facts.Length; i++)
-                BridgeAttributeFact(facts[i], ref eventBusWriter);
-        }
-
-        private static void BridgeAttributeFact(
-            in GameplayEventBuffer fact,
-            ref ProjectionEventWriter eventBusWriter)
-        {
-            if (!eventBusWriter.IsCreated
-                || fact.Domain != EGameplayFactDomain.Attribute
-                || fact.EventType != EGameplayEventType.AttributeBaseValueChanged
-                || fact.TargetAsc == Entity.Null)
-            {
-                return;
-            }
-
-            eventBusWriter.EnqueueAttributeChangeEvent(new AttributeChangeEventBuffer
-            {
-                ASC = fact.TargetAsc,
-                SourceAsc = fact.SourceAsc,
-                SourceAbility = fact.SourceAbility,
-                GameplayEffect = fact.SourceEffect,
-                SourceFactSequence = fact.Sequence,
-                EventCode = fact.GameplayEffectCode,
-                AttrSetCode = fact.AttrSetCode,
-                AttributeCode = fact.AttributeCode,
-                OldValue = fact.OldValue,
-                NewValue = fact.NewValue,
-                ContextId = fact.ContextId,
-                IsBaseValue = true,
-            });
         }
 
         private static void ProjectCueRequest(
             in GEEffectSpecBuffer spec,
             DynamicBuffer<GameplayEventBuffer> facts,
-            ref GEEffectCommandStreamComponent stream,
-            ref ProjectionEventWriter eventBusWriter)
+            ref GEEffectCommandStreamComponent stream)
         {
             if (spec.CueRequestOnApplyCode <= 0
                 || spec.TargetAsc == Entity.Null)
@@ -325,87 +209,201 @@ namespace GAS.Runtime
                 EventCode = (int)EGameplayCueEvent.OnApply,
                 ReasonCode = spec.CueRequestOnApplyCode,
             });
+        }
+    }
 
-            if (!eventBusWriter.IsCreated)
-                return;
-
-            eventBusWriter.EnqueueCueRequest(new CueRequestBuffer
-            {
-                TargetAsc = spec.TargetAsc,
-                SourceAsc = spec.SourceAsc,
-                SourceAbility = spec.SourceAbility,
-                GameplayEffect = Entity.Null,
-                SourceEntity = spec.SourceAbility,
-                SourceType = CueSourceType.GameplayEffect,
-                CueEntity = Entity.Null,
-                SourceFactSequence = factSequence,
-                ContextId = spec.ContextId,
-                ReasonCode = spec.CueRequestOnApplyCode,
-                CueEvent = EGameplayCueEvent.OnApply,
-            });
-
-            eventBusWriter.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
-            {
-                SourceFactSequence = factSequence,
-                Type = EGameplayEventType.CueRequested,
-                SourceAsc = spec.SourceAsc,
-                TargetAsc = spec.TargetAsc,
-                SourceAbility = spec.SourceAbility,
-                ContextId = spec.ContextId,
-                EventCode = (int)EGameplayCueEvent.OnApply,
-                ReasonCode = spec.CueRequestOnApplyCode,
-            });
+    [DisableAutoCreation]
+    [UpdateInGroup(typeof(GASBoundaryProjectionSystemGroup), OrderFirst = true)]
+    [UpdateBefore(typeof(PresentationOutboxProjectionSystem))]
+    [UpdateBefore(typeof(ReplayLogSystem))]
+    [UpdateBefore(typeof(CueRequestBridgeSystem))]
+    [BurstCompile]
+    public partial struct GameplayFactBoundaryProjectionSystem : ISystem
+    {
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<GEEffectCommandStreamComponent>();
+            state.RequireForUpdate<GameplayEventBusComponent>();
         }
 
-        private struct ProjectionEventWriter
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
+            if (!SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var streamEntity)
+                || !SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var eventBusEntity))
+            {
+                return;
+            }
+
+            state.Dependency = new GameplayFactBoundaryProjectionJob
+            {
+                StreamEntity = streamEntity,
+                EventBusEntity = eventBusEntity,
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
+                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: true),
+                AttributeEventLookup = SystemAPI.GetBufferLookup<AttributeChangeEventBuffer>(isReadOnly: false),
+                CueRequestLookup = SystemAPI.GetBufferLookup<CueRequestBuffer>(isReadOnly: false),
+                TagChangeEventLookup = SystemAPI.GetBufferLookup<TagChangeEventBuffer>(isReadOnly: false),
+            }.Schedule(state.Dependency);
+        }
+
+        [BurstCompile]
+        private struct GameplayFactBoundaryProjectionJob : IJob
+        {
+            public Entity StreamEntity;
             public Entity EventBusEntity;
-            public int Frame;
-            public bool HasEventBus;
-            public bool EventBusDirty;
-            public bool HasGameplayEvents;
-            public bool HasAttributeEvents;
-            public bool HasCueRequests;
-            public GameplayEventBusComponent EventBus;
-            public DynamicBuffer<GameplayEventBusEventBuffer> GameplayEvents;
-            public DynamicBuffer<AttributeChangeEventBuffer> AttributeEvents;
-            public DynamicBuffer<CueRequestBuffer> CueRequests;
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            [ReadOnly] public BufferLookup<GameplayEventBuffer> FactLookup;
+            public BufferLookup<AttributeChangeEventBuffer> AttributeEventLookup;
+            public BufferLookup<CueRequestBuffer> CueRequestLookup;
+            public BufferLookup<TagChangeEventBuffer> TagChangeEventLookup;
 
-            public bool IsCreated =>
-                EventBusEntity != Entity.Null
-                && (HasEventBus || HasGameplayEvents || HasAttributeEvents || HasCueRequests);
-
-            public void EnqueueGameplayEvent(GameplayEventBusEventBuffer evt)
+            public void Execute()
             {
-                if (!HasGameplayEvents)
+                if (StreamEntity == Entity.Null
+                    || EventBusEntity == Entity.Null
+                    || !StreamLookup.HasComponent(StreamEntity)
+                    || !FactLookup.HasBuffer(StreamEntity))
+                {
                     return;
-
-                evt.Frame = Frame;
-                if (HasEventBus)
-                {
-                    evt.Sequence = EventBus.NextSequence;
-                    EventBus.NextSequence++;
-                    EventBusDirty = true;
-                }
-                else
-                {
-                    evt.Sequence = 0;
                 }
 
-                GameplayEvents.Add(evt);
+                var stream = StreamLookup[StreamEntity];
+                var facts = FactLookup[StreamEntity];
+                var start = ClampCursor(stream.EventBridgeFactCursor, facts.Length);
+
+                var hasAttributeEvents = AttributeEventLookup.HasBuffer(EventBusEntity);
+                var hasCueRequests = CueRequestLookup.HasBuffer(EventBusEntity);
+                var hasTagChanges = TagChangeEventLookup.HasBuffer(EventBusEntity);
+                if (!hasAttributeEvents && !hasCueRequests && !hasTagChanges)
+                {
+                    stream.EventBridgeFactCursor = facts.Length;
+                    StreamLookup[StreamEntity] = stream;
+                    return;
+                }
+
+                var attributeEvents = hasAttributeEvents
+                    ? AttributeEventLookup[EventBusEntity]
+                    : default;
+                var cueRequests = hasCueRequests
+                    ? CueRequestLookup[EventBusEntity]
+                    : default;
+                var tagChanges = hasTagChanges
+                    ? TagChangeEventLookup[EventBusEntity]
+                    : default;
+
+                for (var i = start; i < facts.Length; i++)
+                {
+                    var fact = facts[i];
+                    if (hasAttributeEvents
+                        && TryCreateAttributeChangeEvent(in fact, out var attributeEvent))
+                    {
+                        attributeEvents.Add(attributeEvent);
+                        continue;
+                    }
+
+                    if (hasCueRequests
+                        && TryCreateCueRequest(in fact, out var cueRequest))
+                    {
+                        cueRequests.Add(cueRequest);
+                        continue;
+                    }
+
+                    if (hasTagChanges
+                        && TryCreateTagChange(in fact, out var tagChange))
+                    {
+                        tagChanges.Add(tagChange);
+                    }
+                }
+
+                stream.EventBridgeFactCursor = facts.Length;
+                StreamLookup[StreamEntity] = stream;
+            }
+        }
+
+        private static bool TryCreateAttributeChangeEvent(
+            in GameplayEventBuffer fact,
+            out AttributeChangeEventBuffer evt)
+        {
+            evt = default;
+
+            if (fact.Domain != EGameplayFactDomain.Attribute
+                || fact.EventType != EGameplayEventType.AttributeBaseValueChanged
+                || fact.TargetAsc == Entity.Null)
+            {
+                return false;
             }
 
-            public void EnqueueAttributeChangeEvent(AttributeChangeEventBuffer evt)
+            evt = new AttributeChangeEventBuffer
             {
-                if (HasAttributeEvents)
-                    AttributeEvents.Add(evt);
+                ASC = fact.TargetAsc,
+                SourceAsc = fact.SourceAsc,
+                SourceAbility = fact.SourceAbility,
+                GameplayEffect = fact.SourceEffect,
+                SourceFactSequence = fact.Sequence,
+                EventCode = fact.GameplayEffectCode,
+                AttrSetCode = fact.AttrSetCode,
+                AttributeCode = fact.AttributeCode,
+                OldValue = fact.OldValue,
+                NewValue = fact.NewValue,
+                ContextId = fact.ContextId,
+                IsBaseValue = true,
+            };
+            return true;
+        }
+
+        private static bool TryCreateCueRequest(
+            in GameplayEventBuffer fact,
+            out CueRequestBuffer request)
+        {
+            request = default;
+
+            if (fact.Domain != EGameplayFactDomain.Cue
+                || fact.EventType != EGameplayEventType.CueRequested
+                || fact.TargetAsc == Entity.Null)
+            {
+                return false;
             }
 
-            public void EnqueueCueRequest(CueRequestBuffer evt)
+            request = new CueRequestBuffer
             {
-                if (HasCueRequests)
-                    CueRequests.Add(evt);
+                TargetAsc = fact.TargetAsc,
+                SourceAsc = fact.SourceAsc,
+                SourceAbility = fact.SourceAbility,
+                GameplayEffect = fact.SourceEffect,
+                SourceEntity = fact.SourceAbility,
+                SourceType = CueSourceType.GameplayEffect,
+                CueEntity = Entity.Null,
+                SourceFactSequence = fact.Sequence,
+                ContextId = fact.ContextId,
+                ReasonCode = fact.ReasonCode,
+                CueEvent = (EGameplayCueEvent)fact.EventCode,
+            };
+            return true;
+        }
+
+        private static bool TryCreateTagChange(
+            in GameplayEventBuffer fact,
+            out TagChangeEventBuffer evt)
+        {
+            evt = default;
+
+            if (fact.Domain != EGameplayFactDomain.Tag
+                || fact.EventType != EGameplayEventType.TagChanged
+                || fact.TargetAsc == Entity.Null)
+            {
+                return false;
             }
+
+            evt = new TagChangeEventBuffer
+            {
+                SourceFactSequence = fact.Sequence,
+                ASC = fact.TargetAsc,
+                TagIndex = fact.EventCode,
+                Added = fact.ReasonCode != 0,
+            };
+            return true;
         }
     }
 

@@ -10,14 +10,14 @@ namespace GAS.Runtime
 
     public sealed class ConfCueOnActivate : ConfCueBase
     {
-        public override void LoadToGameplayEffectEntity(Entity ge)
+        public override void LoadToGameplayEffectEntity(EntityManager entityManager, Entity ge)
         {
-            var entities = CreateCueEntityArray(ge);
-            GASManager.EntityManager.SetComponentData(ge, new GECueOnActivateComponent
+            var entities = CreateCueEntityArray(entityManager, ge);
+            entityManager.SetComponentData(ge, new GECueOnActivateComponent
             {
                 cues = entities
             });
-            GASManager.EntityManager.SetComponentEnabled<GECueOnActivateComponent>(ge, true);
+            entityManager.SetComponentEnabled<GECueOnActivateComponent>(ge, true);
         }
     }
 }

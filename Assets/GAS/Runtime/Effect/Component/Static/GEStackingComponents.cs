@@ -66,9 +66,9 @@ namespace GAS.Runtime
         public bool clearStackOnOverflow;
         public int[] OverflowEffectCodes;
 
-        public override void LoadToGameplayEffectEntity(Entity ge)
+        public override void LoadToGameplayEffectEntity(EntityManager entityManager, Entity ge)
         {
-            var em = GASManager.EntityManager;
+            var em = entityManager;
             em.SetComponentData(ge, new GEStackingDefinitionComponent
             {
                 StackType = StackType,

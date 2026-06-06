@@ -17,15 +17,27 @@ namespace GAS.Runtime
 
         public void OnCreate(ref SystemState state)
         {
-            _ascQuery = SystemAPI.QueryBuilder()
-                .WithAll<ASCDestroyingComponent>()
-                .Build();
-            _effectQuery = SystemAPI.QueryBuilder()
-                .WithAll<GEContextComponent>()
-                .Build();
-            _abilityQuery = SystemAPI.QueryBuilder()
-                .WithAll<AbilityStateComponent>()
-                .Build();
+            _ascQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<ASCDestroyingComponent>(),
+                },
+            });
+            _effectQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<GEContextComponent>(),
+                },
+            });
+            _abilityQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<AbilityStateComponent>(),
+                },
+            });
             state.RequireForUpdate(_ascQuery);
         }
 

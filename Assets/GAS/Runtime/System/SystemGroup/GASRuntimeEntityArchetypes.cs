@@ -152,9 +152,9 @@ namespace GAS.Runtime
                     ComponentType.ReadWrite<GameplayEventBusComponent>(),
                     ComponentType.ReadWrite<PresentationOutboxProjectionStateComponent>(),
                     ComponentType.ReadWrite<PresentationOutboxProjectionOptionsComponent>(),
-                    ComponentType.ReadWrite<DamageEventBuffer>(),
                     ComponentType.ReadWrite<TagChangeEventBuffer>(),
-                    ComponentType.ReadWrite<GameplayEventBusEventBuffer>(),
+                    ComponentType.ReadWrite<AbilityLifecycleRequestBuffer>(),
+                    ComponentType.ReadWrite<AttributeOwnerMarkerRequestBuffer>(),
                     ComponentType.ReadWrite<AttributeChangeEventBuffer>(),
                     ComponentType.ReadWrite<CueRequestBuffer>(),
                     ComponentType.ReadWrite<PresentationOutboxOwnerBuffer>());

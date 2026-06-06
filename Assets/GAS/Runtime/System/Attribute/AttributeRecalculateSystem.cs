@@ -2,6 +2,7 @@ using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 
 namespace GAS.Runtime
@@ -19,12 +20,15 @@ namespace GAS.Runtime
 
         public void OnCreate(ref SystemState state)
         {
-            _dirtyQuery = SystemAPI.QueryBuilder()
-                .WithAll<
-                    TagMaskComponent,
-                    AttributeValueBuffer,
-                    AttributeDirtyComponent>()
-                .Build();
+            _dirtyQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<TagMaskComponent>(),
+                    ComponentType.ReadWrite<AttributeValueBuffer>(),
+                    ComponentType.ReadOnly<AttributeDirtyComponent>(),
+                },
+            });
 
             _query = state.GetEntityQuery(new EntityQueryDesc
             {
@@ -79,7 +83,8 @@ namespace GAS.Runtime
                 var dirtyMask = chunk.GetEnabledMask(ref DirtyTypeHandle);
                 var changeEventPendingMask = chunk.GetEnabledMask(ref ChangeEventPendingTypeHandle);
 
-                for (var entityIndex = 0; entityIndex < chunk.Count; entityIndex++)
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
                 {
                     if (!dirtyMask.GetBit(entityIndex))
                         continue;
@@ -171,90 +176,154 @@ namespace GAS.Runtime
         }
     }
 
-    /// <summary>
-    /// 将 CurrentValue 聚合结果投影为事件事实。它不参与数值计算。
-    /// </summary>
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
-    [UpdateAfter(typeof(AttributeRecalculateSystem))]
-    public partial struct AttributeChangeEventProjectionSystem : ISystem
+    [UpdateBefore(typeof(AttributeRecalculateSystem))]
+    [BurstCompile]
+    public partial struct AttributeOwnerMarkerRequestSystem : ISystem
     {
-        private EntityQuery _query;
+        private EntityQuery _ownerQuery;
 
+        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            _query = SystemAPI.QueryBuilder()
-                .WithAll<AttributeValueBuffer, AttributeChangeEventPendingComponent>()
-                .Build();
-            state.RequireForUpdate(_query);
-        }
-
-        public void OnUpdate(ref SystemState state)
-        {
-            if (!SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var eventBusEntity))
-                return;
-
-            state.Dependency = new AttributeChangeEventProjectionJob
+            _ownerQuery = state.GetEntityQuery(new EntityQueryDesc
             {
-                EventBusEntity = eventBusEntity,
-                AttributeEventsLookup = SystemAPI.GetBufferLookup<AttributeChangeEventBuffer>(),
-            }.Schedule(_query, state.Dependency);
+                All = new[]
+                {
+                    ComponentType.ReadWrite<AttributeDirtyComponent>(),
+                    ComponentType.ReadWrite<AttributeActiveModifierPresentComponent>(),
+                    ComponentType.ReadOnly<AttributeActiveModifierBuffer>(),
+                },
+                Options = EntityQueryOptions.IgnoreComponentEnabledState,
+            });
+            state.RequireForUpdate<GameplayEventBusComponent>();
+            state.RequireForUpdate(_ownerQuery);
         }
 
         [BurstCompile]
-        private partial struct AttributeChangeEventProjectionJob : IJobEntity
+        public void OnUpdate(ref SystemState state)
         {
+            var eventBusEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
+                ? resolvedEventBus
+                : Entity.Null;
+            var em = state.EntityManager;
+            var bufferedRequestCount = eventBusEntity != Entity.Null
+                                       && em.HasBuffer<AttributeOwnerMarkerRequestBuffer>(eventBusEntity)
+                ? em.GetBuffer<AttributeOwnerMarkerRequestBuffer>(eventBusEntity).Length
+                : 0;
+            if (bufferedRequestCount <= 0)
+                return;
+
+            var requests = new NativeList<AttributeOwnerMarkerRequestRecord>(
+                math.max(1, bufferedRequestCount),
+                Allocator.TempJob);
+
+            var collectDependency = new AttributeOwnerMarkerRequestCollectJob
+            {
+                RequestLookup = SystemAPI.GetBufferLookup<AttributeOwnerMarkerRequestBuffer>(isReadOnly: true),
+                EventBusEntity = eventBusEntity,
+                Requests = requests,
+            }.Schedule(state.Dependency);
+
+            state.Dependency = new AttributeOwnerMarkerRequestApplyJob
+            {
+                EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
+                DirtyTypeHandle = SystemAPI.GetComponentTypeHandle<AttributeDirtyComponent>(),
+                ActiveModifierPresentTypeHandle =
+                    SystemAPI.GetComponentTypeHandle<AttributeActiveModifierPresentComponent>(),
+                ActiveModifierTypeHandle =
+                    SystemAPI.GetBufferTypeHandle<AttributeActiveModifierBuffer>(isReadOnly: true),
+                Requests = requests,
+            }.Schedule(_ownerQuery, collectDependency);
+            state.Dependency = requests.Dispose(state.Dependency);
+        }
+
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
+        {
+        }
+
+        [BurstCompile]
+        private struct AttributeOwnerMarkerRequestCollectJob : IJob
+        {
+            [ReadOnly] public BufferLookup<AttributeOwnerMarkerRequestBuffer> RequestLookup;
             public Entity EventBusEntity;
-            public BufferLookup<AttributeChangeEventBuffer> AttributeEventsLookup;
+            public NativeList<AttributeOwnerMarkerRequestRecord> Requests;
 
-            private void Execute(
-                Entity entity,
-                DynamicBuffer<AttributeValueBuffer> attributes,
-                EnabledRefRW<AttributeChangeEventPendingComponent> changeEventPending)
+            public void Execute()
             {
-                if (EventBusEntity != Entity.Null && AttributeEventsLookup.HasBuffer(EventBusEntity))
+                if (EventBusEntity == Entity.Null || !RequestLookup.HasBuffer(EventBusEntity))
+                    return;
+
+                var source = RequestLookup[EventBusEntity];
+                for (var i = 0; i < source.Length; i++)
                 {
-                    var attributeEvents = AttributeEventsLookup[EventBusEntity];
-                    AppendAttributeChangeEvents(entity, attributes, attributeEvents);
+                    var request = source[i];
+                    if (request.ASC == Entity.Null)
+                        continue;
+
+                    Requests.Add(new AttributeOwnerMarkerRequestRecord
+                    {
+                        Sequence = request.Sequence,
+                        ASC = request.ASC,
+                        RequestKind = request.RequestKind,
+                    });
                 }
-
-                changeEventPending.ValueRW = false;
             }
         }
 
-        private static void AppendAttributeChangeEvents(
-            Entity entity,
-            DynamicBuffer<AttributeValueBuffer> attributes,
-            DynamicBuffer<AttributeChangeEventBuffer> attributeEvents)
+        [BurstCompile]
+        private struct AttributeOwnerMarkerRequestApplyJob : IJobChunk
         {
-            for (var attributeIndex = 0; attributeIndex < attributes.Length; attributeIndex++)
+            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
+            public ComponentTypeHandle<AttributeDirtyComponent> DirtyTypeHandle;
+            public ComponentTypeHandle<AttributeActiveModifierPresentComponent> ActiveModifierPresentTypeHandle;
+            [ReadOnly] public BufferTypeHandle<AttributeActiveModifierBuffer> ActiveModifierTypeHandle;
+            [ReadOnly] public NativeList<AttributeOwnerMarkerRequestRecord> Requests;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
             {
-                var attr = attributes[attributeIndex];
-                if (!attr.CurrentValueChangePending)
-                    continue;
+                var owners = chunk.GetNativeArray(EntityTypeHandle);
+                var dirtyMask = chunk.GetEnabledMask(ref DirtyTypeHandle);
+                var activeModifierPresentMask = chunk.GetEnabledMask(ref ActiveModifierPresentTypeHandle);
+                var activeModifiers = chunk.GetBufferAccessor(ref ActiveModifierTypeHandle);
 
-                if (attr.PreviousCurrentValue != attr.CurrentValue)
-                    attributeEvents.Add(CreateAttributeChangeEvent(entity, in attr));
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    var owner = owners[entityIndex];
+                    var shouldMarkDirty = false;
+                    var shouldRefreshActiveModifierPresent = false;
+                    for (var requestIndex = 0; requestIndex < Requests.Length; requestIndex++)
+                    {
+                        var request = Requests[requestIndex];
+                        if (request.ASC != owner)
+                            continue;
 
-                attr.PreviousCurrentValue = attr.CurrentValue;
-                attr.CurrentValueChangePending = false;
-                attributes[attributeIndex] = attr;
+                        if (request.RequestKind == EAttributeOwnerMarkerRequestKind.MarkDirty)
+                            shouldMarkDirty = true;
+                        else if (request.RequestKind == EAttributeOwnerMarkerRequestKind.SetActiveModifierPresent)
+                            shouldRefreshActiveModifierPresent = true;
+                    }
+
+                    if (shouldMarkDirty)
+                        dirtyMask[entityIndex] = true;
+                    if (shouldRefreshActiveModifierPresent)
+                        activeModifierPresentMask[entityIndex] = activeModifiers[entityIndex].Length > 0;
+                }
             }
         }
 
-        private static AttributeChangeEventBuffer CreateAttributeChangeEvent(
-            Entity asc,
-            in AttributeValueBuffer attr)
+        private struct AttributeOwnerMarkerRequestRecord
         {
-            return new AttributeChangeEventBuffer
-            {
-                ASC = asc,
-                AttrSetCode = attr.AttrSetCode,
-                AttributeCode = attr.Code,
-                OldValue = attr.PreviousCurrentValue,
-                NewValue = attr.CurrentValue,
-                IsBaseValue = false,
-            };
+            public int Sequence;
+            public Entity ASC;
+            public EAttributeOwnerMarkerRequestKind RequestKind;
         }
     }
 }

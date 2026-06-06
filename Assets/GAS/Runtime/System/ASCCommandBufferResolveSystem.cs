@@ -37,7 +37,10 @@ namespace GAS.Runtime
         public void OnUpdate(ref SystemState state)
         {
             var em = state.EntityManager;
-            var eventBusEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
+            var streamEntity = SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var resolvedStream)
+                ? resolvedStream
+                : Entity.Null;
+            var requestStreamEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
                 ? resolvedEventBus
                 : Entity.Null;
             var frame = SystemAPI.TryGetSingleton<GlobalTimer>(out var timer)
@@ -48,11 +51,23 @@ namespace GAS.Runtime
                 : default;
             var structuralEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
+            var abilityArchetype = GASRuntimeEntityArchetypes.Ability(em);
+
+            var markDestroyingJob = new ASCCommandBufferMarkDestroyingJob
+            {
+                DestroyingTypeHandle = SystemAPI.GetComponentTypeHandle<ASCDestroyingComponent>(),
+                DestroyCommandBufferTypeHandle =
+                    SystemAPI.GetBufferTypeHandle<ASCDestroyCommandBuffer>(isReadOnly: true),
+            };
+            var markDestroyingDependency = markDestroyingJob.Schedule(_query, state.Dependency);
 
             state.Dependency = new ASCCommandBufferResolveJob
             {
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
                 IdentityTypeHandle = SystemAPI.GetComponentTypeHandle<ASCIdentityComponent>(),
+                PendingTypeHandle = SystemAPI.GetComponentTypeHandle<ASCCommandPendingComponent>(),
+                DestroyingTypeHandle = SystemAPI.GetComponentTypeHandle<ASCDestroyingComponent>(isReadOnly: true),
+                AttributeDirtyTypeHandle = SystemAPI.GetComponentTypeHandle<AttributeDirtyComponent>(),
                 TagMaskTypeHandle = SystemAPI.GetComponentTypeHandle<TagMaskComponent>(),
                 FixedTagMaskTypeHandle = SystemAPI.GetComponentTypeHandle<TagFixedMaskComponent>(),
                 AscCommandBufferTypeHandle = SystemAPI.GetBufferTypeHandle<ASCCommandBuffer>(),
@@ -63,26 +78,21 @@ namespace GAS.Runtime
                 FixedTagSourceBufferTypeHandle = SystemAPI.GetBufferTypeHandle<TagFixedSourceBuffer>(),
                 TemporaryTagSourceBufferTypeHandle =
                     SystemAPI.GetBufferTypeHandle<TagTemporarySourceBuffer>(isReadOnly: true),
-                PendingLookup = SystemAPI.GetComponentLookup<ASCCommandPendingComponent>(),
-                DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(),
-                AttributeDirtyLookup = SystemAPI.GetComponentLookup<AttributeDirtyComponent>(),
+                DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
                 AbilityStateLookup = SystemAPI.GetComponentLookup<AbilityStateComponent>(),
                 AbilityMainTargetLookup = SystemAPI.GetComponentLookup<AbilityMainTargetComponent>(),
                 AbilityActivationPendingLookup = SystemAPI.GetComponentLookup<AbilityActivationPendingComponent>(),
                 AbilityCommitRequestLookup = SystemAPI.GetComponentLookup<AbilityCommitRequestComponent>(),
-                AbilityCancelRequestLookup = SystemAPI.GetComponentLookup<AbilityCancelRequestComponent>(),
-                AbilityEndRequestLookup = SystemAPI.GetComponentLookup<AbilityEndRequestComponent>(),
-                AbilityDestroyOnCleanupLookup = SystemAPI.GetComponentLookup<AbilityDestroyOnCleanupComponent>(),
-                EventBusLookup = SystemAPI.GetComponentLookup<GameplayEventBusComponent>(),
-                GameplayEventLookup = SystemAPI.GetBufferLookup<GameplayEventBusEventBuffer>(),
-                AttributeChangeEventLookup = SystemAPI.GetBufferLookup<AttributeChangeEventBuffer>(),
-                TagChangeEventLookup = SystemAPI.GetBufferLookup<TagChangeEventBuffer>(),
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
+                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
+                AbilityLifecycleRequestLookup = SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(),
                 StructuralEcb = structuralEcb,
-                AbilityArchetype = GASRuntimeEntityArchetypes.Ability(em),
+                AbilityArchetype = abilityArchetype,
                 Catalog = catalog,
-                EventBusEntity = eventBusEntity,
+                StreamEntity = streamEntity,
+                RequestStreamEntity = requestStreamEntity,
                 Frame = frame,
-            }.Schedule(_query, state.Dependency);
+            }.Schedule(_query, markDestroyingDependency);
         }
 
         public void OnDestroy(ref SystemState state)
@@ -90,10 +100,36 @@ namespace GAS.Runtime
         }
 
         [BurstCompile]
+        private struct ASCCommandBufferMarkDestroyingJob : IJobChunk
+        {
+            public ComponentTypeHandle<ASCDestroyingComponent> DestroyingTypeHandle;
+            [ReadOnly] public BufferTypeHandle<ASCDestroyCommandBuffer> DestroyCommandBufferTypeHandle;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var destroyingMask = chunk.GetEnabledMask(ref DestroyingTypeHandle);
+                var destroyCommandBuffers = chunk.GetBufferAccessorRO(ref DestroyCommandBufferTypeHandle);
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    if (destroyCommandBuffers[entityIndex].Length > 0)
+                        destroyingMask[entityIndex] = true;
+                }
+            }
+        }
+
+        [BurstCompile]
         private struct ASCCommandBufferResolveJob : IJobChunk
         {
             [ReadOnly] public EntityTypeHandle EntityTypeHandle;
             public ComponentTypeHandle<ASCIdentityComponent> IdentityTypeHandle;
+            public ComponentTypeHandle<ASCCommandPendingComponent> PendingTypeHandle;
+            [ReadOnly] public ComponentTypeHandle<ASCDestroyingComponent> DestroyingTypeHandle;
+            public ComponentTypeHandle<AttributeDirtyComponent> AttributeDirtyTypeHandle;
             public ComponentTypeHandle<TagMaskComponent> TagMaskTypeHandle;
             public ComponentTypeHandle<TagFixedMaskComponent> FixedTagMaskTypeHandle;
             public BufferTypeHandle<ASCCommandBuffer> AscCommandBufferTypeHandle;
@@ -103,24 +139,19 @@ namespace GAS.Runtime
             public BufferTypeHandle<AbilitySlotBuffer> AbilitySlotBufferTypeHandle;
             public BufferTypeHandle<TagFixedSourceBuffer> FixedTagSourceBufferTypeHandle;
             [ReadOnly] public BufferTypeHandle<TagTemporarySourceBuffer> TemporaryTagSourceBufferTypeHandle;
-            public ComponentLookup<ASCCommandPendingComponent> PendingLookup;
-            public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
-            public ComponentLookup<AttributeDirtyComponent> AttributeDirtyLookup;
+            [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
             public ComponentLookup<AbilityStateComponent> AbilityStateLookup;
             public ComponentLookup<AbilityMainTargetComponent> AbilityMainTargetLookup;
             public ComponentLookup<AbilityActivationPendingComponent> AbilityActivationPendingLookup;
             public ComponentLookup<AbilityCommitRequestComponent> AbilityCommitRequestLookup;
-            public ComponentLookup<AbilityCancelRequestComponent> AbilityCancelRequestLookup;
-            public ComponentLookup<AbilityEndRequestComponent> AbilityEndRequestLookup;
-            public ComponentLookup<AbilityDestroyOnCleanupComponent> AbilityDestroyOnCleanupLookup;
-            public ComponentLookup<GameplayEventBusComponent> EventBusLookup;
-            public BufferLookup<GameplayEventBusEventBuffer> GameplayEventLookup;
-            public BufferLookup<AttributeChangeEventBuffer> AttributeChangeEventLookup;
-            public BufferLookup<TagChangeEventBuffer> TagChangeEventLookup;
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
             public EntityCommandBuffer StructuralEcb;
             public EntityArchetype AbilityArchetype;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
-            public Entity EventBusEntity;
+            public Entity StreamEntity;
+            public Entity RequestStreamEntity;
             public int Frame;
 
             public void Execute(
@@ -140,6 +171,9 @@ namespace GAS.Runtime
                 var abilitySlotBuffers = chunk.GetBufferAccessor(ref AbilitySlotBufferTypeHandle);
                 var fixedTagSourceBuffers = chunk.GetBufferAccessor(ref FixedTagSourceBufferTypeHandle);
                 var temporaryTagSourceBuffers = chunk.GetBufferAccessorRO(ref TemporaryTagSourceBufferTypeHandle);
+                var pendingMask = chunk.GetEnabledMask(ref PendingTypeHandle);
+                var destroyingMask = chunk.GetEnabledMask(ref DestroyingTypeHandle);
+                var attributeDirtyMask = chunk.GetEnabledMask(ref AttributeDirtyTypeHandle);
 
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
@@ -155,12 +189,14 @@ namespace GAS.Runtime
                     var identity = identities[entityIndex];
                     var tagMask = tagMasks[entityIndex];
                     var fixedTagMask = fixedTagMasks[entityIndex];
+                    var ownerIsDestroying = destroyingMask[entityIndex];
+                    var ownerAttributeDirty = false;
 
                     if (destroyCommands.Length > 0)
                     {
                         ProcessDestroyCommand(asc, abilitySlots);
                     }
-                    else if (!IsDestroying(asc))
+                    else if (!ownerIsDestroying)
                     {
                         ProcessAscCommands(
                             asc,
@@ -168,14 +204,17 @@ namespace GAS.Runtime
                             attributes,
                             fixedTagSources,
                             temporaryTagSources,
+                            ref ownerAttributeDirty,
                             ref identity,
                             ref tagMask,
                             ref fixedTagMask);
-                        ProcessAbilityCommands(asc, abilityCommands, abilitySlots);
+                        ProcessAbilityCommands(asc, abilityCommands, abilitySlots, ownerIsDestroying);
+                        if (ownerAttributeDirty)
+                            attributeDirtyMask[entityIndex] = true;
                     }
 
                     ClearOwnerLocalCommands(ascCommands, abilityCommands, destroyCommands);
-                    PendingLookup.SetComponentEnabled(asc, false);
+                    pendingMask[entityIndex] = false;
                     identities[entityIndex] = identity;
                     tagMasks[entityIndex] = tagMask;
                     fixedTagMasks[entityIndex] = fixedTagMask;
@@ -188,6 +227,7 @@ namespace GAS.Runtime
                 DynamicBuffer<AttributeValueBuffer> attributes,
                 DynamicBuffer<TagFixedSourceBuffer> fixedTagSources,
                 DynamicBuffer<TagTemporarySourceBuffer> temporaryTagSources,
+                ref bool ownerAttributeDirty,
                 ref ASCIdentityComponent identity,
                 ref TagMaskComponent tagMask,
                 ref TagFixedMaskComponent fixedTagMask)
@@ -219,10 +259,10 @@ namespace GAS.Runtime
                                 ref fixedTagMask);
                             break;
                         case ASCCommandType.SetAttributeBaseValue:
-                            SetAttributeBaseValue(asc, attributes, in command);
+                            SetAttributeBaseValue(asc, attributes, in command, ref ownerAttributeDirty);
                             break;
                         case ASCCommandType.AddAttribute:
-                            AddAttribute(asc, attributes, in command);
+                            AddAttribute(asc, attributes, in command, ref ownerAttributeDirty);
                             break;
                     }
                 }
@@ -330,11 +370,16 @@ namespace GAS.Runtime
                     if (wasActive == isActive)
                         continue;
 
-                    EnqueueTagChange(new TagChangeEventBuffer
+                    EnqueueGameplayEvent(new GameplayEventBuffer
                     {
-                        ASC = asc,
-                        TagIndex = tagIndex,
-                        Added = isActive,
+                        EventType = EGameplayEventType.TagChanged,
+                        Domain = EGameplayFactDomain.Tag,
+                        Category = EGameplayFactCategory.StateChange,
+                        Severity = EGameplayFactSeverity.Info,
+                        SourceAsc = asc,
+                        TargetAsc = asc,
+                        EventCode = tagIndex,
+                        ReasonCode = isActive ? 1 : 0,
                     });
                 }
             }
@@ -342,7 +387,8 @@ namespace GAS.Runtime
             private void SetAttributeBaseValue(
                 Entity asc,
                 DynamicBuffer<AttributeValueBuffer> attributes,
-                in ASCCommand command)
+                in ASCCommand command,
+                ref bool ownerAttributeDirty)
             {
                 for (var i = 0; i < attributes.Length; i++)
                 {
@@ -365,16 +411,19 @@ namespace GAS.Runtime
                     }
                     attributes[i] = attr;
 
-                    MarkOwnerDirty(asc);
-                    EnqueueAttributeChange(new AttributeChangeEventBuffer
+                    ownerAttributeDirty = true;
+                    EnqueueGameplayEvent(new GameplayEventBuffer
                     {
-                        ASC = asc,
+                        EventType = EGameplayEventType.AttributeBaseValueChanged,
+                        Domain = EGameplayFactDomain.Attribute,
+                        Category = EGameplayFactCategory.StateChange,
+                        Severity = EGameplayFactSeverity.Info,
                         SourceAsc = asc,
+                        TargetAsc = asc,
                         AttrSetCode = command.AttrSetCode,
                         AttributeCode = command.AttributeCode,
                         OldValue = oldValue,
                         NewValue = attr.BaseValue,
-                        IsBaseValue = true,
                     });
                     return;
                 }
@@ -383,7 +432,8 @@ namespace GAS.Runtime
             private void AddAttribute(
                 Entity asc,
                 DynamicBuffer<AttributeValueBuffer> attributes,
-                in ASCCommand command)
+                in ASCCommand command,
+                ref bool ownerAttributeDirty)
             {
                 attributes.Add(new AttributeValueBuffer
                 {
@@ -398,13 +448,14 @@ namespace GAS.Runtime
                     MaxValue = command.MaxValue,
                     Dirty = true,
                 });
-                MarkOwnerDirty(asc);
+                ownerAttributeDirty = true;
             }
 
             private void ProcessAbilityCommands(
                 Entity owner,
                 DynamicBuffer<AbilityCommandBuffer> commands,
-                DynamicBuffer<AbilitySlotBuffer> grantedAbilities)
+                DynamicBuffer<AbilitySlotBuffer> grantedAbilities,
+                bool ownerIsDestroying)
             {
                 for (var i = 0; i < commands.Length; i++)
                 {
@@ -412,7 +463,7 @@ namespace GAS.Runtime
                     if (command.Owner != owner || command.CommandType != EAbilityCommandType.Grant)
                         continue;
 
-                    ProcessGrantCommand(owner, grantedAbilities, in command);
+                    ProcessGrantCommand(owner, grantedAbilities, in command, ownerIsDestroying);
                 }
 
                 for (var i = 0; i < commands.Length; i++)
@@ -421,7 +472,7 @@ namespace GAS.Runtime
                     if (command.Owner != owner || command.CommandType == EAbilityCommandType.Grant)
                         continue;
 
-                    ProcessRuntimeAbilityCommand(owner, grantedAbilities, in command);
+                    ProcessRuntimeAbilityCommand(owner, grantedAbilities, in command, ownerIsDestroying);
                 }
             }
 
@@ -435,9 +486,10 @@ namespace GAS.Runtime
             private void ProcessGrantCommand(
                 Entity owner,
                 DynamicBuffer<AbilitySlotBuffer> grantedAbilities,
-                in AbilityCommand command)
+                in AbilityCommand command,
+                bool ownerIsDestroying)
             {
-                if (IsDestroying(owner))
+                if (ownerIsDestroying)
                     return;
 
                 if (command.AbilityCode > 0
@@ -479,9 +531,10 @@ namespace GAS.Runtime
                     return Entity.Null;
 
                 ref var catalog = ref Catalog.Value;
-                if (!TryGetAbilityDefinition(ref catalog, abilityCode, out var abilityDefinition))
+                if (!GASDefinitionCatalogLookup.TryGetAbilityIndex(ref catalog, abilityCode, out var abilityIndex))
                     return Entity.Null;
 
+                ref readonly var abilityDefinition = ref GASDefinitionCatalogLookup.GetAbility(ref catalog, abilityIndex);
                 var ability = StructuralEcb.CreateEntity(AbilityArchetype);
                 GASRuntimeEntityArchetypes.InitializeAbilityEntity(StructuralEcb, ability);
                 StructuralEcb.SetComponent(
@@ -505,29 +558,11 @@ namespace GAS.Runtime
                        || abilityDefinition.CooldownGameplayEffectCode > 0;
             }
 
-            private static bool TryGetAbilityDefinition(
-                ref GASDefinitionCatalogBlob catalog,
-                int abilityCode,
-                out GASCatalogAbilityDefinitionBlob abilityDefinition)
-            {
-                for (var i = 0; i < catalog.Abilities.Length; i++)
-                {
-                    var candidate = catalog.Abilities[i];
-                    if (candidate.AbilityCode != abilityCode)
-                        continue;
-
-                    abilityDefinition = candidate;
-                    return true;
-                }
-
-                abilityDefinition = default;
-                return false;
-            }
-
             private void ProcessRuntimeAbilityCommand(
                 Entity owner,
                 DynamicBuffer<AbilitySlotBuffer> grantedAbilities,
-                in AbilityCommand command)
+                in AbilityCommand command,
+                bool ownerIsDestroying)
             {
                 if (command.CommandType == EAbilityCommandType.Activate
                     && TryProcessResolvedActivation(in command))
@@ -535,7 +570,7 @@ namespace GAS.Runtime
                     return;
                 }
 
-                if (IsDestroying(owner))
+                if (ownerIsDestroying)
                     return;
 
                 var ability = ResolveRequestedAbility(grantedAbilities, in command);
@@ -549,13 +584,15 @@ namespace GAS.Runtime
                         EnableMarker(ref AbilityActivationPendingLookup, ability);
                         break;
                     case EAbilityCommandType.End:
-                        RequestAbilityEnd(
+                        EnqueueAbilityLifecycleRequest(
                             ability,
+                            EAbilityLifecycleRequestKind.End,
                             EAbilityLifecycleReason.ExplicitEnd);
                         break;
                     case EAbilityCommandType.Cancel:
-                        RequestAbilityCancel(
+                        EnqueueAbilityLifecycleRequest(
                             ability,
+                            EAbilityLifecycleRequestKind.Cancel,
                             EAbilityLifecycleReason.ExplicitCancel);
                         break;
                     case EAbilityCommandType.Remove:
@@ -678,10 +715,11 @@ namespace GAS.Runtime
 
                 if (IsAbilityRunning(ability))
                 {
-                    RequestAbilityCancel(
+                    EnqueueAbilityLifecycleRequest(
                         ability,
-                        EAbilityLifecycleReason.RemoveAbility);
-                    EnableDestroyOnCleanup(ability);
+                        EAbilityLifecycleRequestKind.Cancel,
+                        EAbilityLifecycleReason.RemoveAbility,
+                        destroyOnCleanup: true);
                     return;
                 }
 
@@ -690,9 +728,6 @@ namespace GAS.Runtime
 
             private void ProcessDestroyCommand(Entity asc, DynamicBuffer<AbilitySlotBuffer> grantedAbilities)
             {
-                if (DestroyingLookup.HasComponent(asc))
-                    DestroyingLookup.SetComponentEnabled(asc, true);
-
                 DestroyOwnedAbilities(asc, grantedAbilities);
             }
 
@@ -711,10 +746,11 @@ namespace GAS.Runtime
                     grantedAbilities.RemoveAt(i);
                     if (state.Phase is EAbilityPhase.Activating or EAbilityPhase.Active or EAbilityPhase.Ending)
                     {
-                        RequestAbilityCancel(
+                        EnqueueAbilityLifecycleRequest(
                             ability,
-                            EAbilityLifecycleReason.AscDestroy);
-                        EnableDestroyOnCleanup(ability);
+                            EAbilityLifecycleRequestKind.Cancel,
+                            EAbilityLifecycleReason.AscDestroy,
+                            destroyOnCleanup: true);
                     }
                     else
                     {
@@ -749,75 +785,42 @@ namespace GAS.Runtime
                     StructuralEcb.DestroyEntity(ability);
             }
 
-            private void RequestAbilityEnd(
+            private void EnqueueAbilityLifecycleRequest(
                 Entity ability,
+                EAbilityLifecycleRequestKind requestKind,
                 EAbilityLifecycleReason reason,
                 Entity sourceAbility = default,
                 Entity sourceEffect = default,
-                int sourceAbilityCode = 0)
+                int sourceAbilityCode = 0,
+                bool destroyOnCleanup = false)
             {
-                if (!AbilityEndRequestLookup.HasComponent(ability)
-                    || AbilityEndRequestLookup.IsComponentEnabled(ability))
-                {
+                if (ability == Entity.Null
+                    || RequestStreamEntity == Entity.Null
+                    || !AbilityLifecycleRequestLookup.HasBuffer(RequestStreamEntity))
                     return;
-                }
 
                 var resolvedSourceAbilityCode = ResolveSourceAbilityCode(sourceAbility, sourceAbilityCode);
-                AbilityEndRequestLookup[ability] = new AbilityEndRequestComponent
+                var requests = AbilityLifecycleRequestLookup[RequestStreamEntity];
+                requests.Add(new AbilityLifecycleRequestBuffer
                 {
+                    Sequence = requests.Length,
+                    RequestKind = requestKind,
                     Reason = reason,
+                    Ability = ability,
                     SourceAbility = sourceAbility,
                     SourceEffect = sourceEffect,
                     SourceAbilityCode = resolvedSourceAbilityCode,
-                };
-                AbilityEndRequestLookup.SetComponentEnabled(ability, true);
+                    DestroyOnCleanup = destroyOnCleanup ? (byte)1 : (byte)0,
+                });
                 EnqueueAbilityLifecycleRequestFact(
                     ability,
-                    EGameplayEventType.AbilityEndRequested,
+                    requestKind == EAbilityLifecycleRequestKind.Cancel
+                        ? EGameplayEventType.AbilityCancelRequested
+                        : EGameplayEventType.AbilityEndRequested,
                     reason,
                     sourceAbility,
                     sourceEffect,
                     resolvedSourceAbilityCode);
-            }
-
-            private void RequestAbilityCancel(
-                Entity ability,
-                EAbilityLifecycleReason reason,
-                Entity sourceAbility = default,
-                Entity sourceEffect = default,
-                int sourceAbilityCode = 0)
-            {
-                if (!AbilityCancelRequestLookup.HasComponent(ability)
-                    || AbilityCancelRequestLookup.IsComponentEnabled(ability))
-                {
-                    return;
-                }
-
-                var resolvedSourceAbilityCode = ResolveSourceAbilityCode(sourceAbility, sourceAbilityCode);
-                AbilityCancelRequestLookup[ability] = new AbilityCancelRequestComponent
-                {
-                    Reason = reason,
-                    SourceAbility = sourceAbility,
-                    SourceEffect = sourceEffect,
-                    SourceAbilityCode = resolvedSourceAbilityCode,
-                };
-                AbilityCancelRequestLookup.SetComponentEnabled(ability, true);
-                EnqueueAbilityLifecycleRequestFact(
-                    ability,
-                    EGameplayEventType.AbilityCancelRequested,
-                    reason,
-                    sourceAbility,
-                    sourceEffect,
-                    resolvedSourceAbilityCode);
-            }
-
-            private void EnableDestroyOnCleanup(Entity ability)
-            {
-                if (AbilityDestroyOnCleanupLookup.HasComponent(ability)
-                    && !AbilityDestroyOnCleanupLookup.IsComponentEnabled(ability))
-                {
-                    AbilityDestroyOnCleanupLookup.SetComponentEnabled(ability, true);
-                }
             }
 
             private int ResolveSourceAbilityCode(Entity sourceAbility, int sourceAbilityCode)
@@ -843,62 +846,49 @@ namespace GAS.Runtime
                 var state = AbilityStateLookup.HasComponent(ability)
                     ? AbilityStateLookup[ability]
                     : default;
-                EnqueueGameplayEvent(new GameplayEventBusEventBuffer
+                EnqueueGameplayEvent(new GameplayEventBuffer
                 {
-                    Type = type,
+                    EventType = type,
+                    Domain = EGameplayFactDomain.Ability,
+                    Category = EGameplayFactCategory.Request,
+                    Severity = EGameplayFactSeverity.Info,
                     SourceAsc = state.Owner,
                     TargetAsc = state.Owner,
                     SourceAbility = ability,
-                    GameplayEffect = sourceEffect,
-                    RelatedAbility = sourceAbility,
+                    SourceEffect = sourceEffect,
                     EventCode = state.Code,
                     ReasonCode = (int)reason,
-                    RelatedAbilityCode = sourceAbilityCode,
                     Value = sourceAbilityCode,
                 });
             }
 
-            private void MarkOwnerDirty(Entity asc)
+            private void EnqueueGameplayEvent(GameplayEventBuffer evt)
             {
-                if (asc != Entity.Null
-                    && AttributeDirtyLookup.HasComponent(asc)
-                    && !AttributeDirtyLookup.IsComponentEnabled(asc))
-                {
-                    AttributeDirtyLookup.SetComponentEnabled(asc, true);
-                }
-            }
-
-            private void EnqueueGameplayEvent(GameplayEventBusEventBuffer evt)
-            {
-                if (EventBusEntity == Entity.Null || !GameplayEventLookup.HasBuffer(EventBusEntity))
+                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
                     return;
 
                 evt.Frame = Frame;
-                if (EventBusLookup.HasComponent(EventBusEntity))
+                if (StreamLookup.HasComponent(StreamEntity))
                 {
-                    var eventBus = EventBusLookup[EventBusEntity];
-                    evt.Sequence = eventBus.NextSequence;
-                    eventBus.NextSequence++;
-                    EventBusLookup[EventBusEntity] = eventBus;
+                    var stream = StreamLookup[StreamEntity];
+                    evt.Sequence = Allocate(ref stream.NextFactSequence);
+                    StreamLookup[StreamEntity] = stream;
                 }
                 else
                 {
                     evt.Sequence = 0;
                 }
 
-                GameplayEventLookup[EventBusEntity].Add(evt);
+                FactLookup[StreamEntity].Add(evt);
             }
 
-            private void EnqueueAttributeChange(AttributeChangeEventBuffer evt)
+            private static int Allocate(ref int next)
             {
-                if (EventBusEntity != Entity.Null && AttributeChangeEventLookup.HasBuffer(EventBusEntity))
-                    AttributeChangeEventLookup[EventBusEntity].Add(evt);
-            }
-
-            private void EnqueueTagChange(TagChangeEventBuffer evt)
-            {
-                if (EventBusEntity != Entity.Null && TagChangeEventLookup.HasBuffer(EventBusEntity))
-                    TagChangeEventLookup[EventBusEntity].Add(evt);
+                var value = next;
+                next++;
+                if (next <= 0)
+                    next = 1;
+                return value <= 0 ? Allocate(ref next) : value;
             }
 
             private bool IsAvailableAsc(Entity asc)
@@ -906,13 +896,6 @@ namespace GAS.Runtime
                 return asc != Entity.Null
                        && DestroyingLookup.HasComponent(asc)
                        && !DestroyingLookup.IsComponentEnabled(asc);
-            }
-
-            private bool IsDestroying(Entity asc)
-            {
-                return asc != Entity.Null
-                       && DestroyingLookup.HasComponent(asc)
-                       && DestroyingLookup.IsComponentEnabled(asc);
             }
 
             private static bool IsDeferredEntity(Entity entity)

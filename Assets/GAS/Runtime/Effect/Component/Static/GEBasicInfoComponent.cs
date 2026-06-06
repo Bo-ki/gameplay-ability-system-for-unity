@@ -18,9 +18,9 @@ namespace GAS.Runtime
     {
         public string Name;
 
-        public override void LoadToGameplayEffectEntity(Entity ge)
+        public override void LoadToGameplayEffectEntity(EntityManager entityManager, Entity ge)
         {
-            var em = GASManager.EntityManager;
+            var em = entityManager;
             em.SetName(ge, $"GE_{Name}_V{ge.Version}_{ge.Index}");
             em.SetComponentData(ge, new GEBasicInfoComponent
             {

@@ -42,9 +42,9 @@ namespace GAS.Runtime
         public int Code;
         public int Level;
 
-        public override void LoadToGameplayAbilityEntity(Entity ability)
+        public override void LoadToGameplayAbilityEntity(EntityManager entityManager, Entity ability)
         {
-            _entityManager.SetComponentData(ability, AbilityStateComponent.Create(Code, Level, Entity.Null));
+            entityManager.SetComponentData(ability, AbilityStateComponent.Create(Code, Level, Entity.Null));
         }
     }
 }

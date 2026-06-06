@@ -11,7 +11,6 @@ namespace GAS.Runtime
 
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASFramePrepareSystemGroup))]
-    //[UpdateAfter(typeof(GASManagerInputSystem))]
     public partial struct GASGlobalTimerSystem : ISystem
     {
         [BurstCompile]

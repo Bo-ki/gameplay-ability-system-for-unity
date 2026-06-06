@@ -29,6 +29,7 @@ namespace GAS.Runtime.Generated
                     ComponentType.ReadWrite<AbilityStateComponent>(),
                     ComponentType.ReadWrite<AbilityEndRequestComponent>(),
                 },
+                Options = EntityQueryOptions.IgnoreComponentEnabledState,
             });
             state.RequireForUpdate(_query);
             state.RequireForUpdate<GASDefinitionCatalogComponent>();
@@ -123,6 +124,9 @@ namespace GAS.Runtime.Generated
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
+                    if (!commitRequestMask[entityIndex])
+                        continue;
+
                     var ability = abilities[entityIndex];
                     var state = states[entityIndex];
                     var commitRequest = commitRequests[entityIndex];

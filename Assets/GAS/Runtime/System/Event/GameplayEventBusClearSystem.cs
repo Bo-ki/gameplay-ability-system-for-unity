@@ -26,12 +26,12 @@ namespace GAS.Runtime
             if (em.HasBuffer<PresentationOutboxOwnerBuffer>(eventBus))
                 ClearDirtyPresentationOutboxes(em, em.GetBuffer<PresentationOutboxOwnerBuffer>(eventBus));
 
-            if (em.HasBuffer<DamageEventBuffer>(eventBus))
-                em.GetBuffer<DamageEventBuffer>(eventBus).Clear();
             if (em.HasBuffer<TagChangeEventBuffer>(eventBus))
                 em.GetBuffer<TagChangeEventBuffer>(eventBus).Clear();
-            if (em.HasBuffer<GameplayEventBusEventBuffer>(eventBus))
-                em.GetBuffer<GameplayEventBusEventBuffer>(eventBus).Clear();
+            if (em.HasBuffer<AbilityLifecycleRequestBuffer>(eventBus))
+                em.GetBuffer<AbilityLifecycleRequestBuffer>(eventBus).Clear();
+            if (em.HasBuffer<AttributeOwnerMarkerRequestBuffer>(eventBus))
+                em.GetBuffer<AttributeOwnerMarkerRequestBuffer>(eventBus).Clear();
             if (em.HasBuffer<AttributeChangeEventBuffer>(eventBus))
                 em.GetBuffer<AttributeChangeEventBuffer>(eventBus).Clear();
             if (em.HasBuffer<CueRequestBuffer>(eventBus))

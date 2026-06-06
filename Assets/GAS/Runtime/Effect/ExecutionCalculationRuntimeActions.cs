@@ -16,22 +16,17 @@ namespace GAS.Runtime
             float value,
             int calculationCode = 0)
         {
-            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
-            try
-            {
-                return SetOutputValue(
-                    em,
-                    ge,
-                    context,
-                    outputKey,
-                    value,
-                    ref eventBusWriter,
-                    calculationCode);
-            }
-            finally
-            {
-                eventBusWriter.Dispose();
-            }
+            var eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(em);
+            var changed = SetOutputValue(
+                em,
+                ge,
+                context,
+                outputKey,
+                value,
+                ref eventWriter,
+                calculationCode);
+            eventWriter.Flush();
+            return changed;
         }
 
         public static bool SetOutputValue(
@@ -40,14 +35,14 @@ namespace GAS.Runtime
             in GEContextComponent context,
             int outputKey,
             float value,
-            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
+            ref EffectCommandSpecStream.GameplayEventWriter eventWriter,
             int calculationCode = 0)
         {
             if (!WriteOutputValue(em, ge, outputKey, value))
                 return false;
 
             EnqueueOutputUpdatedFact(
-                ref eventBusWriter,
+                ref eventWriter,
                 ge,
                 context,
                 ResolveEventCode(calculationCode, outputKey),
@@ -97,31 +92,25 @@ namespace GAS.Runtime
             int eventCode,
             float value)
         {
-            var eventBusWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
-            try
-            {
-                EnqueueOutputUpdatedFact(
-                    ref eventBusWriter,
-                    ge,
-                    context,
-                    eventCode,
-                    value);
-            }
-            finally
-            {
-                eventBusWriter.Dispose();
-            }
+            var eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(em);
+            EnqueueOutputUpdatedFact(
+                ref eventWriter,
+                ge,
+                context,
+                eventCode,
+                value);
+            eventWriter.Flush();
         }
 
         public static void EnqueueOutputUpdatedFact(
-            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
+            ref EffectCommandSpecStream.GameplayEventWriter eventWriter,
             Entity ge,
             in GEContextComponent context,
             int eventCode,
             float value)
         {
             EnqueueExecutionFact(
-                ref eventBusWriter,
+                ref eventWriter,
                 ge,
                 context,
                 EGameplayEventType.ExecutionCalculationOutputUpdated,
@@ -164,23 +153,26 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueExecutionFact(
-            ref EventBusHelper.GameplayEventBusWriter eventBusWriter,
+            ref EffectCommandSpecStream.GameplayEventWriter eventWriter,
             Entity ge,
             in GEContextComponent context,
             EGameplayEventType type,
             int eventCode,
             float value)
         {
-            if (!eventBusWriter.IsCreated)
+            if (!eventWriter.IsCreated)
                 return;
 
-            eventBusWriter.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
+            eventWriter.AppendGameplayEvent(new GameplayEventBuffer
             {
-                Type = type,
+                EventType = type,
+                Domain = EGameplayFactDomain.ExecutionCalculation,
+                Category = EGameplayFactCategory.StateChange,
+                Severity = EGameplayFactSeverity.Info,
                 SourceAsc = context.SourceAsc,
                 TargetAsc = context.TargetAsc,
                 SourceAbility = context.SourceAbility,
-                GameplayEffect = ge,
+                SourceEffect = ge,
                 ContextId = context.ContextId,
                 EventCode = eventCode,
                 Value = value,

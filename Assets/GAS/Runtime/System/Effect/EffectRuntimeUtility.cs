@@ -107,27 +107,15 @@ namespace GAS.Runtime
             EntityManager em,
             Entity ge)
         {
-            var eventBusEntity = GASManager.IsInitialized
-                ? GASManager.EntityEventBus
-                : Entity.Null;
-            var eventWriter = eventBusEntity != Entity.Null
-                ? EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity)
-                : default;
-
-            try
-            {
-                CleanupActiveEffect(em, ge, ref eventWriter);
-            }
-            finally
-            {
-                eventWriter.Dispose();
-            }
+            var eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(em);
+            CleanupActiveEffect(em, ge, ref eventWriter);
+            eventWriter.Flush();
         }
 
         public static void CleanupActiveEffect(
             EntityManager em,
             Entity ge,
-            ref EventBusHelper.GameplayEventBusWriter eventWriter)
+            ref EffectCommandSpecStream.GameplayEventWriter eventWriter)
         {
             if (ge == Entity.Null || !em.Exists(ge))
                 return;
@@ -149,7 +137,7 @@ namespace GAS.Runtime
                 out var cleanupSequence);
 
             RemoveActiveModifiersForEffect(em, context.TargetAsc, ge);
-            RemoveGrantedTagsForEffect(em, context.TargetAsc, ge, ref eventWriter);
+            RemoveGrantedTagsForEffect(em, context.TargetAsc, ge);
             RemoveTargetEffect(em, context.TargetAsc, ge);
             ActiveEffectStore.TryRemove(em, ge, in context, frame);
 
@@ -218,13 +206,12 @@ namespace GAS.Runtime
             EntityManager em,
             Entity ge,
             in GEContextComponent context,
-            in GEEffectSpecComponent spec,
-            ref EventBusHelper.GameplayEventBusWriter eventWriter)
+            in GEEffectSpecComponent spec)
         {
             if (context.TargetAsc == Entity.Null || !em.Exists(context.TargetAsc))
                 return;
 
-            EffectMagnitudeResolver.ResolveModifiers(em, ge, in context, in spec, ref eventWriter);
+            EffectMagnitudeResolver.ResolveModifiers(em, ge, in context, in spec);
             if (!em.HasBuffer<GEResolvedModifierBuffer>(ge))
                 return;
 
@@ -302,8 +289,7 @@ namespace GAS.Runtime
         public static void RemoveGrantedTagsForEffect(
             EntityManager em,
             Entity owner,
-            Entity ge,
-            ref EventBusHelper.GameplayEventBusWriter eventWriter)
+            Entity ge)
         {
             if (owner == Entity.Null
                 || !em.Exists(owner)
@@ -321,15 +307,6 @@ namespace GAS.Runtime
 
                 sources.RemoveAt(i);
                 TagRuntimeUtility.RemoveTagIndexFromEffectiveMaskIfUnreferenced(em, owner, source.TagIndex);
-                if (eventWriter.IsCreated)
-                {
-                    eventWriter.EnqueueTagChangeEvent(new TagChangeEventBuffer
-                    {
-                        ASC = owner,
-                        TagIndex = source.TagIndex,
-                        Added = false,
-                    });
-                }
             }
         }
 
@@ -399,7 +376,7 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueRemovedEvent(
-            ref EventBusHelper.GameplayEventBusWriter writer,
+            ref EffectCommandSpecStream.GameplayEventWriter writer,
             EntityManager em,
             Entity ge,
             in GEContextComponent context)
@@ -411,14 +388,18 @@ namespace GAS.Runtime
             if (em.HasComponent<GEEffectSpecComponent>(ge))
                 gameplayEffectCode = em.GetComponentData<GEEffectSpecComponent>(ge).GameplayEffectCode;
 
-            writer.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
+            writer.AppendGameplayEvent(new GameplayEventBuffer
             {
-                Type = EGameplayEventType.GameplayEffectRemoved,
+                EventType = EGameplayEventType.GameplayEffectRemoved,
+                Domain = EGameplayFactDomain.GameplayEffect,
+                Category = EGameplayFactCategory.StateTransition,
+                Severity = EGameplayFactSeverity.Info,
                 SourceAsc = context.SourceAsc,
                 TargetAsc = context.TargetAsc,
                 SourceAbility = context.SourceAbility,
-                GameplayEffect = ge,
+                SourceEffect = ge,
                 ContextId = context.ContextId,
+                GameplayEffectCode = gameplayEffectCode,
                 EventCode = gameplayEffectCode,
             });
         }

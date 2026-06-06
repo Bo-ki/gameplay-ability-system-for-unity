@@ -13,14 +13,14 @@ namespace GAS.Runtime
         public int Cooldown;
         public int GameplayEffectCode;
 
-        public override void LoadToGameplayAbilityEntity(Entity ability)
+        public override void LoadToGameplayAbilityEntity(EntityManager entityManager, Entity ability)
         {
-            _entityManager.SetComponentData(ability, new AbilityCooldownComponent
+            entityManager.SetComponentData(ability, new AbilityCooldownComponent
             {
                 Cooldown = Cooldown,
                 GameplayEffectCode = GameplayEffectCode,
             });
-            _entityManager.SetComponentEnabled<AbilityCooldownComponent>(ability, true);
+            entityManager.SetComponentEnabled<AbilityCooldownComponent>(ability, true);
         }
     }
 }

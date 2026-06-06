@@ -25,9 +25,9 @@ namespace GAS.Runtime
         public bool ResetTimeCountWhenDeactivated;
         public int[] GameplayEffectCodes;
 
-        public override void LoadToGameplayEffectEntity(Entity ge)
+        public override void LoadToGameplayEffectEntity(EntityManager entityManager, Entity ge)
         {
-            var em = GASManager.EntityManager;
+            var em = entityManager;
             em.SetComponentData(ge, new GEPeriodDefinitionComponent
             {
                 Period = Period,

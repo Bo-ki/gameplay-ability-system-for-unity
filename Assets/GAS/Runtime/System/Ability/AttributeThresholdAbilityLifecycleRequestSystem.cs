@@ -18,9 +18,13 @@ namespace GAS.Runtime
 
         public void OnCreate(ref SystemState state)
         {
-            _query = SystemAPI.QueryBuilder()
-                .WithAll<AbilityAttributeThresholdLifecycleRuleComponent>()
-                .Build();
+            _query = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<AbilityAttributeThresholdLifecycleRuleComponent>(),
+                },
+            });
             state.RequireForUpdate(_query);
         }
 
@@ -29,9 +33,9 @@ namespace GAS.Runtime
             var eventBusEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
                 ? resolvedEventBus
                 : Entity.Null;
-            var factEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
-                .CreateCommandBuffer(state.WorldUnmanaged)
-                .AsParallelWriter();
+            var streamEntity = SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var resolvedStream)
+                ? resolvedStream
+                : Entity.Null;
             var job = new AttributeThresholdAbilityLifecycleRequestJob
             {
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
@@ -40,10 +44,11 @@ namespace GAS.Runtime
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true),
                 AbilitySlotLookup = SystemAPI.GetBufferLookup<AbilitySlotBuffer>(isReadOnly: true),
                 AbilityStateLookup = SystemAPI.GetComponentLookup<AbilityStateComponent>(isReadOnly: true),
-                CancelRequestLookup = SystemAPI.GetComponentLookup<AbilityCancelRequestComponent>(),
-                EndRequestLookup = SystemAPI.GetComponentLookup<AbilityEndRequestComponent>(),
+                AbilityLifecycleRequestLookup = SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(),
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
+                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
+                StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
-                FactEcb = factEcb,
             };
             state.Dependency = job.Schedule(_query, state.Dependency);
         }
@@ -60,10 +65,11 @@ namespace GAS.Runtime
             [ReadOnly] public BufferLookup<AttributeValueBuffer> AttributeLookup;
             [ReadOnly] public BufferLookup<AbilitySlotBuffer> AbilitySlotLookup;
             [ReadOnly] public ComponentLookup<AbilityStateComponent> AbilityStateLookup;
-            public ComponentLookup<AbilityCancelRequestComponent> CancelRequestLookup;
-            public ComponentLookup<AbilityEndRequestComponent> EndRequestLookup;
+            public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public Entity StreamEntity;
             public Entity EventBusEntity;
-            public EntityCommandBuffer.ParallelWriter FactEcb;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -114,16 +120,12 @@ namespace GAS.Runtime
                     : rule.Reason;
                 if (rule.RequestType == EAttributeThresholdAbilityLifecycleRequestType.Cancel)
                 {
-                    CancelRequestLookup[ability] = new AbilityCancelRequestComponent
-                    {
-                        Reason = reason,
-                        SourceAbility = ability,
-                        SourceEffect = Entity.Null,
-                        SourceAbilityCode = baseInfo.Code,
-                    };
-                    CancelRequestLookup.SetComponentEnabled(ability, true);
+                    AppendLifecycleRequest(
+                        ability,
+                        EAbilityLifecycleRequestKind.Cancel,
+                        reason,
+                        baseInfo.Code);
                     AppendLifecycleFact(
-                        sortKey,
                         ability,
                         baseInfo,
                         EGameplayEventType.AbilityCancelRequested,
@@ -131,16 +133,12 @@ namespace GAS.Runtime
                 }
                 else
                 {
-                    EndRequestLookup[ability] = new AbilityEndRequestComponent
-                    {
-                        Reason = reason,
-                        SourceAbility = ability,
-                        SourceEffect = Entity.Null,
-                        SourceAbilityCode = baseInfo.Code,
-                    };
-                    EndRequestLookup.SetComponentEnabled(ability, true);
+                    AppendLifecycleRequest(
+                        ability,
+                        EAbilityLifecycleRequestKind.End,
+                        reason,
+                        baseInfo.Code);
                     AppendLifecycleFact(
-                        sortKey,
                         ability,
                         baseInfo,
                         EGameplayEventType.AbilityEndRequested,
@@ -176,9 +174,7 @@ namespace GAS.Runtime
                 {
                     var ability = grantedAbilities[i].AbilityEntity;
                     if (ability == Entity.Null
-                        || !AbilityStateLookup.HasComponent(ability)
-                        || !CancelRequestLookup.HasComponent(ability)
-                        || !EndRequestLookup.HasComponent(ability))
+                        || !AbilityStateLookup.HasComponent(ability))
                     {
                         continue;
                     }
@@ -192,9 +188,7 @@ namespace GAS.Runtime
 
             private bool ShouldRequestLifecycle(Entity ability)
             {
-                if (!AbilityStateLookup.HasComponent(ability)
-                    || CancelRequestLookup.IsComponentEnabled(ability)
-                    || EndRequestLookup.IsComponentEnabled(ability))
+                if (!AbilityStateLookup.HasComponent(ability))
                 {
                     return false;
                 }
@@ -203,29 +197,71 @@ namespace GAS.Runtime
                 return phase == EAbilityPhase.Activating || phase == EAbilityPhase.Active;
             }
 
+            private void AppendLifecycleRequest(
+                Entity ability,
+                EAbilityLifecycleRequestKind requestKind,
+                EAbilityLifecycleReason reason,
+                int sourceAbilityCode)
+            {
+                if (EventBusEntity == Entity.Null
+                    || !AbilityLifecycleRequestLookup.HasBuffer(EventBusEntity))
+                {
+                    return;
+                }
+
+                var requests = AbilityLifecycleRequestLookup[EventBusEntity];
+                requests.Add(new AbilityLifecycleRequestBuffer
+                {
+                    Sequence = requests.Length,
+                    RequestKind = requestKind,
+                    Reason = reason,
+                    Ability = ability,
+                    SourceAbility = ability,
+                    SourceEffect = Entity.Null,
+                    SourceAbilityCode = sourceAbilityCode,
+                    DestroyOnCleanup = 0,
+                });
+            }
+
             private void AppendLifecycleFact(
-                int sortKey,
                 Entity ability,
                 in AbilityStateComponent baseInfo,
                 EGameplayEventType type,
                 EAbilityLifecycleReason reason)
             {
-                if (EventBusEntity == Entity.Null)
+                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
                     return;
 
-                FactEcb.AppendToBuffer(sortKey, EventBusEntity, new GameplayEventBusEventBuffer
+                var fact = new GameplayEventBuffer
                 {
-                    Type = type,
+                    EventType = type,
+                    Domain = EGameplayFactDomain.Ability,
+                    Category = EGameplayFactCategory.Request,
+                    Severity = EGameplayFactSeverity.Info,
                     SourceAsc = baseInfo.Owner,
                     TargetAsc = baseInfo.Owner,
                     SourceAbility = ability,
-                    GameplayEffect = Entity.Null,
-                    RelatedAbility = ability,
                     EventCode = baseInfo.Code,
                     ReasonCode = (int)reason,
-                    RelatedAbilityCode = baseInfo.Code,
                     Value = baseInfo.Code,
-                });
+                };
+                if (StreamLookup.HasComponent(StreamEntity))
+                {
+                    var stream = StreamLookup[StreamEntity];
+                    fact.Sequence = Allocate(ref stream.NextFactSequence);
+                    StreamLookup[StreamEntity] = stream;
+                }
+
+                FactLookup[StreamEntity].Add(fact);
+            }
+
+            private static int Allocate(ref int next)
+            {
+                var value = next;
+                next++;
+                if (next <= 0)
+                    next = 1;
+                return value <= 0 ? Allocate(ref next) : value;
             }
         }
     }

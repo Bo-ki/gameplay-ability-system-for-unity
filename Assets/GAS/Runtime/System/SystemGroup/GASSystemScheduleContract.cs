@@ -174,6 +174,10 @@ namespace GAS.Runtime
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
                 typeof(GASCoreSimulationSystemGroup)),
             new(
+                typeof(GameplayFactBoundaryProjectionSystem),
+                EGasRuntimeCoreFramePhase.ObservationProjection,
+                typeof(GASBoundaryProjectionSystemGroup)),
+            new(
                 typeof(DiagnosticsSnapshotSystem),
                 EGasRuntimeCoreFramePhase.ObservationProjection,
                 typeof(GASBoundaryProjectionSystemGroup)),
@@ -207,6 +211,7 @@ namespace GAS.Runtime
             typeof(GEExecutionCalculationSystem),
             typeof(GEExecutionCalculationExtensionSystemGroup),
             typeof(GEExecutionCalculationOutputModifierSystem),
+            typeof(AttributeOwnerMarkerRequestSystem),
             typeof(AttributeRecalculateSystem),
             typeof(GameplayTagChangeProcessSystem),
             typeof(AbilityStateTickSystem),
@@ -224,6 +229,7 @@ namespace GAS.Runtime
 
         private static readonly Type[] BoundaryProjectionSystemTypes =
         {
+            typeof(GameplayFactBoundaryProjectionSystem),
             typeof(PresentationOutboxProjectionSystem),
             typeof(ReplayLogSystem),
             typeof(DiagnosticsSnapshotSystem),
@@ -239,6 +245,7 @@ namespace GAS.Runtime
         {
             typeof(GEEffectCommandSpecStreamFramePrepareSystem),
             typeof(GameplayFactProjectionSystem),
+            typeof(GameplayFactBoundaryProjectionSystem),
         };
 
         public static IReadOnlyList<Type> FixedStepGroups => FixedStepGroupTypes;

@@ -1118,13 +1118,9 @@ namespace GAS.Runtime
                     out activeEffectChunkSkipOwnerCount);
             }
 
-            var factCount = gameplayEventCount
-                            + attributeChangeCount
-                            + cueRequestCount
-                            + tagChangeCount
-                            + damageEventCount
-                            + typedFactCount;
-            var deltaCount = attributeChangeCount + tagChangeCount + damageEventCount + attributeDeltaCount;
+            var boundaryBridgeEventCount = attributeChangeCount + cueRequestCount + tagChangeCount + damageEventCount;
+            var factCount = typedFactCount;
+            var deltaCount = attributeDeltaCount;
             var streamBufferPeak = Math.Max(
                 Math.Max(effectCommandCount, instantSpecCount),
                 Math.Max(attributeDeltaCount, typedFactCount));
@@ -1133,20 +1129,12 @@ namespace GAS.Runtime
                 em,
                 eventBusEntity,
                 currentFrame,
-                gameplayEventCount,
-                attributeChangeCount,
-                cueRequestCount,
-                tagChangeCount,
-                damageEventCount);
+                typedFactCount);
             var replayCursorLag = CalculateReplayCursorLag(
                 em,
                 eventLogSinkEntity,
                 currentFrame,
-                gameplayEventCount,
-                attributeChangeCount,
-                cueRequestCount,
-                tagChangeCount,
-                damageEventCount);
+                typedFactCount);
             var frameBudget = GASRuntimeFrameBudgetPlanner.CreateCurrent();
 
             return new GasRuntimeCoreDiagnosticCounters(
@@ -1154,7 +1142,7 @@ namespace GAS.Runtime
                 gameplayEffectInstancedCount + instantSpecCount,
                 deltaCount,
                 factCount,
-                cueRequestCount,
+                boundaryBridgeEventCount,
                 presentationCount,
                 gameplayEffectInstancedCount,
                 gameplayEffectRemovedCount,
@@ -1603,10 +1591,8 @@ namespace GAS.Runtime
                 return;
             }
 
-            RecordBufferPressure<GameplayEventBusEventBuffer>(em, eventBusEntity, "GameplayEventBusEventBuffer", frame, log, ref state);
             RecordBufferPressure<AttributeChangeEventBuffer>(em, eventBusEntity, "AttributeChangeEventBuffer", frame, log, ref state);
             RecordBufferPressure<CueRequestBuffer>(em, eventBusEntity, "CueRequestBuffer", frame, log, ref state);
-            RecordBufferPressure<DamageEventBuffer>(em, eventBusEntity, "DamageEventBuffer", frame, log, ref state);
             RecordBufferPressure<TagChangeEventBuffer>(em, eventBusEntity, "TagChangeEventBuffer", frame, log, ref state);
             ApplyRetention(log, ref state);
             em.SetComponentData(debuggerEntity, state);
@@ -1865,26 +1851,9 @@ namespace GAS.Runtime
             if (eventBusEntity == Entity.Null || !em.Exists(eventBusEntity))
                 return;
 
-            if (em.HasBuffer<GameplayEventBusEventBuffer>(eventBusEntity))
-            {
-                var gameplayEvents = em.GetBuffer<GameplayEventBusEventBuffer>(eventBusEntity);
-                gameplayEventCount = gameplayEvents.Length;
-                for (var i = 0; i < gameplayEvents.Length; i++)
-                {
-                    var type = gameplayEvents[i].Type;
-                    if (GameplayFactClassifier.Classify(type).Category == EGameplayFactCategory.Request)
-                        gameplayRequestFactCount++;
-                    if (type == EGameplayEventType.GameplayEffectInstanced)
-                        gameplayEffectInstancedCount++;
-                    else if (type == EGameplayEventType.GameplayEffectRemoved)
-                        gameplayEffectRemovedCount++;
-                }
-            }
-
             attributeChangeCount = GetBufferLength<AttributeChangeEventBuffer>(em, eventBusEntity);
             cueRequestCount = GetBufferLength<CueRequestBuffer>(em, eventBusEntity);
             tagChangeCount = GetBufferLength<TagChangeEventBuffer>(em, eventBusEntity);
-            damageEventCount = GetBufferLength<DamageEventBuffer>(em, eventBusEntity);
         }
 
         private static void ReadEffectCommandSpecStreamCounters(
@@ -1906,6 +1875,25 @@ namespace GAS.Runtime
             instantSpecCount = GetBufferLength<GEEffectSpecBuffer>(em, streamEntity);
             attributeDeltaCount = GetBufferLength<AttributeModifierBuffer>(em, streamEntity);
             typedFactCount = GetBufferLength<GameplayEventBuffer>(em, streamEntity);
+        }
+
+        private static int CountTypedDamageFacts(EntityManager em)
+        {
+            if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity)
+                || !em.HasBuffer<GameplayEventBuffer>(streamEntity))
+            {
+                return 0;
+            }
+
+            var facts = em.GetBuffer<GameplayEventBuffer>(streamEntity);
+            var count = 0;
+            for (var i = 0; i < facts.Length; i++)
+            {
+                if (facts[i].Domain == EGameplayFactDomain.Damage)
+                    count++;
+            }
+
+            return count;
         }
 
         private static void ReadActiveEffectStoreCounters(
@@ -2156,11 +2144,7 @@ namespace GAS.Runtime
             EntityManager em,
             Entity eventBusEntity,
             int currentFrame,
-            int gameplayEventCount,
-            int attributeChangeCount,
-            int cueRequestCount,
-            int tagChangeCount,
-            int damageEventCount)
+            int typedFactCount)
         {
             if (eventBusEntity == Entity.Null
                 || !em.Exists(eventBusEntity)
@@ -2171,28 +2155,16 @@ namespace GAS.Runtime
 
             var projectionState = em.GetComponentData<PresentationOutboxProjectionStateComponent>(eventBusEntity);
             var sameFrame = projectionState.LastProjectedFrame == currentFrame;
-            return SumCursorLag(
-                gameplayEventCount,
-                sameFrame ? projectionState.ProcessedGameplayEventCount : 0,
-                attributeChangeCount,
-                sameFrame ? projectionState.ProcessedAttributeEventCount : 0,
-                cueRequestCount,
-                sameFrame ? projectionState.ProcessedCueRequestCount : 0,
-                tagChangeCount,
-                sameFrame ? projectionState.ProcessedTagEventCount : 0,
-                damageEventCount,
-                sameFrame ? projectionState.ProcessedDamageEventCount : 0);
+            return PositiveLag(
+                typedFactCount,
+                sameFrame ? projectionState.ProcessedTypedFactCount : 0);
         }
 
         private static int CalculateReplayCursorLag(
             EntityManager em,
             Entity eventLogSinkEntity,
             int currentFrame,
-            int gameplayEventCount,
-            int attributeChangeCount,
-            int cueRequestCount,
-            int tagChangeCount,
-            int damageEventCount)
+            int typedFactCount)
         {
             if (eventLogSinkEntity == Entity.Null
                 || !em.Exists(eventLogSinkEntity)
@@ -2203,36 +2175,9 @@ namespace GAS.Runtime
 
             var sinkState = em.GetComponentData<GameplayEventLogSinkComponent>(eventLogSinkEntity);
             var sameFrame = sinkState.LastProjectedFrame == currentFrame;
-            return SumCursorLag(
-                gameplayEventCount,
-                sameFrame ? sinkState.ProcessedGameplayEventCount : 0,
-                attributeChangeCount,
-                sameFrame ? sinkState.ProcessedAttributeEventCount : 0,
-                cueRequestCount,
-                sameFrame ? sinkState.ProcessedCueRequestCount : 0,
-                tagChangeCount,
-                sameFrame ? sinkState.ProcessedTagEventCount : 0,
-                damageEventCount,
-                sameFrame ? sinkState.ProcessedDamageEventCount : 0);
-        }
-
-        private static int SumCursorLag(
-            int gameplayEventCount,
-            int processedGameplayEventCount,
-            int attributeChangeCount,
-            int processedAttributeChangeCount,
-            int cueRequestCount,
-            int processedCueRequestCount,
-            int tagChangeCount,
-            int processedTagChangeCount,
-            int damageEventCount,
-            int processedDamageEventCount)
-        {
-            return PositiveLag(gameplayEventCount, processedGameplayEventCount)
-                   + PositiveLag(attributeChangeCount, processedAttributeChangeCount)
-                   + PositiveLag(cueRequestCount, processedCueRequestCount)
-                   + PositiveLag(tagChangeCount, processedTagChangeCount)
-                   + PositiveLag(damageEventCount, processedDamageEventCount);
+            return PositiveLag(
+                typedFactCount,
+                sameFrame ? sinkState.ProcessedTypedFactCount : 0);
         }
 
         private static int PositiveLag(int count, int processedCount)

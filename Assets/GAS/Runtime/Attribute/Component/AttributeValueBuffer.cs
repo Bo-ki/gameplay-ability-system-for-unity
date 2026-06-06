@@ -21,4 +21,19 @@ namespace GAS.Runtime
         public bool Dirty;
         public bool CurrentValueChangePending;
     }
+
+    public enum EAttributeOwnerMarkerRequestKind : byte
+    {
+        MarkDirty = 1,
+        SetActiveModifierPresent = 2,
+    }
+
+    [InternalBufferCapacity(0)]
+    public struct AttributeOwnerMarkerRequestBuffer : IBufferElementData
+    {
+        public int Sequence;
+        public Entity ASC;
+        public EAttributeOwnerMarkerRequestKind RequestKind;
+        public byte Value;
+    }
 }

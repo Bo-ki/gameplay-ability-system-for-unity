@@ -11,13 +11,13 @@ namespace GAS.Runtime
     {
         public int GameplayEffectCode;
 
-        public override void LoadToGameplayAbilityEntity(Entity ability)
+        public override void LoadToGameplayAbilityEntity(EntityManager entityManager, Entity ability)
         {
-            _entityManager.SetComponentData(ability, new AbilityCostComponent
+            entityManager.SetComponentData(ability, new AbilityCostComponent
             {
                 GameplayEffectCode = GameplayEffectCode,
             });
-            _entityManager.SetComponentEnabled<AbilityCostComponent>(ability, true);
+            entityManager.SetComponentEnabled<AbilityCostComponent>(ability, true);
         }
     }
 }

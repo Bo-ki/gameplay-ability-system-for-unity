@@ -51,21 +51,6 @@ namespace GAS.Runtime
                     currentFrame);
             }
 
-            if (em.HasBuffer<GameplayEventBusEventBuffer>(eventBus))
-                ProjectGameplayEvents(em, eventBus, em.GetBuffer<GameplayEventBusEventBuffer>(eventBus), ref projectionState, currentFrame);
-
-            if (em.HasBuffer<AttributeChangeEventBuffer>(eventBus))
-                ProjectAttributeEvents(em, eventBus, em.GetBuffer<AttributeChangeEventBuffer>(eventBus), ref projectionState, currentFrame);
-
-            if (em.HasBuffer<CueRequestBuffer>(eventBus))
-                ProjectCueRequests(em, eventBus, em.GetBuffer<CueRequestBuffer>(eventBus), ref projectionState, currentFrame);
-
-            if (em.HasBuffer<TagChangeEventBuffer>(eventBus))
-                ProjectTagEvents(em, eventBus, em.GetBuffer<TagChangeEventBuffer>(eventBus), ref projectionState, currentFrame);
-
-            if (em.HasBuffer<DamageEventBuffer>(eventBus))
-                ProjectDamageEvents(em, eventBus, em.GetBuffer<DamageEventBuffer>(eventBus), ref projectionState, currentFrame);
-
             em.SetComponentData(eventBus, projectionState);
         }
 
@@ -77,11 +62,6 @@ namespace GAS.Runtime
                 return;
 
             projectionState.LastProjectedFrame = currentFrame;
-            projectionState.ProcessedGameplayEventCount = 0;
-            projectionState.ProcessedAttributeEventCount = 0;
-            projectionState.ProcessedCueRequestCount = 0;
-            projectionState.ProcessedTagEventCount = 0;
-            projectionState.ProcessedDamageEventCount = 0;
             projectionState.ProcessedTypedFactCount = 0;
         }
 
@@ -172,6 +152,28 @@ namespace GAS.Runtime
                 return true;
             }
 
+            if (fact.Domain == EGameplayFactDomain.Tag
+                && fact.EventType == EGameplayEventType.TagChanged)
+            {
+                presentationEvent = new PresentationEventBuffer
+                {
+                    Kind = EPresentationEventKind.TagChange,
+                    Frame = fact.Frame != 0 ? fact.Frame : fallbackFrame,
+                    Sequence = fact.Sequence,
+                    GameplayEventType = fact.EventType,
+                    SourceAsc = fact.SourceAsc,
+                    TargetAsc = fact.TargetAsc,
+                    SourceAbility = fact.SourceAbility,
+                    GameplayEffect = fact.SourceEffect,
+                    ContextId = fact.ContextId,
+                    EventCode = fact.EventCode,
+                    ReasonCode = fact.ReasonCode,
+                    TagIndex = fact.EventCode,
+                    Flag = fact.ReasonCode != 0 ? (byte)1 : (byte)0,
+                };
+                return true;
+            }
+
             if (fact.Domain == EGameplayFactDomain.Damage)
             {
                 presentationEvent = new PresentationEventBuffer
@@ -226,51 +228,6 @@ namespace GAS.Runtime
             return fact.EventCode != 0 ? fact.EventCode : fact.GameplayEffectCode;
         }
 
-        private static void ProjectGameplayEvents(
-            EntityManager em,
-            Entity eventBus,
-            DynamicBuffer<GameplayEventBusEventBuffer> events,
-            ref PresentationOutboxProjectionStateComponent projectionState,
-            int fallbackFrame)
-        {
-            var start = ClampProcessedCount(projectionState.ProcessedGameplayEventCount, events.Length);
-            for (var i = start; i < events.Length; i++)
-            {
-                var evt = events[i];
-                if (ShouldSkipMirroredTypedFact(
-                        evt.SourceFactSequence,
-                        projectionState.LastProjectedTypedFactSequence))
-                {
-                    continue;
-                }
-
-                if (IsPresentationMarker(evt.Type))
-                    continue;
-
-                var presentationEvent = new PresentationEventBuffer
-                {
-                    Kind = EPresentationEventKind.GameplayEvent,
-                    Frame = evt.Frame != 0 ? evt.Frame : fallbackFrame,
-                    Sequence = evt.Sequence,
-                    GameplayEventType = evt.Type,
-                    SourceAsc = evt.SourceAsc,
-                    TargetAsc = evt.TargetAsc,
-                    SourceAbility = evt.SourceAbility,
-                    GameplayEffect = evt.GameplayEffect,
-                    RelatedAbility = evt.RelatedAbility,
-                    ContextId = evt.ContextId,
-                    EventCode = evt.EventCode,
-                    ReasonCode = evt.ReasonCode,
-                    RelatedAbilityCode = evt.RelatedAbilityCode,
-                    Value = evt.Value,
-                };
-
-                AppendToRelevantAsc(em, eventBus, evt.TargetAsc, evt.SourceAsc, presentationEvent);
-            }
-
-            projectionState.ProcessedGameplayEventCount = events.Length;
-        }
-
         private static bool IsPresentationMarker(EGameplayEventType type)
         {
             return type == EGameplayEventType.AutoChessPresentationUiMarker
@@ -279,161 +236,6 @@ namespace GAS.Runtime
                    || type == EGameplayEventType.AutoChessPresentationFloatingTextMarker
                    || type == EGameplayEventType.AutoChessPresentationCueMarker
                    || type == EGameplayEventType.AutoChessPresentationSettlementMarker;
-        }
-
-        private static void ProjectAttributeEvents(
-            EntityManager em,
-            Entity eventBus,
-            DynamicBuffer<AttributeChangeEventBuffer> events,
-            ref PresentationOutboxProjectionStateComponent projectionState,
-            int frame)
-        {
-            var start = ClampProcessedCount(projectionState.ProcessedAttributeEventCount, events.Length);
-            for (var i = start; i < events.Length; i++)
-            {
-                var evt = events[i];
-                if (ShouldSkipMirroredTypedFact(
-                        evt.SourceFactSequence,
-                        projectionState.LastProjectedTypedFactSequence))
-                {
-                    continue;
-                }
-
-                var presentationEvent = new PresentationEventBuffer
-                {
-                    Kind = EPresentationEventKind.AttributeChange,
-                    Frame = frame,
-                    SourceAsc = evt.SourceAsc,
-                    TargetAsc = evt.ASC,
-                    SourceAbility = evt.SourceAbility,
-                    GameplayEffect = evt.GameplayEffect,
-                    ContextId = evt.ContextId,
-                    EventCode = evt.EventCode,
-                    AttrSetCode = evt.AttrSetCode,
-                    AttributeCode = evt.AttributeCode,
-                    OldValue = evt.OldValue,
-                    NewValue = evt.NewValue,
-                    Flag = evt.IsBaseValue ? (byte)1 : (byte)0,
-                };
-
-                AppendToRelevantAsc(em, eventBus, evt.ASC, evt.SourceAsc, presentationEvent);
-            }
-
-            projectionState.ProcessedAttributeEventCount = events.Length;
-        }
-
-        private static bool ShouldSkipMirroredTypedFact(
-            int sourceFactSequence,
-            int lastProjectedTypedFactSequence)
-        {
-            return sourceFactSequence > 0
-                   && lastProjectedTypedFactSequence >= sourceFactSequence;
-        }
-
-        private static void ProjectCueRequests(
-            EntityManager em,
-            Entity eventBus,
-            DynamicBuffer<CueRequestBuffer> requests,
-            ref PresentationOutboxProjectionStateComponent projectionState,
-            int frame)
-        {
-            var start = ClampProcessedCount(projectionState.ProcessedCueRequestCount, requests.Length);
-            for (var i = start; i < requests.Length; i++)
-            {
-                var request = requests[i];
-                if (ShouldSkipMirroredTypedFact(
-                        request.SourceFactSequence,
-                        projectionState.LastProjectedTypedFactSequence))
-                {
-                    continue;
-                }
-
-                var presentationEvent = new PresentationEventBuffer
-                {
-                    Kind = EPresentationEventKind.CueRequest,
-                    Frame = frame,
-                    Sequence = request.SourceFactSequence,
-                    CueEvent = request.CueEvent,
-                    SourceAsc = request.SourceAsc,
-                    TargetAsc = request.TargetAsc,
-                    SourceAbility = request.SourceAbility,
-                    GameplayEffect = request.GameplayEffect,
-                    SourceEntity = request.SourceEntity,
-                    CueEntity = request.CueEntity,
-                    CueSourceType = request.SourceType,
-                    ContextId = request.ContextId,
-                    EventCode = (int)request.CueEvent,
-                    ReasonCode = request.ReasonCode,
-                };
-
-                AppendToRelevantAsc(em, eventBus, request.TargetAsc, request.SourceAsc, presentationEvent);
-            }
-
-            projectionState.ProcessedCueRequestCount = requests.Length;
-        }
-
-        private static void ProjectTagEvents(
-            EntityManager em,
-            Entity eventBus,
-            DynamicBuffer<TagChangeEventBuffer> events,
-            ref PresentationOutboxProjectionStateComponent projectionState,
-            int frame)
-        {
-            var start = ClampProcessedCount(projectionState.ProcessedTagEventCount, events.Length);
-            for (var i = start; i < events.Length; i++)
-            {
-                var evt = events[i];
-                AppendToAsc(em, eventBus, evt.ASC, new PresentationEventBuffer
-                {
-                    Kind = EPresentationEventKind.TagChange,
-                    Frame = frame,
-                    TargetAsc = evt.ASC,
-                    TagIndex = evt.TagIndex,
-                    Flag = evt.Added ? (byte)1 : (byte)0,
-                });
-            }
-
-            projectionState.ProcessedTagEventCount = events.Length;
-        }
-
-        private static void ProjectDamageEvents(
-            EntityManager em,
-            Entity eventBus,
-            DynamicBuffer<DamageEventBuffer> events,
-            ref PresentationOutboxProjectionStateComponent projectionState,
-            int frame)
-        {
-            var start = ClampProcessedCount(projectionState.ProcessedDamageEventCount, events.Length);
-            for (var i = start; i < events.Length; i++)
-            {
-                var evt = events[i];
-                if (ShouldSkipMirroredTypedFact(
-                        evt.SourceFactSequence,
-                        projectionState.LastProjectedTypedFactSequence))
-                {
-                    continue;
-                }
-
-                var presentationEvent = new PresentationEventBuffer
-                {
-                    Kind = EPresentationEventKind.Damage,
-                    Frame = frame,
-                    Sequence = evt.SourceFactSequence,
-                    SourceAsc = evt.Source,
-                    TargetAsc = evt.Target,
-                    DamageAmount = evt.Amount,
-                    Value = evt.Amount,
-                };
-
-                AppendToRelevantAsc(em, eventBus, evt.Target, evt.Source, presentationEvent);
-            }
-
-            projectionState.ProcessedDamageEventCount = events.Length;
-        }
-
-        private static int ClampProcessedCount(int processedCount, int currentLength)
-        {
-            return processedCount > currentLength ? 0 : processedCount;
         }
 
         private static void AppendToRelevantAsc(

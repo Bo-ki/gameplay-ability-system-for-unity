@@ -7,14 +7,14 @@ namespace GAS.Runtime
     {
         public ModifierDefinitionSetting[] ModifierSettings;
 
-        public override void LoadToGameplayEffectEntity(Entity ge)
+        public override void LoadToGameplayEffectEntity(EntityManager entityManager, Entity ge)
         {
-            var modifiers = GASManager.EntityManager.GetBuffer<GEModifierConfigBuffer>(ge);
+            var modifiers = entityManager.GetBuffer<GEModifierConfigBuffer>(ge);
             modifiers.Clear();
 
             if (ModifierSettings == null)
             {
-                GASManager.EntityManager.SetComponentEnabled<GEModifierConfigBuffer>(ge, false);
+                entityManager.SetComponentEnabled<GEModifierConfigBuffer>(ge, false);
                 return;
             }
 
@@ -29,7 +29,7 @@ namespace GAS.Runtime
                     Op = setting.Operation,
                 });
             }
-            GASManager.EntityManager.SetComponentEnabled<GEModifierConfigBuffer>(ge, modifiers.Length > 0);
+            entityManager.SetComponentEnabled<GEModifierConfigBuffer>(ge, modifiers.Length > 0);
         }
     }
 

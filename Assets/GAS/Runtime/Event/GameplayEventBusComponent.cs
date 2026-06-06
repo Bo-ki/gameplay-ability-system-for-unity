@@ -15,23 +15,12 @@ namespace GAS.Runtime
     }
 
     /// <summary>
-    /// 伤害事件。入队到事件总线 Singleton 的 DamageEventBuffer Buffer。
-    /// </summary>
-    [InternalBufferCapacity(0)]
-    public struct DamageEventBuffer : IBufferElementData
-    {
-        public int SourceFactSequence;
-        public Entity Target;
-        public Entity Source;
-        public float Amount;
-    }
-
-    /// <summary>
     /// Tag 变更事件。入队到事件总线 Singleton 的 TagChangeEventBuffer Buffer。
     /// </summary>
     [InternalBufferCapacity(0)]
     public struct TagChangeEventBuffer : IBufferElementData
     {
+        public int SourceFactSequence;
         public Entity ASC;
         public int TagIndex;
         public bool Added;
@@ -116,6 +105,7 @@ namespace GAS.Runtime
         AutoChessDeathBurstDamageApplied = 74,
         AutoChessEnrageTriggered = 75,
         AutoChessEnrageApplied = 76,
+        TagChanged = 77,
     }
 
     public enum EGameplayFactDomain : byte
@@ -189,6 +179,8 @@ namespace GAS.Runtime
                 EGameplayEventType.ActiveModifierAdded => StateChange(EGameplayFactDomain.Attribute),
                 EGameplayEventType.ActiveModifierRemoved => StateChange(EGameplayFactDomain.Attribute),
                 EGameplayEventType.ActiveModifierUpdated => StateChange(EGameplayFactDomain.Attribute),
+
+                EGameplayEventType.TagChanged => StateChange(EGameplayFactDomain.Tag),
 
                 EGameplayEventType.CueRequested => Request(EGameplayFactDomain.Cue),
 
@@ -339,28 +331,6 @@ namespace GAS.Runtime
     }
 
     /// <summary>
-    /// Gameplay 事实事件。Simulation 写入，表现层/调试层消费。
-    /// </summary>
-    [InternalBufferCapacity(0)]
-    public struct GameplayEventBusEventBuffer : IBufferElementData
-    {
-        public int Frame;
-        public int Sequence;
-        public int SourceFactSequence;
-        public EGameplayEventType Type;
-        public Entity SourceAsc;
-        public Entity TargetAsc;
-        public Entity SourceAbility;
-        public Entity GameplayEffect;
-        public Entity RelatedAbility;
-        public int ContextId;
-        public int EventCode;
-        public int ReasonCode;
-        public int RelatedAbilityCode;
-        public float Value;
-    }
-
-    /// <summary>
     /// Attribute 变更事件。替代核心计算路径中的托管回调。
     /// </summary>
     [InternalBufferCapacity(0)]
@@ -459,11 +429,6 @@ namespace GAS.Runtime
     public struct PresentationOutboxProjectionStateComponent : IComponentData
     {
         public int LastProjectedFrame;
-        public int ProcessedGameplayEventCount;
-        public int ProcessedAttributeEventCount;
-        public int ProcessedCueRequestCount;
-        public int ProcessedTagEventCount;
-        public int ProcessedDamageEventCount;
         public int ProcessedTypedFactCount;
         public int LastProjectedTypedFactSequence;
     }
@@ -497,11 +462,6 @@ namespace GAS.Runtime
         public int DroppedEventCount;
         public int MaxRetainedEvents;
         public int LastProjectedFrame;
-        public int ProcessedGameplayEventCount;
-        public int ProcessedAttributeEventCount;
-        public int ProcessedCueRequestCount;
-        public int ProcessedTagEventCount;
-        public int ProcessedDamageEventCount;
         public int ProcessedTypedFactCount;
         public int LastProjectedTypedFactSequence;
     }

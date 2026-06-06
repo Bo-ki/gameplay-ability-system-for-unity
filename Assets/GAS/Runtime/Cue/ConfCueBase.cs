@@ -10,11 +10,11 @@ namespace GAS.Runtime
         public override bool SupportsPrototypeCache => false;
         public override bool SupportsStaticDefinitionBlob => false;
 
-        public NativeArray<Entity> CreateCueEntityArray(Entity ge)
+        public NativeArray<Entity> CreateCueEntityArray(EntityManager entityManager, Entity ge)
         {
             bool HasTags(int[] tags) => tags != null && tags.Length > 0;
 
-            var em = GASManager.EntityManager;
+            var em = entityManager;
             var entities = new Entity[cues.Length];
             for (var i = 0; i < cues.Length; i++)
             {

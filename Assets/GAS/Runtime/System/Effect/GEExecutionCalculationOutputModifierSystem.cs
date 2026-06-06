@@ -17,15 +17,21 @@ namespace GAS.Runtime
 
         public void OnCreate(ref SystemState state)
         {
-            _outputQuery = SystemAPI.QueryBuilder()
-                .WithAll<
-                    GEContextComponent,
-                    GEEffectSpecComponent,
-                    GEExecutionCalculationValueBuffer,
-                    GEResolvedModifierBuffer,
-                    GEExecutionCalculationOutputModifierDefinitionBuffer>()
-                .WithDisabled<GEExecutionCalculationOutputModifierAppliedComponent>()
-                .Build();
+            _outputQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<GEContextComponent>(),
+                    ComponentType.ReadOnly<GEEffectSpecComponent>(),
+                    ComponentType.ReadOnly<GEExecutionCalculationValueBuffer>(),
+                    ComponentType.ReadWrite<GEResolvedModifierBuffer>(),
+                    ComponentType.ReadOnly<GEExecutionCalculationOutputModifierDefinitionBuffer>(),
+                },
+                Disabled = new[]
+                {
+                    ComponentType.ReadWrite<GEExecutionCalculationOutputModifierAppliedComponent>(),
+                },
+            });
             state.RequireForUpdate<GEEffectCommandStreamComponent>();
             state.RequireForUpdate(_outputQuery);
         }
@@ -51,6 +57,8 @@ namespace GAS.Runtime
             var pendingDeltas = new NativeList<PendingAttributeModifierDeltaRecord>(initialRecordCapacity, Allocator.TempJob);
             var appliedDeltaCounts =
                 new NativeParallelHashMap<Entity, int>(initialRecordCapacity, Allocator.TempJob);
+            var attributeOwnerMarkerRequests =
+                new NativeList<AttributeOwnerMarkerRequestRecord>(initialRecordCapacity, Allocator.TempJob);
 
             var collectJob = new GEExecutionCalculationOutputModifierCollectJob
             {
@@ -76,23 +84,38 @@ namespace GAS.Runtime
                 ModifierRecords = modifierRecords,
                 PendingDeltas = pendingDeltas,
                 AppliedDeltaCounts = appliedDeltaCounts,
+                AttributeOwnerMarkerRequests = attributeOwnerMarkerRequests,
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: false),
-                AttributeDirtyLookup = SystemAPI.GetComponentLookup<AttributeDirtyComponent>(isReadOnly: false),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 DeltaBufferLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(isReadOnly: false),
-                AppliedLookup =
-                    SystemAPI.GetComponentLookup<GEExecutionCalculationOutputModifierAppliedComponent>(
-                        isReadOnly: false),
                 StreamEntity = streamEntity,
                 Frame = frame,
             };
-            state.Dependency = applyJob.Schedule(collectHandle);
+            var applyHandle = applyJob.Schedule(collectHandle);
+            var appliedHandle = new GEExecutionCalculationOutputModifierAppliedJob
+            {
+                EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
+                AppliedTypeHandle =
+                    SystemAPI.GetComponentTypeHandle<GEExecutionCalculationOutputModifierAppliedComponent>(),
+                PendingEffects = pendingEffects,
+                AppliedDeltaCounts = appliedDeltaCounts,
+                Frame = frame,
+            }.Schedule(_outputQuery, applyHandle);
+            state.Dependency = new AttributeOwnerMarkerRequestFlushJob
+            {
+                RequestLookup = SystemAPI.GetBufferLookup<AttributeOwnerMarkerRequestBuffer>(isReadOnly: false),
+                AttributeOwnerMarkerRequests = attributeOwnerMarkerRequests,
+                EventBusEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
+                    ? resolvedEventBus
+                    : Entity.Null,
+            }.Schedule(appliedHandle);
             state.Dependency = effectStream.Dispose(state.Dependency);
             state.Dependency = modifierStream.Dispose(state.Dependency);
             state.Dependency = pendingEffects.Dispose(state.Dependency);
             state.Dependency = modifierRecords.Dispose(state.Dependency);
             state.Dependency = pendingDeltas.Dispose(state.Dependency);
             state.Dependency = appliedDeltaCounts.Dispose(state.Dependency);
+            state.Dependency = attributeOwnerMarkerRequests.Dispose(state.Dependency);
         }
 
         public void OnDestroy(ref SystemState state) { }
@@ -149,6 +172,13 @@ namespace GAS.Runtime
             public float Magnitude;
             public float OldValue;
             public float NewValue;
+        }
+
+        private struct AttributeOwnerMarkerRequestRecord
+        {
+            public int Sequence;
+            public Entity ASC;
+            public EAttributeOwnerMarkerRequestKind RequestKind;
         }
 
         [BurstCompile]
@@ -249,11 +279,10 @@ namespace GAS.Runtime
             public NativeList<PendingOutputModifierRecord> ModifierRecords;
             public NativeList<PendingAttributeModifierDeltaRecord> PendingDeltas;
             public NativeParallelHashMap<Entity, int> AppliedDeltaCounts;
+            public NativeList<AttributeOwnerMarkerRequestRecord> AttributeOwnerMarkerRequests;
             public BufferLookup<AttributeValueBuffer> AttributeLookup;
-            public ComponentLookup<AttributeDirtyComponent> AttributeDirtyLookup;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<AttributeModifierBuffer> DeltaBufferLookup;
-            public ComponentLookup<GEExecutionCalculationOutputModifierAppliedComponent> AppliedLookup;
             public Entity StreamEntity;
             public int Frame;
 
@@ -263,6 +292,7 @@ namespace GAS.Runtime
                 ModifierRecords.Clear();
                 PendingDeltas.Clear();
                 AppliedDeltaCounts.Clear();
+                AttributeOwnerMarkerRequests.Clear();
 
                 ReadPendingEffects(EffectReader, PendingEffects);
                 ReadModifierRecords(ModifierReader, ModifierRecords);
@@ -310,13 +340,12 @@ namespace GAS.Runtime
                             OldValue = oldValue,
                             NewValue = newValue,
                         });
-                        MarkOwnerDirty(record.TargetAsc);
+                        EnqueueAttributeOwnerMarkerRequest(record.TargetAsc);
                         IncrementAppliedDeltaCount(AppliedDeltaCounts, record.Effect);
                     }
                 }
 
                 AppendPendingDeltas();
-                MarkPendingEffectsApplied();
             }
 
             private void AppendPendingDeltas()
@@ -357,37 +386,95 @@ namespace GAS.Runtime
                 StreamLookup[StreamEntity] = stream;
             }
 
-            private void MarkPendingEffectsApplied()
+            private void EnqueueAttributeOwnerMarkerRequest(Entity asc)
             {
-                for (var i = 0; i < PendingEffects.Length; i++)
+                if (asc == Entity.Null)
+                    return;
+
+                AttributeOwnerMarkerRequests.Add(new AttributeOwnerMarkerRequestRecord
                 {
-                    var effect = PendingEffects[i].Effect;
-                    if (effect == Entity.Null
-                        || !AppliedLookup.HasComponent(effect))
-                    {
+                    Sequence = AttributeOwnerMarkerRequests.Length,
+                    ASC = asc,
+                    RequestKind = EAttributeOwnerMarkerRequestKind.MarkDirty,
+                });
+            }
+        }
+
+        [BurstCompile]
+        private struct GEExecutionCalculationOutputModifierAppliedJob : IJobChunk
+        {
+            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
+            public ComponentTypeHandle<GEExecutionCalculationOutputModifierAppliedComponent> AppliedTypeHandle;
+            [ReadOnly] public NativeList<PendingOutputEffectRecord> PendingEffects;
+            [ReadOnly] public NativeParallelHashMap<Entity, int> AppliedDeltaCounts;
+            public int Frame;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var effects = chunk.GetNativeArray(EntityTypeHandle);
+                var applied = chunk.GetNativeArray(ref AppliedTypeHandle);
+                var appliedMask = chunk.GetEnabledMask(ref AppliedTypeHandle);
+
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    var effect = effects[entityIndex];
+                    if (!ContainsPendingEffect(effect))
                         continue;
-                    }
 
                     var deltaCount = AppliedDeltaCounts.TryGetValue(effect, out var count) ? count : 0;
-                    AppliedLookup[effect] = new GEExecutionCalculationOutputModifierAppliedComponent
+                    applied[entityIndex] = new GEExecutionCalculationOutputModifierAppliedComponent
                     {
                         Frame = Frame,
                         DeltaCount = deltaCount,
                     };
-                    AppliedLookup.SetComponentEnabled(effect, true);
+                    appliedMask[entityIndex] = true;
                 }
             }
 
-            private void MarkOwnerDirty(Entity asc)
+            private bool ContainsPendingEffect(Entity effect)
             {
-                if (asc == Entity.Null
-                    || !AttributeDirtyLookup.HasComponent(asc)
-                    || AttributeDirtyLookup.IsComponentEnabled(asc))
+                for (var i = 0; i < PendingEffects.Length; i++)
                 {
-                    return;
+                    if (PendingEffects[i].Effect == effect)
+                        return true;
                 }
 
-                AttributeDirtyLookup.SetComponentEnabled(asc, true);
+                return false;
+            }
+        }
+
+        [BurstCompile]
+        private struct AttributeOwnerMarkerRequestFlushJob : IJob
+        {
+            public BufferLookup<AttributeOwnerMarkerRequestBuffer> RequestLookup;
+            [ReadOnly] public NativeList<AttributeOwnerMarkerRequestRecord> AttributeOwnerMarkerRequests;
+            public Entity EventBusEntity;
+
+            public void Execute()
+            {
+                if (EventBusEntity == Entity.Null || !RequestLookup.HasBuffer(EventBusEntity))
+                    return;
+
+                var requests = RequestLookup[EventBusEntity];
+                for (var i = 0; i < AttributeOwnerMarkerRequests.Length; i++)
+                {
+                    var record = AttributeOwnerMarkerRequests[i];
+                    if (record.ASC == Entity.Null)
+                        continue;
+
+                    requests.Add(new AttributeOwnerMarkerRequestBuffer
+                    {
+                        Sequence = requests.Length,
+                        ASC = record.ASC,
+                        RequestKind = record.RequestKind,
+                        Value = 1,
+                    });
+                }
             }
         }
 

@@ -4,7 +4,6 @@ namespace GAS.Runtime
 {
     public abstract class GameplayEffectComponentConfig
     {
-        protected static EntityManager _entityManager => GASManager.EntityManager;
 
         /// <summary>
         /// 是否可以被加载到 GE prototype 上并通过 EntityManager.Instantiate 复制。
@@ -23,6 +22,6 @@ namespace GAS.Runtime
         /// 因为采用了component结构，未来拓展GE的功能模块，会变得方便很多，实现了提前解耦。
         /// </summary>
         /// <param name="ge"></param>
-        public abstract void LoadToGameplayEffectEntity(Entity ge);
+        public abstract void LoadToGameplayEffectEntity(EntityManager entityManager, Entity ge);
     }
 }

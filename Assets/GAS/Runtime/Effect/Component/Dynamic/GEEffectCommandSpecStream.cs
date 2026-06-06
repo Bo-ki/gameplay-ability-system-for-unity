@@ -338,6 +338,62 @@ namespace GAS.Runtime
             }
         }
 
+        public struct GameplayEventWriter
+        {
+            private EntityManager _em;
+            private Entity _streamEntity;
+            private GEEffectCommandStreamComponent _stream;
+            private DynamicBuffer<GameplayEventBuffer> _facts;
+            private int _currentFrame;
+            private bool _isCreated;
+
+            internal GameplayEventWriter(
+                EntityManager em,
+                Entity streamEntity,
+                GEEffectCommandStreamComponent stream,
+                DynamicBuffer<GameplayEventBuffer> facts,
+                int currentFrame)
+            {
+                _em = em;
+                _streamEntity = streamEntity;
+                _stream = stream;
+                _facts = facts;
+                _currentFrame = currentFrame;
+                _isCreated = true;
+            }
+
+            public bool IsCreated => _isCreated;
+
+            public int CurrentFrame => _currentFrame;
+
+            public GameplayEventBuffer AppendGameplayEvent(in GameplayEventBuffer fact)
+            {
+                if (!_isCreated)
+                    return default;
+
+                var resolved = fact;
+                if (resolved.Sequence <= 0)
+                    resolved.Sequence = Allocate(ref _stream.NextFactSequence);
+                if (resolved.Frame <= 0)
+                    resolved.Frame = _currentFrame;
+
+                _facts.Add(resolved);
+                return resolved;
+            }
+
+            public void Flush()
+            {
+                if (!_isCreated
+                    || _streamEntity == Entity.Null
+                    || !_em.Exists(_streamEntity))
+                {
+                    return;
+                }
+
+                _em.SetComponentData(_streamEntity, _stream);
+            }
+        }
+
         public struct ParallelCommandFanInRecord
         {
             public int ProducerIndex;
@@ -493,6 +549,41 @@ namespace GAS.Runtime
                 commands,
                 setByCallerBuffer,
                 currentFrame);
+        }
+
+        public static GameplayEventWriter BeginGameplayEventWriter(EntityManager em)
+        {
+            if (!TryGetSingleton(em, out var streamEntity))
+                return default;
+            return BeginGameplayEventWriter(em, streamEntity, GASRuntimeFrameContext.ResolveCurrentFrame(em));
+        }
+
+        public static GameplayEventWriter BeginGameplayEventWriter(
+            EntityManager em,
+            Entity streamEntity,
+            int currentFrame)
+        {
+            if (streamEntity == Entity.Null || !em.Exists(streamEntity))
+                return default;
+            if (!HasRequiredBuffers(em, streamEntity))
+                return default;
+
+            var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
+            var facts = em.GetBuffer<GameplayEventBuffer>(streamEntity);
+            return new GameplayEventWriter(
+                em,
+                streamEntity,
+                stream,
+                facts,
+                currentFrame);
+        }
+
+        public static GameplayEventBuffer AppendGameplayEvent(EntityManager em, in GameplayEventBuffer fact)
+        {
+            var writer = BeginGameplayEventWriter(em);
+            var resolved = writer.AppendGameplayEvent(fact);
+            writer.Flush();
+            return resolved;
         }
 
         public static GEEffectCommandBuffer AppendCommand(EntityManager em, in GEEffectCommandBuffer command)

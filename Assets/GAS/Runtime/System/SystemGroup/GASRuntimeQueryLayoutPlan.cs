@@ -462,7 +462,8 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.EffectCommandSetByCallerBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectMutationBuffer,
                     },
-                    typeof(GameplayFactProjectionSystem)),
+                    typeof(GameplayFactProjectionSystem),
+                    typeof(GameplayFactBoundaryProjectionSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.ActiveEffectStore,
                     GASRuntimeLayoutDomain.GameplayEffect,
@@ -577,26 +578,6 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.ActiveModifierBuffer,
                     },
                     typeof(AttributeRecalculateSystem)),
-                Entry(
-                    GASRuntimeQueryLayoutEntryId.AttributeFactProjection,
-                    GASRuntimeLayoutDomain.Attribute,
-                    GASRuntimeEntityKind.EventBus,
-                    GASRuntimeLayoutCapability.QueryBased
-                    | GASRuntimeLayoutCapability.JobCandidate
-                    | GASRuntimeLayoutCapability.BurstCandidate
-                    | GASRuntimeLayoutCapability.ObservationOnly
-                    | GASRuntimeLayoutCapability.RequiresMainThreadEntityManager,
-                    GASRuntimeLayoutBoundary.ObservationReadBoundary
-                    | GASRuntimeLayoutBoundary.RuntimeCoreStreamBoundary
-                    | GASRuntimeLayoutBoundary.DynamicBufferMutation,
-                    GASRuntimeLayoutDecision.ObservationOnly,
-                    new[]
-                    {
-                        GASRuntimeLayoutComponentSlot.AttributeBuffer,
-                        GASRuntimeLayoutComponentSlot.GameplayEventBus,
-                    },
-                    Array.Empty<GASRuntimeLayoutComponentSlot>(),
-                    typeof(AttributeChangeEventProjectionSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.TagMaskRuntime,
                     GASRuntimeLayoutDomain.GameplayTag,

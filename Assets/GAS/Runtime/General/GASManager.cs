@@ -6,9 +6,10 @@ namespace GAS.Runtime
     public static class GASManager
     {
         private const int GameplayEventCapacity = 1024;
+        private const int AbilityLifecycleRequestCapacity = 512;
+        private const int AttributeOwnerMarkerRequestCapacity = 1024;
         private const int AttributeChangeEventCapacity = 512;
         private const int CueRequestCapacity = 512;
-        private const int DamageEventCapacity = 256;
         private const int TagChangeEventCapacity = 256;
         private const int DebugReplayEventCapacity = 8192;
         private const int PresentationOutboxOwnerCapacity = 512;
@@ -135,9 +136,9 @@ namespace GAS.Runtime
             {
                 ProjectRawFacts = 1,
             });
-            ExWorld.EntityManager.GetBuffer<DamageEventBuffer>(EntityEventBus).EnsureCapacity(DamageEventCapacity);
             ExWorld.EntityManager.GetBuffer<TagChangeEventBuffer>(EntityEventBus).EnsureCapacity(TagChangeEventCapacity);
-            ExWorld.EntityManager.GetBuffer<GameplayEventBusEventBuffer>(EntityEventBus).EnsureCapacity(GameplayEventCapacity);
+            ExWorld.EntityManager.GetBuffer<AbilityLifecycleRequestBuffer>(EntityEventBus).EnsureCapacity(AbilityLifecycleRequestCapacity);
+            ExWorld.EntityManager.GetBuffer<AttributeOwnerMarkerRequestBuffer>(EntityEventBus).EnsureCapacity(AttributeOwnerMarkerRequestCapacity);
             ExWorld.EntityManager.GetBuffer<AttributeChangeEventBuffer>(EntityEventBus).EnsureCapacity(AttributeChangeEventCapacity);
             ExWorld.EntityManager.GetBuffer<CueRequestBuffer>(EntityEventBus).EnsureCapacity(CueRequestCapacity);
             ExWorld.EntityManager.GetBuffer<PresentationOutboxOwnerBuffer>(EntityEventBus).EnsureCapacity(PresentationOutboxOwnerCapacity);

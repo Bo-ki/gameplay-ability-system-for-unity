@@ -11,13 +11,13 @@ namespace GAS.Runtime
     {
         public int[] tags;
 
-        public override void LoadToGameplayAbilityEntity(Entity ability)
+        public override void LoadToGameplayAbilityEntity(EntityManager entityManager, Entity ability)
         {
-            _entityManager.SetComponentData(ability, new AbilityCancelWithTagsComponent
+            entityManager.SetComponentData(ability, new AbilityCancelWithTagsComponent
             {
                 Tags = TagHelper.BuildMask(tags, includeParents: false)
             });
-            _entityManager.SetComponentEnabled<AbilityCancelWithTagsComponent>(ability, true);
+            entityManager.SetComponentEnabled<AbilityCancelWithTagsComponent>(ability, true);
         }
     }
 }

@@ -70,7 +70,7 @@ namespace GAS.Runtime
             if (componentConfigs != null)
             {
                 foreach (var config in componentConfigs)
-                    config?.LoadToGameplayEffectEntity(entity);
+                    config?.LoadToGameplayEffectEntity(entityManager, entity);
             }
 
             ConvertToRuntimeBuffers(entityManager, entity);

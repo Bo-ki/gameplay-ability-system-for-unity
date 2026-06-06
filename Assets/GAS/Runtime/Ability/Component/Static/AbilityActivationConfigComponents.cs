@@ -28,12 +28,12 @@ namespace GAS.Runtime
     {
         public int[] EffectCodes = Array.Empty<int>();
 
-        public override void LoadToGameplayAbilityEntity(Entity ability)
+        public override void LoadToGameplayAbilityEntity(EntityManager entityManager, Entity ability)
         {
             if (EffectCodes == null || EffectCodes.Length == 0)
                 return;
 
-            var effects = _entityManager.GetBuffer<AbilityOwnerEffectOnActivateBuffer>(ability);
+            var effects = entityManager.GetBuffer<AbilityOwnerEffectOnActivateBuffer>(ability);
             effects.Clear();
 
             for (var i = 0; i < EffectCodes.Length; i++)
@@ -49,12 +49,12 @@ namespace GAS.Runtime
         public int[] EffectCodes = Array.Empty<int>();
         public bool AutoEndOnCommit = true;
 
-        public override void LoadToGameplayAbilityEntity(Entity ability)
+        public override void LoadToGameplayAbilityEntity(EntityManager entityManager, Entity ability)
         {
             if (EffectCodes == null || EffectCodes.Length == 0)
                 return;
 
-            var effects = _entityManager.GetBuffer<AbilityTargetEffectOnActivateBuffer>(ability);
+            var effects = entityManager.GetBuffer<AbilityTargetEffectOnActivateBuffer>(ability);
             effects.Clear();
 
             for (var i = 0; i < EffectCodes.Length; i++)
@@ -68,7 +68,7 @@ namespace GAS.Runtime
                 });
             }
 
-            _entityManager.SetComponentEnabled<AbilityAutoEndOnCommitComponent>(ability, AutoEndOnCommit);
+            entityManager.SetComponentEnabled<AbilityAutoEndOnCommitComponent>(ability, AutoEndOnCommit);
         }
     }
 
@@ -76,10 +76,10 @@ namespace GAS.Runtime
     {
         public float RotationOffset;
 
-        public override void LoadToGameplayAbilityEntity(Entity ability)
+        public override void LoadToGameplayAbilityEntity(EntityManager entityManager, Entity ability)
         {
-            _entityManager.SetComponentData(ability, new AbilityMoveInputComponent { RotationOffset = RotationOffset });
-            _entityManager.SetComponentEnabled<AbilityMoveInputComponent>(ability, true);
+            entityManager.SetComponentData(ability, new AbilityMoveInputComponent { RotationOffset = RotationOffset });
+            entityManager.SetComponentEnabled<AbilityMoveInputComponent>(ability, true);
         }
     }
 }

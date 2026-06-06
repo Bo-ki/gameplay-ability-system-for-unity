@@ -69,9 +69,9 @@ namespace GAS.Runtime
         public bool ResetStartTimeWhenActivated;
         public bool StopTickWhenDeactivated;
 
-        public override void LoadToGameplayEffectEntity(Entity ge)
+        public override void LoadToGameplayEffectEntity(EntityManager entityManager, Entity ge)
         {
-            var em = GASManager.EntityManager;
+            var em = entityManager;
             em.SetComponentData(ge, new GEDurationDefinitionComponent
             {
                 Duration = duration,

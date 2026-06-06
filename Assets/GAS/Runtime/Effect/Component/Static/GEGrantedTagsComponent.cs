@@ -11,13 +11,13 @@ namespace GAS.Runtime
     {
         public int[] tags;
 
-        public override void LoadToGameplayEffectEntity(Entity ge)
+        public override void LoadToGameplayEffectEntity(EntityManager entityManager, Entity ge)
         {
-            GASManager.EntityManager.SetComponentData(ge, new GEGrantedTagsComponent
+            entityManager.SetComponentData(ge, new GEGrantedTagsComponent
             {
                 Tags = TagHelper.BuildMask(tags, includeParents: true)
             });
-            GASManager.EntityManager.SetComponentEnabled<GEGrantedTagsComponent>(ge, true);
+            entityManager.SetComponentEnabled<GEGrantedTagsComponent>(ge, true);
         }
     }
 }

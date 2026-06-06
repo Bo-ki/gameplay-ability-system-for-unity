@@ -4,13 +4,6 @@ namespace GAS.Runtime
 {
     public static class AbilityRuntimeActions
     {
-        private static EntityManager EntityManager => GASManager.EntityManager;
-
-        public static Entity RequestCostGameplayEffect(Entity ability)
-        {
-            return RequestCostGameplayEffect(ability, EntityManager);
-        }
-
         public static Entity RequestCostGameplayEffect(Entity ability, EntityManager entityManager)
         {
             if (!TryGetBaseInfo(entityManager, ability, out var baseInfo)
@@ -25,11 +18,6 @@ namespace GAS.Runtime
                 baseInfo,
                 cost.GameplayEffectCode,
                 durationFrameOverride: 0);
-        }
-
-        public static Entity RequestCooldownGameplayEffect(Entity ability)
-        {
-            return RequestCooldownGameplayEffect(ability, EntityManager);
         }
 
         public static Entity RequestCooldownGameplayEffect(Entity ability, EntityManager entityManager)
@@ -301,17 +289,18 @@ namespace GAS.Runtime
             int sourceAbilityCode)
         {
             TryGetBaseInfo(entityManager, ability, out var baseInfo);
-            EventBusHelper.EnqueueGameplayEvent(entityManager, GASManager.EntityEventBus, new GameplayEventBusEventBuffer
+            EffectCommandSpecStream.AppendGameplayEvent(entityManager, new GameplayEventBuffer
             {
-                Type = type,
+                EventType = type,
+                Domain = EGameplayFactDomain.Ability,
+                Category = EGameplayFactCategory.Request,
+                Severity = EGameplayFactSeverity.Info,
                 SourceAsc = baseInfo.Owner,
                 TargetAsc = baseInfo.Owner,
                 SourceAbility = ability,
-                GameplayEffect = sourceEffect,
-                RelatedAbility = sourceAbility,
+                SourceEffect = sourceEffect,
                 EventCode = baseInfo.Code,
                 ReasonCode = (int)reason,
-                RelatedAbilityCode = sourceAbilityCode,
                 Value = sourceAbilityCode,
             });
         }

@@ -14,13 +14,13 @@ namespace GAS.Runtime
         public int[] any;
         public int[] none;
 
-        public override void LoadToGameplayEffectEntity(Entity ge)
+        public override void LoadToGameplayEffectEntity(EntityManager entityManager, Entity ge)
         {
-            GASManager.EntityManager.SetComponentData(ge, new GEOngoingRequiredTagsComponent
+            entityManager.SetComponentData(ge, new GEOngoingRequiredTagsComponent
             {
                 requirement = TagHelper.BuildRequirementMask(all ?? tags, any, none)
             });
-            GASManager.EntityManager.SetComponentEnabled<GEOngoingRequiredTagsComponent>(ge, true);
+            entityManager.SetComponentEnabled<GEOngoingRequiredTagsComponent>(ge, true);
         }
     }
 }

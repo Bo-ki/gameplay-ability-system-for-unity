@@ -17,9 +17,13 @@ namespace GAS.Runtime
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            _activeQuery = SystemAPI.QueryBuilder()
-                .WithAll<AbilityStateComponent>()
-                .Build();
+            _activeQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadWrite<AbilityStateComponent>(),
+                },
+            });
             state.RequireForUpdate(_activeQuery);
         }
 

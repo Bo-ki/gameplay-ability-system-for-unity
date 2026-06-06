@@ -33,10 +33,10 @@ namespace GAS.Runtime
     {
         public GrantedAbilityConfigSetting[] GrantedAbilities;
 
-        public override void LoadToGameplayEffectEntity(Entity ge)
+        public override void LoadToGameplayEffectEntity(EntityManager entityManager, Entity ge)
         {
             var settings = GrantedAbilities ?? Array.Empty<GrantedAbilityConfigSetting>();
-            var configBuffer = _entityManager.GetBuffer<GEGrantedAbilityConfigBuffer>(ge);
+            var configBuffer = entityManager.GetBuffer<GEGrantedAbilityConfigBuffer>(ge);
             configBuffer.Clear();
 
             for (var i = 0; i < settings.Length; i++)
@@ -50,7 +50,7 @@ namespace GAS.Runtime
                     RemovePolicy = settings[i].RemovePolicy,
                 });
             }
-            _entityManager.SetComponentEnabled<GEGrantedAbilityConfigBuffer>(ge, configBuffer.Length > 0);
+            entityManager.SetComponentEnabled<GEGrantedAbilityConfigBuffer>(ge, configBuffer.Length > 0);
         }
     }
 }

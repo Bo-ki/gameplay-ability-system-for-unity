@@ -34,4 +34,28 @@ namespace GAS.Runtime
     public struct AbilityDestroyOnCleanupComponent : IComponentData, IEnableableComponent
     {
     }
+
+    public enum EAbilityLifecycleRequestKind : byte
+    {
+        End = 1,
+        Cancel = 2,
+    }
+
+    /// <summary>
+    /// Frame-local ability lifecycle request produced by non-ability-owned systems.
+    /// AbilityLifecycleRequestSystem is the only runtime hot-path system that applies these
+    /// records to ability enableable markers.
+    /// </summary>
+    [InternalBufferCapacity(0)]
+    public struct AbilityLifecycleRequestBuffer : IBufferElementData
+    {
+        public int Sequence;
+        public EAbilityLifecycleRequestKind RequestKind;
+        public EAbilityLifecycleReason Reason;
+        public Entity Ability;
+        public Entity SourceAbility;
+        public Entity SourceEffect;
+        public int SourceAbilityCode;
+        public byte DestroyOnCleanup;
+    }
 }

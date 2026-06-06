@@ -18,13 +18,15 @@ namespace GAS.Runtime
         private EntityQuery _activationPendingQuery;
         private EntityQuery _query;
 
-        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            _activationPendingQuery = SystemAPI.QueryBuilder()
-                .WithAll<
-                    AbilityActivationPendingComponent>()
-                .Build();
+            _activationPendingQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<AbilityActivationPendingComponent>(),
+                },
+            });
 
             _query = state.GetEntityQuery(new EntityQueryDesc
             {
@@ -53,7 +55,6 @@ namespace GAS.Runtime
             }.ScheduleParallel(_query, state.Dependency);
         }
 
-        [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
         }
@@ -76,7 +77,8 @@ namespace GAS.Runtime
                 var commitRequests = chunk.GetNativeArray(ref CommitRequestTypeHandle);
                 var targets = chunk.GetNativeArray(ref MainTargetTypeHandle);
 
-                for (var entityIndex = 0; entityIndex < chunk.Count; entityIndex++)
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
                 {
                     if (!activationPendingMask.GetBit(entityIndex))
                         continue;

@@ -139,30 +139,6 @@ namespace GAS.Runtime
             return Create(evt.LogIndex, evt, GameplayFactClassifier.Classify(evt));
         }
 
-        public static GasStructuredLogEntry FromGameplayEvent(in GameplayEventBusEventBuffer evt)
-        {
-            var replay = new ReplayLogEventBuffer
-            {
-                LogIndex = NoReplayLogIndex,
-                Frame = evt.Frame,
-                Sequence = evt.Sequence,
-                Kind = EDebugReplayEventKind.GameplayEvent,
-                GameplayEventType = evt.Type,
-                SourceAsc = evt.SourceAsc,
-                TargetAsc = evt.TargetAsc,
-                SourceAbility = evt.SourceAbility,
-                GameplayEffect = evt.GameplayEffect,
-                RelatedAbility = evt.RelatedAbility,
-                ContextId = evt.ContextId,
-                EventCode = evt.EventCode,
-                ReasonCode = evt.ReasonCode,
-                RelatedAbilityCode = evt.RelatedAbilityCode,
-                Value = evt.Value,
-            };
-
-            return Create(NoReplayLogIndex, replay, GameplayFactClassifier.Classify(evt.Type));
-        }
-
         public static GasStructuredLogEntry FromAttributeChange(in AttributeChangeEventBuffer evt)
         {
             var replay = new ReplayLogEventBuffer
@@ -215,21 +191,6 @@ namespace GAS.Runtime
                 TargetAsc = evt.ASC,
                 TagIndex = evt.TagIndex,
                 Flag = evt.Added ? (byte)1 : (byte)0,
-            };
-
-            return Create(NoReplayLogIndex, replay, GameplayFactClassifier.Classify(replay));
-        }
-
-        public static GasStructuredLogEntry FromDamage(in DamageEventBuffer evt)
-        {
-            var replay = new ReplayLogEventBuffer
-            {
-                LogIndex = NoReplayLogIndex,
-                Kind = EDebugReplayEventKind.Damage,
-                SourceAsc = evt.Source,
-                TargetAsc = evt.Target,
-                DamageAmount = evt.Amount,
-                Value = evt.Amount,
             };
 
             return Create(NoReplayLogIndex, replay, GameplayFactClassifier.Classify(replay));
