@@ -2,7 +2,7 @@
 
 InputHash: `c189c1233efed059a50c04b5cc91c1d56de27fd79cf2edcaab713ec7708aa159`
 RowCount: `7`
-OrphansDeleted: `1`
+OrphansDeleted: `0`
 LubanCSharpOutput: `Assets/DataGenerated/Luban/CSharp`
 LubanJsonOutput: `Assets/DataGenerated/Luban/Json/GAS`
 RuntimeForbiddenDependencyHits: `0`

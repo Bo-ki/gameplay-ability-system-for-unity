@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 namespace GAS.Editor
@@ -57,6 +58,7 @@ namespace GAS.Editor
                 {
                     if (!orphanCleanupRan && phase.PhaseName == "ValidationReport")
                     {
+                        PreRegisterPhaseOutputs(context, manifest, phase, "Editor/CI", false);
                         context.OrphansDeleted = manifest.DeleteOrphanedFiles();
                         orphanCleanupRan = true;
                     }
@@ -101,6 +103,23 @@ namespace GAS.Editor
 #else
             return GasCodeGenSettings.CreateDefault();
 #endif
+        }
+
+        private static void PreRegisterPhaseOutputs(
+            GasCodeGenContext context,
+            GasCodeGenManifest manifest,
+            IGasCodeGenPhase phase,
+            string layer,
+            bool runtimeVisible)
+        {
+            for (var i = 0; i < phase.OutputFileNames.Count; i++)
+            {
+                manifest.AddGeneratedFile(
+                    phase.PhaseName,
+                    Path.Combine(context.OutputDir, phase.OutputFileNames[i]),
+                    layer,
+                    runtimeVisible);
+            }
         }
     }
 }

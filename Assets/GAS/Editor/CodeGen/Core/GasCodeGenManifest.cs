@@ -29,12 +29,31 @@ namespace GAS.Editor
         {
             var normalizedPath = Normalize(fullPath);
             EnsureUnderProjectRoot(normalizedPath);
+            var projectRelativePath = ToProjectRelativePath(normalizedPath);
+
+            for (var i = 0; i < _entries.Count; i++)
+            {
+                if (!string.Equals(
+                        _entries[i].ProjectRelativePath,
+                        projectRelativePath,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                _entries[i].PhaseName = phaseName;
+                _entries[i].FileName = Path.GetFileName(normalizedPath);
+                _entries[i].Layer = layer;
+                _entries[i].RuntimeVisible = runtimeVisible;
+                _entries[i].VersionControlled = IsVersionControlledPath(normalizedPath);
+                return;
+            }
 
             _entries.Add(new Entry
             {
                 PhaseName = phaseName,
                 FileName = Path.GetFileName(normalizedPath),
-                ProjectRelativePath = ToProjectRelativePath(normalizedPath),
+                ProjectRelativePath = projectRelativePath,
                 Layer = layer,
                 RuntimeVisible = runtimeVisible,
                 VersionControlled = IsVersionControlledPath(normalizedPath),
