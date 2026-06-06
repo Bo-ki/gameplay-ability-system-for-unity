@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants>$(DefineConstants);GAS_CODEGEN_BOOTSTRAP_ONLY</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Core\GasCodeGenContext.cs" Link="CodeGen\Core\GasCodeGenContext.cs" />
+    <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Core\GasRowScanner.cs" Link="CodeGen\Core\GasRowScanner.cs" />
+    <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Core\RowMetadata.cs" Link="CodeGen\Core\RowMetadata.cs" />
+    <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Core\RowMetadataFactory.cs" Link="CodeGen\Core\RowMetadataFactory.cs" />
+    <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Core\LubanNormalizedRowBootstrap.cs" Link="CodeGen\Core\LubanNormalizedRowBootstrap.cs" />
+    <Compile Include="..\..\Assets\GAS\Editor\General\IndentedWriter.cs" Link="CodeGen\IndentedWriter.cs" />
+    <Compile Include="..\GasCodeGenCli\GasDefinitionKindShim.cs" Link="CodeGen\GasDefinitionKindShim.cs" />
+  </ItemGroup>
+</Project>

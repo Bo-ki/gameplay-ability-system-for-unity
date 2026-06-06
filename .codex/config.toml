@@ -1,0 +1,10 @@
+[mcp_servers.codedb-mcp]
+command = 'C:\Users\Y\.codex\vendor_imports\codedb-mcp\skills\codedb-mcp\assets\codebase-mcp.exe'
+args = [
+  "--config",
+  'E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\.codedb-mcp\codedb-mcp.toml',
+  "mcp",
+  'E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity',
+]
+cwd = 'E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity'
+startup_timeout_sec = 120

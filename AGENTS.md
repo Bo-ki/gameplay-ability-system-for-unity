@@ -55,3 +55,13 @@ Use a single-context domain documentation layout. Read `CONTEXT.md` and `docs/ad
   - What changed and why.
   - Affected modules/paths (for example `Assets/GAS/Runtime/Effect`).
   - Validation evidence (test run, editor verification, or screenshots for tooling/UI changes).
+
+## codedb-mcp 检索约定
+
+- 当需要按自然语言语义、业务概念或模糊描述查找代码时，优先使用 `codedb_search`，不要先大范围读取源码树。
+- 当需要精确文本、正则或字符串搜索时，使用 `codedb_search`，必要时传入 `regex=true`；如果结果看起来不完整，先用 `codedb_status` 检查索引范围和扫描状态。
+- 当需要查找符号定义、文件大纲或读取局部代码上下文时，优先使用 `codedb_symbol`、`codedb_outline`、`codedb_read`，并用行号范围控制上下文大小。
+- 当需要查找符号引用、调用方或“哪里用了这个类/方法”时，优先使用 `codedb_callers`；如果已知定义位置，传入 `definition_path` 和 `definition_line`。
+- 当需要分析文件依赖、反向依赖或跨模块关系时，优先使用 `codedb_deps`。
+- 当一次任务需要多个搜索、outline、read 或依赖查询时，优先使用 `codedb_bundle`、`codedb_query` 或工具自带的 batch 参数，减少 MCP 往返和 token 消耗。
+- 当怀疑索引不新鲜或监听未生效时，先调用 `codedb_status`、`codedb_changes` 或 `codedb_hot` 检查状态。

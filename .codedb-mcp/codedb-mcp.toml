@@ -1,0 +1,85 @@
+# codedb-mcp project configuration.
+# Keep this file inside the project root so the local index and MCP behavior
+# are tied to this Unity repository.
+
+[scan]
+# Current codedb-mcp parser languages include C#, Java, Rust, Python, Lua,
+# JavaScript/TypeScript, C, and C++.
+extensions = ["cs", "java", "rs", "py", "pyw", "lua", "js", "jsx", "mjs", "cjs", "ts", "tsx", "c", "h", "cc", "cpp", "cxx", "hpp", "hh", "hxx"]
+
+max_file_bytes = 50000000
+respect_gitignore = true
+
+# Keep the Unity index focused on project source. PackageCache and external
+# docs can be added later if a task needs dependency-source lookup.
+root_paths = [
+  "Assets/GAS",
+  "Assets/AutoChessDemo",
+  "Assets/DataGenerated/Luban/CSharp",
+  "Assets/LubanGen",
+  "Assets/Settings",
+  "Tools",
+]
+
+# Include generated Luban C# even though the Unity .gitignore excludes it.
+include_paths = [
+  "Assets/DataGenerated/Luban/CSharp",
+]
+
+exclude_paths = [
+  "Bundles/**",
+  "Library/**",
+  "Logs/**",
+  "Temp/**",
+  "TestResults/**",
+  "UserSettings/**",
+  "方案讨论/UnityDOTS官方文档参考/官方文档原件/**",
+]
+
+skip_dirs = [
+  ".git",
+  ".hg",
+  ".svn",
+  ".vs",
+  ".idea",
+  ".gradle",
+  "node_modules",
+  "target",
+  "dist",
+  ".next",
+  ".svelte-kit",
+  "coverage",
+  "out",
+  ".codedb-mcp",
+  "Library",
+  "Temp",
+  "Logs",
+  "obj",
+  "bin",
+  "Build",
+  "Builds",
+  "Bundles",
+  "TestResults",
+  "UserSettings",
+]
+
+[embedding]
+model = "C:/Users/Y/.cache/huggingface/hub/codedb-mcp/models/potion-code-16M"
+
+[diagnostics]
+timing = false
+slow_file_ms = 0
+
+[logging]
+enabled = false
+file = ".codedb-mcp/codedb-mcp.log"
+queue_capacity = 8192
+flush_interval_ms = 500
+
+[watch]
+enabled = true
+poll_interval_seconds = 5
+
+[storage]
+enabled = true
+dir = ".codedb-mcp"
