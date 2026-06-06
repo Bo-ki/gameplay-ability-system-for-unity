@@ -6,8 +6,8 @@ namespace GAS.Runtime
     public enum GASRuntimeStructuralChangeEntryId
     {
         None = 0,
-        AscCreateRequest = 1,
-        AbilityCommandRequestConsumption = 2,
+        AscOwnerLocalInitialization = 1,
+        AbilityCommandBufferConsumption = 2,
         AbilityCommitGateMutation = 3,
         AbilityLifecycleCleanup = 4,
         GameplayEffectApplyRequestConsumption = 6,
@@ -66,7 +66,7 @@ namespace GAS.Runtime
     public enum GASRuntimeStructuralBoundary
     {
         None = 0,
-        RequestEntityConsumption = 1 << 0,
+        TransientCommandConsumption = 1 << 0,
         RuntimeEntityLifecycle = 1 << 1,
         AbilityLifecycleMarker = 1 << 2,
         GameplayEffectInstanceLifecycle = 1 << 3,
@@ -96,7 +96,7 @@ namespace GAS.Runtime
     public enum GASRuntimeEnableableScope
     {
         None = 0,
-        ExistingRequestMarker = 1 << 0,
+        OwnerLocalPendingMarker = 1 << 0,
         TransientCommandMarker = 1 << 1,
         TransientLifecycleMarker = 1 << 2,
         DirtyMarker = 1 << 3,
@@ -375,7 +375,7 @@ namespace GAS.Runtime
             AddIfLayoutEntryExists(
                 entries,
                 layoutPlan,
-                GASRuntimeStructuralChangeEntryId.AscCreateRequest,
+                GASRuntimeStructuralChangeEntryId.AscOwnerLocalInitialization,
                 GASRuntimeQueryLayoutEntryId.AscStableState,
                 GASRuntimeStructuralOperation.CreateEntity
                 | GASRuntimeStructuralOperation.AddComponent
@@ -387,11 +387,11 @@ namespace GAS.Runtime
                 GASRuntimeStructuralEligibility.CanUseEcb
                 | GASRuntimeStructuralEligibility.AlreadyUsesEcb
                 | GASRuntimeStructuralEligibility.CanUseEnableableTransientMarker,
-                GASRuntimeStructuralBoundary.RequestEntityConsumption
+                GASRuntimeStructuralBoundary.TransientCommandConsumption
                 | GASRuntimeStructuralBoundary.RuntimeEntityLifecycle
                 | GASRuntimeStructuralBoundary.DynamicBufferMutation,
                 GASRuntimeDirtyPipelineSignal.None,
-                GASRuntimeEnableableScope.ExistingRequestMarker,
+                GASRuntimeEnableableScope.OwnerLocalPendingMarker,
                 GASRuntimeLayoutComponentSlot.AscBasicData,
                 GASRuntimeLayoutComponentSlot.TagMask,
                 GASRuntimeLayoutComponentSlot.AttributeBuffer,
@@ -402,8 +402,8 @@ namespace GAS.Runtime
             AddIfLayoutEntryExists(
                 entries,
                 layoutPlan,
-                GASRuntimeStructuralChangeEntryId.AbilityCommandRequestConsumption,
-                GASRuntimeQueryLayoutEntryId.AbilityCommandRequest,
+                GASRuntimeStructuralChangeEntryId.AbilityCommandBufferConsumption,
+                GASRuntimeQueryLayoutEntryId.AbilityCommandBuffer,
                 GASRuntimeStructuralOperation.CreateEntity
                 | GASRuntimeStructuralOperation.DestroyEntity
                 | GASRuntimeStructuralOperation.AddComponent
@@ -417,13 +417,13 @@ namespace GAS.Runtime
                 | GASRuntimeStructuralEligibility.CanUseEnableableTransientMarker
                 | GASRuntimeStructuralEligibility.RequiresSemanticDecision
                 | GASRuntimeStructuralEligibility.MirrorsLayoutStructuralHotspot,
-                GASRuntimeStructuralBoundary.RequestEntityConsumption
+                GASRuntimeStructuralBoundary.TransientCommandConsumption
                 | GASRuntimeStructuralBoundary.RuntimeEntityLifecycle
                 | GASRuntimeStructuralBoundary.DynamicBufferMutation,
                 GASRuntimeDirtyPipelineSignal.None,
-                GASRuntimeEnableableScope.ExistingRequestMarker
+                GASRuntimeEnableableScope.OwnerLocalPendingMarker
                 | GASRuntimeEnableableScope.TransientCommandMarker,
-                GASRuntimeLayoutComponentSlot.AbilityCommandRequest,
+                GASRuntimeLayoutComponentSlot.AbilityCommandBuffer,
                 GASRuntimeLayoutComponentSlot.GrantedAbilityBuffer);
 
             AddIfLayoutEntryExists(
@@ -443,7 +443,7 @@ namespace GAS.Runtime
                 | GASRuntimeStructuralEligibility.CanUseEnableableTransientMarker
                 | GASRuntimeStructuralEligibility.RequiresSemanticDecision
                 | GASRuntimeStructuralEligibility.MirrorsLayoutStructuralHotspot,
-                GASRuntimeStructuralBoundary.RequestEntityConsumption
+                GASRuntimeStructuralBoundary.TransientCommandConsumption
                 | GASRuntimeStructuralBoundary.AbilityLifecycleMarker
                 | GASRuntimeStructuralBoundary.DefinitionRuntimeTransition
                 | GASRuntimeStructuralBoundary.CrossEntityLookup
@@ -504,7 +504,7 @@ namespace GAS.Runtime
                 | GASRuntimeStructuralEligibility.CanUseDirtyPipeline
                 | GASRuntimeStructuralEligibility.RequiresSemanticDecision
                 | GASRuntimeStructuralEligibility.MirrorsLayoutStructuralHotspot,
-                GASRuntimeStructuralBoundary.RequestEntityConsumption
+                GASRuntimeStructuralBoundary.TransientCommandConsumption
                 | GASRuntimeStructuralBoundary.GameplayEffectInstanceLifecycle
                 | GASRuntimeStructuralBoundary.DefinitionRuntimeTransition
                 | GASRuntimeStructuralBoundary.AttributeDirtyPropagation

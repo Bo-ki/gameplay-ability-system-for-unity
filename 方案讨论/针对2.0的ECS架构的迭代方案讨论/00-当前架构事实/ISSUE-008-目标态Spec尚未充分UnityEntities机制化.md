@@ -1,6 +1,6 @@
 # ISSUE-008 目标态 Spec 尚未充分 Unity Entities 机制化
 
-> 最近复核：2026-06-02 | 状态：Active | 严重度：P1
+> 最近复核：2026-06-06 | 状态：Active | 严重度：P1
 
 ## 当前结论
 
@@ -16,10 +16,10 @@
 
 ## 仍不足部分
 
-1. `SystemAPI.Query` 主线程 foreach 仍被用在 hot path proof 中。
-2. `Complete()` 未被系统性治理。
+1. `SystemAPI.Query` 主线程 foreach 仍被用在 generated commit/remove、ASC command resolve、ability cleanup、attribute event projection 等 proof/transition 路径中。
+2. `Complete()` 已清零，但仍需作为 codegen/static validation 防回流项，而不是当前 runtime 事实。
 3. 实际 `Baker<T>` / `BlobAssetStore` 还没有落到当前 Runtime/AutoChess 代码树。
-4. NativeStream / deterministic merge 仍是目标，不是当前事实。
+4. NativeStream / deterministic merge 已在 OutputModifier 局部落地，但 singleton stream owner 的容量、ordering、budget 证据仍不足。
 5. Contract-only 文件未和 runtime evidence 强绑定。
 
 ## 退出条件

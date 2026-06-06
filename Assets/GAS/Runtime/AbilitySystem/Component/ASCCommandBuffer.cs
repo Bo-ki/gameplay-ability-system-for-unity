@@ -3,7 +3,7 @@ using Unity.Entities;
 namespace GAS.Runtime
 {
     /// <summary>
-    /// ASC 边界命令类型。只用于低频 Request Entity，不进入高频帧内 fan-in record。
+    /// ASC owner-local 命令类型。边界入口只追加 ASCCommandBuffer，不创建 request entity。
     /// </summary>
     public enum ASCCommandType : byte
     {
@@ -15,15 +15,15 @@ namespace GAS.Runtime
     }
 
     /// <summary>
-    /// ASC 边界命令请求。系统消费后应销毁请求实体，避免跨帧堆积。
+    /// ASC owner-local 命令 payload。Transient command 由 ASCCommandBuffer 承载。
     /// </summary>
-    public struct ASCCommandRequestComponent : IComponentData
+    public struct ASCCommand
     {
-        public Entity ASC;
         public ASCCommandType CommandType;
 
         public int Level;
-        public int TagCode;
+        public int TagSourceIndex;
+        public TagMaskComponent TagMask;
 
         public int AttrSetCode;
         public int AttributeCode;
@@ -32,5 +32,11 @@ namespace GAS.Runtime
         public bool IsClampMax;
         public float MinValue;
         public float MaxValue;
+    }
+
+    [InternalBufferCapacity(4)]
+    public struct ASCCommandBuffer : IBufferElementData
+    {
+        public ASCCommand Command;
     }
 }

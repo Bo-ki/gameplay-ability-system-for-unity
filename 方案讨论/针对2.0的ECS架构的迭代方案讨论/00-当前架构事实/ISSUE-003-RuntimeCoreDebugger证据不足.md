@@ -1,6 +1,6 @@
 # ISSUE-003 Runtime Core Debugger 证据不足
 
-> 最近复核：2026-06-02 | 状态：Active | 严重度：P1
+> 最近复核：2026-06-06 | 状态：Active | 严重度：P1
 
 ## 当前结论
 

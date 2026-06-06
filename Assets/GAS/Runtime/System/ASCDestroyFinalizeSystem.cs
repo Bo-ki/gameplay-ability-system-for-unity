@@ -1,6 +1,8 @@
+using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 
 namespace GAS.Runtime
 {
@@ -29,58 +31,70 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            var ascChunkCount = _ascQuery.CalculateChunkCount();
+            var ascChunkCount = _ascQuery.CalculateChunkCountWithoutFiltering();
             if (ascChunkCount <= 0)
                 return;
 
-            var em = state.EntityManager;
             var ascRecordStream = new NativeStream(ascChunkCount, Allocator.TempJob);
-            var ascRecords = new NativeList<ASCDestroyFinalizeRecord>(Allocator.Temp);
-            var effectReferenceRecords = new NativeList<ASCReferencingEffectRecord>(Allocator.Temp);
-            var abilityOwnerRecords = new NativeList<ASCOwnedAbilityRecord>(Allocator.Temp);
+            var effectChunkCount = _effectQuery.CalculateChunkCountWithoutFiltering();
+            var effectRecordStream = new NativeStream(
+                effectChunkCount > 0 ? effectChunkCount : 1,
+                Allocator.TempJob);
+            var abilityChunkCount = _abilityQuery.CalculateChunkCountWithoutFiltering();
+            var abilityRecordStream = new NativeStream(
+                abilityChunkCount > 0 ? abilityChunkCount : 1,
+                Allocator.TempJob);
+            var ascRecords = new NativeList<ASCDestroyFinalizeRecord>(Allocator.TempJob);
+            var effectReferenceRecords = new NativeList<ASCReferencingEffectRecord>(Allocator.TempJob);
+            var abilityOwnerRecords = new NativeList<ASCOwnedAbilityRecord>(Allocator.TempJob);
             var ecb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
-
-            try
+            var entityTypeHandle = SystemAPI.GetEntityTypeHandle();
+            var originalDependency = state.Dependency;
+            var ascScanHandle = ScheduleDestroyingASCScan(
+                ascRecordStream,
+                entityTypeHandle,
+                originalDependency);
+            var effectScanHandle = ScheduleReferencingEffectScan(
+                effectChunkCount,
+                effectRecordStream,
+                entityTypeHandle,
+                SystemAPI.GetComponentTypeHandle<GEContextComponent>(isReadOnly: true),
+                originalDependency);
+            var abilityScanHandle = ScheduleAbilityOwnerScan(
+                abilityChunkCount,
+                abilityRecordStream,
+                entityTypeHandle,
+                SystemAPI.GetComponentTypeHandle<AbilityStateComponent>(isReadOnly: true),
+                originalDependency);
+            var scanHandle = JobHandle.CombineDependencies(
+                ascScanHandle,
+                effectScanHandle,
+                abilityScanHandle);
+            var applyJob = new ASCDestroyFinalizeApplyJob
             {
-                var entityTypeHandle = SystemAPI.GetEntityTypeHandle();
-                ScanDestroyingASCs(ref state, ascRecordStream, entityTypeHandle);
-                ReadDestroyingASCs(ascRecordStream, ascRecords);
-                ScanReferencingEffects(
-                    ref state,
-                    effectReferenceRecords,
-                    entityTypeHandle,
-                    SystemAPI.GetComponentTypeHandle<GEContextComponent>(isReadOnly: true));
-                ScanAbilityOwners(
-                    ref state,
-                    abilityOwnerRecords,
-                    entityTypeHandle,
-                    SystemAPI.GetComponentTypeHandle<AbilityStateComponent>(isReadOnly: true));
+                ASCRecordStream = ascRecordStream,
+                EffectRecordStream = effectRecordStream,
+                AbilityRecordStream = abilityRecordStream,
+                ASCRecords = ascRecords,
+                EffectReferenceRecords = effectReferenceRecords,
+                AbilityOwnerRecords = abilityOwnerRecords,
+                ActiveEffectLookup = SystemAPI.GetBufferLookup<LegacyGameplayEffectEntityBuffer>(isReadOnly: true),
+                AbilitySlotLookup = SystemAPI.GetBufferLookup<AbilitySlotBuffer>(isReadOnly: true),
+                EffectLifecycleLookup = SystemAPI.GetComponentLookup<GEEffectLifecycleComponent>(isReadOnly: true),
+                AbilityStateLookup = SystemAPI.GetComponentLookup<AbilityStateComponent>(isReadOnly: true),
+                Ecb = ecb,
+            };
+            var applyHandle = applyJob.Schedule(scanHandle);
+            var disposeHandle = ascRecordStream.Dispose(applyHandle);
+            disposeHandle = JobHandle.CombineDependencies(disposeHandle, effectRecordStream.Dispose(applyHandle));
+            disposeHandle = JobHandle.CombineDependencies(disposeHandle, abilityRecordStream.Dispose(applyHandle));
 
-                for (var i = 0; i < ascRecords.Length; i++)
-                {
-                    var asc = ascRecords[i].ASC;
-                    if (!em.Exists(asc))
-                        continue;
-
-                    if (HasOwnedTargetEffect(em, asc)
-                        || HasReferencingEffect(asc, effectReferenceRecords)
-                        || HasOwnedAbility(em, asc, abilityOwnerRecords))
-                    {
-                        continue;
-                    }
-
-                    EntityHelper.UnbindGameObjectToEntity(asc);
-                    ecb.DestroyEntity(asc);
-                }
-            }
-            finally
-            {
-                abilityOwnerRecords.Dispose();
-                effectReferenceRecords.Dispose();
-                ascRecords.Dispose();
-                ascRecordStream.Dispose();
-            }
+            var listDisposeHandle = JobHandle.CombineDependencies(
+                ascRecords.Dispose(applyHandle),
+                effectReferenceRecords.Dispose(applyHandle),
+                abilityOwnerRecords.Dispose(applyHandle));
+            state.Dependency = JobHandle.CombineDependencies(disposeHandle, listDisposeHandle);
         }
 
         public void OnDestroy(ref SystemState state)
@@ -105,108 +119,58 @@ namespace GAS.Runtime
             public Entity Owner;
         }
 
-        private void ScanDestroyingASCs(
-            ref SystemState state,
+        private JobHandle ScheduleDestroyingASCScan(
             NativeStream ascRecordStream,
-            EntityTypeHandle entityTypeHandle)
+            EntityTypeHandle entityTypeHandle,
+            JobHandle dependency)
         {
             var scanJob = new ASCDestroyFinalizeScanJob
             {
                 EntityTypeHandle = entityTypeHandle,
                 ASCRecordWriter = ascRecordStream.AsWriter(),
             };
-            state.Dependency = scanJob.ScheduleParallel(_ascQuery, state.Dependency);
-            state.Dependency.Complete();
+            return scanJob.ScheduleParallel(_ascQuery, dependency);
         }
 
-        private static void ReadDestroyingASCs(
-            NativeStream ascRecordStream,
-            NativeList<ASCDestroyFinalizeRecord> ascRecords)
-        {
-            var ascRecordReader = ascRecordStream.AsReader();
-            for (var streamIndex = 0; streamIndex < ascRecordReader.ForEachCount; streamIndex++)
-            {
-                var recordCount = ascRecordReader.BeginForEachIndex(streamIndex);
-                for (var i = 0; i < recordCount; i++)
-                    ascRecords.Add(ascRecordReader.Read<ASCDestroyFinalizeRecord>());
-                ascRecordReader.EndForEachIndex();
-            }
-        }
-
-        private void ScanReferencingEffects(
-            ref SystemState state,
-            NativeList<ASCReferencingEffectRecord> effectReferenceRecords,
+        private JobHandle ScheduleReferencingEffectScan(
+            int effectChunkCount,
+            NativeStream effectRecordStream,
             EntityTypeHandle entityTypeHandle,
-            ComponentTypeHandle<GEContextComponent> effectContextTypeHandle)
+            ComponentTypeHandle<GEContextComponent> effectContextTypeHandle,
+            JobHandle dependency)
         {
-            var effectChunkCount = _effectQuery.CalculateChunkCount();
             if (effectChunkCount <= 0)
-                return;
+                return dependency;
 
-            var effectRecordStream = new NativeStream(effectChunkCount, Allocator.TempJob);
-            try
+            var scanJob = new ASCReferencingEffectScanJob
             {
-                var scanJob = new ASCReferencingEffectScanJob
-                {
-                    EntityTypeHandle = entityTypeHandle,
-                    EffectContextTypeHandle = effectContextTypeHandle,
-                    EffectRecordWriter = effectRecordStream.AsWriter(),
-                };
-                state.Dependency = scanJob.ScheduleParallel(_effectQuery, state.Dependency);
-                state.Dependency.Complete();
-
-                var effectRecordReader = effectRecordStream.AsReader();
-                for (var streamIndex = 0; streamIndex < effectRecordReader.ForEachCount; streamIndex++)
-                {
-                    var recordCount = effectRecordReader.BeginForEachIndex(streamIndex);
-                    for (var i = 0; i < recordCount; i++)
-                        effectReferenceRecords.Add(effectRecordReader.Read<ASCReferencingEffectRecord>());
-                    effectRecordReader.EndForEachIndex();
-                }
-            }
-            finally
-            {
-                effectRecordStream.Dispose();
-            }
+                EntityTypeHandle = entityTypeHandle,
+                EffectContextTypeHandle = effectContextTypeHandle,
+                EffectRecordWriter = effectRecordStream.AsWriter(),
+            };
+            return scanJob.ScheduleParallel(_effectQuery, dependency);
         }
 
-        private void ScanAbilityOwners(
-            ref SystemState state,
-            NativeList<ASCOwnedAbilityRecord> abilityOwnerRecords,
+        private JobHandle ScheduleAbilityOwnerScan(
+            int abilityChunkCount,
+            NativeStream abilityRecordStream,
             EntityTypeHandle entityTypeHandle,
-            ComponentTypeHandle<AbilityStateComponent> abilityStateTypeHandle)
+            ComponentTypeHandle<AbilityStateComponent> abilityStateTypeHandle,
+            JobHandle dependency)
         {
-            var abilityChunkCount = _abilityQuery.CalculateChunkCount();
             if (abilityChunkCount <= 0)
-                return;
+                return dependency;
 
-            var abilityRecordStream = new NativeStream(abilityChunkCount, Allocator.TempJob);
-            try
+            var scanJob = new ASCOwnedAbilityScanJob
             {
-                var scanJob = new ASCOwnedAbilityScanJob
-                {
-                    EntityTypeHandle = entityTypeHandle,
-                    AbilityStateTypeHandle = abilityStateTypeHandle,
-                    AbilityRecordWriter = abilityRecordStream.AsWriter(),
-                };
-                state.Dependency = scanJob.ScheduleParallel(_abilityQuery, state.Dependency);
-                state.Dependency.Complete();
-
-                var abilityRecordReader = abilityRecordStream.AsReader();
-                for (var streamIndex = 0; streamIndex < abilityRecordReader.ForEachCount; streamIndex++)
-                {
-                    var recordCount = abilityRecordReader.BeginForEachIndex(streamIndex);
-                    for (var i = 0; i < recordCount; i++)
-                        abilityOwnerRecords.Add(abilityRecordReader.Read<ASCOwnedAbilityRecord>());
-                    abilityRecordReader.EndForEachIndex();
-                }
-            }
-            finally
-            {
-                abilityRecordStream.Dispose();
-            }
+                EntityTypeHandle = entityTypeHandle,
+                AbilityStateTypeHandle = abilityStateTypeHandle,
+                AbilityRecordWriter = abilityRecordStream.AsWriter(),
+            };
+            return scanJob.ScheduleParallel(_abilityQuery, dependency);
         }
 
+        [BurstCompile]
         private struct ASCDestroyFinalizeScanJob : IJobChunk
         {
             [ReadOnly] public EntityTypeHandle EntityTypeHandle;
@@ -232,6 +196,7 @@ namespace GAS.Runtime
             }
         }
 
+        [BurstCompile]
         private struct ASCReferencingEffectScanJob : IJobChunk
         {
             [ReadOnly] public EntityTypeHandle EntityTypeHandle;
@@ -262,6 +227,7 @@ namespace GAS.Runtime
             }
         }
 
+        [BurstCompile]
         private struct ASCOwnedAbilityScanJob : IJobChunk
         {
             [ReadOnly] public EntityTypeHandle EntityTypeHandle;
@@ -290,60 +256,140 @@ namespace GAS.Runtime
             }
         }
 
-        private static bool HasOwnedTargetEffect(EntityManager em, Entity asc)
+        [BurstCompile]
+        private struct ASCDestroyFinalizeApplyJob : IJob
         {
-            if (!em.HasBuffer<LegacyGameplayEffectEntityBuffer>(asc))
-                return false;
+            public NativeStream ASCRecordStream;
+            public NativeStream EffectRecordStream;
+            public NativeStream AbilityRecordStream;
+            public NativeList<ASCDestroyFinalizeRecord> ASCRecords;
+            public NativeList<ASCReferencingEffectRecord> EffectReferenceRecords;
+            public NativeList<ASCOwnedAbilityRecord> AbilityOwnerRecords;
+            [ReadOnly] public BufferLookup<LegacyGameplayEffectEntityBuffer> ActiveEffectLookup;
+            [ReadOnly] public BufferLookup<AbilitySlotBuffer> AbilitySlotLookup;
+            [ReadOnly] public ComponentLookup<GEEffectLifecycleComponent> EffectLifecycleLookup;
+            [ReadOnly] public ComponentLookup<AbilityStateComponent> AbilityStateLookup;
+            public EntityCommandBuffer Ecb;
 
-            var activeEffects = em.GetBuffer<LegacyGameplayEffectEntityBuffer>(asc);
-            for (var i = 0; i < activeEffects.Length; i++)
+            public void Execute()
             {
-                var effect = activeEffects[i].GameplayEffect;
-                if (effect != Entity.Null && em.Exists(effect))
-                    return true;
-            }
+                ReadDestroyingASCs();
+                ReadReferencingEffects();
+                ReadAbilityOwners();
 
-            return false;
-        }
-
-        private static bool HasReferencingEffect(
-            Entity asc,
-            NativeList<ASCReferencingEffectRecord> effectReferenceRecords)
-        {
-            for (var i = 0; i < effectReferenceRecords.Length; i++)
-            {
-                var effectReference = effectReferenceRecords[i];
-                if (effectReference.SourceAsc == asc || effectReference.TargetAsc == asc)
-                    return true;
-            }
-
-            return false;
-        }
-
-        private static bool HasOwnedAbility(
-            EntityManager em,
-            Entity asc,
-            NativeList<ASCOwnedAbilityRecord> abilityOwnerRecords)
-        {
-            if (em.HasBuffer<AbilitySlotBuffer>(asc))
-            {
-                var grantedAbilities = em.GetBuffer<AbilitySlotBuffer>(asc);
-                for (var i = 0; i < grantedAbilities.Length; i++)
+                for (var i = 0; i < ASCRecords.Length; i++)
                 {
-                    var ability = grantedAbilities[i].AbilityEntity;
-                    if (ability != Entity.Null && em.Exists(ability))
-                        return true;
+                    var asc = ASCRecords[i].ASC;
+                    if (asc == Entity.Null)
+                        continue;
+
+                    if (HasOwnedTargetEffect(asc)
+                        || HasReferencingEffect(asc)
+                        || HasOwnedAbility(asc))
+                    {
+                        continue;
+                    }
+
+                    Ecb.DestroyEntity(asc);
                 }
             }
 
-            for (var i = 0; i < abilityOwnerRecords.Length; i++)
+            private void ReadDestroyingASCs()
             {
-                var abilityOwner = abilityOwnerRecords[i];
-                if (abilityOwner.Ability != Entity.Null && abilityOwner.Owner == asc)
-                    return true;
+                var ascRecordReader = ASCRecordStream.AsReader();
+                for (var streamIndex = 0; streamIndex < ascRecordReader.ForEachCount; streamIndex++)
+                {
+                    var recordCount = ascRecordReader.BeginForEachIndex(streamIndex);
+                    for (var i = 0; i < recordCount; i++)
+                        ASCRecords.Add(ascRecordReader.Read<ASCDestroyFinalizeRecord>());
+                    ascRecordReader.EndForEachIndex();
+                }
             }
 
-            return false;
+            private void ReadReferencingEffects()
+            {
+                if (!EffectRecordStream.IsCreated)
+                    return;
+
+                var effectRecordReader = EffectRecordStream.AsReader();
+                for (var streamIndex = 0; streamIndex < effectRecordReader.ForEachCount; streamIndex++)
+                {
+                    var recordCount = effectRecordReader.BeginForEachIndex(streamIndex);
+                    for (var i = 0; i < recordCount; i++)
+                        EffectReferenceRecords.Add(effectRecordReader.Read<ASCReferencingEffectRecord>());
+                    effectRecordReader.EndForEachIndex();
+                }
+            }
+
+            private void ReadAbilityOwners()
+            {
+                if (!AbilityRecordStream.IsCreated)
+                    return;
+
+                var abilityRecordReader = AbilityRecordStream.AsReader();
+                for (var streamIndex = 0; streamIndex < abilityRecordReader.ForEachCount; streamIndex++)
+                {
+                    var recordCount = abilityRecordReader.BeginForEachIndex(streamIndex);
+                    for (var i = 0; i < recordCount; i++)
+                        AbilityOwnerRecords.Add(abilityRecordReader.Read<ASCOwnedAbilityRecord>());
+                    abilityRecordReader.EndForEachIndex();
+                }
+            }
+
+            private bool HasOwnedTargetEffect(Entity asc)
+            {
+                if (!ActiveEffectLookup.HasBuffer(asc))
+                    return false;
+
+                var activeEffects = ActiveEffectLookup[asc];
+                for (var i = 0; i < activeEffects.Length; i++)
+                {
+                    var effect = activeEffects[i].GameplayEffect;
+                    if (effect != Entity.Null && EffectLifecycleLookup.HasComponent(effect))
+                        return true;
+                }
+
+                return false;
+            }
+
+            private bool HasReferencingEffect(Entity asc)
+            {
+                for (var i = 0; i < EffectReferenceRecords.Length; i++)
+                {
+                    var effectReference = EffectReferenceRecords[i];
+                    if (effectReference.SourceAsc == asc || effectReference.TargetAsc == asc)
+                        return true;
+                }
+
+                return false;
+            }
+
+            private bool HasOwnedAbility(Entity asc)
+            {
+                if (AbilitySlotLookup.HasBuffer(asc))
+                {
+                    var grantedAbilities = AbilitySlotLookup[asc];
+                    for (var i = 0; i < grantedAbilities.Length; i++)
+                    {
+                        var ability = grantedAbilities[i].AbilityEntity;
+                        if (ability != Entity.Null && AbilityStateLookup.HasComponent(ability))
+                            return true;
+                    }
+                }
+
+                for (var i = 0; i < AbilityOwnerRecords.Length; i++)
+                {
+                    var abilityOwner = AbilityOwnerRecords[i];
+                    if (abilityOwner.Ability != Entity.Null
+                        && AbilityStateLookup.HasComponent(abilityOwner.Ability)
+                        && abilityOwner.Owner == asc)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
         }
     }
 }

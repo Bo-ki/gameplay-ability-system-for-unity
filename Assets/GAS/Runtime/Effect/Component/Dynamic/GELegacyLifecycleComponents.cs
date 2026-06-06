@@ -25,9 +25,9 @@ namespace GAS.Runtime
     {
     }
 
-    public struct GERemoveRequestComponent : IComponentData
+    [InternalBufferCapacity(2)]
+    public struct GERemoveCommandBuffer : IBufferElementData
     {
-        public Entity TargetAsc;
         public int GameplayEffectCode;
     }
 

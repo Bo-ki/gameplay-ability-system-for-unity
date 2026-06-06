@@ -7,7 +7,7 @@ namespace GAS.Runtime
     {
         None = 0,
         AscStableState = 1,
-        AbilityCommandRequest = 2,
+        AbilityCommandBuffer = 2,
         AbilityCommitGate = 3,
         AbilityTickLifecycle = 4,
         GameplayEffectApplyRequest = 6,
@@ -81,7 +81,7 @@ namespace GAS.Runtime
     public enum GASRuntimeLayoutBoundary
     {
         None = 0,
-        RequestEntityWriteBoundary = 1 << 0,
+        TransientCommandWriteBoundary = 1 << 0,
         ObservationReadBoundary = 1 << 1,
         ManagedPresentationBoundary = 1 << 2,
         StructuralEntityManagerHotspot = 1 << 3,
@@ -101,7 +101,7 @@ namespace GAS.Runtime
         ActiveModifierBuffer = 4,
         GrantedAbilityBuffer = 5,
         GameplayEffectBuffer = 6,
-        AbilityCommandRequest = 7,
+        AbilityCommandBuffer = 7,
         AbilityCommitRequest = 8,
         AbilityBaseInfo = 9,
         AbilityConfig = 10,
@@ -358,28 +358,26 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.ActiveEffectStore,
                         GASRuntimeLayoutComponentSlot.ActiveEffectSlotBuffer,
                     },
-                    typeof(ASCEntityCreateSystem),
-                    typeof(ASCInitializeRequestSystem),
-                    typeof(ASCDestroyRequestSystem),
+                    typeof(ASCCommandBufferResolveSystem),
                     typeof(ASCDestroyFinalizeSystem)),
                 Entry(
-                    GASRuntimeQueryLayoutEntryId.AbilityCommandRequest,
+                    GASRuntimeQueryLayoutEntryId.AbilityCommandBuffer,
                     GASRuntimeLayoutDomain.Ability,
-                    GASRuntimeEntityKind.Request,
+                    GASRuntimeEntityKind.AbilitySystemComponent,
                     GASRuntimeLayoutCapability.QueryBased
                     | GASRuntimeLayoutCapability.EcbMigrationCandidate
                     | GASRuntimeLayoutCapability.RequiresMainThreadEntityManager
                     | GASRuntimeLayoutCapability.StructuralChanges
                     | GASRuntimeLayoutCapability.WritesSimulationState,
-                    GASRuntimeLayoutBoundary.RequestEntityWriteBoundary
+                    GASRuntimeLayoutBoundary.DynamicBufferMutation
                     | GASRuntimeLayoutBoundary.StructuralEntityManagerHotspot,
                     GASRuntimeLayoutDecision.NeedsEcbMigration,
                     new[]
                     {
-                        GASRuntimeLayoutComponentSlot.AbilityCommandRequest,
+                        GASRuntimeLayoutComponentSlot.AbilityCommandBuffer,
                     },
                     Array.Empty<GASRuntimeLayoutComponentSlot>(),
-                    typeof(AbilityCommandRequestSystem),
+                    typeof(ASCCommandBufferResolveSystem),
                     typeof(AbilityTryActivateSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.AbilityCommitGate,

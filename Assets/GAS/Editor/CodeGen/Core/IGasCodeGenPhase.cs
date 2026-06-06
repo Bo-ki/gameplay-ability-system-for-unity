@@ -8,6 +8,8 @@ namespace GAS.Editor
 
         IReadOnlyList<string> OutputFileNames { get; }
 
+        bool RequiresRows { get; }
+
         void Execute(GasCodeGenContext context, GasCodeGenManifest manifest);
     }
 }

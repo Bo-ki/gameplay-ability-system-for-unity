@@ -16,8 +16,8 @@ namespace GAS.Runtime
     }
 
     /// <summary>
-    /// Boundary command and target resolution domain. External requests are normalized here;
-    /// gameplay simulation state is still changed by later CoreSimulation lanes.
+    /// Boundary command and target resolution domain. External requests are normalized into
+    /// owner-local command buffers here; structural work is only recorded for StructuralCommit playback.
     /// </summary>
     [DisableAutoCreation]
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]

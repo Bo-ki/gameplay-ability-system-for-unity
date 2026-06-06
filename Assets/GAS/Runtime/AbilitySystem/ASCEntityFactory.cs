@@ -6,6 +6,10 @@ namespace GAS.Runtime
     {
         private const int AttributeCapacity = 32;
         private const int ActiveModifierCapacity = 32;
+        private const int AscCommandCapacity = 8;
+        private const int AbilityCommandCapacity = 8;
+        private const int AscDestroyCommandCapacity = 1;
+        private const int GameplayEffectRemoveCommandCapacity = 4;
         private const int GrantedAbilityCapacity = 16;
         private const int TagSourceCapacity = 32;
         private const int GameplayEffectCapacity = 32;
@@ -33,12 +37,18 @@ namespace GAS.Runtime
         private static void InitializeCoreComponents(EntityManager entityManager, Entity asc)
         {
             entityManager.SetComponentEnabled<ASCDestroyingComponent>(asc, false);
+            entityManager.SetComponentEnabled<ASCCommandPendingComponent>(asc, false);
+            entityManager.SetComponentEnabled<GERemoveCommandPendingComponent>(asc, false);
             entityManager.SetComponentEnabled<AttributeDirtyComponent>(asc, false);
             entityManager.SetComponentEnabled<AttributeChangeEventPendingComponent>(asc, false);
             entityManager.SetComponentEnabled<AttributeActiveModifierPresentComponent>(asc, false);
             entityManager.SetComponentData(asc, ActiveEffectStore.CreateDefault());
             entityManager.GetBuffer<AttributeValueBuffer>(asc).EnsureCapacity(AttributeCapacity);
             entityManager.GetBuffer<AttributeActiveModifierBuffer>(asc).EnsureCapacity(ActiveModifierCapacity);
+            entityManager.GetBuffer<ASCCommandBuffer>(asc).EnsureCapacity(AscCommandCapacity);
+            entityManager.GetBuffer<AbilityCommandBuffer>(asc).EnsureCapacity(AbilityCommandCapacity);
+            entityManager.GetBuffer<ASCDestroyCommandBuffer>(asc).EnsureCapacity(AscDestroyCommandCapacity);
+            entityManager.GetBuffer<GERemoveCommandBuffer>(asc).EnsureCapacity(GameplayEffectRemoveCommandCapacity);
             entityManager.GetBuffer<AbilitySlotBuffer>(asc).EnsureCapacity(GrantedAbilityCapacity);
             entityManager.GetBuffer<TagFixedSourceBuffer>(asc).EnsureCapacity(TagSourceCapacity);
             entityManager.GetBuffer<TagTemporarySourceBuffer>(asc).EnsureCapacity(TagSourceCapacity);
@@ -52,12 +62,18 @@ namespace GAS.Runtime
         private static void InitializeCoreComponents(EntityCommandBuffer commandBuffer, Entity asc)
         {
             commandBuffer.SetComponentEnabled<ASCDestroyingComponent>(asc, false);
+            commandBuffer.SetComponentEnabled<ASCCommandPendingComponent>(asc, false);
+            commandBuffer.SetComponentEnabled<GERemoveCommandPendingComponent>(asc, false);
             commandBuffer.SetComponentEnabled<AttributeDirtyComponent>(asc, false);
             commandBuffer.SetComponentEnabled<AttributeChangeEventPendingComponent>(asc, false);
             commandBuffer.SetComponentEnabled<AttributeActiveModifierPresentComponent>(asc, false);
             commandBuffer.SetComponent(asc, ActiveEffectStore.CreateDefault());
             commandBuffer.SetBuffer<AttributeValueBuffer>(asc).EnsureCapacity(AttributeCapacity);
             commandBuffer.SetBuffer<AttributeActiveModifierBuffer>(asc).EnsureCapacity(ActiveModifierCapacity);
+            commandBuffer.SetBuffer<ASCCommandBuffer>(asc).EnsureCapacity(AscCommandCapacity);
+            commandBuffer.SetBuffer<AbilityCommandBuffer>(asc).EnsureCapacity(AbilityCommandCapacity);
+            commandBuffer.SetBuffer<ASCDestroyCommandBuffer>(asc).EnsureCapacity(AscDestroyCommandCapacity);
+            commandBuffer.SetBuffer<GERemoveCommandBuffer>(asc).EnsureCapacity(GameplayEffectRemoveCommandCapacity);
             commandBuffer.SetBuffer<AbilitySlotBuffer>(asc).EnsureCapacity(GrantedAbilityCapacity);
             commandBuffer.SetBuffer<TagFixedSourceBuffer>(asc).EnsureCapacity(TagSourceCapacity);
             commandBuffer.SetBuffer<TagTemporarySourceBuffer>(asc).EnsureCapacity(TagSourceCapacity);
@@ -74,6 +90,8 @@ namespace GAS.Runtime
                 && entityManager.Exists(asc)
                 && entityManager.HasComponent<ASCIdentityComponent>(asc)
                 && entityManager.HasComponent<ASCDestroyingComponent>(asc)
+                && entityManager.HasComponent<ASCCommandPendingComponent>(asc)
+                && entityManager.HasComponent<GERemoveCommandPendingComponent>(asc)
                 && entityManager.HasComponent<AttributeDirtyComponent>(asc)
                 && entityManager.HasComponent<AttributeChangeEventPendingComponent>(asc)
                 && entityManager.HasComponent<AttributeActiveModifierPresentComponent>(asc)
@@ -81,6 +99,10 @@ namespace GAS.Runtime
                 && entityManager.HasComponent<TagFixedMaskComponent>(asc)
                 && entityManager.HasBuffer<AttributeValueBuffer>(asc)
                 && entityManager.HasBuffer<AttributeActiveModifierBuffer>(asc)
+                && entityManager.HasBuffer<ASCCommandBuffer>(asc)
+                && entityManager.HasBuffer<AbilityCommandBuffer>(asc)
+                && entityManager.HasBuffer<ASCDestroyCommandBuffer>(asc)
+                && entityManager.HasBuffer<GERemoveCommandBuffer>(asc)
                 && entityManager.HasBuffer<AbilitySlotBuffer>(asc)
                 && entityManager.HasBuffer<TagFixedSourceBuffer>(asc)
                 && entityManager.HasBuffer<TagTemporarySourceBuffer>(asc)

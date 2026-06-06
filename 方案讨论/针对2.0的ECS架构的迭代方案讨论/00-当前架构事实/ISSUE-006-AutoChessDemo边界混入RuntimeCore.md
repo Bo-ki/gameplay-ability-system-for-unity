@@ -1,6 +1,6 @@
 # ISSUE-006 AutoChessDemo 边界混入 Runtime Core
 
-> 最近复核：2026-06-02 | 状态：Mitigated | 严重度：P1
+> 最近复核：2026-06-06 | 状态：Mitigated | 严重度：P1
 
 ## 当前结论
 

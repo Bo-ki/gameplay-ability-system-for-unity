@@ -1,3 +1,5 @@
+using Unity.Burst;
+using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
@@ -10,10 +12,12 @@ namespace GAS.Runtime
     [UpdateAfter(typeof(AbilityStateTickSystem))]
     [UpdateBefore(typeof(AbilityStateCleanupSystem))]
     [DisableAutoCreation]
+    [BurstCompile]
     public partial struct AbilityLifecycleRequestSystem : ISystem
     {
         private EntityQuery _query;
 
+        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             _query = SystemAPI.QueryBuilder()
@@ -22,35 +26,48 @@ namespace GAS.Runtime
             state.RequireForUpdate(_query);
         }
 
+        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            var em = state.EntityManager;
-            foreach (var (abilityState, ability) in SystemAPI
-                         .Query<RefRO<AbilityStateComponent>>()
-                         .WithEntityAccess())
+            state.Dependency = new AbilityLifecycleRequestJob
             {
-                var runtime = abilityState.ValueRO;
-                if (runtime.Phase != EAbilityPhase.Ending)
-                    continue;
-
-                if (AbilityRuntimeActions.IsCancelRequested(ability, em)
-                    || AbilityRuntimeActions.IsEndRequested(ability, em))
-                {
-                    continue;
-                }
-
-                AbilityRuntimeActions.RequestAbilityEnd(
-                    ability,
-                    em,
-                    EAbilityLifecycleReason.LifetimeExpired,
-                    sourceAbility: ability,
-                    sourceAbilityCode: runtime.Code);
-            }
+                CancelRequestLookup = SystemAPI.GetComponentLookup<AbilityCancelRequestComponent>(isReadOnly: true),
+                EndRequestLookup = SystemAPI.GetComponentLookup<AbilityEndRequestComponent>(),
+            }.Schedule(_query, state.Dependency);
         }
 
+        [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
         }
 
+        [BurstCompile]
+        private partial struct AbilityLifecycleRequestJob : IJobEntity
+        {
+            [ReadOnly] public ComponentLookup<AbilityCancelRequestComponent> CancelRequestLookup;
+            public ComponentLookup<AbilityEndRequestComponent> EndRequestLookup;
+
+            private void Execute(Entity ability, in AbilityStateComponent runtime)
+            {
+                if (runtime.Phase != EAbilityPhase.Ending)
+                    return;
+
+                if ((CancelRequestLookup.HasComponent(ability)
+                        && CancelRequestLookup.IsComponentEnabled(ability))
+                    || !EndRequestLookup.HasComponent(ability)
+                    || EndRequestLookup.IsComponentEnabled(ability))
+                {
+                    return;
+                }
+
+                EndRequestLookup[ability] = new AbilityEndRequestComponent
+                {
+                    Reason = EAbilityLifecycleReason.LifetimeExpired,
+                    SourceAbility = ability,
+                    SourceAbilityCode = runtime.Code,
+                };
+                EndRequestLookup.SetComponentEnabled(ability, true);
+            }
+        }
     }
 }

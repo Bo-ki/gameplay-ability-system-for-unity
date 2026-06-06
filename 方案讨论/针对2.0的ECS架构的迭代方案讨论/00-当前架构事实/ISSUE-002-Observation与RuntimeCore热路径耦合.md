@@ -1,6 +1,6 @@
 # ISSUE-002 Observation 与 Runtime Core 热路径耦合
 
-> 最近复核：2026-06-02 | 状态：Active | 严重度：P1
+> 最近复核：2026-06-06 | 状态：Active | 严重度：P1
 
 ## 当前结论
 

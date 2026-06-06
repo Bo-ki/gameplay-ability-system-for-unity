@@ -4,11 +4,13 @@
 ///////////////////////////////////
 
 using GAS.Runtime;
+using Unity.Burst;
+using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 
 namespace GAS.Runtime.Generated
 {
-    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GEEffectCommandCatalogNormalizeSystem))]
     [UpdateBefore(typeof(GASActiveEffectMutationApplySystem))]
@@ -30,58 +32,99 @@ namespace GAS.Runtime.Generated
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
             if (!EffectCommandSpecStream.HasRequiredBuffers(em, streamEntity))
                 return;
-            var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
-            var commands = em.GetBuffer<GEEffectCommandBuffer>(streamEntity);
-            var specs = em.GetBuffer<GEEffectSpecBuffer>(streamEntity);
-            var setByCallerValues = em.GetBuffer<GESetByCallerValueBuffer>(streamEntity);
-            ref var catalog = ref catalogComponent.Catalog.Value;
 
-            var start = ClampCursor(stream.SpecBuildCommandCursor, commands.Length);
-            for (var i = start; i < commands.Length; i++)
+            state.Dependency = new InstantSpecBuildJob
             {
-                var command = commands[i];
-                if (command.Kind != GEEffectCommandKind.Instant)
-                    continue;
-                if (!CanBuildInstantSpec(ref catalog, in command, em, out var gameplayEffectIndex))
-                    continue;
-
-                specs.Add(new GEEffectSpecBuffer
-                {
-                    Sequence = Allocate(ref stream.NextSpecSequence),
-                    SourceCommandSequence = command.Sequence,
-                    Frame = command.Frame,
-                    SourceAsc = command.SourceAsc,
-                    TargetAsc = command.TargetAsc,
-                    SourceAbility = command.SourceAbility,
-                    SourceEffect = command.SourceEffect,
-                    Instigator = command.Instigator,
-                    Causer = command.Causer,
-                    GameplayEffectCode = command.GameplayEffectCode,
-                    CueRequestOnApplyCode = GetCueRequestOnApply(ref catalog, gameplayEffectIndex),
-                    Level = command.Level,
-                    StackCount = 1,
-                    DurationFrameOverride = command.DurationFrameOverride,
-                    ContextId = command.ContextId,
-                    ParentContextId = command.ParentContextId,
-                    TargetDataKind = command.TargetDataKind,
-                    SetByCallerStart = command.SetByCallerStart,
-                    SetByCallerCount = command.SetByCallerCount,
-                    Flags = gameplayEffectIndex,
-                });
-                AssignSpecSequence(setByCallerValues, command.SetByCallerStart, command.SetByCallerCount, command.Sequence, specs[specs.Length - 1].Sequence);
-            }
-
-            stream.SpecBuildCommandCursor = commands.Length;
-            em.SetComponentData(streamEntity, stream);
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
+                CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: true),
+                SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(),
+                SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(),
+                EntityStorageInfoLookup = SystemAPI.GetEntityStorageInfoLookup(),
+                DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
+                Catalog = catalogComponent.Catalog,
+                StreamEntity = streamEntity,
+            }.Schedule(state.Dependency);
         }
 
-        private static bool CanBuildInstantSpec(ref GASDefinitionCatalogBlob catalog, in GEEffectCommandBuffer command, EntityManager em, out int gameplayEffectIndex)
+        [BurstCompile]
+        private struct InstantSpecBuildJob : IJob
+        {
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            [ReadOnly] public BufferLookup<GEEffectCommandBuffer> CommandLookup;
+            public BufferLookup<GEEffectSpecBuffer> SpecLookup;
+            public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
+            [ReadOnly] public EntityStorageInfoLookup EntityStorageInfoLookup;
+            [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
+            [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
+            public Entity StreamEntity;
+
+            public void Execute()
+            {
+                if (!Catalog.IsCreated
+                    || StreamEntity == Entity.Null
+                    || !StreamLookup.HasComponent(StreamEntity)
+                    || !CommandLookup.HasBuffer(StreamEntity)
+                    || !SpecLookup.HasBuffer(StreamEntity)
+                    || !SetByCallerLookup.HasBuffer(StreamEntity))
+                    return;
+
+                var stream = StreamLookup[StreamEntity];
+                var commands = CommandLookup[StreamEntity];
+                var specs = SpecLookup[StreamEntity];
+                var setByCallerValues = SetByCallerLookup[StreamEntity];
+                ref var catalog = ref Catalog.Value;
+                var start = ClampCursor(stream.SpecBuildCommandCursor, commands.Length);
+                for (var i = start; i < commands.Length; i++)
+                {
+                    var command = commands[i];
+                    if (command.Kind != GEEffectCommandKind.Instant)
+                        continue;
+                    if (!CanBuildInstantSpec(ref catalog, in command, EntityStorageInfoLookup, DestroyingLookup, out var gameplayEffectIndex))
+                        continue;
+
+                    specs.Add(new GEEffectSpecBuffer
+                    {
+                        Sequence = Allocate(ref stream.NextSpecSequence),
+                        SourceCommandSequence = command.Sequence,
+                        Frame = command.Frame,
+                        SourceAsc = command.SourceAsc,
+                        TargetAsc = command.TargetAsc,
+                        SourceAbility = command.SourceAbility,
+                        SourceEffect = command.SourceEffect,
+                        Instigator = command.Instigator,
+                        Causer = command.Causer,
+                        GameplayEffectCode = command.GameplayEffectCode,
+                        CueRequestOnApplyCode = GetCueRequestOnApply(ref catalog, gameplayEffectIndex),
+                        Level = command.Level,
+                        StackCount = 1,
+                        DurationFrameOverride = command.DurationFrameOverride,
+                        ContextId = command.ContextId,
+                        ParentContextId = command.ParentContextId,
+                        TargetDataKind = command.TargetDataKind,
+                        SetByCallerStart = command.SetByCallerStart,
+                        SetByCallerCount = command.SetByCallerCount,
+                        Flags = gameplayEffectIndex,
+                    });
+                    AssignSpecSequence(setByCallerValues, command.SetByCallerStart, command.SetByCallerCount, command.Sequence, specs[specs.Length - 1].Sequence);
+                }
+
+                stream.SpecBuildCommandCursor = commands.Length;
+                StreamLookup[StreamEntity] = stream;
+            }
+        }
+
+        private static bool CanBuildInstantSpec(
+            ref GASDefinitionCatalogBlob catalog,
+            in GEEffectCommandBuffer command,
+            EntityStorageInfoLookup entityStorageInfoLookup,
+            ComponentLookup<ASCDestroyingComponent> destroyingLookup,
+            out int gameplayEffectIndex)
         {
             gameplayEffectIndex = -1;
             if (command.GameplayEffectCode <= 0
                 || command.TargetAsc == Entity.Null
-                || IsUnavailableAsc(em, command.SourceAsc)
-                || IsUnavailableAsc(em, command.TargetAsc)
+                || IsUnavailableAsc(entityStorageInfoLookup, destroyingLookup, command.SourceAsc)
+                || IsUnavailableAsc(entityStorageInfoLookup, destroyingLookup, command.TargetAsc)
                 || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, command.GameplayEffectCode, out gameplayEffectIndex))
                 return false;
 
@@ -92,7 +135,8 @@ namespace GAS.Runtime.Generated
                 && gameplayEffect.GrantedTagMaskIndex < 0
                 && gameplayEffect.RemoveGameplayEffectTagMaskIndex < 0
                 && gameplayEffect.GrantedAbilityCount == 0
-                && gameplayEffect.ModifierCount > 0;
+                && (gameplayEffect.ModifierCount > 0
+                    || gameplayEffect.GameplayCueCode > 0);
         }
 
         private static int GetCueRequestOnApply(ref GASDefinitionCatalogBlob catalog, int gameplayEffectIndex)
@@ -116,11 +160,23 @@ namespace GAS.Runtime.Generated
             return cursor;
         }
 
-        private static bool IsUnavailableAsc(EntityManager em, Entity asc)
+        private static bool IsUnavailableAsc(
+            EntityStorageInfoLookup entityStorageInfoLookup,
+            ComponentLookup<ASCDestroyingComponent> destroyingLookup,
+            Entity asc)
         {
             return asc == Entity.Null
-                || !em.Exists(asc)
-                || ASCEntityFactory.IsDestroying(em, asc);
+                || !entityStorageInfoLookup.Exists(asc)
+                || IsDestroyingAsc(destroyingLookup, asc);
+        }
+
+        private static bool IsDestroyingAsc(
+            ComponentLookup<ASCDestroyingComponent> destroyingLookup,
+            Entity asc)
+        {
+            return asc != Entity.Null
+                && destroyingLookup.HasComponent(asc)
+                && destroyingLookup.IsComponentEnabled(asc);
         }
 
         private static void AssignSpecSequence(
@@ -147,7 +203,6 @@ namespace GAS.Runtime.Generated
         }
     }
 
-    [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GASActiveEffectMutationApplySystem))]
     [UpdateAfter(typeof(GEExecutionCalculationOutputModifierSystem))]
@@ -170,36 +225,73 @@ namespace GAS.Runtime.Generated
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
             if (!EffectCommandSpecStream.HasRequiredBuffers(em, streamEntity))
                 return;
-            var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
-            var specs = em.GetBuffer<GEEffectSpecBuffer>(streamEntity);
-            var deltas = em.GetBuffer<AttributeModifierBuffer>(streamEntity);
-            var setByCallerValues = em.GetBuffer<GESetByCallerValueBuffer>(streamEntity);
-            ref var catalog = ref catalogComponent.Catalog.Value;
 
-            var start = ClampCursor(stream.DeltaApplySpecCursor, specs.Length);
-            for (var i = start; i < specs.Length; i++)
-                ApplySpec(em, ref stream, ref catalog, specs[i], setByCallerValues, deltas);
+            state.Dependency = new AttributeSetReduceApplyJob
+            {
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
+                SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(),
+                DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(),
+                SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: true),
+                AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(),
+                DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
+                Catalog = catalogComponent.Catalog,
+                StreamEntity = streamEntity,
+            }.Schedule(state.Dependency);
+        }
 
-            stream.DeltaApplySpecCursor = specs.Length;
-            em.SetComponentData(streamEntity, stream);
+        [BurstCompile]
+        private struct AttributeSetReduceApplyJob : IJob
+        {
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            public BufferLookup<GEEffectSpecBuffer> SpecLookup;
+            public BufferLookup<AttributeModifierBuffer> DeltaLookup;
+            [ReadOnly] public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
+            public BufferLookup<AttributeValueBuffer> AttributeLookup;
+            [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
+            [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
+            public Entity StreamEntity;
+
+            public void Execute()
+            {
+                if (!Catalog.IsCreated
+                    || StreamEntity == Entity.Null
+                    || !StreamLookup.HasComponent(StreamEntity)
+                    || !SpecLookup.HasBuffer(StreamEntity)
+                    || !DeltaLookup.HasBuffer(StreamEntity)
+                    || !SetByCallerLookup.HasBuffer(StreamEntity))
+                    return;
+
+                var stream = StreamLookup[StreamEntity];
+                var specs = SpecLookup[StreamEntity];
+                var deltas = DeltaLookup[StreamEntity];
+                var setByCallerValues = SetByCallerLookup[StreamEntity];
+                ref var catalog = ref Catalog.Value;
+                var start = ClampCursor(stream.DeltaApplySpecCursor, specs.Length);
+                for (var i = start; i < specs.Length; i++)
+                    ApplySpec(ref stream, ref catalog, specs[i], setByCallerValues, deltas, AttributeLookup, DestroyingLookup);
+
+                stream.DeltaApplySpecCursor = specs.Length;
+                StreamLookup[StreamEntity] = stream;
+            }
         }
 
         private static void ApplySpec(
-            EntityManager em,
             ref GEEffectCommandStreamComponent stream,
             ref GASDefinitionCatalogBlob catalog,
             in GEEffectSpecBuffer spec,
             DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
-            DynamicBuffer<AttributeModifierBuffer> deltas)
+            DynamicBuffer<AttributeModifierBuffer> deltas,
+            BufferLookup<AttributeValueBuffer> attributeLookup,
+            ComponentLookup<ASCDestroyingComponent> destroyingLookup)
         {
             if (spec.TargetAsc == Entity.Null
-                || !em.Exists(spec.TargetAsc)
-                || !em.HasBuffer<AttributeValueBuffer>(spec.TargetAsc)
+                || IsDestroyingAsc(destroyingLookup, spec.TargetAsc)
+                || !attributeLookup.HasBuffer(spec.TargetAsc)
                 || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, spec.GameplayEffectCode, out var gameplayEffectIndex))
                 return;
 
             ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
-            var attributes = em.GetBuffer<AttributeValueBuffer>(spec.TargetAsc);
+            var attributes = attributeLookup[spec.TargetAsc];
             for (var i = 0; i < gameplayEffect.ModifierCount; i++)
             {
                 var modifierIndex = gameplayEffect.ModifierStart + i;
@@ -226,13 +318,12 @@ namespace GAS.Runtime.Generated
                 attribute.CurrentValue = newValue;
                 if (newValue != oldValue)
                 {
+                    attribute.Dirty = true;
                     if (oldCurrentValue != attribute.CurrentValue)
                     {
                         attribute.PreviousCurrentValue = oldCurrentValue;
                         attribute.CurrentValueChangePending = true;
                     }
-
-                    AttributeHelper.MarkDirectCurrentValueChanged(em, spec.TargetAsc, ref attribute);
 
                     deltas.Add(new AttributeModifierBuffer
                     {
@@ -322,11 +413,23 @@ namespace GAS.Runtime.Generated
             return cursor;
         }
 
-        private static bool IsUnavailableAsc(EntityManager em, Entity asc)
+        private static bool IsUnavailableAsc(
+            EntityStorageInfoLookup entityStorageInfoLookup,
+            ComponentLookup<ASCDestroyingComponent> destroyingLookup,
+            Entity asc)
         {
             return asc == Entity.Null
-                || !em.Exists(asc)
-                || ASCEntityFactory.IsDestroying(em, asc);
+                || !entityStorageInfoLookup.Exists(asc)
+                || IsDestroyingAsc(destroyingLookup, asc);
+        }
+
+        private static bool IsDestroyingAsc(
+            ComponentLookup<ASCDestroyingComponent> destroyingLookup,
+            Entity asc)
+        {
+            return asc != Entity.Null
+                && destroyingLookup.HasComponent(asc)
+                && destroyingLookup.IsComponentEnabled(asc);
         }
 
         private static void AssignSpecSequence(

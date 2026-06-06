@@ -1,4 +1,3 @@
-using System;
 using Unity.Entities;
 
 namespace GAS.Runtime
@@ -6,18 +5,6 @@ namespace GAS.Runtime
     public static class AbilityRuntimeActions
     {
         private static EntityManager EntityManager => GASManager.EntityManager;
-
-        [Obsolete("Use RequestCostGameplayEffect. This method no longer applies cost directly.")]
-        public static Entity ApplyCost(Entity ability)
-        {
-            return RequestCostGameplayEffect(ability);
-        }
-
-        [Obsolete("Use RequestCooldownGameplayEffect. This method no longer applies cooldown directly.")]
-        public static Entity ApplyCooldown(Entity ability)
-        {
-            return RequestCooldownGameplayEffect(ability);
-        }
 
         public static Entity RequestCostGameplayEffect(Entity ability)
         {
@@ -32,13 +19,12 @@ namespace GAS.Runtime
                 return Entity.Null;
 
             var cost = entityManager.GetComponentData<AbilityCostComponent>(ability);
-            return AppendSimpleInstantSelfCommandOrCreateRequest(
+            return AppendSimpleInstantSelfCommandToStream(
                 entityManager,
                 ability,
                 baseInfo,
                 cost.GameplayEffectCode,
-                durationFrameOverride: 0,
-                "AbilityCostRequest");
+                durationFrameOverride: 0);
         }
 
         public static Entity RequestCooldownGameplayEffect(Entity ability)
@@ -54,13 +40,12 @@ namespace GAS.Runtime
                 return Entity.Null;
 
             var cooldown = entityManager.GetComponentData<AbilityCooldownComponent>(ability);
-            return AppendSimpleInstantSelfCommandOrCreateRequest(
+            return AppendSimpleInstantSelfCommandToStream(
                 entityManager,
                 ability,
                 baseInfo,
                 cooldown.GameplayEffectCode,
-                cooldown.Cooldown,
-                "AbilityCooldownRequest");
+                cooldown.Cooldown);
         }
 
         public static void RemoveActivationOwnedTags(Entity ability, EntityManager entityManager)
@@ -257,13 +242,12 @@ namespace GAS.Runtime
             }
         }
 
-        private static Entity AppendSimpleInstantSelfCommandOrCreateRequest(
+        private static Entity AppendSimpleInstantSelfCommandToStream(
             EntityManager entityManager,
             Entity ability,
             in AbilityStateComponent baseInfo,
             int gameplayEffectCode,
-            int durationFrameOverride,
-            string namePrefix)
+            int durationFrameOverride)
         {
             if (gameplayEffectCode <= 0
                 || baseInfo.Owner == Entity.Null
@@ -284,12 +268,11 @@ namespace GAS.Runtime
                 DurationFrameOverride = durationFrameOverride,
             };
 
-            return GameplayEffectRequestWriter.AppendSimpleInstantCommandOrCreateSingleTargetRequest(
+            return GameplayEffectRequestWriter.AppendSimpleInstantCommandToStream(
                 entityManager,
                 request,
                 baseInfo.Owner,
-                ETargetDataKind.Self,
-                namePrefix);
+                ETargetDataKind.Self);
         }
 
         private static int ResolveSourceAbilityCode(

@@ -41,13 +41,15 @@ namespace GAS.Runtime
             if (ASCEntityFactory.IsDestroying(EntityManager, Entity))
                 return Entity.Null;
 
-            var request = EntityManager.CreateEntity(GASRuntimeEntityArchetypes.ASCDestroyRequest(EntityManager));
-            EntityManager.SetName(request, $"AscDestroyRequest_{Entity.Index}_{request.Index}");
-            EntityManager.SetComponentData(request, new ASCDestroyRequestComponent
+            if (!EntityManager.HasBuffer<ASCDestroyCommandBuffer>(Entity))
+                return Entity.Null;
+
+            EntityManager.GetBuffer<ASCDestroyCommandBuffer>(Entity).Add(new ASCDestroyCommandBuffer
             {
-                ASC = Entity,
+                Requested = 1,
             });
-            return request;
+            MarkAscCommandPending();
+            return Entity;
         }
 
         public Entity Init(AbilitySystemConfig config)
@@ -61,19 +63,28 @@ namespace GAS.Runtime
             if (!IsValid || ASCEntityFactory.IsDestroying(EntityManager, Entity))
                 return Entity.Null;
 
-            var request = EntityManager.CreateEntity(GASRuntimeEntityArchetypes.ASCInitializeRequest(EntityManager));
-            EntityManager.SetName(request, $"AscInitializeRequest_{Entity.Index}_{request.Index}");
-            EntityManager.SetComponentData(request, new ASCInitializeRequestComponent
+            if (!EntityManager.HasBuffer<ASCCommandBuffer>(Entity)
+                || !EntityManager.HasBuffer<AbilityCommandBuffer>(Entity))
             {
-                ASC = Entity,
-                Level = level,
+                return Entity.Null;
+            }
+
+            var ascCommands = EntityManager.GetBuffer<ASCCommandBuffer>(Entity);
+            ascCommands.Add(new ASCCommandBuffer
+            {
+                Command = new ASCCommand
+                {
+                    CommandType = ASCCommandType.SetLevel,
+                    Level = level,
+                },
             });
 
-            FillInitTags(request, baseTags);
-            FillInitAttributes(request, attrSets);
-            FillInitAbilities(request, baseAbilityCodes);
+            FillInitTags(ascCommands, baseTags);
+            FillInitAttributes(ascCommands, attrSets);
+            FillInitAbilities(EntityManager.GetBuffer<AbilityCommandBuffer>(Entity), baseAbilityCodes);
+            MarkAscCommandPending();
 
-            return request;
+            return Entity;
         }
 
         #endregion
@@ -175,25 +186,22 @@ namespace GAS.Runtime
             if (!IsValid || ASCEntityFactory.IsDestroying(EntityManager, Entity))
                 return Entity.Null;
 
-            var request = EntityManager.CreateEntity(GASRuntimeEntityArchetypes.GERemoveRequest(EntityManager));
-            EntityManager.SetName(
-                request,
-                gameplayEffectCode > 0
-                    ? $"GERemove_{gameplayEffectCode}_{request.Index}"
-                    : $"GEClear_{Entity.Index}_{request.Index}");
-            EntityManager.SetComponentData(request, new GERemoveRequestComponent
+            if (!EntityManager.HasBuffer<GERemoveCommandBuffer>(Entity))
+                return Entity.Null;
+
+            EntityManager.GetBuffer<GERemoveCommandBuffer>(Entity).Add(new GERemoveCommandBuffer
             {
-                TargetAsc = Entity,
                 GameplayEffectCode = gameplayEffectCode,
             });
-            return request;
+            MarkGameplayEffectRemovePending();
+            return Entity;
         }
 
         #region BasicData
 
         public Entity SetLevel(int level)
         {
-            return CreateAscCommandRequest(new ASCCommandRequestComponent
+            return AppendAscCommand(new ASCCommand
             {
                 CommandType = ASCCommandType.SetLevel,
                 Level = level,
@@ -254,103 +262,159 @@ namespace GAS.Runtime
 
         public Entity TryActivateAbility(int abilityCode, Entity target)
         {
-            return CreateAbilityCommandRequest(abilityCode, target, EAbilityCommandType.Activate, "Activate");
+            return AppendAbilityCommand(abilityCode, target, EAbilityCommandType.Activate);
         }
 
         public Entity CancelAbility(int abilityCode)
         {
-            return CreateAbilityCommandRequest(abilityCode, Entity.Null, EAbilityCommandType.Cancel, "Cancel");
+            return AppendAbilityCommand(abilityCode, Entity.Null, EAbilityCommandType.Cancel);
         }
 
-        private Entity CreateAbilityCommandRequest(
+        private Entity AppendAbilityCommand(
             int abilityCode,
             Entity target,
-            EAbilityCommandType commandType,
-            string name)
+            EAbilityCommandType commandType)
         {
             if (!IsValid || ASCEntityFactory.IsDestroying(EntityManager, Entity))
                 return Entity.Null;
             if (target != Entity.Null && !EntityManager.Exists(target))
                 return Entity.Null;
+            if (!EntityManager.HasBuffer<AbilityCommandBuffer>(Entity))
+                return Entity.Null;
 
-            var request = EntityManager.CreateEntity(GASRuntimeEntityArchetypes.AbilityCommandRequest(EntityManager));
-            EntityManager.SetName(request, $"AbilityCommand_{name}_{request.Index}");
-            EntityManager.SetComponentData(request, new AbilityCommandRequestComponent
+            EntityManager.GetBuffer<AbilityCommandBuffer>(Entity).Add(new AbilityCommandBuffer
             {
-                Owner = Entity,
-                AbilityCode = abilityCode,
-                TargetAsc = target,
-                CommandType = commandType,
+                Command = new AbilityCommand
+                {
+                    Owner = Entity,
+                    AbilityCode = abilityCode,
+                    TargetAsc = target,
+                    CommandType = commandType,
+                },
             });
-            return request;
+            MarkAscCommandPending();
+            return Entity;
         }
 
         #endregion
 
         #region Internal
 
-        private Entity CreateAscCommandRequest(ASCCommandRequestComponent command)
+        private Entity AppendAscCommand(ASCCommand command)
         {
             if (!IsValid || ASCEntityFactory.IsDestroying(EntityManager, Entity))
                 return Entity.Null;
+            if (!EntityManager.HasBuffer<ASCCommandBuffer>(Entity))
+                return Entity.Null;
 
-            var request = EntityManager.CreateEntity(GASRuntimeEntityArchetypes.ASCCommandRequest(EntityManager));
-            EntityManager.SetName(request, $"AscCommand_{command.CommandType}_{request.Index}");
-            command.ASC = Entity;
-            EntityManager.SetComponentData(request, command);
-            return request;
+            EntityManager.GetBuffer<ASCCommandBuffer>(Entity).Add(new ASCCommandBuffer
+            {
+                Command = command,
+            });
+            MarkAscCommandPending();
+            return Entity;
         }
 
-        private void FillInitTags(Entity request, IEnumerable<int> baseTags)
+        private void FillInitTags(DynamicBuffer<ASCCommandBuffer> commands, IEnumerable<int> baseTags)
         {
             if (baseTags == null)
                 return;
 
-            var buffer = EntityManager.GetBuffer<ASCInitializeFixedTagBuffer>(request);
             foreach (var tag in baseTags)
-                buffer.Add(new ASCInitializeFixedTagBuffer { TagCode = tag });
+            {
+                if (!TryCreateFixedTagCommand(tag, ASCCommandType.AddFixedTag, out var command))
+                    continue;
+
+                commands.Add(new ASCCommandBuffer
+                {
+                    Command = command,
+                });
+            }
         }
 
-        private void FillInitAttributes(Entity request, IEnumerable<AttrSetConfig> attrSets)
+        private void FillInitAttributes(DynamicBuffer<ASCCommandBuffer> commands, IEnumerable<AttrSetConfig> attrSets)
         {
             if (attrSets == null)
                 return;
 
-            var buffer = EntityManager.GetBuffer<ASCInitializeAttributeBuffer>(request);
             foreach (var attrSet in attrSets)
             {
                 if (attrSet.Settings == null) continue;
                 foreach (var setting in attrSet.Settings)
                 {
-                    buffer.Add(new ASCInitializeAttributeBuffer
+                    commands.Add(new ASCCommandBuffer
                     {
-                        AttrSetCode = attrSet.Code,
-                        AttributeCode = setting.Code,
-                        BaseValue = setting.InitValue,
-                        MaxValue = setting.Max,
-                        MinValue = setting.Min,
-                        IsClampMin = setting.IsClampMin,
-                        IsClampMax = setting.IsClampMax,
+                        Command = new ASCCommand
+                        {
+                            CommandType = ASCCommandType.AddAttribute,
+                            AttrSetCode = attrSet.Code,
+                            AttributeCode = setting.Code,
+                            AttributeValue = setting.InitValue,
+                            MaxValue = setting.Max,
+                            MinValue = setting.Min,
+                            IsClampMin = setting.IsClampMin,
+                            IsClampMax = setting.IsClampMax,
+                        },
                     });
                 }
             }
         }
 
-        private void FillInitAbilities(Entity request, IEnumerable<int> baseAbilityCodes)
+        private void FillInitAbilities(DynamicBuffer<AbilityCommandBuffer> commands, IEnumerable<int> baseAbilityCodes)
         {
             if (baseAbilityCodes == null)
                 return;
 
-            var buffer = EntityManager.GetBuffer<ASCInitializeAbilityBuffer>(request);
             foreach (var abilityCode in baseAbilityCodes)
-                buffer.Add(new ASCInitializeAbilityBuffer { AbilityCode = abilityCode });
+            {
+                commands.Add(new AbilityCommandBuffer
+                {
+                    Command = new AbilityCommand
+                    {
+                        Owner = Entity,
+                        AbilityCode = abilityCode,
+                        CommandType = EAbilityCommandType.Grant,
+                    },
+                });
+            }
+        }
+
+        private static bool TryCreateFixedTagCommand(int tagCode, ASCCommandType commandType, out ASCCommand command)
+        {
+            command = default;
+            if (!TagHelper.TryGetDenseIndex(tagCode, out var sourceTagIndex))
+                return false;
+
+            var tagMask = new TagMaskComponent();
+            if (!TagHelper.TryAddTagToMask(ref tagMask, tagCode, includeParents: true) || tagMask.IsEmpty)
+                return false;
+
+            command = new ASCCommand
+            {
+                CommandType = commandType,
+                TagSourceIndex = sourceTagIndex,
+                TagMask = tagMask,
+            };
+            return true;
+        }
+
+        private void MarkAscCommandPending()
+        {
+            if (EntityManager.HasComponent<ASCCommandPendingComponent>(Entity))
+                EntityManager.SetComponentEnabled<ASCCommandPendingComponent>(Entity, true);
+        }
+
+        private void MarkGameplayEffectRemovePending()
+        {
+            if (EntityManager.HasComponent<GERemoveCommandPendingComponent>(Entity))
+                EntityManager.SetComponentEnabled<GERemoveCommandPendingComponent>(Entity, true);
         }
 
         #endregion
 
         public Entity TryEndAbility(int abilityCode)
         {
-            return CreateAbilityCommandRequest(abilityCode, Entity.Null, EAbilityCommandType.End, "End");
+            return AppendAbilityCommand(abilityCode, Entity.Null, EAbilityCommandType.End);
         }
 
         public Entity TryCancelAbility(int abilityCode)
@@ -360,7 +424,7 @@ namespace GAS.Runtime
 
         public Entity RemoveAbility(int abilityCode)
         {
-            return CreateAbilityCommandRequest(abilityCode, Entity.Null, EAbilityCommandType.Remove, "Remove");
+            return AppendAbilityCommand(abilityCode, Entity.Null, EAbilityCommandType.Remove);
         }
 
         public bool TryGetAttributeCurrentValue(int attrSetCode, int attrCode, out float value)

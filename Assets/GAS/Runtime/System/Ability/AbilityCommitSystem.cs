@@ -10,7 +10,6 @@ namespace GAS.Runtime
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
     [UpdateAfter(typeof(AbilityTryActivateSystem))]
-    [UpdateBefore(typeof(GEEffectCommandIngestSystem))]
     public partial struct AbilityCommitSystem : ISystem
     {
         public void OnCreate(ref SystemState state)

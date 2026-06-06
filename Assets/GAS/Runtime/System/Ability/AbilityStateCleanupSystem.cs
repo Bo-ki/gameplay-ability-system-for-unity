@@ -1,3 +1,6 @@
+using Unity.Burst;
+using Unity.Burst.Intrinsics;
+using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
@@ -28,248 +31,382 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            var abilityChunkCount = _cleanupQuery.CalculateChunkCount();
+            var abilityChunkCount = _cleanupQuery.CalculateChunkCountWithoutFiltering();
             if (abilityChunkCount <= 0)
                 return;
 
-            var em = state.EntityManager;
-            var ecb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
-                .CreateCommandBuffer(state.WorldUnmanaged);
-            var gameplayEventWriter = EventBusHelper.BeginGameplayEventBatch(em, GASManager.EntityEventBus);
+            var eventBusEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
+                ? resolvedEventBus
+                : Entity.Null;
+            var frame = SystemAPI.TryGetSingleton<GlobalTimer>(out var timer)
+                ? timer.Frame
+                : 0;
+            var structuralEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
+                .CreateCommandBuffer(state.WorldUnmanaged)
+                .AsParallelWriter();
 
-            try
+            state.Dependency = new AbilityStateCleanupJob
             {
-                foreach (var (runtime, cancelRequest, ability) in SystemAPI
-                             .Query<RefRO<AbilityStateComponent>, RefRO<AbilityCancelRequestComponent>>()
-                             .WithEntityAccess())
-                {
-                    CleanupAbility(
-                        em,
-                        ref ecb,
-                        ref gameplayEventWriter,
-                        new AbilityStateCleanupRecord
-                        {
-                            Ability = ability,
-                            State = runtime.ValueRO,
-                            ShouldCancel = true,
-                            CancelRequest = cancelRequest.ValueRO,
-                        });
-                }
-
-                foreach (var (runtime, endRequest, ability) in SystemAPI
-                             .Query<RefRO<AbilityStateComponent>, RefRO<AbilityEndRequestComponent>>()
-                             .WithEntityAccess())
-                {
-                    if (!em.IsComponentEnabled<AbilityEndRequestComponent>(ability))
-                        continue;
-
-                    CleanupAbility(
-                        em,
-                        ref ecb,
-                        ref gameplayEventWriter,
-                        new AbilityStateCleanupRecord
-                        {
-                            Ability = ability,
-                            State = runtime.ValueRO,
-                            ShouldEnd = true,
-                            EndRequest = endRequest.ValueRO,
-                        });
-                }
-            }
-            finally
-            {
-                gameplayEventWriter.Dispose();
-            }
+                EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
+                StateTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityStateComponent>(),
+                CancelRequestLookup = SystemAPI.GetComponentLookup<AbilityCancelRequestComponent>(),
+                EndRequestLookup = SystemAPI.GetComponentLookup<AbilityEndRequestComponent>(),
+                ActivationPendingLookup = SystemAPI.GetComponentLookup<AbilityActivationPendingComponent>(),
+                CommitRequestLookup = SystemAPI.GetComponentLookup<AbilityCommitRequestComponent>(),
+                DestroyOnCleanupLookup = SystemAPI.GetComponentLookup<AbilityDestroyOnCleanupComponent>(),
+                MainTargetLookup = SystemAPI.GetComponentLookup<AbilityMainTargetComponent>(),
+                GrantedByEffectLookup = SystemAPI.GetComponentLookup<AbilityGrantedByEffectComponent>(isReadOnly: true),
+                AbilitySlotLookup = SystemAPI.GetBufferLookup<AbilitySlotBuffer>(),
+                GrantedAbilityRuntimeLookup = SystemAPI.GetBufferLookup<GEGrantedAbilityRuntimeBuffer>(),
+                EffectContextLookup = SystemAPI.GetComponentLookup<GEContextComponent>(isReadOnly: true),
+                ActiveEffectStoreLookup = SystemAPI.GetComponentLookup<ASCActiveEffectsComponent>(),
+                ActiveEffectSlotLookup = SystemAPI.GetBufferLookup<ActiveGameplayEffectBuffer>(),
+                TemporaryTagSourceLookup = SystemAPI.GetBufferLookup<TagTemporarySourceBuffer>(),
+                TagMaskLookup = SystemAPI.GetComponentLookup<TagMaskComponent>(),
+                FixedTagMaskLookup = SystemAPI.GetComponentLookup<TagFixedMaskComponent>(isReadOnly: true),
+                EventBusEntity = eventBusEntity,
+                Frame = frame,
+                EventBusLookup = SystemAPI.GetComponentLookup<GameplayEventBusComponent>(),
+                GameplayEventLookup = SystemAPI.GetBufferLookup<GameplayEventBusEventBuffer>(),
+                StructuralEcb = structuralEcb,
+            }.Schedule(_cleanupQuery, state.Dependency);
         }
 
         public void OnDestroy(ref SystemState state)
         {
         }
 
-        private static void CleanupAbility(
-            EntityManager em,
-            ref EntityCommandBuffer ecb,
-            ref EventBusHelper.GameplayEventBusWriter gameplayEventWriter,
-            in AbilityStateCleanupRecord abilityRecord)
+        [BurstCompile]
+        private struct AbilityStateCleanupJob : IJobChunk
         {
-            var ability = abilityRecord.Ability;
-            if (!em.Exists(ability))
-                return;
+            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
+            public ComponentTypeHandle<AbilityStateComponent> StateTypeHandle;
+            public ComponentLookup<AbilityCancelRequestComponent> CancelRequestLookup;
+            public ComponentLookup<AbilityEndRequestComponent> EndRequestLookup;
+            public ComponentLookup<AbilityActivationPendingComponent> ActivationPendingLookup;
+            public ComponentLookup<AbilityCommitRequestComponent> CommitRequestLookup;
+            public ComponentLookup<AbilityDestroyOnCleanupComponent> DestroyOnCleanupLookup;
+            public ComponentLookup<AbilityMainTargetComponent> MainTargetLookup;
+            [ReadOnly] public ComponentLookup<AbilityGrantedByEffectComponent> GrantedByEffectLookup;
+            public BufferLookup<AbilitySlotBuffer> AbilitySlotLookup;
+            public BufferLookup<GEGrantedAbilityRuntimeBuffer> GrantedAbilityRuntimeLookup;
+            [ReadOnly] public ComponentLookup<GEContextComponent> EffectContextLookup;
+            public ComponentLookup<ASCActiveEffectsComponent> ActiveEffectStoreLookup;
+            public BufferLookup<ActiveGameplayEffectBuffer> ActiveEffectSlotLookup;
+            public BufferLookup<TagTemporarySourceBuffer> TemporaryTagSourceLookup;
+            public ComponentLookup<TagMaskComponent> TagMaskLookup;
+            [ReadOnly] public ComponentLookup<TagFixedMaskComponent> FixedTagMaskLookup;
+            public Entity EventBusEntity;
+            public int Frame;
+            public ComponentLookup<GameplayEventBusComponent> EventBusLookup;
+            public BufferLookup<GameplayEventBusEventBuffer> GameplayEventLookup;
+            public EntityCommandBuffer.ParallelWriter StructuralEcb;
 
-            if (!abilityRecord.ShouldCancel && !abilityRecord.ShouldEnd)
-                return;
-
-            var state = abilityRecord.State;
-            var owner = state.Owner;
-            var lifecycleRequest = ResolveLifecycleRequest(in abilityRecord);
-            AbilityRuntimeActions.RemoveActivationOwnedTags(ability, em);
-            var destroyOnCleanup = CleanupGrantedAbilityIfNeeded(em, ref ecb, ability, owner, abilityRecord.ShouldCancel);
-
-            DisableComponentIfPresent<AbilityActivationPendingComponent>(em, ability);
-            DisableComponentIfPresent<AbilityCommitRequestComponent>(em, ability);
-            DisableComponentIfPresent<AbilityCancelRequestComponent>(em, ability);
-            DisableComponentIfPresent<AbilityEndRequestComponent>(em, ability);
-            if (em.HasComponent<AbilityMainTargetComponent>(ability))
-                em.SetComponentData(ability, new AbilityMainTargetComponent { TargetAsc = Entity.Null });
-
-            state.Phase = EAbilityPhase.Ready;
-            state.Timer = 0f;
-            state.RemainingFrame = 0;
-            ecb.SetComponent(ability, state);
-
-            gameplayEventWriter.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
             {
-                Type = abilityRecord.ShouldCancel ? EGameplayEventType.AbilityCanceled : EGameplayEventType.AbilityEnded,
-                SourceAsc = owner,
-                TargetAsc = owner,
-                SourceAbility = ability,
-                GameplayEffect = lifecycleRequest.SourceEffect,
-                RelatedAbility = lifecycleRequest.SourceAbility,
-                EventCode = state.Code,
-                ReasonCode = (int)lifecycleRequest.Reason,
-                RelatedAbilityCode = lifecycleRequest.SourceAbilityCode,
-                Value = lifecycleRequest.SourceAbilityCode,
-            });
-
-            if (destroyOnCleanup || AbilityRuntimeActions.IsDestroyOnCleanupEnabled(ability, em))
-                DestroyAbilityEntity(em, ref ecb, ability);
-        }
-
-        private static AbilityLifecycleCleanupRequest ResolveLifecycleRequest(in AbilityStateCleanupRecord abilityRecord)
-        {
-            if (abilityRecord.ShouldCancel)
-                return new AbilityLifecycleCleanupRequest
+                var abilities = chunk.GetNativeArray(EntityTypeHandle);
+                var states = chunk.GetNativeArray(ref StateTypeHandle);
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
                 {
-                    Reason = abilityRecord.CancelRequest.Reason,
-                    SourceAbility = abilityRecord.CancelRequest.SourceAbility,
-                    SourceEffect = abilityRecord.CancelRequest.SourceEffect,
-                    SourceAbilityCode = abilityRecord.CancelRequest.SourceAbilityCode,
+                    var ability = abilities[entityIndex];
+                    var state = states[entityIndex];
+                    if (!TryResolveCleanupRequest(ability, out var cleanupRequest))
+                        continue;
+
+                    var owner = state.Owner;
+                    RemoveActivationOwnedTags(owner, ability);
+                    var destroyOnCleanup = CleanupGrantedAbilityIfNeeded(ability, owner, cleanupRequest.ShouldCancel);
+
+                    DisableComponentIfPresent(ref ActivationPendingLookup, ability);
+                    DisableComponentIfPresent(ref CommitRequestLookup, ability);
+                    DisableComponentIfPresent(ref CancelRequestLookup, ability);
+                    DisableComponentIfPresent(ref EndRequestLookup, ability);
+                    if (MainTargetLookup.HasComponent(ability))
+                        MainTargetLookup[ability] = new AbilityMainTargetComponent { TargetAsc = Entity.Null };
+
+                    state.Phase = EAbilityPhase.Ready;
+                    state.Timer = 0f;
+                    state.RemainingFrame = 0;
+                    states[entityIndex] = state;
+
+                    EnqueueLifecycleEvent(ability, owner, in state, in cleanupRequest);
+
+                    if (destroyOnCleanup || IsDestroyOnCleanupEnabled(ability))
+                        StructuralEcb.DestroyEntity(unfilteredChunkIndex, ability);
+                }
+            }
+
+            private bool TryResolveCleanupRequest(Entity ability, out AbilityLifecycleCleanupRequest cleanupRequest)
+            {
+                cleanupRequest = default;
+                if (CancelRequestLookup.HasComponent(ability)
+                    && CancelRequestLookup.IsComponentEnabled(ability))
+                {
+                    var cancelRequest = CancelRequestLookup[ability];
+                    cleanupRequest = new AbilityLifecycleCleanupRequest
+                    {
+                        ShouldCancel = true,
+                        Reason = cancelRequest.Reason,
+                        SourceAbility = cancelRequest.SourceAbility,
+                        SourceEffect = cancelRequest.SourceEffect,
+                        SourceAbilityCode = cancelRequest.SourceAbilityCode,
+                    };
+                    return true;
+                }
+
+                if (EndRequestLookup.HasComponent(ability)
+                    && EndRequestLookup.IsComponentEnabled(ability))
+                {
+                    var endRequest = EndRequestLookup[ability];
+                    cleanupRequest = new AbilityLifecycleCleanupRequest
+                    {
+                        ShouldEnd = true,
+                        Reason = endRequest.Reason,
+                        SourceAbility = endRequest.SourceAbility,
+                        SourceEffect = endRequest.SourceEffect,
+                        SourceAbilityCode = endRequest.SourceAbilityCode,
+                    };
+                    return true;
+                }
+
+                return false;
+            }
+
+            private bool CleanupGrantedAbilityIfNeeded(Entity ability, Entity owner, bool canceled)
+            {
+                if (!GrantedByEffectLookup.HasComponent(ability))
+                    return false;
+
+                var granted = GrantedByEffectLookup[ability];
+                var shouldRemove = granted.RemovePolicy switch
+                {
+                    GrantedAbilityRemovePolicy.WhenEnd => !canceled,
+                    GrantedAbilityRemovePolicy.WhenCancel => canceled,
+                    GrantedAbilityRemovePolicy.WhenCancelOrEnd => true,
+                    GrantedAbilityRemovePolicy.SyncWithEffect => IsDestroyOnCleanupEnabled(ability),
+                    _ => false,
                 };
 
-            if (abilityRecord.ShouldEnd)
-                return new AbilityLifecycleCleanupRequest
+                if (!shouldRemove)
+                    return false;
+
+                RemoveAbilityFromAsc(owner, ability);
+                ClearRuntimeGrantedAbility(granted.SourceEffect, ability);
+                RefreshGrantedAbilityStoreState(granted.SourceEffect);
+                EnableDestroyOnCleanup(ability);
+                return true;
+            }
+
+            private void RemoveAbilityFromAsc(Entity owner, Entity ability)
+            {
+                if (owner == Entity.Null || !AbilitySlotLookup.HasBuffer(owner))
+                    return;
+
+                var abilities = AbilitySlotLookup[owner];
+                for (var i = abilities.Length - 1; i >= 0; i--)
+                    if (abilities[i].AbilityEntity == ability)
+                        abilities.RemoveAt(i);
+            }
+
+            private void ClearRuntimeGrantedAbility(Entity effect, Entity ability)
+            {
+                if (effect == Entity.Null || !GrantedAbilityRuntimeLookup.HasBuffer(effect))
+                    return;
+
+                var runtimeAbilities = GrantedAbilityRuntimeLookup[effect];
+                for (var i = 0; i < runtimeAbilities.Length; i++)
                 {
-                    Reason = abilityRecord.EndRequest.Reason,
-                    SourceAbility = abilityRecord.EndRequest.SourceAbility,
-                    SourceEffect = abilityRecord.EndRequest.SourceEffect,
-                    SourceAbilityCode = abilityRecord.EndRequest.SourceAbilityCode,
-                };
+                    if (runtimeAbilities[i].AbilityEntity != ability)
+                        continue;
 
-            return default;
-        }
+                    var runtime = runtimeAbilities[i];
+                    runtime.AbilityEntity = Entity.Null;
+                    runtimeAbilities[i] = runtime;
+                }
+            }
 
-        private struct AbilityStateCleanupRecord
-        {
-            public Entity Ability;
-            public AbilityStateComponent State;
-            public bool ShouldCancel;
-            public bool ShouldEnd;
-            public AbilityCancelRequestComponent CancelRequest;
-            public AbilityEndRequestComponent EndRequest;
+            private void RefreshGrantedAbilityStoreState(Entity effect)
+            {
+                if (effect == Entity.Null
+                    || !EffectContextLookup.HasComponent(effect)
+                    || !GrantedAbilityRuntimeLookup.HasBuffer(effect))
+                    return;
+
+                var context = EffectContextLookup[effect];
+                var owner = context.TargetAsc;
+                if (owner == Entity.Null
+                    || !ActiveEffectStoreLookup.HasComponent(owner)
+                    || !ActiveEffectSlotLookup.HasBuffer(owner))
+                    return;
+
+                var store = ActiveEffectStoreLookup[owner];
+                var slots = ActiveEffectSlotLookup[owner];
+                var slotIndex = FindSlot(slots, effect);
+                if (slotIndex < 0)
+                    return;
+
+                var slot = slots[slotIndex];
+                slot.ActiveGrantedTagCount = CountActiveGrantedTags(owner, effect);
+                slot.ActiveGrantedAbilityCount = CountActiveGrantedAbilities(effect);
+                slots[slotIndex] = slot;
+                ActiveEffectStore.RefreshChunkSkipIndexCounters(
+                    ref store,
+                    slots,
+                    store.LastChunkSkipIndexFrame);
+                ActiveEffectStoreLookup[owner] = store;
+            }
+
+            private int CountActiveGrantedAbilities(Entity effect)
+            {
+                if (effect == Entity.Null || !GrantedAbilityRuntimeLookup.HasBuffer(effect))
+                    return 0;
+
+                var runtimeAbilities = GrantedAbilityRuntimeLookup[effect];
+                var count = 0;
+                for (var i = 0; i < runtimeAbilities.Length; i++)
+                    if (runtimeAbilities[i].AbilityEntity != Entity.Null)
+                        count++;
+                return count;
+            }
+
+            private int CountActiveGrantedTags(Entity owner, Entity effect)
+            {
+                if (owner == Entity.Null
+                    || effect == Entity.Null
+                    || !TemporaryTagSourceLookup.HasBuffer(owner))
+                    return 0;
+
+                var sources = TemporaryTagSourceLookup[owner];
+                var seen = new TagMaskComponent();
+                var count = 0;
+                for (var i = 0; i < sources.Length; i++)
+                {
+                    var source = sources[i];
+                    if (source.Source != effect
+                        || !TagMaskComponent.IsValidIndex(source.TagIndex)
+                        || seen.HasTag(source.TagIndex))
+                        continue;
+
+                    seen.AddTag(source.TagIndex);
+                    count++;
+                }
+
+                return count;
+            }
+
+            private void RemoveActivationOwnedTags(Entity owner, Entity ability)
+            {
+                if (owner == Entity.Null || !TemporaryTagSourceLookup.HasBuffer(owner))
+                    return;
+
+                var sources = TemporaryTagSourceLookup[owner];
+                for (var i = sources.Length - 1; i >= 0; i--)
+                {
+                    if (sources[i].Source != ability)
+                        continue;
+
+                    var tagIndex = sources[i].TagIndex;
+                    sources.RemoveAt(i);
+                    RemoveTagIndexFromEffectiveMaskIfUnreferenced(owner, sources, tagIndex);
+                }
+            }
+
+            private void RemoveTagIndexFromEffectiveMaskIfUnreferenced(
+                Entity owner,
+                DynamicBuffer<TagTemporarySourceBuffer> sources,
+                int tagIndex)
+            {
+                if (!TagMaskLookup.HasComponent(owner))
+                    return;
+                if (FixedTagMaskLookup.HasComponent(owner)
+                    && FixedTagMaskLookup[owner].Mask.HasTag(tagIndex))
+                    return;
+                for (var i = 0; i < sources.Length; i++)
+                    if (sources[i].TagIndex == tagIndex)
+                        return;
+
+                var mask = TagMaskLookup[owner];
+                mask.RemoveTag(tagIndex);
+                TagMaskLookup[owner] = mask;
+            }
+
+            private void EnableDestroyOnCleanup(Entity ability)
+            {
+                if (DestroyOnCleanupLookup.HasComponent(ability))
+                    DestroyOnCleanupLookup.SetComponentEnabled(ability, true);
+            }
+
+            private bool IsDestroyOnCleanupEnabled(Entity ability)
+            {
+                return DestroyOnCleanupLookup.HasComponent(ability)
+                       && DestroyOnCleanupLookup.IsComponentEnabled(ability);
+            }
+
+            private void EnqueueLifecycleEvent(
+                Entity ability,
+                Entity owner,
+                in AbilityStateComponent state,
+                in AbilityLifecycleCleanupRequest cleanupRequest)
+            {
+                if (EventBusEntity == Entity.Null
+                    || !EventBusLookup.HasComponent(EventBusEntity)
+                    || !GameplayEventLookup.HasBuffer(EventBusEntity))
+                    return;
+
+                var eventBus = EventBusLookup[EventBusEntity];
+                var events = GameplayEventLookup[EventBusEntity];
+                events.Add(new GameplayEventBusEventBuffer
+                {
+                    Frame = Frame,
+                    Sequence = eventBus.NextSequence,
+                    Type = cleanupRequest.ShouldCancel
+                        ? EGameplayEventType.AbilityCanceled
+                        : EGameplayEventType.AbilityEnded,
+                    SourceAsc = owner,
+                    TargetAsc = owner,
+                    SourceAbility = ability,
+                    GameplayEffect = cleanupRequest.SourceEffect,
+                    RelatedAbility = cleanupRequest.SourceAbility,
+                    EventCode = state.Code,
+                    ReasonCode = (int)cleanupRequest.Reason,
+                    RelatedAbilityCode = cleanupRequest.SourceAbilityCode,
+                    Value = cleanupRequest.SourceAbilityCode,
+                });
+                eventBus.NextSequence++;
+                EventBusLookup[EventBusEntity] = eventBus;
+            }
+
+            private static int FindSlot(DynamicBuffer<ActiveGameplayEffectBuffer> slots, Entity effect)
+            {
+                for (var i = 0; i < slots.Length; i++)
+                    if (slots[i].ActiveEffectEntity == effect)
+                        return i;
+                return -1;
+            }
         }
 
         private struct AbilityLifecycleCleanupRequest
         {
+            public bool ShouldCancel;
+            public bool ShouldEnd;
             public EAbilityLifecycleReason Reason;
             public Entity SourceAbility;
             public Entity SourceEffect;
             public int SourceAbilityCode;
         }
 
-        private static bool CleanupGrantedAbilityIfNeeded(
-            EntityManager em,
-            ref EntityCommandBuffer ecb,
-            Entity ability,
-            Entity owner,
-            bool canceled)
-        {
-            if (!em.HasComponent<AbilityGrantedByEffectComponent>(ability))
-                return false;
-
-            var granted = em.GetComponentData<AbilityGrantedByEffectComponent>(ability);
-            var shouldRemove = granted.RemovePolicy switch
-            {
-                GrantedAbilityRemovePolicy.WhenEnd => !canceled,
-                GrantedAbilityRemovePolicy.WhenCancel => canceled,
-                GrantedAbilityRemovePolicy.WhenCancelOrEnd => true,
-                GrantedAbilityRemovePolicy.SyncWithEffect => AbilityRuntimeActions.IsDestroyOnCleanupEnabled(ability, em),
-                _ => false,
-            };
-
-            if (!shouldRemove)
-                return false;
-
-            RemoveAbilityFromAsc(em, owner, ability);
-            ClearRuntimeGrantedAbility(em, granted.SourceEffect, ability);
-            RefreshGrantedAbilityStoreState(em, granted.SourceEffect);
-            AbilityRuntimeActions.EnableDestroyOnCleanup(ability, em, ref ecb);
-
-            return true;
-        }
-
-        private static void RemoveAbilityFromAsc(EntityManager em, Entity owner, Entity ability)
-        {
-            if (!em.Exists(owner) || !em.HasBuffer<AbilitySlotBuffer>(owner))
-                return;
-
-            var abilities = em.GetBuffer<AbilitySlotBuffer>(owner);
-            for (var i = abilities.Length - 1; i >= 0; i--)
-            {
-                if (abilities[i].AbilityEntity == ability)
-                    abilities.RemoveAt(i);
-            }
-        }
-
-        private static void ClearRuntimeGrantedAbility(EntityManager em, Entity effect, Entity ability)
-        {
-            if (effect == Entity.Null || !em.Exists(effect) || !em.HasBuffer<GEGrantedAbilityRuntimeBuffer>(effect))
-                return;
-
-            var runtimeAbilities = em.GetBuffer<GEGrantedAbilityRuntimeBuffer>(effect);
-            for (var i = 0; i < runtimeAbilities.Length; i++)
-            {
-                if (runtimeAbilities[i].AbilityEntity != ability)
-                    continue;
-
-                var runtime = runtimeAbilities[i];
-                runtime.AbilityEntity = Entity.Null;
-                runtimeAbilities[i] = runtime;
-            }
-        }
-
-        private static void RefreshGrantedAbilityStoreState(EntityManager em, Entity effect)
-        {
-            if (effect == Entity.Null
-                || !em.Exists(effect)
-                || !em.HasComponent<GEContextComponent>(effect))
-            {
-                return;
-            }
-
-            ActiveEffectStore.TryRefreshGrantedAbilityState(
-                em,
-                effect,
-                em.GetComponentData<GEContextComponent>(effect));
-        }
-
-        private static void DestroyAbilityEntity(
-            EntityManager em,
-            ref EntityCommandBuffer ecb,
-            Entity ability)
-        {
-            if (!em.Exists(ability))
-                return;
-
-            ecb.DestroyEntity(ability);
-        }
-
         private static void DisableComponentIfPresent<T>(
-            EntityManager em,
+            ref ComponentLookup<T> lookup,
             Entity entity)
             where T : unmanaged, IComponentData, IEnableableComponent
         {
-            if (em.HasComponent<T>(entity) && em.IsComponentEnabled<T>(entity))
-                em.SetComponentEnabled<T>(entity, false);
+            if (lookup.HasComponent(entity) && lookup.IsComponentEnabled(entity))
+                lookup.SetComponentEnabled(entity, false);
         }
     }
 }

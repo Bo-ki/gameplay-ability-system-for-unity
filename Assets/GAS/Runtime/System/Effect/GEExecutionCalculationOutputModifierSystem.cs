@@ -3,6 +3,7 @@ using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 
 namespace GAS.Runtime
@@ -12,11 +13,7 @@ namespace GAS.Runtime
     [UpdateAfter(typeof(GEExecutionCalculationExtensionSystemGroup))]
     public partial struct GEExecutionCalculationOutputModifierSystem : ISystem
     {
-        private const int MainThreadEffectThreshold = 32;
-        private const int MainThreadAttributeThreshold = 64;
-
         private EntityQuery _outputQuery;
-        private EntityQuery _attributeQuery;
 
         public void OnCreate(ref SystemState state)
         {
@@ -29,16 +26,13 @@ namespace GAS.Runtime
                     GEExecutionCalculationOutputModifierDefinitionBuffer>()
                 .WithDisabled<GEExecutionCalculationOutputModifierAppliedComponent>()
                 .Build();
-            _attributeQuery = SystemAPI.QueryBuilder()
-                .WithAll<AttributeValueBuffer>()
-                .Build();
             state.RequireForUpdate<GEEffectCommandStreamComponent>();
             state.RequireForUpdate(_outputQuery);
         }
 
         public void OnUpdate(ref SystemState state)
         {
-            var effectChunkCount = _outputQuery.CalculateChunkCount();
+            var effectChunkCount = _outputQuery.CalculateChunkCountWithoutFiltering();
             if (effectChunkCount <= 0)
                 return;
 
@@ -47,211 +41,61 @@ namespace GAS.Runtime
             if (!EffectCommandSpecStream.HasRequiredBuffers(em, streamEntity))
                 return;
 
-            var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
-            var deltas = em.GetBuffer<AttributeModifierBuffer>(streamEntity);
             var frame = GASRuntimeFrameContext.ResolveCurrentFrame(em);
-            var effectEntityCount = _outputQuery.CalculateEntityCount();
-            if (effectEntityCount <= MainThreadEffectThreshold
-                && _attributeQuery.CalculateEntityCount() <= MainThreadAttributeThreshold)
-            {
-                ApplyOutputModifiersOnMainThread(ref state, em, streamEntity, ref stream, deltas, frame);
-                return;
-            }
 
             var effectStream = new NativeStream(effectChunkCount, Allocator.TempJob);
             var modifierStream = new NativeStream(effectChunkCount, Allocator.TempJob);
-            var pendingEffects = new NativeList<PendingOutputEffectRecord>(Allocator.TempJob);
-            var modifierRecords = new NativeList<PendingOutputModifierRecord>(Allocator.TempJob);
+            var initialRecordCapacity = math.max(1, effectChunkCount * 128);
+            var pendingEffects = new NativeList<PendingOutputEffectRecord>(initialRecordCapacity, Allocator.TempJob);
+            var modifierRecords = new NativeList<PendingOutputModifierRecord>(initialRecordCapacity, Allocator.TempJob);
+            var pendingDeltas = new NativeList<PendingAttributeModifierDeltaRecord>(initialRecordCapacity, Allocator.TempJob);
+            var appliedDeltaCounts =
+                new NativeParallelHashMap<Entity, int>(initialRecordCapacity, Allocator.TempJob);
 
-            try
+            var collectJob = new GEExecutionCalculationOutputModifierCollectJob
             {
-                var collectJob = new GEExecutionCalculationOutputModifierCollectJob
-                {
-                    EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
-                    ContextTypeHandle = SystemAPI.GetComponentTypeHandle<GEContextComponent>(isReadOnly: true),
-                    SpecTypeHandle = SystemAPI.GetComponentTypeHandle<GEEffectSpecComponent>(isReadOnly: true),
-                    ValueTypeHandle = SystemAPI.GetBufferTypeHandle<GEExecutionCalculationValueBuffer>(isReadOnly: true),
-                    DefinitionTypeHandle =
-                        SystemAPI.GetBufferTypeHandle<GEExecutionCalculationOutputModifierDefinitionBuffer>(
-                            isReadOnly: true),
-                    ResolvedModifierTypeHandle =
-                        SystemAPI.GetBufferTypeHandle<GEResolvedModifierBuffer>(isReadOnly: false),
-                    EffectWriter = effectStream.AsWriter(),
-                    ModifierWriter = modifierStream.AsWriter(),
-                };
-                state.Dependency = collectJob.ScheduleParallel(_outputQuery, state.Dependency);
-                state.Dependency.Complete();
+                EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
+                ContextTypeHandle = SystemAPI.GetComponentTypeHandle<GEContextComponent>(isReadOnly: true),
+                SpecTypeHandle = SystemAPI.GetComponentTypeHandle<GEEffectSpecComponent>(isReadOnly: true),
+                ValueTypeHandle = SystemAPI.GetBufferTypeHandle<GEExecutionCalculationValueBuffer>(isReadOnly: true),
+                DefinitionTypeHandle =
+                    SystemAPI.GetBufferTypeHandle<GEExecutionCalculationOutputModifierDefinitionBuffer>(
+                        isReadOnly: true),
+                ResolvedModifierTypeHandle =
+                    SystemAPI.GetBufferTypeHandle<GEResolvedModifierBuffer>(isReadOnly: false),
+                EffectWriter = effectStream.AsWriter(),
+                ModifierWriter = modifierStream.AsWriter(),
+            };
+            var collectHandle = collectJob.ScheduleParallel(_outputQuery, state.Dependency);
 
-                ReadPendingEffects(effectStream.AsReader(), pendingEffects);
-                ReadModifierRecords(modifierStream.AsReader(), modifierRecords);
-
-                var appliedDeltaCounts =
-                    new NativeParallelHashMap<Entity, int>(math.max(1, pendingEffects.Length), Allocator.TempJob);
-                try
-                {
-                    if (modifierRecords.Length > 0)
-                    {
-                        modifierRecords.Sort(new PendingOutputModifierRecordComparer());
-                        var targetRanges =
-                            new NativeParallelHashMap<Entity, OutputModifierRecordRange>(
-                                math.max(1, modifierRecords.Length),
-                                Allocator.TempJob);
-                        var deltaChunkCount = _attributeQuery.CalculateChunkCount();
-                        var deltaStream = deltaChunkCount > 0
-                            ? new NativeStream(deltaChunkCount, Allocator.TempJob)
-                            : default;
-
-                        try
-                        {
-                            BuildTargetRanges(modifierRecords.AsArray(), targetRanges);
-
-                            if (deltaChunkCount > 0)
-                            {
-                                var applyJob = new TargetAttributeOutputModifierApplyJob
-                                {
-                                    EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
-                                    AttributeTypeHandle =
-                                        SystemAPI.GetBufferTypeHandle<AttributeValueBuffer>(isReadOnly: false),
-                                    ModifierRecords = modifierRecords.AsArray(),
-                                    TargetRanges = targetRanges,
-                                    DeltaWriter = deltaStream.AsWriter(),
-                                    Frame = frame,
-                                };
-                                state.Dependency = applyJob.ScheduleParallel(_attributeQuery, state.Dependency);
-                                state.Dependency.Complete();
-
-                                AppendPendingDeltas(
-                                    em,
-                                    deltaStream.AsReader(),
-                                    deltas,
-                                    ref stream,
-                                    appliedDeltaCounts);
-                            }
-                        }
-                        finally
-                        {
-                            if (deltaStream.IsCreated)
-                                deltaStream.Dispose();
-                            targetRanges.Dispose();
-                        }
-                    }
-
-                    em.SetComponentData(streamEntity, stream);
-                    MarkPendingEffectsApplied(
-                        SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
-                            .CreateCommandBuffer(state.WorldUnmanaged),
-                        pendingEffects.AsArray(),
-                        appliedDeltaCounts,
-                        frame);
-                }
-                finally
-                {
-                    appliedDeltaCounts.Dispose();
-                }
-            }
-            finally
+            var applyJob = new GEExecutionCalculationOutputModifierApplyJob
             {
-                modifierRecords.Dispose();
-                pendingEffects.Dispose();
-                modifierStream.Dispose();
-                effectStream.Dispose();
-            }
+                EffectReader = effectStream.AsReader(),
+                ModifierReader = modifierStream.AsReader(),
+                PendingEffects = pendingEffects,
+                ModifierRecords = modifierRecords,
+                PendingDeltas = pendingDeltas,
+                AppliedDeltaCounts = appliedDeltaCounts,
+                AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: false),
+                AttributeDirtyLookup = SystemAPI.GetComponentLookup<AttributeDirtyComponent>(isReadOnly: false),
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
+                DeltaBufferLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(isReadOnly: false),
+                AppliedLookup =
+                    SystemAPI.GetComponentLookup<GEExecutionCalculationOutputModifierAppliedComponent>(
+                        isReadOnly: false),
+                StreamEntity = streamEntity,
+                Frame = frame,
+            };
+            state.Dependency = applyJob.Schedule(collectHandle);
+            state.Dependency = effectStream.Dispose(state.Dependency);
+            state.Dependency = modifierStream.Dispose(state.Dependency);
+            state.Dependency = pendingEffects.Dispose(state.Dependency);
+            state.Dependency = modifierRecords.Dispose(state.Dependency);
+            state.Dependency = pendingDeltas.Dispose(state.Dependency);
+            state.Dependency = appliedDeltaCounts.Dispose(state.Dependency);
         }
 
         public void OnDestroy(ref SystemState state) { }
-
-        private void ApplyOutputModifiersOnMainThread(
-            ref SystemState state,
-            EntityManager em,
-            Entity streamEntity,
-            ref GEEffectCommandStreamComponent stream,
-            DynamicBuffer<AttributeModifierBuffer> deltas,
-            int frame)
-        {
-            var ecb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
-                .CreateCommandBuffer(state.WorldUnmanaged);
-
-            foreach (var (contextRef, specRef, values, definitions, resolvedModifiers, effect)
-                     in SystemAPI
-                         .Query<
-                             RefRO<GEContextComponent>,
-                             RefRO<GEEffectSpecComponent>,
-                             DynamicBuffer<GEExecutionCalculationValueBuffer>,
-                             DynamicBuffer<GEExecutionCalculationOutputModifierDefinitionBuffer>,
-                             DynamicBuffer<GEResolvedModifierBuffer>>()
-                         .WithDisabled<GEExecutionCalculationOutputModifierAppliedComponent>()
-                         .WithEntityAccess())
-            {
-                var context = contextRef.ValueRO;
-                var spec = specRef.ValueRO;
-                var deltaCount = 0;
-                var hasTargetAttributes = context.TargetAsc != Entity.Null
-                                          && em.Exists(context.TargetAsc)
-                                          && em.HasBuffer<AttributeValueBuffer>(context.TargetAsc);
-                var targetAttributes = hasTargetAttributes
-                    ? em.GetBuffer<AttributeValueBuffer>(context.TargetAsc)
-                    : default;
-
-                resolvedModifiers.Clear();
-                for (var definitionIndex = 0; definitionIndex < definitions.Length; definitionIndex++)
-                {
-                    var definition = definitions[definitionIndex];
-                    var magnitude = ResolveOutputMagnitude(values, definition);
-                    resolvedModifiers.Add(new GEResolvedModifierBuffer
-                    {
-                        AttrSetCode = definition.AttrSetCode,
-                        AttributeCode = definition.AttributeCode,
-                        Op = definition.Op,
-                        Magnitude = magnitude,
-                        SourceEffect = effect,
-                    });
-
-                    if (!hasTargetAttributes
-                        || !ApplyModifierDelta(
-                            targetAttributes,
-                            definition.AttrSetCode,
-                            definition.AttributeCode,
-                            definition.Op,
-                            magnitude,
-                            out var oldValue,
-                            out var newValue))
-                    {
-                        continue;
-                    }
-
-                    deltas.Add(new AttributeModifierBuffer
-                    {
-                        Sequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextDeltaSequence),
-                        Frame = frame,
-                        SourceAsc = context.SourceAsc,
-                        TargetAsc = context.TargetAsc,
-                        SourceAbility = context.SourceAbility,
-                        SourceEffect = effect,
-                        GameplayEffectCode = spec.GameplayEffectCode,
-                        ContextId = context.ContextId,
-                        ParentContextId = context.ParentContextId,
-                        AttrSetCode = definition.AttrSetCode,
-                        AttributeCode = definition.AttributeCode,
-                        Op = definition.Op,
-                        ValueKind = AttributeDeltaValueKind.BaseValue,
-                        Magnitude = magnitude,
-                        OldValue = oldValue,
-                        NewValue = newValue,
-                    });
-                    AttributeHelper.MarkOwnerDirty(em, context.TargetAsc);
-                    deltaCount++;
-                }
-
-                ecb.SetComponent(effect, new GEExecutionCalculationOutputModifierAppliedComponent
-                {
-                    Frame = frame,
-                    DeltaCount = deltaCount,
-                });
-                ecb.SetComponentEnabled<GEExecutionCalculationOutputModifierAppliedComponent>(effect, true);
-            }
-
-            em.SetComponentData(streamEntity, stream);
-        }
 
         private static float ResolveOutputMagnitude(
             DynamicBuffer<GEExecutionCalculationValueBuffer> values,
@@ -286,12 +130,6 @@ namespace GAS.Runtime
             public int AttributeCode;
             public EModifierOp Op;
             public float Magnitude;
-        }
-
-        private struct OutputModifierRecordRange
-        {
-            public int Start;
-            public int Count;
         }
 
         private struct PendingAttributeModifierDeltaRecord
@@ -403,38 +241,45 @@ namespace GAS.Runtime
         }
 
         [BurstCompile]
-        private struct TargetAttributeOutputModifierApplyJob : IJobChunk
+        private struct GEExecutionCalculationOutputModifierApplyJob : IJob
         {
-            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
-            public BufferTypeHandle<AttributeValueBuffer> AttributeTypeHandle;
-            [ReadOnly] public NativeArray<PendingOutputModifierRecord> ModifierRecords;
-            [ReadOnly] public NativeParallelHashMap<Entity, OutputModifierRecordRange> TargetRanges;
-            public NativeStream.Writer DeltaWriter;
+            public NativeStream.Reader EffectReader;
+            public NativeStream.Reader ModifierReader;
+            public NativeList<PendingOutputEffectRecord> PendingEffects;
+            public NativeList<PendingOutputModifierRecord> ModifierRecords;
+            public NativeList<PendingAttributeModifierDeltaRecord> PendingDeltas;
+            public NativeParallelHashMap<Entity, int> AppliedDeltaCounts;
+            public BufferLookup<AttributeValueBuffer> AttributeLookup;
+            public ComponentLookup<AttributeDirtyComponent> AttributeDirtyLookup;
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            public BufferLookup<AttributeModifierBuffer> DeltaBufferLookup;
+            public ComponentLookup<GEExecutionCalculationOutputModifierAppliedComponent> AppliedLookup;
+            public Entity StreamEntity;
             public int Frame;
 
-            public void Execute(
-                in ArchetypeChunk chunk,
-                int unfilteredChunkIndex,
-                bool useEnabledMask,
-                in v128 chunkEnabledMask)
+            public void Execute()
             {
-                DeltaWriter.BeginForEachIndex(unfilteredChunkIndex);
+                PendingEffects.Clear();
+                ModifierRecords.Clear();
+                PendingDeltas.Clear();
+                AppliedDeltaCounts.Clear();
 
-                var entities = chunk.GetNativeArray(EntityTypeHandle);
-                var attributeBuffers = chunk.GetBufferAccessor(ref AttributeTypeHandle);
-                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                ReadPendingEffects(EffectReader, PendingEffects);
+                ReadModifierRecords(ModifierReader, ModifierRecords);
 
-                while (enumerator.NextEntityIndex(out var entityIndex))
+                if (ModifierRecords.Length > 0)
                 {
-                    var asc = entities[entityIndex];
-                    if (!TargetRanges.TryGetValue(asc, out var range))
-                        continue;
-
-                    var attributes = attributeBuffers[entityIndex];
-                    var end = range.Start + range.Count;
-                    for (var recordIndex = range.Start; recordIndex < end; recordIndex++)
+                    ModifierRecords.Sort(new PendingOutputModifierRecordComparer());
+                    for (var recordIndex = 0; recordIndex < ModifierRecords.Length; recordIndex++)
                     {
                         var record = ModifierRecords[recordIndex];
+                        if (record.TargetAsc == Entity.Null
+                            || !AttributeLookup.HasBuffer(record.TargetAsc))
+                        {
+                            continue;
+                        }
+
+                        var attributes = AttributeLookup[record.TargetAsc];
                         if (!ApplyModifierDelta(
                                 attributes,
                                 record.AttrSetCode,
@@ -447,7 +292,7 @@ namespace GAS.Runtime
                             continue;
                         }
 
-                        DeltaWriter.Write(new PendingAttributeModifierDeltaRecord
+                        PendingDeltas.Add(new PendingAttributeModifierDeltaRecord
                         {
                             Order = record.Order,
                             Frame = Frame,
@@ -465,10 +310,84 @@ namespace GAS.Runtime
                             OldValue = oldValue,
                             NewValue = newValue,
                         });
+                        MarkOwnerDirty(record.TargetAsc);
+                        IncrementAppliedDeltaCount(AppliedDeltaCounts, record.Effect);
                     }
                 }
 
-                DeltaWriter.EndForEachIndex();
+                AppendPendingDeltas();
+                MarkPendingEffectsApplied();
+            }
+
+            private void AppendPendingDeltas()
+            {
+                if (PendingDeltas.Length == 0
+                    || !StreamLookup.HasComponent(StreamEntity)
+                    || !DeltaBufferLookup.HasBuffer(StreamEntity))
+                {
+                    return;
+                }
+
+                PendingDeltas.Sort(new PendingAttributeModifierDeltaRecordComparer());
+                var stream = StreamLookup[StreamEntity];
+                var deltas = DeltaBufferLookup[StreamEntity];
+                for (var i = 0; i < PendingDeltas.Length; i++)
+                {
+                    var record = PendingDeltas[i];
+                    deltas.Add(new AttributeModifierBuffer
+                    {
+                        Sequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextDeltaSequence),
+                        Frame = record.Frame,
+                        SourceAsc = record.SourceAsc,
+                        TargetAsc = record.TargetAsc,
+                        SourceAbility = record.SourceAbility,
+                        SourceEffect = record.Effect,
+                        GameplayEffectCode = record.GameplayEffectCode,
+                        ContextId = record.ContextId,
+                        ParentContextId = record.ParentContextId,
+                        AttrSetCode = record.AttrSetCode,
+                        AttributeCode = record.AttributeCode,
+                        Op = record.Op,
+                        ValueKind = AttributeDeltaValueKind.BaseValue,
+                        Magnitude = record.Magnitude,
+                        OldValue = record.OldValue,
+                        NewValue = record.NewValue,
+                    });
+                }
+                StreamLookup[StreamEntity] = stream;
+            }
+
+            private void MarkPendingEffectsApplied()
+            {
+                for (var i = 0; i < PendingEffects.Length; i++)
+                {
+                    var effect = PendingEffects[i].Effect;
+                    if (effect == Entity.Null
+                        || !AppliedLookup.HasComponent(effect))
+                    {
+                        continue;
+                    }
+
+                    var deltaCount = AppliedDeltaCounts.TryGetValue(effect, out var count) ? count : 0;
+                    AppliedLookup[effect] = new GEExecutionCalculationOutputModifierAppliedComponent
+                    {
+                        Frame = Frame,
+                        DeltaCount = deltaCount,
+                    };
+                    AppliedLookup.SetComponentEnabled(effect, true);
+                }
+            }
+
+            private void MarkOwnerDirty(Entity asc)
+            {
+                if (asc == Entity.Null
+                    || !AttributeDirtyLookup.HasComponent(asc)
+                    || AttributeDirtyLookup.IsComponentEnabled(asc))
+                {
+                    return;
+                }
+
+                AttributeDirtyLookup.SetComponentEnabled(asc, true);
             }
         }
 
@@ -499,111 +418,6 @@ namespace GAS.Runtime
                     modifierRecords.Add(record);
                 }
                 modifierReader.EndForEachIndex();
-            }
-        }
-
-        private static void BuildTargetRanges(
-            NativeArray<PendingOutputModifierRecord> modifierRecords,
-            NativeParallelHashMap<Entity, OutputModifierRecordRange> targetRanges)
-        {
-            if (modifierRecords.Length == 0)
-                return;
-
-            var start = 0;
-            var target = modifierRecords[0].TargetAsc;
-            for (var i = 1; i < modifierRecords.Length; i++)
-            {
-                var record = modifierRecords[i];
-                if (record.TargetAsc.Equals(target))
-                    continue;
-
-                targetRanges.TryAdd(target, new OutputModifierRecordRange
-                {
-                    Start = start,
-                    Count = i - start,
-                });
-                start = i;
-                target = record.TargetAsc;
-            }
-
-            targetRanges.TryAdd(target, new OutputModifierRecordRange
-            {
-                Start = start,
-                Count = modifierRecords.Length - start,
-            });
-        }
-
-        private static void AppendPendingDeltas(
-            EntityManager em,
-            NativeStream.Reader deltaReader,
-            DynamicBuffer<AttributeModifierBuffer> deltas,
-            ref GEEffectCommandStreamComponent stream,
-            NativeParallelHashMap<Entity, int> appliedDeltaCounts)
-        {
-            var pendingDeltas = new NativeList<PendingAttributeModifierDeltaRecord>(Allocator.Temp);
-            try
-            {
-                for (var streamIndex = 0; streamIndex < deltaReader.ForEachCount; streamIndex++)
-                {
-                    var recordCount = deltaReader.BeginForEachIndex(streamIndex);
-                    for (var i = 0; i < recordCount; i++)
-                        pendingDeltas.Add(deltaReader.Read<PendingAttributeModifierDeltaRecord>());
-                    deltaReader.EndForEachIndex();
-                }
-
-                if (pendingDeltas.Length == 0)
-                    return;
-
-                pendingDeltas.Sort(new PendingAttributeModifierDeltaRecordComparer());
-                for (var i = 0; i < pendingDeltas.Length; i++)
-                {
-                    var record = pendingDeltas[i];
-                    deltas.Add(new AttributeModifierBuffer
-                    {
-                        Sequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextDeltaSequence),
-                        Frame = record.Frame,
-                        SourceAsc = record.SourceAsc,
-                        TargetAsc = record.TargetAsc,
-                        SourceAbility = record.SourceAbility,
-                        SourceEffect = record.Effect,
-                        GameplayEffectCode = record.GameplayEffectCode,
-                        ContextId = record.ContextId,
-                        ParentContextId = record.ParentContextId,
-                        AttrSetCode = record.AttrSetCode,
-                        AttributeCode = record.AttributeCode,
-                        Op = record.Op,
-                        ValueKind = AttributeDeltaValueKind.BaseValue,
-                        Magnitude = record.Magnitude,
-                        OldValue = record.OldValue,
-                        NewValue = record.NewValue,
-                    });
-                    AttributeHelper.MarkOwnerDirty(em, record.TargetAsc);
-
-                    IncrementAppliedDeltaCount(appliedDeltaCounts, record.Effect);
-                }
-            }
-            finally
-            {
-                pendingDeltas.Dispose();
-            }
-        }
-
-        private static void MarkPendingEffectsApplied(
-            EntityCommandBuffer ecb,
-            NativeArray<PendingOutputEffectRecord> pendingEffects,
-            NativeParallelHashMap<Entity, int> appliedDeltaCounts,
-            int frame)
-        {
-            for (var i = 0; i < pendingEffects.Length; i++)
-            {
-                var effect = pendingEffects[i].Effect;
-                var deltaCount = appliedDeltaCounts.TryGetValue(effect, out var count) ? count : 0;
-                ecb.SetComponent(effect, new GEExecutionCalculationOutputModifierAppliedComponent
-                {
-                    Frame = frame,
-                    DeltaCount = deltaCount,
-                });
-                ecb.SetComponentEnabled<GEExecutionCalculationOutputModifierAppliedComponent>(effect, true);
             }
         }
 

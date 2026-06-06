@@ -1,6 +1,8 @@
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Jobs;
 using GAS.Runtime;
 
 namespace GAS.AutoChessDemo
@@ -34,177 +36,179 @@ namespace GAS.AutoChessDemo
             if (driver.LastExecutionFrame == frame)
                 return;
 
-            var em = state.EntityManager;
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
-            if (!EffectCommandSpecStream.HasRequiredBuffers(em, streamEntity))
-                return;
             var eventBusEntity = SystemAPI.GetSingletonEntity<GameplayEventBusComponent>();
 
-            var commands = em.GetBuffer<GEEffectCommandBuffer>(streamEntity);
-            var damageDeltas = new NativeList<AutoChessExecuteDamageDeltaRecord>(Allocator.Temp);
-            var attributesByAsc = SystemAPI.GetBufferLookup<AttributeValueBuffer>();
-            var destroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true);
-
-            try
+            state.Dependency = new ExecuteDamageCalculationJob
             {
-                CollectDamageDeltas(
-                    commands,
-                    attributesByAsc,
-                    destroyingLookup,
-                    frame,
-                    damageDeltas);
-                AppendDamageDeltasAndEvents(em, streamEntity, eventBusEntity, damageDeltas.AsArray());
-
-                driver.LastExecutionFrame = frame;
-                SystemAPI.SetComponent(driverEntity, driver);
-            }
-            finally
-            {
-                damageDeltas.Dispose();
-            }
+                DriverEntity = driverEntity,
+                Driver = driver,
+                StreamEntity = streamEntity,
+                EventBusEntity = eventBusEntity,
+                Frame = frame,
+                DriverLookup = SystemAPI.GetComponentLookup<AutoChessBattleDriverComponent>(),
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
+                CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: true),
+                DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(),
+                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
+                EventBusLookup = SystemAPI.GetComponentLookup<GameplayEventBusComponent>(),
+                GameplayEventLookup = SystemAPI.GetBufferLookup<GameplayEventBusEventBuffer>(),
+                AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(),
+                DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
+                ChangeEventPendingLookup = SystemAPI.GetComponentLookup<AttributeChangeEventPendingComponent>(),
+            }.Schedule(state.Dependency);
         }
 
         public void OnDestroy(ref SystemState state)
         {
         }
 
-        private static void CollectDamageDeltas(
-            DynamicBuffer<GEEffectCommandBuffer> commands,
-            BufferLookup<AttributeValueBuffer> attributesByAsc,
-            ComponentLookup<ASCDestroyingComponent> destroyingLookup,
-            int frame,
-            NativeList<AutoChessExecuteDamageDeltaRecord> damageDeltas)
+        [BurstCompile]
+        private struct ExecuteDamageCalculationJob : IJob
         {
-            for (var i = 0; i < commands.Length; i++)
+            public Entity DriverEntity;
+            public AutoChessBattleDriverComponent Driver;
+            public Entity StreamEntity;
+            public Entity EventBusEntity;
+            public int Frame;
+            public ComponentLookup<AutoChessBattleDriverComponent> DriverLookup;
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            [ReadOnly] public BufferLookup<GEEffectCommandBuffer> CommandLookup;
+            public BufferLookup<AttributeModifierBuffer> DeltaLookup;
+            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public ComponentLookup<GameplayEventBusComponent> EventBusLookup;
+            public BufferLookup<GameplayEventBusEventBuffer> GameplayEventLookup;
+            public BufferLookup<AttributeValueBuffer> AttributeLookup;
+            [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
+            public ComponentLookup<AttributeChangeEventPendingComponent> ChangeEventPendingLookup;
+
+            public void Execute()
             {
-                var command = commands[i];
-                if (command.GameplayEffectCode != AutoChessBattleRules.GameplayEffectPlayerExecute
-                    || command.TargetAsc == Entity.Null)
+                if (StreamEntity == Entity.Null
+                    || !StreamLookup.HasComponent(StreamEntity)
+                    || !CommandLookup.HasBuffer(StreamEntity)
+                    || !DeltaLookup.HasBuffer(StreamEntity)
+                    || !FactLookup.HasBuffer(StreamEntity))
+                    return;
+
+                var stream = StreamLookup[StreamEntity];
+                var commands = CommandLookup[StreamEntity];
+                var deltas = DeltaLookup[StreamEntity];
+                var facts = FactLookup[StreamEntity];
+                var canAppendGameplayEvent = EventBusEntity != Entity.Null
+                                            && EventBusLookup.HasComponent(EventBusEntity)
+                                            && GameplayEventLookup.HasBuffer(EventBusEntity);
+                var eventBus = canAppendGameplayEvent
+                    ? EventBusLookup[EventBusEntity]
+                    : default;
+                var gameplayEvents = canAppendGameplayEvent
+                    ? GameplayEventLookup[EventBusEntity]
+                    : default;
+
+                for (var i = 0; i < commands.Length; i++)
                 {
-                    continue;
-                }
+                    var command = commands[i];
+                    if (command.GameplayEffectCode != AutoChessBattleRules.GameplayEffectPlayerExecute
+                        || command.TargetAsc == Entity.Null)
+                    {
+                        continue;
+                    }
 
-                var targetAsc = command.TargetAsc;
-                if (!attributesByAsc.HasBuffer(targetAsc)
-                    || IsDestroying(destroyingLookup, targetAsc))
-                {
-                    continue;
-                }
+                    var targetAsc = command.TargetAsc;
+                    if (!AttributeLookup.HasBuffer(targetAsc)
+                        || IsDestroying(DestroyingLookup, targetAsc))
+                    {
+                        continue;
+                    }
 
-                var attributes = attributesByAsc[targetAsc];
-                if (!ApplyExecuteDamage(attributes, in command, out var oldValue, out var newValue, out var damage))
-                    continue;
+                    var attributes = AttributeLookup[targetAsc];
+                    if (!ApplyExecuteDamage(attributes, in command, out var oldValue, out var newValue, out var damage))
+                        continue;
 
-                damageDeltas.Add(new AutoChessExecuteDamageDeltaRecord
-                {
-                    CommandSequence = command.Sequence,
-                    Frame = command.Frame != 0 ? command.Frame : frame,
-                    SourceAsc = command.SourceAsc,
-                    TargetAsc = targetAsc,
-                    SourceAbility = command.SourceAbility,
-                    SourceEffect = command.SourceEffect,
-                    GameplayEffectCode = command.GameplayEffectCode,
-                    ContextId = command.ContextId,
-                    ParentContextId = command.ParentContextId,
-                    AttrSetCode = AutoChessBattleRules.AttributeSetCombat,
-                    AttributeCode = AutoChessBattleRules.AttributeHealth,
-                    OutputKey = AutoChessBattleRules.ExecutionCalculationExecuteDamageOutput,
-                    Damage = damage,
-                    OldValue = oldValue,
-                    NewValue = newValue,
-                });
-            }
-        }
-
-        private static void AppendDamageDeltasAndEvents(
-            EntityManager em,
-            Entity streamEntity,
-            Entity eventBusEntity,
-            NativeArray<AutoChessExecuteDamageDeltaRecord> damageDeltas)
-        {
-            if (damageDeltas.Length == 0)
-                return;
-
-            var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
-            var deltas = em.GetBuffer<AttributeModifierBuffer>(streamEntity);
-            var facts = em.GetBuffer<GameplayEventBuffer>(streamEntity);
-            var eventWriter = EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity);
-
-            try
-            {
-                for (var i = 0; i < damageDeltas.Length; i++)
-                {
-                    var record = damageDeltas[i];
+                    var commandFrame = command.Frame != 0 ? command.Frame : Frame;
                     var deltaSequence = Allocate(ref stream.NextDeltaSequence);
                     var factSequence = Allocate(ref stream.NextFactSequence);
                     deltas.Add(new AttributeModifierBuffer
                     {
                         Sequence = deltaSequence,
-                        SourceCommandSequence = record.CommandSequence,
-                        Frame = record.Frame,
-                        SourceAsc = record.SourceAsc,
-                        TargetAsc = record.TargetAsc,
-                        SourceAbility = record.SourceAbility,
-                        SourceEffect = record.SourceEffect,
-                        GameplayEffectCode = record.GameplayEffectCode,
-                        ContextId = record.ContextId,
-                        ParentContextId = record.ParentContextId,
-                        AttrSetCode = record.AttrSetCode,
-                        AttributeCode = record.AttributeCode,
+                        SourceCommandSequence = command.Sequence,
+                        Frame = commandFrame,
+                        SourceAsc = command.SourceAsc,
+                        TargetAsc = targetAsc,
+                        SourceAbility = command.SourceAbility,
+                        SourceEffect = command.SourceEffect,
+                        GameplayEffectCode = command.GameplayEffectCode,
+                        ContextId = command.ContextId,
+                        ParentContextId = command.ParentContextId,
+                        AttrSetCode = AutoChessBattleRules.AttributeSetCombat,
+                        AttributeCode = AutoChessBattleRules.AttributeHealth,
                         Op = EModifierOp.Subtract,
                         ValueKind = AttributeDeltaValueKind.BaseValue,
-                        Magnitude = record.Damage,
-                        OldValue = record.OldValue,
-                        NewValue = record.NewValue,
+                        Magnitude = damage,
+                        OldValue = oldValue,
+                        NewValue = newValue,
                     });
-                    AttributeHelper.MarkOwnerChangeEventPending(em, record.TargetAsc);
+                    MarkOwnerChangeEventPending(targetAsc);
 
                     facts.Add(new GameplayEventBuffer
                     {
                         Sequence = factSequence,
-                        SourceCommandSequence = record.CommandSequence,
+                        SourceCommandSequence = command.Sequence,
                         SourceDeltaSequence = deltaSequence,
-                        Frame = record.Frame,
+                        Frame = commandFrame,
                         EventType = EGameplayEventType.ExecutionCalculationOutputUpdated,
                         Domain = EGameplayFactDomain.ExecutionCalculation,
                         Category = EGameplayFactCategory.StateChange,
                         Severity = EGameplayFactSeverity.Info,
-                        SourceAsc = record.SourceAsc,
-                        TargetAsc = record.TargetAsc,
-                        SourceAbility = record.SourceAbility,
-                        SourceEffect = record.SourceEffect,
-                        GameplayEffectCode = record.GameplayEffectCode,
-                        ContextId = record.ContextId,
-                        ParentContextId = record.ParentContextId,
+                        SourceAsc = command.SourceAsc,
+                        TargetAsc = targetAsc,
+                        SourceAbility = command.SourceAbility,
+                        SourceEffect = command.SourceEffect,
+                        GameplayEffectCode = command.GameplayEffectCode,
+                        ContextId = command.ContextId,
+                        ParentContextId = command.ParentContextId,
                         EventCode = AutoChessBattleRules.ExecutionCalculationExecuteDamage,
-                        AttrSetCode = record.AttrSetCode,
-                        AttributeCode = record.AttributeCode,
-                        ReasonCode = record.OutputKey,
-                        Value = record.Damage,
-                        OldValue = record.OldValue,
-                        NewValue = record.NewValue,
+                        AttrSetCode = AutoChessBattleRules.AttributeSetCombat,
+                        AttributeCode = AutoChessBattleRules.AttributeHealth,
+                        ReasonCode = AutoChessBattleRules.ExecutionCalculationExecuteDamageOutput,
+                        Value = damage,
+                        OldValue = oldValue,
+                        NewValue = newValue,
                     });
 
-                    eventWriter.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
+                    if (!canAppendGameplayEvent)
+                        continue;
+
+                    gameplayEvents.Add(new GameplayEventBusEventBuffer
                     {
                         SourceFactSequence = factSequence,
+                        Frame = Frame,
+                        Sequence = eventBus.NextSequence,
                         Type = EGameplayEventType.ExecutionCalculationOutputUpdated,
-                        SourceAsc = record.SourceAsc,
-                        TargetAsc = record.TargetAsc,
-                        SourceAbility = record.SourceAbility,
-                        GameplayEffect = record.SourceEffect,
-                        ContextId = record.ContextId,
+                        SourceAsc = command.SourceAsc,
+                        TargetAsc = targetAsc,
+                        SourceAbility = command.SourceAbility,
+                        GameplayEffect = command.SourceEffect,
+                        ContextId = command.ContextId,
                         EventCode = AutoChessBattleRules.ExecutionCalculationExecuteDamage,
-                        ReasonCode = record.OutputKey,
-                        Value = record.Damage,
+                        ReasonCode = AutoChessBattleRules.ExecutionCalculationExecuteDamageOutput,
+                        Value = damage,
                     });
+                    eventBus.NextSequence++;
                 }
 
-                em.SetComponentData(streamEntity, stream);
+                StreamLookup[StreamEntity] = stream;
+                if (canAppendGameplayEvent)
+                    EventBusLookup[EventBusEntity] = eventBus;
+
+                Driver.LastExecutionFrame = Frame;
+                DriverLookup[DriverEntity] = Driver;
             }
-            finally
+
+            private void MarkOwnerChangeEventPending(Entity asc)
             {
-                eventWriter.Dispose();
+                if (ChangeEventPendingLookup.HasComponent(asc))
+                    ChangeEventPendingLookup.SetComponentEnabled(asc, true);
             }
         }
 
@@ -223,26 +227,6 @@ namespace GAS.AutoChessDemo
             return destroyingLookup.HasComponent(asc)
                    && destroyingLookup.IsComponentEnabled(asc);
         }
-
-        private struct AutoChessExecuteDamageDeltaRecord
-        {
-            public int CommandSequence;
-            public int Frame;
-            public Entity SourceAsc;
-            public Entity TargetAsc;
-            public Entity SourceAbility;
-            public Entity SourceEffect;
-            public int GameplayEffectCode;
-            public int ContextId;
-            public int ParentContextId;
-            public int AttrSetCode;
-            public int AttributeCode;
-            public int OutputKey;
-            public float Damage;
-            public float OldValue;
-            public float NewValue;
-        }
-
         private static bool ApplyExecuteDamage(
             DynamicBuffer<AttributeValueBuffer> attributes,
             in GEEffectCommandBuffer command,

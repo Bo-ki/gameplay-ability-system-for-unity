@@ -61,7 +61,7 @@ namespace GAS.Runtime
         public int RuntimeCoreEntityDestroyCount;
         public int RuntimeCoreEcbPlaybackCount;
         public int RuntimeCorePeakActiveEffectEntityCount;
-        public int RuntimeCorePeakApplyRequestEntityCount;
+        public int RuntimeCorePeakPendingApplyCommandOwnerCount;
         public int RuntimeCorePeakEventBusBufferLength;
         public int RuntimeCorePeakPresentationCursorLag;
         public int RuntimeCorePeakReplayCursorLag;
@@ -157,7 +157,7 @@ namespace GAS.Runtime
         public int EntityDestroyCount;
         public int EcbPlaybackCount;
         public int ActiveEffectEntityCount;
-        public int ApplyRequestEntityCount;
+        public int PendingApplyCommandOwnerCount;
         public int EventBusBufferLength;
         public int PresentationCursorLag;
         public int ReplayCursorLag;
@@ -275,7 +275,7 @@ namespace GAS.Runtime
         public readonly int EntityDestroyCount;
         public readonly int EcbPlaybackCount;
         public readonly int PeakActiveEffectEntityCount;
-        public readonly int PeakApplyRequestEntityCount;
+        public readonly int PeakPendingApplyCommandOwnerCount;
         public readonly int PeakEventBusBufferLength;
         public readonly int PeakPresentationCursorLag;
         public readonly int PeakReplayCursorLag;
@@ -330,7 +330,7 @@ namespace GAS.Runtime
             int entityDestroyCount,
             int ecbPlaybackCount,
             int peakActiveEffectEntityCount,
-            int peakApplyRequestEntityCount,
+            int peakPendingApplyCommandOwnerCount,
             int peakEventBusBufferLength,
             int peakPresentationCursorLag,
             int peakReplayCursorLag,
@@ -384,7 +384,7 @@ namespace GAS.Runtime
             EntityDestroyCount = entityDestroyCount;
             EcbPlaybackCount = ecbPlaybackCount;
             PeakActiveEffectEntityCount = peakActiveEffectEntityCount;
-            PeakApplyRequestEntityCount = peakApplyRequestEntityCount;
+            PeakPendingApplyCommandOwnerCount = peakPendingApplyCommandOwnerCount;
             PeakEventBusBufferLength = peakEventBusBufferLength;
             PeakPresentationCursorLag = peakPresentationCursorLag;
             PeakReplayCursorLag = peakReplayCursorLag;
@@ -436,19 +436,15 @@ namespace GAS.Runtime
         private readonly bool _isCreated;
 
         public GasRuntimeCoreCounterQueries(
-            EntityQuery abilityCommandRequests,
-            EntityQuery ascCommandRequests,
-            EntityQuery ascInitializeRequests,
-            EntityQuery ascDestroyRequests,
+            EntityQuery ascCommandPendingOwners,
+            EntityQuery gameplayEffectRemovePendingOwners,
             EntityQuery effectSpecs,
             EntityQuery activeEffectStores,
             EntityQuery presentationOutboxes,
             bool ownsQueries)
         {
-            AbilityCommandRequests = abilityCommandRequests;
-            AscCommandRequests = ascCommandRequests;
-            AscInitializeRequests = ascInitializeRequests;
-            AscDestroyRequests = ascDestroyRequests;
+            AscCommandPendingOwners = ascCommandPendingOwners;
+            GameplayEffectRemovePendingOwners = gameplayEffectRemovePendingOwners;
             EffectSpecs = effectSpecs;
             ActiveEffectStores = activeEffectStores;
             PresentationOutboxes = presentationOutboxes;
@@ -456,13 +452,9 @@ namespace GAS.Runtime
             _isCreated = true;
         }
 
-        public EntityQuery AbilityCommandRequests { get; }
+        public EntityQuery AscCommandPendingOwners { get; }
 
-        public EntityQuery AscCommandRequests { get; }
-
-        public EntityQuery AscInitializeRequests { get; }
-
-        public EntityQuery AscDestroyRequests { get; }
+        public EntityQuery GameplayEffectRemovePendingOwners { get; }
 
         public EntityQuery EffectSpecs { get; }
 
@@ -478,10 +470,8 @@ namespace GAS.Runtime
         public static GasRuntimeCoreCounterQueries Create(ref SystemState state)
         {
             return new GasRuntimeCoreCounterQueries(
-                CreateSystemQuery<AbilityCommandRequestComponent>(ref state),
-                CreateSystemQuery<ASCCommandRequestComponent>(ref state),
-                CreateSystemQuery<ASCInitializeRequestComponent>(ref state),
-                CreateSystemQuery<ASCDestroyRequestComponent>(ref state),
+                CreateSystemQuery<ASCCommandPendingComponent>(ref state),
+                CreateSystemQuery<GERemoveCommandPendingComponent>(ref state),
                 CreateSystemQuery<GEEffectSpecComponent>(ref state),
                 state.GetEntityQuery(new EntityQueryDesc
                 {
@@ -495,12 +485,10 @@ namespace GAS.Runtime
                 ownsQueries: false);
         }
 
-        public int CountRequestEntities()
+        public int CountPendingCommandOwners()
         {
-            return Count(AbilityCommandRequests)
-                   + Count(AscCommandRequests)
-                   + Count(AscInitializeRequests)
-                   + Count(AscDestroyRequests);
+            return Count(AscCommandPendingOwners)
+                   + Count(GameplayEffectRemovePendingOwners);
         }
 
         public int CountActiveEffectEntities()
@@ -513,14 +501,9 @@ namespace GAS.Runtime
             return Count(ActiveEffectStores);
         }
 
-        public int CountApplyRequestEntities()
+        public int CountPendingApplyCommandOwners()
         {
             return 0;
-        }
-
-        public int CountDestroyMarkers()
-        {
-            return Count(AscDestroyRequests);
         }
 
         public void Dispose()
@@ -528,10 +511,8 @@ namespace GAS.Runtime
             if (!_ownsQueries)
                 return;
 
-            AbilityCommandRequests.Dispose();
-            AscCommandRequests.Dispose();
-            AscInitializeRequests.Dispose();
-            AscDestroyRequests.Dispose();
+            AscCommandPendingOwners.Dispose();
+            GameplayEffectRemovePendingOwners.Dispose();
             EffectSpecs.Dispose();
             ActiveEffectStores.Dispose();
             PresentationOutboxes.Dispose();
@@ -805,7 +786,7 @@ namespace GAS.Runtime
             state.RuntimeCoreEntityDestroyCount = 0;
             state.RuntimeCoreEcbPlaybackCount = 0;
             state.RuntimeCorePeakActiveEffectEntityCount = 0;
-            state.RuntimeCorePeakApplyRequestEntityCount = 0;
+            state.RuntimeCorePeakPendingApplyCommandOwnerCount = 0;
             state.RuntimeCorePeakEventBusBufferLength = 0;
             state.RuntimeCorePeakPresentationCursorLag = 0;
             state.RuntimeCorePeakReplayCursorLag = 0;
@@ -998,7 +979,7 @@ namespace GAS.Runtime
                 counters.EntityDestroyCount,
                 counters.EcbPlaybackCount,
                 counters.PeakActiveEffectEntityCount,
-                counters.PeakApplyRequestEntityCount,
+                counters.PeakPendingApplyCommandOwnerCount,
                 counters.PeakEventBusBufferLength,
                 counters.PeakPresentationCursorLag,
                 counters.PeakReplayCursorLag,
@@ -1058,10 +1039,9 @@ namespace GAS.Runtime
             Entity eventLogSinkEntity,
             in GasRuntimeCoreCounterQueries queries)
         {
-            var requestEntityCount = queries.CountRequestEntities();
+            var pendingCommandOwnerCount = queries.CountPendingCommandOwners();
             var activeEffectEntityCount = queries.CountActiveEffectEntities();
-            var applyRequestEntityCount = queries.CountApplyRequestEntities();
-            var destroyMarkerCount = queries.CountDestroyMarkers();
+            var pendingApplyCommandOwnerCount = queries.CountPendingApplyCommandOwners();
 
             ReadEventBusCounters(
                 em,
@@ -1170,17 +1150,17 @@ namespace GAS.Runtime
             var frameBudget = GASRuntimeFrameBudgetPlanner.CreateCurrent();
 
             return new GasRuntimeCoreDiagnosticCounters(
-                requestEntityCount + gameplayRequestFactCount + effectCommandCount,
+                pendingCommandOwnerCount + gameplayRequestFactCount + effectCommandCount,
                 gameplayEffectInstancedCount + instantSpecCount,
                 deltaCount,
                 factCount,
                 cueRequestCount,
                 presentationCount,
-                requestEntityCount + gameplayEffectInstancedCount,
-                destroyMarkerCount + gameplayEffectRemovedCount,
+                gameplayEffectInstancedCount,
+                gameplayEffectRemovedCount,
                 0,
                 activeEffectEntityCount,
-                applyRequestEntityCount,
+                pendingApplyCommandOwnerCount,
                 Math.Max(factCount, streamBufferPeak),
                 presentationCursorLag,
                 replayCursorLag,
@@ -1433,7 +1413,7 @@ namespace GAS.Runtime
             int entityDestroyCount,
             int ecbPlaybackCount,
             int activeEffectEntityCount,
-            int applyRequestEntityCount,
+            int pendingApplyCommandOwnerCount,
             int eventBusBufferLength = 0,
             int presentationCursorLag = 0,
             int replayCursorLag = 0,
@@ -1491,8 +1471,8 @@ namespace GAS.Runtime
             state.RuntimeCoreEcbPlaybackCount += ecbPlaybackCount;
             if (activeEffectEntityCount > state.RuntimeCorePeakActiveEffectEntityCount)
                 state.RuntimeCorePeakActiveEffectEntityCount = activeEffectEntityCount;
-            if (applyRequestEntityCount > state.RuntimeCorePeakApplyRequestEntityCount)
-                state.RuntimeCorePeakApplyRequestEntityCount = applyRequestEntityCount;
+            if (pendingApplyCommandOwnerCount > state.RuntimeCorePeakPendingApplyCommandOwnerCount)
+                state.RuntimeCorePeakPendingApplyCommandOwnerCount = pendingApplyCommandOwnerCount;
             if (eventBusBufferLength > state.RuntimeCorePeakEventBusBufferLength)
                 state.RuntimeCorePeakEventBusBufferLength = eventBusBufferLength;
             if (presentationCursorLag > state.RuntimeCorePeakPresentationCursorLag)
@@ -1560,7 +1540,7 @@ namespace GAS.Runtime
                     EntityDestroyCount = entityDestroyCount,
                     EcbPlaybackCount = ecbPlaybackCount,
                     ActiveEffectEntityCount = activeEffectEntityCount,
-                    ApplyRequestEntityCount = applyRequestEntityCount,
+                    PendingApplyCommandOwnerCount = pendingApplyCommandOwnerCount,
                     EventBusBufferLength = eventBusBufferLength,
                     PresentationCursorLag = presentationCursorLag,
                     ReplayCursorLag = replayCursorLag,
@@ -1778,7 +1758,7 @@ namespace GAS.Runtime
                     state.RuntimeCoreEntityDestroyCount,
                     state.RuntimeCoreEcbPlaybackCount,
                     state.RuntimeCorePeakActiveEffectEntityCount,
-                    state.RuntimeCorePeakApplyRequestEntityCount,
+                    state.RuntimeCorePeakPendingApplyCommandOwnerCount,
                     state.RuntimeCorePeakEventBusBufferLength,
                     state.RuntimeCorePeakPresentationCursorLag,
                     state.RuntimeCorePeakReplayCursorLag,
@@ -2467,8 +2447,8 @@ namespace GAS.Runtime
                     .Append(evt.EcbPlaybackCount)
                     .Append("|activeEffectEntities=")
                     .Append(evt.ActiveEffectEntityCount)
-                    .Append("|applyRequestEntities=")
-                    .Append(evt.ApplyRequestEntityCount)
+                    .Append("|pendingApplyCommandOwners=")
+                    .Append(evt.PendingApplyCommandOwnerCount)
                     .Append("|eventBusBufferLength=")
                     .Append(evt.EventBusBufferLength)
                     .Append("|presentationCursorLag=")
@@ -2668,8 +2648,8 @@ namespace GAS.Runtime
                 .AppendLine();
             builder.Append("runtimeCoreCountersPeak|activeEffectEntities=")
                 .Append(counters.PeakActiveEffectEntityCount)
-                .Append("|applyRequestEntities=")
-                .Append(counters.PeakApplyRequestEntityCount)
+                .Append("|pendingApplyCommandOwners=")
+                .Append(counters.PeakPendingApplyCommandOwnerCount)
                 .Append("|eventBusBufferLength=")
                 .Append(counters.PeakEventBusBufferLength)
                 .Append("|presentationCursorLag=")

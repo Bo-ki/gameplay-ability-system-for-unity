@@ -114,8 +114,8 @@ namespace GAS.Runtime
                 EGasRuntimeCoreFramePhase.CommandIngest,
                 typeof(GASCommandResolveSystemGroup),
                 EGasRuntimeCorePhaseAccess.FrameState,
-                EGasRuntimeCorePhaseAccess.CommandStream,
-                EGasRuntimeCoreStructuralPermission.None),
+                EGasRuntimeCorePhaseAccess.CommandStream | EGasRuntimeCorePhaseAccess.StructuralMutation,
+                EGasRuntimeCoreStructuralPermission.RecordOnly),
             new(
                 EGasRuntimeCoreFramePhase.SpecEvaluation,
                 typeof(GASCoreSimulationSystemGroup),
@@ -197,12 +197,9 @@ namespace GAS.Runtime
 
         private static readonly Type[] CommandResolveSystemTypes =
         {
-            typeof(ASCEntityCreateSystem),
-            typeof(ASCInitializeRequestSystem),
-            typeof(ASCCommandRequestSystem),
-            typeof(AbilityCommandRequestSystem),
+            typeof(ASCCommandBufferResolveSystem),
             typeof(AbilityTryActivateSystem),
-            typeof(ASCDestroyRequestSystem),
+            typeof(AbilityCommitSystem),
         };
 
         private static readonly Type[] CoreSimulationSystemTypes =

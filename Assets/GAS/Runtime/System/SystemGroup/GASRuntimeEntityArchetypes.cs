@@ -10,11 +10,6 @@ namespace GAS.Runtime
         private static EntityArchetype _asc;
         private static EntityArchetype _ability;
         private static EntityArchetype _grantedAbility;
-        private static EntityArchetype _abilityCommandRequest;
-        private static EntityArchetype _ascCommandRequest;
-        private static EntityArchetype _ascCreateRequest;
-        private static EntityArchetype _ascInitializeRequest;
-        private static EntityArchetype _ascDestroyRequest;
         private static EntityArchetype _effectCommandStream;
         private static EntityArchetype _gameplayEventBus;
         private static EntityArchetype _gameplayEventLogSink;
@@ -23,7 +18,6 @@ namespace GAS.Runtime
         private static EntityArchetype _activeEffectGlobalIndex;
         private static EntityArchetype _activeEffectGlobalIndexBucket;
         private static EntityArchetype _gasRunningTag;
-        private static EntityArchetype _geRemoveRequest;
         private static EntityArchetype _gameplayEffectRuntime;
         private static EntityArchetype _gameplayEffectPrototype;
         private static EntityArchetype _cueRuntime;
@@ -42,6 +36,8 @@ namespace GAS.Runtime
             {
                 _asc = em.CreateArchetype(
                     ComponentType.ReadWrite<ASCIdentityComponent>(),
+                    ComponentType.ReadWrite<ASCCommandPendingComponent>(),
+                    ComponentType.ReadWrite<GERemoveCommandPendingComponent>(),
                     ComponentType.ReadWrite<ASCDestroyingComponent>(),
                     ComponentType.ReadWrite<TagMaskComponent>(),
                     ComponentType.ReadWrite<TagFixedMaskComponent>(),
@@ -50,6 +46,10 @@ namespace GAS.Runtime
                     ComponentType.ReadWrite<AttributeActiveModifierPresentComponent>(),
                     ComponentType.ReadWrite<AttributeValueBuffer>(),
                     ComponentType.ReadWrite<AttributeActiveModifierBuffer>(),
+                    ComponentType.ReadWrite<ASCCommandBuffer>(),
+                    ComponentType.ReadWrite<AbilityCommandBuffer>(),
+                    ComponentType.ReadWrite<ASCDestroyCommandBuffer>(),
+                    ComponentType.ReadWrite<GERemoveCommandBuffer>(),
                     ComponentType.ReadWrite<AbilitySlotBuffer>(),
                     ComponentType.ReadWrite<TagFixedSourceBuffer>(),
                     ComponentType.ReadWrite<TagTemporarySourceBuffer>(),
@@ -125,53 +125,6 @@ namespace GAS.Runtime
             return _grantedAbility;
         }
 
-        public static EntityArchetype AbilityCommandRequest(EntityManager em)
-        {
-            ResetIfWorldChanged(em);
-            if (!_abilityCommandRequest.Valid)
-                _abilityCommandRequest = em.CreateArchetype(ComponentType.ReadWrite<AbilityCommandRequestComponent>());
-            return _abilityCommandRequest;
-        }
-
-        public static EntityArchetype ASCCommandRequest(EntityManager em)
-        {
-            ResetIfWorldChanged(em);
-            if (!_ascCommandRequest.Valid)
-                _ascCommandRequest = em.CreateArchetype(ComponentType.ReadWrite<ASCCommandRequestComponent>());
-            return _ascCommandRequest;
-        }
-
-        public static EntityArchetype ASCCreateRequest(EntityManager em)
-        {
-            ResetIfWorldChanged(em);
-            if (!_ascCreateRequest.Valid)
-                _ascCreateRequest = em.CreateArchetype(ComponentType.ReadWrite<ASCCreateRequestComponent>());
-            return _ascCreateRequest;
-        }
-
-        public static EntityArchetype ASCInitializeRequest(EntityManager em)
-        {
-            ResetIfWorldChanged(em);
-            if (!_ascInitializeRequest.Valid)
-            {
-                _ascInitializeRequest = em.CreateArchetype(
-                    ComponentType.ReadWrite<ASCInitializeRequestComponent>(),
-                    ComponentType.ReadWrite<ASCInitializeFixedTagBuffer>(),
-                    ComponentType.ReadWrite<ASCInitializeAttributeBuffer>(),
-                    ComponentType.ReadWrite<ASCInitializeAbilityBuffer>());
-            }
-
-            return _ascInitializeRequest;
-        }
-
-        public static EntityArchetype ASCDestroyRequest(EntityManager em)
-        {
-            ResetIfWorldChanged(em);
-            if (!_ascDestroyRequest.Valid)
-                _ascDestroyRequest = em.CreateArchetype(ComponentType.ReadWrite<ASCDestroyRequestComponent>());
-            return _ascDestroyRequest;
-        }
-
         public static EntityArchetype EffectCommandStream(EntityManager em)
         {
             ResetIfWorldChanged(em);
@@ -179,7 +132,6 @@ namespace GAS.Runtime
             {
                 _effectCommandStream = em.CreateArchetype(
                     ComponentType.ReadWrite<GEEffectCommandStreamComponent>(),
-                    ComponentType.ReadWrite<AbilityCommandBuffer>(),
                     ComponentType.ReadWrite<GEEffectCommandBuffer>(),
                     ComponentType.ReadWrite<GESetByCallerValueBuffer>(),
                     ComponentType.ReadWrite<GEEffectSpecBuffer>(),
@@ -278,14 +230,6 @@ namespace GAS.Runtime
             if (!_gasRunningTag.Valid)
                 _gasRunningTag = em.CreateArchetype(ComponentType.ReadWrite<GASRunningTag>());
             return _gasRunningTag;
-        }
-
-        public static EntityArchetype GERemoveRequest(EntityManager em)
-        {
-            ResetIfWorldChanged(em);
-            if (!_geRemoveRequest.Valid)
-                _geRemoveRequest = em.CreateArchetype(ComponentType.ReadWrite<GERemoveRequestComponent>());
-            return _geRemoveRequest;
         }
 
         public static EntityArchetype GameplayEffectRuntime(EntityManager em)
@@ -502,11 +446,6 @@ namespace GAS.Runtime
             _asc = default;
             _ability = default;
             _grantedAbility = default;
-            _abilityCommandRequest = default;
-            _ascCommandRequest = default;
-            _ascCreateRequest = default;
-            _ascInitializeRequest = default;
-            _ascDestroyRequest = default;
             _effectCommandStream = default;
             _gameplayEventBus = default;
             _gameplayEventLogSink = default;
@@ -515,7 +454,6 @@ namespace GAS.Runtime
             _activeEffectGlobalIndex = default;
             _activeEffectGlobalIndexBucket = default;
             _gasRunningTag = default;
-            _geRemoveRequest = default;
             _gameplayEffectRuntime = default;
             _gameplayEffectPrototype = default;
             _cueRuntime = default;

@@ -1,3 +1,4 @@
+using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
@@ -25,57 +26,44 @@ namespace GAS.Runtime
 
         public void OnUpdate(ref SystemState state)
         {
-            var ruleChunkCount = _query.CalculateChunkCount();
-            if (ruleChunkCount <= 0)
-                return;
-
-            var em = state.EntityManager;
-            var ruleRecordStream = new NativeStream(ruleChunkCount, Allocator.TempJob);
-
-            try
+            var eventBusEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
+                ? resolvedEventBus
+                : Entity.Null;
+            var factEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
+                .CreateCommandBuffer(state.WorldUnmanaged)
+                .AsParallelWriter();
+            var job = new AttributeThresholdAbilityLifecycleRequestJob
             {
-                var scanJob = new AttributeThresholdAbilityLifecycleRequestScanJob
-                {
-                    EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
-                    RuleTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityAttributeThresholdLifecycleRuleComponent>(isReadOnly: true),
-                    RuleRecordWriter = ruleRecordStream.AsWriter(),
-                };
-                state.Dependency = scanJob.ScheduleParallel(_query, state.Dependency);
-                state.Dependency.Complete();
-
-                var ruleRecordReader = ruleRecordStream.AsReader();
-                for (var streamIndex = 0; streamIndex < ruleRecordReader.ForEachCount; streamIndex++)
-                {
-                    var recordCount = ruleRecordReader.BeginForEachIndex(streamIndex);
-                    for (var i = 0; i < recordCount; i++)
-                    {
-                        var ruleRecord = ruleRecordReader.Read<AttributeThresholdAbilityLifecycleRequestRecord>();
-                        EvaluateRule(em, in ruleRecord);
-                    }
-                    ruleRecordReader.EndForEachIndex();
-                }
-            }
-            finally
-            {
-                ruleRecordStream.Dispose();
-            }
+                EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
+                RuleTypeHandle =
+                    SystemAPI.GetComponentTypeHandle<AbilityAttributeThresholdLifecycleRuleComponent>(isReadOnly: true),
+                AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true),
+                AbilitySlotLookup = SystemAPI.GetBufferLookup<AbilitySlotBuffer>(isReadOnly: true),
+                AbilityStateLookup = SystemAPI.GetComponentLookup<AbilityStateComponent>(isReadOnly: true),
+                CancelRequestLookup = SystemAPI.GetComponentLookup<AbilityCancelRequestComponent>(),
+                EndRequestLookup = SystemAPI.GetComponentLookup<AbilityEndRequestComponent>(),
+                EventBusEntity = eventBusEntity,
+                FactEcb = factEcb,
+            };
+            state.Dependency = job.Schedule(_query, state.Dependency);
         }
 
         public void OnDestroy(ref SystemState state)
         {
         }
 
-        private struct AttributeThresholdAbilityLifecycleRequestRecord
-        {
-            public Entity RuleEntity;
-            public AbilityAttributeThresholdLifecycleRuleComponent Rule;
-        }
-
-        private struct AttributeThresholdAbilityLifecycleRequestScanJob : IJobChunk
+        [BurstCompile]
+        private struct AttributeThresholdAbilityLifecycleRequestJob : IJobChunk
         {
             [ReadOnly] public EntityTypeHandle EntityTypeHandle;
             [ReadOnly] public ComponentTypeHandle<AbilityAttributeThresholdLifecycleRuleComponent> RuleTypeHandle;
-            public NativeStream.Writer RuleRecordWriter;
+            [ReadOnly] public BufferLookup<AttributeValueBuffer> AttributeLookup;
+            [ReadOnly] public BufferLookup<AbilitySlotBuffer> AbilitySlotLookup;
+            [ReadOnly] public ComponentLookup<AbilityStateComponent> AbilityStateLookup;
+            public ComponentLookup<AbilityCancelRequestComponent> CancelRequestLookup;
+            public ComponentLookup<AbilityEndRequestComponent> EndRequestLookup;
+            public Entity EventBusEntity;
+            public EntityCommandBuffer.ParallelWriter FactEcb;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -83,131 +71,162 @@ namespace GAS.Runtime
                 bool useEnabledMask,
                 in v128 chunkEnabledMask)
             {
-                RuleRecordWriter.BeginForEachIndex(unfilteredChunkIndex);
                 var ruleEntities = chunk.GetNativeArray(EntityTypeHandle);
                 var rules = chunk.GetNativeArray(ref RuleTypeHandle);
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
-                    RuleRecordWriter.Write(new AttributeThresholdAbilityLifecycleRequestRecord
-                    {
-                        RuleEntity = ruleEntities[entityIndex],
-                        Rule = rules[entityIndex],
-                    });
+                    EvaluateRule(unfilteredChunkIndex, ruleEntities[entityIndex], rules[entityIndex]);
                 }
-                RuleRecordWriter.EndForEachIndex();
-            }
-        }
-
-        private static void EvaluateRule(EntityManager em, in AttributeThresholdAbilityLifecycleRequestRecord ruleRecord)
-        {
-            var rule = ruleRecord.Rule;
-            var owner = rule.OwnerAsc != Entity.Null ? rule.OwnerAsc : ruleRecord.RuleEntity;
-            if (!CanEvaluateRule(em, owner, rule))
-                return;
-
-            if (!TryGetAttributeValue(em.GetBuffer<AttributeValueBuffer>(owner), rule.AttrSetCode, rule.AttrCode, out var value)
-                || value > rule.Threshold)
-            {
-                return;
             }
 
-            var ability = FindGrantedAbility(em, em.GetBuffer<AbilitySlotBuffer>(owner), rule.AbilityCode);
-            if (ability == Entity.Null || !ShouldRequestLifecycle(em, ability))
-                return;
-
-            var baseInfo = em.GetComponentData<AbilityStateComponent>(ability);
-            var reason = rule.Reason == EAbilityLifecycleReason.Unknown
-                ? EAbilityLifecycleReason.AttributeThreshold
-                : rule.Reason;
-
-            if (rule.RequestType == EAttributeThresholdAbilityLifecycleRequestType.Cancel)
+            private void EvaluateRule(
+                int sortKey,
+                Entity ruleEntity,
+                in AbilityAttributeThresholdLifecycleRuleComponent rule)
             {
-                AbilityRuntimeActions.RequestAbilityCancel(
-                    ability,
-                    em,
-                    reason,
-                    sourceAbility: ability,
-                    sourceAbilityCode: baseInfo.Code);
-            }
-            else
-            {
-                AbilityRuntimeActions.RequestAbilityEnd(
-                    ability,
-                    em,
-                    reason,
-                    sourceAbility: ability,
-                    sourceAbilityCode: baseInfo.Code);
-            }
-        }
-
-        private static bool CanEvaluateRule(
-            EntityManager em,
-            Entity owner,
-            in AbilityAttributeThresholdLifecycleRuleComponent rule)
-        {
-            return owner != Entity.Null
-                && rule.AbilityCode > 0
-                && em.Exists(owner)
-                && em.HasBuffer<AttributeValueBuffer>(owner)
-                && em.HasBuffer<AbilitySlotBuffer>(owner);
-        }
-
-        private static bool TryGetAttributeValue(
-            DynamicBuffer<AttributeValueBuffer> attributes,
-            int attrSetCode,
-            int attrCode,
-            out float value)
-        {
-            for (var i = 0; i < attributes.Length; i++)
-            {
-                var attribute = attributes[i];
-                if (attribute.AttrSetCode != attrSetCode || attribute.Code != attrCode)
-                    continue;
-
-                value = attribute.CurrentValue;
-                return true;
-            }
-
-            value = 0f;
-            return false;
-        }
-
-        private static Entity FindGrantedAbility(
-            EntityManager em,
-            DynamicBuffer<AbilitySlotBuffer> grantedAbilities,
-            int abilityCode)
-        {
-            for (var i = 0; i < grantedAbilities.Length; i++)
-            {
-                var ability = grantedAbilities[i].AbilityEntity;
-                if (ability == Entity.Null
-                    || !em.Exists(ability)
-                    || !em.HasComponent<AbilityStateComponent>(ability))
+                var owner = rule.OwnerAsc != Entity.Null ? rule.OwnerAsc : ruleEntity;
+                if (owner == Entity.Null
+                    || rule.AbilityCode <= 0
+                    || !AttributeLookup.HasBuffer(owner)
+                    || !AbilitySlotLookup.HasBuffer(owner))
                 {
-                    continue;
+                    return;
                 }
 
-                var baseInfo = em.GetComponentData<AbilityStateComponent>(ability);
-                if (baseInfo.Code == abilityCode)
-                    return ability;
+                if (!TryGetAttributeValue(
+                        AttributeLookup[owner],
+                        rule.AttrSetCode,
+                        rule.AttrCode,
+                        out var value)
+                    || value > rule.Threshold)
+                {
+                    return;
+                }
+
+                var ability = FindGrantedAbility(AbilitySlotLookup[owner], rule.AbilityCode);
+                if (ability == Entity.Null || !ShouldRequestLifecycle(ability))
+                    return;
+
+                var baseInfo = AbilityStateLookup[ability];
+                var reason = rule.Reason == EAbilityLifecycleReason.Unknown
+                    ? EAbilityLifecycleReason.AttributeThreshold
+                    : rule.Reason;
+                if (rule.RequestType == EAttributeThresholdAbilityLifecycleRequestType.Cancel)
+                {
+                    CancelRequestLookup[ability] = new AbilityCancelRequestComponent
+                    {
+                        Reason = reason,
+                        SourceAbility = ability,
+                        SourceEffect = Entity.Null,
+                        SourceAbilityCode = baseInfo.Code,
+                    };
+                    CancelRequestLookup.SetComponentEnabled(ability, true);
+                    AppendLifecycleFact(
+                        sortKey,
+                        ability,
+                        baseInfo,
+                        EGameplayEventType.AbilityCancelRequested,
+                        reason);
+                }
+                else
+                {
+                    EndRequestLookup[ability] = new AbilityEndRequestComponent
+                    {
+                        Reason = reason,
+                        SourceAbility = ability,
+                        SourceEffect = Entity.Null,
+                        SourceAbilityCode = baseInfo.Code,
+                    };
+                    EndRequestLookup.SetComponentEnabled(ability, true);
+                    AppendLifecycleFact(
+                        sortKey,
+                        ability,
+                        baseInfo,
+                        EGameplayEventType.AbilityEndRequested,
+                        reason);
+                }
             }
 
-            return Entity.Null;
-        }
-
-        private static bool ShouldRequestLifecycle(EntityManager em, Entity ability)
-        {
-            if (!em.Exists(ability)
-                || !em.HasComponent<AbilityStateComponent>(ability)
-                || AbilityRuntimeActions.IsEndRequested(ability, em)
-                || AbilityRuntimeActions.IsCancelRequested(ability, em))
+            private static bool TryGetAttributeValue(
+                DynamicBuffer<AttributeValueBuffer> attributes,
+                int attrSetCode,
+                int attrCode,
+                out float value)
             {
+                for (var i = 0; i < attributes.Length; i++)
+                {
+                    var attribute = attributes[i];
+                    if (attribute.AttrSetCode != attrSetCode || attribute.Code != attrCode)
+                        continue;
+
+                    value = attribute.CurrentValue;
+                    return true;
+                }
+
+                value = 0f;
                 return false;
             }
 
-            var phase = em.GetComponentData<AbilityStateComponent>(ability).Phase;
-            return phase == EAbilityPhase.Activating || phase == EAbilityPhase.Active;
+            private Entity FindGrantedAbility(
+                DynamicBuffer<AbilitySlotBuffer> grantedAbilities,
+                int abilityCode)
+            {
+                for (var i = 0; i < grantedAbilities.Length; i++)
+                {
+                    var ability = grantedAbilities[i].AbilityEntity;
+                    if (ability == Entity.Null
+                        || !AbilityStateLookup.HasComponent(ability)
+                        || !CancelRequestLookup.HasComponent(ability)
+                        || !EndRequestLookup.HasComponent(ability))
+                    {
+                        continue;
+                    }
+
+                    if (AbilityStateLookup[ability].Code == abilityCode)
+                        return ability;
+                }
+
+                return Entity.Null;
+            }
+
+            private bool ShouldRequestLifecycle(Entity ability)
+            {
+                if (!AbilityStateLookup.HasComponent(ability)
+                    || CancelRequestLookup.IsComponentEnabled(ability)
+                    || EndRequestLookup.IsComponentEnabled(ability))
+                {
+                    return false;
+                }
+
+                var phase = AbilityStateLookup[ability].Phase;
+                return phase == EAbilityPhase.Activating || phase == EAbilityPhase.Active;
+            }
+
+            private void AppendLifecycleFact(
+                int sortKey,
+                Entity ability,
+                in AbilityStateComponent baseInfo,
+                EGameplayEventType type,
+                EAbilityLifecycleReason reason)
+            {
+                if (EventBusEntity == Entity.Null)
+                    return;
+
+                FactEcb.AppendToBuffer(sortKey, EventBusEntity, new GameplayEventBusEventBuffer
+                {
+                    Type = type,
+                    SourceAsc = baseInfo.Owner,
+                    TargetAsc = baseInfo.Owner,
+                    SourceAbility = ability,
+                    GameplayEffect = Entity.Null,
+                    RelatedAbility = ability,
+                    EventCode = baseInfo.Code,
+                    ReasonCode = (int)reason,
+                    RelatedAbilityCode = baseInfo.Code,
+                    Value = baseInfo.Code,
+                });
+            }
         }
     }
 }

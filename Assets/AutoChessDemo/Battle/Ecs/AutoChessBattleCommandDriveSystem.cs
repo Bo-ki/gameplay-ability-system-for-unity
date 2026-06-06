@@ -1,13 +1,15 @@
+using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using GAS.Runtime;
 
 namespace GAS.AutoChessDemo
 {
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
-    [UpdateAfter(typeof(ASCCommandRequestSystem))]
-    [UpdateBefore(typeof(AbilityCommandRequestSystem))]
+    [UpdateBefore(typeof(ASCCommandBufferResolveSystem))]
     public partial struct AutoChessBattleCommandDriveSystem : ISystem
     {
         private EntityQuery _driverQuery;
@@ -39,43 +41,90 @@ namespace GAS.AutoChessDemo
             if (driver.LastDecisionFrame == frame)
                 return;
 
-            var unitCapacity = _unitQuery.CalculateEntityCount();
-            if (unitCapacity < 1)
-                unitCapacity = 1;
+            var unitChunkCount = _unitQuery.CalculateChunkCountWithoutFiltering();
+            var unitCapacity = unitChunkCount > 0 ? unitChunkCount * 64 : 1;
+            var units = new NativeList<AutoChessBattleUnitTargetStateRecord>(unitCapacity, Allocator.TempJob);
+            var targetCache = new NativeParallelHashMap<int, AutoChessBattleGroupTargetCacheRecord>(
+                unitCapacity,
+                Allocator.TempJob);
+            var stats = new NativeReference<AutoChessBattleDecisionStats>(Allocator.TempJob);
 
-            var attributesByAsc = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true);
-            using (var units = new NativeList<AutoChessBattleUnitTargetStateRecord>(unitCapacity, Allocator.Temp))
+            var collectHandle = new CollectUnitTargetStatesJob
             {
-                var maxBattleGroup = -1;
-                var playerAliveCount = 0;
-                var enemyAliveCount = 0;
-                foreach (var (unit, tags, entity)
-                         in SystemAPI.Query<
-                                 RefRO<AutoChessBattleUnitComponent>,
-                                 RefRO<TagMaskComponent>>()
-                             .WithNone<ASCDestroyingComponent>()
-                             .WithEntityAccess())
-                {
-                    if (!attributesByAsc.HasBuffer(entity))
-                        continue;
+                EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
+                UnitTypeHandle = SystemAPI.GetComponentTypeHandle<AutoChessBattleUnitComponent>(isReadOnly: true),
+                TagTypeHandle = SystemAPI.GetComponentTypeHandle<TagMaskComponent>(isReadOnly: true),
+                AttributeTypeHandle = SystemAPI.GetBufferTypeHandle<AttributeValueBuffer>(isReadOnly: true),
+                Units = units,
+                Stats = stats,
+            }.Schedule(_unitQuery, state.Dependency);
 
-                    var attributes = attributesByAsc[entity];
-                    var unitValue = unit.ValueRO;
+            var flushHandle = new FlushCommandRequestsJob
+            {
+                DriverEntity = driverEntity,
+                Driver = driver,
+                Frame = frame,
+                Units = units,
+                TargetCache = targetCache,
+                Stats = stats,
+                AbilityCommandsByAsc = SystemAPI.GetBufferLookup<AbilityCommandBuffer>(),
+                CommandPendingByAsc = SystemAPI.GetComponentLookup<ASCCommandPendingComponent>(),
+                DriverLookup = SystemAPI.GetComponentLookup<AutoChessBattleDriverComponent>(),
+            }.Schedule(collectHandle);
+
+            var disposeUnitsHandle = units.Dispose(flushHandle);
+            var disposeCacheHandle = targetCache.Dispose(flushHandle);
+            var disposeStatsHandle = stats.Dispose(flushHandle);
+            state.Dependency = JobHandle.CombineDependencies(
+                disposeUnitsHandle,
+                JobHandle.CombineDependencies(disposeCacheHandle, disposeStatsHandle));
+        }
+
+        public void OnDestroy(ref SystemState state)
+        {
+        }
+
+        [BurstCompile]
+        private struct CollectUnitTargetStatesJob : IJobChunk
+        {
+            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
+            [ReadOnly] public ComponentTypeHandle<AutoChessBattleUnitComponent> UnitTypeHandle;
+            [ReadOnly] public ComponentTypeHandle<TagMaskComponent> TagTypeHandle;
+            [ReadOnly] public BufferTypeHandle<AttributeValueBuffer> AttributeTypeHandle;
+            public NativeList<AutoChessBattleUnitTargetStateRecord> Units;
+            public NativeReference<AutoChessBattleDecisionStats> Stats;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var entities = chunk.GetNativeArray(EntityTypeHandle);
+                var units = chunk.GetNativeArray(ref UnitTypeHandle);
+                var tags = chunk.GetNativeArray(ref TagTypeHandle);
+                var attributes = chunk.GetBufferAccessorRO(ref AttributeTypeHandle);
+                var stats = Stats.Value;
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    var unitValue = units[entityIndex];
+                    var unitAttributes = attributes[entityIndex];
                     var health = GetAttribute(
-                        attributes,
+                        unitAttributes,
                         unitValue.HealthAttrSetCode,
                         unitValue.HealthAttrCode);
                     if (health <= 0f)
                         continue;
 
                     if (unitValue.Team == AutoChessTeam.Player)
-                        playerAliveCount++;
+                        stats.PlayerAliveCount++;
                     else if (unitValue.Team == AutoChessTeam.Enemy)
-                        enemyAliveCount++;
+                        stats.EnemyAliveCount++;
 
-                    units.Add(new AutoChessBattleUnitTargetStateRecord
+                    Units.Add(new AutoChessBattleUnitTargetStateRecord
                     {
-                        Asc = entity,
+                        Asc = entities[entityIndex],
                         BattleGroup = unitValue.BattleGroup,
                         Team = unitValue.Team,
                         Slot = unitValue.Slot,
@@ -87,48 +136,65 @@ namespace GAS.AutoChessDemo
                         FinisherHealthThreshold = unitValue.FinisherHealthThreshold,
                         PrimaryTargetPolicy = unitValue.PrimaryTargetPolicy,
                         FinisherTargetPolicy = unitValue.FinisherTargetPolicy,
-                        Tags = tags.ValueRO,
+                        Tags = tags[entityIndex],
                         Health = health,
                         Energy = GetAttribute(
-                            attributes,
+                            unitAttributes,
                             unitValue.EnergyAttrSetCode,
                             unitValue.EnergyAttrCode),
                     });
-                    if (unitValue.BattleGroup > maxBattleGroup)
-                        maxBattleGroup = unitValue.BattleGroup;
                 }
 
-                if (units.Length > 0)
-                {
-                    using var targetCache = new NativeArray<AutoChessBattleGroupTargetCacheRecord>(
-                        maxBattleGroup + 1,
-                        Allocator.Temp);
-                    BuildTargetCache(units.AsArray(), targetCache);
-                    FlushCommandRequests(state.EntityManager, units.AsArray(), targetCache, ref driver);
-                }
-
-                driver.LastDecisionFrame = frame;
-                driver.LastOutcomeFrame = frame;
-                driver.PlayerAliveCount = playerAliveCount;
-                driver.EnemyAliveCount = enemyAliveCount;
-                SystemAPI.SetComponent(driverEntity, driver);
+                Stats.Value = stats;
             }
         }
 
-        public void OnDestroy(ref SystemState state)
+        [BurstCompile]
+        private struct FlushCommandRequestsJob : IJob
         {
+            public Entity DriverEntity;
+            public AutoChessBattleDriverComponent Driver;
+            public int Frame;
+            public NativeList<AutoChessBattleUnitTargetStateRecord> Units;
+            public NativeParallelHashMap<int, AutoChessBattleGroupTargetCacheRecord> TargetCache;
+            public NativeReference<AutoChessBattleDecisionStats> Stats;
+            public BufferLookup<AbilityCommandBuffer> AbilityCommandsByAsc;
+            public ComponentLookup<ASCCommandPendingComponent> CommandPendingByAsc;
+            public ComponentLookup<AutoChessBattleDriverComponent> DriverLookup;
+
+            public void Execute()
+            {
+                var units = Units.AsArray();
+                if (units.Length > 0)
+                {
+                    BuildTargetCache(units, TargetCache);
+                    FlushCommandRequests(
+                        units,
+                        TargetCache,
+                        ref AbilityCommandsByAsc,
+                        ref CommandPendingByAsc,
+                        ref Driver);
+                }
+
+                var stats = Stats.Value;
+                Driver.LastDecisionFrame = Frame;
+                Driver.LastOutcomeFrame = Frame;
+                Driver.PlayerAliveCount = stats.PlayerAliveCount;
+                Driver.EnemyAliveCount = stats.EnemyAliveCount;
+                DriverLookup[DriverEntity] = Driver;
+            }
         }
 
         private static void FlushCommandRequests(
-            EntityManager em,
             NativeArray<AutoChessBattleUnitTargetStateRecord> units,
-            NativeArray<AutoChessBattleGroupTargetCacheRecord> targetCache,
+            NativeParallelHashMap<int, AutoChessBattleGroupTargetCacheRecord> targetCache,
+            ref BufferLookup<AbilityCommandBuffer> abilityCommandsByAsc,
+            ref ComponentLookup<ASCCommandPendingComponent> commandPendingByAsc,
             ref AutoChessBattleDriverComponent driver)
         {
             var issuedPrimary = 0;
             var issuedFinisher = 0;
             var lowestHealthSelections = 0;
-            var commandBuffer = ResolveCommandBuffer(em);
 
             for (var i = 0; i < units.Length; i++)
             {
@@ -148,11 +214,13 @@ namespace GAS.AutoChessDemo
                     continue;
                 }
 
-                if (commandBuffer.IsCreated)
+                if (abilityCommandsByAsc.HasBuffer(source.Asc)
+                    && commandPendingByAsc.HasComponent(source.Asc))
                 {
+                    var commandBuffer = abilityCommandsByAsc[source.Asc];
                     commandBuffer.Add(new AbilityCommandBuffer
                     {
-                        Command = new AbilityCommandRequestComponent
+                        Command = new AbilityCommand
                         {
                             Owner = source.Asc,
                             AbilityCode = abilityCode,
@@ -161,6 +229,7 @@ namespace GAS.AutoChessDemo
                             TargetAsc = target,
                         },
                     });
+                    commandPendingByAsc.SetComponentEnabled(source.Asc, true);
                 }
 
                 if (isFinisher)
@@ -177,22 +246,9 @@ namespace GAS.AutoChessDemo
             driver.LowestHealthTargetCount += lowestHealthSelections;
         }
 
-        private static DynamicBuffer<AbilityCommandBuffer> ResolveCommandBuffer(EntityManager em)
-        {
-            if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity)
-                || streamEntity == Entity.Null
-                || !em.Exists(streamEntity)
-                || !em.HasBuffer<AbilityCommandBuffer>(streamEntity))
-            {
-                return default;
-            }
-
-            return em.GetBuffer<AbilityCommandBuffer>(streamEntity);
-        }
-
         private static bool TrySelectCommand(
             in AutoChessBattleUnitTargetStateRecord source,
-            NativeArray<AutoChessBattleGroupTargetCacheRecord> targetCache,
+            NativeParallelHashMap<int, AutoChessBattleGroupTargetCacheRecord> targetCache,
             out int abilityCode,
             out Entity target,
             out AutoChessTargetPolicy policy,
@@ -234,15 +290,14 @@ namespace GAS.AutoChessDemo
 
         private static bool TryFindAliveEnemy(
             in AutoChessBattleUnitTargetStateRecord source,
-            NativeArray<AutoChessBattleGroupTargetCacheRecord> targetCache,
+            NativeParallelHashMap<int, AutoChessBattleGroupTargetCacheRecord> targetCache,
             AutoChessTargetPolicy policy,
             out AutoChessBattleUnitTargetStateRecord target)
         {
             target = default;
-            if (source.BattleGroup < 0 || source.BattleGroup >= targetCache.Length)
+            if (!targetCache.TryGetValue(source.BattleGroup, out var cache))
                 return false;
 
-            var cache = targetCache[source.BattleGroup];
             if (source.Team == AutoChessTeam.Player)
                 return TryResolveCachedTarget(in cache.Enemy, policy, out target);
             if (source.Team == AutoChessTeam.Enemy)
@@ -253,20 +308,19 @@ namespace GAS.AutoChessDemo
 
         private static void BuildTargetCache(
             NativeArray<AutoChessBattleUnitTargetStateRecord> units,
-            NativeArray<AutoChessBattleGroupTargetCacheRecord> targetCache)
+            NativeParallelHashMap<int, AutoChessBattleGroupTargetCacheRecord> targetCache)
         {
+            targetCache.Clear();
             for (var i = 0; i < units.Length; i++)
             {
                 var unit = units[i];
-                if (unit.BattleGroup < 0
-                    || unit.BattleGroup >= targetCache.Length
-                    || unit.Asc == Entity.Null
+                if (unit.Asc == Entity.Null
                     || unit.Health <= 0f)
                 {
                     continue;
                 }
 
-                var cache = targetCache[unit.BattleGroup];
+                targetCache.TryGetValue(unit.BattleGroup, out var cache);
                 if (unit.Team == AutoChessTeam.Player)
                     UpdateTeamTargetCache(ref cache.Player, in unit);
                 else if (unit.Team == AutoChessTeam.Enemy)
@@ -381,6 +435,12 @@ namespace GAS.AutoChessDemo
             public byte HasLowestHealth;
             public AutoChessBattleUnitTargetStateRecord Frontline;
             public AutoChessBattleUnitTargetStateRecord LowestHealth;
+        }
+
+        private struct AutoChessBattleDecisionStats
+        {
+            public int PlayerAliveCount;
+            public int EnemyAliveCount;
         }
     }
 }

@@ -5,43 +5,46 @@ namespace GAS.Runtime
 {
     internal static class GameplayEffectRequestWriter
     {
-        public static Entity AppendSimpleInstantCommandOrCreateSingleTargetRequest(
+        public static Entity AppendSimpleInstantCommandToStream(
             EntityManager em,
             in GEApplyRequestComponent request,
             Entity targetAsc,
-            ETargetDataKind targetDataKind,
-            string namePrefix = "ApplyGERequest")
+            ETargetDataKind targetDataKind)
         {
-            TryAppendSimpleInstantCommand(em, request, targetAsc, targetDataKind, null);
-            return Entity.Null;
+            return TryAppendSimpleInstantCommand(em, request, targetAsc, targetDataKind, null)
+                   && EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity)
+                ? streamEntity
+                : Entity.Null;
         }
 
-        public static Entity AppendSimpleInstantCommandOrCreateSingleTargetRequest(
+        public static Entity AppendSimpleInstantCommandToStream(
             EntityManager em,
             in GEApplyRequestComponent request,
             Entity targetAsc,
             ETargetDataKind targetDataKind,
-            in GESetByCallerRequestValueBuffer setByCallerValue,
-            string namePrefix = "ApplyGERequest")
+            in GESetByCallerRequestValueBuffer setByCallerValue)
         {
             var canUseSetByCaller = setByCallerValue.Key > 0;
             var setByCallerValues = canUseSetByCaller
                 ? new[] { setByCallerValue }
                 : null;
 
-            TryAppendSimpleInstantCommand(em, request, targetAsc, targetDataKind, setByCallerValues);
-            return Entity.Null;
+            return TryAppendSimpleInstantCommand(em, request, targetAsc, targetDataKind, setByCallerValues)
+                   && EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity)
+                ? streamEntity
+                : Entity.Null;
         }
 
-        public static Entity AppendSimpleInstantCommandsOrCreateTargetListRequest(
+        public static Entity AppendSimpleInstantCommandsToStream(
             EntityManager em,
             in GEApplyRequestComponent request,
             IReadOnlyList<Entity> targetAscs,
-            ETargetDataKind targetDataKind,
-            string namePrefix = "ApplyGERequest")
+            ETargetDataKind targetDataKind)
         {
-            TryAppendSimpleInstantCommands(em, request, targetAscs, targetDataKind, null);
-            return Entity.Null;
+            return TryAppendSimpleInstantCommands(em, request, targetAscs, targetDataKind, null)
+                   && EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity)
+                ? streamEntity
+                : Entity.Null;
         }
 
         public static bool TryAppendSimpleInstantCommands(

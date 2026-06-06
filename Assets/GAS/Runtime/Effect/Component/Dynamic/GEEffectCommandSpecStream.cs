@@ -16,7 +16,6 @@ namespace GAS.Runtime
         Period = 3,
         Passive = 4,
         RuntimeBoundary = 5,
-        LegacyRequestBridge = 6,
         Overflow = 7,
     }
 
@@ -388,7 +387,6 @@ namespace GAS.Runtime
                 return false;
 
             return em.HasBuffer<GEEffectCommandBuffer>(streamEntity)
-                   && em.HasBuffer<AbilityCommandBuffer>(streamEntity)
                    && em.HasBuffer<GESetByCallerValueBuffer>(streamEntity)
                    && em.HasBuffer<GEEffectSpecBuffer>(streamEntity)
                    && em.HasBuffer<AttributeModifierBuffer>(streamEntity)
@@ -586,7 +584,6 @@ namespace GAS.Runtime
 
             if (!HasRequiredBuffers(em, streamEntity))
                 return;
-            em.GetBuffer<AbilityCommandBuffer>(streamEntity).Clear();
             em.GetBuffer<GEEffectCommandBuffer>(streamEntity).Clear();
             em.GetBuffer<GESetByCallerValueBuffer>(streamEntity).Clear();
             em.GetBuffer<GEEffectSpecBuffer>(streamEntity).Clear();
@@ -618,7 +615,6 @@ namespace GAS.Runtime
 
             var commands = em.GetBuffer<GEEffectCommandBuffer>(streamEntity);
             var setByCallerValues = em.GetBuffer<GESetByCallerValueBuffer>(streamEntity);
-            em.GetBuffer<AbilityCommandBuffer>(streamEntity).Clear();
             CompactConsumedCommands(
                 commands,
                 setByCallerValues,
@@ -641,13 +637,38 @@ namespace GAS.Runtime
             em.SetComponentData(streamEntity, stream);
         }
 
-        public static GEEffectCommandBuffer AppendLegacyRequestBridgeCommand(
-            EntityManager em,
-            in GEApplyRequestComponent request,
-            Entity targetAsc,
-            ETargetDataKind targetDataKind)
+        public static void PrepareFrameLocalData(
+            ref GEEffectCommandStreamComponent stream,
+            DynamicBuffer<GEEffectCommandBuffer> commands,
+            DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+            DynamicBuffer<GEEffectSpecBuffer> specs,
+            DynamicBuffer<AttributeModifierBuffer> deltas,
+            DynamicBuffer<ActiveEffectMutationBuffer> mutations,
+            DynamicBuffer<GameplayEventBuffer> facts,
+            int frame)
         {
-            return ToCommand(request, targetAsc, targetDataKind, GEEffectCommandSource.LegacyRequestBridge);
+            if (stream.LastClearedFrame == frame)
+                return;
+
+            CompactConsumedCommands(
+                commands,
+                setByCallerValues,
+                MinCursor(
+                    ClampCursor(stream.SpecBuildCommandCursor, commands.Length),
+                    ClampCursor(stream.ActiveMutationCommandCursor, commands.Length)));
+
+            specs.Clear();
+            deltas.Clear();
+            mutations.Clear();
+            facts.Clear();
+
+            stream.LastClearedFrame = frame;
+            stream.SpecBuildCommandCursor = 0;
+            stream.ActiveMutationCommandCursor = 0;
+            stream.DeltaApplySpecCursor = 0;
+            stream.FactProjectionDeltaCursor = 0;
+            stream.EventBridgeFactCursor = 0;
+            stream.CueProjectionSpecCursor = 0;
         }
 
         public static GEEffectCommandBuffer ToCommand(

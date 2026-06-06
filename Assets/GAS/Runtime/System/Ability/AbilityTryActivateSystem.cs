@@ -1,4 +1,6 @@
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
+using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
@@ -13,37 +15,42 @@ namespace GAS.Runtime
     [BurstCompile]
     public partial struct AbilityTryActivateSystem : ISystem
     {
+        private EntityQuery _activationPendingQuery;
         private EntityQuery _query;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            _query = SystemAPI.QueryBuilder()
-                .WithAll<AbilityActivationPendingComponent, AbilityStateComponent>()
+            _activationPendingQuery = SystemAPI.QueryBuilder()
+                .WithAll<
+                    AbilityActivationPendingComponent>()
                 .Build();
-            state.RequireForUpdate(_query);
+
+            _query = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadWrite<AbilityActivationPendingComponent>(),
+                    ComponentType.ReadWrite<AbilityCommitRequestComponent>(),
+                    ComponentType.ReadOnly<AbilityMainTargetComponent>(),
+                    ComponentType.ReadOnly<AbilityStateComponent>(),
+                },
+                Options = EntityQueryOptions.IgnoreComponentEnabledState,
+            });
+            state.RequireForUpdate(_activationPendingQuery);
         }
 
         public void OnUpdate(ref SystemState state)
         {
-            var commitRequests = SystemAPI.GetComponentLookup<AbilityCommitRequestComponent>();
-            foreach (var (target, activationPending, ability) in SystemAPI
-                         .Query<RefRO<AbilityMainTargetComponent>, EnabledRefRW<AbilityActivationPendingComponent>>()
-                         .WithAll<AbilityStateComponent, AbilityActivationPendingComponent>()
-                         .WithEntityAccess())
+            state.Dependency = new AbilityTryActivateJob
             {
-                if (commitRequests.HasComponent(ability))
-                {
-                    commitRequests[ability] = new AbilityCommitRequestComponent
-                    {
-                        TargetAsc = target.ValueRO.TargetAsc,
-                    };
-                    if (!commitRequests.IsComponentEnabled(ability))
-                        commitRequests.SetComponentEnabled(ability, true);
-                }
-
-                activationPending.ValueRW = false;
-            }
+                ActivationPendingTypeHandle =
+                    SystemAPI.GetComponentTypeHandle<AbilityActivationPendingComponent>(),
+                CommitRequestTypeHandle =
+                    SystemAPI.GetComponentTypeHandle<AbilityCommitRequestComponent>(),
+                MainTargetTypeHandle =
+                    SystemAPI.GetComponentTypeHandle<AbilityMainTargetComponent>(isReadOnly: true),
+            }.ScheduleParallel(_query, state.Dependency);
         }
 
         [BurstCompile]
@@ -51,5 +58,36 @@ namespace GAS.Runtime
         {
         }
 
+        [BurstCompile]
+        private struct AbilityTryActivateJob : IJobChunk
+        {
+            public ComponentTypeHandle<AbilityActivationPendingComponent> ActivationPendingTypeHandle;
+            public ComponentTypeHandle<AbilityCommitRequestComponent> CommitRequestTypeHandle;
+            [ReadOnly] public ComponentTypeHandle<AbilityMainTargetComponent> MainTargetTypeHandle;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var activationPendingMask = chunk.GetEnabledMask(ref ActivationPendingTypeHandle);
+                var commitRequestMask = chunk.GetEnabledMask(ref CommitRequestTypeHandle);
+                var commitRequests = chunk.GetNativeArray(ref CommitRequestTypeHandle);
+                var targets = chunk.GetNativeArray(ref MainTargetTypeHandle);
+
+                for (var entityIndex = 0; entityIndex < chunk.Count; entityIndex++)
+                {
+                    if (!activationPendingMask.GetBit(entityIndex))
+                        continue;
+
+                    var commitRequest = commitRequests[entityIndex];
+                    commitRequest.TargetAsc = targets[entityIndex].TargetAsc;
+                    commitRequests[entityIndex] = commitRequest;
+                    commitRequestMask[entityIndex] = true;
+                    activationPendingMask[entityIndex] = false;
+                }
+            }
+        }
     }
 }

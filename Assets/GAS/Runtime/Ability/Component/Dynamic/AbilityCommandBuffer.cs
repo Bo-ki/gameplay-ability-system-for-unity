@@ -11,7 +11,7 @@ namespace GAS.Runtime
         Remove,
     }
 
-    public struct AbilityCommandRequestComponent : IComponentData
+    public struct AbilityCommand
     {
         public Entity Owner;
         public Entity AbilityEntity;
@@ -20,9 +20,9 @@ namespace GAS.Runtime
         public EAbilityCommandType CommandType;
     }
 
-    [InternalBufferCapacity(0)]
+    [InternalBufferCapacity(4)]
     public struct AbilityCommandBuffer : IBufferElementData
     {
-        public AbilityCommandRequestComponent Command;
+        public AbilityCommand Command;
     }
 }
