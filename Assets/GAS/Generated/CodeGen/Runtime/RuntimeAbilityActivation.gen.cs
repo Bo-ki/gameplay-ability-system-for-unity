@@ -27,6 +27,7 @@ namespace GAS.Runtime.Generated
                 {
                     ComponentType.ReadWrite<AbilityCommitRequestComponent>(),
                     ComponentType.ReadWrite<AbilityStateComponent>(),
+                    ComponentType.ReadWrite<AbilityEndRequestComponent>(),
                 },
             });
             state.RequireForUpdate(_query);
@@ -48,7 +49,6 @@ namespace GAS.Runtime.Generated
             var eventBusEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
                 ? resolvedEventBus
                 : Entity.Null;
-            var seeds = new NativeList<GECommandSeedRecord>(Allocator.TempJob);
             state.Dependency = new AbilityCatalogCommitJob
             {
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
@@ -61,20 +61,17 @@ namespace GAS.Runtime.Generated
                 AutoEndOnCommitLookup = SystemAPI.GetComponentLookup<AbilityAutoEndOnCommitComponent>(isReadOnly: true),
                 GrantedByEffectLookup = SystemAPI.GetComponentLookup<AbilityGrantedByEffectComponent>(isReadOnly: true),
                 CancelRequestLookup = SystemAPI.GetComponentLookup<AbilityCancelRequestComponent>(),
-                EndRequestLookup = SystemAPI.GetComponentLookup<AbilityEndRequestComponent>(),
+                EndRequestTypeHandle = SystemAPI.GetComponentTypeHandle<AbilityEndRequestComponent>(),
                 DestroyOnCleanupLookup = SystemAPI.GetComponentLookup<AbilityDestroyOnCleanupComponent>(isReadOnly: true),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(),
                 SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: true),
-                EventBusLookup = SystemAPI.GetComponentLookup<GameplayEventBusComponent>(),
-                GameplayEventLookup = SystemAPI.GetBufferLookup<GameplayEventBusEventBuffer>(),
+                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
                 Catalog = catalogComponent.Catalog,
                 StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
                 Frame = frame,
-                Seeds = seeds,
             }.Schedule(_query, state.Dependency);
-            state.Dependency = seeds.Dispose(state.Dependency);
         }
 
         [BurstCompile]
@@ -90,18 +87,16 @@ namespace GAS.Runtime.Generated
             [ReadOnly] public ComponentLookup<AbilityAutoEndOnCommitComponent> AutoEndOnCommitLookup;
             [ReadOnly] public ComponentLookup<AbilityGrantedByEffectComponent> GrantedByEffectLookup;
             public ComponentLookup<AbilityCancelRequestComponent> CancelRequestLookup;
-            public ComponentLookup<AbilityEndRequestComponent> EndRequestLookup;
+            public ComponentTypeHandle<AbilityEndRequestComponent> EndRequestTypeHandle;
             [ReadOnly] public ComponentLookup<AbilityDestroyOnCleanupComponent> DestroyOnCleanupLookup;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             [ReadOnly] public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
-            public ComponentLookup<GameplayEventBusComponent> EventBusLookup;
-            public BufferLookup<GameplayEventBusEventBuffer> GameplayEventLookup;
+            public BufferLookup<GameplayEventBuffer> FactLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public Entity StreamEntity;
             public Entity EventBusEntity;
             public int Frame;
-            public NativeList<GECommandSeedRecord> Seeds;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -122,6 +117,8 @@ namespace GAS.Runtime.Generated
                 var states = chunk.GetNativeArray(ref StateTypeHandle);
                 var commitRequests = chunk.GetNativeArray(ref CommitRequestTypeHandle);
                 var commitRequestMask = chunk.GetEnabledMask(ref CommitRequestTypeHandle);
+                var endRequests = chunk.GetNativeArray(ref EndRequestTypeHandle);
+                var endRequestMask = chunk.GetEnabledMask(ref EndRequestTypeHandle);
                 ref var catalog = ref Catalog.Value;
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
@@ -133,7 +130,10 @@ namespace GAS.Runtime.Generated
                         ability,
                         commitRequest.TargetAsc,
                         ref catalog,
-                        ref state);
+                        ref state,
+                        ref endRequests,
+                        endRequestMask,
+                        entityIndex);
                     states[entityIndex] = state;
                     commitRequestMask[entityIndex] = false;
                 }
@@ -143,10 +143,12 @@ namespace GAS.Runtime.Generated
                 Entity ability,
                 Entity requestedTarget,
                 ref GASDefinitionCatalogBlob catalog,
-                ref AbilityStateComponent state)
+                ref AbilityStateComponent state,
+                ref NativeArray<AbilityEndRequestComponent> endRequests,
+                EnabledMask endRequestMask,
+                int entityIndex)
             {
                 var resolvedTarget = ResolveMainTarget(requestedTarget, state.Owner);
-                Seeds.Clear();
 
                 var committed = TryCommitAbility(
                     ability,
@@ -161,7 +163,7 @@ namespace GAS.Runtime.Generated
                 if (AutoEndOnCommitLookup.HasComponent(ability)
                     && AutoEndOnCommitLookup.IsComponentEnabled(ability))
                 {
-                    if (CanCompleteAutoEndOnCommitDirectly(ability))
+                    if (CanCompleteAutoEndOnCommitDirectly(ability, endRequestMask, entityIndex))
                     {
                         CompleteAutoEndOnCommitDirectly(
                             ability,
@@ -174,6 +176,9 @@ namespace GAS.Runtime.Generated
                         RequestAbilityEnd(
                             ability,
                             EAbilityLifecycleReason.ActivationCompleted,
+                            ref endRequests,
+                            endRequestMask,
+                            entityIndex,
                             sourceAbility: ability,
                             sourceAbilityCode: nextRuntime.Code);
                     }
@@ -183,7 +188,10 @@ namespace GAS.Runtime.Generated
                 return true;
             }
 
-            private bool CanCompleteAutoEndOnCommitDirectly(Entity ability)
+            private bool CanCompleteAutoEndOnCommitDirectly(
+                Entity ability,
+                EnabledMask endRequestMask,
+                int entityIndex)
             {
                 if (GrantedByEffectLookup.HasComponent(ability)
                     || IsDestroyOnCleanupEnabled(ability))
@@ -197,8 +205,7 @@ namespace GAS.Runtime.Generated
                     return false;
                 }
 
-                return !EndRequestLookup.HasComponent(ability)
-                       || !EndRequestLookup.IsComponentEnabled(ability);
+                return !endRequestMask[entityIndex];
             }
 
             private void CompleteAutoEndOnCommitDirectly(
@@ -228,16 +235,17 @@ namespace GAS.Runtime.Generated
                 Entity ability,
                 in AbilityStateComponent state)
             {
-                EnqueueGameplayEvent(new GameplayEventBusEventBuffer
+                EnqueueGameplayEvent(new GameplayEventBuffer
                 {
-                    Type = type,
+                    EventType = type,
+                    Domain = EGameplayFactDomain.Ability,
+                    Category = EGameplayFactCategory.StateChange,
+                    Severity = EGameplayFactSeverity.Info,
                     SourceAsc = state.Owner,
                     TargetAsc = state.Owner,
                     SourceAbility = ability,
-                    RelatedAbility = ability,
                     EventCode = state.Code,
                     ReasonCode = (int)EAbilityLifecycleReason.ActivationCompleted,
-                    RelatedAbilityCode = state.Code,
                     Value = state.Code,
                 });
             }
@@ -280,24 +288,37 @@ namespace GAS.Runtime.Generated
 
                 ApplyActivationOwnedTags(ability, state.Owner, ref catalog, in abilityDefinition);
 
-                GASGeneratedRuntimeDefinitionResolver.WriteGECommandSeeds(
-                    ref catalog,
-                    in plan,
-                    contextId: 0,
-                    parentContextId: 0,
-                    ref Seeds);
-                for (var i = 0; i < Seeds.Length; i++)
-                {
-                    var seed = Seeds[i];
-                    if (seed.FailureReasonCode != GASFailureReasonCodes.None)
-                        continue;
-                    AppendEffectCommand(ToEffectCommand(in seed));
-                }
+                AppendAbilityEffectCommand(ref catalog, in plan, GASGESeedKind.Cost, plan.CostGameplayEffectCode);
+                AppendAbilityEffectCommand(ref catalog, in plan, GASGESeedKind.Cooldown, plan.CooldownGameplayEffectCode);
+                AppendAbilityEffectCommand(ref catalog, in plan, GASGESeedKind.Primary, plan.PrimaryGameplayEffectCode);
+                AppendAbilityEffectCommand(ref catalog, in plan, GASGESeedKind.Secondary, plan.SecondaryGameplayEffectCode);
 
                 nextRuntime.Phase = EAbilityPhase.Active;
                 nextRuntime.Timer = 0f;
                 nextRuntime.RemainingFrame = -1;
                 return true;
+            }
+
+            private void AppendAbilityEffectCommand(
+                ref GASDefinitionCatalogBlob catalog,
+                in AbilityActivationPlanRecord plan,
+                int seedKind,
+                int gameplayEffectCode)
+            {
+                if (!GASGeneratedRuntimeDefinitionResolver.TryBuildGECommandSeed(
+                        ref catalog,
+                        in plan,
+                        seedKind,
+                        GEEffectCommandSource.Ability,
+                        gameplayEffectCode,
+                        contextId: 0,
+                        parentContextId: 0,
+                        out var seed))
+                {
+                    return;
+                }
+
+                AppendEffectCommand(ToEffectCommand(in seed));
             }
 
             private void AppendEffectCommand(in GEEffectCommandBuffer command)
@@ -449,32 +470,36 @@ namespace GAS.Runtime.Generated
             private void RequestAbilityEnd(
                 Entity ability,
                 EAbilityLifecycleReason reason,
+                ref NativeArray<AbilityEndRequestComponent> endRequests,
+                EnabledMask endRequestMask,
+                int entityIndex,
                 Entity sourceAbility = default,
                 Entity sourceEffect = default,
                 int sourceAbilityCode = 0)
             {
-                if (!EndRequestLookup.HasComponent(ability)
-                    || EndRequestLookup.IsComponentEnabled(ability))
+                if (endRequestMask[entityIndex])
                 {
                     return;
                 }
 
-                EndRequestLookup[ability] = new AbilityEndRequestComponent
+                endRequests[entityIndex] = new AbilityEndRequestComponent
                 {
                     Reason = reason,
                     SourceAbility = sourceAbility,
                     SourceEffect = sourceEffect,
                     SourceAbilityCode = sourceAbilityCode,
                 };
-                EndRequestLookup.SetComponentEnabled(ability, true);
-                EnqueueGameplayEvent(new GameplayEventBusEventBuffer
+                endRequestMask[entityIndex] = true;
+                EnqueueGameplayEvent(new GameplayEventBuffer
                 {
-                    Type = EGameplayEventType.AbilityEndRequested,
+                    EventType = EGameplayEventType.AbilityEndRequested,
+                    Domain = EGameplayFactDomain.Ability,
+                    Category = EGameplayFactCategory.Request,
+                    Severity = EGameplayFactSeverity.Info,
                     SourceAbility = ability,
-                    GameplayEffect = sourceEffect,
-                    RelatedAbility = sourceAbility,
+                    SourceEffect = sourceEffect,
                     ReasonCode = (int)reason,
-                    RelatedAbilityCode = sourceAbilityCode,
+                    EventCode = sourceAbilityCode,
                     Value = sourceAbilityCode,
                 });
             }
@@ -531,25 +556,24 @@ namespace GAS.Runtime.Generated
                 return false;
             }
 
-            private void EnqueueGameplayEvent(GameplayEventBusEventBuffer evt)
+            private void EnqueueGameplayEvent(GameplayEventBuffer evt)
             {
-                if (EventBusEntity == Entity.Null || !GameplayEventLookup.HasBuffer(EventBusEntity))
+                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
                     return;
 
                 evt.Frame = Frame;
-                if (EventBusLookup.HasComponent(EventBusEntity))
+                if (StreamLookup.HasComponent(StreamEntity))
                 {
-                    var eventBus = EventBusLookup[EventBusEntity];
-                    evt.Sequence = eventBus.NextSequence;
-                    eventBus.NextSequence++;
-                    EventBusLookup[EventBusEntity] = eventBus;
+                    var stream = StreamLookup[StreamEntity];
+                    evt.Sequence = Allocate(ref stream.NextFactSequence);
+                    StreamLookup[StreamEntity] = stream;
                 }
                 else
                 {
                     evt.Sequence = 0;
                 }
 
-                GameplayEventLookup[EventBusEntity].Add(evt);
+                FactLookup[StreamEntity].Add(evt);
             }
 
             private static int Allocate(ref int next)

@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using Unity.Entities;
 using GAS.Runtime;
 
 namespace GAS.AutoChessDemo
@@ -87,7 +86,6 @@ namespace GAS.AutoChessDemo
         public readonly string DisplayName;
         public readonly string OwnerName;
         public readonly string ArchetypeName;
-        public readonly Entity AscEntity;
         public readonly AutoChessTeam Team;
         public readonly int Slot;
         public readonly float Health;
@@ -99,20 +97,18 @@ namespace GAS.AutoChessDemo
             string displayName,
             string ownerName,
             string archetypeName,
-            Entity ascEntity,
             AutoChessTeam team,
             int slot,
             float health,
             float energy,
             bool alive)
         {
-            Id = id;
-            DisplayName = string.IsNullOrWhiteSpace(displayName) ? id : displayName;
+            Id = id ?? string.Empty;
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? Id : displayName;
             OwnerName = string.IsNullOrWhiteSpace(ownerName)
                 ? AutoChessBattleRules.GetTeamName(team)
                 : ownerName;
             ArchetypeName = string.IsNullOrWhiteSpace(archetypeName) ? DisplayName : archetypeName;
-            AscEntity = ascEntity;
             Team = team;
             Slot = slot;
             Health = health;
@@ -156,6 +152,91 @@ namespace GAS.AutoChessDemo
             AttributeChanges = attributeChanges;
             TagChanges = tagChanges;
             CueRequests = cueRequests;
+        }
+    }
+
+    public enum AutoChessBattleReportEventKind : byte
+    {
+        SkillResolved = 0,
+        DamageApplied = 1,
+        UnitDied = 2,
+    }
+
+    public readonly struct AutoChessBattleReportUnit
+    {
+        public readonly int UnitIndex;
+        public readonly string UnitId;
+        public readonly string DisplayName;
+        public readonly string OwnerName;
+        public readonly AutoChessTeam Team;
+        public readonly int Slot;
+        public readonly int BattleGroup;
+
+        public AutoChessBattleReportUnit(
+            int unitIndex,
+            string unitId,
+            string displayName,
+            string ownerName,
+            AutoChessTeam team,
+            int slot,
+            int battleGroup)
+        {
+            UnitIndex = unitIndex;
+            UnitId = unitId ?? string.Empty;
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? UnitId : displayName;
+            OwnerName = ownerName ?? string.Empty;
+            Team = team;
+            Slot = slot;
+            BattleGroup = battleGroup;
+        }
+    }
+
+    public readonly struct AutoChessBattleReportEvent
+    {
+        public readonly int Frame;
+        public readonly AutoChessBattleReportEventKind Kind;
+        public readonly int SourceUnitIndex;
+        public readonly int TargetUnitIndex;
+        public readonly int AbilityCode;
+        public readonly int GameplayEffectCode;
+        public readonly float Value;
+        public readonly float OldValue;
+        public readonly float NewValue;
+
+        public AutoChessBattleReportEvent(
+            int frame,
+            AutoChessBattleReportEventKind kind,
+            int sourceUnitIndex,
+            int targetUnitIndex,
+            int abilityCode,
+            int gameplayEffectCode,
+            float value,
+            float oldValue,
+            float newValue)
+        {
+            Frame = frame;
+            Kind = kind;
+            SourceUnitIndex = sourceUnitIndex;
+            TargetUnitIndex = targetUnitIndex;
+            AbilityCode = abilityCode;
+            GameplayEffectCode = gameplayEffectCode;
+            Value = value;
+            OldValue = oldValue;
+            NewValue = newValue;
+        }
+    }
+
+    public readonly struct AutoChessBattleReport
+    {
+        public readonly AutoChessBattleReportUnit[] Units;
+        public readonly AutoChessBattleReportEvent[] Events;
+
+        public AutoChessBattleReport(
+            AutoChessBattleReportUnit[] units,
+            AutoChessBattleReportEvent[] events)
+        {
+            Units = units ?? Array.Empty<AutoChessBattleReportUnit>();
+            Events = events ?? Array.Empty<AutoChessBattleReportEvent>();
         }
     }
 
@@ -239,6 +320,7 @@ namespace GAS.AutoChessDemo
         public readonly string RuntimeDiagnosticsLog;
         public readonly GasRuntimeOfficialToolDiffSnapshot OfficialToolDiff;
         public readonly GasStructuredLogExportSnapshot StructuredLogSnapshot;
+        public readonly AutoChessBattleReport BattleReport;
         public readonly AutoChessBattleLogSnapshot BattleLog;
         public readonly string AssertionLog;
 
@@ -266,6 +348,7 @@ namespace GAS.AutoChessDemo
             string runtimeDiagnosticsLog,
             GasRuntimeOfficialToolDiffSnapshot officialToolDiff,
             GasStructuredLogExportSnapshot structuredLogSnapshot,
+            AutoChessBattleReport battleReport,
             AutoChessBattleLogSnapshot battleLog,
             string assertionLog)
         {
@@ -293,6 +376,7 @@ namespace GAS.AutoChessDemo
             RuntimeDiagnosticsLog = runtimeDiagnosticsLog ?? string.Empty;
             OfficialToolDiff = officialToolDiff;
             StructuredLogSnapshot = structuredLogSnapshot;
+            BattleReport = battleReport;
             BattleLog = battleLog;
             AssertionLog = assertionLog ?? string.Empty;
         }
@@ -323,6 +407,7 @@ namespace GAS.AutoChessDemo
                 RuntimeDiagnosticsLog,
                 officialToolDiff,
                 StructuredLogSnapshot,
+                BattleReport,
                 BattleLog,
                 AssertionLog);
         }

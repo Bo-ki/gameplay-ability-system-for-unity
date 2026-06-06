@@ -39,20 +39,5 @@ namespace GAS.Runtime.Generated
             ComponentType.ReadWrite<GASGeneratedDefinitionBlobComponent<GameplayTagDefinitionBlob>>(),
             ComponentType.ReadWrite<GASDefinitionCodeComponent>()
         );
-
-        public static readonly ComponentTypeSet ScenarioSpawnDefinitionComponentTypes = new ComponentTypeSet(
-            ComponentType.ReadWrite<GASGeneratedDefinitionBlobComponent<ScenarioSpawnDefinitionBlob>>(),
-            ComponentType.ReadWrite<GASDefinitionCodeComponent>()
-        );
-
-        public static readonly ComponentTypeSet SummonDefinitionComponentTypes = new ComponentTypeSet(
-            ComponentType.ReadWrite<GASGeneratedDefinitionBlobComponent<SummonDefinitionBlob>>(),
-            ComponentType.ReadWrite<GASDefinitionCodeComponent>()
-        );
-
-        public static readonly ComponentTypeSet UnitDefinitionComponentTypes = new ComponentTypeSet(
-            ComponentType.ReadWrite<GASGeneratedDefinitionBlobComponent<UnitDefinitionBlob>>(),
-            ComponentType.ReadWrite<GASDefinitionCodeComponent>()
-        );
     }
 }

@@ -5,16 +5,17 @@
 ## 模块布局
 
 - `GameRoom`: 房间、玩家席位、阵容、棋子展示名、技能/GE 规则码。
-- `Battle`: 对局契约、对局编排、战场会话、结果快照、战斗日志翻译。它消费 Runtime structured log，输出业务可读日志。
+- `Battle`: 对局契约、对局编排、战场会话、结果快照、战报投影和战斗日志翻译。它把 Runtime facts 投影成 Demo 战报，再输出业务可读日志。
 - `Battle/Ecs`: AutoChess 专用 ECS 适配层，包含 command drive、definition catalog、execution calculation。
 - `Integration/GasCore`: AutoChessDemo 到 GAS Core 的唯一接入层，集中 Runtime 初始化、ASC 创建、定义安装、tick 推进、Replay/Diagnostics/Official diff 导出。
 - `AutoRunner`: batchmode / Player launch / GAS system bootstrap。
 - `Presentation`: 日志画面和 Cue 占位。场景只显示日志，不承载战斗模拟。
-- `Config`: 后续 Luban / SourceGenerator 产物入口，生成目录继续保持忽略。
+- `Generated`: codegen 输出的强类型配置数据。生成物只提供常量、验证 profile 和基础单位行，不拥有房间构造、缩放阵容或展示文案。
 
 ## Demo 与 GAS Core 职责
 
 - AutoChessDemo owns: 房间、玩家席位、阵容、目标策略、战斗循环、胜负收口、业务日志和日志画面。
+- `GameRoom` owns: 从生成配置行组装真实业务房间、玩家席位、镜像 battle group 和棋子展示信息。`Generated` 不反向创建房间。
 - `Battle/Ecs` owns: Demo 在 GAS 物理组里的自走棋扩展系统，包括技能指令驱动、斩杀 execution calculation 和 Demo 专用 definition catalog。
 - `Integration/GasCore` owns: Demo 概念到 GAS Runtime API 的翻译，以及对 Core 观测数据的读取。上层业务不直接触碰 `GASManager`、`ASCCommandGateway`、`GasRuntimeDebugger` 或 `GasStructuredLogExporter`。
 - GAS Core owns: Ability / GameplayEffect / Attribute / Cue / Replay / Runtime Diagnostics 的执行与事实流。AutoChessDemo 不修改 Core 规则，只通过集成层装配本 Demo 的业务定义和扩展系统。
@@ -30,14 +31,16 @@
 7. `AutoChessBattleCommandDriveSystem` 按 battle group 收集存活棋子，缓存 frontline / lowest-health 目标，向 `AbilityCommandBuffer` 写入技能指令。
 8. Runtime Core 执行 Ability / GE / Attribute / Cue / Replay 管线。
 9. `AutoChessExecuteDamageCalculationSystem` 处理斩杀伤害，并写入 typed fact。
-10. `AutoChessGasCoreBridge` 导出 Replay / Diagnostics / Official diff 观测数据，`AutoChessBattleResultBuilder` 只负责组合 `AutoChessBattleResult`。
-11. `AutoChessBattleLogBuilder` 把 Runtime structured log 翻译成中文业务日志，例如“玩家A的霜卫先锋对玩家B的荒原斗士发动了破阵斩，造成 12 点伤害”。
-12. `AutoChessDemoSceneRunner` 只绘制一个日志面板，并导出 `AutoChessBattleLog.txt`。
+10. `AutoChessGasCoreBridge` 导出 Replay / Diagnostics / Official diff 观测数据，`AutoChessBattleReportBuilder` 把 Runtime structured log 投影成 Demo 业务战报。
+11. `AutoChessBattleResultBuilder` 组合 `AutoChessBattleResult`，同时保留 Runner 需要的 Runtime diagnostics/official diff 诊断数据。
+12. `AutoChessBattleLogBuilder` 只消费 `AutoChessBattleReport`，渲染中文业务日志，例如“玩家A的霜卫先锋对玩家B的荒原斗士发动了破阵斩，造成 12 点伤害”。
+13. `AutoChessDemoSceneRunner` 只绘制一个日志面板，并导出 `AutoChessBattleLog.txt`。
 
 ## 无资源表现约束
 
 - 当前没有人物、特效、音效资源，但仍保留业务上需要的展示名、技能名、伤害、死亡、胜负日志。
 - Presentation 不反推战斗状态，不遍历 ECS World，只消费 `AutoChessBattleResult.BattleLog`。
+- 日志层不直接读取 GAS Runtime structured log；死亡、伤害、技能释放等展示语义由 `AutoChessBattleReport` 承接。
 - 验证层继续使用 Runtime Diagnostics、official tool diff 和 structured log，但不替代游戏业务模块。
 
 ## 验收命令

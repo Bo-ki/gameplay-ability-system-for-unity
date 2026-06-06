@@ -19,7 +19,7 @@ namespace GAS.Runtime.Generated
 
     public static class GASGeneratedDefinitionBakePlan
     {
-        public const int DefinitionCount = 9;
+        public const int DefinitionCount = 6;
         public const int AbilityDefinitionBlobKind = 0;
         public const int AbilityDefinitionKind = 1;
         public const int AttributeDefinitionBlobKind = 1;
@@ -32,11 +32,5 @@ namespace GAS.Runtime.Generated
         public const int GameplayEffectDefinitionKind = 2;
         public const int GameplayTagDefinitionBlobKind = 5;
         public const int GameplayTagDefinitionKind = 5;
-        public const int ScenarioSpawnDefinitionBlobKind = 6;
-        public const int ScenarioSpawnDefinitionKind = 0;
-        public const int SummonDefinitionBlobKind = 7;
-        public const int SummonDefinitionKind = 0;
-        public const int UnitDefinitionBlobKind = 8;
-        public const int UnitDefinitionKind = 0;
     }
 }

@@ -1,32 +1,33 @@
 using System;
+using System.Globalization;
 
 namespace GAS.AutoChessDemo
 {
     public static class AutoChessBattleRules
     {
-        public const int AttributeSetCombat = 9001;
-        public const int AttributeHealth = 1;
-        public const int AttributeEnergy = 2;
+        public const int AttributeSetCombat = AutoChessGeneratedConfig.AttributeSetCombat;
+        public const int AttributeHealth = AutoChessGeneratedConfig.AttributeHealth;
+        public const int AttributeEnergy = AutoChessGeneratedConfig.AttributeEnergy;
 
-        public const int AbilityPlayerAttack = 9101;
-        public const int AbilityEnemyAttack = 9102;
-        public const int AbilityPlayerExecute = 9103;
+        public const int AbilityPlayerAttack = AutoChessGeneratedConfig.AbilityPlayerAttack;
+        public const int AbilityEnemyAttack = AutoChessGeneratedConfig.AbilityEnemyAttack;
+        public const int AbilityPlayerExecute = AutoChessGeneratedConfig.AbilityPlayerExecute;
 
-        public const int GameplayEffectPlayerAttackDamage = 9201;
-        public const int GameplayEffectEnemyAttackDamage = 9202;
-        public const int GameplayEffectPlayerExecute = 9207;
+        public const int GameplayEffectPlayerAttackDamage = AutoChessGeneratedConfig.GameplayEffectPlayerAttackDamage;
+        public const int GameplayEffectEnemyAttackDamage = AutoChessGeneratedConfig.GameplayEffectEnemyAttackDamage;
+        public const int GameplayEffectPlayerExecute = AutoChessGeneratedConfig.GameplayEffectPlayerExecute;
 
-        public const int ExecutionCalculationExecuteDamage = 9401;
-        public const int ExecutionCalculationExecuteDamageOutput = 9402;
+        public const int ExecutionCalculationExecuteDamage = AutoChessGeneratedConfig.ExecutionCalculationExecuteDamage;
+        public const int ExecutionCalculationExecuteDamageOutput = AutoChessGeneratedConfig.ExecutionCalculationExecuteDamageOutput;
 
-        public const int TagAttackCooldown = 1;
+        public const int TagAttackCooldown = AutoChessGeneratedConfig.TagAttackCooldown;
 
         public static string GetTeamName(AutoChessTeam team)
         {
             return team switch
             {
-                AutoChessTeam.Player => "玩家A",
-                AutoChessTeam.Enemy => "玩家B",
+                AutoChessTeam.Player => AutoChessGeneratedConfig.PlayerDisplayName,
+                AutoChessTeam.Enemy => AutoChessGeneratedConfig.EnemyDisplayName,
                 AutoChessTeam.Draw => "平局",
                 _ => "未分组",
             };
@@ -200,78 +201,64 @@ namespace GAS.AutoChessDemo
             int scale,
             float healthMultiplier)
         {
-            var multiplier = healthMultiplier > 0f ? healthMultiplier : 1f;
-            var baseUnits = new[]
-            {
-                new AutoChessUnitDefinition(
-                    "player-vanguard",
-                    "霜卫先锋",
-                    "前排战士",
-                    0,
-                    AutoChessTeam.Player,
-                    0,
-                    72f * multiplier,
-                    8f,
-                    AutoChessBattleRules.AbilityPlayerAttack,
-                    AutoChessBattleRules.AbilityPlayerExecute,
-                    44f * multiplier,
-                    AutoChessTargetPolicy.Frontline,
-                    AutoChessTargetPolicy.LowestHealth),
-                new AutoChessUnitDefinition(
-                    "player-ranger",
-                    "游侠射手",
-                    "后排射手",
-                    0,
-                    AutoChessTeam.Player,
-                    1,
-                    54f * multiplier,
-                    8f,
-                    AutoChessBattleRules.AbilityPlayerAttack,
-                    AutoChessBattleRules.AbilityPlayerExecute,
-                    44f * multiplier,
-                    AutoChessTargetPolicy.LowestHealth,
-                    AutoChessTargetPolicy.LowestHealth),
-                new AutoChessUnitDefinition(
-                    "enemy-brute",
-                    "荒原斗士",
-                    "前排斗士",
-                    0,
-                    AutoChessTeam.Enemy,
-                    0,
-                    48f * multiplier,
-                    8f,
-                    AutoChessBattleRules.AbilityEnemyAttack,
-                    0,
-                    0f,
-                    AutoChessTargetPolicy.Frontline,
-                    AutoChessTargetPolicy.Frontline),
-                new AutoChessUnitDefinition(
-                    "enemy-caster",
-                    "秘术术士",
-                    "后排法师",
-                    0,
-                    AutoChessTeam.Enemy,
-                    1,
-                    42f * multiplier,
-                    8f,
-                    AutoChessBattleRules.AbilityEnemyAttack,
-                    0,
-                    0f,
-                    AutoChessTargetPolicy.Frontline,
-                    AutoChessTargetPolicy.Frontline),
-            };
-
             var normalizedScale = scale > 0 ? scale : 1;
-            var units = normalizedScale <= 1
-                ? baseUnits
-                : ExpandScaleGroups(baseUnits, normalizedScale);
-
+            var normalizedHealthMultiplier = healthMultiplier > 0f ? healthMultiplier : 1f;
             return new AutoChessGameRoomDefinition(
-                "room-standard-duel-x" + normalizedScale,
-                "标准双人自走棋对局",
-                new AutoChessPlayerSeat(AutoChessTeam.Player, "player-a", "玩家A"),
-                new AutoChessPlayerSeat(AutoChessTeam.Enemy, "player-b", "玩家B"),
-                units);
+                AutoChessGeneratedConfig.RoomIdPrefix + normalizedScale,
+                AutoChessGeneratedConfig.RoomDisplayName,
+                new AutoChessPlayerSeat(
+                    AutoChessTeam.Player,
+                    AutoChessGeneratedConfig.PlayerId,
+                    AutoChessGeneratedConfig.PlayerDisplayName),
+                new AutoChessPlayerSeat(
+                    AutoChessTeam.Enemy,
+                    AutoChessGeneratedConfig.EnemyId,
+                    AutoChessGeneratedConfig.EnemyDisplayName),
+                ExpandScaleGroups(CreateBaseUnits(normalizedHealthMultiplier), normalizedScale));
+        }
+
+        public static int ResolveBattleGroup(string unitId)
+        {
+            if (string.IsNullOrEmpty(unitId))
+                return 0;
+
+            var marker = unitId.LastIndexOf("-g", StringComparison.Ordinal);
+            if (marker < 0 || marker + 2 >= unitId.Length)
+                return 0;
+
+            return int.TryParse(
+                unitId.Substring(marker + 2),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var group)
+                ? group
+                : 0;
+        }
+
+        private static AutoChessUnitDefinition[] CreateBaseUnits(float healthMultiplier)
+        {
+            var rows = AutoChessGeneratedConfig.CreateBaseUnitRows();
+            var units = new AutoChessUnitDefinition[rows.Length];
+            for (var i = 0; i < rows.Length; i++)
+            {
+                var row = rows[i];
+                units[i] = new AutoChessUnitDefinition(
+                    row.Id,
+                    row.DisplayName,
+                    row.ArchetypeName,
+                    0,
+                    row.Team,
+                    row.Slot,
+                    row.Health * healthMultiplier,
+                    row.Energy,
+                    row.PrimaryAbilityCode,
+                    row.FinisherAbilityCode,
+                    row.FinisherHealthThreshold * healthMultiplier,
+                    row.PrimaryTargetPolicy,
+                    row.FinisherTargetPolicy);
+            }
+
+            return units;
         }
 
         private static AutoChessUnitDefinition[] ExpandScaleGroups(
@@ -283,7 +270,10 @@ namespace GAS.AutoChessDemo
             for (var group = 0; group < scale; group++)
             {
                 for (var i = 0; i < baseUnits.Length; i++)
-                    units[index++] = baseUnits[i].WithScaleGroup(group);
+                {
+                    units[index] = baseUnits[i].WithScaleGroup(group);
+                    index++;
+                }
             }
 
             return units;

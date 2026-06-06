@@ -1,0 +1,79 @@
+{
+  "executionCalculations": {
+    "executeDamage": 9401,
+    "executeDamageOutput": 9402
+  },
+  "tags": {
+    "attackCooldown": 1
+  },
+  "validationScenario": {
+    "scale": 50,
+    "maxTicks": 96,
+    "postVictoryFlushTicks": 4,
+    "processWarmupRuns": 1,
+    "healthMultiplier": 1.0,
+    "expectedWinner": "AutoChessTeam.Player",
+    "minDriverIssuedCommands": 1,
+    "minAttributeChanges": 1,
+    "minExecutionOutputs": 1,
+    "minCueRequests": "Auto"
+  },
+  "units": [
+    {
+      "id": "player-vanguard",
+      "displayName": "霜卫先锋",
+      "archetypeName": "前排战士",
+      "team": "AutoChessTeam.Player",
+      "slot": 0,
+      "health": 72.0,
+      "energy": 8.0,
+      "primaryAbility": "AbilityPlayerAttack",
+      "finisherAbility": "AbilityPlayerExecute",
+      "finisherHealthThreshold": 44.0,
+      "primaryTargetPolicy": "AutoChessTargetPolicy.Frontline",
+      "finisherTargetPolicy": "AutoChessTargetPolicy.LowestHealth"
+    },
+    {
+      "id": "player-ranger",
+      "displayName": "游侠射手",
+      "archetypeName": "后排射手",
+      "team": "AutoChessTeam.Player",
+      "slot": 1,
+      "health": 54.0,
+      "energy": 8.0,
+      "primaryAbility": "AbilityPlayerAttack",
+      "finisherAbility": "AbilityPlayerExecute",
+      "finisherHealthThreshold": 44.0,
+      "primaryTargetPolicy": "AutoChessTargetPolicy.LowestHealth",
+      "finisherTargetPolicy": "AutoChessTargetPolicy.LowestHealth"
+    },
+    {
+      "id": "enemy-brute",
+      "displayName": "荒原斗士",
+      "archetypeName": "前排斗士",
+      "team": "AutoChessTeam.Enemy",
+      "slot": 0,
+      "health": 48.0,
+      "energy": 8.0,
+      "primaryAbility": "AbilityEnemyAttack",
+      "finisherAbility": "None",
+      "finisherHealthThreshold": 0.0,
+      "primaryTargetPolicy": "AutoChessTargetPolicy.Frontline",
+      "finisherTargetPolicy": "AutoChessTargetPolicy.Frontline"
+    },
+    {
+      "id": "enemy-caster",
+      "displayName": "秘术术士",
+      "archetypeName": "后排法师",
+      "team": "AutoChessTeam.Enemy",
+      "slot": 1,
+      "health": 42.0,
+      "energy": 8.0,
+      "primaryAbility": "AbilityEnemyAttack",
+      "finisherAbility": "None",
+      "finisherHealthThreshold": 0.0,
+      "primaryTargetPolicy": "AutoChessTargetPolicy.Frontline",
+      "finisherTargetPolicy": "AutoChessTargetPolicy.Frontline"
+    }
+  ]
+}

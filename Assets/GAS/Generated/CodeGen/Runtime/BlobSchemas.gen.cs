@@ -16,10 +16,13 @@ namespace GAS.Runtime.Generated
         public int AbilityCode;
         public int Level;
         public int TimelineId;
+        public int PrimaryGameplayEffectCode;
+        public int SecondaryGameplayEffectCode;
         public int ActivationOwnedTagCode;
         public int CostGameplayEffectCode;
         public int CooldownGameplayEffectCode;
         public int CooldownFrames;
+        public int TargetRuleCode;
     }
 
     /// <summary>
@@ -66,6 +69,12 @@ namespace GAS.Runtime.Generated
         public float ModifierMagnitude;
         public int ModifierMagnitudeSource;
         public int ModifierMagnitudeKey;
+        public BlobArray<int> ModifierAttributeSetCodes;
+        public BlobArray<int> ModifierAttributeCodes;
+        public BlobArray<int> ModifierOperations;
+        public BlobArray<float> ModifierMagnitudes;
+        public BlobArray<int> ModifierMagnitudeSources;
+        public BlobArray<int> ModifierMagnitudeKeys;
         public int DurationFrames;
         public int PeriodFrames;
         public int PeriodGameplayEffectCode;
@@ -95,69 +104,5 @@ namespace GAS.Runtime.Generated
         public int GameplayTagCode;
         public BlobArray<int> ParentCodes;
         public BlobArray<int> ChildCodes;
-    }
-
-    /// <summary>
-    /// BlobAsset definition generated for ScenarioSpawn.
-    /// </summary>
-    public struct ScenarioSpawnDefinitionBlob
-    {
-        public int ScenarioSpawnCode;
-        public int ScenarioId;
-        public int UnitCode;
-        public int Team;
-        public int BoardX;
-        public int BoardY;
-        public int TurnOrder;
-    }
-
-    /// <summary>
-    /// BlobAsset definition generated for Summon.
-    /// </summary>
-    public struct SummonDefinitionBlob
-    {
-        public int SummonGameplayEffectCode;
-        public int SummonedUnitCode;
-        public int FixedTagCode;
-        public int PrimaryAbilityCode;
-        public int LifetimeTurns;
-        public int SlotOffset;
-        public int BoardXOffset;
-        public int BoardYOffset;
-        public int TurnOrderOffset;
-        public float Health;
-        public float Mana;
-        public float Shield;
-        public float MaxHealth;
-        public float MaxMana;
-        public float MaxShield;
-        public int PrimaryTargetPolicy;
-    }
-
-    /// <summary>
-    /// BlobAsset definition generated for Unit.
-    /// </summary>
-    public struct UnitDefinitionBlob
-    {
-        public int UnitCode;
-        public BlobString Name;
-        public int FixedTagCode;
-        public int PrimaryAbilityCode;
-        public int ManaAbilityCode;
-        public int ControlAbilityCode;
-        public int SupportAbilityCode;
-        public int SummonAbilityCode;
-        public float Health;
-        public float Mana;
-        public float Shield;
-        public float ArcaneResistance;
-        public float MaxHealth;
-        public float MaxMana;
-        public float MaxShield;
-        public float MaxArcaneResistance;
-        public int PrimaryTargetPolicy;
-        public int ManaTargetPolicy;
-        public int ControlTargetPolicy;
-        public int SupportTargetPolicy;
     }
 }

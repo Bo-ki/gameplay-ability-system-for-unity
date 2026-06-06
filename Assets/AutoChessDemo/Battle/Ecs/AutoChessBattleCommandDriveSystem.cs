@@ -17,13 +17,26 @@ namespace GAS.AutoChessDemo
 
         public void OnCreate(ref SystemState state)
         {
-            _driverQuery = SystemAPI.QueryBuilder()
-                .WithAll<AutoChessBattleDriverComponent>()
-                .Build();
-            _unitQuery = SystemAPI.QueryBuilder()
-                .WithAll<AutoChessBattleUnitComponent, AttributeValueBuffer, TagMaskComponent>()
-                .WithNone<ASCDestroyingComponent>()
-                .Build();
+            _driverQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadWrite<AutoChessBattleDriverComponent>(),
+                },
+            });
+            _unitQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<AutoChessBattleUnitComponent>(),
+                    ComponentType.ReadOnly<AttributeValueBuffer>(),
+                    ComponentType.ReadOnly<TagMaskComponent>(),
+                },
+                None = new[]
+                {
+                    ComponentType.ReadOnly<ASCDestroyingComponent>(),
+                },
+            });
 
             state.RequireForUpdate<GlobalTimer>();
             state.RequireForUpdate(_driverQuery);
@@ -76,8 +89,12 @@ namespace GAS.AutoChessDemo
             var disposeCacheHandle = targetCache.Dispose(flushHandle);
             var disposeStatsHandle = stats.Dispose(flushHandle);
             state.Dependency = JobHandle.CombineDependencies(
-                disposeUnitsHandle,
-                JobHandle.CombineDependencies(disposeCacheHandle, disposeStatsHandle));
+                collectHandle,
+                JobHandle.CombineDependencies(
+                    flushHandle,
+                    JobHandle.CombineDependencies(
+                        disposeUnitsHandle,
+                        JobHandle.CombineDependencies(disposeCacheHandle, disposeStatsHandle))));
         }
 
         public void OnDestroy(ref SystemState state)

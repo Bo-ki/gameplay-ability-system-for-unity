@@ -4,10 +4,204 @@ using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+#if UNITY_EDITOR
 using UnityEngine;
+#endif
 
 namespace GAS.Editor
 {
+#if !GAS_CODEGEN_BOOTSTRAP_ONLY
+    public static class GasCodeGenCli
+    {
+        public static int Run(string[] args)
+        {
+            try
+            {
+                var projectRoot = GasCodeGenEnvironment.ResolveProjectRootArgument(args);
+                GasCodeGenEnvironment.UseOfflineProjectRoot(projectRoot);
+
+#if UNITY_EDITOR
+                if (!GasCodeGenEnvironment.IsOffline && !GasCodeGenProcessGate.RunDefault())
+                    return 2;
+#endif
+
+                return GasCodeGenPipeline.TryRunAll(refreshAssetDatabase: false)
+                    ? 0
+                    : 3;
+            }
+            catch (Exception ex)
+            {
+                GasCodeGenEnvironment.LogException(ex);
+                return 1;
+            }
+        }
+    }
+#endif
+
+    internal static class GasCodeGenEnvironment
+    {
+        private static string s_projectRootOverride;
+        private static GasCodeGenSettings s_activeSettings;
+
+        public static bool IsOffline => !string.IsNullOrWhiteSpace(s_projectRootOverride);
+
+        public static GasCodeGenSettings ActiveSettings => s_activeSettings;
+
+        public static void UseOfflineProjectRoot(string projectRoot)
+        {
+            if (string.IsNullOrWhiteSpace(projectRoot))
+                throw new ArgumentException("Project root is required.", nameof(projectRoot));
+
+            s_projectRootOverride = Path.GetFullPath(projectRoot);
+        }
+
+        public static string ProjectRoot
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(s_projectRootOverride))
+                    return s_projectRootOverride;
+
+#if UNITY_EDITOR
+                return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+#else
+                return Directory.GetCurrentDirectory();
+#endif
+            }
+        }
+
+        public static void SetActiveSettings(GasCodeGenSettings settings)
+        {
+            s_activeSettings = settings;
+        }
+
+        public static string ResolveProjectPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return ProjectRoot;
+
+            return Path.GetFullPath(Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(ProjectRoot, path));
+        }
+
+        public static string ResolveProjectRootArgument(string[] args)
+        {
+            if (args != null)
+            {
+                for (var i = 0; i < args.Length; i++)
+                {
+                    var arg = args[i];
+                    if (arg == "--projectRoot" && i + 1 < args.Length)
+                        return args[i + 1];
+
+                    const string prefix = "--projectRoot=";
+                    if (arg != null && arg.StartsWith(prefix, StringComparison.Ordinal))
+                        return arg.Substring(prefix.Length);
+                }
+            }
+
+            return Directory.GetCurrentDirectory();
+        }
+
+        public static void RefreshAssetDatabase()
+        {
+            if (IsOffline)
+                return;
+
+#if UNITY_EDITOR
+            UnityEditor.AssetDatabase.Refresh();
+#endif
+        }
+
+        public static void ClearProgressBar()
+        {
+            if (IsOffline)
+                return;
+
+#if UNITY_EDITOR
+            UnityEditor.EditorUtility.ClearProgressBar();
+#endif
+        }
+
+        public static void DisplayProgressBar(string title, string info, float progress)
+        {
+            if (IsOffline)
+                return;
+
+#if UNITY_EDITOR
+            UnityEditor.EditorUtility.DisplayProgressBar(title, info, progress);
+#endif
+        }
+
+        public static void Log(string message)
+        {
+            if (IsOffline)
+                Console.WriteLine(message);
+#if UNITY_EDITOR
+            else
+                UnityEngine.Debug.Log(message);
+#else
+            else
+                Console.WriteLine(message);
+#endif
+        }
+
+        public static void LogError(string message)
+        {
+            if (IsOffline)
+                Console.Error.WriteLine(message);
+#if UNITY_EDITOR
+            else
+                UnityEngine.Debug.LogError(message);
+#else
+            else
+                Console.Error.WriteLine(message);
+#endif
+        }
+
+        public static void LogException(Exception ex)
+        {
+            if (IsOffline)
+                WriteException(ex);
+#if UNITY_EDITOR
+            else
+                UnityEngine.Debug.LogException(ex);
+#else
+            else
+                WriteException(ex);
+#endif
+        }
+
+        private static void WriteException(Exception ex)
+        {
+            var current = ex;
+            var depth = 0;
+            while (current != null)
+            {
+                Console.Error.WriteLine($"[{depth}] {current.GetType().FullName}: {SafeString(() => current.Message)}");
+                var stackTrace = SafeString(() => current.StackTrace);
+                if (!string.IsNullOrWhiteSpace(stackTrace))
+                    Console.Error.WriteLine(stackTrace);
+
+                current = current.InnerException;
+                depth++;
+            }
+        }
+
+        private static string SafeString(Func<string> read)
+        {
+            try
+            {
+                return read() ?? string.Empty;
+            }
+            catch (Exception nested)
+            {
+                return $"<failed to read exception text: {nested.GetType().FullName}>";
+            }
+        }
+    }
+
     public sealed class GasCodeGenContext
     {
         private GasCodeGenContext(
@@ -46,9 +240,15 @@ namespace GAS.Editor
 
         public static GasCodeGenContext Create(bool forceRefresh = false)
         {
-            var setting = GASSettingAsset.LoadOrCreate();
-            var codeGenSettings = GasCodeGenSettings.From(setting);
-            var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            var codeGenSettings = GasCodeGenEnvironment.IsOffline
+                ? GasCodeGenSettings.CreateDefault()
+#if UNITY_EDITOR
+                : GasCodeGenSettings.From(GASSettingAsset.LoadOrCreate());
+#else
+                : GasCodeGenSettings.CreateDefault();
+#endif
+            GasCodeGenEnvironment.SetActiveSettings(codeGenSettings);
+            var projectRoot = GasCodeGenEnvironment.ProjectRoot;
             var outputDir = ResolveProjectPath(projectRoot, codeGenSettings.OutputPath);
             var rowTypes = GasRowScanner.Scan(forceRefresh);
             var rows = RowMetadataFactory.BuildAll(rowTypes, codeGenSettings);
@@ -83,6 +283,7 @@ namespace GAS.Editor
                 builder.Append(row.RowType.AssemblyQualifiedName).Append('|')
                     .Append(row.DomainName).Append('|')
                     .Append(row.CodeFieldName).Append('|')
+                    .Append(string.Join(",", row.BakerKeyFieldNames ?? Array.Empty<string>())).Append('|')
                     .Append(row.DefinitionKind).Append('|')
                     .Append(row.RowFactoryTypeName).Append('|')
                     .Append(row.RowFactoryMethodName).Append('|');
@@ -100,6 +301,10 @@ namespace GAS.Editor
                 for (var j = 0; j < rowValues.Count; j++)
                 {
                     builder.Append(rowValues[j].Code).Append(':');
+                    var bakerKeyValues = rowValues[j].BakerKeyValues ?? Array.Empty<int>();
+                    for (var k = 0; k < bakerKeyValues.Count; k++)
+                        builder.Append(bakerKeyValues[k]).Append(',');
+                    builder.Append(':');
                     AppendRowValueHash(builder, rowValues[j].Row);
                     builder.Append('|');
                 }
@@ -169,12 +374,14 @@ namespace GAS.Editor
             string outputPath,
             string rootNamespace,
             IReadOnlyList<string> rowTypePrefixesToStrip,
+            string configProjectPath,
             string lubanCodeOutputPath,
             string lubanDataOutputPath)
         {
             OutputPath = outputPath;
             RootNamespace = rootNamespace;
             RowTypePrefixesToStrip = rowTypePrefixesToStrip;
+            ConfigProjectPath = configProjectPath;
             LubanCodeOutputPath = lubanCodeOutputPath;
             LubanDataOutputPath = lubanDataOutputPath;
         }
@@ -185,10 +392,13 @@ namespace GAS.Editor
 
         public IReadOnlyList<string> RowTypePrefixesToStrip { get; }
 
+        public string ConfigProjectPath { get; }
+
         public string LubanCodeOutputPath { get; }
 
         public string LubanDataOutputPath { get; }
 
+#if UNITY_EDITOR
         public static GasCodeGenSettings From(GASSettingAsset setting)
         {
             return new GasCodeGenSettings(
@@ -197,8 +407,21 @@ namespace GAS.Editor
                     ? "GAS.Runtime.Generated"
                     : setting.CodeGenerateRootNamespace.Trim(),
                 ParseCsv(setting.CodeGenerateRowTypePrefixesToStrip),
+                setting.ConfigProjectPath,
                 setting.TableClassCodeOutpuPath,
                 setting.TableOutpuPath);
+        }
+#endif
+
+        public static GasCodeGenSettings CreateDefault()
+        {
+            return new GasCodeGenSettings(
+                "Assets/GAS/Generated/CodeGen",
+                "GAS.Runtime.Generated",
+                Array.Empty<string>(),
+                "EX_GAS_Config/ProjectConfigTable/exgas_config",
+                "Assets/DataGenerated/Luban/CSharp",
+                "Assets/DataGenerated/Luban/Json/GAS");
         }
 
         private static IReadOnlyList<string> ParseCsv(string value)

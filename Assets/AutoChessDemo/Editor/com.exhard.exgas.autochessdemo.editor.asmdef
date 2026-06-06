@@ -1,0 +1,18 @@
+{
+    "name": "com.exhard.exgas.autochessdemo.editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:dd8391f2d6ed41b192a25d9d07ee728b"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

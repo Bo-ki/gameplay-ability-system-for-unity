@@ -22,6 +22,7 @@ namespace GAS.Editor
             var definitionName = $"{domainName}Definition";
             var blobSchemaName = $"{definitionName}Blob";
             var codeFieldName = InferCodeFieldName(rowType, domainName);
+            var bakerKeyFieldNames = InferBakerKeyFieldNames(rowType, domainName, codeFieldName);
             var rowFactory = FindRowFactory(rowType);
 
             return new RowMetadata
@@ -29,6 +30,7 @@ namespace GAS.Editor
                 RowType = rowType,
                 DomainName = domainName,
                 CodeFieldName = codeFieldName,
+                BakerKeyFieldNames = bakerKeyFieldNames,
                 DefinitionKind = InferDefinitionKind(domainName),
                 BlobSchemaName = blobSchemaName,
                 LookupName = $"{definitionName}Lookup",
@@ -40,7 +42,7 @@ namespace GAS.Editor
                 RowFactoryTypeName = rowFactory.TypeName,
                 RowFactoryMethodName = rowFactory.MethodName,
                 BlobMembers = BuildBlobMembers(rowType),
-                RowValues = BuildRowValues(rowType, codeFieldName, rowFactory),
+                RowValues = BuildRowValues(rowType, codeFieldName, bakerKeyFieldNames, rowFactory),
             };
         }
 
@@ -141,6 +143,24 @@ namespace GAS.Editor
             }
         }
 
+        private static IReadOnlyList<string> InferBakerKeyFieldNames(
+            Type rowType,
+            string domainName,
+            string codeFieldName)
+        {
+            var fieldNames = new HashSet<string>(
+                rowType.GetFields(BindingFlags.Public | BindingFlags.Instance).Select(field => field.Name));
+
+            if (domainName == "Attribute"
+                && fieldNames.Contains("AttributeSetCode")
+                && fieldNames.Contains("AttributeCode"))
+            {
+                return new[] { "AttributeSetCode", "AttributeCode" };
+            }
+
+            return new[] { codeFieldName };
+        }
+
         private static string InferCodeComponentType(string domainName)
         {
             return "GASDefinitionCodeComponent";
@@ -193,6 +213,7 @@ namespace GAS.Editor
         private static IReadOnlyList<RowValueSnapshot> BuildRowValues(
             Type rowType,
             string codeFieldName,
+            IReadOnlyList<string> bakerKeyFieldNames,
             RowFactoryInfo rowFactory)
         {
             var rows = rowFactory.Method != null
@@ -209,8 +230,24 @@ namespace GAS.Editor
                 {
                     Row = row,
                     Code = Convert.ToInt32(GetRowMemberValue(rowType, row, codeFieldName) ?? 0),
+                    BakerKeyValues = BuildBakerKeyValues(rowType, row, bakerKeyFieldNames),
                 });
             }
+
+            return result;
+        }
+
+        private static IReadOnlyList<int> BuildBakerKeyValues(
+            Type rowType,
+            object row,
+            IReadOnlyList<string> bakerKeyFieldNames)
+        {
+            if (bakerKeyFieldNames == null || bakerKeyFieldNames.Count == 0)
+                return Array.Empty<int>();
+
+            var result = new int[bakerKeyFieldNames.Count];
+            for (var i = 0; i < bakerKeyFieldNames.Count; i++)
+                result[i] = Convert.ToInt32(GetRowMemberValue(rowType, row, bakerKeyFieldNames[i]) ?? 0);
 
             return result;
         }

@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEditor;
-using Debug = UnityEngine.Debug;
 
 namespace GAS.Editor
 {
@@ -19,40 +17,45 @@ namespace GAS.Editor
             new BakerGluePhase(),
             new ComponentTypeSetPhase(),
             new QueryLayoutPhase(),
+            new AutoChessDemoConfigPhase(),
             new ValidationReportPhase(),
         };
 
         public static void RunAll()
         {
-            Run(s_corePhases);
+            TryRunAll();
         }
 
-        internal static void Run(IEnumerable<IGasCodeGenPhase> phases)
+        public static bool TryRunAll()
+        {
+            return TryRunAll(refreshAssetDatabase: true);
+        }
+
+        public static bool TryRunAll(bool refreshAssetDatabase)
+        {
+            return Run(s_corePhases, refreshAssetDatabase);
+        }
+
+        internal static bool Run(IEnumerable<IGasCodeGenPhase> phases, bool refreshAssetDatabase = true)
         {
             var phaseList = phases as IReadOnlyList<IGasCodeGenPhase> ?? phases.ToArray();
+            var lubanRowsPath = LubanNormalizedRowBootstrap.Generate(CreateSettings());
             var context = GasCodeGenContext.Create(true);
             var hasRows = context.RowTypes.Count > 0;
             if (!hasRows)
-                Debug.LogWarning("[GasCodeGenPipeline] 未找到任何 *DefinitionRow 类型。将执行不依赖 RowMetadata 的独立 Phase，并跳过 Row 驱动 Phase。");
+                throw new InvalidOperationException("[GasCodeGenPipeline] 未找到任何 Definition Row。Luban / SourceGenerator 输入 gate 失败，禁止 partial generation 输出过期 artifact。");
 
             var manifest = new GasCodeGenManifest(context.ProjectRoot, context.OutputDir, context.InputHash);
+            manifest.AddGeneratedFile("LubanNormalizedRows", lubanRowsPath, "Editor", false);
             var errors = new List<string>();
             var orphanCleanupRan = false;
             var executedCount = 0;
-            var skippedCount = 0;
 
             foreach (var phase in phaseList)
             {
-                if (!hasRows && phase.RequiresRows)
-                {
-                    skippedCount++;
-                    Debug.LogWarning($"[GasCodeGenPipeline] 跳过 {phase.PhaseName}: 缺少 RowMetadata。");
-                    continue;
-                }
-
                 try
                 {
-                    if (hasRows && !orphanCleanupRan && phase.PhaseName == "ValidationReport")
+                    if (!orphanCleanupRan && phase.PhaseName == "ValidationReport")
                     {
                         context.OrphansDeleted = manifest.DeleteOrphanedFiles();
                         orphanCleanupRan = true;
@@ -60,28 +63,44 @@ namespace GAS.Editor
 
                     phase.Execute(context, manifest);
                     executedCount++;
-                    Debug.Log($"[GasCodeGenPipeline] {phase.PhaseName} 完成: {string.Join(", ", phase.OutputFileNames)}");
+                    GasCodeGenEnvironment.Log($"[GasCodeGenPipeline] {phase.PhaseName} 完成: {string.Join(", ", phase.OutputFileNames)}");
                 }
                 catch (Exception ex)
                 {
                     errors.Add($"{phase.PhaseName}: {ex.Message}");
-                    Debug.LogException(ex);
+                    GasCodeGenEnvironment.LogException(ex);
                 }
             }
 
-            if (hasRows && !orphanCleanupRan)
+            if (!orphanCleanupRan)
                 context.OrphansDeleted = manifest.DeleteOrphanedFiles();
 
-            if (hasRows)
-                manifest.Save();
-            AssetDatabase.Refresh();
+            manifest.Save();
+            if (refreshAssetDatabase)
+                GasCodeGenEnvironment.RefreshAssetDatabase();
 
             if (errors.Count > 0)
-                Debug.LogError($"[GasCodeGenPipeline] {errors.Count} 个 Phase 失败:\n{string.Join("\n", errors)}");
-            else if (!hasRows)
-                Debug.Log($"[GasCodeGenPipeline] Partial generation 完成。Rows=0, Executed={executedCount}, Skipped={skippedCount}, ManifestSaved=False, OrphanCleanup=False");
+            {
+                GasCodeGenEnvironment.LogError($"[GasCodeGenPipeline] {errors.Count} 个 Phase 失败:\n{string.Join("\n", errors)}");
+                return false;
+            }
             else
-                Debug.Log($"[GasCodeGenPipeline] 全部完成。Rows={context.Rows.Count}, Phases={phaseList.Count}, OrphansDeleted={context.OrphansDeleted}");
+            {
+                GasCodeGenEnvironment.Log($"[GasCodeGenPipeline] 全部完成。Rows={context.Rows.Count}, Phases={phaseList.Count}, OrphansDeleted={context.OrphansDeleted}");
+                return true;
+            }
+        }
+
+        private static GasCodeGenSettings CreateSettings()
+        {
+            if (GasCodeGenEnvironment.IsOffline)
+                return GasCodeGenSettings.CreateDefault();
+
+#if UNITY_EDITOR
+            return GasCodeGenSettings.From(GASSettingAsset.LoadOrCreate());
+#else
+            return GasCodeGenSettings.CreateDefault();
+#endif
         }
     }
 }

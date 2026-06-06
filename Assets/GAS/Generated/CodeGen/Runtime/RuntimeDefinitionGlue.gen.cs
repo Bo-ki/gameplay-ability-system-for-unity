@@ -50,22 +50,21 @@ namespace GAS.Runtime.Generated
             return true;
         }
 
-        public static int WriteGECommandSeeds(
+        public static bool TryBuildGECommandSeed(
             ref GASDefinitionCatalogBlob catalog,
             in AbilityActivationPlanRecord plan,
+            int seedKind,
+            GEEffectCommandSource source,
+            int gameplayEffectCode,
             int contextId,
             int parentContextId,
-            ref NativeList<GECommandSeedRecord> seeds)
+            out GECommandSeedRecord seed)
         {
+            seed = default;
             if (!plan.Succeeded)
-                return 0;
+                return false;
 
-            var count = 0;
-            count += TryAppendSeed(ref catalog, in plan, GASGESeedKind.Cost, GEEffectCommandSource.Ability, plan.CostGameplayEffectCode, contextId, parentContextId, ref seeds) ? 1 : 0;
-            count += TryAppendSeed(ref catalog, in plan, GASGESeedKind.Cooldown, GEEffectCommandSource.Ability, plan.CooldownGameplayEffectCode, contextId, parentContextId, ref seeds) ? 1 : 0;
-            count += TryAppendSeed(ref catalog, in plan, GASGESeedKind.Primary, GEEffectCommandSource.Ability, plan.PrimaryGameplayEffectCode, contextId, parentContextId, ref seeds) ? 1 : 0;
-            count += TryAppendSeed(ref catalog, in plan, GASGESeedKind.Secondary, GEEffectCommandSource.Ability, plan.SecondaryGameplayEffectCode, contextId, parentContextId, ref seeds) ? 1 : 0;
-            return count;
+            return TryBuildSeed(ref catalog, in plan, seedKind, source, gameplayEffectCode, contextId, parentContextId, out seed);
         }
 
         public static int AppendModifierRecords(
@@ -108,7 +107,7 @@ namespace GAS.Runtime.Generated
             return appended;
         }
 
-        private static bool TryAppendSeed(
+        private static bool TryBuildSeed(
             ref GASDefinitionCatalogBlob catalog,
             in AbilityActivationPlanRecord plan,
             int seedKind,
@@ -116,8 +115,9 @@ namespace GAS.Runtime.Generated
             int gameplayEffectCode,
             int contextId,
             int parentContextId,
-            ref NativeList<GECommandSeedRecord> seeds)
+            out GECommandSeedRecord seed)
         {
+            seed = default;
             if (gameplayEffectCode <= 0)
                 return false;
 
@@ -142,7 +142,7 @@ namespace GAS.Runtime.Generated
                     flags |= GASGECommandSeedFlags.ActiveMutation;
             }
 
-            seeds.Add(new GECommandSeedRecord
+            seed = new GECommandSeedRecord
             {
                 Frame = plan.Frame,
                 SeedKind = seedKind,
@@ -158,7 +158,7 @@ namespace GAS.Runtime.Generated
                 DurationFrameOverride = durationFrameOverride,
                 FailureReasonCode = failureReason,
                 Flags = flags,
-            });
+            };
             return failureReason == GASFailureReasonCodes.None;
         }
     }

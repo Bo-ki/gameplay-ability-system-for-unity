@@ -106,7 +106,6 @@ namespace GAS.AutoChessDemo
                     unit.Definition.DisplayName,
                     Room.GetPlayerName(unit.Definition.Team),
                     unit.Definition.ArchetypeName,
-                    unit.GasHandle.AscEntity,
                     unit.Definition.Team,
                     unit.Definition.Slot,
                     unit.Health,
@@ -114,6 +113,14 @@ namespace GAS.AutoChessDemo
                     unit.Alive);
             }
 
+            return units;
+        }
+
+        public AutoChessBattleRuntimeUnitIndex[] CreateRuntimeUnitIndex()
+        {
+            var units = new AutoChessBattleRuntimeUnitIndex[_units.Length];
+            for (var i = 0; i < _units.Length; i++)
+                units[i] = new AutoChessBattleRuntimeUnitIndex(i, _units[i].GasHandle.AscEntity);
             return units;
         }
 

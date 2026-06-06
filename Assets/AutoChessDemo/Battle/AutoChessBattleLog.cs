@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using Unity.Entities;
-using GAS.Runtime;
 
 namespace GAS.AutoChessDemo
 {
@@ -67,13 +65,12 @@ namespace GAS.AutoChessDemo
 
         public static AutoChessBattleLogSnapshot Build(
             in AutoChessGameRoomDefinition room,
-            in GasStructuredLogExportSnapshot structuredLog,
-            AutoChessBattleUnitResult[] units,
+            in AutoChessBattleReport report,
             AutoChessTeam winner,
             int battleTicks)
         {
             var lines = new List<AutoChessBattleLogLine>(128);
-            var unitMap = BuildUnitMap(units);
+            var unitMap = BuildUnitMap(report.Units);
 
             Add(lines, 0, AutoChessBattleLogKind.System,
                 "游戏开始：" + room.GetPlayerName(AutoChessTeam.Player)
@@ -82,18 +79,18 @@ namespace GAS.AutoChessDemo
                 + "，棋子数=" + room.Units.Length.ToString(CultureInfo.InvariantCulture) + "。");
             AppendDeploymentLines(lines, room);
 
-            var entries = structuredLog.Entries ?? Array.Empty<GasStructuredLogEntry>();
+            var events = report.Events ?? Array.Empty<AutoChessBattleReportEvent>();
             var skippedMirrorEvents = 0;
-            for (var i = 0; i < entries.Length && lines.Count < MaxLogLines - 1; i++)
+            for (var i = 0; i < events.Length && lines.Count < MaxLogLines - 1; i++)
             {
-                var entry = entries[i];
-                if (ShouldFoldMirrorBattleEvent(unitMap, in entry))
+                var evt = events[i];
+                if (ShouldFoldMirrorBattleEvent(unitMap, in evt))
                 {
                     skippedMirrorEvents++;
                     continue;
                 }
 
-                if (TryAppendBattleEvent(lines, unitMap, in entry))
+                if (TryAppendBattleEvent(lines, unitMap, in evt))
                     continue;
             }
 
@@ -117,18 +114,18 @@ namespace GAS.AutoChessDemo
             return new AutoChessBattleLogSnapshot(lines.ToArray());
         }
 
-        private static Dictionary<Entity, AutoChessBattleUnitResult> BuildUnitMap(
-            AutoChessBattleUnitResult[] units)
+        private static Dictionary<int, AutoChessBattleReportUnit> BuildUnitMap(
+            AutoChessBattleReportUnit[] units)
         {
-            var map = new Dictionary<Entity, AutoChessBattleUnitResult>();
+            var map = new Dictionary<int, AutoChessBattleReportUnit>();
             if (units == null)
                 return map;
 
             for (var i = 0; i < units.Length; i++)
             {
                 var unit = units[i];
-                if (unit.AscEntity != Entity.Null && !map.ContainsKey(unit.AscEntity))
-                    map.Add(unit.AscEntity, unit);
+                if (unit.UnitIndex >= 0 && !map.ContainsKey(unit.UnitIndex))
+                    map.Add(unit.UnitIndex, unit);
             }
 
             return map;
@@ -169,102 +166,78 @@ namespace GAS.AutoChessDemo
 
         private static bool TryAppendBattleEvent(
             List<AutoChessBattleLogLine> lines,
-            Dictionary<Entity, AutoChessBattleUnitResult> unitMap,
-            in GasStructuredLogEntry entry)
+            Dictionary<int, AutoChessBattleReportUnit> unitMap,
+            in AutoChessBattleReportEvent evt)
         {
-            if (entry.ReplayKind == EDebugReplayEventKind.GameplayEvent
-                && entry.GameplayEventType == EGameplayEventType.ExecutionCalculationOutputUpdated
-                && entry.EventCode == AutoChessBattleRules.ExecutionCalculationExecuteDamage)
+            if (evt.Kind == AutoChessBattleReportEventKind.SkillResolved)
             {
-                Add(lines, entry.Frame, AutoChessBattleLogKind.Skill,
-                    ResolveUnitName(unitMap, entry.SourceAsc)
+                Add(lines, evt.Frame, AutoChessBattleLogKind.Skill,
+                    ResolveUnitName(unitMap, evt.SourceUnitIndex)
                     + " 对 "
-                    + ResolveUnitName(unitMap, entry.TargetAsc)
+                    + ResolveUnitName(unitMap, evt.TargetUnitIndex)
                     + " 发动了 "
-                    + AutoChessBattleRules.GetAbilityName(AutoChessBattleRules.AbilityPlayerExecute)
+                    + AutoChessBattleRules.GetAbilityName(evt.AbilityCode)
                     + "，造成 "
-                    + Format(entry.Value)
+                    + Format(evt.Value)
                     + " 点处决伤害。");
                 return true;
             }
 
-            if (entry.ReplayKind != EDebugReplayEventKind.AttributeChange
-                || entry.AttrSetCode != AutoChessBattleRules.AttributeSetCombat
-                || entry.AttributeCode != AutoChessBattleRules.AttributeHealth
-                || entry.NewValue >= entry.OldValue)
+            if (evt.Kind == AutoChessBattleReportEventKind.DamageApplied)
             {
-                return false;
+                Add(lines, evt.Frame, AutoChessBattleLogKind.Damage,
+                    ResolveUnitName(unitMap, evt.SourceUnitIndex)
+                    + " 对 "
+                    + ResolveUnitName(unitMap, evt.TargetUnitIndex)
+                    + " 发动了 "
+                    + AutoChessBattleRules.GetActionNameFromGameplayEffect(evt.GameplayEffectCode)
+                    + "，造成 "
+                    + Format(evt.Value)
+                    + " 点伤害（HP "
+                    + Format(evt.OldValue)
+                    + " -> "
+                    + Format(evt.NewValue)
+                    + "）。");
+                return true;
             }
 
-            var damage = entry.OldValue - entry.NewValue;
-            Add(lines, entry.Frame, AutoChessBattleLogKind.Damage,
-                ResolveUnitName(unitMap, entry.SourceAsc)
-                + " 对 "
-                + ResolveUnitName(unitMap, entry.TargetAsc)
-                + " 发动了 "
-                + AutoChessBattleRules.GetActionNameFromGameplayEffect(entry.EventCode)
-                + "，造成 "
-                + Format(damage)
-                + " 点伤害（HP "
-                + Format(entry.OldValue)
-                + " -> "
-                + Format(entry.NewValue)
-                + "）。");
-
-            if (entry.NewValue <= 0f && entry.OldValue > 0f)
+            if (evt.Kind == AutoChessBattleReportEventKind.UnitDied)
             {
-                Add(lines, entry.Frame, AutoChessBattleLogKind.Death,
-                    ResolveUnitName(unitMap, entry.TargetAsc)
+                Add(lines, evt.Frame, AutoChessBattleLogKind.Death,
+                    ResolveUnitName(unitMap, evt.TargetUnitIndex)
                     + " 受到致命伤害，死亡。");
+                return true;
             }
 
-            return true;
+            return false;
         }
 
         private static bool ShouldFoldMirrorBattleEvent(
-            Dictionary<Entity, AutoChessBattleUnitResult> unitMap,
-            in GasStructuredLogEntry entry)
+            Dictionary<int, AutoChessBattleReportUnit> unitMap,
+            in AutoChessBattleReportEvent evt)
         {
-            if (entry.Frame <= 0)
+            if (evt.Frame <= 0)
                 return false;
 
-            return IsBeyondDetailedGroup(unitMap, entry.SourceAsc)
-                   || IsBeyondDetailedGroup(unitMap, entry.TargetAsc);
+            return IsBeyondDetailedGroup(unitMap, evt.SourceUnitIndex)
+                   || IsBeyondDetailedGroup(unitMap, evt.TargetUnitIndex);
         }
 
         private static bool IsBeyondDetailedGroup(
-            Dictionary<Entity, AutoChessBattleUnitResult> unitMap,
-            Entity entity)
+            Dictionary<int, AutoChessBattleReportUnit> unitMap,
+            int unitIndex)
         {
-            if (entity == Entity.Null || !unitMap.TryGetValue(entity, out var unit))
+            if (unitIndex < 0 || !unitMap.TryGetValue(unitIndex, out var unit))
                 return false;
 
-            return ResolveBattleGroup(unit.Id) >= MaxDetailedBattleGroups;
-        }
-
-        private static int ResolveBattleGroup(string unitId)
-        {
-            if (string.IsNullOrEmpty(unitId))
-                return 0;
-
-            var marker = unitId.LastIndexOf("-g", StringComparison.Ordinal);
-            if (marker < 0 || marker + 2 >= unitId.Length)
-                return 0;
-
-            return int.TryParse(
-                unitId.Substring(marker + 2),
-                NumberStyles.Integer,
-                CultureInfo.InvariantCulture,
-                out var group)
-                ? group
-                : 0;
+            return unit.BattleGroup >= MaxDetailedBattleGroups;
         }
 
         private static string ResolveUnitName(
-            Dictionary<Entity, AutoChessBattleUnitResult> unitMap,
-            Entity entity)
+            Dictionary<int, AutoChessBattleReportUnit> unitMap,
+            int unitIndex)
         {
-            if (entity != Entity.Null && unitMap.TryGetValue(entity, out var unit))
+            if (unitIndex >= 0 && unitMap.TryGetValue(unitIndex, out var unit))
                 return unit.OwnerName + "的" + unit.DisplayName;
 
             return "战场系统";

@@ -15,13 +15,16 @@ namespace GAS.AutoChessDemo
 
         public void OnCreate(ref SystemState state)
         {
-            _driverQuery = SystemAPI.QueryBuilder()
-                .WithAll<AutoChessBattleDriverComponent>()
-                .Build();
+            _driverQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadWrite<AutoChessBattleDriverComponent>(),
+                },
+            });
 
             state.RequireForUpdate<GlobalTimer>();
             state.RequireForUpdate<GEEffectCommandStreamComponent>();
-            state.RequireForUpdate<GameplayEventBusComponent>();
             state.RequireForUpdate(_driverQuery);
         }
 
@@ -37,22 +40,17 @@ namespace GAS.AutoChessDemo
                 return;
 
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
-            var eventBusEntity = SystemAPI.GetSingletonEntity<GameplayEventBusComponent>();
-
             state.Dependency = new ExecuteDamageCalculationJob
             {
                 DriverEntity = driverEntity,
                 Driver = driver,
                 StreamEntity = streamEntity,
-                EventBusEntity = eventBusEntity,
                 Frame = frame,
                 DriverLookup = SystemAPI.GetComponentLookup<AutoChessBattleDriverComponent>(),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: true),
                 DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
-                EventBusLookup = SystemAPI.GetComponentLookup<GameplayEventBusComponent>(),
-                GameplayEventLookup = SystemAPI.GetBufferLookup<GameplayEventBusEventBuffer>(),
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(),
                 DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
                 ChangeEventPendingLookup = SystemAPI.GetComponentLookup<AttributeChangeEventPendingComponent>(),
@@ -69,15 +67,12 @@ namespace GAS.AutoChessDemo
             public Entity DriverEntity;
             public AutoChessBattleDriverComponent Driver;
             public Entity StreamEntity;
-            public Entity EventBusEntity;
             public int Frame;
             public ComponentLookup<AutoChessBattleDriverComponent> DriverLookup;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             [ReadOnly] public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             public BufferLookup<AttributeModifierBuffer> DeltaLookup;
             public BufferLookup<GameplayEventBuffer> FactLookup;
-            public ComponentLookup<GameplayEventBusComponent> EventBusLookup;
-            public BufferLookup<GameplayEventBusEventBuffer> GameplayEventLookup;
             public BufferLookup<AttributeValueBuffer> AttributeLookup;
             [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
             public ComponentLookup<AttributeChangeEventPendingComponent> ChangeEventPendingLookup;
@@ -95,15 +90,6 @@ namespace GAS.AutoChessDemo
                 var commands = CommandLookup[StreamEntity];
                 var deltas = DeltaLookup[StreamEntity];
                 var facts = FactLookup[StreamEntity];
-                var canAppendGameplayEvent = EventBusEntity != Entity.Null
-                                            && EventBusLookup.HasComponent(EventBusEntity)
-                                            && GameplayEventLookup.HasBuffer(EventBusEntity);
-                var eventBus = canAppendGameplayEvent
-                    ? EventBusLookup[EventBusEntity]
-                    : default;
-                var gameplayEvents = canAppendGameplayEvent
-                    ? GameplayEventLookup[EventBusEntity]
-                    : default;
 
                 for (var i = 0; i < commands.Length; i++)
                 {
@@ -176,30 +162,9 @@ namespace GAS.AutoChessDemo
                         NewValue = newValue,
                     });
 
-                    if (!canAppendGameplayEvent)
-                        continue;
-
-                    gameplayEvents.Add(new GameplayEventBusEventBuffer
-                    {
-                        SourceFactSequence = factSequence,
-                        Frame = Frame,
-                        Sequence = eventBus.NextSequence,
-                        Type = EGameplayEventType.ExecutionCalculationOutputUpdated,
-                        SourceAsc = command.SourceAsc,
-                        TargetAsc = targetAsc,
-                        SourceAbility = command.SourceAbility,
-                        GameplayEffect = command.SourceEffect,
-                        ContextId = command.ContextId,
-                        EventCode = AutoChessBattleRules.ExecutionCalculationExecuteDamage,
-                        ReasonCode = AutoChessBattleRules.ExecutionCalculationExecuteDamageOutput,
-                        Value = damage,
-                    });
-                    eventBus.NextSequence++;
                 }
 
                 StreamLookup[StreamEntity] = stream;
-                if (canAppendGameplayEvent)
-                    EventBusLookup[EventBusEntity] = eventBus;
 
                 Driver.LastExecutionFrame = Frame;
                 DriverLookup[DriverEntity] = Driver;

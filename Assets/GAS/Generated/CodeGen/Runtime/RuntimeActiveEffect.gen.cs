@@ -4,6 +4,7 @@
 ///////////////////////////////////
 
 using GAS.Runtime;
+using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
@@ -61,7 +62,8 @@ namespace GAS.Runtime.Generated
 
                 ref var catalog = ref Catalog.Value;
                 var commandBuffers = chunk.GetBufferAccessor(ref CommandTypeHandle);
-                for (var bufferIndex = 0; bufferIndex < commandBuffers.Length; bufferIndex++)
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var bufferIndex))
                 {
                     var commands = commandBuffers[bufferIndex];
                     for (var i = 0; i < commands.Length; i++)
@@ -99,50 +101,47 @@ namespace GAS.Runtime.Generated
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
             if (!EffectCommandSpecStream.HasRequiredBuffers(em, streamEntity))
                 return;
-            var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
-            var commands = em.GetBuffer<GEEffectCommandBuffer>(streamEntity);
-            var mutations = em.GetBuffer<ActiveEffectMutationBuffer>(streamEntity);
-            var setByCallerValues = em.GetBuffer<GESetByCallerValueBuffer>(streamEntity);
-            ref var catalog = ref catalogComponent.Catalog.Value;
 
             var eventBusEntity = SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var resolvedEventBus)
                 ? resolvedEventBus
                 : Entity.Null;
-            var eventWriter = eventBusEntity != Entity.Null
-                ? EventBusHelper.BeginGameplayEventBatch(em, eventBusEntity)
-                : default;
             var structuralEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
 
-            try
+            state.Dependency = new GASGeneratedActiveEffectRuntime.GEActiveEffectMutationApplyJob
             {
-                var start = GASGeneratedActiveEffectRuntime.ClampCursor(stream.ActiveMutationCommandCursor, commands.Length);
-                for (var i = start; i < commands.Length; i++)
-                {
-                    var command = commands[i];
-                    if (command.Kind != GEEffectCommandKind.ActiveMutation)
-                        continue;
-
-                    GASGeneratedActiveEffectRuntime.TryApplyActiveMutation(
-                        em,
-                        ref stream,
-                        ref catalog,
-                        in command,
-                        commands,
-                        setByCallerValues,
-                        mutations,
-                        frame,
-                        ref structuralEcb,
-                        ref eventWriter);
-                }
-
-                stream.ActiveMutationCommandCursor = commands.Length;
-                em.SetComponentData(streamEntity, stream);
-            }
-            finally
-            {
-                eventWriter.Dispose();
-            }
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
+                CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
+                CommandSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
+                MutationLookup = SystemAPI.GetBufferLookup<ActiveEffectMutationBuffer>(isReadOnly: false),
+                EntityStorageInfoLookup = SystemAPI.GetEntityStorageInfoLookup(),
+                DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
+                ActiveEffectsLookup = SystemAPI.GetComponentLookup<ASCActiveEffectsComponent>(isReadOnly: false),
+                ActiveEffectSlotLookup = SystemAPI.GetBufferLookup<ActiveGameplayEffectBuffer>(isReadOnly: false),
+                SetByCallerSnapshotLookup =
+                    SystemAPI.GetBufferLookup<ActiveGameplayEffectSetByCallerValueBuffer>(isReadOnly: false),
+                CleanupRecordLookup =
+                    SystemAPI.GetBufferLookup<ActiveGameplayEffectCleanupRecordBuffer>(isReadOnly: false),
+                AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: false),
+                ActiveModifierLookup = SystemAPI.GetBufferLookup<AttributeActiveModifierBuffer>(isReadOnly: false),
+                AttributeOwnerMarkerRequestLookup =
+                    SystemAPI.GetBufferLookup<AttributeOwnerMarkerRequestBuffer>(isReadOnly: false),
+                TagMaskLookup = SystemAPI.GetComponentLookup<TagMaskComponent>(isReadOnly: false),
+                TagFixedMaskLookup = SystemAPI.GetComponentLookup<TagFixedMaskComponent>(isReadOnly: true),
+                TagSourceLookup = SystemAPI.GetBufferLookup<TagTemporarySourceBuffer>(isReadOnly: false),
+                AbilitySlotLookup = SystemAPI.GetBufferLookup<AbilitySlotBuffer>(isReadOnly: false),
+                AbilityStateLookup = SystemAPI.GetComponentLookup<AbilityStateComponent>(isReadOnly: false),
+                AbilityGrantedLookup = SystemAPI.GetComponentLookup<AbilityGrantedByEffectComponent>(isReadOnly: true),
+                AbilityLifecycleRequestLookup =
+                    SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
+                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
+                StructuralEcb = structuralEcb,
+                GrantedAbilityArchetype = GASRuntimeEntityArchetypes.GrantedAbility(em),
+                Catalog = catalogComponent.Catalog,
+                StreamEntity = streamEntity,
+                EventBusEntity = eventBusEntity,
+                Frame = frame,
+            }.Schedule(state.Dependency);
         }
     }
 
@@ -154,9 +153,14 @@ namespace GAS.Runtime.Generated
 
         public void OnCreate(ref SystemState state)
         {
-            _ownerQuery = SystemAPI.QueryBuilder()
-                .WithAll<ASCActiveEffectsComponent, ActiveGameplayEffectBuffer>()
-                .Build();
+            _ownerQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadWrite<ASCActiveEffectsComponent>(),
+                    ComponentType.ReadWrite<ActiveGameplayEffectBuffer>(),
+                },
+            });
             state.RequireForUpdate(_ownerQuery);
             state.RequireForUpdate<GlobalTimer>();
             state.RequireForUpdate<GASDefinitionCatalogComponent>();
@@ -190,28 +194,24 @@ namespace GAS.Runtime.Generated
                     SystemAPI.GetBufferLookup<ActiveGameplayEffectSetByCallerValueBuffer>(isReadOnly: false),
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: false),
                 ActiveModifierLookup = SystemAPI.GetBufferLookup<AttributeActiveModifierBuffer>(isReadOnly: false),
-                AttributeDirtyLookup = SystemAPI.GetComponentLookup<AttributeDirtyComponent>(isReadOnly: false),
-                ActiveModifierPresentLookup =
-                    SystemAPI.GetComponentLookup<AttributeActiveModifierPresentComponent>(isReadOnly: false),
+                AttributeOwnerMarkerRequestLookup =
+                    SystemAPI.GetBufferLookup<AttributeOwnerMarkerRequestBuffer>(isReadOnly: false),
                 TagMaskLookup = SystemAPI.GetComponentLookup<TagMaskComponent>(isReadOnly: false),
                 TagFixedMaskLookup = SystemAPI.GetComponentLookup<TagFixedMaskComponent>(isReadOnly: true),
                 TagSourceLookup = SystemAPI.GetBufferLookup<TagTemporarySourceBuffer>(isReadOnly: false),
                 AbilitySlotLookup = SystemAPI.GetBufferLookup<AbilitySlotBuffer>(isReadOnly: false),
                 AbilityStateLookup = SystemAPI.GetComponentLookup<AbilityStateComponent>(isReadOnly: false),
                 AbilityGrantedLookup = SystemAPI.GetComponentLookup<AbilityGrantedByEffectComponent>(isReadOnly: true),
-                AbilityCancelRequestLookup =
-                    SystemAPI.GetComponentLookup<AbilityCancelRequestComponent>(isReadOnly: false),
-                AbilityDestroyOnCleanupLookup =
-                    SystemAPI.GetComponentLookup<AbilityDestroyOnCleanupComponent>(isReadOnly: false),
                 RemoveCommandBufferTypeHandle = SystemAPI.GetBufferTypeHandle<GERemoveCommandBuffer>(isReadOnly: false),
-                RemovePendingLookup = SystemAPI.GetComponentLookup<GERemoveCommandPendingComponent>(isReadOnly: false),
+                RemovePendingTypeHandle =
+                    SystemAPI.GetComponentTypeHandle<GERemoveCommandPendingComponent>(isReadOnly: false),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
                 CommandSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
                 MutationLookup = SystemAPI.GetBufferLookup<ActiveEffectMutationBuffer>(isReadOnly: false),
-                GameplayEventBusLookup = SystemAPI.GetComponentLookup<GameplayEventBusComponent>(isReadOnly: false),
-                GameplayEventLookup = SystemAPI.GetBufferLookup<GameplayEventBusEventBuffer>(isReadOnly: false),
-                TagChangeEventLookup = SystemAPI.GetBufferLookup<TagChangeEventBuffer>(isReadOnly: false),
+                AbilityLifecycleRequestLookup =
+                    SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
+                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
                 GrantedAbilityArchetype = GASRuntimeEntityArchetypes.GrantedAbility(em),
                 Catalog = catalogComponent.Catalog,
@@ -233,13 +233,16 @@ namespace GAS.Runtime.Generated
 
         public void OnCreate(ref SystemState state)
         {
-            _removeCommandQuery = SystemAPI.QueryBuilder()
-                .WithAll<
-                    GERemoveCommandPendingComponent,
-                    GERemoveCommandBuffer,
-                    ASCActiveEffectsComponent,
-                    ActiveGameplayEffectBuffer>()
-                .Build();
+            _removeCommandQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadWrite<GERemoveCommandPendingComponent>(),
+                    ComponentType.ReadWrite<GERemoveCommandBuffer>(),
+                    ComponentType.ReadWrite<ASCActiveEffectsComponent>(),
+                    ComponentType.ReadWrite<ActiveGameplayEffectBuffer>(),
+                },
+            });
             state.RequireForUpdate(_removeCommandQuery);
         }
 
@@ -269,27 +272,23 @@ namespace GAS.Runtime.Generated
                     SystemAPI.GetBufferLookup<ActiveGameplayEffectSetByCallerValueBuffer>(isReadOnly: false),
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: false),
                 ActiveModifierLookup = SystemAPI.GetBufferLookup<AttributeActiveModifierBuffer>(isReadOnly: false),
-                AttributeDirtyLookup = SystemAPI.GetComponentLookup<AttributeDirtyComponent>(isReadOnly: false),
-                ActiveModifierPresentLookup =
-                    SystemAPI.GetComponentLookup<AttributeActiveModifierPresentComponent>(isReadOnly: false),
+                AttributeOwnerMarkerRequestLookup =
+                    SystemAPI.GetBufferLookup<AttributeOwnerMarkerRequestBuffer>(isReadOnly: false),
                 TagMaskLookup = SystemAPI.GetComponentLookup<TagMaskComponent>(isReadOnly: false),
                 TagFixedMaskLookup = SystemAPI.GetComponentLookup<TagFixedMaskComponent>(isReadOnly: true),
                 TagSourceLookup = SystemAPI.GetBufferLookup<TagTemporarySourceBuffer>(isReadOnly: false),
                 AbilitySlotLookup = SystemAPI.GetBufferLookup<AbilitySlotBuffer>(isReadOnly: false),
                 AbilityStateLookup = SystemAPI.GetComponentLookup<AbilityStateComponent>(isReadOnly: false),
                 AbilityGrantedLookup = SystemAPI.GetComponentLookup<AbilityGrantedByEffectComponent>(isReadOnly: true),
-                AbilityCancelRequestLookup =
-                    SystemAPI.GetComponentLookup<AbilityCancelRequestComponent>(isReadOnly: false),
-                AbilityDestroyOnCleanupLookup =
-                    SystemAPI.GetComponentLookup<AbilityDestroyOnCleanupComponent>(isReadOnly: false),
-                RemovePendingLookup = SystemAPI.GetComponentLookup<GERemoveCommandPendingComponent>(isReadOnly: false),
+                RemovePendingTypeHandle =
+                    SystemAPI.GetComponentTypeHandle<GERemoveCommandPendingComponent>(isReadOnly: false),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
                 CommandSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
                 MutationLookup = SystemAPI.GetBufferLookup<ActiveEffectMutationBuffer>(isReadOnly: false),
-                GameplayEventBusLookup = SystemAPI.GetComponentLookup<GameplayEventBusComponent>(isReadOnly: false),
-                GameplayEventLookup = SystemAPI.GetBufferLookup<GameplayEventBusEventBuffer>(isReadOnly: false),
-                TagChangeEventLookup = SystemAPI.GetBufferLookup<TagChangeEventBuffer>(isReadOnly: false),
+                AbilityLifecycleRequestLookup =
+                    SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
+                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
                 StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
@@ -301,6 +300,1102 @@ namespace GAS.Runtime.Generated
 
     internal static class GASGeneratedActiveEffectRuntime
     {
+        [BurstCompile]
+        public struct GEActiveEffectMutationApplyJob : IJob
+        {
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            public BufferLookup<GEEffectCommandBuffer> CommandLookup;
+            public BufferLookup<GESetByCallerValueBuffer> CommandSetByCallerLookup;
+            public BufferLookup<ActiveEffectMutationBuffer> MutationLookup;
+            [ReadOnly] public EntityStorageInfoLookup EntityStorageInfoLookup;
+            [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
+            public ComponentLookup<ASCActiveEffectsComponent> ActiveEffectsLookup;
+            public BufferLookup<ActiveGameplayEffectBuffer> ActiveEffectSlotLookup;
+            public BufferLookup<ActiveGameplayEffectSetByCallerValueBuffer> SetByCallerSnapshotLookup;
+            public BufferLookup<ActiveGameplayEffectCleanupRecordBuffer> CleanupRecordLookup;
+            public BufferLookup<AttributeValueBuffer> AttributeLookup;
+            public BufferLookup<AttributeActiveModifierBuffer> ActiveModifierLookup;
+            public BufferLookup<AttributeOwnerMarkerRequestBuffer> AttributeOwnerMarkerRequestLookup;
+            public ComponentLookup<TagMaskComponent> TagMaskLookup;
+            [ReadOnly] public ComponentLookup<TagFixedMaskComponent> TagFixedMaskLookup;
+            public BufferLookup<TagTemporarySourceBuffer> TagSourceLookup;
+            public BufferLookup<AbilitySlotBuffer> AbilitySlotLookup;
+            public ComponentLookup<AbilityStateComponent> AbilityStateLookup;
+            [ReadOnly] public ComponentLookup<AbilityGrantedByEffectComponent> AbilityGrantedLookup;
+            public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
+            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public EntityCommandBuffer StructuralEcb;
+            public EntityArchetype GrantedAbilityArchetype;
+            [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
+            public Entity StreamEntity;
+            public Entity EventBusEntity;
+            public int Frame;
+
+            public void Execute()
+            {
+                if (!Catalog.IsCreated
+                    || StreamEntity == Entity.Null
+                    || !StreamLookup.HasComponent(StreamEntity)
+                    || !CommandLookup.HasBuffer(StreamEntity)
+                    || !CommandSetByCallerLookup.HasBuffer(StreamEntity)
+                    || !MutationLookup.HasBuffer(StreamEntity))
+                {
+                    return;
+                }
+
+                var stream = StreamLookup[StreamEntity];
+                var commands = CommandLookup[StreamEntity];
+                var setByCallerValues = CommandSetByCallerLookup[StreamEntity];
+                var mutations = MutationLookup[StreamEntity];
+                ref var catalog = ref Catalog.Value;
+                var start = ClampCursor(stream.ActiveMutationCommandCursor, commands.Length);
+                for (var i = start; i < commands.Length; i++)
+                {
+                    var command = commands[i];
+                    if (command.Kind != GEEffectCommandKind.ActiveMutation)
+                        continue;
+
+                    TryApplyActiveMutation(
+                        ref stream,
+                        ref catalog,
+                        in command,
+                        commands,
+                        setByCallerValues,
+                        mutations);
+                }
+
+                stream.ActiveMutationCommandCursor = commands.Length;
+                StreamLookup[StreamEntity] = stream;
+            }
+
+            private bool TryApplyActiveMutation(
+                ref GEEffectCommandStreamComponent stream,
+                ref GASDefinitionCatalogBlob catalog,
+                in GEEffectCommandBuffer command,
+                DynamicBuffer<GEEffectCommandBuffer> commands,
+                DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+                DynamicBuffer<ActiveEffectMutationBuffer> mutations)
+            {
+                if (!IsAvailableAsc(command.TargetAsc)
+                    || !HasActiveEffectStorage(command.TargetAsc)
+                    || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, command.GameplayEffectCode, out var gameplayEffectIndex))
+                {
+                    return false;
+                }
+
+                ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
+                var targetTags = TagMaskLookup[command.TargetAsc];
+                if (!EvaluateGameplayEffectRequirements(ref catalog, in gameplayEffect, in targetTags))
+                    return false;
+
+                var store = ActiveEffectsLookup[command.TargetAsc];
+                var slots = ActiveEffectSlotLookup[command.TargetAsc];
+                var setByCallerSnapshot = SetByCallerSnapshotLookup[command.TargetAsc];
+                RemoveGameplayEffectsWithTags(
+                    ref catalog,
+                    command.TargetAsc,
+                    in gameplayEffect,
+                    slots,
+                    mutations,
+                    ref store);
+
+                var durationFrame = ResolveDurationFrame(in command, in gameplayEffect);
+                if (!HasPersistentRuntimeState(in gameplayEffect, durationFrame))
+                {
+                    mutations.Add(new ActiveEffectMutationBuffer
+                    {
+                        Sequence = command.Sequence,
+                        SourceCommandSequence = command.Sequence,
+                        Frame = Frame,
+                        Kind = ActiveEffectMutationKind.Apply,
+                        ActiveEffect = Entity.Null,
+                        SourceAsc = command.SourceAsc,
+                        TargetAsc = command.TargetAsc,
+                        SourceAbility = command.SourceAbility,
+                        SourceEffect = command.SourceEffect,
+                        GameplayEffectCode = command.GameplayEffectCode,
+                        ContextId = command.ContextId,
+                        ParentContextId = command.ParentContextId,
+                        StackCount = 1,
+                        DurationFrameOverride = durationFrame,
+                        PeriodFrame = gameplayEffect.PeriodFrames,
+                    });
+                    EnqueueAppliedEvents(in command, in gameplayEffect, Entity.Null);
+                    ActiveEffectStore.RefreshChunkSkipIndexCounters(ref store, slots, Frame);
+                    ActiveEffectsLookup[command.TargetAsc] = store;
+                    return true;
+                }
+
+                var slotIndex = FindRefreshableSlot(slots, in command);
+                if (slotIndex < 0 && slots.Length >= GASParameterSetting.ASC_MAX_GAMEPLAY_EFFECT_COUNT)
+                    return false;
+
+                var isNewSlot = slotIndex < 0;
+                var previous = isNewSlot ? default : slots[slotIndex];
+                var previousStackCount = previous.StackCount <= 0 ? 1 : previous.StackCount;
+                var isOverflow = !isNewSlot && IsStackOverflow(in gameplayEffect, previousStackCount);
+                if (isOverflow)
+                {
+                    EmitOverflowCommand(
+                        ref stream,
+                        ref catalog,
+                        commands,
+                        setByCallerValues,
+                        in command,
+                        in gameplayEffect);
+                    EnqueueStackOverflowEvent(in command, in gameplayEffect);
+                    if (gameplayEffect.ClearStackOnOverflow != 0)
+                    {
+                        RemoveSlotAt(command.TargetAsc, slots, slotIndex, mutations, ref store);
+                        slotIndex = -1;
+                        isNewSlot = true;
+                        previous = default;
+                        previousStackCount = 1;
+                        EnqueueStackClearedByOverflowEvent(in command);
+                    }
+
+                    if (gameplayEffect.DenyOverflowApplication != 0)
+                    {
+                        EnqueueStackOverflowDeniedEvent(in command);
+                        ActiveEffectStore.RefreshChunkSkipIndexCounters(ref store, slots, Frame);
+                        ActiveEffectsLookup[command.TargetAsc] = store;
+                        return true;
+                    }
+                }
+
+                var slot = isNewSlot
+                    ? CreateNewSlot(ref store, in command, in gameplayEffect, durationFrame, Frame)
+                    : RefreshExistingSlot(
+                        previous,
+                        in command,
+                        in gameplayEffect,
+                        durationFrame,
+                        Frame,
+                        ShouldRefreshDuration(in gameplayEffect),
+                        ShouldResetPeriod(in gameplayEffect));
+
+                slot.StackCount = ResolveNextStackCount(in gameplayEffect, previousStackCount, isNewSlot);
+                RemoveActiveModifiersForSlot(command.TargetAsc, slot.Sequence, slot.GameplayEffectCode);
+                GASGeneratedActiveEffectRuntime.RemoveSetByCallerSnapshotForSlot(
+                    setByCallerSnapshot,
+                    slot.Sequence,
+                    slot.GameplayEffectCode);
+                CopySetByCallerSnapshot(in command, setByCallerValues, setByCallerSnapshot, slot.Sequence, slot.GameplayEffectCode);
+
+                var activeModifierCount = ApplyActiveModifiers(
+                    ref catalog,
+                    in gameplayEffect,
+                    in command,
+                    setByCallerValues,
+                    slot.Sequence,
+                    slot.StackCount);
+                slot.ActiveGrantedTagCount = ApplyGrantedTags(
+                    ref catalog,
+                    command.TargetAsc,
+                    in gameplayEffect,
+                    slot.Sequence);
+                slot.ActiveGrantedAbilityCount = ApplyGrantedAbilities(
+                    ref catalog,
+                    command.TargetAsc,
+                    in gameplayEffect,
+                    slot.Sequence);
+                slot.Flags = ResolveSlotFlags(
+                    in gameplayEffect,
+                    durationFrame,
+                    activeModifierCount,
+                    slot.ActiveGrantedTagCount,
+                    slot.ActiveGrantedAbilityCount);
+
+                if (slotIndex >= 0)
+                    slots[slotIndex] = slot;
+                else
+                    slots.Add(slot);
+
+                ActiveEffectStore.RefreshChunkSkipIndexCounters(ref store, slots, Frame);
+                ActiveEffectsLookup[command.TargetAsc] = store;
+
+                mutations.Add(new ActiveEffectMutationBuffer
+                {
+                    Sequence = slot.Sequence,
+                    SourceCommandSequence = command.Sequence,
+                    Frame = Frame,
+                    Kind = isNewSlot
+                        ? ActiveEffectMutationKind.Apply
+                        : slot.StackCount > previousStackCount
+                            ? ActiveEffectMutationKind.Stack
+                            : ActiveEffectMutationKind.Refresh,
+                    ActiveEffect = Entity.Null,
+                    SourceAsc = command.SourceAsc,
+                    TargetAsc = command.TargetAsc,
+                    SourceAbility = command.SourceAbility,
+                    SourceEffect = command.SourceEffect,
+                    GameplayEffectCode = command.GameplayEffectCode,
+                    ContextId = command.ContextId,
+                    ParentContextId = command.ParentContextId,
+                    StackCount = slot.StackCount,
+                    DurationFrameOverride = durationFrame,
+                    PeriodFrame = slot.PeriodFrame,
+                });
+
+                EnqueueAppliedEvents(in command, in gameplayEffect, Entity.Null);
+                return true;
+            }
+
+            private int ApplyActiveModifiers(
+                ref GASDefinitionCatalogBlob catalog,
+                in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
+                in GEEffectCommandBuffer command,
+                DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+                int slotSequence,
+                int stackCount)
+            {
+                if (gameplayEffect.ModifierCount <= 0
+                    || command.TargetAsc == Entity.Null
+                    || !AttributeLookup.HasBuffer(command.TargetAsc)
+                    || !ActiveModifierLookup.HasBuffer(command.TargetAsc))
+                {
+                    return 0;
+                }
+
+                var attributes = AttributeLookup[command.TargetAsc];
+                var activeModifiers = ActiveModifierLookup[command.TargetAsc];
+                var added = 0;
+                for (var i = 0; i < gameplayEffect.ModifierCount; i++)
+                {
+                    var modifierIndex = gameplayEffect.ModifierStart + i;
+                    if ((uint)modifierIndex >= (uint)catalog.Modifiers.Length)
+                        continue;
+
+                    var modifier = catalog.Modifiers[modifierIndex];
+                    var attrIndex = attributes.IndexOfAttribute(modifier.AttributeSetCode, modifier.AttributeCode);
+                    if (attrIndex < 0)
+                        continue;
+
+                    var context = BuildMagnitudeContext(in command, setByCallerValues, in modifier, stackCount);
+                    if (!GASGeneratedMagnitudeEvaluator.TryResolveMagnitude(in modifier, in context, out var magnitude))
+                        continue;
+
+                    if (HasActiveModifier(activeModifiers, slotSequence, command.GameplayEffectCode, modifier.AttributeSetCode, modifier.AttributeCode, modifier.Operation))
+                        continue;
+
+                    activeModifiers.Add(new AttributeActiveModifierBuffer
+                    {
+                        AttrSetCode = modifier.AttributeSetCode,
+                        AttributeCode = modifier.AttributeCode,
+                        SourceEntity = Entity.Null,
+                        SourceSequence = slotSequence,
+                        SourceGameplayEffectCode = command.GameplayEffectCode,
+                        Magnitude = magnitude,
+                        Op = modifier.Operation,
+                    });
+                    MarkActiveModifierAdded(command.TargetAsc);
+                    MarkCurrentValueDirty(attributes, command.TargetAsc, modifier.AttributeSetCode, modifier.AttributeCode);
+                    added++;
+                }
+
+                return added;
+            }
+
+            private MagnitudeEvalContext BuildMagnitudeContext(
+                in GEEffectCommandBuffer command,
+                DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+                in GASCatalogModifierDefinitionBlob modifier,
+                int stackCount)
+            {
+                var context = new MagnitudeEvalContext
+                {
+                    SourceAsc = command.SourceAsc,
+                    TargetAsc = command.TargetAsc,
+                    GameplayEffectCode = command.GameplayEffectCode,
+                    Level = command.Level,
+                    StackCount = stackCount <= 0 ? 1 : stackCount,
+                    SetByCallerKey = modifier.MagnitudeKey,
+                };
+
+                if (modifier.MagnitudeSource == EMagnitudeSource.SetByCaller
+                    && TryFindSetByCallerValue(in command, setByCallerValues, modifier.MagnitudeKey, out var setByCallerValue))
+                {
+                    context.HasSetByCallerValue = 1;
+                    context.SetByCallerValue = setByCallerValue;
+                }
+
+                if (modifier.MagnitudeSource == EMagnitudeSource.SourceAttribute
+                    && TryReadAttributeValue(command.SourceAsc, in modifier, out var sourceValue))
+                {
+                    context.HasSourceAttributeValue = 1;
+                    context.SourceAttributeValue = sourceValue;
+                }
+
+                if (modifier.MagnitudeSource == EMagnitudeSource.TargetAttribute
+                    && TryReadAttributeValue(command.TargetAsc, in modifier, out var targetValue))
+                {
+                    context.HasTargetAttributeValue = 1;
+                    context.TargetAttributeValue = targetValue;
+                }
+
+                return context;
+            }
+
+            private bool TryReadAttributeValue(
+                Entity owner,
+                in GASCatalogModifierDefinitionBlob modifier,
+                out float value)
+            {
+                value = 0f;
+                if (owner == Entity.Null || !AttributeLookup.HasBuffer(owner))
+                    return false;
+
+                var attrSetCode = modifier.CaptureAttributeSetCode != 0
+                    ? modifier.CaptureAttributeSetCode
+                    : modifier.AttributeSetCode;
+                var attributeCode = modifier.CaptureAttributeCode != 0
+                    ? modifier.CaptureAttributeCode
+                    : modifier.AttributeCode;
+                var attributes = AttributeLookup[owner];
+                var attrIndex = attributes.IndexOfAttribute(attrSetCode, attributeCode);
+                if (attrIndex < 0)
+                    return false;
+
+                value = attributes[attrIndex].CurrentValue;
+                return true;
+            }
+
+            private void RemoveActiveModifiersForSlot(
+                Entity owner,
+                int slotSequence,
+                int gameplayEffectCode)
+            {
+                if (owner == Entity.Null || !ActiveModifierLookup.HasBuffer(owner))
+                    return;
+
+                var modifiers = ActiveModifierLookup[owner];
+                var hasAttributes = AttributeLookup.HasBuffer(owner);
+                var attributes = hasAttributes ? AttributeLookup[owner] : default;
+                for (var i = modifiers.Length - 1; i >= 0; i--)
+                {
+                    var modifier = modifiers[i];
+                    if (modifier.SourceSequence != slotSequence
+                        || modifier.SourceGameplayEffectCode != gameplayEffectCode)
+                    {
+                        continue;
+                    }
+
+                    modifiers.RemoveAt(i);
+                    if (hasAttributes)
+                        MarkCurrentValueDirty(attributes, owner, modifier.AttrSetCode, modifier.AttributeCode);
+                }
+
+                RefreshActiveModifierPresence(owner, modifiers);
+            }
+
+            private int ApplyGrantedTags(
+                ref GASDefinitionCatalogBlob catalog,
+                Entity owner,
+                in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
+                int slotSequence)
+            {
+                if (gameplayEffect.GrantedTagMaskIndex < 0
+                    || gameplayEffect.GrantedTagMaskIndex >= catalog.TagMasks.Length
+                    || owner == Entity.Null
+                    || !TagMaskLookup.HasComponent(owner)
+                    || !TagSourceLookup.HasBuffer(owner))
+                {
+                    return 0;
+                }
+
+                var grantedMask = catalog.TagMasks[gameplayEffect.GrantedTagMaskIndex].Mask;
+                var ownerTags = TagMaskLookup[owner];
+                var sources = TagSourceLookup[owner];
+                for (var tagIndex = 0; tagIndex < TagMaskComponent.Capacity; tagIndex++)
+                {
+                    if (!grantedMask.HasTag(tagIndex)
+                        || HasTempTagSource(sources, tagIndex, slotSequence, gameplayEffect.GameplayEffectCode))
+                    {
+                        continue;
+                    }
+
+                    var wasActive = ownerTags.HasTag(tagIndex);
+                    ownerTags.AddTag(tagIndex);
+                    sources.Add(new TagTemporarySourceBuffer
+                    {
+                        TagIndex = tagIndex,
+                        Source = Entity.Null,
+                        SourceSequence = slotSequence,
+                        SourceGameplayEffectCode = gameplayEffect.GameplayEffectCode,
+                    });
+
+                    if (!wasActive)
+                    {
+                        EnqueueTagChangedEvent(owner, tagIndex, true);
+                    }
+                }
+
+                TagMaskLookup[owner] = ownerTags;
+                return CountTempTagSourcesForSlot(sources, slotSequence, gameplayEffect.GameplayEffectCode);
+            }
+
+            private void RemoveGrantedTagsForSlot(
+                Entity owner,
+                int slotSequence,
+                int gameplayEffectCode)
+            {
+                if (owner == Entity.Null || !TagSourceLookup.HasBuffer(owner))
+                    return;
+
+                var sources = TagSourceLookup[owner];
+                for (var i = sources.Length - 1; i >= 0; i--)
+                {
+                    var source = sources[i];
+                    if (source.SourceSequence != slotSequence
+                        || source.SourceGameplayEffectCode != gameplayEffectCode)
+                    {
+                        continue;
+                    }
+
+                    sources.RemoveAt(i);
+                    var removedFromMask = RemoveTagIndexFromEffectiveMaskIfUnreferenced(owner, source.TagIndex);
+                    if (removedFromMask)
+                    {
+                        EnqueueTagChangedEvent(owner, source.TagIndex, false);
+                    }
+                }
+            }
+
+            private bool RemoveTagIndexFromEffectiveMaskIfUnreferenced(Entity owner, int tagIndex)
+            {
+                if (owner == Entity.Null || !TagMaskLookup.HasComponent(owner))
+                    return false;
+                if (TagFixedMaskLookup.HasComponent(owner)
+                    && TagFixedMaskLookup[owner].Mask.HasTag(tagIndex))
+                {
+                    return false;
+                }
+                if (HasAnyTemporarySourceForTag(owner, tagIndex))
+                    return false;
+
+                var mask = TagMaskLookup[owner];
+                if (!mask.HasTag(tagIndex))
+                    return false;
+                mask.RemoveTag(tagIndex);
+                TagMaskLookup[owner] = mask;
+                return true;
+            }
+
+            private bool HasAnyTemporarySourceForTag(Entity owner, int tagIndex)
+            {
+                if (owner == Entity.Null || !TagSourceLookup.HasBuffer(owner))
+                    return false;
+
+                var sources = TagSourceLookup[owner];
+                for (var i = 0; i < sources.Length; i++)
+                {
+                    if (sources[i].TagIndex == tagIndex)
+                        return true;
+                }
+
+                return false;
+            }
+
+            private int ApplyGrantedAbilities(
+                ref GASDefinitionCatalogBlob catalog,
+                Entity owner,
+                in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
+                int slotSequence)
+            {
+                if (gameplayEffect.GrantedAbilityCount <= 0
+                    || owner == Entity.Null
+                    || !AbilitySlotLookup.HasBuffer(owner))
+                {
+                    return 0;
+                }
+
+                var grantedAbilities = AbilitySlotLookup[owner];
+                var added = 0;
+                for (var i = 0; i < gameplayEffect.GrantedAbilityCount; i++)
+                {
+                    var grantedIndex = gameplayEffect.GrantedAbilityStart + i;
+                    if ((uint)grantedIndex >= (uint)catalog.GrantedAbilities.Length)
+                        continue;
+
+                    var granted = catalog.GrantedAbilities[grantedIndex];
+                    if (granted.AbilityCode <= 0
+                        || HasGrantedAbilityForSlot(grantedAbilities, granted.AbilityCode, slotSequence, gameplayEffect.GameplayEffectCode))
+                    {
+                        continue;
+                    }
+
+                    var ability = StructuralEcb.CreateEntity(GrantedAbilityArchetype);
+                    GASRuntimeEntityArchetypes.InitializeAbilityEntity(StructuralEcb, ability);
+                    StructuralEcb.SetComponent(
+                        ability,
+                        AbilityStateComponent.Create(granted.AbilityCode, granted.Level, owner));
+                    StructuralEcb.SetComponent(ability, new AbilityMainTargetComponent { TargetAsc = Entity.Null });
+                    StructuralEcb.SetComponent(ability, new AbilityGrantedByEffectComponent
+                    {
+                        SourceEffect = Entity.Null,
+                        SourceSequence = slotSequence,
+                        SourceGameplayEffectCode = gameplayEffect.GameplayEffectCode,
+                        ActivationPolicy = (GrantedAbilityActivationPolicy)granted.ActivationPolicy,
+                        DeactivationPolicy = GrantedAbilityDeactivationPolicy.SyncWithEffect,
+                        RemovePolicy = granted.RemovePolicy == 0
+                            ? GrantedAbilityRemovePolicy.SyncWithEffect
+                            : (GrantedAbilityRemovePolicy)granted.RemovePolicy,
+                    });
+
+                    StructuralEcb.AppendToBuffer(owner, new AbilitySlotBuffer { AbilityEntity = ability });
+                    added++;
+
+                    var activationPolicy = (GrantedAbilityActivationPolicy)granted.ActivationPolicy;
+                    StructuralEcb.SetComponentEnabled<AbilityActivationPendingComponent>(
+                        ability,
+                        activationPolicy == GrantedAbilityActivationPolicy.WhenAdded
+                        || activationPolicy == GrantedAbilityActivationPolicy.SyncWithEffect);
+                }
+
+                return CountGrantedAbilitiesForSlot(grantedAbilities, slotSequence, gameplayEffect.GameplayEffectCode) + added;
+            }
+
+            private void RemoveGrantedAbilitiesForSlot(
+                Entity owner,
+                int slotSequence,
+                int gameplayEffectCode)
+            {
+                if (owner == Entity.Null || !AbilitySlotLookup.HasBuffer(owner))
+                    return;
+
+                var grantedAbilities = AbilitySlotLookup[owner];
+                for (var i = grantedAbilities.Length - 1; i >= 0; i--)
+                {
+                    var ability = grantedAbilities[i].AbilityEntity;
+                    if (!IsGrantedBySlot(ability, slotSequence, gameplayEffectCode))
+                        continue;
+
+                    grantedAbilities.RemoveAt(i);
+                    RemoveGrantedAbilityEntity(ability);
+                }
+            }
+
+            private bool HasGrantedAbilityForSlot(
+                DynamicBuffer<AbilitySlotBuffer> grantedAbilities,
+                int abilityCode,
+                int slotSequence,
+                int gameplayEffectCode)
+            {
+                for (var i = 0; i < grantedAbilities.Length; i++)
+                {
+                    var ability = grantedAbilities[i].AbilityEntity;
+                    if (!IsGrantedBySlot(ability, slotSequence, gameplayEffectCode)
+                        || !AbilityStateLookup.HasComponent(ability))
+                    {
+                        continue;
+                    }
+
+                    if (AbilityStateLookup[ability].Code == abilityCode)
+                        return true;
+                }
+
+                return false;
+            }
+
+            private int CountGrantedAbilitiesForSlot(
+                DynamicBuffer<AbilitySlotBuffer> grantedAbilities,
+                int slotSequence,
+                int gameplayEffectCode)
+            {
+                var count = 0;
+                for (var i = 0; i < grantedAbilities.Length; i++)
+                {
+                    if (IsGrantedBySlot(grantedAbilities[i].AbilityEntity, slotSequence, gameplayEffectCode))
+                        count++;
+                }
+
+                return count;
+            }
+
+            private bool IsGrantedBySlot(
+                Entity ability,
+                int slotSequence,
+                int gameplayEffectCode)
+            {
+                if (ability == Entity.Null
+                    || !AbilityGrantedLookup.HasComponent(ability))
+                {
+                    return false;
+                }
+
+                var granted = AbilityGrantedLookup[ability];
+                return granted.SourceSequence == slotSequence
+                    && granted.SourceGameplayEffectCode == gameplayEffectCode;
+            }
+
+            private void RemoveGrantedAbilityEntity(Entity ability)
+            {
+                if (ability == Entity.Null || !AbilityStateLookup.HasComponent(ability))
+                    return;
+
+                var runtime = AbilityStateLookup[ability];
+                var isRunning = runtime.Phase is EAbilityPhase.Activating or EAbilityPhase.Active or EAbilityPhase.Ending;
+                if (isRunning)
+                {
+                    EnqueueAbilityLifecycleRequest(ability, runtime);
+                    return;
+                }
+
+                StructuralEcb.DestroyEntity(ability);
+            }
+
+            private void EnqueueAbilityLifecycleRequest(Entity ability, in AbilityStateComponent runtime)
+            {
+                if (EventBusEntity == Entity.Null
+                    || !AbilityLifecycleRequestLookup.HasBuffer(EventBusEntity))
+                    return;
+
+                var requests = AbilityLifecycleRequestLookup[EventBusEntity];
+                requests.Add(new AbilityLifecycleRequestBuffer
+                {
+                    Sequence = requests.Length,
+                    RequestKind = EAbilityLifecycleRequestKind.Cancel,
+                    Reason = EAbilityLifecycleReason.GrantedEffectRemoved,
+                    Ability = ability,
+                    SourceAbility = Entity.Null,
+                    SourceEffect = Entity.Null,
+                    SourceAbilityCode = 0,
+                    DestroyOnCleanup = 1,
+                });
+                EnqueueGameplayEvent(new GameplayEventBuffer
+                {
+                    EventType = EGameplayEventType.AbilityCancelRequested,
+                    Domain = EGameplayFactDomain.Ability,
+                    Category = EGameplayFactCategory.Request,
+                    Severity = EGameplayFactSeverity.Info,
+                    SourceAsc = runtime.Owner,
+                    TargetAsc = runtime.Owner,
+                    SourceAbility = ability,
+                    EventCode = runtime.Code,
+                    ReasonCode = (int)EAbilityLifecycleReason.GrantedEffectRemoved,
+                });
+            }
+
+            private void RemoveGameplayEffectsWithTags(
+                ref GASDefinitionCatalogBlob catalog,
+                Entity owner,
+                in GASCatalogGameplayEffectDefinitionBlob appliedGameplayEffect,
+                DynamicBuffer<ActiveGameplayEffectBuffer> slots,
+                DynamicBuffer<ActiveEffectMutationBuffer> mutations,
+                ref ASCActiveEffectsComponent store)
+            {
+                if (appliedGameplayEffect.RemoveGameplayEffectTagMaskIndex < 0
+                    || appliedGameplayEffect.RemoveGameplayEffectTagMaskIndex >= catalog.TagMasks.Length)
+                {
+                    return;
+                }
+
+                var removeMask = catalog.TagMasks[appliedGameplayEffect.RemoveGameplayEffectTagMaskIndex].Mask;
+                if (removeMask.IsEmpty)
+                    return;
+
+                for (var i = slots.Length - 1; i >= 0; i--)
+                {
+                    var slot = slots[i];
+                    if (!GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, slot.GameplayEffectCode, out var slotGameplayEffectIndex))
+                        continue;
+
+                    ref readonly var slotGameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, slotGameplayEffectIndex);
+                    if (slotGameplayEffect.GrantedTagMaskIndex < 0
+                        || slotGameplayEffect.GrantedTagMaskIndex >= catalog.TagMasks.Length)
+                    {
+                        continue;
+                    }
+
+                    var slotGrantedMask = catalog.TagMasks[slotGameplayEffect.GrantedTagMaskIndex].Mask;
+                    if (slotGrantedMask.HasAnyTag(removeMask))
+                        RemoveSlotAt(owner, slots, i, mutations, ref store);
+                }
+            }
+
+            private void RemoveSlotAt(
+                Entity owner,
+                DynamicBuffer<ActiveGameplayEffectBuffer> slots,
+                int slotIndex,
+                DynamicBuffer<ActiveEffectMutationBuffer> mutations,
+                ref ASCActiveEffectsComponent store)
+            {
+                if ((uint)slotIndex >= (uint)slots.Length)
+                    return;
+
+                var slot = slots[slotIndex];
+                var activeModifierCount = CountActiveModifiersForSlot(owner, slot.Sequence, slot.GameplayEffectCode);
+                RemoveActiveModifiersForSlot(owner, slot.Sequence, slot.GameplayEffectCode);
+                RemoveGrantedTagsForSlot(owner, slot.Sequence, slot.GameplayEffectCode);
+                RemoveGrantedAbilitiesForSlot(owner, slot.Sequence, slot.GameplayEffectCode);
+                RemoveSetByCallerSnapshotForSlot(owner, slot.Sequence, slot.GameplayEffectCode);
+                RecordCleanup(owner, in slot, activeModifierCount, ref store);
+                mutations.Add(new ActiveEffectMutationBuffer
+                {
+                    Sequence = slot.Sequence,
+                    Frame = Frame,
+                    Kind = ActiveEffectMutationKind.Remove,
+                    ActiveEffect = Entity.Null,
+                    SourceAsc = slot.SourceAsc,
+                    TargetAsc = owner,
+                    SourceAbility = slot.SourceAbility,
+                    SourceEffect = slot.SourceEffect,
+                    GameplayEffectCode = slot.GameplayEffectCode,
+                    ContextId = slot.ContextId,
+                    ParentContextId = slot.ParentContextId,
+                    StackCount = slot.StackCount,
+                    DurationFrameOverride = slot.DurationFrame,
+                    PeriodFrame = slot.PeriodFrame,
+                });
+                EnqueueRemovedEvent(in slot);
+                slots.RemoveAt(slotIndex);
+            }
+
+            private void RemoveSetByCallerSnapshotForSlot(
+                Entity owner,
+                int slotSequence,
+                int gameplayEffectCode)
+            {
+                if (owner == Entity.Null || !SetByCallerSnapshotLookup.HasBuffer(owner))
+                    return;
+
+                GASGeneratedActiveEffectRuntime.RemoveSetByCallerSnapshotForSlot(
+                    SetByCallerSnapshotLookup[owner],
+                    slotSequence,
+                    gameplayEffectCode);
+            }
+
+            private void RecordCleanup(
+                Entity owner,
+                in ActiveGameplayEffectBuffer slot,
+                int activeModifierCount,
+                ref ASCActiveEffectsComponent store)
+            {
+                if (owner == Entity.Null || !CleanupRecordLookup.HasBuffer(owner))
+                    return;
+
+                var records = CleanupRecordLookup[owner];
+                while (records.Length >= ActiveEffectStore.MaxCleanupRecordCount)
+                    records.RemoveAt(0);
+
+                var cleanupFlags = ActiveEffectCleanupWorkFlags.OwnerLocalSlot;
+                if (activeModifierCount > 0)
+                    cleanupFlags |= ActiveEffectCleanupWorkFlags.RuntimeModifiers;
+                if (slot.ActiveGrantedTagCount > 0)
+                    cleanupFlags |= ActiveEffectCleanupWorkFlags.GrantedTags;
+                if (slot.ActiveGrantedAbilityCount > 0)
+                    cleanupFlags |= ActiveEffectCleanupWorkFlags.GrantedAbilities;
+
+                records.Add(new ActiveGameplayEffectCleanupRecordBuffer
+                {
+                    Sequence = slot.Sequence,
+                    ActiveEffectEntity = Entity.Null,
+                    SourceAsc = slot.SourceAsc,
+                    TargetAsc = owner,
+                    SourceAbility = slot.SourceAbility,
+                    SourceEffect = slot.SourceEffect,
+                    Instigator = slot.Instigator,
+                    Causer = slot.Causer,
+                    GameplayEffectCode = slot.GameplayEffectCode,
+                    Level = slot.Level,
+                    StackCount = slot.StackCount,
+                    ContextId = slot.ContextId,
+                    ParentContextId = slot.ParentContextId,
+                    CleanupFrame = Frame,
+                    CleanupState = EGameplayEffectLifecycleState.PendingRemove,
+                    SlotState = ActiveEffectSlotState.PendingRemove,
+                    PreviousSlotState = slot.State,
+                    DurationFrame = slot.DurationFrame,
+                    RemainingFrame = slot.RemainingFrame,
+                    PeriodFrame = slot.PeriodFrame,
+                    LastPeriodFrame = slot.LastPeriodFrame,
+                    ActiveGrantedTagCount = slot.ActiveGrantedTagCount,
+                    ActiveGrantedAbilityCount = slot.ActiveGrantedAbilityCount,
+                    ActiveModifierCount = activeModifierCount,
+                    RequestedCleanupWorkFlags = (int)cleanupFlags,
+                    ResolvedCleanupWorkFlags = (int)cleanupFlags,
+                    CleanupResolvedFrame = Frame,
+                    Flags = slot.Flags,
+                });
+
+                store.LastCleanupFrame = Frame;
+                store.CleanupRecordCount = records.Length;
+            }
+
+            private void EmitOverflowCommand(
+                ref GEEffectCommandStreamComponent stream,
+                ref GASDefinitionCatalogBlob catalog,
+                DynamicBuffer<GEEffectCommandBuffer> commands,
+                DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+                in GEEffectCommandBuffer sourceCommand,
+                in GASCatalogGameplayEffectDefinitionBlob gameplayEffect)
+            {
+                if (gameplayEffect.OverflowGameplayEffectCode <= 0
+                    || gameplayEffect.OverflowGameplayEffectCode == sourceCommand.GameplayEffectCode
+                    || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, gameplayEffect.OverflowGameplayEffectCode, out var overflowIndex))
+                {
+                    return;
+                }
+
+                ref readonly var overflowEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, overflowIndex);
+                var durationFrame = overflowEffect.DurationFrames;
+                var kind = RequiresActiveMutationLane(in overflowEffect, durationFrame)
+                    ? GEEffectCommandKind.ActiveMutation
+                    : GEEffectCommandKind.Instant;
+                EffectCommandSpecStream.AppendPreparedCommand(
+                    ref stream,
+                    commands,
+                    setByCallerValues,
+                    new GEEffectCommandBuffer
+                    {
+                        Frame = Frame,
+                        Kind = kind,
+                        Source = GEEffectCommandSource.Overflow,
+                        SourceAsc = sourceCommand.SourceAsc,
+                        TargetAsc = sourceCommand.TargetAsc,
+                        SourceAbility = sourceCommand.SourceAbility,
+                        SourceEffect = sourceCommand.SourceEffect,
+                        Instigator = sourceCommand.Instigator,
+                        Causer = sourceCommand.Causer,
+                        GameplayEffectCode = gameplayEffect.OverflowGameplayEffectCode,
+                        Level = sourceCommand.Level,
+                        DurationFrameOverride = durationFrame,
+                        ParentContextId = sourceCommand.ContextId,
+                        TargetDataKind = sourceCommand.TargetDataKind,
+                        Flags = kind == GEEffectCommandKind.ActiveMutation ? GASGECommandSeedFlags.ActiveMutation : GASGECommandSeedFlags.None,
+                    },
+                    Frame);
+            }
+
+            private void MarkActiveModifierAdded(Entity asc)
+            {
+                EnqueueAttributeOwnerMarkerRequest(asc, EAttributeOwnerMarkerRequestKind.SetActiveModifierPresent);
+            }
+
+            private void RefreshActiveModifierPresence(
+                Entity asc,
+                DynamicBuffer<AttributeActiveModifierBuffer> modifiers)
+            {
+                EnqueueAttributeOwnerMarkerRequest(asc, EAttributeOwnerMarkerRequestKind.SetActiveModifierPresent);
+            }
+
+            private void MarkCurrentValueDirty(
+                DynamicBuffer<AttributeValueBuffer> attributes,
+                Entity asc,
+                int attrSetCode,
+                int attrCode)
+            {
+                var attrIndex = attributes.IndexOfAttribute(attrSetCode, attrCode);
+                if (attrIndex == -1)
+                    return;
+
+                var attr = attributes[attrIndex];
+                attr.Dirty = true;
+                attributes[attrIndex] = attr;
+                EnqueueAttributeOwnerMarkerRequest(asc, EAttributeOwnerMarkerRequestKind.MarkDirty);
+            }
+
+            private void EnqueueAttributeOwnerMarkerRequest(Entity asc, EAttributeOwnerMarkerRequestKind requestKind)
+            {
+                if (asc == Entity.Null
+                    || EventBusEntity == Entity.Null
+                    || !AttributeOwnerMarkerRequestLookup.HasBuffer(EventBusEntity))
+                {
+                    return;
+                }
+
+                var requests = AttributeOwnerMarkerRequestLookup[EventBusEntity];
+                requests.Add(new AttributeOwnerMarkerRequestBuffer
+                {
+                    Sequence = requests.Length,
+                    ASC = asc,
+                    RequestKind = requestKind,
+                    Value = 1,
+                });
+            }
+
+            private int CountActiveModifiersForSlot(
+                Entity owner,
+                int sourceSequence,
+                int gameplayEffectCode)
+            {
+                if (owner == Entity.Null || !ActiveModifierLookup.HasBuffer(owner))
+                    return 0;
+
+                var count = 0;
+                var modifiers = ActiveModifierLookup[owner];
+                for (var i = 0; i < modifiers.Length; i++)
+                {
+                    var modifier = modifiers[i];
+                    if (modifier.SourceSequence == sourceSequence
+                        && modifier.SourceGameplayEffectCode == gameplayEffectCode)
+                    {
+                        count++;
+                    }
+                }
+
+                return count;
+            }
+
+            private bool IsAvailableAsc(Entity asc)
+            {
+                return asc != Entity.Null
+                    && EntityStorageInfoLookup.Exists(asc)
+                    && (!DestroyingLookup.HasComponent(asc) || !DestroyingLookup.IsComponentEnabled(asc));
+            }
+
+            private bool HasActiveEffectStorage(Entity owner)
+            {
+                return owner != Entity.Null
+                    && ActiveEffectsLookup.HasComponent(owner)
+                    && ActiveEffectSlotLookup.HasBuffer(owner)
+                    && SetByCallerSnapshotLookup.HasBuffer(owner)
+                    && CleanupRecordLookup.HasBuffer(owner)
+                    && TagMaskLookup.HasComponent(owner);
+            }
+
+            private void EnqueueStackOverflowEvent(
+                in GEEffectCommandBuffer command,
+                in GASCatalogGameplayEffectDefinitionBlob gameplayEffect)
+            {
+                EnqueueGameplayEvent(new GameplayEventBuffer
+                {
+                    EventType = EGameplayEventType.StackOverflow,
+                    Domain = EGameplayFactDomain.GameplayEffect,
+                    Category = EGameplayFactCategory.StateChange,
+                    Severity = EGameplayFactSeverity.Info,
+                    SourceAsc = command.SourceAsc,
+                    TargetAsc = command.TargetAsc,
+                    SourceAbility = command.SourceAbility,
+                    ContextId = command.ContextId,
+                    EventCode = command.GameplayEffectCode,
+                    ReasonCode = gameplayEffect.OverflowGameplayEffectCode,
+                });
+            }
+
+            private void EnqueueStackOverflowDeniedEvent(in GEEffectCommandBuffer command)
+            {
+                EnqueueGameplayEvent(new GameplayEventBuffer
+                {
+                    EventType = EGameplayEventType.StackOverflowDenied,
+                    Domain = EGameplayFactDomain.GameplayEffect,
+                    Category = EGameplayFactCategory.Failure,
+                    Severity = EGameplayFactSeverity.Warning,
+                    SourceAsc = command.SourceAsc,
+                    TargetAsc = command.TargetAsc,
+                    SourceAbility = command.SourceAbility,
+                    ContextId = command.ContextId,
+                    EventCode = command.GameplayEffectCode,
+                });
+            }
+
+            private void EnqueueStackClearedByOverflowEvent(in GEEffectCommandBuffer command)
+            {
+                EnqueueGameplayEvent(new GameplayEventBuffer
+                {
+                    EventType = EGameplayEventType.StackClearedByOverflow,
+                    Domain = EGameplayFactDomain.GameplayEffect,
+                    Category = EGameplayFactCategory.StateChange,
+                    Severity = EGameplayFactSeverity.Info,
+                    SourceAsc = command.SourceAsc,
+                    TargetAsc = command.TargetAsc,
+                    SourceAbility = command.SourceAbility,
+                    ContextId = command.ContextId,
+                    EventCode = command.GameplayEffectCode,
+                });
+            }
+
+            private void EnqueueAppliedEvents(
+                in GEEffectCommandBuffer command,
+                in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
+                Entity gameplayEffectEntity)
+            {
+                EnqueueGameplayEvent(new GameplayEventBuffer
+                {
+                    EventType = EGameplayEventType.GameplayEffectApplied,
+                    Domain = EGameplayFactDomain.GameplayEffect,
+                    Category = EGameplayFactCategory.StateChange,
+                    Severity = EGameplayFactSeverity.Info,
+                    SourceAsc = command.SourceAsc,
+                    TargetAsc = command.TargetAsc,
+                    SourceAbility = command.SourceAbility,
+                    SourceEffect = gameplayEffectEntity,
+                    ContextId = command.ContextId,
+                    EventCode = command.GameplayEffectCode,
+                });
+
+                if (gameplayEffect.GameplayCueCode <= 0)
+                    return;
+
+                EnqueueGameplayEvent(new GameplayEventBuffer
+                {
+                    EventType = EGameplayEventType.CueRequested,
+                    Domain = EGameplayFactDomain.Cue,
+                    Category = EGameplayFactCategory.Request,
+                    Severity = EGameplayFactSeverity.Info,
+                    SourceAsc = command.SourceAsc,
+                    TargetAsc = command.TargetAsc,
+                    SourceAbility = command.SourceAbility,
+                    SourceEffect = gameplayEffectEntity,
+                    ContextId = command.ContextId,
+                    EventCode = (int)EGameplayCueEvent.OnApply,
+                    ReasonCode = gameplayEffect.GameplayCueCode,
+                });
+            }
+
+            private void EnqueueRemovedEvent(in ActiveGameplayEffectBuffer slot)
+            {
+                EnqueueGameplayEvent(new GameplayEventBuffer
+                {
+                    EventType = EGameplayEventType.GameplayEffectRemoved,
+                    Domain = EGameplayFactDomain.GameplayEffect,
+                    Category = EGameplayFactCategory.StateChange,
+                    Severity = EGameplayFactSeverity.Info,
+                    SourceAsc = slot.SourceAsc,
+                    TargetAsc = slot.TargetAsc,
+                    SourceAbility = slot.SourceAbility,
+                    SourceEffect = slot.SourceEffect,
+                    ContextId = slot.ContextId,
+                    EventCode = slot.GameplayEffectCode,
+                });
+            }
+
+            private void EnqueueGameplayEvent(GameplayEventBuffer evt)
+            {
+                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
+                    return;
+
+                evt.Frame = Frame;
+                if (StreamLookup.HasComponent(StreamEntity))
+                {
+                    var stream = StreamLookup[StreamEntity];
+                    evt.Sequence = Allocate(ref stream.NextFactSequence);
+                    StreamLookup[StreamEntity] = stream;
+                }
+                else
+                {
+                    evt.Sequence = 0;
+                }
+
+                FactLookup[StreamEntity].Add(evt);
+            }
+
+            private void EnqueueTagChangedEvent(Entity owner, int tagIndex, bool added)
+            {
+                EnqueueGameplayEvent(new GameplayEventBuffer
+                {
+                    EventType = EGameplayEventType.TagChanged,
+                    Domain = EGameplayFactDomain.Tag,
+                    Category = EGameplayFactCategory.StateChange,
+                    Severity = EGameplayFactSeverity.Info,
+                    TargetAsc = owner,
+                    EventCode = tagIndex,
+                    ReasonCode = added ? 1 : 0,
+                });
+            }
+        }
+
+        [BurstCompile]
         public struct GEActiveEffectPreTickJob : IJobChunk
         {
             [ReadOnly] public EntityTypeHandle EntityTypeHandle;
@@ -311,24 +1406,20 @@ namespace GAS.Runtime.Generated
             public BufferLookup<ActiveGameplayEffectSetByCallerValueBuffer> SetByCallerSnapshotLookup;
             public BufferLookup<AttributeValueBuffer> AttributeLookup;
             public BufferLookup<AttributeActiveModifierBuffer> ActiveModifierLookup;
-            public ComponentLookup<AttributeDirtyComponent> AttributeDirtyLookup;
-            public ComponentLookup<AttributeActiveModifierPresentComponent> ActiveModifierPresentLookup;
+            public BufferLookup<AttributeOwnerMarkerRequestBuffer> AttributeOwnerMarkerRequestLookup;
             public ComponentLookup<TagMaskComponent> TagMaskLookup;
             [ReadOnly] public ComponentLookup<TagFixedMaskComponent> TagFixedMaskLookup;
             public BufferLookup<TagTemporarySourceBuffer> TagSourceLookup;
             public BufferLookup<AbilitySlotBuffer> AbilitySlotLookup;
             [ReadOnly] public ComponentLookup<AbilityStateComponent> AbilityStateLookup;
             [ReadOnly] public ComponentLookup<AbilityGrantedByEffectComponent> AbilityGrantedLookup;
-            public ComponentLookup<AbilityCancelRequestComponent> AbilityCancelRequestLookup;
-            public ComponentLookup<AbilityDestroyOnCleanupComponent> AbilityDestroyOnCleanupLookup;
-            public ComponentLookup<GERemoveCommandPendingComponent> RemovePendingLookup;
+            public ComponentTypeHandle<GERemoveCommandPendingComponent> RemovePendingTypeHandle;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             public BufferLookup<GESetByCallerValueBuffer> CommandSetByCallerLookup;
             public BufferLookup<ActiveEffectMutationBuffer> MutationLookup;
-            public ComponentLookup<GameplayEventBusComponent> GameplayEventBusLookup;
-            public BufferLookup<GameplayEventBusEventBuffer> GameplayEventLookup;
-            public BufferLookup<TagChangeEventBuffer> TagChangeEventLookup;
+            public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
+            public BufferLookup<GameplayEventBuffer> FactLookup;
             public EntityCommandBuffer StructuralEcb;
             public EntityArchetype GrantedAbilityArchetype;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
@@ -359,6 +1450,9 @@ namespace GAS.Runtime.Generated
                 var removeCommandBuffers = ProcessExplicitRemoveCommands
                     ? chunk.GetBufferAccessor(ref RemoveCommandBufferTypeHandle)
                     : default;
+                EnabledMask removePendingMask = default;
+                if (ProcessExplicitRemoveCommands)
+                    removePendingMask = chunk.GetEnabledMask(ref RemovePendingTypeHandle);
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
@@ -391,8 +1485,7 @@ namespace GAS.Runtime.Generated
                         }
 
                         removeCommands.Clear();
-                        if (RemovePendingLookup.HasComponent(owner))
-                            RemovePendingLookup.SetComponentEnabled(owner, false);
+                        removePendingMask[entityIndex] = false;
                     }
 
                     ActiveEffectStore.RefreshChunkSkipIndexCounters(ref store, slots, Frame);
@@ -691,6 +1784,53 @@ namespace GAS.Runtime.Generated
                 RefreshActiveModifierPresence(owner, modifiers);
             }
 
+            private void MarkActiveModifierAdded(Entity asc)
+            {
+                EnqueueAttributeOwnerMarkerRequest(asc, EAttributeOwnerMarkerRequestKind.SetActiveModifierPresent);
+            }
+
+            private void RefreshActiveModifierPresence(
+                Entity asc,
+                DynamicBuffer<AttributeActiveModifierBuffer> modifiers)
+            {
+                EnqueueAttributeOwnerMarkerRequest(asc, EAttributeOwnerMarkerRequestKind.SetActiveModifierPresent);
+            }
+
+            private void MarkCurrentValueDirty(
+                DynamicBuffer<AttributeValueBuffer> attributes,
+                Entity asc,
+                int attrSetCode,
+                int attrCode)
+            {
+                var attrIndex = attributes.IndexOfAttribute(attrSetCode, attrCode);
+                if (attrIndex == -1)
+                    return;
+
+                var attr = attributes[attrIndex];
+                attr.Dirty = true;
+                attributes[attrIndex] = attr;
+                EnqueueAttributeOwnerMarkerRequest(asc, EAttributeOwnerMarkerRequestKind.MarkDirty);
+            }
+
+            private void EnqueueAttributeOwnerMarkerRequest(Entity asc, EAttributeOwnerMarkerRequestKind requestKind)
+            {
+                if (asc == Entity.Null
+                    || EventBusEntity == Entity.Null
+                    || !AttributeOwnerMarkerRequestLookup.HasBuffer(EventBusEntity))
+                {
+                    return;
+                }
+
+                var requests = AttributeOwnerMarkerRequestLookup[EventBusEntity];
+                requests.Add(new AttributeOwnerMarkerRequestBuffer
+                {
+                    Sequence = requests.Length,
+                    ASC = asc,
+                    RequestKind = requestKind,
+                    Value = 1,
+                });
+            }
+
             private int CountActiveModifiersForSlot(
                 Entity owner,
                 int sourceSequence,
@@ -736,12 +1876,7 @@ namespace GAS.Runtime.Generated
                     var removedFromMask = RemoveTagIndexFromEffectiveMaskIfUnreferenced(owner, source.TagIndex);
                     if (removedFromMask)
                     {
-                        EnqueueTagChangeEvent(new TagChangeEventBuffer
-                        {
-                            ASC = owner,
-                            TagIndex = source.TagIndex,
-                            Added = false,
-                        });
+                        EnqueueTagChangedEvent(owner, source.TagIndex, false);
                     }
                 }
             }
@@ -826,50 +1961,43 @@ namespace GAS.Runtime.Generated
                 var isRunning = runtime.Phase is EAbilityPhase.Activating or EAbilityPhase.Active or EAbilityPhase.Ending;
                 if (isRunning)
                 {
-                    RequestAbilityCancel(ability, runtime);
-                    EnableDestroyOnCleanup(ability);
+                    EnqueueAbilityLifecycleRequest(ability, runtime);
                     return;
                 }
 
                 StructuralEcb.DestroyEntity(ability);
             }
 
-            private void RequestAbilityCancel(Entity ability, in AbilityStateComponent runtime)
+            private void EnqueueAbilityLifecycleRequest(Entity ability, in AbilityStateComponent runtime)
             {
-                if (!AbilityCancelRequestLookup.HasComponent(ability)
-                    || AbilityCancelRequestLookup.IsComponentEnabled(ability))
-                {
+                if (EventBusEntity == Entity.Null
+                    || !AbilityLifecycleRequestLookup.HasBuffer(EventBusEntity))
                     return;
-                }
 
-                AbilityCancelRequestLookup[ability] = new AbilityCancelRequestComponent
+                var requests = AbilityLifecycleRequestLookup[EventBusEntity];
+                requests.Add(new AbilityLifecycleRequestBuffer
                 {
+                    Sequence = requests.Length,
+                    RequestKind = EAbilityLifecycleRequestKind.Cancel,
                     Reason = EAbilityLifecycleReason.GrantedEffectRemoved,
+                    Ability = ability,
                     SourceAbility = Entity.Null,
                     SourceEffect = Entity.Null,
                     SourceAbilityCode = 0,
-                };
-                AbilityCancelRequestLookup.SetComponentEnabled(ability, true);
-                EnqueueGameplayEvent(new GameplayEventBusEventBuffer
+                    DestroyOnCleanup = 1,
+                });
+                EnqueueGameplayEvent(new GameplayEventBuffer
                 {
-                    Type = EGameplayEventType.AbilityCancelRequested,
+                    EventType = EGameplayEventType.AbilityCancelRequested,
+                    Domain = EGameplayFactDomain.Ability,
+                    Category = EGameplayFactCategory.Request,
+                    Severity = EGameplayFactSeverity.Info,
                     SourceAsc = runtime.Owner,
                     TargetAsc = runtime.Owner,
                     SourceAbility = ability,
-                    GameplayEffect = Entity.Null,
-                    RelatedAbility = Entity.Null,
                     EventCode = runtime.Code,
                     ReasonCode = (int)EAbilityLifecycleReason.GrantedEffectRemoved,
                 });
-            }
-
-            private void EnableDestroyOnCleanup(Entity ability)
-            {
-                if (AbilityDestroyOnCleanupLookup.HasComponent(ability)
-                    && !AbilityDestroyOnCleanupLookup.IsComponentEnabled(ability))
-                {
-                    AbilityDestroyOnCleanupLookup.SetComponentEnabled(ability, true);
-                }
             }
 
             private void RemoveSetByCallerSnapshotForSlot(
@@ -1078,58 +2206,18 @@ namespace GAS.Runtime.Generated
                 }
             }
 
-            private void MarkActiveModifierAdded(Entity asc)
-            {
-                if (asc == Entity.Null
-                    || !ActiveModifierPresentLookup.HasComponent(asc)
-                    || ActiveModifierPresentLookup.IsComponentEnabled(asc))
-                {
-                    return;
-                }
-
-                ActiveModifierPresentLookup.SetComponentEnabled(asc, true);
-            }
-
-            private void RefreshActiveModifierPresence(
-                Entity asc,
-                DynamicBuffer<AttributeActiveModifierBuffer> modifiers)
-            {
-                if (asc == Entity.Null || !ActiveModifierPresentLookup.HasComponent(asc))
-                    return;
-
-                ActiveModifierPresentLookup.SetComponentEnabled(asc, modifiers.Length > 0);
-            }
-
-            private void MarkCurrentValueDirty(
-                DynamicBuffer<AttributeValueBuffer> attributes,
-                Entity asc,
-                int attrSetCode,
-                int attrCode)
-            {
-                var attrIndex = attributes.IndexOfAttribute(attrSetCode, attrCode);
-                if (attrIndex == -1)
-                    return;
-
-                var attr = attributes[attrIndex];
-                attr.Dirty = true;
-                attributes[attrIndex] = attr;
-                if (asc != Entity.Null
-                    && AttributeDirtyLookup.HasComponent(asc)
-                    && !AttributeDirtyLookup.IsComponentEnabled(asc))
-                {
-                    AttributeDirtyLookup.SetComponentEnabled(asc, true);
-                }
-            }
-
             private void EnqueueStackCountChangedEvent(in ActiveGameplayEffectBuffer slot)
             {
-                EnqueueGameplayEvent(new GameplayEventBusEventBuffer
+                EnqueueGameplayEvent(new GameplayEventBuffer
                 {
-                    Type = EGameplayEventType.StackCountChanged,
+                    EventType = EGameplayEventType.StackCountChanged,
+                    Domain = EGameplayFactDomain.GameplayEffect,
+                    Category = EGameplayFactCategory.StateChange,
+                    Severity = EGameplayFactSeverity.Info,
                     SourceAsc = slot.SourceAsc,
                     TargetAsc = slot.TargetAsc,
                     SourceAbility = slot.SourceAbility,
-                    GameplayEffect = Entity.Null,
+                    SourceEffect = slot.SourceEffect,
                     ContextId = slot.ContextId,
                     EventCode = slot.GameplayEffectCode,
                     Value = slot.StackCount,
@@ -1138,225 +2226,54 @@ namespace GAS.Runtime.Generated
 
             private void EnqueueRemovedEvent(in ActiveGameplayEffectBuffer slot)
             {
-                EnqueueGameplayEvent(new GameplayEventBusEventBuffer
+                EnqueueGameplayEvent(new GameplayEventBuffer
                 {
-                    Type = EGameplayEventType.GameplayEffectRemoved,
+                    EventType = EGameplayEventType.GameplayEffectRemoved,
+                    Domain = EGameplayFactDomain.GameplayEffect,
+                    Category = EGameplayFactCategory.StateChange,
+                    Severity = EGameplayFactSeverity.Info,
                     SourceAsc = slot.SourceAsc,
                     TargetAsc = slot.TargetAsc,
                     SourceAbility = slot.SourceAbility,
-                    GameplayEffect = Entity.Null,
+                    SourceEffect = slot.SourceEffect,
                     ContextId = slot.ContextId,
                     EventCode = slot.GameplayEffectCode,
                 });
             }
 
-            private void EnqueueGameplayEvent(GameplayEventBusEventBuffer evt)
+            private void EnqueueGameplayEvent(GameplayEventBuffer evt)
             {
-                if (EventBusEntity == Entity.Null || !GameplayEventLookup.HasBuffer(EventBusEntity))
+                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
                     return;
 
                 evt.Frame = Frame;
-                if (GameplayEventBusLookup.HasComponent(EventBusEntity))
+                if (StreamLookup.HasComponent(StreamEntity))
                 {
-                    var eventBus = GameplayEventBusLookup[EventBusEntity];
-                    evt.Sequence = eventBus.NextSequence;
-                    eventBus.NextSequence++;
-                    GameplayEventBusLookup[EventBusEntity] = eventBus;
+                    var stream = StreamLookup[StreamEntity];
+                    evt.Sequence = Allocate(ref stream.NextFactSequence);
+                    StreamLookup[StreamEntity] = stream;
                 }
                 else
                 {
                     evt.Sequence = 0;
                 }
 
-                GameplayEventLookup[EventBusEntity].Add(evt);
+                FactLookup[StreamEntity].Add(evt);
             }
 
-            private void EnqueueTagChangeEvent(TagChangeEventBuffer evt)
+            private void EnqueueTagChangedEvent(Entity owner, int tagIndex, bool added)
             {
-                if (EventBusEntity != Entity.Null && TagChangeEventLookup.HasBuffer(EventBusEntity))
-                    TagChangeEventLookup[EventBusEntity].Add(evt);
-            }
-        }
-
-        public static bool TryApplyActiveMutation(
-            EntityManager em,
-            ref GEEffectCommandStreamComponent stream,
-            ref GASDefinitionCatalogBlob catalog,
-            in GEEffectCommandBuffer command,
-            DynamicBuffer<GEEffectCommandBuffer> commands,
-            DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
-            DynamicBuffer<ActiveEffectMutationBuffer> mutations,
-            int frame,
-            ref EntityCommandBuffer structuralEcb,
-            ref EventBusHelper.GameplayEventBusWriter eventWriter)
-        {
-            if (!IsAvailableAsc(em, command.TargetAsc)
-                || !HasActiveEffectStorage(em, command.TargetAsc)
-                || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, command.GameplayEffectCode, out var gameplayEffectIndex))
-            {
-                return false;
-            }
-
-            ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
-            var targetTags = em.GetComponentData<TagMaskComponent>(command.TargetAsc);
-            if (!EvaluateGameplayEffectRequirements(ref catalog, in gameplayEffect, in targetTags))
-                return false;
-
-            var slots = em.GetBuffer<ActiveGameplayEffectBuffer>(command.TargetAsc);
-            var setByCallerSnapshot = em.GetBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(command.TargetAsc);
-            RemoveGameplayEffectsWithTags(
-                em,
-                ref catalog,
-                command.TargetAsc,
-                in gameplayEffect,
-                slots,
-                mutations,
-                frame,
-                ref structuralEcb,
-                ref eventWriter);
-
-            var durationFrame = ResolveDurationFrame(in command, in gameplayEffect);
-            if (!HasPersistentRuntimeState(in gameplayEffect, durationFrame))
-            {
-                mutations.Add(new ActiveEffectMutationBuffer
+                EnqueueGameplayEvent(new GameplayEventBuffer
                 {
-                    Sequence = command.Sequence,
-                    SourceCommandSequence = command.Sequence,
-                    Frame = frame,
-                    Kind = ActiveEffectMutationKind.Apply,
-                    ActiveEffect = Entity.Null,
-                    SourceAsc = command.SourceAsc,
-                    TargetAsc = command.TargetAsc,
-                    SourceAbility = command.SourceAbility,
-                    SourceEffect = command.SourceEffect,
-                    GameplayEffectCode = command.GameplayEffectCode,
-                    ContextId = command.ContextId,
-                    ParentContextId = command.ParentContextId,
-                    StackCount = 1,
-                    DurationFrameOverride = durationFrame,
-                    PeriodFrame = gameplayEffect.PeriodFrames,
+                    EventType = EGameplayEventType.TagChanged,
+                    Domain = EGameplayFactDomain.Tag,
+                    Category = EGameplayFactCategory.StateChange,
+                    Severity = EGameplayFactSeverity.Info,
+                    TargetAsc = owner,
+                    EventCode = tagIndex,
+                    ReasonCode = added ? 1 : 0,
                 });
-                EnqueueAppliedEvents(ref eventWriter, in command, in gameplayEffect, Entity.Null);
-                return true;
             }
-
-            var store = em.GetComponentData<ASCActiveEffectsComponent>(command.TargetAsc);
-            var slotIndex = FindRefreshableSlot(slots, in command);
-            if (slotIndex < 0 && slots.Length >= GASParameterSetting.ASC_MAX_GAMEPLAY_EFFECT_COUNT)
-                return false;
-
-            var isNewSlot = slotIndex < 0;
-            var previous = isNewSlot ? default : slots[slotIndex];
-            var previousStackCount = previous.StackCount <= 0 ? 1 : previous.StackCount;
-            var isOverflow = !isNewSlot && IsStackOverflow(in gameplayEffect, previousStackCount);
-            if (isOverflow)
-            {
-                EmitOverflowCommand(
-                    ref stream,
-                    ref catalog,
-                    commands,
-                    setByCallerValues,
-                    in command,
-                    in gameplayEffect,
-                    frame);
-                EnqueueStackOverflowEvent(ref eventWriter, in command, in gameplayEffect);
-                if (gameplayEffect.ClearStackOnOverflow != 0)
-                {
-                    RemoveSlotAt(em, command.TargetAsc, slots, slotIndex, mutations, frame, ref structuralEcb, ref eventWriter);
-                    if (em.HasComponent<ASCActiveEffectsComponent>(command.TargetAsc))
-                        store = em.GetComponentData<ASCActiveEffectsComponent>(command.TargetAsc);
-                    slotIndex = -1;
-                    isNewSlot = true;
-                    previous = default;
-                    previousStackCount = 1;
-                    EnqueueStackClearedByOverflowEvent(ref eventWriter, in command);
-                }
-
-                if (gameplayEffect.DenyOverflowApplication != 0)
-                {
-                    EnqueueStackOverflowDeniedEvent(ref eventWriter, in command);
-                    return true;
-                }
-            }
-
-            var slot = isNewSlot
-                ? CreateNewSlot(ref store, in command, in gameplayEffect, durationFrame, frame)
-                : RefreshExistingSlot(
-                    previous,
-                    in command,
-                    in gameplayEffect,
-                    durationFrame,
-                    frame,
-                    ShouldRefreshDuration(in gameplayEffect),
-                    ShouldResetPeriod(in gameplayEffect));
-
-            slot.StackCount = ResolveNextStackCount(in gameplayEffect, previousStackCount, isNewSlot);
-            RemoveActiveModifiersForSlot(em, command.TargetAsc, slot.Sequence, slot.GameplayEffectCode);
-            RemoveSetByCallerSnapshotForSlot(setByCallerSnapshot, slot.Sequence, slot.GameplayEffectCode);
-            CopySetByCallerSnapshot(in command, setByCallerValues, setByCallerSnapshot, slot.Sequence, slot.GameplayEffectCode);
-
-            var activeModifierCount = ApplyActiveModifiers(
-                em,
-                ref catalog,
-                in gameplayEffect,
-                in command,
-                setByCallerValues,
-                slot.Sequence,
-                slot.StackCount);
-            slot.ActiveGrantedTagCount = ApplyGrantedTags(
-                em,
-                ref catalog,
-                command.TargetAsc,
-                in gameplayEffect,
-                slot.Sequence,
-                ref eventWriter);
-            slot.ActiveGrantedAbilityCount = ApplyGrantedAbilities(
-                em,
-                ref catalog,
-                command.TargetAsc,
-                in gameplayEffect,
-                slot.Sequence,
-                ref structuralEcb);
-            slot.Flags = ResolveSlotFlags(
-                in gameplayEffect,
-                durationFrame,
-                activeModifierCount,
-                slot.ActiveGrantedTagCount,
-                slot.ActiveGrantedAbilityCount);
-
-            if (slotIndex >= 0)
-                slots[slotIndex] = slot;
-            else
-                slots.Add(slot);
-
-            ActiveEffectStore.RefreshChunkSkipIndexCounters(ref store, slots, frame);
-            em.SetComponentData(command.TargetAsc, store);
-
-            mutations.Add(new ActiveEffectMutationBuffer
-            {
-                Sequence = slot.Sequence,
-                SourceCommandSequence = command.Sequence,
-                Frame = frame,
-                Kind = isNewSlot
-                    ? ActiveEffectMutationKind.Apply
-                    : slot.StackCount > previousStackCount
-                        ? ActiveEffectMutationKind.Stack
-                        : ActiveEffectMutationKind.Refresh,
-                ActiveEffect = Entity.Null,
-                SourceAsc = command.SourceAsc,
-                TargetAsc = command.TargetAsc,
-                SourceAbility = command.SourceAbility,
-                SourceEffect = command.SourceEffect,
-                GameplayEffectCode = command.GameplayEffectCode,
-                ContextId = command.ContextId,
-                ParentContextId = command.ParentContextId,
-                StackCount = slot.StackCount,
-                DurationFrameOverride = durationFrame,
-                PeriodFrame = slot.PeriodFrame,
-            });
-
-            EnqueueAppliedEvents(ref eventWriter, in command, in gameplayEffect, Entity.Null);
-            return true;
         }
 
         public static int ClampCursor(int cursor, int length)
@@ -1533,133 +2450,8 @@ namespace GAS.Runtime.Generated
             return (int)flags;
         }
 
-        private static int ApplyActiveModifiers(
-            EntityManager em,
-            ref GASDefinitionCatalogBlob catalog,
-            in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
-            in GEEffectCommandBuffer command,
-            DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
-            int slotSequence,
-            int stackCount)
-        {
-            if (gameplayEffect.ModifierCount <= 0
-                || command.TargetAsc == Entity.Null
-                || !em.Exists(command.TargetAsc)
-                || !em.HasBuffer<AttributeValueBuffer>(command.TargetAsc)
-                || !em.HasBuffer<AttributeActiveModifierBuffer>(command.TargetAsc))
-            {
-                return 0;
-            }
 
-            var attributes = em.GetBuffer<AttributeValueBuffer>(command.TargetAsc);
-            var activeModifiers = em.GetBuffer<AttributeActiveModifierBuffer>(command.TargetAsc);
-            var added = 0;
-            for (var i = 0; i < gameplayEffect.ModifierCount; i++)
-            {
-                var modifierIndex = gameplayEffect.ModifierStart + i;
-                if ((uint)modifierIndex >= (uint)catalog.Modifiers.Length)
-                    continue;
 
-                var modifier = catalog.Modifiers[modifierIndex];
-                var attrIndex = attributes.IndexOfAttribute(modifier.AttributeSetCode, modifier.AttributeCode);
-                if (attrIndex < 0)
-                    continue;
-
-                var context = BuildMagnitudeContext(em, in command, setByCallerValues, in modifier, stackCount);
-                if (!GASGeneratedMagnitudeEvaluator.TryResolveMagnitude(in modifier, in context, out var magnitude))
-                    continue;
-
-                if (HasActiveModifier(activeModifiers, slotSequence, command.GameplayEffectCode, modifier.AttributeSetCode, modifier.AttributeCode, modifier.Operation))
-                    continue;
-
-                activeModifiers.Add(new AttributeActiveModifierBuffer
-                {
-                    AttrSetCode = modifier.AttributeSetCode,
-                    AttributeCode = modifier.AttributeCode,
-                    SourceEntity = Entity.Null,
-                    SourceSequence = slotSequence,
-                    SourceGameplayEffectCode = command.GameplayEffectCode,
-                    Magnitude = magnitude,
-                    Op = modifier.Operation,
-                });
-                AttributeHelper.MarkActiveModifierAdded(em, command.TargetAsc);
-                AttributeHelper.MarkCurrentValueDirty(
-                    em,
-                    command.TargetAsc,
-                    attributes,
-                    modifier.AttributeSetCode,
-                    modifier.AttributeCode);
-                added++;
-            }
-
-            return added;
-        }
-
-        private static MagnitudeEvalContext BuildMagnitudeContext(
-            EntityManager em,
-            in GEEffectCommandBuffer command,
-            DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
-            in GASCatalogModifierDefinitionBlob modifier,
-            int stackCount)
-        {
-            var context = new MagnitudeEvalContext
-            {
-                SourceAsc = command.SourceAsc,
-                TargetAsc = command.TargetAsc,
-                GameplayEffectCode = command.GameplayEffectCode,
-                Level = command.Level,
-                StackCount = stackCount <= 0 ? 1 : stackCount,
-                SetByCallerKey = modifier.MagnitudeKey,
-            };
-
-            if (modifier.MagnitudeSource == EMagnitudeSource.SetByCaller
-                && TryFindSetByCallerValue(in command, setByCallerValues, modifier.MagnitudeKey, out var setByCallerValue))
-            {
-                context.HasSetByCallerValue = 1;
-                context.SetByCallerValue = setByCallerValue;
-            }
-
-            if (modifier.MagnitudeSource == EMagnitudeSource.SourceAttribute
-                && TryReadAttributeValue(em, command.SourceAsc, in modifier, out var sourceValue))
-            {
-                context.HasSourceAttributeValue = 1;
-                context.SourceAttributeValue = sourceValue;
-            }
-
-            if (modifier.MagnitudeSource == EMagnitudeSource.TargetAttribute
-                && TryReadAttributeValue(em, command.TargetAsc, in modifier, out var targetValue))
-            {
-                context.HasTargetAttributeValue = 1;
-                context.TargetAttributeValue = targetValue;
-            }
-
-            return context;
-        }
-
-        private static bool TryReadAttributeValue(
-            EntityManager em,
-            Entity owner,
-            in GASCatalogModifierDefinitionBlob modifier,
-            out float value)
-        {
-            value = 0f;
-            if (owner == Entity.Null || !em.Exists(owner) || !em.HasBuffer<AttributeValueBuffer>(owner))
-                return false;
-
-            var attrSetCode = modifier.CaptureAttributeSetCode != 0
-                ? modifier.CaptureAttributeSetCode
-                : modifier.AttributeSetCode;
-            var attributeCode = modifier.CaptureAttributeCode != 0
-                ? modifier.CaptureAttributeCode
-                : modifier.AttributeCode;
-            var attributes = em.GetBuffer<AttributeValueBuffer>(owner);
-            var attrIndex = attributes.IndexOfAttribute(attrSetCode, attributeCode);
-            if (attrIndex < 0)
-                return false;
-
-            value = attributes[attrIndex].CurrentValue;
-            return true;
-        }
 
         private static bool TryFindSetByCallerValue(
             in GEEffectCommandBuffer command,
@@ -1684,311 +2476,15 @@ namespace GAS.Runtime.Generated
             return false;
         }
 
-        private static void RemoveActiveModifiersForSlot(
-            EntityManager em,
-            Entity owner,
-            int slotSequence,
-            int gameplayEffectCode)
-        {
-            if (owner == Entity.Null || !em.Exists(owner) || !em.HasBuffer<AttributeActiveModifierBuffer>(owner))
-                return;
 
-            var modifiers = em.GetBuffer<AttributeActiveModifierBuffer>(owner);
-            var attributes = em.HasBuffer<AttributeValueBuffer>(owner)
-                ? em.GetBuffer<AttributeValueBuffer>(owner)
-                : default;
-            for (var i = modifiers.Length - 1; i >= 0; i--)
-            {
-                var modifier = modifiers[i];
-                if (modifier.SourceSequence != slotSequence
-                    || modifier.SourceGameplayEffectCode != gameplayEffectCode)
-                {
-                    continue;
-                }
 
-                modifiers.RemoveAt(i);
-                if (attributes.IsCreated)
-                    AttributeHelper.MarkCurrentValueDirty(
-                        em,
-                        owner,
-                        attributes,
-                        modifier.AttrSetCode,
-                        modifier.AttributeCode);
-            }
 
-            AttributeHelper.RefreshActiveModifierPresence(em, owner, modifiers);
-        }
 
-        private static int ApplyGrantedTags(
-            EntityManager em,
-            ref GASDefinitionCatalogBlob catalog,
-            Entity owner,
-            in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
-            int slotSequence,
-            ref EventBusHelper.GameplayEventBusWriter eventWriter)
-        {
-            if (gameplayEffect.GrantedTagMaskIndex < 0
-                || gameplayEffect.GrantedTagMaskIndex >= catalog.TagMasks.Length
-                || owner == Entity.Null
-                || !em.Exists(owner))
-            {
-                return 0;
-            }
 
-            if (!em.HasComponent<TagMaskComponent>(owner) || !em.HasBuffer<TagTemporarySourceBuffer>(owner))
-                return 0;
 
-            var grantedMask = catalog.TagMasks[gameplayEffect.GrantedTagMaskIndex].Mask;
-            var ownerTags = em.GetComponentData<TagMaskComponent>(owner);
-            var sources = em.GetBuffer<TagTemporarySourceBuffer>(owner);
-            for (var tagIndex = 0; tagIndex < TagMaskComponent.Capacity; tagIndex++)
-            {
-                if (!grantedMask.HasTag(tagIndex)
-                    || HasTempTagSource(sources, tagIndex, slotSequence, gameplayEffect.GameplayEffectCode))
-                {
-                    continue;
-                }
 
-                var wasActive = ownerTags.HasTag(tagIndex);
-                ownerTags.AddTag(tagIndex);
-                sources.Add(new TagTemporarySourceBuffer
-                {
-                    TagIndex = tagIndex,
-                    Source = Entity.Null,
-                    SourceSequence = slotSequence,
-                    SourceGameplayEffectCode = gameplayEffect.GameplayEffectCode,
-                });
 
-                if (!wasActive && eventWriter.IsCreated)
-                {
-                    eventWriter.EnqueueTagChangeEvent(new TagChangeEventBuffer
-                    {
-                        ASC = owner,
-                        TagIndex = tagIndex,
-                        Added = true,
-                    });
-                }
-            }
 
-            em.SetComponentData(owner, ownerTags);
-            return CountTempTagSourcesForSlot(sources, slotSequence, gameplayEffect.GameplayEffectCode);
-        }
-
-        private static void RemoveGrantedTagsForSlot(
-            EntityManager em,
-            Entity owner,
-            int slotSequence,
-            int gameplayEffectCode,
-            ref EventBusHelper.GameplayEventBusWriter eventWriter)
-        {
-            if (owner == Entity.Null || !em.Exists(owner) || !em.HasBuffer<TagTemporarySourceBuffer>(owner))
-                return;
-
-            var sources = em.GetBuffer<TagTemporarySourceBuffer>(owner);
-            for (var i = sources.Length - 1; i >= 0; i--)
-            {
-                var source = sources[i];
-                if (source.SourceSequence != slotSequence
-                    || source.SourceGameplayEffectCode != gameplayEffectCode)
-                {
-                    continue;
-                }
-
-                sources.RemoveAt(i);
-                var removedFromMask = RemoveTagIndexFromEffectiveMaskIfUnreferenced(em, owner, source.TagIndex);
-                if (removedFromMask && eventWriter.IsCreated)
-                {
-                    eventWriter.EnqueueTagChangeEvent(new TagChangeEventBuffer
-                    {
-                        ASC = owner,
-                        TagIndex = source.TagIndex,
-                        Added = false,
-                    });
-                }
-            }
-        }
-
-        private static int ApplyGrantedAbilities(
-            EntityManager em,
-            ref GASDefinitionCatalogBlob catalog,
-            Entity owner,
-            in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
-            int slotSequence,
-            ref EntityCommandBuffer structuralEcb)
-        {
-            if (gameplayEffect.GrantedAbilityCount <= 0
-                || owner == Entity.Null
-                || !em.Exists(owner)
-                || !em.HasBuffer<AbilitySlotBuffer>(owner))
-            {
-                return 0;
-            }
-
-            var grantedAbilities = em.GetBuffer<AbilitySlotBuffer>(owner);
-            var added = 0;
-            for (var i = 0; i < gameplayEffect.GrantedAbilityCount; i++)
-            {
-                var grantedIndex = gameplayEffect.GrantedAbilityStart + i;
-                if ((uint)grantedIndex >= (uint)catalog.GrantedAbilities.Length)
-                    continue;
-
-                var granted = catalog.GrantedAbilities[grantedIndex];
-                if (granted.AbilityCode <= 0
-                    || HasGrantedAbilityForSlot(em, grantedAbilities, granted.AbilityCode, slotSequence, gameplayEffect.GameplayEffectCode))
-                {
-                    continue;
-                }
-
-                var ability = structuralEcb.CreateEntity(GASRuntimeEntityArchetypes.GrantedAbility(em));
-                GASRuntimeEntityArchetypes.InitializeAbilityEntity(structuralEcb, ability);
-                structuralEcb.SetComponent(
-                    ability,
-                    AbilityStateComponent.Create(granted.AbilityCode, granted.Level, owner));
-                structuralEcb.SetComponent(ability, new AbilityMainTargetComponent { TargetAsc = Entity.Null });
-                structuralEcb.SetComponent(ability, new AbilityGrantedByEffectComponent
-                {
-                    SourceEffect = Entity.Null,
-                    SourceSequence = slotSequence,
-                    SourceGameplayEffectCode = gameplayEffect.GameplayEffectCode,
-                    ActivationPolicy = (GrantedAbilityActivationPolicy)granted.ActivationPolicy,
-                    DeactivationPolicy = GrantedAbilityDeactivationPolicy.SyncWithEffect,
-                    RemovePolicy = granted.RemovePolicy == 0
-                        ? GrantedAbilityRemovePolicy.SyncWithEffect
-                        : (GrantedAbilityRemovePolicy)granted.RemovePolicy,
-                });
-
-                structuralEcb.AppendToBuffer(owner, new AbilitySlotBuffer { AbilityEntity = ability });
-                added++;
-
-                var activationPolicy = (GrantedAbilityActivationPolicy)granted.ActivationPolicy;
-                if ((activationPolicy == GrantedAbilityActivationPolicy.WhenAdded
-                        || activationPolicy == GrantedAbilityActivationPolicy.SyncWithEffect))
-                {
-                    structuralEcb.SetComponentEnabled<AbilityActivationPendingComponent>(ability, true);
-                }
-                else
-                {
-                    DisableMarker<AbilityActivationPendingComponent>(ref structuralEcb, ability);
-                }
-            }
-
-            return CountGrantedAbilitiesForSlot(em, grantedAbilities, slotSequence, gameplayEffect.GameplayEffectCode) + added;
-        }
-
-        private static void DisableMarker<T>(ref EntityCommandBuffer ecb, Entity entity)
-            where T : unmanaged, IComponentData, IEnableableComponent
-        {
-            ecb.SetComponentEnabled<T>(entity, false);
-        }
-
-        private static void RemoveGrantedAbilitiesForSlot(
-            EntityManager em,
-            ref EntityCommandBuffer structuralEcb,
-            Entity owner,
-            int slotSequence,
-            int gameplayEffectCode)
-        {
-            if (owner == Entity.Null || !em.Exists(owner) || !em.HasBuffer<AbilitySlotBuffer>(owner))
-                return;
-
-            var grantedAbilities = em.GetBuffer<AbilitySlotBuffer>(owner);
-            for (var i = grantedAbilities.Length - 1; i >= 0; i--)
-            {
-                var ability = grantedAbilities[i].AbilityEntity;
-                if (!IsGrantedBySlot(em, ability, slotSequence, gameplayEffectCode))
-                    continue;
-
-                grantedAbilities.RemoveAt(i);
-                RemoveGrantedAbilityEntity(em, ref structuralEcb, ability);
-            }
-        }
-
-        private static bool HasGrantedAbilityForSlot(
-            EntityManager em,
-            DynamicBuffer<AbilitySlotBuffer> grantedAbilities,
-            int abilityCode,
-            int slotSequence,
-            int gameplayEffectCode)
-        {
-            for (var i = 0; i < grantedAbilities.Length; i++)
-            {
-                var ability = grantedAbilities[i].AbilityEntity;
-                if (!IsGrantedBySlot(em, ability, slotSequence, gameplayEffectCode)
-                    || !em.HasComponent<AbilityStateComponent>(ability))
-                {
-                    continue;
-                }
-
-                if (em.GetComponentData<AbilityStateComponent>(ability).Code == abilityCode)
-                    return true;
-            }
-
-            return false;
-        }
-
-        private static int CountGrantedAbilitiesForSlot(
-            EntityManager em,
-            DynamicBuffer<AbilitySlotBuffer> grantedAbilities,
-            int slotSequence,
-            int gameplayEffectCode)
-        {
-            var count = 0;
-            for (var i = 0; i < grantedAbilities.Length; i++)
-            {
-                if (IsGrantedBySlot(em, grantedAbilities[i].AbilityEntity, slotSequence, gameplayEffectCode))
-                    count++;
-            }
-
-            return count;
-        }
-
-        private static bool IsGrantedBySlot(
-            EntityManager em,
-            Entity ability,
-            int slotSequence,
-            int gameplayEffectCode)
-        {
-            if (ability == Entity.Null
-                || !em.Exists(ability)
-                || !em.HasComponent<AbilityGrantedByEffectComponent>(ability))
-            {
-                return false;
-            }
-
-            var granted = em.GetComponentData<AbilityGrantedByEffectComponent>(ability);
-            return granted.SourceSequence == slotSequence
-                && granted.SourceGameplayEffectCode == gameplayEffectCode;
-        }
-
-        private static void RemoveGrantedAbilityEntity(
-            EntityManager em,
-            ref EntityCommandBuffer structuralEcb,
-            Entity ability)
-        {
-            if (ability == Entity.Null || !em.Exists(ability))
-                return;
-
-            var isRunning = false;
-            if (em.HasComponent<AbilityStateComponent>(ability))
-            {
-                var runtime = em.GetComponentData<AbilityStateComponent>(ability);
-                isRunning = runtime.Phase is EAbilityPhase.Activating or EAbilityPhase.Active or EAbilityPhase.Ending;
-            }
-
-            if (isRunning)
-            {
-                AbilityRuntimeActions.RequestAbilityCancel(
-                    ability,
-                    em,
-                    ref structuralEcb,
-                    EAbilityLifecycleReason.GrantedEffectRemoved,
-                    sourceEffect: Entity.Null);
-                AbilityRuntimeActions.EnableDestroyOnCleanup(ability, em, ref structuralEcb);
-                return;
-            }
-
-            structuralEcb.DestroyEntity(ability);
-        }
 
         private static void CopySetByCallerSnapshot(
             in GEEffectCommandBuffer command,
@@ -2024,20 +2520,6 @@ namespace GAS.Runtime.Generated
             }
         }
 
-        private static void RemoveSetByCallerSnapshotForSlot(
-            EntityManager em,
-            Entity owner,
-            int slotSequence,
-            int gameplayEffectCode)
-        {
-            if (owner == Entity.Null || !em.Exists(owner) || !em.HasBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(owner))
-                return;
-
-            RemoveSetByCallerSnapshotForSlot(
-                em.GetBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(owner),
-                slotSequence,
-                gameplayEffectCode);
-        }
 
         private static void RemoveSetByCallerSnapshotForSlot(
             DynamicBuffer<ActiveGameplayEffectSetByCallerValueBuffer> snapshot,
@@ -2055,86 +2537,7 @@ namespace GAS.Runtime.Generated
             }
         }
 
-        private static bool RemoveTagIndexFromEffectiveMaskIfUnreferenced(EntityManager em, Entity owner, int tagIndex)
-        {
-            if (owner == Entity.Null || !em.Exists(owner) || !em.HasComponent<TagMaskComponent>(owner))
-                return false;
-            if (em.HasComponent<TagFixedMaskComponent>(owner)
-                && em.GetComponentData<TagFixedMaskComponent>(owner).Mask.HasTag(tagIndex))
-            {
-                return false;
-            }
-            if (HasAnyTemporarySourceForTag(em, owner, tagIndex))
-                return false;
 
-            var mask = em.GetComponentData<TagMaskComponent>(owner);
-            if (!mask.HasTag(tagIndex))
-                return false;
-            mask.RemoveTag(tagIndex);
-            em.SetComponentData(owner, mask);
-            return true;
-        }
-
-        private static bool HasAnyTemporarySourceForTag(EntityManager em, Entity owner, int tagIndex)
-        {
-            if (!em.Exists(owner) || !em.HasBuffer<TagTemporarySourceBuffer>(owner))
-                return false;
-
-            var sources = em.GetBuffer<TagTemporarySourceBuffer>(owner);
-            for (var i = 0; i < sources.Length; i++)
-            {
-                if (sources[i].TagIndex == tagIndex)
-                    return true;
-            }
-
-            return false;
-        }
-
-        private static void HandleDurationExpired(
-            EntityManager em,
-            Entity owner,
-            DynamicBuffer<ActiveGameplayEffectBuffer> slots,
-            int slotIndex,
-            ref GASDefinitionCatalogBlob catalog,
-            DynamicBuffer<ActiveEffectMutationBuffer> mutations,
-            int frame,
-            ref EntityCommandBuffer structuralEcb,
-            ref EventBusHelper.GameplayEventBusWriter eventWriter)
-        {
-            if ((uint)slotIndex >= (uint)slots.Length)
-                return;
-
-            var slot = slots[slotIndex];
-            if (!GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, slot.GameplayEffectCode, out var gameplayEffectIndex))
-            {
-                RemoveSlotAt(em, owner, slots, slotIndex, mutations, frame, ref structuralEcb, ref eventWriter);
-                return;
-            }
-
-            ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
-            var expirationPolicy = (EffectExpirationPolicy)gameplayEffect.EffectExpirationPolicy;
-            if (expirationPolicy == EffectExpirationPolicy.RefreshDuration)
-            {
-                RefreshSlotDuration(ref slot, frame, resetPeriod: true);
-                slots[slotIndex] = slot;
-                mutations.Add(CreateRefreshMutation(in slot, frame));
-                return;
-            }
-
-            if (expirationPolicy == EffectExpirationPolicy.RemoveSingleStackAndRefreshDuration
-                && slot.StackCount > 1)
-            {
-                slot.StackCount--;
-                RefreshSlotDuration(ref slot, frame, resetPeriod: true);
-                slots[slotIndex] = slot;
-                RebuildActiveModifiersForSlot(em, ref catalog, in gameplayEffect, in slot);
-                mutations.Add(CreateStackMutation(in slot, frame));
-                EnqueueStackCountChangedEvent(ref eventWriter, in slot);
-                return;
-            }
-
-            RemoveSlotAt(em, owner, slots, slotIndex, mutations, frame, ref structuralEcb, ref eventWriter);
-        }
 
         private static void RefreshSlotDuration(ref ActiveGameplayEffectBuffer slot, int frame, bool resetPeriod)
         {
@@ -2173,106 +2576,6 @@ namespace GAS.Runtime.Generated
             return mutation;
         }
 
-        private static int RebuildActiveModifiersForSlot(
-            EntityManager em,
-            ref GASDefinitionCatalogBlob catalog,
-            in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
-            in ActiveGameplayEffectBuffer slot)
-        {
-            if (gameplayEffect.ModifierCount <= 0
-                || slot.TargetAsc == Entity.Null
-                || !em.Exists(slot.TargetAsc)
-                || !em.HasBuffer<AttributeValueBuffer>(slot.TargetAsc)
-                || !em.HasBuffer<AttributeActiveModifierBuffer>(slot.TargetAsc))
-            {
-                return 0;
-            }
-
-            RemoveActiveModifiersForSlot(em, slot.TargetAsc, slot.Sequence, slot.GameplayEffectCode);
-            var attributes = em.GetBuffer<AttributeValueBuffer>(slot.TargetAsc);
-            var activeModifiers = em.GetBuffer<AttributeActiveModifierBuffer>(slot.TargetAsc);
-            var setByCallerSnapshot = em.HasBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(slot.TargetAsc)
-                ? em.GetBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(slot.TargetAsc)
-                : default;
-            var added = 0;
-            for (var i = 0; i < gameplayEffect.ModifierCount; i++)
-            {
-                var modifierIndex = gameplayEffect.ModifierStart + i;
-                if ((uint)modifierIndex >= (uint)catalog.Modifiers.Length)
-                    continue;
-
-                var modifier = catalog.Modifiers[modifierIndex];
-                var attrIndex = attributes.IndexOfAttribute(modifier.AttributeSetCode, modifier.AttributeCode);
-                if (attrIndex < 0)
-                    continue;
-
-                var context = BuildMagnitudeContextFromSlot(em, in slot, setByCallerSnapshot, in modifier);
-                if (!GASGeneratedMagnitudeEvaluator.TryResolveMagnitude(in modifier, in context, out var magnitude))
-                    continue;
-
-                activeModifiers.Add(new AttributeActiveModifierBuffer
-                {
-                    AttrSetCode = modifier.AttributeSetCode,
-                    AttributeCode = modifier.AttributeCode,
-                    SourceEntity = Entity.Null,
-                    SourceSequence = slot.Sequence,
-                    SourceGameplayEffectCode = slot.GameplayEffectCode,
-                    Magnitude = magnitude,
-                    Op = modifier.Operation,
-                });
-                AttributeHelper.MarkActiveModifierAdded(em, slot.TargetAsc);
-                AttributeHelper.MarkCurrentValueDirty(
-                    em,
-                    slot.TargetAsc,
-                    attributes,
-                    modifier.AttributeSetCode,
-                    modifier.AttributeCode);
-                added++;
-            }
-
-            return added;
-        }
-
-        private static MagnitudeEvalContext BuildMagnitudeContextFromSlot(
-            EntityManager em,
-            in ActiveGameplayEffectBuffer slot,
-            DynamicBuffer<ActiveGameplayEffectSetByCallerValueBuffer> setByCallerSnapshot,
-            in GASCatalogModifierDefinitionBlob modifier)
-        {
-            var context = new MagnitudeEvalContext
-            {
-                SourceAsc = slot.SourceAsc,
-                TargetAsc = slot.TargetAsc,
-                GameplayEffectCode = slot.GameplayEffectCode,
-                Level = slot.Level,
-                StackCount = slot.StackCount <= 0 ? 1 : slot.StackCount,
-                SetByCallerKey = modifier.MagnitudeKey,
-            };
-
-            if (modifier.MagnitudeSource == EMagnitudeSource.SetByCaller
-                && TryFindSetByCallerSnapshotValue(setByCallerSnapshot, slot.Sequence, slot.GameplayEffectCode, modifier.MagnitudeKey, out var setByCallerValue))
-            {
-                context.HasSetByCallerValue = 1;
-                context.SetByCallerValue = setByCallerValue;
-            }
-
-            if (modifier.MagnitudeSource == EMagnitudeSource.SourceAttribute
-                && TryReadAttributeValue(em, slot.SourceAsc, in modifier, out var sourceValue))
-            {
-                context.HasSourceAttributeValue = 1;
-                context.SourceAttributeValue = sourceValue;
-            }
-
-            if (modifier.MagnitudeSource == EMagnitudeSource.TargetAttribute
-                && TryReadAttributeValue(em, slot.TargetAsc, in modifier, out var targetValue))
-            {
-                context.HasTargetAttributeValue = 1;
-                context.TargetAttributeValue = targetValue;
-            }
-
-            return context;
-        }
-
         private static bool TryFindSetByCallerSnapshotValue(
             DynamicBuffer<ActiveGameplayEffectSetByCallerValueBuffer> snapshot,
             int slotSequence,
@@ -2299,204 +2602,8 @@ namespace GAS.Runtime.Generated
             return false;
         }
 
-        private static void RemoveGameplayEffectsWithTags(
-            EntityManager em,
-            ref GASDefinitionCatalogBlob catalog,
-            Entity owner,
-            in GASCatalogGameplayEffectDefinitionBlob appliedGameplayEffect,
-            DynamicBuffer<ActiveGameplayEffectBuffer> slots,
-            DynamicBuffer<ActiveEffectMutationBuffer> mutations,
-            int frame,
-            ref EntityCommandBuffer structuralEcb,
-            ref EventBusHelper.GameplayEventBusWriter eventWriter)
-        {
-            if (appliedGameplayEffect.RemoveGameplayEffectTagMaskIndex < 0
-                || appliedGameplayEffect.RemoveGameplayEffectTagMaskIndex >= catalog.TagMasks.Length)
-            {
-                return;
-            }
 
-            var removeMask = catalog.TagMasks[appliedGameplayEffect.RemoveGameplayEffectTagMaskIndex].Mask;
-            if (removeMask.IsEmpty)
-                return;
 
-            for (var i = slots.Length - 1; i >= 0; i--)
-            {
-                var slot = slots[i];
-                if (!GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, slot.GameplayEffectCode, out var slotGameplayEffectIndex))
-                    continue;
-
-                ref readonly var slotGameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, slotGameplayEffectIndex);
-                if (slotGameplayEffect.GrantedTagMaskIndex < 0
-                    || slotGameplayEffect.GrantedTagMaskIndex >= catalog.TagMasks.Length)
-                {
-                    continue;
-                }
-
-                var slotGrantedMask = catalog.TagMasks[slotGameplayEffect.GrantedTagMaskIndex].Mask;
-                if (slotGrantedMask.HasAnyTag(removeMask))
-                    RemoveSlotAt(em, owner, slots, i, mutations, frame, ref structuralEcb, ref eventWriter);
-            }
-        }
-
-        public static void RemoveSlotAt(
-            EntityManager em,
-            Entity owner,
-            DynamicBuffer<ActiveGameplayEffectBuffer> slots,
-            int slotIndex,
-            DynamicBuffer<ActiveEffectMutationBuffer> mutations,
-            int frame,
-            ref EntityCommandBuffer structuralEcb,
-            ref EventBusHelper.GameplayEventBusWriter eventWriter)
-        {
-            if ((uint)slotIndex >= (uint)slots.Length)
-                return;
-
-            var slot = slots[slotIndex];
-            var activeModifierCount = CountActiveModifiersForSlot(em, owner, slot.Sequence, slot.GameplayEffectCode);
-            RemoveActiveModifiersForSlot(em, owner, slot.Sequence, slot.GameplayEffectCode);
-            RemoveGrantedTagsForSlot(em, owner, slot.Sequence, slot.GameplayEffectCode, ref eventWriter);
-            RemoveGrantedAbilitiesForSlot(em, ref structuralEcb, owner, slot.Sequence, slot.GameplayEffectCode);
-            RemoveSetByCallerSnapshotForSlot(em, owner, slot.Sequence, slot.GameplayEffectCode);
-            RecordCleanup(em, owner, in slot, activeModifierCount, frame);
-            mutations.Add(new ActiveEffectMutationBuffer
-            {
-                Sequence = slot.Sequence,
-                Frame = frame,
-                Kind = ActiveEffectMutationKind.Remove,
-                ActiveEffect = Entity.Null,
-                SourceAsc = slot.SourceAsc,
-                TargetAsc = owner,
-                SourceAbility = slot.SourceAbility,
-                SourceEffect = slot.SourceEffect,
-                GameplayEffectCode = slot.GameplayEffectCode,
-                ContextId = slot.ContextId,
-                ParentContextId = slot.ParentContextId,
-                StackCount = slot.StackCount,
-                DurationFrameOverride = slot.DurationFrame,
-                PeriodFrame = slot.PeriodFrame,
-            });
-            EnqueueRemovedEvent(ref eventWriter, in slot);
-            slots.RemoveAt(slotIndex);
-        }
-
-        private static void RecordCleanup(
-            EntityManager em,
-            Entity owner,
-            in ActiveGameplayEffectBuffer slot,
-            int activeModifierCount,
-            int frame)
-        {
-            if (owner == Entity.Null || !em.Exists(owner) || !em.HasBuffer<ActiveGameplayEffectCleanupRecordBuffer>(owner))
-                return;
-
-            var records = em.GetBuffer<ActiveGameplayEffectCleanupRecordBuffer>(owner);
-            while (records.Length >= ActiveEffectStore.MaxCleanupRecordCount)
-                records.RemoveAt(0);
-
-            var cleanupFlags = ActiveEffectCleanupWorkFlags.OwnerLocalSlot;
-            if (activeModifierCount > 0)
-                cleanupFlags |= ActiveEffectCleanupWorkFlags.RuntimeModifiers;
-            if (slot.ActiveGrantedTagCount > 0)
-                cleanupFlags |= ActiveEffectCleanupWorkFlags.GrantedTags;
-            if (slot.ActiveGrantedAbilityCount > 0)
-                cleanupFlags |= ActiveEffectCleanupWorkFlags.GrantedAbilities;
-
-            records.Add(new ActiveGameplayEffectCleanupRecordBuffer
-            {
-                Sequence = slot.Sequence,
-                ActiveEffectEntity = Entity.Null,
-                SourceAsc = slot.SourceAsc,
-                TargetAsc = owner,
-                SourceAbility = slot.SourceAbility,
-                SourceEffect = slot.SourceEffect,
-                Instigator = slot.Instigator,
-                Causer = slot.Causer,
-                GameplayEffectCode = slot.GameplayEffectCode,
-                Level = slot.Level,
-                StackCount = slot.StackCount,
-                ContextId = slot.ContextId,
-                ParentContextId = slot.ParentContextId,
-                CleanupFrame = frame,
-                CleanupState = EGameplayEffectLifecycleState.PendingRemove,
-                SlotState = ActiveEffectSlotState.PendingRemove,
-                PreviousSlotState = slot.State,
-                DurationFrame = slot.DurationFrame,
-                RemainingFrame = slot.RemainingFrame,
-                PeriodFrame = slot.PeriodFrame,
-                LastPeriodFrame = slot.LastPeriodFrame,
-                ActiveGrantedTagCount = slot.ActiveGrantedTagCount,
-                ActiveGrantedAbilityCount = slot.ActiveGrantedAbilityCount,
-                ActiveModifierCount = activeModifierCount,
-                RequestedCleanupWorkFlags = (int)cleanupFlags,
-                ResolvedCleanupWorkFlags = (int)cleanupFlags,
-                CleanupResolvedFrame = frame,
-                Flags = slot.Flags,
-            });
-
-            if (em.HasComponent<ASCActiveEffectsComponent>(owner))
-            {
-                var store = em.GetComponentData<ASCActiveEffectsComponent>(owner);
-                store.LastCleanupFrame = frame;
-                store.CleanupRecordCount = records.Length;
-                em.SetComponentData(owner, store);
-            }
-        }
-
-        private static void EmitPeriodCommand(
-            EntityManager em,
-            ref GASDefinitionCatalogBlob catalog,
-            in ActiveGameplayEffectBuffer slot,
-            Entity owner,
-            ref EffectCommandSpecStream.CommandWriter commandWriter)
-        {
-            if (!GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, slot.GameplayEffectCode, out var gameplayEffectIndex))
-                return;
-
-            ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
-            if (gameplayEffect.PeriodGameplayEffectCode <= 0
-                || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, gameplayEffect.PeriodGameplayEffectCode, out var periodGameplayEffectIndex))
-            {
-                return;
-            }
-
-            ref readonly var periodGameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, periodGameplayEffectIndex);
-            var durationFrame = periodGameplayEffect.DurationFrames;
-            var kind = RequiresActiveMutationLane(in periodGameplayEffect, durationFrame)
-                ? GEEffectCommandKind.ActiveMutation
-                : GEEffectCommandKind.Instant;
-            var command = new GEEffectCommandBuffer
-            {
-                Kind = kind,
-                Source = GEEffectCommandSource.Period,
-                SourceAsc = slot.SourceAsc,
-                TargetAsc = owner,
-                SourceAbility = slot.SourceAbility,
-                SourceEffect = Entity.Null,
-                Instigator = slot.Instigator != Entity.Null ? slot.Instigator : slot.SourceAsc,
-                Causer = slot.Causer != Entity.Null ? slot.Causer : slot.SourceAbility,
-                GameplayEffectCode = gameplayEffect.PeriodGameplayEffectCode,
-                Level = slot.Level,
-                DurationFrameOverride = durationFrame,
-                ParentContextId = slot.ContextId,
-                TargetDataKind = slot.SourceAsc == owner ? ETargetDataKind.Self : ETargetDataKind.Entity,
-                Flags = kind == GEEffectCommandKind.ActiveMutation ? GASGECommandSeedFlags.ActiveMutation : GASGECommandSeedFlags.None,
-            };
-
-            if (owner != Entity.Null
-                && em.Exists(owner)
-                && em.HasBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(owner))
-            {
-                commandWriter.AppendCommand(
-                    command,
-                    em.GetBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(owner),
-                    slot.Sequence,
-                    slot.GameplayEffectCode);
-                return;
-            }
-
-            commandWriter.AppendCommand(command);
-        }
 
         private static bool EvaluateGameplayEffectRequirements(
             ref GASDefinitionCatalogBlob catalog,
@@ -2525,10 +2632,6 @@ namespace GAS.Runtime.Generated
             return true;
         }
 
-        private static bool HasActiveEffectStorage(EntityManager em, Entity owner)
-        {
-            return ASCEntityFactory.HasASCRuntimeCoreComponents(em, owner);
-        }
 
         private static int FindRefreshableSlot(DynamicBuffer<ActiveGameplayEffectBuffer> slots, in GEEffectCommandBuffer command)
         {
@@ -2612,36 +2715,7 @@ namespace GAS.Runtime.Generated
             return count;
         }
 
-        private static int CountActiveModifiersForSlot(
-            EntityManager em,
-            Entity owner,
-            int sourceSequence,
-            int gameplayEffectCode)
-        {
-            if (owner == Entity.Null || !em.Exists(owner) || !em.HasBuffer<AttributeActiveModifierBuffer>(owner))
-                return 0;
 
-            var count = 0;
-            var modifiers = em.GetBuffer<AttributeActiveModifierBuffer>(owner);
-            for (var i = 0; i < modifiers.Length; i++)
-            {
-                var modifier = modifiers[i];
-                if (modifier.SourceSequence == sourceSequence
-                    && modifier.SourceGameplayEffectCode == gameplayEffectCode)
-                {
-                    count++;
-                }
-            }
-
-            return count;
-        }
-
-        private static bool IsAvailableAsc(EntityManager em, Entity asc)
-        {
-            return asc != Entity.Null
-                && em.Exists(asc)
-                && !ASCEntityFactory.IsDestroying(em, asc);
-        }
 
         private static int Allocate(ref int next)
         {
@@ -2650,197 +2724,11 @@ namespace GAS.Runtime.Generated
             return next++;
         }
 
-        private static void EmitOverflowCommand(
-            ref GEEffectCommandStreamComponent stream,
-            ref GASDefinitionCatalogBlob catalog,
-            DynamicBuffer<GEEffectCommandBuffer> commands,
-            DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
-            in GEEffectCommandBuffer sourceCommand,
-            in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
-            int frame)
-        {
-            if (gameplayEffect.OverflowGameplayEffectCode <= 0
-                || gameplayEffect.OverflowGameplayEffectCode == sourceCommand.GameplayEffectCode
-                || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, gameplayEffect.OverflowGameplayEffectCode, out var overflowIndex))
-            {
-                return;
-            }
 
-            ref readonly var overflowEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, overflowIndex);
-            var durationFrame = overflowEffect.DurationFrames;
-            var kind = RequiresActiveMutationLane(in overflowEffect, durationFrame)
-                ? GEEffectCommandKind.ActiveMutation
-                : GEEffectCommandKind.Instant;
-            EffectCommandSpecStream.AppendPreparedCommand(
-                ref stream,
-                commands,
-                setByCallerValues,
-                new GEEffectCommandBuffer
-                {
-                    Frame = frame,
-                    Kind = kind,
-                    Source = GEEffectCommandSource.Overflow,
-                    SourceAsc = sourceCommand.SourceAsc,
-                    TargetAsc = sourceCommand.TargetAsc,
-                    SourceAbility = sourceCommand.SourceAbility,
-                    SourceEffect = sourceCommand.SourceEffect,
-                    Instigator = sourceCommand.Instigator,
-                    Causer = sourceCommand.Causer,
-                    GameplayEffectCode = gameplayEffect.OverflowGameplayEffectCode,
-                    Level = sourceCommand.Level,
-                    DurationFrameOverride = durationFrame,
-                    ParentContextId = sourceCommand.ContextId,
-                    TargetDataKind = sourceCommand.TargetDataKind,
-                    Flags = kind == GEEffectCommandKind.ActiveMutation ? GASGECommandSeedFlags.ActiveMutation : GASGECommandSeedFlags.None,
-                },
-                frame);
-        }
 
-        private static void EnqueueStackOverflowEvent(
-            ref EventBusHelper.GameplayEventBusWriter writer,
-            in GEEffectCommandBuffer command,
-            in GASCatalogGameplayEffectDefinitionBlob gameplayEffect)
-        {
-            if (!writer.IsCreated)
-                return;
 
-            writer.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
-            {
-                Type = EGameplayEventType.StackOverflow,
-                SourceAsc = command.SourceAsc,
-                TargetAsc = command.TargetAsc,
-                SourceAbility = command.SourceAbility,
-                GameplayEffect = Entity.Null,
-                ContextId = command.ContextId,
-                EventCode = command.GameplayEffectCode,
-                ReasonCode = gameplayEffect.OverflowGameplayEffectCode,
-            });
-        }
 
-        private static void EnqueueStackOverflowDeniedEvent(
-            ref EventBusHelper.GameplayEventBusWriter writer,
-            in GEEffectCommandBuffer command)
-        {
-            if (!writer.IsCreated)
-                return;
 
-            writer.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
-            {
-                Type = EGameplayEventType.StackOverflowDenied,
-                SourceAsc = command.SourceAsc,
-                TargetAsc = command.TargetAsc,
-                SourceAbility = command.SourceAbility,
-                GameplayEffect = Entity.Null,
-                ContextId = command.ContextId,
-                EventCode = command.GameplayEffectCode,
-            });
-        }
 
-        private static void EnqueueStackClearedByOverflowEvent(
-            ref EventBusHelper.GameplayEventBusWriter writer,
-            in GEEffectCommandBuffer command)
-        {
-            if (!writer.IsCreated)
-                return;
-
-            writer.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
-            {
-                Type = EGameplayEventType.StackClearedByOverflow,
-                SourceAsc = command.SourceAsc,
-                TargetAsc = command.TargetAsc,
-                SourceAbility = command.SourceAbility,
-                GameplayEffect = Entity.Null,
-                ContextId = command.ContextId,
-                EventCode = command.GameplayEffectCode,
-            });
-        }
-
-        private static void EnqueueStackCountChangedEvent(
-            ref EventBusHelper.GameplayEventBusWriter writer,
-            in ActiveGameplayEffectBuffer slot)
-        {
-            if (!writer.IsCreated)
-                return;
-
-            writer.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
-            {
-                Type = EGameplayEventType.StackCountChanged,
-                SourceAsc = slot.SourceAsc,
-                TargetAsc = slot.TargetAsc,
-                SourceAbility = slot.SourceAbility,
-                GameplayEffect = Entity.Null,
-                ContextId = slot.ContextId,
-                EventCode = slot.GameplayEffectCode,
-                Value = slot.StackCount,
-            });
-        }
-
-        private static void EnqueueAppliedEvents(
-            ref EventBusHelper.GameplayEventBusWriter writer,
-            in GEEffectCommandBuffer command,
-            in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
-            Entity gameplayEffectEntity)
-        {
-            if (!writer.IsCreated)
-                return;
-
-            writer.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
-            {
-                Type = EGameplayEventType.GameplayEffectApplied,
-                SourceAsc = command.SourceAsc,
-                TargetAsc = command.TargetAsc,
-                SourceAbility = command.SourceAbility,
-                GameplayEffect = gameplayEffectEntity,
-                ContextId = command.ContextId,
-                EventCode = command.GameplayEffectCode,
-            });
-
-            if (gameplayEffect.GameplayCueCode <= 0)
-                return;
-
-            writer.EnqueueCueRequest(new CueRequestBuffer
-            {
-                TargetAsc = command.TargetAsc,
-                SourceAsc = command.SourceAsc,
-                SourceAbility = command.SourceAbility,
-                GameplayEffect = gameplayEffectEntity,
-                SourceEntity = command.SourceAbility,
-                SourceType = CueSourceType.GameplayEffect,
-                CueEntity = Entity.Null,
-                ContextId = command.ContextId,
-                ReasonCode = gameplayEffect.GameplayCueCode,
-                CueEvent = EGameplayCueEvent.OnApply,
-            });
-            writer.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
-            {
-                Type = EGameplayEventType.CueRequested,
-                SourceAsc = command.SourceAsc,
-                TargetAsc = command.TargetAsc,
-                SourceAbility = command.SourceAbility,
-                GameplayEffect = gameplayEffectEntity,
-                ContextId = command.ContextId,
-                EventCode = (int)EGameplayCueEvent.OnApply,
-                ReasonCode = gameplayEffect.GameplayCueCode,
-            });
-        }
-
-        private static void EnqueueRemovedEvent(
-            ref EventBusHelper.GameplayEventBusWriter writer,
-            in ActiveGameplayEffectBuffer slot)
-        {
-            if (!writer.IsCreated)
-                return;
-
-            writer.EnqueueGameplayEvent(new GameplayEventBusEventBuffer
-            {
-                Type = EGameplayEventType.GameplayEffectRemoved,
-                SourceAsc = slot.SourceAsc,
-                TargetAsc = slot.TargetAsc,
-                SourceAbility = slot.SourceAbility,
-                GameplayEffect = Entity.Null,
-                ContextId = slot.ContextId,
-                EventCode = slot.GameplayEffectCode,
-            });
-        }
     }
 }

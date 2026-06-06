@@ -1,0 +1,174 @@
+{
+  "OutputRoot": "Assets/GAS/Generated/CodeGen",
+  "InputHash": "c189c1233efed059a50c04b5cc91c1d56de27fd79cf2edcaab713ec7708aa159",
+  "Entries": [
+    {
+      "PhaseName": "LubanNormalizedRows",
+      "FileName": "LubanNormalizedRows.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/LubanNormalizedRows.gen.cs",
+      "Layer": "Editor",
+      "RuntimeVisible": false,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "AssemblyDefinition",
+      "FileName": "com.exhard.exgas.generated.runtime.asmdef",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/com.exhard.exgas.generated.runtime.asmdef",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "AssemblyDefinition",
+      "FileName": "com.exhard.exgas.generated.editor.asmdef",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef",
+      "Layer": "Baking",
+      "RuntimeVisible": false,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "DefinitionIndex",
+      "FileName": "DefinitionIndex.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/DefinitionIndex.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "BlobSchema",
+      "FileName": "BlobSchemas.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/BlobSchemas.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "BlobSchema",
+      "FileName": "BlobBuilders.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/BlobBuilders.gen.cs",
+      "Layer": "Baking",
+      "RuntimeVisible": false,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "StaticLookup",
+      "FileName": "StaticLookups.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/StaticLookups.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "StaticLookup",
+      "FileName": "StaticLookupBuilders.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/StaticLookupBuilders.gen.cs",
+      "Layer": "Baking",
+      "RuntimeVisible": false,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "DefinitionCatalog",
+      "FileName": "DefinitionCatalog.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/DefinitionCatalog.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "DefinitionCatalog",
+      "FileName": "DefinitionCatalogBuilder.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/DefinitionCatalogBuilder.gen.cs",
+      "Layer": "Baking",
+      "RuntimeVisible": false,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "RuntimeDefinitionGlue",
+      "FileName": "RuntimeDefinitionGlue.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeDefinitionGlue.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "RuntimeDefinitionGlue",
+      "FileName": "RuntimeAbilityActivation.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "RuntimeDefinitionGlue",
+      "FileName": "RuntimeEffectInstant.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "RuntimeDefinitionGlue",
+      "FileName": "RuntimeActiveEffect.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "RuntimeDefinitionGlue",
+      "FileName": "RuntimeSystemRegistration.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeSystemRegistration.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "BakerGlue",
+      "FileName": "DefinitionComponents.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/DefinitionComponents.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "BakerGlue",
+      "FileName": "BakerGlue.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/BakerGlue.gen.cs",
+      "Layer": "Baking",
+      "RuntimeVisible": false,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "ComponentTypeSet",
+      "FileName": "ComponentTypeSets.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/ComponentTypeSets.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "QueryLayout",
+      "FileName": "QueryLayouts.gen.cs",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/QueryLayouts.gen.cs",
+      "Layer": "Editor/CI",
+      "RuntimeVisible": false,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "AutoChessDemoConfig",
+      "FileName": "AutoChessGeneratedConfig.gen.cs",
+      "ProjectRelativePath": "Assets/AutoChessDemo/Generated/AutoChessGeneratedConfig.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "ValidationReport",
+      "FileName": "GasCodeGenValidationReport.md",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md",
+      "Layer": "Editor/CI",
+      "RuntimeVisible": false,
+      "VersionControlled": true
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using UnityEngine;
+using Newtonsoft.Json;
 
 namespace GAS.Editor
 {
@@ -47,7 +47,7 @@ namespace GAS.Editor
             if (!File.Exists(manifestPath))
                 return 0;
 
-            var oldManifest = JsonUtility.FromJson<Data>(File.ReadAllText(manifestPath));
+            var oldManifest = JsonConvert.DeserializeObject<Data>(File.ReadAllText(manifestPath));
             if (oldManifest == null || oldManifest.Entries == null)
                 return 0;
 
@@ -90,7 +90,7 @@ namespace GAS.Editor
                 Entries = _entries.ToArray(),
             };
 
-            File.WriteAllText(ManifestPath, JsonUtility.ToJson(data, true));
+            File.WriteAllText(ManifestPath, JsonConvert.SerializeObject(data, Formatting.Indented));
         }
 
         private string ProjectRelativeToFullPath(string projectRelativePath)

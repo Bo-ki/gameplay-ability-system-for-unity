@@ -12,6 +12,8 @@ namespace GAS.Editor
 
         public string CodeFieldName { get; set; }
 
+        public IReadOnlyList<string> BakerKeyFieldNames { get; set; }
+
         public GASDefinitionKind DefinitionKind { get; set; }
 
         public string BlobSchemaName { get; set; }
@@ -45,6 +47,8 @@ namespace GAS.Editor
         public object Row { get; set; }
 
         public int Code { get; set; }
+
+        public IReadOnlyList<int> BakerKeyValues { get; set; }
     }
 
     public sealed class BlobMemberInfo

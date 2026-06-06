@@ -12,19 +12,18 @@ namespace GAS.AutoChessDemo
     public static class AutoChessRuntimeRunner
     {
         private const string RunArgument = "-gasAutoChessDemo";
-        private const int ProcessWarmupRuns = 1;
-        private const int ValidationScale = 50;
-        private const int ValidationMaxTicks = 96;
-        private const int ValidationPostVictoryFlushTicks = 4;
+        private static AutoChessGeneratedScenarioProfile ValidationScenario =>
+            AutoChessGeneratedConfig.ValidationScenario;
 
         public static void RunAutoChessBattleOnce()
         {
             var result = RunAutoChessBattleForValidation();
             if (!result.Completed
-                || result.DriverIssuedCommands <= 0
-                || result.EventCounts.AttributeChanges <= 0
-                || result.EventCounts.ExecutionCalculationOutputUpdated <= 0
-                || result.EventCounts.CueRequests <= 0
+                 || result.Winner != ValidationScenario.ExpectedWinner
+                 || result.DriverIssuedCommands < ValidationScenario.MinDriverIssuedCommands
+                 || result.EventCounts.AttributeChanges < ValidationScenario.MinAttributeChanges
+                 || result.EventCounts.ExecutionCalculationOutputUpdated < ValidationScenario.MinExecutionOutputs
+                 || result.EventCounts.CueRequests < ValidationScenario.MinCueRequests
                 || result.RuntimeDiagnostics.EventCount <= 0
                 || HasBlockingDiagnosticErrors(result.RuntimeDiagnostics)
                 || !result.OfficialToolDiff.JournalingCaptured)
@@ -79,6 +78,7 @@ namespace GAS.AutoChessDemo
             var summaryHash = CalculateSummaryHash(result, factsHash);
             return $"completed={result.Completed}, "
                    + $"winner={result.Winner}, "
+                   + $"expectedWinner={ValidationScenario.ExpectedWinner}, "
                    + $"scale={result.ScenarioScale}, "
                    + $"units={result.Units.Length}, "
                    + $"battleTicks={result.BattleTicks}, "
@@ -101,7 +101,7 @@ namespace GAS.AutoChessDemo
                    + $"peakEventBus={result.RuntimeDiagnostics.CoreCounters.PeakEventBusBufferLength}, "
                    + $"replayLag={result.RuntimeDiagnostics.CoreCounters.PeakReplayCursorLag}, "
                    + $"journalingRecords={result.OfficialToolDiff.JournalingWorldRecordCount}, "
-                   + $"processWarmupRuns={ProcessWarmupRuns}, "
+                   + $"processWarmupRuns={ValidationScenario.ProcessWarmupRuns}, "
                    + $"totalElapsedMs={result.ElapsedMilliseconds:0.000}, "
                    + $"factsHash=0x{factsHash:X8}, "
                    + $"summaryHash=0x{summaryHash:X8}, "
@@ -152,15 +152,17 @@ namespace GAS.AutoChessDemo
 
         private static void RunProcessWarmupBattles()
         {
-            for (var i = 0; i < ProcessWarmupRuns; i++)
+            var scenario = ValidationScenario;
+            for (var i = 0; i < scenario.ProcessWarmupRuns; i++)
             {
                 try
                 {
                     AutoChessBattleManager.RunDefault(new AutoChessBattleOptions(
-                        ValidationMaxTicks,
-                        ValidationPostVictoryFlushTicks,
-                        ValidationScale,
-                        captureOfficialToolDiff: false));
+                        scenario.MaxTicks,
+                        scenario.PostVictoryFlushTicks,
+                        scenario.Scale,
+                        captureOfficialToolDiff: false,
+                        healthMultiplier: scenario.HealthMultiplier));
                 }
                 finally
                 {
@@ -171,11 +173,13 @@ namespace GAS.AutoChessDemo
 
         private static AutoChessBattleResult RunScenario(bool captureOfficialToolDiff)
         {
+            var scenario = ValidationScenario;
             return AutoChessBattleManager.RunDefault(new AutoChessBattleOptions(
-                ValidationMaxTicks,
-                ValidationPostVictoryFlushTicks,
-                ValidationScale,
-                captureOfficialToolDiff));
+                scenario.MaxTicks,
+                scenario.PostVictoryFlushTicks,
+                scenario.Scale,
+                captureOfficialToolDiff,
+                healthMultiplier: scenario.HealthMultiplier));
         }
 
         internal static void ValidateOfficialDiffRun(

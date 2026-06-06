@@ -65,8 +65,15 @@ namespace GAS.Editor
 
         public static bool TryUpdateBeans()
         {
-            var setting = GASSettingAsset.LoadOrCreate();
-            var beansPath = Path.Combine(setting.ConfigProjectPath, "Datas", BEANS_XLSX_NAME);
+            var settings = GasCodeGenEnvironment.ActiveSettings
+                           ?? (GasCodeGenEnvironment.IsOffline
+                               ? GasCodeGenSettings.CreateDefault()
+                               : GasCodeGenSettings.From(GASSettingAsset.LoadOrCreate()));
+            GasCodeGenEnvironment.SetActiveSettings(settings);
+            var beansPath = Path.Combine(
+                GasCodeGenEnvironment.ResolveProjectPath(settings.ConfigProjectPath),
+                "Datas",
+                BEANS_XLSX_NAME);
 
             if (!File.Exists(beansPath))
             {
@@ -82,24 +89,24 @@ namespace GAS.Editor
                 // 写入Bean定义到xlsx  
                 GenerateAndUpdateBeans(beansPath, beans);
 
-                Debug.Log($"[BeanUpdater] Bean定义更新完成，共 {beans.Count} 个Bean");
+                GasCodeGenEnvironment.Log($"[BeanUpdater] Bean定义更新完成，共 {beans.Count} 个Bean");
                 return true;
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                GasCodeGenEnvironment.LogException(ex);
                 return false;
             }
             finally
             {
-                EditorUtility.ClearProgressBar();
+                GasCodeGenEnvironment.ClearProgressBar();
             }
         }
 
         private static void ReportError(string message)
         {
-            Debug.LogError(message);
-            if (!Application.isBatchMode)
+            GasCodeGenEnvironment.LogError(message);
+            if (!Application.isBatchMode && !GasCodeGenEnvironment.IsOffline)
                 EditorUtility.DisplayDialog("错误", message, "确定");
         }
 
@@ -114,23 +121,23 @@ namespace GAS.Editor
             const string title = "BeanUpdater - 收集Bean定义";
 
             // 1. 收集XParam参数类  
-            EditorUtility.DisplayProgressBar(title, "收集 XParam 参数类...", 0f / 6f);
+            GasCodeGenEnvironment.DisplayProgressBar(title, "收集 XParam 参数类...", 0f / 6f);
             CollectXParamBeans(beans);
 
             // 2. 收集Cue逻辑类  
-            EditorUtility.DisplayProgressBar(title, "收集 Cue 逻辑类...", 1f / 6f);
+            GasCodeGenEnvironment.DisplayProgressBar(title, "收集 Cue 逻辑类...", 1f / 6f);
             CollectCueBeans(beans);
 
             // 3. 收集 Ability 执行配置  
-            EditorUtility.DisplayProgressBar(title, "收集 Ability 执行配置...", 3f / 6f);
+            GasCodeGenEnvironment.DisplayProgressBar(title, "收集 Ability 执行配置...", 3f / 6f);
             CollectAbilityExecutionBeans(beans);
 
             // 4. 收集 Timeline Action 参数配置  
-            EditorUtility.DisplayProgressBar(title, "收集 Timeline Action 参数配置...", 4f / 6f);
+            GasCodeGenEnvironment.DisplayProgressBar(title, "收集 Timeline Action 参数配置...", 4f / 6f);
             CollectTimelineActionParameterBeans(beans);
 
             // 6. 收集TargetCatcher类  
-            EditorUtility.DisplayProgressBar(title, "收集 TargetCatcher 类...", 5f / 6f);
+            GasCodeGenEnvironment.DisplayProgressBar(title, "收集 TargetCatcher 类...", 5f / 6f);
             CollectTargetCatcherBeans(beans);
 
             return beans;
@@ -531,7 +538,7 @@ namespace GAS.Editor
                 var worksheet = package.Workbook.Worksheets[1];
 
                 // 整行删除：同时清除值和格式（背景色、字体等）  
-                EditorUtility.DisplayProgressBar(title, "清除旧数据...", 0f);
+                GasCodeGenEnvironment.DisplayProgressBar(title, "清除旧数据...", 0f);
                 if (worksheet.Dimension != null && worksheet.Dimension.End.Row >= DATA_START_ROW)
                 {
                     var delCount = worksheet.Dimension.End.Row - DATA_START_ROW + 1;
@@ -549,7 +556,7 @@ namespace GAS.Editor
                     var bean = beans[beanIndex];
 
                     // 更新进度条  
-                    EditorUtility.DisplayProgressBar(title,
+                    GasCodeGenEnvironment.DisplayProgressBar(title,
                         $"写入 Bean: {bean.Name} ({beanIndex + 1}/{totalBeans})",
                         (float)(beanIndex + 1) / totalBeans);
 
@@ -602,7 +609,7 @@ namespace GAS.Editor
                     }
                 }
 
-                EditorUtility.DisplayProgressBar(title, "保存文件...", 1f);
+                GasCodeGenEnvironment.DisplayProgressBar(title, "保存文件...", 1f);
                 package.Save();
             }
         }

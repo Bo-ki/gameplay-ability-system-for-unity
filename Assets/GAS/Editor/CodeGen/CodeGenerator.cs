@@ -18,29 +18,34 @@ namespace GAS.Editor
 
         internal static bool TryGenerateGasConfigTables()
         {
-            var instance = GASSettingAsset.Instance;
-            var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            var fullConfigProjectPath = ResolveProjectPath(projectRoot, instance.ConfigProjectPath);
-            var fullOutputPath = ResolveProjectPath(projectRoot, instance.TableOutpuPath);
-            var fullCodeOutputPath = ResolveProjectPath(projectRoot, instance.TableClassCodeOutpuPath);
+            var settings = GasCodeGenEnvironment.ActiveSettings
+                           ?? (GasCodeGenEnvironment.IsOffline
+                               ? GasCodeGenSettings.CreateDefault()
+                               : GasCodeGenSettings.From(GASSettingAsset.Instance));
+            GasCodeGenEnvironment.SetActiveSettings(settings);
+
+            var projectRoot = GasCodeGenEnvironment.ProjectRoot;
+            var fullConfigProjectPath = ResolveProjectPath(projectRoot, settings.ConfigProjectPath);
+            var fullOutputPath = ResolveProjectPath(projectRoot, settings.LubanDataOutputPath);
+            var fullCodeOutputPath = ResolveProjectPath(projectRoot, settings.LubanCodeOutputPath);
             var fullLubanDllPath = Path.GetFullPath(Path.Combine(fullConfigProjectPath, "..", "Tools", "Luban", "Luban.dll"));
             var fullLubanConfPath = Path.Combine(fullConfigProjectPath, "luban.conf");
 
             if (!Directory.Exists(fullConfigProjectPath))
             {
-                Debug.LogError($"配置表工程路径不存在: {fullConfigProjectPath}");
+                GasCodeGenEnvironment.LogError($"配置表工程路径不存在: {fullConfigProjectPath}");
                 return false;
             }
 
             if (!File.Exists(fullLubanDllPath))
             {
-                Debug.LogError($"Luban.dll 不存在: {fullLubanDllPath}");
+                GasCodeGenEnvironment.LogError($"Luban.dll 不存在: {fullLubanDllPath}");
                 return false;
             }
 
             if (!File.Exists(fullLubanConfPath))
             {
-                Debug.LogError($"luban.conf 不存在: {fullLubanConfPath}");
+                GasCodeGenEnvironment.LogError($"luban.conf 不存在: {fullLubanConfPath}");
                 return false;
             }
 
@@ -69,12 +74,12 @@ namespace GAS.Editor
             // 注册输出事件
             process.OutputDataReceived += (sender, e) => {
                 if (!string.IsNullOrEmpty(e.Data)) 
-                    Debug.Log(e.Data);
+                    GasCodeGenEnvironment.Log(e.Data);
             };
         
             process.ErrorDataReceived += (sender, e) => {
                 if (!string.IsNullOrEmpty(e.Data)) 
-                    Debug.LogError(e.Data);
+                    GasCodeGenEnvironment.LogError(e.Data);
             };
 
             try
@@ -88,23 +93,23 @@ namespace GAS.Editor
 
                 if (process.ExitCode != 0)
                 {
-                    Debug.LogError($"Luban执行失败，退出代码: {process.ExitCode}");
+                    GasCodeGenEnvironment.LogError($"Luban执行失败，退出代码: {process.ExitCode}");
                     return false;
                 }
 
-                Debug.Log($"Luban执行完成，退出代码: {process.ExitCode}");
+                GasCodeGenEnvironment.Log($"Luban执行完成，退出代码: {process.ExitCode}");
                 return true;
             }
             catch (Exception ex)
             {
-                Debug.LogError($"执行错误: {ex.Message}");
+                GasCodeGenEnvironment.LogError($"执行错误: {ex.Message}");
                 return false;
             }
             finally
             {
                 process.Close();
                 // 刷新资源
-                AssetDatabase.Refresh();
+                GasCodeGenEnvironment.RefreshAssetDatabase();
             }
         }
 
@@ -454,13 +459,21 @@ namespace GAS.Editor
         [MenuItem("EXTool/EX-GAS/生成脚本/生成所有")]
         public static void GenerateAllCode()
         {
-            if (!GasCodeGenProcessGate.RunDefault())
-                return;
-
-            GasCodeGenPipeline.RunAll();
+            TryGenerateAllCode();
         }
 
         [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成所有胶水代码（Pipeline）")]
-        public static void GenerateGluePipeline() => GasCodeGenPipeline.RunAll();
+        public static void GenerateGluePipeline()
+        {
+            TryGenerateAllCode();
+        }
+
+        public static bool TryGenerateAllCode()
+        {
+            if (!GasCodeGenProcessGate.RunDefault())
+                return false;
+
+            return GasCodeGenPipeline.TryRunAll();
+        }
     }
 }

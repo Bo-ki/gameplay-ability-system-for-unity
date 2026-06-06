@@ -83,9 +83,7 @@ namespace GAS.AutoChessDemo
                     });
                 }
 
-                ClearBuffer<DamageEventBuffer>(em, GASManager.EntityEventBus);
                 ClearBuffer<TagChangeEventBuffer>(em, GASManager.EntityEventBus);
-                ClearBuffer<GameplayEventBusEventBuffer>(em, GASManager.EntityEventBus);
                 ClearBuffer<AttributeChangeEventBuffer>(em, GASManager.EntityEventBus);
                 ClearBuffer<CueRequestBuffer>(em, GASManager.EntityEventBus);
             }
@@ -260,6 +258,7 @@ namespace GAS.AutoChessDemo
         {
             var start = Stopwatch.GetTimestamp();
             group.Update();
+            GASManager.EntityManager.CompleteAllTrackedJobs();
             return Stopwatch.GetTimestamp() - start;
         }
 

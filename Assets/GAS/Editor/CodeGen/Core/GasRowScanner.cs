@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 
 namespace GAS.Editor
 {
@@ -28,7 +30,7 @@ namespace GAS.Editor
                             continue;
 
                         if (type.Name.EndsWith("DefinitionRow", StringComparison.Ordinal))
-                            result.Add(type);
+                            AddUnique(result, type);
                     }
                 }
                 catch (NotSupportedException)
@@ -44,12 +46,22 @@ namespace GAS.Editor
             return s_cachedRows;
         }
 
+        private static void AddUnique(List<Type> result, Type type)
+        {
+            if (type == null || result.Contains(type))
+                return;
+
+            result.Add(type);
+        }
+
+#if UNITY_EDITOR
         [InitializeOnLoadMethod]
         private static void RegisterAssemblyReloadCallback()
         {
             AssemblyReloadEvents.beforeAssemblyReload += ClearCache;
             AssemblyReloadEvents.afterAssemblyReload += ClearCache;
         }
+#endif
 
         private static void ClearCache()
         {
