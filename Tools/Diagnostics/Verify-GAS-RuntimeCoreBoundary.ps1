@@ -239,6 +239,70 @@ Assert-FileContains `
     -Path $queryLayoutPlanPath `
     -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.AttributeDeltaBuffer" `
     -Message "AttributeDeltaBuffer must be classified with the ASC owner-local layout."
+Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<GEEffectCommandBuffer>\(\)" `
+    -Message "ASC runtime archetype must own GEEffectCommandBuffer as an owner-local instant command source."
+Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<GESetByCallerValueBuffer>\(\)" `
+    -Message "ASC runtime archetype must own GESetByCallerValueBuffer as owner-local instant command payload."
+Assert-FileContains `
+    -Path $ascFactoryPath `
+    -Pattern "GetBuffer<GEEffectCommandBuffer>\(asc\)\.EnsureCapacity" `
+    -Message "ASC factory must initialize owner-local instant command capacity."
+Assert-FileContains `
+    -Path $ascFactoryPath `
+    -Pattern "GetBuffer<GESetByCallerValueBuffer>\(asc\)\.EnsureCapacity" `
+    -Message "ASC factory must initialize owner-local instant set-by-caller capacity."
+Assert-FileContains `
+    -Path $ascFactoryPath `
+    -Pattern "HasBuffer<GEEffectCommandBuffer>\(asc\)" `
+    -Message "ASC runtime component completeness check must require owner-local instant command buffer."
+Assert-FileContains `
+    -Path $ascFactoryPath `
+    -Pattern "HasBuffer<GESetByCallerValueBuffer>\(asc\)" `
+    -Message "ASC runtime component completeness check must require owner-local instant set-by-caller buffer."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "OwnerLocalInstantCommandFramePrepareSystem" `
+    -Message "Runtime Core must clear ASC owner-local instant commands during FramePrepare."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "BufferTypeHandle<GEEffectCommandBuffer>" `
+    -Message "Runtime Core must clear ASC owner-local instant commands with a chunk buffer type handle."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "BufferTypeHandle<GESetByCallerValueBuffer>" `
+    -Message "Runtime Core must clear ASC owner-local instant set-by-caller payloads with a chunk buffer type handle."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "OwnerLocalInstantCommandFlushSystem[\s\S]*?CollectOwnerLocalInstantCommandsJob[\s\S]*?FlushOwnerLocalInstantCommandsJob" `
+    -Message "Runtime Core must flush ASC owner-local instant commands through a deterministic merge system."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "OwnerLocalInstantCommandRecordComparer[\s\S]*?x\.Command\.Sequence\.CompareTo\(y\.Command\.Sequence\)" `
+    -Message "Owner-local instant command flush must sort by command sequence before appending to the spec stream."
+Assert-FileContains `
+    -Path $scheduleContractPath `
+    -Pattern "OwnerLocalInstantCommandFramePrepareSystem" `
+    -Message "Owner-local instant command frame prepare system must be registered in the runtime schedule."
+Assert-FileContains `
+    -Path $scheduleContractPath `
+    -Pattern "OwnerLocalInstantCommandFlushSystem" `
+    -Message "Owner-local instant command flush system must be registered in the runtime schedule."
+Assert-FileContains `
+    -Path $queryLayoutPlanPath `
+    -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.EffectCommandBuffer[\s\S]*GASRuntimeLayoutComponentSlot\.EffectCommandSetByCallerBuffer" `
+    -Message "Owner-local instant command buffers must be classified with the ASC owner-local layout."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "UpdateAfter\(typeof\(OwnerLocalInstantCommandFlushSystem\)\)" `
+    -Message "Generated instant spec build must run after owner-local instant command flush."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern 'writer\.WriteLine\("\[UpdateAfter\(typeof\(OwnerLocalInstantCommandFlushSystem\)\)\]"' `
+    -Message "CodeGen template must regenerate the instant spec build order after owner-local instant command flush."
 Assert-FileNotContains `
     -Path $generatedInstantEffectPath `
     -Pattern "DeltaLookup\s*=\s*SystemAPI\.GetBufferLookup<AttributeModifierBuffer>" `
@@ -327,6 +391,46 @@ Assert-FileContains `
     -Path $queryLayoutPlanPath `
     -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.ActiveEffectMutationSetByCallerBuffer" `
     -Message "ActiveEffectMutationSetByCallerBuffer must be classified with the ASC ActiveEffectStore layout, not the command stream layout."
+Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "struct ActiveEffectNextFrameMutationCommandBuffer\s*:\s*IBufferElementData" `
+    -Message "Runtime Core must define an owner-local next-frame command carrier for active mutation commands emitted after collect."
+Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "struct ActiveEffectNextFrameMutationSetByCallerValueBuffer\s*:\s*IBufferElementData" `
+    -Message "Runtime Core must define an owner-local next-frame set-by-caller carrier for deferred active mutation commands."
+Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<ActiveEffectNextFrameMutationCommandBuffer>\(\)" `
+    -Message "ASC runtime archetype must own ActiveEffectNextFrameMutationCommandBuffer for post-collect active mutation producers."
+Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<ActiveEffectNextFrameMutationSetByCallerValueBuffer>\(\)" `
+    -Message "ASC runtime archetype must own ActiveEffectNextFrameMutationSetByCallerValueBuffer for deferred active mutation payloads."
+Assert-FileContains `
+    -Path $ascFactoryPath `
+    -Pattern "GetBuffer<ActiveEffectNextFrameMutationCommandBuffer>\(asc\)\.EnsureCapacity" `
+    -Message "ASC factory must initialize owner-local next-frame active mutation command capacity."
+Assert-FileContains `
+    -Path $ascFactoryPath `
+    -Pattern "HasBuffer<ActiveEffectNextFrameMutationSetByCallerValueBuffer>\(asc\)" `
+    -Message "ASC runtime component completeness check must require owner-local next-frame active mutation payload buffer."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "NextFrameCommandType[\s\S]*GetBufferTypeHandle<ActiveEffectNextFrameMutationCommandBuffer>[\s\S]*deferredCommands\.Clear\(\)" `
+    -Message "FramePrepare must move next-frame active mutation commands into current owner-local commands before clearing the deferred carrier."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "NextFrameSetByCallerType[\s\S]*GetBufferTypeHandle<ActiveEffectNextFrameMutationSetByCallerValueBuffer>[\s\S]*deferredSetByCallerValues\.Clear\(\)" `
+    -Message "FramePrepare must move next-frame active mutation payloads into current owner-local payloads before clearing the deferred carrier."
+Assert-FileContains `
+    -Path $queryLayoutPlanPath `
+    -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.ActiveEffectNextFrameMutationCommandBuffer" `
+    -Message "ActiveEffectNextFrameMutationCommandBuffer must be classified with the ASC ActiveEffectStore layout."
+Assert-FileContains `
+    -Path $streamOwnerContractPath `
+    -Pattern "EGasRuntimeFrameStreamId\.ActiveEffectNextFrameMutation[\s\S]*EGasRuntimeFrameStreamCarrier\.OwnerLocalDynamicBuffer,\s*[\r\n\s]*EGasRuntimeFrameStreamCarrier\.OwnerLocalDynamicBuffer" `
+    -Message "ActiveEffectNextFrameMutation stream owner contract must use owner-local carriers across the frame boundary."
 Assert-FileNotContains `
     -Path $debuggerPath `
     -Pattern "RecordFrameStreamBufferPressure<ActiveEffectMutationBuffer>" `
@@ -565,8 +669,20 @@ Assert-FileNotContains `
     -Message "GameplayEffectRequestWriter must resolve stream owner explicitly before writing commands."
 Assert-FileContains `
     -Path $gameplayEffectRequestWriterPath `
-    -Pattern "AppendPreparedCommand\([\s\S]*?command\.Kind != GEEffectCommandKind\.ActiveMutation[\s\S]*?writer\.AppendOwnerLocalActiveMutationCommand" `
+    -Pattern "AppendPreparedCommand\([\s\S]*?if\s*\(command\.Kind == GEEffectCommandKind\.Instant\)[\s\S]*?writer\.AppendOwnerLocalInstantCommand" `
+    -Message "GameplayEffectRequestWriter must route instant runtime requests through owner-local ASC command buffers."
+Assert-FileContains `
+    -Path $gameplayEffectRequestWriterPath `
+    -Pattern "AppendPreparedCommand\([\s\S]*?TryGetActiveMutationOwnerPayload[\s\S]*?writer\.AppendOwnerLocalActiveMutationCommand" `
     -Message "GameplayEffectRequestWriter must route active mutation runtime requests through owner-local ASC command buffers."
+Assert-FileContains `
+    -Path $gameplayEffectRequestWriterPath `
+    -Pattern "TryGetInstantCommandOwnerPayload\([\s\S]*?em\.GetBuffer<GESetByCallerValueBuffer>\(targetAsc\)" `
+    -Message "GameplayEffectRequestWriter must resolve owner-local instant set-by-caller payload buffers."
+Assert-FileContains `
+    -Path $gameplayEffectRequestWriterPath `
+    -Pattern "TryGetInstantCommandOwnerPayload\([\s\S]*?em\.GetBuffer<GEEffectCommandBuffer>\(targetAsc\)" `
+    -Message "GameplayEffectRequestWriter must resolve target ASC owner-local instant command buffers."
 Assert-FileContains `
     -Path $gameplayEffectRequestWriterPath `
     -Pattern "TryGetActiveMutationOwnerPayload\([\s\S]*?em\.GetBuffer<ActiveEffectMutationSetByCallerValueBuffer>\(targetAsc\)" `
@@ -957,6 +1073,14 @@ Assert-FileContains `
     -Message "GameplayEffectRequestWriter must route runtime/simple active mutation commands to ASC owner-local command buffers."
 Assert-FileContains `
     -Path $gameplayEffectRequestWriterPath `
+    -Pattern "AppendPreparedCommand\([\s\S]*?writer\.AppendOwnerLocalInstantCommand" `
+    -Message "GameplayEffectRequestWriter must route runtime/simple instant commands to ASC owner-local command buffers."
+Assert-FileContains `
+    -Path $gameplayEffectRequestWriterPath `
+    -Pattern "CanAppendInstantCommand\([\s\S]*?HasBuffer<GEEffectCommandBuffer>[\s\S]*?HasBuffer<GESetByCallerValueBuffer>" `
+    -Message "GameplayEffectRequestWriter must preflight owner-local instant command payload buffers."
+Assert-FileContains `
+    -Path $gameplayEffectRequestWriterPath `
     -Pattern "CanAppendActiveMutationCommand\([\s\S]*?HasBuffer<ActiveEffectMutationCommandBuffer>[\s\S]*?HasBuffer<ActiveEffectMutationSetByCallerValueBuffer>" `
     -Message "GameplayEffectRequestWriter must preflight owner-local active mutation payload buffers."
 Assert-FileNotContains `
@@ -1011,6 +1135,22 @@ Assert-FileContains `
     -Path $codeGenTemplatePath `
     -Pattern "var ownerCommand = PrepareCommand\([\s\S]*?ownerSetByCallerValues\.Length[\s\S]*?Command = ownerCommand" `
     -Message "CodeGen template must keep owner-local period set-by-caller payload remapping."
+Assert-FileContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "NextFrameActiveMutationCommandLookup\s*=\s*[\s\S]*?SystemAPI\.GetBufferLookup<ActiveEffectNextFrameMutationCommandBuffer>\(isReadOnly:\s*false\)" `
+    -Message "Generated active mutation apply must acquire owner-local next-frame command buffers for post-collect active mutation producers."
+Assert-FileContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "NextFrameActiveMutationSetByCallerLookup\s*=\s*[\s\S]*?SystemAPI\.GetBufferLookup<ActiveEffectNextFrameMutationSetByCallerValueBuffer>\(isReadOnly:\s*false\)" `
+    -Message "Generated active mutation apply must acquire owner-local next-frame payload buffers for post-collect active mutation producers."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "EmitOverflowCommand[\s\S]*?if\s*\(kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?NextFrameActiveMutationCommandLookup\[targetAsc\]\.Add\(new ActiveEffectNextFrameMutationCommandBuffer[\s\S]*?EffectCommandSpecStream\.AppendPreparedCommand\(ref stream, commands, setByCallerValues, command, Frame\)" `
+    -Message "Generated overflow active mutation commands must use next-frame owner-local buffers while instant overflow keeps the spec stream path."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "EmitOverflowCommand[\s\S]*?if\s*\(kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?NextFrameActiveMutationCommandLookup\[targetAsc\]\.Add\(new ActiveEffectNextFrameMutationCommandBuffer[\s\S]*?EffectCommandSpecStream\.AppendPreparedCommand\(ref stream, commands, setByCallerValues, command, Frame\)" `
+    -Message "CodeGen template must keep overflow active mutation commands off the singleton command stream."
 Assert-FileNotContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]{0,3000}\|\| !CommandSetByCallerLookup\.HasBuffer\(StreamEntity\)" `

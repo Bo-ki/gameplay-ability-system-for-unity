@@ -168,6 +168,10 @@ namespace GAS.Runtime
                 EGasRuntimeCoreFramePhase.FramePrepare,
                 typeof(GASFramePrepareSystemGroup)),
             new(
+                typeof(OwnerLocalInstantCommandFramePrepareSystem),
+                EGasRuntimeCoreFramePhase.FramePrepare,
+                typeof(GASFramePrepareSystemGroup)),
+            new(
                 typeof(ActiveEffectOwnerLocalMutationFramePrepareSystem),
                 EGasRuntimeCoreFramePhase.FramePrepare,
                 typeof(GASFramePrepareSystemGroup)),
@@ -178,6 +182,10 @@ namespace GAS.Runtime
             new(
                 typeof(GASAttributeModifierDeltaApplySystem),
                 EGasRuntimeCoreFramePhase.DeltaApply,
+                typeof(GASCoreSimulationSystemGroup)),
+            new(
+                typeof(OwnerLocalInstantCommandFlushSystem),
+                EGasRuntimeCoreFramePhase.SpecEvaluation,
                 typeof(GASCoreSimulationSystemGroup)),
             new(
                 typeof(GameplayOwnerLocalFactFlushSystem),
@@ -211,6 +219,7 @@ namespace GAS.Runtime
             typeof(GameplayEventBusClearSystem),
             typeof(GASGlobalTimerSystem),
             typeof(GEEffectCommandSpecStreamFramePrepareSystem),
+            typeof(OwnerLocalInstantCommandFramePrepareSystem),
             typeof(ActiveEffectOwnerLocalMutationFramePrepareSystem),
             typeof(GameplayOwnerLocalFactFramePrepareSystem),
         };
@@ -240,6 +249,7 @@ namespace GAS.Runtime
             typeof(AttributeThresholdAbilityLifecycleRequestSystem),
             typeof(AbilityLifecycleRequestSystem),
             typeof(AbilityStateCleanupSystem),
+            typeof(OwnerLocalInstantCommandFlushSystem),
             typeof(GameplayOwnerLocalFactFlushSystem),
             typeof(GameplayFactProjectionSystem),
         };
@@ -272,6 +282,7 @@ namespace GAS.Runtime
         private static readonly Type[] EffectCommandSpecStreamTargetSystemTypes =
         {
             typeof(GEEffectCommandSpecStreamFramePrepareSystem),
+            typeof(OwnerLocalInstantCommandFlushSystem),
             typeof(GameplayOwnerLocalFactFlushSystem),
             typeof(GameplayFactProjectionSystem),
             typeof(GameplayFactBoundaryProjectionSystem),

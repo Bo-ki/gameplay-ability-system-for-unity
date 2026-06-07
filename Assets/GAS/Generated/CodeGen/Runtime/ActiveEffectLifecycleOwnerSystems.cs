@@ -170,6 +170,8 @@ namespace GAS.Runtime.Generated
                     ComponentType.ReadWrite<ActiveGameplayEffectCleanupRecordBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationCommandBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationSetByCallerValueBuffer>(),
+                    ComponentType.ReadWrite<ActiveEffectNextFrameMutationCommandBuffer>(),
+                    ComponentType.ReadWrite<ActiveEffectNextFrameMutationSetByCallerValueBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationBuffer>(),
                     ComponentType.ReadWrite<TagMaskComponent>(),
                     ComponentType.ReadOnly<TagFixedMaskComponent>(),
@@ -268,6 +270,10 @@ namespace GAS.Runtime.Generated
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
                 StreamSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
+                NextFrameActiveMutationCommandLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectNextFrameMutationCommandBuffer>(isReadOnly: false),
+                NextFrameActiveMutationSetByCallerLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectNextFrameMutationSetByCallerValueBuffer>(isReadOnly: false),
                 AttributeOwnerMarkerRequestLookup =
                     SystemAPI.GetBufferLookup<AttributeOwnerMarkerRequestBuffer>(isReadOnly: false),
                 AbilityStateLookup = SystemAPI.GetComponentLookup<AbilityStateComponent>(isReadOnly: false),

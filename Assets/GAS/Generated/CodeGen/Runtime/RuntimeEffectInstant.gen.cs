@@ -12,6 +12,7 @@ using Unity.Jobs;
 namespace GAS.Runtime.Generated
 {
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
+    [UpdateAfter(typeof(OwnerLocalInstantCommandFlushSystem))]
     public partial struct GEEffectSpecBuildSystem : ISystem
     {
         public void OnCreate(ref SystemState state)

@@ -192,24 +192,47 @@ namespace GAS.Runtime
                 && em.HasBuffer<ActiveEffectMutationSetByCallerValueBuffer>(targetAsc);
         }
 
+        private static bool CanAppendInstantCommand(
+            EntityManager em,
+            in GEEffectCommandBuffer command)
+        {
+            var targetAsc = ResolveTargetAsc(in command);
+            return targetAsc != Entity.Null
+                && em.Exists(targetAsc)
+                && em.HasBuffer<GEEffectCommandBuffer>(targetAsc)
+                && em.HasBuffer<GESetByCallerValueBuffer>(targetAsc);
+        }
+
         private static GEEffectCommandBuffer AppendPreparedCommand(
             EntityManager em,
             ref EffectCommandSpecStream.CommandWriter writer,
             in GEEffectCommandBuffer command,
             IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues)
         {
-            if (command.Kind != GEEffectCommandKind.ActiveMutation)
-                return writer.AppendCommand(command, setByCallerValues);
+            if (command.Kind == GEEffectCommandKind.Instant)
+            {
+                return TryGetInstantCommandOwnerPayload(
+                        em,
+                        in command,
+                        out var instantCommands,
+                        out var instantSetByCallerValues)
+                    ? writer.AppendOwnerLocalInstantCommand(
+                        command,
+                        instantCommands,
+                        instantSetByCallerValues,
+                        setByCallerValues)
+                    : default;
+            }
 
             return TryGetActiveMutationOwnerPayload(
                     em,
                     in command,
-                    out var ownerCommands,
-                    out var ownerSetByCallerValues)
+                    out var activeMutationCommands,
+                    out var activeMutationSetByCallerValues)
                 ? writer.AppendOwnerLocalActiveMutationCommand(
                     command,
-                    ownerCommands,
-                    ownerSetByCallerValues,
+                    activeMutationCommands,
+                    activeMutationSetByCallerValues,
                     setByCallerValues)
                 : default;
         }
@@ -220,18 +243,30 @@ namespace GAS.Runtime
             in GEEffectCommandBuffer command,
             DynamicBuffer<GESetByCallerRequestValueBuffer> setByCallerValues)
         {
-            if (command.Kind != GEEffectCommandKind.ActiveMutation)
-                return writer.AppendCommand(command, setByCallerValues);
+            if (command.Kind == GEEffectCommandKind.Instant)
+            {
+                return TryGetInstantCommandOwnerPayload(
+                        em,
+                        in command,
+                        out var instantCommands,
+                        out var instantSetByCallerValues)
+                    ? writer.AppendOwnerLocalInstantCommand(
+                        command,
+                        instantCommands,
+                        instantSetByCallerValues,
+                        setByCallerValues)
+                    : default;
+            }
 
             return TryGetActiveMutationOwnerPayload(
                     em,
                     in command,
-                    out var ownerCommands,
-                    out var ownerSetByCallerValues)
+                    out var activeMutationCommands,
+                    out var activeMutationSetByCallerValues)
                 ? writer.AppendOwnerLocalActiveMutationCommand(
                     command,
-                    ownerCommands,
-                    ownerSetByCallerValues,
+                    activeMutationCommands,
+                    activeMutationSetByCallerValues,
                     setByCallerValues)
                 : default;
         }
@@ -259,6 +294,29 @@ namespace GAS.Runtime
             return true;
         }
 
+        private static bool TryGetInstantCommandOwnerPayload(
+            EntityManager em,
+            in GEEffectCommandBuffer command,
+            out DynamicBuffer<GEEffectCommandBuffer> ownerCommands,
+            out DynamicBuffer<GESetByCallerValueBuffer> ownerSetByCallerValues)
+        {
+            ownerCommands = default;
+            ownerSetByCallerValues = default;
+
+            var targetAsc = ResolveTargetAsc(in command);
+            if (targetAsc == Entity.Null
+                || !em.Exists(targetAsc)
+                || !em.HasBuffer<GEEffectCommandBuffer>(targetAsc)
+                || !em.HasBuffer<GESetByCallerValueBuffer>(targetAsc))
+            {
+                return false;
+            }
+
+            ownerCommands = em.GetBuffer<GEEffectCommandBuffer>(targetAsc);
+            ownerSetByCallerValues = em.GetBuffer<GESetByCallerValueBuffer>(targetAsc);
+            return true;
+        }
+
         private static bool CanAppendEffectCommand(
             EntityManager em,
             in GEApplyRequestComponent request,
@@ -273,8 +331,9 @@ namespace GAS.Runtime
                 targetDataKind,
                 source,
                 out var command)
-                && (command.Kind != GEEffectCommandKind.ActiveMutation
-                    || CanAppendActiveMutationCommand(em, in command));
+                && (command.Kind == GEEffectCommandKind.Instant
+                    ? CanAppendInstantCommand(em, in command)
+                    : CanAppendActiveMutationCommand(em, in command));
         }
 
         private static bool PrepareAppendableCommand(

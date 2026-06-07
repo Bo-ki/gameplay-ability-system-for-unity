@@ -477,6 +477,8 @@ namespace GAS.Runtime.Generated
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             public BufferLookup<GESetByCallerValueBuffer> StreamSetByCallerLookup;
+            public BufferLookup<ActiveEffectNextFrameMutationCommandBuffer> NextFrameActiveMutationCommandLookup;
+            public BufferLookup<ActiveEffectNextFrameMutationSetByCallerValueBuffer> NextFrameActiveMutationSetByCallerLookup;
             public BufferLookup<AttributeOwnerMarkerRequestBuffer> AttributeOwnerMarkerRequestLookup;
             public ComponentLookup<AbilityStateComponent> AbilityStateLookup;
             [ReadOnly] public ComponentLookup<AbilityGrantedByEffectComponent> AbilityGrantedLookup;
@@ -1412,8 +1414,6 @@ namespace GAS.Runtime.Generated
             {
                 if (gameplayEffect.OverflowGameplayEffectCode <= 0
                     || gameplayEffect.OverflowGameplayEffectCode == sourceCommand.GameplayEffectCode
-                    || !commands.IsCreated
-                    || !setByCallerValues.IsCreated
                     || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, gameplayEffect.OverflowGameplayEffectCode, out var overflowIndex))
                 {
                     return;
@@ -1424,29 +1424,82 @@ namespace GAS.Runtime.Generated
                 var kind = RequiresActiveMutationLane(in overflowEffect, durationFrame)
                     ? GEEffectCommandKind.ActiveMutation
                     : GEEffectCommandKind.Instant;
-                EffectCommandSpecStream.AppendPreparedCommand(
-                    ref stream,
-                    commands,
-                    setByCallerValues,
-                    new GEEffectCommandBuffer
+                var command = new GEEffectCommandBuffer
+                {
+                    Frame = Frame,
+                    Kind = kind,
+                    Source = GEEffectCommandSource.Overflow,
+                    SourceAsc = sourceCommand.SourceAsc,
+                    TargetAsc = sourceCommand.TargetAsc,
+                    SourceAbility = sourceCommand.SourceAbility,
+                    SourceEffect = sourceCommand.SourceEffect,
+                    Instigator = sourceCommand.Instigator,
+                    Causer = sourceCommand.Causer,
+                    GameplayEffectCode = gameplayEffect.OverflowGameplayEffectCode,
+                    Level = sourceCommand.Level,
+                    DurationFrameOverride = durationFrame,
+                    ParentContextId = sourceCommand.ContextId,
+                    TargetDataKind = sourceCommand.TargetDataKind,
+                    Flags = kind == GEEffectCommandKind.ActiveMutation ? GASGECommandSeedFlags.ActiveMutation : GASGECommandSeedFlags.None,
+                };
+
+                if (kind == GEEffectCommandKind.ActiveMutation)
+                {
+                    var targetAsc = command.TargetAsc != Entity.Null ? command.TargetAsc : command.SourceAsc;
+                    if (targetAsc == Entity.Null
+                        || !NextFrameActiveMutationCommandLookup.HasBuffer(targetAsc)
+                        || !NextFrameActiveMutationSetByCallerLookup.HasBuffer(targetAsc))
                     {
-                        Frame = Frame,
-                        Kind = kind,
-                        Source = GEEffectCommandSource.Overflow,
-                        SourceAsc = sourceCommand.SourceAsc,
-                        TargetAsc = sourceCommand.TargetAsc,
-                        SourceAbility = sourceCommand.SourceAbility,
-                        SourceEffect = sourceCommand.SourceEffect,
-                        Instigator = sourceCommand.Instigator,
-                        Causer = sourceCommand.Causer,
-                        GameplayEffectCode = gameplayEffect.OverflowGameplayEffectCode,
-                        Level = sourceCommand.Level,
-                        DurationFrameOverride = durationFrame,
-                        ParentContextId = sourceCommand.ContextId,
-                        TargetDataKind = sourceCommand.TargetDataKind,
-                        Flags = kind == GEEffectCommandKind.ActiveMutation ? GASGECommandSeedFlags.ActiveMutation : GASGECommandSeedFlags.None,
-                    },
-                    Frame);
+                        return;
+                    }
+
+                    var ownerSetByCallerValues = NextFrameActiveMutationSetByCallerLookup[targetAsc];
+                    var ownerCommand = PrepareCommand(
+                        ref stream,
+                        ownerSetByCallerValues.Length,
+                        in command,
+                        0,
+                        Frame);
+                    NextFrameActiveMutationCommandLookup[targetAsc].Add(new ActiveEffectNextFrameMutationCommandBuffer
+                    {
+                        Command = ownerCommand,
+                    });
+                    return;
+                }
+
+                if (!commands.IsCreated
+                    || !setByCallerValues.IsCreated)
+                {
+                    return;
+                }
+
+                EffectCommandSpecStream.AppendPreparedCommand(ref stream, commands, setByCallerValues, command, Frame);
+            }
+
+            private GEEffectCommandBuffer PrepareCommand(
+                ref GEEffectCommandStreamComponent stream,
+                int setByCallerStart,
+                in GEEffectCommandBuffer command,
+                int setByCallerCount,
+                int currentFrame)
+            {
+                var resolved = command;
+                if (resolved.Sequence <= 0)
+                    resolved.Sequence = Allocate(ref stream.NextCommandSequence);
+                if (resolved.Frame <= 0)
+                    resolved.Frame = currentFrame;
+                if (resolved.ContextId <= 0)
+                    resolved.ContextId = Allocate(ref stream.NextContextId);
+                if (resolved.TargetAsc == Entity.Null)
+                    resolved.TargetAsc = resolved.SourceAsc;
+                if (resolved.Instigator == Entity.Null)
+                    resolved.Instigator = resolved.SourceAsc;
+                if (resolved.Causer == Entity.Null)
+                    resolved.Causer = resolved.SourceAbility;
+
+                resolved.SetByCallerStart = setByCallerStart;
+                resolved.SetByCallerCount = setByCallerCount;
+                return resolved;
             }
 
             private void MarkActiveModifierAdded(Entity asc)

@@ -12,6 +12,7 @@ namespace GAS.Runtime
         ActiveEffectMutation = 4,
         AttributeDelta = 5,
         TypedSimulationFact = 6,
+        ActiveEffectNextFrameMutation = 7,
     }
 
     public enum EGasRuntimeFrameStreamAuthority
@@ -362,6 +363,19 @@ namespace GAS.Runtime
                     EGasRuntimeFrameStreamMergePolicy.StableSortByTargetThenSequence,
                     EGasRuntimeFrameStreamSortKey.TargetAscThenCommandSequence,
                     internalBufferCapacity: 32),
+                Entry(
+                    EGasRuntimeFrameStreamId.ActiveEffectNextFrameMutation,
+                    GASRuntimeLayoutComponentSlot.ActiveEffectNextFrameMutationCommandBuffer,
+                    EGasRuntimeCoreFramePhase.FramePrepare,
+                    EGasRuntimeCoreFramePhase.ActiveEffectLifecycle,
+                    EGasRuntimeCoreFramePhase.FramePrepare,
+                    EGasRuntimeCoreFramePhase.FramePrepare,
+                    EGasRuntimeFrameStreamAuthority.GameplayDeterministic,
+                    EGasRuntimeFrameStreamCarrier.OwnerLocalDynamicBuffer,
+                    EGasRuntimeFrameStreamCarrier.OwnerLocalDynamicBuffer,
+                    EGasRuntimeFrameStreamMergePolicy.StableSortByTargetThenSequence,
+                    EGasRuntimeFrameStreamSortKey.TargetAscThenCommandSequence,
+                    internalBufferCapacity: 4),
                 Entry(
                     EGasRuntimeFrameStreamId.AttributeDelta,
                     GASRuntimeLayoutComponentSlot.AttributeDeltaBuffer,

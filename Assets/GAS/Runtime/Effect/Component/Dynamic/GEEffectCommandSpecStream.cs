@@ -222,6 +222,18 @@ namespace GAS.Runtime
         public GESetByCallerValueBuffer Value;
     }
 
+    [InternalBufferCapacity(4)]
+    public struct ActiveEffectNextFrameMutationCommandBuffer : IBufferElementData
+    {
+        public GEEffectCommandBuffer Command;
+    }
+
+    [InternalBufferCapacity(8)]
+    public struct ActiveEffectNextFrameMutationSetByCallerValueBuffer : IBufferElementData
+    {
+        public GESetByCallerValueBuffer Value;
+    }
+
     [InternalBufferCapacity(0)]
     public struct GameplayEventBuffer : IBufferElementData
     {
@@ -452,6 +464,57 @@ namespace GAS.Runtime
                 {
                     Command = resolved,
                 });
+                return resolved;
+            }
+
+            public GEEffectCommandBuffer AppendOwnerLocalInstantCommand(
+                in GEEffectCommandBuffer command,
+                DynamicBuffer<GEEffectCommandBuffer> ownerCommands,
+                DynamicBuffer<GESetByCallerValueBuffer> ownerSetByCallerValues,
+                IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues)
+            {
+                if (!_isCreated
+                    || !ownerCommands.IsCreated
+                    || !ownerSetByCallerValues.IsCreated)
+                {
+                    return default;
+                }
+
+                var resolved = PrepareCommand(
+                    ref _stream,
+                    ownerSetByCallerValues.Length,
+                    command,
+                    setByCallerValues?.Count ?? 0,
+                    _currentFrame);
+
+                CopyRequestSetByCallerValues(ownerSetByCallerValues, setByCallerValues, resolved.Sequence);
+                ownerCommands.Add(resolved);
+                return resolved;
+            }
+
+            public GEEffectCommandBuffer AppendOwnerLocalInstantCommand(
+                in GEEffectCommandBuffer command,
+                DynamicBuffer<GEEffectCommandBuffer> ownerCommands,
+                DynamicBuffer<GESetByCallerValueBuffer> ownerSetByCallerValues,
+                DynamicBuffer<GESetByCallerRequestValueBuffer> setByCallerValues)
+            {
+                if (!_isCreated
+                    || !ownerCommands.IsCreated
+                    || !ownerSetByCallerValues.IsCreated)
+                {
+                    return default;
+                }
+
+                var setByCallerCount = setByCallerValues.IsCreated ? setByCallerValues.Length : 0;
+                var resolved = PrepareCommand(
+                    ref _stream,
+                    ownerSetByCallerValues.Length,
+                    command,
+                    setByCallerCount,
+                    _currentFrame);
+
+                CopyRequestSetByCallerValues(ownerSetByCallerValues, setByCallerValues, resolved.Sequence);
+                ownerCommands.Add(resolved);
                 return resolved;
             }
 
@@ -1045,6 +1108,27 @@ namespace GAS.Runtime
         }
 
         private static void CopyRequestSetByCallerValues(
+            DynamicBuffer<GESetByCallerValueBuffer> target,
+            IReadOnlyList<GESetByCallerRequestValueBuffer> source,
+            int commandSequence)
+        {
+            if (source == null)
+                return;
+
+            for (var i = 0; i < source.Count; i++)
+            {
+                var value = source[i];
+                target.Add(new GESetByCallerValueBuffer
+                {
+                    CommandSequence = commandSequence,
+                    SpecSequence = 0,
+                    Key = value.Key,
+                    Value = value.Value,
+                });
+            }
+        }
+
+        private static void CopyRequestSetByCallerValues(
             DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> target,
             DynamicBuffer<GESetByCallerRequestValueBuffer> source,
             int commandSequence)
@@ -1064,6 +1148,27 @@ namespace GAS.Runtime
                         Key = value.Key,
                         Value = value.Value,
                     },
+                });
+            }
+        }
+
+        private static void CopyRequestSetByCallerValues(
+            DynamicBuffer<GESetByCallerValueBuffer> target,
+            DynamicBuffer<GESetByCallerRequestValueBuffer> source,
+            int commandSequence)
+        {
+            if (!source.IsCreated)
+                return;
+
+            for (var i = 0; i < source.Length; i++)
+            {
+                var value = source[i];
+                target.Add(new GESetByCallerValueBuffer
+                {
+                    CommandSequence = commandSequence,
+                    SpecSequence = 0,
+                    Key = value.Key,
+                    Value = value.Value,
                 });
             }
         }
