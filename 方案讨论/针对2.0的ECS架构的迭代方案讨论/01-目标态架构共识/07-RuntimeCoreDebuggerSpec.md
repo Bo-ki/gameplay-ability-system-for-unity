@@ -98,6 +98,18 @@ sequenceDiagram
 5. **AutoChessDemo**：作为 Layer 1 业务验收 Demo，只消费 DiagnosticsSink，不拥有 Runtime Debugger 模块。
 6. **Validation Evidence**：Headless runner、scene runner、profile runner 必须把 DiagnosticsSink、OfficialToolDiff、Runtime timing 和业务结果合并成同一个 evidence model；字符串 summary、Mermaid 图和日志文件只是该 model 的导出格式，不是机器依据。
 
+## 证据源分层
+
+目标态 Debugger evidence 必须把证据来源分成五类，并在导出时保留来源标签：
+
+1. **Contract / Plan Evidence**：phase、stream、structural playback、cost split 和 policy 的设计约束，只能说明应当验证什么。
+2. **Runtime Counter Evidence**：Core / Boundary / Debugger / Adapter 在运行时写入的数值 counter，用于解释 owner、phase、query、lookup、buffer、allocator、dependency 和 timing。
+3. **Official Capture Evidence**：Unity Profiler、Entities Journaling、ProfilerRecorder / ProfilerDriver 或等价官方工具的 captured / disabled / unsupported 状态。
+4. **Validation Evidence**：headless、scene、Profiler pass 和 official diff pass 的同构机器字段，用于判断业务闭环、确定性、性能口径和 blocking debug errors。
+5. **Derived Export**：中文日志、summary、Mermaid dataflow、sequence diagram 和 Editor 图表，只能从前四类 evidence 派生，不反向参与验收。
+
+任何性能结论必须显式区分 performance pass 与 diagnostic pass。若 Debugger、Journaling、Profiler 或图表导出改变了采样成本，evidence 必须标记 overhead owner，并禁止把该样本直接消费为 Core tick 优秀证明。
+
 ## 必备 counters
 
 1. request/spec/delta/fact/cue/presentation 计数。

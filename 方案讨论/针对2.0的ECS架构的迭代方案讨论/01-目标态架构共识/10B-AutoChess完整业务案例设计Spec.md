@@ -24,7 +24,7 @@
 |---|---|---|
 | 1 | [10B-01 场景、单位、属性与 Tag](10B-AutoChess完整业务案例/10B-01-场景单位属性TagSpec.md) | 需要理解 AutoChess 验收战斗、棋子数据、属性和 Tag shape |
 | 2 | [10B-02 技能与 GameplayEffect](10B-AutoChess完整业务案例/10B-02-技能与GESpec.md) | 需要理解 Ability / GE 配置、Blob 和 MMC static evaluator |
-| 3 | [10B-03 羁绊与 Runtime 基础设施](10B-AutoChess完整业务案例/10B-03-羁绊与Runtime基础设施Spec.md) | 需要理解 Synergy 系统和 Runtime Core 基础设施 component / buffer |
+| 3 | [10B-03 羁绊与 Runtime 基础设施](10B-AutoChess完整业务案例/10B-03-羁绊与Runtime基础设施Spec.md) | 需要理解 10B-03 阅读入口、羁绊系统子 Spec 和 Runtime 基础设施子 Spec 的职责边界 |
 | 4 | [10B-04 Command 与 Effect Fan-In 核心 System](10B-AutoChess完整业务案例/10B-04-核心System-Command与FanInSpec.md) | 需要查看普攻、技能激活和 Effect fan-in lane 目标实现 |
 | 5 | [10B-05 Attribute / ActiveEffect / Death 核心 System](10B-AutoChess完整业务案例/10B-05-核心System-AttributeActiveEffectDeathSpec.md) | 需要查看 Attribute reduce/apply、ActiveEffect lifecycle 和死亡检测目标实现 |
 | 6 | [10B-06 业务流程走查](10B-AutoChess完整业务案例/10B-06-业务流程走查Spec.md) | 需要阅读三条完整业务流程 |

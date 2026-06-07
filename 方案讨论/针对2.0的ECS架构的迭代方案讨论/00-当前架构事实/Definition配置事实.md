@@ -73,7 +73,7 @@ flowchart LR
 10. 当前 codegen pipeline 已改为严格输入 gate：没有任何 `*DefinitionRow` 时直接抛错阻断，禁止 partial generation 继续输出过期 Runtime artifact。
 11. `Tools/CodeGen/Generate-GAS-SourceGen.bat` 与 `Tools/GasCodeGenCli` 已提供不启动 Unity 的 sourcegen 驱动；默认 `--mode sourcegen`，可显式 `--mode unity` 调 Unity batchmode。
 12. `GasCodeGenManifest` 与离线 row provider 已改为可由 dotnet host 使用的 `Newtonsoft.Json` / JSON row 输入；`GasCodeGenValidationReport.md` 当前 `RowCount: 7`、`RuntimeForbiddenDependencyHits: 0`、`GeneratedHotPathRegressionHits: 0`。
-13. AutoChess 业务验证已经跑到 Runtime Core 消费端：`AutoChessRuntimeRunner` 日志显示 `completed=True`、`blockingDebugErrors=0`，且 commands/facts/deltas/cues 都由 generated catalog 链路驱动。
+13. AutoChess 业务验证已经跑到 Runtime Core 消费端：2026-06-07 Run3 归档日志 `_归档/2026-06-07-AutoChessBattleValidation-ActiveMutationChunkApply-Run3.log` 显示 `completed=True`、`blockingDebugErrors=0`、`commands=1050`、`coreFacts=5200`、`coreDeltas=650`、`coreCues=2500`，且该轮使用 generated catalog 安装路径；这不是 R6/R8 完成证明。
 14. 本轮 sourcegen 模板修复后，generated editor asmdef 的 row source assembly 已从 CLI 宿主程序集归一化到 Unity 编译域真实 assembly，避免 `GasCodeGenCli` 泄入 Unity generated editor asmdef 引用。
 15. generated runtime 模板中 stored query 已切到 `state.GetEntityQuery(EntityQueryDesc)`；`GEEffectCommandCatalogNormalizeJob` 已按 `PRF-22` 使用 `ChunkEntityEnumerator` 处理 enabled mask。
 16. 本轮重新运行 `dotnet run --project .\Tools\GasCodeGenCli\GasCodeGenCli.csproj -- --mode sourcegen --projectRoot ...` 成功，输出 `Rows=7, Phases=10, OrphansDeleted=1`；未直接手改 `.gen.cs`。

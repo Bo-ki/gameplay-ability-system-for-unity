@@ -16,6 +16,7 @@
 2. Boundary command record、Core command resolve、Effect fan-in、Debugger evidence、SourceGenerator pure glue 的目标代码骨架。
 3. Shell / Adapter capability 分级、opaque handle、snapshot read model、report projection identity 和 API health owner model。
 4. 对 DOTS 官方规则的 API 选型约束、验收门槛和禁止方向。
+5. 完整代码骨架阅读链：Shell capability public seam -> Boundary command record -> Core `IJobChunk` resolve -> `NativeStream` deterministic fan-in -> Debugger evidence projection -> SourceGenerator pure glue -> Snapshot / Identity / API Health validation。
 
 ## 子 Spec 阅读路径
 

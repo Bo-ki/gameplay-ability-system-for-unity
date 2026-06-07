@@ -17,7 +17,9 @@
 |---|---|
 | [10B-01 场景、单位、属性与 Tag](10B-01-场景单位属性TagSpec.md) | AutoChess 验收场景、棋子、属性、Tag 和 generated config shape。 |
 | [10B-02 技能与 GameplayEffect](10B-02-技能与GESpec.md) | Ability、GE、BlobAsset、MMC static evaluator 和配置到 Runtime 的目标链路。 |
-| [10B-03 羁绊与 Runtime 基础设施](10B-03-羁绊与Runtime基础设施Spec.md) | Synergy detection、Runtime Core 基础设施 component / buffer / owner shape。 |
+| [10B-03 羁绊与 Runtime 基础设施](10B-03-羁绊与Runtime基础设施Spec.md) | 10B-03 阅读入口、职责边界和反向链接；正文拆到 10B-03A / 10B-03B。 |
+| [10B-03A 羁绊系统](10B-03A-羁绊系统Spec.md) | AutoChess 羁绊配置、检测、typed fact、deterministic merge 和 fact reaction 目标约束。 |
+| [10B-03B Runtime 基础设施](10B-03B-Runtime基础设施Spec.md) | Frame-local stream/range、lane metadata、target grouped range、structural intent、command/request、ASC identity、static lookup 和 buffer capacity 目标约束。 |
 | [10B-04 Command 与 Effect Fan-In 核心 System](10B-04-核心System-Command与FanInSpec.md) | 普攻、技能激活、Effect fan-in lane 的目标代码样例和数据流。 |
 | [10B-05 Attribute / ActiveEffect / Death 核心 System](10B-05-核心System-AttributeActiveEffectDeathSpec.md) | Attribute reduce/apply、ActiveEffect lifecycle、死亡检测 lane 的目标代码样例。 |
 | [10B-06 业务流程走查](10B-06-业务流程走查Spec.md) | 盾击、冰霜新星、毒刃三条完整业务走查。 |

@@ -42,7 +42,7 @@
 | [08-Luban-SourceGenerator配置生成链路Spec](08-Luban-SourceGenerator配置生成链路Spec.md) | Luban / SourceGenerator / Definition / Bake 链路 |
 | [09-DefinitionAuthoring边界Spec](09-DefinitionAuthoring边界Spec.md) | Definition Authoring 输入面、Baker/Bootstrap 和 Runtime Core 隔离边界 |
 | [10-AutoChess无头验收Spec](10-AutoChess无头验收Spec.md) | AutoChessDemo 验收 Demo 目标态、Battle Runtime Adapter、业务链路和自动验收 |
-| [10B-AutoChess完整业务案例设计Spec](10B-AutoChess完整业务案例设计Spec.md) / [10B 子 Spec 索引](10B-AutoChess完整业务案例/README.md) | 完整 GAS 设计预演总览：具名棋子、具体 Excel 配置、目标代码样例、业务流程走查和交互矩阵 |
+| [10B-AutoChess完整业务案例设计Spec](10B-AutoChess完整业务案例设计Spec.md) / [10B 子 Spec 索引](10B-AutoChess完整业务案例/README.md) | 完整 GAS 设计预演总览：具名棋子、具体 Excel 配置、羁绊机制、Runtime 基础设施、目标代码样例、业务流程走查和交互矩阵 |
 | [11-AutoChessDemo-Luban配置方案Spec](11-AutoChessDemo-Luban配置方案Spec.md) | AutoChessDemo Luban 表、SourceGenerator 输出、ScaleProfile 和自动验收配置 |
 | [12-命名规范Spec](12-命名规范Spec.md) | 四层职责命名、后缀语义、限制词和任务命名规范 |
 | [13-EntityComponent物理布局Spec](13-EntityComponent物理布局Spec.md) | Entity/Component 物理布局、Archetype 审计、Buffer 容量策略 |

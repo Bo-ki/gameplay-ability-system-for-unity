@@ -12,6 +12,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 2. `GasRuntimeOfficialToolDiff` 使用 `EntitiesJournaling` 统计 create/destroy/add/remove/enable/disable/set/get。
 3. `ReplayLogSystem` 与 structured log exporter 能输出 replay/断言文本。
 4. AutoChess bridge 能导出 replay、diagnostics、official diff snapshot。
+5. AutoChess validation report 已能输出 runtime diagnostics、physical group timing、hotspot summary、official diff summary、dataflow 和 sequence 导出；这些导出是 structured evidence 的消费面，不是机器验收源本身。
 
 ## 仍成立风险
 
@@ -19,6 +20,8 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 2. 当前文档不能仅凭“工具存在”宣称结构变化已收口。
 3. generated runtime 的 query/dependency/buffer pressure 缺少专项 counters。
 4. x50/x1000 profile 与 battle hash 需要与 Debugger snapshot 联动。
+5. `GASRuntimeDebuggerEvidenceGateContract` 当前提供的是 contract / plan 计数；`ProfilerMarkerCount`、`JournalingMarkerCount`、cost group split 不能直接消费为 Unity Profiler / Entities Journaling 已 captured。
+6. CoreSimulation 的 query materialization、Boundary managed query、Debugger observation query 和 runner sync 必须分别计入 evidence owner，否则平均 tick 会掩盖真实热点。
 
 ## 代码证据
 

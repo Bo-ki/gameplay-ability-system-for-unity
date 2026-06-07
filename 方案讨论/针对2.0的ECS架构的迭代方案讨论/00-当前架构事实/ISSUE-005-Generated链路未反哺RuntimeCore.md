@@ -27,11 +27,11 @@
 ## 新风险
 
 1. generated systems 修改 runtime state，不能被视为“只读生成物”。
-2. generated output 中 `Complete()` 已清零；`GASActiveEffectMutationApplySystem` 已进入 gather + ASC chunk-local apply，active store、slot、mutation、tag、attribute、modifier 与 ability buffer 在 owner chunk 内直接访问；相邻 pending AttributeDelta owner-local apply 也已进入 ASC chunk-local path。剩余 generated/runtime 联动风险是 singleton command carrier、gather serial command scan、SourceAttribute 跨 owner snapshot lane 缺口，以及 stream migration fallback 仍未退出。
+2. generated output 中 `Complete()` 已清零；`GASActiveEffectMutationApplySystem` 已进入 gather + ASC chunk-local apply，active store、slot、mutation、tag、attribute、modifier 与 ability buffer 在 owner chunk 内直接访问；相邻 pending AttributeDelta owner-local apply 也已进入 ASC chunk-local path，旧 stream migration fallback 已退出。剩余 generated/runtime 联动风险是 singleton command carrier、gather serial command scan、SourceAttribute 跨 owner snapshot lane 缺口，以及 generated instant / execution delta record 仍经 singleton stream carrier。
 3. generated active lifecycle 的 ability cancel/destroy cleanup 已通过 frame-local lifecycle request buffer 收口；active modifier present / attribute dirty 已通过 frame-local attribute owner marker request buffer 收口。当前 `ComponentLookup.SetComponentEnabled(...)` 随机 enableable 风险不再集中于这些 marker，而是需要继续扫描未来模板是否回流。
 4. generated active effect lifecycle 与 handwritten ExecutionCalculation/Attribute/Fact projection 的 ordering、capacity、deterministic merge 需要证据。
 5. generated catalog lookup 的 revision/lifecycle owner 需要明确。
-6. codegen static validation 已有第一道 gate，并覆盖 ability lifecycle / ASC dirty-present 旧 lookup、global EntityManager facade、旧 active mutation serial apply、旧 active mutation random lookup 估算与 chunk buffer/lookup alias 回流；后续还需要继续扩展到 singleton command carrier 阈值、pending AttributeDelta owner materialization 回流、stream migration fallback 证据、无 `[BurstCompile]` hot job、Temp ECB playback 和 `state.Dependency.Complete()`。
+6. codegen static validation 已有第一道 gate，并覆盖 ability lifecycle / ASC dirty-present 旧 lookup、global EntityManager facade、旧 active mutation serial apply、旧 active mutation random lookup 估算与 chunk buffer/lookup alias 回流；后续还需要继续扩展到 singleton command carrier 阈值、pending AttributeDelta owner materialization / stream fallback 回流、generated delta record carrier 证据、无 `[BurstCompile]` hot job、Temp ECB playback 和 `state.Dependency.Complete()`。
 
 ## 代码证据
 
