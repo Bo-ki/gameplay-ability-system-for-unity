@@ -142,7 +142,15 @@ Assert-FileNotContains `
 Assert-FileContains `
     -Path $globalTimerPath `
     -Pattern "TryResolveRegisteredGlobalTimer" `
-    -Message "GASRuntimeFrameContext must prefer the registered GlobalTimer owner before fallback singleton queries."
+    -Message "GASRuntimeFrameContext must prefer the registered GlobalTimer owner."
+Assert-FileNotContains `
+    -Path $globalTimerPath `
+    -Pattern "CreateEntityQuery" `
+    -Message "GASRuntimeFrameContext current-frame lookup must not create singleton fallback queries."
+Assert-FileNotContains `
+    -Path $globalTimerPath `
+    -Pattern "TryResolveSingletonGlobalTimer" `
+    -Message "GASRuntimeFrameContext must not keep singleton query fallback helpers."
 Assert-FileNotContains `
     -Path $activeEffectStorePath `
     -Pattern "CreateEntityQuery" `
@@ -226,5 +234,6 @@ Assert-FileNotContains `
 
 Write-Host "GAS Runtime Core boundary check passed: no AutoChess references under Assets/GAS/Runtime."
 Write-Host "GAS Runtime Core pending attribute delta contract passed: owner-local apply, stream migration fallback retired, and debugger counters are wired."
+Write-Host "GAS Runtime Core global timer contract passed: registered/cache owner lookup is wired and singleton fallback queries are blocked."
 Write-Host "GAS Runtime Core active effect global index contract passed: registered/cache owner lookup is wired and singleton fallback queries are blocked."
 Write-Host "GAS Runtime Core active mutation contract passed: generated gather + ASC chunk-local apply path is wired."

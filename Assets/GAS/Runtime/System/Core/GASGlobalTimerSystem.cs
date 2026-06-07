@@ -78,7 +78,8 @@ namespace GAS.Runtime
             if (TryResolveRegisteredGlobalTimer(em, out frame))
                 return true;
 
-            return TryResolveSingletonGlobalTimer(em, out frame);
+            frame = 0;
+            return false;
         }
 
         private static bool TryResolveCachedGlobalTimer(EntityManager em, out int frame)
@@ -108,25 +109,6 @@ namespace GAS.Runtime
                 return false;
 
             var globalTimer = GASManager.EntityGlobalTimer;
-            if (!IsValidGlobalTimer(em, globalTimer))
-                return false;
-
-            RegisterKnownGlobalTimer(em, globalTimer);
-            frame = em.GetComponentData<GlobalTimer>(globalTimer).Frame;
-            return true;
-        }
-
-        private static bool TryResolveSingletonGlobalTimer(EntityManager em, out int frame)
-        {
-            frame = 0;
-            if (em.World == null || !em.World.IsCreated)
-                return false;
-
-            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<GlobalTimer>());
-            if (query.CalculateEntityCount() != 1)
-                return false;
-
-            var globalTimer = query.GetSingletonEntity();
             if (!IsValidGlobalTimer(em, globalTimer))
                 return false;
 

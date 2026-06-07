@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-旧的“多处重复 ResolveCurrentFrame / 大量临时 EntityQuery”口径已经明显缓解，但“current-frame fallback query 已删除”的旧验证结论也已经不符合当前代码。当前 `ToEntityArray` 和临时 query 必须按 owner 分类，而不能再只用数量判断。
+旧的“多处重复 ResolveCurrentFrame / 大量临时 EntityQuery”口径已经明显缓解；本轮 `GASRuntimeFrameContext` current-frame singleton fallback query 已删除，当前 `ToEntityArray` 和临时 query 必须按 owner 分类，而不能再只用数量判断。
 
 本轮复核后，`Assets/GAS/Runtime/System` 与 `Assets/GAS/Generated/CodeGen/Runtime` 内 `SystemAPI.QueryBuilder().Build()` 扫描为 0；手写 Runtime Core stored query 已统一改为 `state.GetEntityQuery(EntityQueryDesc)`。因此本 issue 不能再以“多数 Runtime 系统 QueryBuilder 承载长期 query 生命周期”作为当前诊断。
 
@@ -13,9 +13,9 @@
 ## 已缓解部分
 
 1. 旧“22 个 ToEntityArray 热路径”不再成立。
-2. 当前 `ToEntityArray()` 运行命中 4 处：`GasRuntimeDebugger.cs:889/2260/2458` 属于 Debugger observation；`CueManagedLifecycleSystem.cs:39` 属于 Boundary managed presentation。`GASAttributeModifierDeltaApplySystem` 不再通过 `_ownerDeltaQuery.ToEntityArray` 物化 owner；`GASGlobalTimerSystem` current-frame cache miss fallback 当前是 `CreateEntityQuery + CalculateEntityCount + GetSingletonEntity`，不再是 `ToEntityArray` 命中；`ActiveEffectStore` global index owner 已改为 registered/cache owner，不再创建 fallback query。
+2. 当前 `ToEntityArray()` 运行命中 4 处：`GasRuntimeDebugger.cs:889/2260/2458` 属于 Debugger observation；`CueManagedLifecycleSystem.cs:39` 属于 Boundary managed presentation。`GASAttributeModifierDeltaApplySystem` 不再通过 `_ownerDeltaQuery.ToEntityArray` 物化 owner；`GASRuntimeFrameContext` current-frame lookup 已改为 registered/cache owner，cache miss 直接失败，不再创建 fallback query；`ActiveEffectStore` global index owner 已改为 registered/cache owner，不再创建 fallback query。
 3. Runtime Core stored query 已从 `SystemAPI.QueryBuilder().Build()` 迁到 `state.GetEntityQuery(EntityQueryDesc)`，对齐 `PRF-33` / `CASE-46`。
-4. current frame 主链由 `GlobalTimer` singleton 驱动；`GASRuntimeFrameContext` 已优先使用 registered `GASManager.EntityGlobalTimer` owner，cache miss 才走 `EntityManager.CreateEntityQuery + CalculateEntityCount + GetSingletonEntity` fallback，仍需要 owner 化或 cache miss 计数证明低频。
+4. current frame 主链由 `GlobalTimer` singleton 驱动；`GASRuntimeFrameContext` 只使用 registered `GASManager.EntityGlobalTimer` owner 和本地 cache，cache miss 直接返回 false/0，不再扫描 world 查 singleton。
 5. generated `AbilityCatalogCommitJob` 已从 `ComponentLookup.SetComponentEnabled` 随机访问切到 chunk-local `EnabledMask`；同实体 commit request 关闭和 auto-end request 写入不再作为 API 承载选型错误记录。
 6. generated `GASActiveEffectMutationApplySystem` 已从旧 public/static `TryApplyActiveMutation(EntityManager, ...)` 路径迁入 `GEActiveEffectMutationGatherJob : IJob` + `GEActiveEffectMutationChunkApplyJob : IJobChunk`；当前不再把它写作主线程 helper、serial apply job 或 random owner lookup store 问题。
 7. generated `AbilityCatalogCommitSystem` 已移除 per-frame `NativeList<GECommandSeedRecord>(Allocator.TempJob)` scratch；command seed API 不再以临时 NativeList 承载单条输出。
@@ -55,7 +55,7 @@
 | config component global facade 已删除 | `GameplayEffectComponentConfig.cs`, `AbilityComponentConfig.cs`, `GameplayEffectEntityFactory.cs`, GE/Ability static config component classes |
 | pending AttributeDelta owner-local chunk apply | `GASAttributeModifierDeltaApplySystem.cs:37-195` |
 | debugger queries | `GasRuntimeDebugger.cs:888-889`, `:2260`, `:2458` |
-| current-frame fallback query | `GASGlobalTimerSystem.cs:125-129` |
+| current-frame registered/cache owner | `GASGlobalTimerSystem.cs:73-126` |
 | active effect global index registered owner cache | `ActiveEffectStore.cs:1368-1419` |
 | demo catalog direct init | `AutoChessBattleDefinitionCatalogBuilder.cs:51-58` |
 | demo bridge | `AutoChessGasCoreBridge.cs` |

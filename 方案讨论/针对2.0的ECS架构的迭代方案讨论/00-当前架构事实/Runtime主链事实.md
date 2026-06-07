@@ -102,7 +102,7 @@
 3. 这条事实用于对齐本地官方规则 `PRF-33` / `CASE-46`：stored query 归属 `SystemState`，不再由 `SystemAPI.QueryBuilder().Build()` 承载长期生命周期。
 4. 同轮扫描中，`IJobChunk.Execute` 内直接 `for (... chunk.Count ...)` 遍历已经清零；涉及 enableable mask 的 job 使用 `ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count)` 或已经不属于 `IJobChunk` 语义。
 5. 这不等于所有 query 成本已经终局优化：`CalculateChunkCountWithoutFiltering()`、singleton stream sizing、Debugger observation query、Cue managed lifecycle query 仍需按 owner / phase / cost 分类报告。
-6. 2026-06-07 整体截面确认 `EntityManager.CreateEntityQuery(...)` 当前只剩 2 处：`GasRuntimeDebugger.cs:888` 属于 Debugger observation；`GASGlobalTimerSystem.cs:125` 属于 current-frame singleton cache-miss fallback。`ActiveEffectStore` global index owner 已改为 registered/cache owner，不再创建 fallback query；剩余工作是容量、cache integrity 和 hot path 触发证据。
+6. 2026-06-07 整体截面确认 `EntityManager.CreateEntityQuery(...)` 当前只剩 1 处：`GasRuntimeDebugger.cs:888` 属于 Debugger observation。`GASRuntimeFrameContext` current-frame lookup 与 `ActiveEffectStore` global index owner 均已改为 registered/cache owner，不再创建 fallback query；剩余工作是容量、cache integrity 和 hot path 触发证据。
 
 ### 6. Observation / Debugger
 
@@ -148,7 +148,7 @@
 2. `AutoChessBattleCommandDriveSystem`、`AutoChessExecuteDamageCalculationSystem`、`AbilityLifecycleRequestSystem`、`AbilityStateCleanupSystem` 已迁到 scheduled job；Core 主链的 `AttributeRecalculateSystem` 小规模主线程 fallback、ASC command resolve、generated ability commit、generated normalize/spec-build/reduce、generated ActiveEffect pre-scan、explicit remove 主线程 foreach、stream frame prepare 和 fact projection 主线程 buffer loop 均已退场。
 3. `Assets/GAS/Runtime/System` 与 generated runtime stored query 当前已统一使用 `state.GetEntityQuery(EntityQueryDesc)`；`SystemAPI.QueryBuilder().Build()` 扫描为 0。
 4. `Assets/GAS/Runtime` 与 generated runtime 内 `SystemAPI.Query<...>` / `SystemAPI.Query(...)` 当前 0 命中；Cue managed lifecycle 使用 stored query + `ToEntityArray`，归 Boundary managed presentation。
-5. Runtime Core 的 pending AttributeDelta owner-local apply 已迁到 ASC chunk-local `IJobChunk`，不再通过 `_ownerDeltaQuery.ToEntityArray(Allocator.TempJob)` 物化 owner，也不再把 owner chunk 写入计为 random lookup；旧 stream migration fallback 已删除并由诊断脚本防回流。剩余 Runtime Core 风险集中在 singleton stream carrier、generated instant delta record / fan-in 证明、`GASRuntimeFrameContext` current-frame fallback query、`ActiveEffectStore` global index capacity / cache integrity 证据。generated active mutation 逐 command store/slot/snapshot lookup 已收束为 owner range 入口，但 command source 仍来自 singleton carrier。
+5. Runtime Core 的 pending AttributeDelta owner-local apply 已迁到 ASC chunk-local `IJobChunk`，不再通过 `_ownerDeltaQuery.ToEntityArray(Allocator.TempJob)` 物化 owner，也不再把 owner chunk 写入计为 random lookup；旧 stream migration fallback 已删除并由诊断脚本防回流。剩余 Runtime Core 风险集中在 singleton stream carrier、generated instant delta record / fan-in 证明、`ActiveEffectStore` global index capacity / cache integrity 证据。generated active mutation 逐 command store/slot/snapshot lookup 已收束为 owner range 入口，但 command source 仍来自 singleton carrier。
 6. 按 `QRY-01`、`PRF-05`、`CASE-01` 的规则口径，`SystemAPI.Query` 仍只能作为 managed boundary / proof / debug 工具，不能重新进入 Core hot path。
 
 当前检出：
@@ -161,7 +161,7 @@
 | `ToEntityArray()` | `GasRuntimeDebugger.cs:889/2260/2458` | Debugger / observation-only |
 | `ToEntityArray()` | `CueManagedLifecycleSystem.cs:39` | Boundary managed presentation |
 | pending AttributeDelta owner-local apply | `GASAttributeModifierDeltaApplySystem.cs:37-195` | ASC chunk-local `IJobChunk`；`pendingAttributeEstimatedRandomLookups=0` / `pendingAttributeMigrationCarriers=0` 已由 AutoChess x50 复测证明，旧 stream migration fallback 已删除并由诊断脚本防回流 |
-| `EntityManager.CreateEntityQuery()` | `GASGlobalTimerSystem.cs:125` | current-frame singleton cache-miss fallback；已优先读取 `GASManager.EntityGlobalTimer` registered owner，不再 `ToEntityArray` materialize |
+| `GASRuntimeFrameContext` current-frame owner | `GASGlobalTimerSystem.cs:73-126` | registered/cache owner；cache miss 直接失败，不再创建 singleton fallback query |
 | ActiveEffectStore global index owner | `ActiveEffectStore.cs:1368-1419` | registered/cache owner；不再创建 fallback query，仍需 capacity / cache integrity / hot path 触发证据 |
 | `CalculateEntityCount()` | `GasRuntimeDebugger.cs:609` | observation-only |
 | `CalculateChunkCountWithoutFiltering()` | `AbilityStateCleanupSystem`、`GEExecutionCalculationSystem`、`GEExecutionCalculationOutputModifierSystem`、`ASCDestroyFinalizeSystem`、AutoChess command drive | scheduled job sizing；按 PRF-09 避免 enableable/filter sync，并匹配 `IJobChunk` unfiltered chunk index |
