@@ -35,7 +35,6 @@ namespace GAS.Runtime
                 SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
                 SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(isReadOnly: false),
                 DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(isReadOnly: false),
-                MutationLookup = SystemAPI.GetBufferLookup<ActiveEffectMutationBuffer>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
             }.Schedule(state.Dependency);
         }
@@ -50,7 +49,6 @@ namespace GAS.Runtime
             public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
             public BufferLookup<GEEffectSpecBuffer> SpecLookup;
             public BufferLookup<AttributeModifierBuffer> DeltaLookup;
-            public BufferLookup<ActiveEffectMutationBuffer> MutationLookup;
             public BufferLookup<GameplayEventBuffer> FactLookup;
 
             public void Execute()
@@ -61,7 +59,6 @@ namespace GAS.Runtime
                     || !SetByCallerLookup.HasBuffer(StreamEntity)
                     || !SpecLookup.HasBuffer(StreamEntity)
                     || !DeltaLookup.HasBuffer(StreamEntity)
-                    || !MutationLookup.HasBuffer(StreamEntity)
                     || !FactLookup.HasBuffer(StreamEntity))
                 {
                     return;
@@ -74,7 +71,6 @@ namespace GAS.Runtime
                     SetByCallerLookup[StreamEntity],
                     SpecLookup[StreamEntity],
                     DeltaLookup[StreamEntity],
-                    MutationLookup[StreamEntity],
                     FactLookup[StreamEntity],
                     Frame);
                 StreamLookup[StreamEntity] = stream;
@@ -85,6 +81,56 @@ namespace GAS.Runtime
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASFramePrepareSystemGroup))]
     [UpdateAfter(typeof(GEEffectCommandSpecStreamFramePrepareSystem))]
+    [BurstCompile]
+    public partial struct ActiveEffectOwnerLocalMutationFramePrepareSystem : ISystem
+    {
+        private EntityQuery _ownerMutationQuery;
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            _ownerMutationQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadWrite<ActiveEffectMutationBuffer>(),
+                    ComponentType.ReadOnly<ASCIdentityComponent>(),
+                },
+            });
+            state.RequireForUpdate(_ownerMutationQuery);
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            state.Dependency = new ClearOwnerLocalActiveEffectMutationsJob
+            {
+                MutationType = SystemAPI.GetBufferTypeHandle<ActiveEffectMutationBuffer>(),
+            }.Schedule(_ownerMutationQuery, state.Dependency);
+        }
+
+        [BurstCompile]
+        private struct ClearOwnerLocalActiveEffectMutationsJob : IJobChunk
+        {
+            public BufferTypeHandle<ActiveEffectMutationBuffer> MutationType;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var mutations = chunk.GetBufferAccessor(ref MutationType);
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                    mutations[entityIndex].Clear();
+            }
+        }
+    }
+
+    [DisableAutoCreation]
+    [UpdateInGroup(typeof(GASFramePrepareSystemGroup))]
+    [UpdateAfter(typeof(ActiveEffectOwnerLocalMutationFramePrepareSystem))]
     [BurstCompile]
     public partial struct GameplayOwnerLocalFactFramePrepareSystem : ISystem
     {

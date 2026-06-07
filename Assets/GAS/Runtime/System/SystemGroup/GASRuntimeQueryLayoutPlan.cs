@@ -460,7 +460,6 @@ namespace GAS.Runtime
                     new[]
                     {
                         GASRuntimeLayoutComponentSlot.EffectCommandSetByCallerBuffer,
-                        GASRuntimeLayoutComponentSlot.ActiveEffectMutationBuffer,
                     },
                     typeof(GameplayFactProjectionSystem),
                     typeof(GameplayFactBoundaryProjectionSystem)),
@@ -486,6 +485,7 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.GameplayEffectBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveModifierBuffer,
                         GASRuntimeLayoutComponentSlot.GrantedAbilityBuffer,
+                        GASRuntimeLayoutComponentSlot.ActiveEffectMutationBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexStore,
                         GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexBuffer,
                     },

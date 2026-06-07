@@ -121,7 +121,6 @@ namespace GAS.Runtime
                     ComponentType.ReadWrite<GESetByCallerValueBuffer>(),
                     ComponentType.ReadWrite<GEEffectSpecBuffer>(),
                     ComponentType.ReadWrite<AttributeModifierBuffer>(),
-                    ComponentType.ReadWrite<ActiveEffectMutationBuffer>(),
                     ComponentType.ReadWrite<GameplayEventBuffer>());
             }
 

@@ -357,7 +357,7 @@ namespace GAS.Runtime
                     EGasRuntimeCoreFramePhase.DeltaApply,
                     EGasRuntimeCoreFramePhase.ActiveEffectLifecycle,
                     EGasRuntimeFrameStreamAuthority.GameplayDeterministic,
-                    EGasRuntimeFrameStreamCarrier.SingletonDynamicBuffer,
+                    EGasRuntimeFrameStreamCarrier.OwnerLocalDynamicBuffer,
                     EGasRuntimeFrameStreamCarrier.OwnerLocalDynamicBuffer,
                     EGasRuntimeFrameStreamMergePolicy.StableSortByTargetThenSequence,
                     EGasRuntimeFrameStreamSortKey.TargetAscThenCommandSequence,

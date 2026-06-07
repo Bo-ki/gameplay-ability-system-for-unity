@@ -168,6 +168,10 @@ namespace GAS.Runtime
                 EGasRuntimeCoreFramePhase.FramePrepare,
                 typeof(GASFramePrepareSystemGroup)),
             new(
+                typeof(ActiveEffectOwnerLocalMutationFramePrepareSystem),
+                EGasRuntimeCoreFramePhase.FramePrepare,
+                typeof(GASFramePrepareSystemGroup)),
+            new(
                 typeof(GameplayOwnerLocalFactFramePrepareSystem),
                 EGasRuntimeCoreFramePhase.FramePrepare,
                 typeof(GASFramePrepareSystemGroup)),
@@ -207,6 +211,7 @@ namespace GAS.Runtime
             typeof(GameplayEventBusClearSystem),
             typeof(GASGlobalTimerSystem),
             typeof(GEEffectCommandSpecStreamFramePrepareSystem),
+            typeof(ActiveEffectOwnerLocalMutationFramePrepareSystem),
             typeof(GameplayOwnerLocalFactFramePrepareSystem),
         };
 
