@@ -15,6 +15,7 @@ namespace GAS.AutoChessDemo
         {
             var counters = result.RuntimeDiagnostics.CoreCounters;
             var backbone = result.RuntimeDiagnostics.FrameBackboneCounters;
+            var observation = result.RuntimeDiagnostics.ObservationMaterializationCounters;
             var factsHash = CalculateFactsHash(result.StructuredLogSnapshot);
             var summaryHash = CalculateSummaryHash(result, presentation.RuntimeMarkerCount, factsHash);
             var streamCarrierPressure = CalculateStreamCarrierPressure(result.RuntimeDiagnostics);
@@ -29,6 +30,8 @@ namespace GAS.AutoChessDemo
                 reselectTriggerMask |= 8;
             if (streamCarrierPressure.WarningCount > 0)
                 reselectTriggerMask |= 16;
+            if (observation.PerformancePollutionRiskCount > 0)
+                reselectTriggerMask |= 32;
 
             return new AutoChessValidationEvidence(
                 result.Completed,
@@ -84,6 +87,10 @@ namespace GAS.AutoChessDemo
                 streamCarrierPressure.WarningCount,
                 streamCarrierPressure.PeakCount,
                 streamCarrierPressure.PeakCapacity,
+                observation.MaterializedQueryCount,
+                observation.MaterializedEntityCount,
+                observation.ElapsedMicroseconds,
+                observation.PerformancePollutionRiskCount,
                 result.ElapsedMilliseconds,
                 result.AverageTickMilliseconds,
                 factsHash,
@@ -184,21 +191,25 @@ namespace GAS.AutoChessDemo
                     + $"activeMutationOwnerGroups={evidence.ActiveMutationOwnerGroupCount}, "
                     + $"activeMutationMaxOwnerRange={evidence.ActiveMutationMaxOwnerRange}, "
                     + $"activeMutationSortMoves={evidence.ActiveMutationSortMoveCount}, "
-                     + $"activeMutationEstimatedRandomLookups={evidence.ActiveMutationEstimatedRandomLookupCount}, "
-                     + $"activeMutationOwnerResourceLookups={evidence.ActiveMutationOwnerResourceLookupCount}, "
-                     + $"activeMutationMigrationCarriers={evidence.ActiveMutationMigrationCarrierCount}, "
-                     + $"pendingAttributeDeltas={evidence.PendingAttributeDeltaCount}, "
-                     + $"pendingAttributeAppliedDeltas={evidence.PendingAttributeAppliedDeltaCount}, "
-                     + $"pendingAttributeSkippedDeltas={evidence.PendingAttributeSkippedDeltaCount}, "
-                     + $"pendingAttributeTargetGroups={evidence.PendingAttributeTargetGroupCount}, "
-                     + $"pendingAttributeMaxTargetRange={evidence.PendingAttributeMaxTargetRange}, "
-                      + $"pendingAttributeEstimatedRandomLookups={evidence.PendingAttributeEstimatedRandomLookupCount}, "
-                      + $"pendingAttributeFactPatches={evidence.PendingAttributeFactPatchCount}, "
-                      + $"pendingAttributeMigrationCarriers={evidence.PendingAttributeMigrationCarrierCount}, "
-                      + $"streamCarrierPressureWarnings={evidence.StreamCarrierPressureWarningCount}, "
-                      + $"streamCarrierPeak={evidence.StreamCarrierPeakCount}, "
-                      + $"streamCarrierCapacity={evidence.StreamCarrierPeakCapacity}, "
-                      + $"journalingCaptured={evidence.JournalingCaptured}, "
+                    + $"activeMutationEstimatedRandomLookups={evidence.ActiveMutationEstimatedRandomLookupCount}, "
+                    + $"activeMutationOwnerResourceLookups={evidence.ActiveMutationOwnerResourceLookupCount}, "
+                    + $"activeMutationMigrationCarriers={evidence.ActiveMutationMigrationCarrierCount}, "
+                    + $"pendingAttributeDeltas={evidence.PendingAttributeDeltaCount}, "
+                    + $"pendingAttributeAppliedDeltas={evidence.PendingAttributeAppliedDeltaCount}, "
+                    + $"pendingAttributeSkippedDeltas={evidence.PendingAttributeSkippedDeltaCount}, "
+                    + $"pendingAttributeTargetGroups={evidence.PendingAttributeTargetGroupCount}, "
+                    + $"pendingAttributeMaxTargetRange={evidence.PendingAttributeMaxTargetRange}, "
+                    + $"pendingAttributeEstimatedRandomLookups={evidence.PendingAttributeEstimatedRandomLookupCount}, "
+                    + $"pendingAttributeFactPatches={evidence.PendingAttributeFactPatchCount}, "
+                    + $"pendingAttributeMigrationCarriers={evidence.PendingAttributeMigrationCarrierCount}, "
+                    + $"streamCarrierPressureWarnings={evidence.StreamCarrierPressureWarningCount}, "
+                    + $"streamCarrierPeak={evidence.StreamCarrierPeakCount}, "
+                    + $"streamCarrierCapacity={evidence.StreamCarrierPeakCapacity}, "
+                    + $"observationMaterializedQueries={evidence.ObservationMaterializedQueryCount}, "
+                    + $"observationMaterializedEntities={evidence.ObservationMaterializedEntityCount}, "
+                    + $"observationMaterializationUs={evidence.ObservationMaterializationElapsedMicroseconds}, "
+                    + $"performancePassObservationPollutionRisks={evidence.ObservationPerformancePollutionRiskCount}, "
+                    + $"journalingCaptured={evidence.JournalingCaptured}, "
                    + $"profilerCaptureState={evidence.ProfilerCaptureState}, "
                    + $"ecsRuntimeTickOnly={evidence.EcsRuntimeTickOnly}, "
                    + $"officialDiffSeparatePass={evidence.OfficialDiffSeparatePass}, "
@@ -216,6 +227,7 @@ namespace GAS.AutoChessDemo
             var stats = result.RuntimeDiagnostics.Stats;
             var counters = result.RuntimeDiagnostics.CoreCounters;
             var backbone = result.RuntimeDiagnostics.FrameBackboneCounters;
+            var observation = result.RuntimeDiagnostics.ObservationMaterializationCounters;
             return $"runtimeDiagnostics events={stats.RetainedEventCount}, "
                    + $"dropped={stats.DroppedEventCount}, "
                    + $"warnings={stats.WarningCount}, "
@@ -233,24 +245,28 @@ namespace GAS.AutoChessDemo
                    + $"queryBudget={counters.QueryBudget}, "
                    + $"lookupBudget={counters.LookupUpdateBudget}, "
                    + $"randomLookupBudget={counters.RandomLookupBudget}, "
-                    + $"syncQueryBudget={counters.SyncQueryBudget}, "
-                    + $"activeMutationCommands={counters.ActiveMutationCommandCount}, "
-                    + $"activeMutationOwnerGroups={counters.ActiveMutationOwnerGroupCount}, "
-                    + $"activeMutationMaxOwnerRange={counters.ActiveMutationMaxOwnerRange}, "
-                    + $"activeMutationSortMoves={counters.ActiveMutationSortMoveCount}, "
-                     + $"activeMutationEstimatedRandomLookups={counters.ActiveMutationEstimatedRandomLookupCount}, "
-                     + $"activeMutationOwnerResourceLookups={counters.ActiveMutationOwnerResourceLookupCount}, "
-                     + $"activeMutationMigrationCarriers={counters.ActiveMutationMigrationCarrierCount}, "
-                     + $"pendingAttributeDeltas={counters.PendingAttributeDeltaCount}, "
-                     + $"pendingAttributeAppliedDeltas={counters.PendingAttributeAppliedDeltaCount}, "
-                     + $"pendingAttributeSkippedDeltas={counters.PendingAttributeSkippedDeltaCount}, "
-                     + $"pendingAttributeTargetGroups={counters.PendingAttributeTargetGroupCount}, "
-                     + $"pendingAttributeMaxTargetRange={counters.PendingAttributeMaxTargetRange}, "
-                      + $"pendingAttributeEstimatedRandomLookups={counters.PendingAttributeEstimatedRandomLookupCount}, "
-                      + $"pendingAttributeFactPatches={counters.PendingAttributeFactPatchCount}, "
-                      + $"pendingAttributeMigrationCarriers={counters.PendingAttributeMigrationCarrierCount}, "
-                      + $"streamCarrierPressureWarnings={CalculateStreamCarrierPressure(result.RuntimeDiagnostics).WarningCount}, "
-                      + $"frameBackbonePhases={backbone.PhaseCount}, "
+                   + $"syncQueryBudget={counters.SyncQueryBudget}, "
+                   + $"activeMutationCommands={counters.ActiveMutationCommandCount}, "
+                   + $"activeMutationOwnerGroups={counters.ActiveMutationOwnerGroupCount}, "
+                   + $"activeMutationMaxOwnerRange={counters.ActiveMutationMaxOwnerRange}, "
+                   + $"activeMutationSortMoves={counters.ActiveMutationSortMoveCount}, "
+                   + $"activeMutationEstimatedRandomLookups={counters.ActiveMutationEstimatedRandomLookupCount}, "
+                   + $"activeMutationOwnerResourceLookups={counters.ActiveMutationOwnerResourceLookupCount}, "
+                   + $"activeMutationMigrationCarriers={counters.ActiveMutationMigrationCarrierCount}, "
+                   + $"pendingAttributeDeltas={counters.PendingAttributeDeltaCount}, "
+                   + $"pendingAttributeAppliedDeltas={counters.PendingAttributeAppliedDeltaCount}, "
+                   + $"pendingAttributeSkippedDeltas={counters.PendingAttributeSkippedDeltaCount}, "
+                   + $"pendingAttributeTargetGroups={counters.PendingAttributeTargetGroupCount}, "
+                   + $"pendingAttributeMaxTargetRange={counters.PendingAttributeMaxTargetRange}, "
+                   + $"pendingAttributeEstimatedRandomLookups={counters.PendingAttributeEstimatedRandomLookupCount}, "
+                   + $"pendingAttributeFactPatches={counters.PendingAttributeFactPatchCount}, "
+                   + $"pendingAttributeMigrationCarriers={counters.PendingAttributeMigrationCarrierCount}, "
+                   + $"streamCarrierPressureWarnings={CalculateStreamCarrierPressure(result.RuntimeDiagnostics).WarningCount}, "
+                   + $"observationMaterializedQueries={observation.MaterializedQueryCount}, "
+                   + $"observationMaterializedEntities={observation.MaterializedEntityCount}, "
+                   + $"observationMaterializationUs={observation.ElapsedMicroseconds}, "
+                   + $"performancePassObservationPollutionRisks={observation.PerformancePollutionRiskCount}, "
+                   + $"frameBackbonePhases={backbone.PhaseCount}, "
                    + $"streams={backbone.StreamCount}, "
                    + $"migrationCarriers={backbone.MigrationCarrierCount}, "
                    + $"profilerMarkerContracts={backbone.ProfilerMarkerCount}, "
@@ -304,12 +320,15 @@ namespace GAS.AutoChessDemo
                    + $"activeMutationMaxOwnerRange={result.RuntimeDiagnostics.CoreCounters.ActiveMutationMaxOwnerRange}, "
                    + $"activeMutationEstimatedRandomLookups={result.RuntimeDiagnostics.CoreCounters.ActiveMutationEstimatedRandomLookupCount}, "
                    + $"periodTickDamageFacts={result.EventCounts.PeriodTickDamageFacts}, "
-                    + $"pendingAttributeDeltas={result.RuntimeDiagnostics.CoreCounters.PendingAttributeDeltaCount}, "
-                    + $"pendingAttributeAppliedDeltas={result.RuntimeDiagnostics.CoreCounters.PendingAttributeAppliedDeltaCount}, "
-                    + $"pendingAttributeTargetGroups={result.RuntimeDiagnostics.CoreCounters.PendingAttributeTargetGroupCount}, "
-                    + $"pendingAttributeEstimatedRandomLookups={result.RuntimeDiagnostics.CoreCounters.PendingAttributeEstimatedRandomLookupCount}, "
-                    + $"streamCarrierPressureWarnings={CalculateStreamCarrierPressure(result.RuntimeDiagnostics).WarningCount}, "
-                    + $"structuralCommitAvgMs={result.RuntimeTiming.StructuralCommit.AverageMilliseconds:0.000}, "
+                   + $"pendingAttributeDeltas={result.RuntimeDiagnostics.CoreCounters.PendingAttributeDeltaCount}, "
+                   + $"pendingAttributeAppliedDeltas={result.RuntimeDiagnostics.CoreCounters.PendingAttributeAppliedDeltaCount}, "
+                   + $"pendingAttributeTargetGroups={result.RuntimeDiagnostics.CoreCounters.PendingAttributeTargetGroupCount}, "
+                   + $"pendingAttributeEstimatedRandomLookups={result.RuntimeDiagnostics.CoreCounters.PendingAttributeEstimatedRandomLookupCount}, "
+                   + $"streamCarrierPressureWarnings={CalculateStreamCarrierPressure(result.RuntimeDiagnostics).WarningCount}, "
+                   + $"observationMaterializedQueries={result.RuntimeDiagnostics.ObservationMaterializationCounters.MaterializedQueryCount}, "
+                   + $"observationMaterializationUs={result.RuntimeDiagnostics.ObservationMaterializationCounters.ElapsedMicroseconds}, "
+                   + $"performancePassObservationPollutionRisks={result.RuntimeDiagnostics.ObservationMaterializationCounters.PerformancePollutionRiskCount}, "
+                   + $"structuralCommitAvgMs={result.RuntimeTiming.StructuralCommit.AverageMilliseconds:0.000}, "
                    + $"boundaryProjectionAvgMs={result.RuntimeTiming.BoundaryProjection.AverageMilliseconds:0.000}, "
                    + $"dependencyDrainAvgMs={result.RuntimeTiming.DependencyDrain.AverageMilliseconds:0.000}";
         }

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Text;
 using Unity.Collections;
 using Unity.Entities;
@@ -14,6 +15,7 @@ namespace GAS.Runtime
         StructuralChange = 4,
         RuntimeCoreCounters = 5,
         RuntimeCoreFrameBackbone = 6,
+        ObservationMaterialization = 7,
     }
 
     public enum EGasRuntimeDiagnosticSeverity : byte
@@ -258,6 +260,14 @@ namespace GAS.Runtime
         public int FrameBackboneBurstWarmupPolicyCount;
         public int FrameBackboneHotPathManagedStringCount;
         public int FrameBackboneEvidenceMask;
+        public int ObservationMaterializedQueryCount;
+        public int ObservationMaterializedEntityCount;
+        public int ObservationMaterializationElapsedMicroseconds;
+        public int ObservationActiveEffectStoreQueryCount;
+        public int ObservationActiveEffectStoreEntityCount;
+        public int ObservationPresentationOutboxQueryCount;
+        public int ObservationPresentationOutboxEntityCount;
+        public int ObservationPerformancePollutionRiskCount;
         public float Ratio;
     }
 
@@ -290,6 +300,100 @@ namespace GAS.Runtime
             ErrorCount = errorCount;
             SlowSystemCount = slowSystemCount;
             BufferPressureWarningCount = bufferPressureWarningCount;
+        }
+    }
+
+    public readonly struct GasRuntimeObservationMaterializationCounters
+    {
+        public readonly int MaterializedQueryCount;
+        public readonly int MaterializedEntityCount;
+        public readonly int ElapsedMicroseconds;
+        public readonly int ActiveEffectStoreQueryCount;
+        public readonly int ActiveEffectStoreEntityCount;
+        public readonly int PresentationOutboxQueryCount;
+        public readonly int PresentationOutboxEntityCount;
+        public readonly int PerformancePollutionRiskCount;
+
+        public static GasRuntimeObservationMaterializationCounters Empty => default;
+
+        public GasRuntimeObservationMaterializationCounters(
+            int materializedQueryCount,
+            int materializedEntityCount,
+            int elapsedMicroseconds,
+            int activeEffectStoreQueryCount,
+            int activeEffectStoreEntityCount,
+            int presentationOutboxQueryCount,
+            int presentationOutboxEntityCount,
+            int performancePollutionRiskCount)
+        {
+            MaterializedQueryCount = materializedQueryCount;
+            MaterializedEntityCount = materializedEntityCount;
+            ElapsedMicroseconds = elapsedMicroseconds;
+            ActiveEffectStoreQueryCount = activeEffectStoreQueryCount;
+            ActiveEffectStoreEntityCount = activeEffectStoreEntityCount;
+            PresentationOutboxQueryCount = presentationOutboxQueryCount;
+            PresentationOutboxEntityCount = presentationOutboxEntityCount;
+            PerformancePollutionRiskCount = performancePollutionRiskCount;
+        }
+
+        public bool HasMaterialization => MaterializedQueryCount > 0 || MaterializedEntityCount > 0 || ElapsedMicroseconds > 0;
+
+        public GasRuntimeObservationMaterializationCounters AddActiveEffectStoreMaterialization(
+            int entityCount,
+            int elapsedMicroseconds)
+        {
+            return Add(
+                activeEffectStoreQueries: 1,
+                activeEffectStoreEntities: entityCount,
+                presentationOutboxQueries: 0,
+                presentationOutboxEntities: 0,
+                elapsedMicroseconds: elapsedMicroseconds);
+        }
+
+        public GasRuntimeObservationMaterializationCounters AddPresentationOutboxMaterialization(
+            int entityCount,
+            int elapsedMicroseconds)
+        {
+            return Add(
+                activeEffectStoreQueries: 0,
+                activeEffectStoreEntities: 0,
+                presentationOutboxQueries: 1,
+                presentationOutboxEntities: entityCount,
+                elapsedMicroseconds: elapsedMicroseconds);
+        }
+
+        public GasRuntimeObservationMaterializationCounters Add(
+            in GasRuntimeObservationMaterializationCounters other)
+        {
+            return new GasRuntimeObservationMaterializationCounters(
+                MaterializedQueryCount + other.MaterializedQueryCount,
+                MaterializedEntityCount + other.MaterializedEntityCount,
+                ElapsedMicroseconds + other.ElapsedMicroseconds,
+                ActiveEffectStoreQueryCount + other.ActiveEffectStoreQueryCount,
+                ActiveEffectStoreEntityCount + other.ActiveEffectStoreEntityCount,
+                PresentationOutboxQueryCount + other.PresentationOutboxQueryCount,
+                PresentationOutboxEntityCount + other.PresentationOutboxEntityCount,
+                PerformancePollutionRiskCount + other.PerformancePollutionRiskCount);
+        }
+
+        private GasRuntimeObservationMaterializationCounters Add(
+            int activeEffectStoreQueries,
+            int activeEffectStoreEntities,
+            int presentationOutboxQueries,
+            int presentationOutboxEntities,
+            int elapsedMicroseconds)
+        {
+            var queryCount = activeEffectStoreQueries + presentationOutboxQueries;
+            var entityCount = activeEffectStoreEntities + presentationOutboxEntities;
+            return new GasRuntimeObservationMaterializationCounters(
+                MaterializedQueryCount + queryCount,
+                MaterializedEntityCount + entityCount,
+                ElapsedMicroseconds + elapsedMicroseconds,
+                ActiveEffectStoreQueryCount + activeEffectStoreQueries,
+                ActiveEffectStoreEntityCount + activeEffectStoreEntities,
+                PresentationOutboxQueryCount + presentationOutboxQueries,
+                PresentationOutboxEntityCount + presentationOutboxEntities,
+                PerformancePollutionRiskCount + (queryCount > 0 ? 1 : 0));
         }
     }
 
@@ -781,6 +885,7 @@ namespace GAS.Runtime
         public readonly GasRuntimeDiagnosticStats Stats;
         public readonly GasRuntimeCoreDiagnosticCounters CoreCounters;
         public readonly GasRuntimeFrameBackboneDiagnosticCounters FrameBackboneCounters;
+        public readonly GasRuntimeObservationMaterializationCounters ObservationMaterializationCounters;
         public readonly GASRuntimeDiagnosticEventBuffer[] Events;
 
         public GasRuntimeDiagnosticSnapshot(
@@ -791,6 +896,7 @@ namespace GAS.Runtime
                 stats,
                 coreCounters,
                 GasRuntimeFrameBackboneDiagnosticCounters.Empty,
+                GasRuntimeObservationMaterializationCounters.Empty,
                 events)
         {
         }
@@ -800,10 +906,26 @@ namespace GAS.Runtime
             in GasRuntimeCoreDiagnosticCounters coreCounters,
             in GasRuntimeFrameBackboneDiagnosticCounters frameBackboneCounters,
             GASRuntimeDiagnosticEventBuffer[] events)
+            : this(
+                stats,
+                coreCounters,
+                frameBackboneCounters,
+                GasRuntimeObservationMaterializationCounters.Empty,
+                events)
+        {
+        }
+
+        public GasRuntimeDiagnosticSnapshot(
+            in GasRuntimeDiagnosticStats stats,
+            in GasRuntimeCoreDiagnosticCounters coreCounters,
+            in GasRuntimeFrameBackboneDiagnosticCounters frameBackboneCounters,
+            in GasRuntimeObservationMaterializationCounters observationMaterializationCounters,
+            GASRuntimeDiagnosticEventBuffer[] events)
         {
             Stats = stats;
             CoreCounters = coreCounters;
             FrameBackboneCounters = frameBackboneCounters;
+            ObservationMaterializationCounters = observationMaterializationCounters;
             Events = events ?? Array.Empty<GASRuntimeDiagnosticEventBuffer>();
         }
 
@@ -1218,8 +1340,29 @@ namespace GAS.Runtime
             EntityManager em,
             Entity eventBusEntity,
             Entity eventLogSinkEntity,
+            out GasRuntimeObservationMaterializationCounters observationCounters)
+        {
+            using var queries = GasRuntimeCoreCounterQueries.CreateOwned(em);
+            return CollectRuntimeCoreCounters(em, eventBusEntity, eventLogSinkEntity, queries, out observationCounters);
+        }
+
+        public static GasRuntimeCoreDiagnosticCounters CollectRuntimeCoreCounters(
+            EntityManager em,
+            Entity eventBusEntity,
+            Entity eventLogSinkEntity,
             in GasRuntimeCoreCounterQueries queries)
         {
+            return CollectRuntimeCoreCounters(em, eventBusEntity, eventLogSinkEntity, queries, out _);
+        }
+
+        public static GasRuntimeCoreDiagnosticCounters CollectRuntimeCoreCounters(
+            EntityManager em,
+            Entity eventBusEntity,
+            Entity eventLogSinkEntity,
+            in GasRuntimeCoreCounterQueries queries,
+            out GasRuntimeObservationMaterializationCounters observationCounters)
+        {
+            observationCounters = GasRuntimeObservationMaterializationCounters.Empty;
             var pendingCommandOwnerCount = queries.CountPendingCommandOwners();
             var activeEffectEntityCount = queries.CountActiveEffectEntities();
             var pendingApplyCommandOwnerCount = queries.CountPendingApplyCommandOwners();
@@ -1311,7 +1454,8 @@ namespace GAS.Runtime
                     out activeEffectChunkSkipSkippedSlotCount,
                     out activeEffectChunkSkipDuePeriodSlotCount,
                     out activeEffectChunkSkipNoopSlotCount,
-                    out activeEffectChunkSkipOwnerCount);
+                    out activeEffectChunkSkipOwnerCount,
+                    ref observationCounters);
             }
 
             var boundaryBridgeEventCount = attributeChangeCount + cueRequestCount + tagChangeCount + damageEventCount;
@@ -1320,7 +1464,11 @@ namespace GAS.Runtime
             var streamBufferPeak = Math.Max(
                 Math.Max(effectCommandCount, instantSpecCount),
                 Math.Max(attributeDeltaCount, typedFactCount));
-            var presentationCount = CountPresentationOutboxEvents(em, eventBusEntity, queries.PresentationOutboxes);
+            var presentationCount = CountPresentationOutboxEvents(
+                em,
+                eventBusEntity,
+                queries.PresentationOutboxes,
+                ref observationCounters);
             var presentationCursorLag = CalculatePresentationCursorLag(
                 em,
                 eventBusEntity,
@@ -1411,8 +1559,13 @@ namespace GAS.Runtime
             Entity eventBusEntity,
             Entity eventLogSinkEntity)
         {
-            var counters = CollectRuntimeCoreCounters(em, eventBusEntity, eventLogSinkEntity);
+            var counters = CollectRuntimeCoreCounters(
+                em,
+                eventBusEntity,
+                eventLogSinkEntity,
+                out var observationCounters);
             RecordRuntimeCoreCounters(em, debuggerEntity, frame, counters);
+            RecordObservationMaterialization(em, debuggerEntity, frame, observationCounters);
         }
 
         public static void CollectAndRecordRuntimeCoreCounters(
@@ -1423,8 +1576,14 @@ namespace GAS.Runtime
             Entity eventLogSinkEntity,
             in GasRuntimeCoreCounterQueries queries)
         {
-            var counters = CollectRuntimeCoreCounters(em, eventBusEntity, eventLogSinkEntity, queries);
+            var counters = CollectRuntimeCoreCounters(
+                em,
+                eventBusEntity,
+                eventLogSinkEntity,
+                queries,
+                out var observationCounters);
             RecordRuntimeCoreCounters(em, debuggerEntity, frame, counters);
+            RecordObservationMaterialization(em, debuggerEntity, frame, observationCounters);
         }
 
         public static void RecordRuntimeCoreEcbPlayback(
@@ -1835,6 +1994,47 @@ namespace GAS.Runtime
             em.SetComponentData(debuggerEntity, state);
         }
 
+        public static void RecordObservationMaterialization(
+            EntityManager em,
+            Entity debuggerEntity,
+            int frame,
+            in GasRuntimeObservationMaterializationCounters counters)
+        {
+            if (!counters.HasMaterialization
+                || !TryGetWritableLog(em, debuggerEntity, out var state, out var log))
+            {
+                return;
+            }
+
+            Append(
+                log,
+                ref state,
+                new GASRuntimeDiagnosticEventBuffer
+                {
+                    Frame = frame,
+                    Kind = EGasRuntimeDiagnosticKind.ObservationMaterialization,
+                    Severity = EGasRuntimeDiagnosticSeverity.Trace,
+                    Module = EGasRuntimeDiagnosticModule.Presentation,
+                    GroupName = "DebuggerObservation",
+                    SystemName = nameof(DiagnosticsSnapshotSystem),
+                    BufferName = "ToEntityArray",
+                    Count = counters.MaterializedQueryCount,
+                    Capacity = counters.MaterializedEntityCount,
+                    ElapsedMicroseconds = counters.ElapsedMicroseconds,
+                    ObservationMaterializedQueryCount = counters.MaterializedQueryCount,
+                    ObservationMaterializedEntityCount = counters.MaterializedEntityCount,
+                    ObservationMaterializationElapsedMicroseconds = counters.ElapsedMicroseconds,
+                    ObservationActiveEffectStoreQueryCount = counters.ActiveEffectStoreQueryCount,
+                    ObservationActiveEffectStoreEntityCount = counters.ActiveEffectStoreEntityCount,
+                    ObservationPresentationOutboxQueryCount = counters.PresentationOutboxQueryCount,
+                    ObservationPresentationOutboxEntityCount = counters.PresentationOutboxEntityCount,
+                    ObservationPerformancePollutionRiskCount = counters.PerformancePollutionRiskCount,
+                });
+
+            ApplyRetention(log, ref state);
+            em.SetComponentData(debuggerEntity, state);
+        }
+
         public static void RecordEventBusPressure(
             EntityManager em,
             Entity debuggerEntity,
@@ -2034,6 +2234,7 @@ namespace GAS.Runtime
             var errorCount = 0;
             var slowSystemCount = 0;
             var bufferPressureWarningCount = 0;
+            var observationMaterializationCounters = GasRuntimeObservationMaterializationCounters.Empty;
 
             for (var i = 0; i < log.Length; i++)
             {
@@ -2052,6 +2253,19 @@ namespace GAS.Runtime
                     && evt.Severity >= EGasRuntimeDiagnosticSeverity.Warning)
                 {
                     bufferPressureWarningCount++;
+                }
+                if (evt.Kind == EGasRuntimeDiagnosticKind.ObservationMaterialization)
+                {
+                    observationMaterializationCounters = observationMaterializationCounters.Add(
+                        new GasRuntimeObservationMaterializationCounters(
+                            evt.ObservationMaterializedQueryCount,
+                            evt.ObservationMaterializedEntityCount,
+                            evt.ObservationMaterializationElapsedMicroseconds,
+                            evt.ObservationActiveEffectStoreQueryCount,
+                            evt.ObservationActiveEffectStoreEntityCount,
+                            evt.ObservationPresentationOutboxQueryCount,
+                            evt.ObservationPresentationOutboxEntityCount,
+                            evt.ObservationPerformancePollutionRiskCount));
                 }
             }
 
@@ -2135,6 +2349,7 @@ namespace GAS.Runtime
                     state.RuntimeCoreWorldUpdateAllocatorOwnerCount,
                     state.RuntimeCoreRewindableAllocatorCandidateCount),
                 CreateFrameBackboneCounters(state),
+                observationMaterializationCounters,
                 events);
         }
 
@@ -2157,6 +2372,7 @@ namespace GAS.Runtime
                 .AppendLine();
             AppendRuntimeCoreCounters(builder, snapshot.CoreCounters);
             AppendRuntimeCoreFrameBackboneCounters(builder, snapshot.FrameBackboneCounters);
+            AppendObservationMaterializationCounters(builder, snapshot.ObservationMaterializationCounters);
 
             var events = snapshot.Events ?? Array.Empty<GASRuntimeDiagnosticEventBuffer>();
             var count = maxEvents > 0 && maxEvents < events.Length ? maxEvents : events.Length;
@@ -2311,7 +2527,8 @@ namespace GAS.Runtime
             out int chunkSkipSkippedSlotCount,
             out int chunkSkipDuePeriodSlotCount,
             out int chunkSkipNoopSlotCount,
-            out int chunkSkipOwnerCount)
+            out int chunkSkipOwnerCount,
+            ref GasRuntimeObservationMaterializationCounters observationCounters)
         {
             ownerCount = 0;
             slotCount = 0;
@@ -2330,7 +2547,11 @@ namespace GAS.Runtime
             chunkSkipNoopSlotCount = 0;
             chunkSkipOwnerCount = 0;
 
+            var materializationStart = Stopwatch.GetTimestamp();
             using var owners = activeEffectStoreQuery.ToEntityArray(Allocator.Temp);
+            observationCounters = observationCounters.AddActiveEffectStoreMaterialization(
+                owners.Length,
+                ToMicroseconds(Stopwatch.GetTimestamp() - materializationStart));
             ownerCount = owners.Length;
 
             for (var ownerIndex = 0; ownerIndex < owners.Length; ownerIndex++)
@@ -2507,10 +2728,20 @@ namespace GAS.Runtime
                 : 0;
         }
 
+        private static int ToMicroseconds(long stopwatchTicks)
+        {
+            if (stopwatchTicks <= 0)
+                return 0;
+
+            var microseconds = stopwatchTicks * 1000000d / Stopwatch.Frequency;
+            return microseconds >= int.MaxValue ? int.MaxValue : (int)Math.Ceiling(microseconds);
+        }
+
         private static int CountPresentationOutboxEvents(
             EntityManager em,
             Entity eventBusEntity,
-            EntityQuery presentationOutboxQuery)
+            EntityQuery presentationOutboxQuery,
+            ref GasRuntimeObservationMaterializationCounters observationCounters)
         {
             if (eventBusEntity != Entity.Null
                 && em.Exists(eventBusEntity)
@@ -2528,7 +2759,11 @@ namespace GAS.Runtime
                 return count;
             }
 
+            var materializationStart = Stopwatch.GetTimestamp();
             using var entities = presentationOutboxQuery.ToEntityArray(Allocator.Temp);
+            observationCounters = observationCounters.AddPresentationOutboxMaterialization(
+                entities.Length,
+                ToMicroseconds(Stopwatch.GetTimestamp() - materializationStart));
             var fallbackCount = 0;
             for (var i = 0; i < entities.Length; i++)
                 fallbackCount += em.GetBuffer<PresentationEventBuffer>(entities[i]).Length;
@@ -3015,6 +3250,27 @@ namespace GAS.Runtime
                 builder.AppendLine();
                 return;
             }
+            if (evt.Kind == EGasRuntimeDiagnosticKind.ObservationMaterialization)
+            {
+                builder.Append("|materializedQueries=")
+                    .Append(evt.ObservationMaterializedQueryCount)
+                    .Append("|materializedEntities=")
+                    .Append(evt.ObservationMaterializedEntityCount)
+                    .Append("|elapsedUs=")
+                    .Append(evt.ObservationMaterializationElapsedMicroseconds)
+                    .Append("|activeEffectStoreQueries=")
+                    .Append(evt.ObservationActiveEffectStoreQueryCount)
+                    .Append("|activeEffectStoreEntities=")
+                    .Append(evt.ObservationActiveEffectStoreEntityCount)
+                    .Append("|presentationOutboxQueries=")
+                    .Append(evt.ObservationPresentationOutboxQueryCount)
+                    .Append("|presentationOutboxEntities=")
+                    .Append(evt.ObservationPresentationOutboxEntityCount)
+                    .Append("|performancePollutionRisks=")
+                    .Append(evt.ObservationPerformancePollutionRiskCount);
+                builder.AppendLine();
+                return;
+            }
             if (evt.Kind == EGasRuntimeDiagnosticKind.StructuralChange)
             {
                 if (evt.EcbPlaybackCount != 0)
@@ -3198,6 +3454,29 @@ namespace GAS.Runtime
                 .Append(counters.WorldUpdateAllocatorOwnerCount)
                 .Append("|rewindableAllocatorCandidates=")
                 .Append(counters.RewindableAllocatorCandidateCount)
+                .AppendLine();
+        }
+
+        private static void AppendObservationMaterializationCounters(
+            StringBuilder builder,
+            in GasRuntimeObservationMaterializationCounters counters)
+        {
+            builder.Append("runtimeObservationMaterialization|queries=")
+                .Append(counters.MaterializedQueryCount)
+                .Append("|entities=")
+                .Append(counters.MaterializedEntityCount)
+                .Append("|elapsedUs=")
+                .Append(counters.ElapsedMicroseconds)
+                .Append("|activeEffectStoreQueries=")
+                .Append(counters.ActiveEffectStoreQueryCount)
+                .Append("|activeEffectStoreEntities=")
+                .Append(counters.ActiveEffectStoreEntityCount)
+                .Append("|presentationOutboxQueries=")
+                .Append(counters.PresentationOutboxQueryCount)
+                .Append("|presentationOutboxEntities=")
+                .Append(counters.PresentationOutboxEntityCount)
+                .Append("|performancePollutionRisks=")
+                .Append(counters.PerformancePollutionRiskCount)
                 .AppendLine();
         }
 

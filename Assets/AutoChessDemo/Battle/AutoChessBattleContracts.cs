@@ -418,6 +418,10 @@ namespace GAS.AutoChessDemo
         public readonly int StreamCarrierPressureWarningCount;
         public readonly int StreamCarrierPeakCount;
         public readonly int StreamCarrierPeakCapacity;
+        public readonly int ObservationMaterializedQueryCount;
+        public readonly int ObservationMaterializedEntityCount;
+        public readonly int ObservationMaterializationElapsedMicroseconds;
+        public readonly int ObservationPerformancePollutionRiskCount;
         public readonly double TotalElapsedMilliseconds;
         public readonly double AverageTickMilliseconds;
         public readonly uint FactsHash;
@@ -486,6 +490,10 @@ namespace GAS.AutoChessDemo
             int streamCarrierPressureWarningCount,
             int streamCarrierPeakCount,
             int streamCarrierPeakCapacity,
+            int observationMaterializedQueryCount,
+            int observationMaterializedEntityCount,
+            int observationMaterializationElapsedMicroseconds,
+            int observationPerformancePollutionRiskCount,
             double totalElapsedMilliseconds,
             double averageTickMilliseconds,
             uint factsHash,
@@ -553,6 +561,10 @@ namespace GAS.AutoChessDemo
             StreamCarrierPressureWarningCount = streamCarrierPressureWarningCount;
             StreamCarrierPeakCount = streamCarrierPeakCount;
             StreamCarrierPeakCapacity = streamCarrierPeakCapacity;
+            ObservationMaterializedQueryCount = observationMaterializedQueryCount;
+            ObservationMaterializedEntityCount = observationMaterializedEntityCount;
+            ObservationMaterializationElapsedMicroseconds = observationMaterializationElapsedMicroseconds;
+            ObservationPerformancePollutionRiskCount = observationPerformancePollutionRiskCount;
             TotalElapsedMilliseconds = totalElapsedMilliseconds;
             AverageTickMilliseconds = averageTickMilliseconds;
             FactsHash = factsHash;

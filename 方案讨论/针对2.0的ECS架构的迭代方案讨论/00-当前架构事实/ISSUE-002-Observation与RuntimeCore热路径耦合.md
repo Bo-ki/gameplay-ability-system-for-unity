@@ -1,6 +1,6 @@
 # ISSUE-002 Observation 与 Runtime Core 热路径耦合
 
-> 最近复核：2026-06-06 | 状态：Mitigated | 严重度：P1
+> 最近复核：2026-06-08 | 状态：Mitigated | 严重度：P1
 
 ## 当前结论
 
@@ -15,13 +15,15 @@ Observation 已经被放到 `GASBoundaryProjectionSystemGroup`，并且 typed fa
 5. `DamageEventBuffer` 与 `EventBusHelper.EnqueueDamageEvent` 已退场；Damage 由 typed fact 的 `Domain=Damage` 表达。
 6. `EventBusHelper` 不再公开 Attribute/Cue/Tag/Damage gameplay fact enqueue API。
 7. `GameplayEventLogSinkComponent` 与 `PresentationOutboxProjectionStateComponent` 已删除 legacy processed cursor，只保留 typed fact cursor。
+8. Debugger observation materialization 已有独立诊断事件和 AutoChess evidence；2026-06-08 x50 日志显示 `observationMaterializedQueries=12`、`observationMaterializedEntities=2400`、`observationMaterializationUs=92`。
 
 ## 仍成立风险
 
 1. `GameplayEventBusComponent` 仍是 Attribute/Cue/Tag 边界缓冲和 presentation outbox owner 的 singleton owner；这些缓冲只允许作为 BoundaryProjection 派生产物和 managed Cue bridge，不再是 gameplay truth。
-2. `GasRuntimeDebugger` 仍有 observation-only query 和 `ToEntityArray`。
+2. `GasRuntimeDebugger` 仍有 observation-only query 和 `ToEntityArray`；当前已通过 `ObservationMaterialization` 事件、snapshot/export counter 和 AutoChess evidence 单独归因，但仍不能混入 CoreSimulation hot path。
 3. 如果性能报告不拆 Core / Boundary / Demo，架构判断会失真。
 4. 业务 reaction 若重新扫描边界缓冲，会把 Observation 成本和事实源重新拉回 CoreSimulation。
+5. 当前 `performancePassObservationPollutionRisks=12`，说明 observation pass 与 performance pass 仍未完全隔离；状态只能写成 mitigated，不是完成态。
 
 ## 代码证据
 
@@ -34,6 +36,7 @@ Observation 已经被放到 `GASBoundaryProjectionSystemGroup`，并且 typed fa
 | boundary helper | `EventBusHelper.cs` |
 | debugger query | `GasRuntimeDebugger.cs` |
 | AutoChess log-only presentation | `AutoChessDemoSceneRunner.cs`, `AutoChessBattleLog.cs` |
+| observation materialization x50 | `_归档/2026-06-08-AutoChessBattleValidation-ObservationMaterialization-Run1.log` |
 
 ## 退出条件
 

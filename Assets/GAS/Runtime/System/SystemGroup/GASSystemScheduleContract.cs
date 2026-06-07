@@ -384,9 +384,11 @@ namespace GAS.Runtime
         {
             for (var i = 0; i < systemTypeNames.Count; i++)
             {
-                var systemType = Type.GetType(systemTypeNames[i]);
+                var systemTypeName = systemTypeNames[i];
+                var systemType = Type.GetType(systemTypeName);
                 if (systemType == null)
-                    continue;
+                    throw new InvalidOperationException(
+                        $"Generated GAS runtime system type is missing: {systemTypeName}");
 
                 group.AddSystemToUpdateList(world.CreateSystem(systemType));
             }

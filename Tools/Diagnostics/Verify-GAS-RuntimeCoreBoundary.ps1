@@ -205,6 +205,38 @@ Assert-FileContains `
     -Pattern "EntityRuntimeDebugger = GasRuntimeDebugger\.CreateSingleton\(ExWorld\.EntityManager\)" `
     -Message "GASManager initialization must register the runtime debugger owner."
 Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "GasRuntimeObservationMaterializationCounters" `
+    -Message "GasRuntimeDebugger must expose observation materialization counters outside Runtime Core counters."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "ObservationMaterialization" `
+    -Message "GasRuntimeDebugger must emit a dedicated observation materialization diagnostic event."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "runtimeObservationMaterialization" `
+    -Message "GasRuntimeDebugger text export must expose observation materialization counters."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "observationMaterializationCounters\s*=\s*observationMaterializationCounters\.Add" `
+    -Message "GasRuntimeDebugger snapshots must aggregate observation materialization events into machine-readable counters."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "PerformancePollutionRiskCount" `
+    -Message "GasRuntimeDebugger must tag observation materialization as performance-pass pollution risk."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "result\.RuntimeDiagnostics\.ObservationMaterializationCounters" `
+    -Message "AutoChess validation evidence must consume observation materialization counters from runtime diagnostics snapshots."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "performancePassObservationPollutionRisks" `
+    -Message "AutoChess validation evidence must expose observation materialization pollution risk."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "observationMaterializedQueries" `
+    -Message "AutoChess validation evidence must expose observation materialized query count."
+Assert-FileContains `
     -Path $streamPath `
     -Pattern "ResetFrameLocalCounters\(ref stream\)" `
     -Message "GEEffectCommandSpecStream must reset frame-local debugger counters during frame prepare."
@@ -268,6 +300,14 @@ Assert-FileContains `
     -Path $scheduleContractPath `
     -Pattern "typeof\(GASAttributeModifierDeltaApplySystem\),\s*[\r\n\s]*EGasRuntimeCoreFramePhase\.DeltaApply" `
     -Message "GASSystemScheduleContract must classify GASAttributeModifierDeltaApplySystem as DeltaApply."
+Assert-FileNotContains `
+    -Path $scheduleContractPath `
+    -Pattern "if\s*\(systemType\s*==\s*null\)\s*[\r\n\s]*continue" `
+    -Message "GASSystemScheduleContract must not silently skip missing generated runtime systems."
+Assert-FileContains `
+    -Path $scheduleContractPath `
+    -Pattern "Generated GAS runtime system type is missing" `
+    -Message "GASSystemScheduleContract must fail fast when generated runtime system types are missing."
 Assert-FileContains `
     -Path $streamOwnerContractPath `
     -Pattern "streamId == EGasRuntimeFrameStreamId\.AttributeDelta" `

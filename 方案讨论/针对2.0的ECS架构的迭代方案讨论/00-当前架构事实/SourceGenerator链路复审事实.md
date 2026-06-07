@@ -29,7 +29,7 @@
 4. `RuntimeForbiddenDependencyHits = 0` 能证明 managed config 没有直接泄漏到 generated Runtime。
 5. `GasCodeGenPipeline.s_corePhases` 已不再包含 `AutoChessDemoConfigPhase`，Demo 产物改由 standalone phase 写入 `Assets/AutoChessDemo/Generated`。
 6. validation report 已新增 generated lifecycle / structural / ownership / random lookup / managed config boundary 计数，并输出 `GeneratedRuntimeBoundaryGateMode: blocking-unclassified-migration-proof`。
-7. `GeneratedRuntimeSystemRegistrationHits = 0` 只说明 SourceGenerator 当前没有输出自注册 helper；手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 仍通过 `Type.GetType(...)` 反射解析 generated systems，解析失败时 `continue` 静默跳过，不具备目标态 fail-fast 证据。
+7. `GeneratedRuntimeSystemRegistrationHits = 0` 只说明 SourceGenerator 当前没有输出自注册 helper；手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 仍通过 `Type.GetType(...)` 反射解析 generated systems，但解析失败时当前已抛 `InvalidOperationException`，不再静默跳过。该事实具备 fail-fast 正向证据，仍需补缺失 artifact / type mismatch / assembly unavailable 的负例验证、system 数量和 phase budget 证据。
 
 必须修正的是：生成器不应继续生成 Runtime Core lifecycle system、隐藏结构变化 owner 或大量 runtime random lookup 驱动逻辑；新增 boundary hit 不能长期只报告不阻断。SourceGenerator 当前已经不只是“配置到代码”的胶水，而是在部分路径上替 Runtime Core 拥有 gameplay 时序。
 
@@ -168,7 +168,7 @@ Runtime/RuntimeEffectInstant.gen.cs
 Runtime/RuntimeActiveEffect.gen.cs
 ```
 
-其中后三类不再是 definition glue，而是 Runtime Core 执行管线。它们包含 `ISystem`、`OnUpdate()`、`ComponentLookup`、`BufferLookup`、`Schedule()`、ECB 和 structural owner。`RuntimeSystemRegistration.gen.cs` 当前已不在 output list，且 report 中 `GeneratedRuntimeSystemRegistrationHits = 0`，这是正向事实；但这只证明生成器没有自注册 helper，不能证明手写 schedule registry 达标。当前 `GASSystemScheduleContract.AddSystemsByTypeName()` 在 generated type 缺失时静默跳过，新增 registration helper 必须默认失败，手写 registry 也必须补缺失 artifact / type mismatch / assembly unavailable 的 fail-fast 或 validation gate。
+其中后三类不再是 definition glue，而是 Runtime Core 执行管线。它们包含 `ISystem`、`OnUpdate()`、`ComponentLookup`、`BufferLookup`、`Schedule()`、ECB 和 structural owner。`RuntimeSystemRegistration.gen.cs` 当前已不在 output list，且 report 中 `GeneratedRuntimeSystemRegistrationHits = 0`，这是正向事实；但这只证明生成器没有自注册 helper，不能证明手写 schedule registry 整体达标。当前 `GASSystemScheduleContract.AddSystemsByTypeName()` 在 generated type 缺失时已 fail-fast，新增 registration helper 必须默认失败，手写 registry 还必须补缺失 artifact / type mismatch / assembly unavailable 的负例验证、system 数量和 phase budget。
 
 官方判定：
 
@@ -242,7 +242,7 @@ GetBufferLookup<T>()
 |---|---|---|---|
 | Core / Demo phase 已拆分 | `GasCodeGenPipeline.s_corePhases` 不含 `AutoChessDemoConfigPhase`，Demo 写入 standalone output root | `ODF-06`、`20-GASRuntimeCore-API选型基线.md` | 旧 P0 已缓解；继续保持 Core report 与 Demo evidence 分 owner |
 | RuntimeDefinitionGluePhase 过厚 | 同 phase 生成 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs` | `SYS-01`、`SYS-03`、`QRY-01` | SourceGenerator 越权生成 lifecycle |
-| generated runtime system registration 当前为 0 | report 输出 `GeneratedRuntimeSystemRegistrationHits: 0`，output list 不含 `RuntimeSystemRegistration.gen.cs`；手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 对缺失 generated type 当前静默跳过 | `SYS-01`、`SYS-03` | SourceGenerator 不自注册是正向事实；手写 registry 仍缺 fail-fast 证据，新增 registration helper 必须默认失败 |
+| generated runtime system registration 当前为 0 | report 输出 `GeneratedRuntimeSystemRegistrationHits: 0`，output list 不含 `RuntimeSystemRegistration.gen.cs`；手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 对缺失 generated type 当前 fail-fast | `SYS-01`、`SYS-03` | SourceGenerator 不自注册是正向事实；缺失 type 静默漏注册风险已缓解，但手写 registry 仍需负例验证、system 数量和 phase budget；新增 registration helper 必须默认失败 |
 | generated runtime boundary gate 阻断未分类命中 | report 输出 `GeneratedRuntimeBoundaryHits: 135`、`GeneratedRuntimeBoundaryGateMode: blocking-unclassified-migration-proof`、`GeneratedRuntimeUnclassifiedBoundaryHits: 0` | `ODF-18`、`SYS-01`、`QRY-04`、`SC-01` | 未分类回流已被阻断；已分类 `MigrationProofOnly` 仍可生成 |
 | generated runtime 使用 random lookup | generated lifecycle 文件内使用 `ComponentLookup<T>` / `BufferLookup<T>` | `QRY-04`、`PRF-06`、`PRF-19` | 只能作为迁移期 proof，不是 scale-ready 终局 |
 | Catalog builder runtime-visible | `DefinitionCatalog.gen.cs` 暴露 `BuildCatalog()` / `BlobBuilder` | `BLOB-01`、`BLOB-02`、`BAKE-01` | 初始化可接受，但层级边界和 dispose owner 需继续证明 |

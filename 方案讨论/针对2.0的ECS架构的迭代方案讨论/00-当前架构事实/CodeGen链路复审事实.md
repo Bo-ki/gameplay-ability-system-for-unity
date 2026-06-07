@@ -31,7 +31,7 @@
 3. `DefinitionCatalog.gen.cs` 已生成 `GASDefinitionCatalogBlob`、sorted code lookup、`TryGetAbilityIndex()` / `TryGetGameplayEffectIndex()` 和 `ref readonly` definition 访问。
 4. `RuntimeDefinitionGlue.gen.cs` 中的 `GASGeneratedRuntimeDefinitionResolver`、Requirement / Magnitude evaluator、record glue 是正向资产：它们把 definition index/range 转成 frame-local record，不需要 managed row、JSON 或 `Dictionary`。
 5. `GasCodeGenPipeline.s_corePhases` 已不再包含 `AutoChessDemoConfigPhase`；Demo 生成改由 `s_autoChessDemoPhases` standalone 写入 `Assets/AutoChessDemo/Generated`。
-6. `GasCodeGenValidationReport.md` 当前不仅输出 forbidden dependency 和 naming debt 命中数，也输出 generated runtime boundary hits；其中 `GeneratedRuntimeSystemRegistrationHits = 0` 是 SourceGenerator 不自注册的正向事实，但手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 当前对缺失 generated type 仍是静默跳过。
+6. `GasCodeGenValidationReport.md` 当前不仅输出 forbidden dependency 和 naming debt 命中数，也输出 generated runtime boundary hits；其中 `GeneratedRuntimeSystemRegistrationHits = 0` 是 SourceGenerator 不自注册的正向事实。手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 当前对缺失 generated type 已 fail-fast 抛错，不再静默跳过；剩余证据缺口转为缺失 artifact / type mismatch / assembly unavailable 的负例验证、system 数量、phase budget 和 validation gate 对账。
 
 ## 当前 P0 / P1 违约事实
 
@@ -51,7 +51,7 @@ Runtime/RuntimeEffectInstant.gen.cs
 Runtime/RuntimeActiveEffect.gen.cs
 ```
 
-这些 generated 文件包含 `ISystem`、`OnUpdate(ref SystemState)`、`SystemAPI.GetComponentLookup`、`SystemAPI.GetBufferLookup`、`EntityCommandBuffer`、structural owner 和大量 random lookup。`RuntimeSystemRegistration.gen.cs` 当前已不在 output list，且 report 中 `GeneratedRuntimeSystemRegistrationHits = 0`；这不等于主链注册已合规，因为手写 registry 当前 `Type.GetType(...) == null` 时 `continue`，缺失 generated artifact / type / assembly 不会 fail-fast。新增 registration helper 仍必须按目标态禁止项处理，手写 registry 也必须补验证门。
+这些 generated 文件包含 `ISystem`、`OnUpdate(ref SystemState)`、`SystemAPI.GetComponentLookup`、`SystemAPI.GetBufferLookup`、`EntityCommandBuffer`、structural owner 和大量 random lookup。`RuntimeSystemRegistration.gen.cs` 当前已不在 output list，且 report 中 `GeneratedRuntimeSystemRegistrationHits = 0`；手写 registry 当前已把缺失 generated type 从 silent skip 改为 fail-fast。这个修复只关闭“缺失 type 静默漏注册”风险，不等于主链注册整体合规；新增 registration helper 仍必须按目标态禁止项处理，手写 registry 还必须补负例验证、system 数量、phase budget 和 generated assembly 可用性证据。
 
 判定依据：
 
@@ -88,7 +88,7 @@ GeneratedRuntimeManagedConfigHits
 |---|---|---|---|
 | Core / Demo phase 已拆分 | `GasCodeGenPipeline.cs` 中 `s_corePhases` 不含 `AutoChessDemoConfigPhase`；Demo standalone 写入 `Assets/AutoChessDemo/Generated` | `ODF-06` | 旧 P0 已缓解；消费链仍需分 owner |
 | RuntimeDefinitionGluePhase 过厚 | `GasGlueCodeGenPhases.cs` 写出 runtime activation / instant / active lifecycle artifact | `SYS-01`、`SYS-03` | SourceGenerator 越权生成 lifecycle |
-| generated runtime registration 当前为 0 | validation report 输出 `GeneratedRuntimeSystemRegistrationHits: 0`；手写 registry 对缺失 generated type 当前静默跳过 | `SYS-03` | SourceGenerator 不自注册是正向事实；主链注册 fail-fast 尚未达标，新增 registration 默认失败 |
+| generated runtime registration 当前为 0 | validation report 输出 `GeneratedRuntimeSystemRegistrationHits: 0`；手写 registry 对缺失 generated type 当前 fail-fast 抛错 | `SYS-03` | SourceGenerator 不自注册是正向事实；缺失 type 静默漏注册风险已缓解，但主链注册仍需 system 数量、phase budget、type mismatch / assembly unavailable 负例验证；新增 registration 默认失败 |
 | generated runtime boundary gate 已阻断未分类命中 | validation report 输出 `GeneratedRuntimeBoundaryHits: 135`、`GeneratedRuntimeBoundaryGateMode: blocking-unclassified-migration-proof`、`GeneratedRuntimeUnclassifiedBoundaryHits: 0` | `ODF-18`、`SYS-01`、`QRY-04` | 未分类回流已进入 blocking；已分类 `MigrationProofOnly` 仍需 R2/R3/R5 退出 |
 | generated runtime random lookup | generated lifecycle 文件使用 `ComponentLookup<T>` / `BufferLookup<T>` | `QRY-04` | 迁移期 proof，非 scale-ready 终局 |
 | catalog blob 已出现 | `DefinitionCatalog.gen.cs` 有 sorted lookup / `ref readonly` access | `BLOB-01` | 正向事实 |

@@ -43,7 +43,7 @@
 | `FixedStepGroupTypes` / `RegisterSystems()` | runtime-active | 当前 World 初始化真实创建和注册 |
 | `RuntimeCoreFramePhaseContracts` | contract-only | 描述 8 个逻辑 phase 的读写权限；不是 8 个物理 group |
 | `RuntimeCoreFramePhaseSystemContracts` | partial mapping | 当前只覆盖 5 个系统的 phase mapping，不能视为全系统 phase table |
-| generated registration reflection | runtime-active but fragile | `GASSystemScheduleContract` 通过手写 generated type-name 列表反射注册；若 generated asmdef/type 缺失会静默跳过，且 `RuntimeSystemRegistration.gen.cs` 当前已退场 |
+| generated registration reflection | runtime-active with fail-fast guard | `GASSystemScheduleContract` 通过手写 generated type-name 列表反射注册；当前 `Type.GetType(...) == null` 会抛 `InvalidOperationException("Generated GAS runtime system type is missing: ...")`，不再静默跳过；`RuntimeSystemRegistration.gen.cs` 当前已退场 |
 | AutoChess system bootstrap | demo-extension | 只为 demo world 插入 command drive / execution extension，不属于通用 Runtime 注册表 |
 
 ### 3. Command / Spec / Delta / Fact 迁移链
@@ -102,7 +102,7 @@
 3. 这条事实用于对齐本地官方规则 `PRF-33` / `CASE-46`：stored query 归属 `SystemState`，不再由 `SystemAPI.QueryBuilder().Build()` 承载长期生命周期。
 4. 同轮扫描中，`IJobChunk.Execute` 内直接 `for (... chunk.Count ...)` 遍历已经清零；涉及 enableable mask 的 job 使用 `ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count)` 或已经不属于 `IJobChunk` 语义。
 5. 这不等于所有 query 成本已经终局优化：`CalculateChunkCountWithoutFiltering()`、singleton stream sizing、Debugger observation query、Cue managed lifecycle query 仍需按 owner / phase / cost 分类报告。
-6. 2026-06-08 codedb + 文本复核确认 `EntityManager.CreateEntityQuery(...)` 当前 Runtime 可执行命中为 0。`GasRuntimeDebugger` singleton lookup、`GASRuntimeFrameContext` current-frame lookup 与 `ActiveEffectStore` global index owner 均已改为 registered/cache owner，不再创建 fallback query；剩余工作是容量、cache integrity、hot path 触发证据，以及 Debugger observation 成本归因和防回流门禁。
+6. 2026-06-08 codedb + 文本复核确认 `EntityManager.CreateEntityQuery(...)` 当前 Runtime 可执行命中为 0。`GasRuntimeDebugger` singleton lookup、`GASRuntimeFrameContext` current-frame lookup 与 `ActiveEffectStore` global index owner 均已改为 registered/cache owner，不再创建 fallback query；Debugger observation materialization 当前已进入专用 event、snapshot/export counter 和 AutoChess validation evidence。剩余工作是容量、cache integrity、hot path 触发证据，以及 Debugger observation 成本阈值和防回流门禁。
 
 ### 6. Observation / Debugger
 
@@ -110,7 +110,7 @@
 2. `GameplayFactBoundaryProjectionSystem` 会把 Attribute/Cue/Tag typed facts 投影到边界缓冲；当前投影已由 BoundaryProjection 内的 scheduled `IJob` 完成，不再由 CoreSimulation 的 `GameplayFactProjectionSystem` 或 CommandResolve 的 `ASCCommandBufferResolveSystem` 写 EventBus lookup。
 3. `PresentationOutboxProjectionSystem`、`ReplayLogSystem`、`DiagnosticsSnapshotSystem` 位于 `GASBoundaryProjectionSystemGroup`；Presentation/Replay 只读 typed fact。
 4. `GasRuntimeOfficialToolDiff` 使用 `EntitiesJournaling` 统计 create/destroy/add/remove/enable/disable/set/get 等记录，是结构变化收口的有效证据工具。
-5. `GasRuntimeDebugger` 仍有 observation-only `ToEntityArray` 和同步 query；这类成本必须与 Core Simulation 成本拆分报告。
+5. `GasRuntimeDebugger` 仍有 observation-only `ToEntityArray` 和同步 query；这类成本已通过 `ObservationMaterialization` / `runtimeObservationMaterialization` / AutoChess observation evidence 单独归因，仍必须与 Core Simulation 成本拆分报告。2026-06-08 x50 日志 `_归档/2026-06-08-AutoChessBattleValidation-ObservationMaterialization-Run1.log` 显示 `runtimeObservationMaterialization|queries=12|entities=2400|elapsedUs=92|performancePollutionRisks=12`，说明本轮只完成成本显性化，performance pass 隔离还未完成。
 
 ## 当前 DOTS 合规缺口
 
