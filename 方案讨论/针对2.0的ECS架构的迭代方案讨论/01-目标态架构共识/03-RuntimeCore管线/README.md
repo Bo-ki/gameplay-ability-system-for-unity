@@ -15,7 +15,7 @@
 | 文件 | 职责 |
 |---|---|
 | [03A 执行域与数据流](03A-执行域与数据流Spec.md) | 目标态 Runtime Core 的目的、官方依据、物理执行域、数据流、SystemGroup、Phase 和官方交叉审查。 |
-| [03B 业务调用链与配置消费](03B-业务调用链与配置消费Spec.md) | 目标态业务调用链、Luban 配置生成链 Runtime 消费链和 Generated Runtime Glue 真实消费接口。 |
+| [03B 业务调用链与配置消费](03B-业务调用链与配置消费Spec.md) / [03B 子页索引](03B-业务调用链与配置消费/README.md) | 目标态业务调用链、Luban 配置生成链 Runtime 消费链和 Generated Runtime Glue 真实消费接口；根文件只保留短索引，正文在同名子目录。 |
 | [03C SystemGroup 合约与核心数据形态](03C-SystemGroup合约与核心数据形态Spec.md) | 目标代码骨架中的 SystemGroup 合约、核心组件、buffer、frame context、command/fact/outbox 数据形态。 |
 | [03D Command Resolve 与 Target Resolve](03D-CommandResolve与TargetResolveSpec.md) | 目标态 Ability command ingest、Core Ability Producer、NativeStream command records、target resolve 和 request-owned TargetDataBuffer。 |
 | [03E Effect Fan-In / State / Attribute / Fact](03E-EffectFanIn-State-Attribute-FactSpec.md) | 目标态 effect fan-in、active effect store、attribute reduce/apply 和 gameplay fact 数据流。 |

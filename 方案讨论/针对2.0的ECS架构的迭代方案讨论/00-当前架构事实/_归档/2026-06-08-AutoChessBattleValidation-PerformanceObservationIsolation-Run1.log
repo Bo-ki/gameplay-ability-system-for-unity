@@ -1,0 +1,1244 @@
+[Licensing::Module] Trying to connect to existing licensing client channel...
+Built from '6000.3/staging' branch; Version is '6000.3.14f1 (d68c3f99a318) revision 14060607'; Using compiler version '194234433'; Build Type 'Release'
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-Y" at "2026-06-07T16:57:54.4181719Z"
+OS: 'Windows 11  (10.0.26200) Core' Language: 'zh' Physical Memory: 48943 MB
+BatchMode: 1, IsHumanControllingUs: 0, StartBugReporterOnCrash: 0, Is64bit: 1
+System  architecture: x64
+Process architecture: x64
+Date: 2026-06-07T16:57:54Z
+
+COMMAND LINE ARGUMENTS:
+E:\Unity\UnityEditor\6000.3.14f1\Editor\Unity.exe
+-batchmode
+-nographics
+-quit
+-projectPath
+E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity
+-executeMethod
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner.RunAutoChessBattleOnceAndExit
+-logFile
+Temp\AutoChessBattleValidation-PerformanceObservationIsolation.log
+Successfully changed project path to: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity
+E:/Unity/UnityProjects/_Git/gameplay-ability-system-for-unity
+[UnityMemory] Configuration Parameters - Can be set up in boot.config
+    "memorysetup-temp-allocator-size-nav-mesh-worker=65536"
+    "memorysetup-temp-allocator-size-audio-worker=65536"
+    "memorysetup-temp-allocator-size-gfx=262144"
+    "memorysetup-allocator-temp-initial-block-size-main=262144"
+    "memorysetup-allocator-temp-initial-block-size-worker=262144"
+    "memorysetup-temp-allocator-size-background-worker=32768"
+    "memorysetup-temp-allocator-size-job-worker=262144"
+    "memorysetup-temp-allocator-size-preload-manager=33554432"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-bucket-allocator-granularity=16"
+    "memorysetup-bucket-allocator-bucket-count=8"
+    "memorysetup-bucket-allocator-block-size=33554432"
+    "memorysetup-bucket-allocator-block-count=8"
+    "memorysetup-main-allocator-block-size=16777216"
+    "memorysetup-thread-allocator-block-size=16777216"
+    "memorysetup-gfx-main-allocator-block-size=16777216"
+    "memorysetup-gfx-thread-allocator-block-size=16777216"
+    "memorysetup-cache-allocator-block-size=4194304"
+    "memorysetup-typetree-allocator-block-size=2097152"
+    "memorysetup-profiler-bucket-allocator-granularity=16"
+    "memorysetup-profiler-bucket-allocator-bucket-count=8"
+    "memorysetup-profiler-bucket-allocator-block-size=33554432"
+    "memorysetup-profiler-bucket-allocator-block-count=8"
+    "memorysetup-profiler-allocator-block-size=16777216"
+    "memorysetup-profiler-editor-allocator-block-size=1048576"
+    "memorysetup-temp-allocator-size-main=16777216"
+    "memorysetup-job-temp-allocator-block-size=2097152"
+    "memorysetup-job-temp-allocator-block-size-background=1048576"
+    "memorysetup-job-temp-allocator-reduction-small-platforms=262144"
+    "memorysetup-temp-allocator-size-cloud-worker=32768"
+Player connection [36004]  Target information:
+
+Player connection [36004]  * "[IP] 172.22.192.1 [Port] 55504 [Flags] 2 [Guid] 3787054062 [EditorId] 3787054062 [Version] 1048832 [Id] WindowsEditor(7,Y) [Debug] 1 [PackageName] WindowsEditor [ProjectName] Editor"
+
+Player connection [36004]  * "[IP] 192.168.1.85 [Port] 55504 [Flags] 2 [Guid] 3787054062 [EditorId] 3787054062 [Version] 1048832 [Id] WindowsEditor(7,Y) [Debug] 1 [PackageName] WindowsEditor [ProjectName] Editor"
+
+Unable to join player connection multicast group (err: 10013).
+Player connection [36004] Host joined alternative multi-casting on [225.0.0.222:34997]...
+Input System module state changed to: Initialized.
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+[Package Manager] Connected to IPC stream "Upm-32812" after 0.3 seconds.
+[Licensing::Module] Licensing is not yet initialized.
+[Licensing::Client] Error: HandshakeResponse reported an error:
+	ResponseCode: 505
+	ResponseStatus: Unsupported protocol version '1.18.1'.
+[Licensing::Module] Error: Failed to handshake to channel: "LicenseClient-Y"
+[Licensing::IpcConnector] LicenseClient-Y channel disconnected successfully.
+[Licensing::IpcConnector] Channel LicenseClient-Y-6000.3.14 doesn't exist
+[Licensing::Module] Successfully launched the LicensingClient (PId: 36248)
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-Y-6000.3.14" at "2026-06-07T16:57:55.9451302Z"
+[Licensing::Client] Handshaking with LicensingClient:
+  Version:                 1.18.1+9fbee8e
+  Session Id:              5b555326bf6144f9af687a0c4db650d6
+  Correlation Id:          bd554657a2358374aa6494d34f6ece28
+  External correlation Id: 8636844402861170392
+  Machine Id:              UtHw8tZ7YP8iwCH0Agz7aNRXLD0=
+[Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-Y-6000.3.14" (connect: 0.37s, validation: 0.05s, handshake: 1.04s)
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-Y-6000.3.14-notifications" at "2026-06-07T16:57:57.0324708Z"
+[Licensing::Module] Connected to LicensingClient (PId: 36248, launch time: 0.01, total connection time: 1.46s)
+[Licensing::Module] Error: Access token is unavailable; failed to update
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] License group:
+  Id: ewogICJzdWJzR3JvdXAiIDogInVuaXR5IGVkaXRvciIsCiAgIm5hbWVzcGFjZSIgOiAidW5pdHlfZWRpdG9yIiwKICAidHlwZSIgOiAiRURJVE9SIiwKICAidGFnIiA6ICJVbml0eVBlcnNvbmFsXXXX
+  Product: Unity Personal Version
+  Type: Assigned
+  Expiration: Unlimited
+[Licensing::Client] Successfully updated license, isAsync: True, time: 0.01
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] Licensing Background thread has ended after 2.64s
+[Licensing::Module] Licensing is initialized (took 1.87s).
+[Licensing::Client] Successfully resolved entitlement details
+Library Redirect Path: Library/
+[Physics::Module] Selected backend.
+[Physics::Module] Name: PhysX
+[Physics::Module] Id: 0xf2b8ea05
+[Physics::Module] SDK Version: 4.1.2
+[Physics::Module] Integration Version: 1.0.0
+[Physics::Module] Threading Mode: Multi-Threaded
+Refreshing native plugins compatible for Editor in 0.48 ms, found 0 plugins.
+Preloading 0 native plugins for Editor in 0.00 ms.
+Initialize engine version: 6000.3.14f1 (d68c3f99a318)
+[Subsystems] Discovering subsystems at path E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/Resources/UnitySubsystems
+[Subsystems] Discovering subsystems at path E:/Unity/UnityProjects/_Git/gameplay-ability-system-for-unity/Assets
+Forcing GfxDevice: Null
+GfxDevice: creating device client; kGfxThreadingModeNonThreaded
+NullGfxDevice:
+    Version:  NULL 1.0 [1.0]
+    Renderer: Null Device
+    Vendor:   Unity Technologies
+Initialize mono
+Mono path[0] = 'E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/Managed'
+Mono path[1] = 'E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/MonoBleedingEdge/lib/mono/unityjit-win32'
+Mono config path = 'E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/MonoBleedingEdge/etc'
+Using monoOptions --debugger-agent=transport=dt_socket,embedding=1,server=y,suspend=n,address=127.0.0.1:56812
+Using cacheserver namespaces - metadata:defaultmetadata, artifacts:defaultartifacts
+Using cacheserver namespaces - metadata:defaultmetadata, artifacts:defaultartifacts
+ImportWorker Server TCP listen port: 0
+AcceleratorClientConnectionCallback - disconnected - :0
+Begin MonoManager ReloadAssembly
+Registering precompiled unity dll's ...
+Register platform support module: E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/PlaybackEngines/WebGLSupport/UnityEditor.WebGL.Extensions.dll
+Register platform support module: E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/PlaybackEngines/WindowsStandaloneSupport/UnityEditor.WindowsStandalone.Extensions.dll
+[Licensing::Client] Successfully resolved entitlement details
+Register platform support module: E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/PlaybackEngines/AndroidPlayer/UnityEditor.Android.Extensions.dll
+Registered in 0.008807 seconds.
+- Loaded All Assemblies, in  0.416 seconds
+Native extension for Android target not found
+Native extension for WindowsStandalone target not found
+Native extension for WebGL target not found
+Package Manager log level set to [2]
+ScheduleIndexationOnStartup MainProcess:False IndexOnStartup:True
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  0.376 seconds
+Domain Reload Profiling: 786ms
+	BeginReloadAssembly (136ms)
+		ExecutionOrderSort (0ms)
+		DisableScriptedObjects (0ms)
+		BackupInstance (0ms)
+		ReleaseScriptingObjects (0ms)
+		CreateAndSetChildDomain (5ms)
+	RebuildCommonClasses (34ms)
+	RebuildNativeTypeToScriptingClass (10ms)
+	initialDomainReloadingComplete (55ms)
+	LoadAllAssembliesAndSetupDomain (174ms)
+		LoadAssemblies (127ms)
+		RebuildTransferFunctionScriptingTraits (0ms)
+		AnalyzeDomain (169ms)
+			TypeCache.Refresh (167ms)
+				TypeCache.ScanAssembly (154ms)
+			BuildScriptInfoCaches (0ms)
+			ResolveRequiredComponents (0ms)
+	FinalizeReload (377ms)
+		ReleaseScriptCaches (0ms)
+		RebuildScriptCaches (0ms)
+		SetupLoadedEditorAssemblies (338ms)
+			LogAssemblyErrors (0ms)
+			InitializePlatformSupportModulesInManaged (55ms)
+			SetLoadedEditorAssemblies (4ms)
+			BeforeProcessingInitializeOnLoad (69ms)
+			ProcessInitializeOnLoadAttributes (125ms)
+			ProcessInitializeOnLoadMethodAttributes (85ms)
+			AfterProcessingInitializeOnLoad (0ms)
+			EditorAssembliesLoaded (0ms)
+		ExecutionOrderSort2 (0ms)
+		AwakeInstancesAfterBackupRestoration (0ms)
+[Licensing::Client] Successfully resolved entitlement details
+Application.AssetDatabase Initial Refresh Start
+[Package Manager] Restoring resolved packages state from cache
+[Licensing::Client] Successfully resolved entitlement details
+[Package Manager] Registered 88 packages:
+  Packages from [https://packages.unity.com]:
+    com.unity.animation.rigging@1.4.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.animation.rigging@ae5f251e1ed4)
+    com.unity.collab-proxy@2.12.4 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.collab-proxy@0b1559bcd34e)
+    com.unity.entities@1.4.6 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.entities@e90944159b94)
+    com.unity.entities.graphics@1.4.19 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.entities.graphics@1e91bb5cdef3)
+    com.unity.ide.rider@3.0.39 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.ide.rider@4504839d03f7)
+    com.unity.inputsystem@1.19.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.inputsystem@21a28c3a6c83)
+    com.unity.mathematics@1.3.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.mathematics@19a9377c4ffa)
+    com.unity.netcode@1.10.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.netcode@5d39c9b3860a)
+    com.unity.nuget.newtonsoft-json@3.2.2 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.nuget.newtonsoft-json@4dfd81071c64)
+    com.unity.physics@1.4.6 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.physics@22d10f355559)
+    com.unity.probuilder@6.0.9 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.probuilder@1f279ab829b7)
+    com.unity.timeline@1.8.12 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.timeline@8cd8509afae5)
+    com.unity.visualscripting@1.9.11 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.visualscripting@8bed5ad90189)
+    com.unity.settings-manager@2.1.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.settings-manager@0b8638c5ce86)
+    com.unity.burst@1.8.29 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.burst@6bb9aca3ef38)
+    com.unity.collections@2.6.6 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.collections@9796e5ee0d9e)
+    com.unity.transport@2.7.2 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.transport@ed7eca02732f)
+    com.unity.cinemachine@3.1.6 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.cinemachine@285f38545487)
+    com.unity.ide.visualstudio@2.0.26 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.ide.visualstudio@a99d56dec63f)
+    com.unity.editorcoroutines@1.1.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.editorcoroutines@87a15ed012c2)
+    com.unity.performance.profile-analyzer@1.3.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.performance.profile-analyzer@10347e9ce886)
+    com.unity.testtools.codecoverage@1.3.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.testtools.codecoverage@19a841221620)
+    com.unity.2d.animation@13.0.4 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.animation@7396d8477ca9)
+    com.unity.2d.pixel-perfect@5.1.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.pixel-perfect@09d99455b901)
+    com.unity.2d.psdimporter@12.0.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.psdimporter@9abe0f7cac7e)
+    com.unity.2d.spriteshape@13.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.spriteshape@0738bab11647)
+    com.unity.2d.tilemap.extras@6.0.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.tilemap.extras@3dde84bf3867)
+    com.unity.2d.aseprite@3.0.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.aseprite@809e3a168ff7)
+    com.unity.2d.tooling@1.0.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.tooling@127d960d4dc1)
+    com.unity.serialization@3.1.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.serialization@7725fb70c685)
+    com.unity.profiling.core@1.0.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.profiling.core@8a49f7027d06)
+    com.unity.nuget.mono-cecil@1.11.6 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.nuget.mono-cecil@ecb9724e46ff)
+    com.unity.scriptablebuildpipeline@2.6.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.scriptablebuildpipeline@36e3b5898ee2)
+    com.unity.test-framework.performance@3.4.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.test-framework.performance@aa81a99c4a75)
+    com.unity.searcher@4.9.4 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.searcher@d45a78918735)
+    com.unity.splines@2.8.4 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.splines@9b00833aca09)
+    com.unity.2d.common@12.0.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.common@2af7c9b44b5c)
+  Built-in packages:
+    com.unity.feature.2d@2.0.2 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.feature.2d@0309d34ea7f2)
+    com.unity.feature.development@1.0.2 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.feature.development@767aadbc6eb7)
+    com.unity.feature.gameplay-storytelling@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.feature.gameplay-storytelling@16ce2b9ee1fa)
+    com.unity.multiplayer.center@1.0.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.multiplayer.center@f01f4ba8d00a)
+    com.unity.render-pipelines.universal@17.3.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.render-pipelines.universal@3b809f23691d)
+    com.unity.ugui@2.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.ugui@8ccc29d23a79)
+    com.unity.modules.accessibility@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.accessibility)
+    com.unity.modules.adaptiveperformance@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.adaptiveperformance)
+    com.unity.modules.ai@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.ai)
+    com.unity.modules.androidjni@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.androidjni)
+    com.unity.modules.animation@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.animation)
+    com.unity.modules.assetbundle@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.assetbundle)
+    com.unity.modules.audio@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.audio)
+    com.unity.modules.cloth@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.cloth)
+    com.unity.modules.director@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.director)
+    com.unity.modules.imageconversion@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.imageconversion)
+    com.unity.modules.imgui@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.imgui)
+    com.unity.modules.jsonserialize@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.jsonserialize)
+    com.unity.modules.particlesystem@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.particlesystem)
+    com.unity.modules.physics@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.physics)
+    com.unity.modules.physics2d@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.physics2d)
+    com.unity.modules.screencapture@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.screencapture)
+    com.unity.modules.terrain@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.terrain)
+    com.unity.modules.terrainphysics@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.terrainphysics)
+    com.unity.modules.tilemap@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.tilemap)
+    com.unity.modules.ui@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.ui)
+    com.unity.modules.uielements@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.uielements)
+    com.unity.modules.umbra@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.umbra)
+    com.unity.modules.unityanalytics@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.unityanalytics)
+    com.unity.modules.unitywebrequest@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.unitywebrequest)
+    com.unity.modules.unitywebrequestassetbundle@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.unitywebrequestassetbundle)
+    com.unity.modules.unitywebrequestaudio@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.unitywebrequestaudio)
+    com.unity.modules.unitywebrequesttexture@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.unitywebrequesttexture)
+    com.unity.modules.unitywebrequestwww@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.unitywebrequestwww)
+    com.unity.modules.vectorgraphics@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.vectorgraphics)
+    com.unity.modules.vehicles@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.vehicles)
+    com.unity.modules.video@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.video)
+    com.unity.modules.vr@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.vr)
+    com.unity.modules.wind@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.wind)
+    com.unity.modules.xr@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.xr)
+    com.unity.modules.subsystems@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.subsystems)
+    com.unity.modules.hierarchycore@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.hierarchycore)
+    com.unity.render-pipelines.core@17.3.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.render-pipelines.core@02dfbe8e43de)
+    com.unity.shadergraph@17.3.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.shadergraph@28ee1cc75774)
+    com.unity.render-pipelines.universal-config@17.0.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.render-pipelines.universal-config@8dc1aab4af1d)
+    com.unity.test-framework@1.6.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.test-framework@aebcb98460c6)
+    com.unity.ext.nunit@2.0.5 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.ext.nunit@d8c07649098d)
+    com.unity.2d.sprite@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.sprite@d14b9d497a24)
+    com.unity.2d.tilemap@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.tilemap@43eb9b2da17d)
+  Git packages:
+    cn.lys.aibridge@https://github.com/liyingsong99/AIBridge.git#1.4.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\cn.lys.aibridge@f203de2ec848)
+    com.cysharp.unitask@https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.cysharp.unitask@228d03356bd8)
+[Subsystems] No new subsystems found in resolved package list.
+[Package Manager] Done registering packages in 0.04 seconds
+Assembly reference Packages/com.unity.cinemachine/Editor/Samples/ExposeHDRPInternals/HDRP-Editor-ref.asmref has no target assembly definition
+Assembly reference Packages/com.unity.entities/Unity.Scenes.Editor/Internals/Properties/Unity.Properties.Internals.asmref has no target assembly definition
+Assembly reference Packages/com.unity.cinemachine/Editor/Samples/ExposeHDRPInternals/HDRP-Editor-ref.asmref has no target assembly definition
+Assembly reference Packages/com.unity.entities/Unity.Scenes.Editor/Internals/Properties/Unity.Properties.Internals.asmref has no target assembly definition
+[ScriptCompilation] Requested script compilation because: Assetdatabase observed changes in script compilation related files
+Refreshing native plugins compatible for Editor in 6.25 ms, found 6 plugins.
+Starting: E:\Unity\UnityEditor\6000.3.14f1\Editor\Data\Tools\BuildPipeline\bee_backend.exe --ipc --defer-dag-verification --dagfile="Library/Bee/1900b0aE.dag" --continue-on-failure --profile="Library/Bee/backend1.traceevents" ScriptAssemblies
+WorkingDir: E:/Unity/UnityProjects/_Git/gameplay-ability-system-for-unity
+DisplayProgressbar: Compiling Scripts
+ExitCode: 0 Duration: 2s857ms
+[1449/1929  0s] ILPP-Configuration Library/ilpp-configuration.nevergeneratedoutput
+[1909/1929  0s] Csc Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.autochessdemo.dll (+2 others)
+[1910/1929  0s] Csc Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.autochessdemo.editor.dll (+2 others)
+[1911/1929  0s] Csc Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.editor.dll (+2 others)
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(22,47): warning CS0618: 'TreeView' is obsolete: 'TreeView is now deprecated. You can likely now use TreeView<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeView<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(45,35): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(61,28): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(67,58): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(67,34): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(89,70): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(106,67): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(131,54): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(203,63): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(218,32): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(218,58): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(28,31): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(31,38): warning CS0618: 'TreeViewState' is obsolete: 'TreeViewState is now deprecated. You can likely now use TreeViewState<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewState<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(36,38): warning CS0618: 'TreeViewState' is obsolete: 'TreeViewState is now deprecated. You can likely now use TreeViewState<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewState<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(12,38): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\Track\TrackClipVisualElement.cs(101,76): warning CS0618: 'VisualElement.UxmlTraits' is obsolete: 'UxmlTraits is deprecated and will be removed. Use UxmlElementAttribute instead.'
+
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\Track\TrackClipVisualElement.cs(101,40): warning CS0618: 'UxmlFactory<TrackClipVisualElement, VisualElement.UxmlTraits>' is obsolete: 'UxmlFactory<TCreatedType, TTraits> is deprecated and will be removed. Use UxmlElementAttribute instead.'
+
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\VisualElement\PointerIMGUIContainer.cs(36,75): warning CS0618: 'IMGUIContainer.UxmlTraits' is obsolete: 'UxmlTraits is deprecated and will be removed. Use UxmlElementAttribute instead.'
+
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\VisualElement\PointerIMGUIContainer.cs(36,40): warning CS0618: 'UxmlFactory<PointerIMGUIContainer, IMGUIContainer.UxmlTraits>' is obsolete: 'UxmlFactory<TCreatedType, TTraits> is deprecated and will be removed. Use UxmlElementAttribute instead.'
+
+Assets\GAS\Editor\General\VisualElement\SplitView.cs(8,63): warning CS0618: 'TwoPaneSplitView.UxmlTraits' is obsolete: 'UxmlTraits is deprecated and will be removed. Use UxmlElementAttribute instead.'
+
+Assets\GAS\Editor\General\VisualElement\SplitView.cs(8,40): warning CS0618: 'UxmlFactory<SplitView, TwoPaneSplitView.UxmlTraits>' is obsolete: 'UxmlFactory<TCreatedType, TTraits> is deprecated and will be removed. Use UxmlElementAttribute instead.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(28,63): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\Track\TimelineActionClipTrack\TimelineActionClip.cs(63,27): warning CS0618: 'VisualElement.transform' is obsolete: 'When writing the value, use VisualElement.style.translate, VisualElement.style.rotate or VisualElement.style.scale instead. When reading the value, use VisualElement.resolvedStyle.translate, scale and rotate'
+
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\Track\TimelineActionClipTrack\TimelineActionClip.cs(63,27): warning CS0618: 'ITransform.position' is obsolete: 'When reading the value, use VisualElement.resolvedStyle.translate. When writing the value, use VisualElement.style.translate instead.'
+
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\Track\TimelineActionClipTrack\TimelineActionClip.cs(65,13): warning CS0618: 'VisualElement.transform' is obsolete: 'When writing the value, use VisualElement.style.translate, VisualElement.style.rotate or VisualElement.style.scale instead. When reading the value, use VisualElement.resolvedStyle.translate, scale and rotate'
+
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\Track\TimelineActionClipTrack\TimelineActionClip.cs(65,13): warning CS0618: 'ITransform.position' is obsolete: 'When reading the value, use VisualElement.resolvedStyle.translate. When writing the value, use VisualElement.style.translate instead.'
+
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(169,83): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\EditorWindow\AbilityTimelineEditorWindow.cs(268,51): warning CS0618: 'VisualElement.transform' is obsolete: 'When writing the value, use VisualElement.style.translate, VisualElement.style.rotate or VisualElement.style.scale instead. When reading the value, use VisualElement.resolvedStyle.translate, scale and rotate'
+
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\EditorWindow\AbilityTimelineEditorWindow.cs(268,51): warning CS0618: 'ITransform.position' is obsolete: 'When reading the value, use VisualElement.resolvedStyle.translate. When writing the value, use VisualElement.style.translate instead.'
+
+Assets\GAS\Editor\General\ScriptingDefineSymbolsHelper.cs(19,33): warning CS0618: 'PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildTargetGroup)' is obsolete: 'Use GetScriptingDefineSymbols(NamedBuildTarget buildTarget) instead'
+
+Assets\GAS\Editor\General\ScriptingDefineSymbolsHelper.cs(28,13): warning CS0618: 'PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup, string)' is obsolete: 'Use SetScriptingDefineSymbols(NamedBuildTarget buildTarget, string defines) instead'
+
+Assets\GAS\Editor\General\ScriptingDefineSymbolsHelper.cs(40,33): warning CS0618: 'PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildTargetGroup)' is obsolete: 'Use GetScriptingDefineSymbols(NamedBuildTarget buildTarget) instead'
+
+Assets\GAS\Editor\General\ScriptingDefineSymbolsHelper.cs(49,13): warning CS0618: 'PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup, string)' is obsolete: 'Use SetScriptingDefineSymbols(NamedBuildTarget buildTarget, string defines) instead'
+
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\EditorWindow\AbilityTimelineEditorWindow.cs(37,22): warning CS0414: The field 'AbilityTimelineEditorWindow._autoSaveRunning' is assigned but its value is never used
+[1912/1929  0s] ILPostProcess Library/Bee/artifacts/1900b0aE.dag/post-processed/com.exhard.exgas.autochessdemo.editor.dll (+pdb)
+Processing assembly Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.autochessdemo.editor.dll, with 144 defines and 302 references
+
+processors: Unity.Entities.CodeGen.EntitiesILPostProcessors, Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+
+running Unity.Entities.CodeGen.EntitiesILPostProcessors
+
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+[1913/1929  0s] CopyFiles Library/ScriptAssemblies/com.exhard.exgas.autochessdemo.editor.pdb
+[1914/1929  0s] CopyFiles Library/ScriptAssemblies/com.exhard.exgas.autochessdemo.editor.dll
+[1915/1929  0s] Csc Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.generated.editor.dll (+2 others)
+[1916/1929  0s] ILPostProcess Library/Bee/artifacts/1900b0aE.dag/post-processed/com.exhard.exgas.editor.dll (+pdb)
+Processing assembly Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.editor.dll, with 144 defines and 306 references
+
+processors: Unity.Entities.CodeGen.EntitiesILPostProcessors, Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+
+running Unity.Entities.CodeGen.EntitiesILPostProcessors
+
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+[1917/1929  0s] ILPostProcess Library/Bee/artifacts/1900b0aE.dag/post-processed/com.exhard.exgas.generated.editor.dll (+pdb)
+Processing assembly Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.generated.editor.dll, with 144 defines and 307 references
+
+processors: Unity.Entities.CodeGen.EntitiesILPostProcessors, Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+
+running Unity.Entities.CodeGen.EntitiesILPostProcessors
+
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+[1918/1929  0s] CopyFiles Library/ScriptAssemblies/com.exhard.exgas.editor.pdb
+[1919/1929  0s] CopyFiles Library/ScriptAssemblies/com.exhard.exgas.editor.dll
+[1920/1929  1s] ILPostProcess Library/Bee/artifacts/1900b0aE.dag/post-processed/com.exhard.exgas.autochessdemo.dll (+pdb)
+Processing assembly Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.autochessdemo.dll, with 146 defines and 299 references
+
+processors: Unity.Entities.CodeGen.EntitiesILPostProcessors, Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+
+running Unity.Entities.CodeGen.EntitiesILPostProcessors
+
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+[1921/1929  0s] CopyFiles Library/ScriptAssemblies/com.exhard.exgas.generated.editor.pdb
+[1922/1929  0s] CopyFiles Library/ScriptAssemblies/com.exhard.exgas.generated.editor.dll
+[1923/1929  0s] CopyFiles Library/ScriptAssemblies/com.exhard.exgas.autochessdemo.pdb
+[1924/1929  0s] CopyFiles Library/ScriptAssemblies/com.exhard.exgas.autochessdemo.dll
+[1925/1929  0s] Csc Library/Bee/artifacts/1900b0aE.dag/Assembly-CSharp.dll (+2 others)
+E:\opt\UnitySrc\dev\dots\Packages\com.unity.netcode\Runtime\SourceGenerators\Source~\NetCodeSourceGenerator\Generators\NetCodeSourceGenerator.cs(130,1): info NetCode: Begin Processing assembly Assembly-CSharp
+
+E:\opt\UnitySrc\dev\dots\Packages\com.unity.netcode\Runtime\SourceGenerators\Source~\NetCodeSourceGenerator\Generators\NetCodeSourceGenerator.cs(146,1): info NetCode: End Processing assembly Assembly-CSharp.
+
+E:\opt\UnitySrc\dev\dots\Packages\com.unity.netcode\Runtime\SourceGenerators\Source~\NetCodeSourceGenerator\Generators\NetCodeSourceGenerator.cs(147,1): info NetCode: Timing:
+
+Total: 166.6251 msec
+[1926/1929  0s] ILPostProcess Library/Bee/artifacts/1900b0aE.dag/post-processed/Assembly-CSharp.dll (+pdb)
+Processing assembly Library/Bee/artifacts/1900b0aE.dag/Assembly-CSharp.dll, with 146 defines and 416 references
+
+processors: Unity.Entities.CodeGen.EntitiesILPostProcessors, Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+
+running Unity.Entities.CodeGen.EntitiesILPostProcessors
+
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+[1927/1929  0s] CopyFiles Library/ScriptAssemblies/Assembly-CSharp.dll
+[1928/1929  0s] CopyFiles Library/ScriptAssemblies/Assembly-CSharp.pdb
+*** Tundra build success (2.81 seconds), 21 items updated, 1929 evaluated
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(22,47): warning CS0618: 'TreeView' is obsolete: 'TreeView is now deprecated. You can likely now use TreeView<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeView<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(45,35): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(61,28): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(67,58): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(67,34): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(89,70): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(106,67): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(131,54): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(203,63): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(218,32): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(218,58): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(28,31): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(31,38): warning CS0618: 'TreeViewState' is obsolete: 'TreeViewState is now deprecated. You can likely now use TreeViewState<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewState<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(36,38): warning CS0618: 'TreeViewState' is obsolete: 'TreeViewState is now deprecated. You can likely now use TreeViewState<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewState<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(12,38): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\Track\TrackClipVisualElement.cs(101,76): warning CS0618: 'VisualElement.UxmlTraits' is obsolete: 'UxmlTraits is deprecated and will be removed. Use UxmlElementAttribute instead.'
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\Track\TrackClipVisualElement.cs(101,40): warning CS0618: 'UxmlFactory<TrackClipVisualElement, VisualElement.UxmlTraits>' is obsolete: 'UxmlFactory<TCreatedType, TTraits> is deprecated and will be removed. Use UxmlElementAttribute instead.'
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\VisualElement\PointerIMGUIContainer.cs(36,75): warning CS0618: 'IMGUIContainer.UxmlTraits' is obsolete: 'UxmlTraits is deprecated and will be removed. Use UxmlElementAttribute instead.'
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\VisualElement\PointerIMGUIContainer.cs(36,40): warning CS0618: 'UxmlFactory<PointerIMGUIContainer, IMGUIContainer.UxmlTraits>' is obsolete: 'UxmlFactory<TCreatedType, TTraits> is deprecated and will be removed. Use UxmlElementAttribute instead.'
+Assets\GAS\Editor\General\VisualElement\SplitView.cs(8,63): warning CS0618: 'TwoPaneSplitView.UxmlTraits' is obsolete: 'UxmlTraits is deprecated and will be removed. Use UxmlElementAttribute instead.'
+Assets\GAS\Editor\General\VisualElement\SplitView.cs(8,40): warning CS0618: 'UxmlFactory<SplitView, TwoPaneSplitView.UxmlTraits>' is obsolete: 'UxmlFactory<TCreatedType, TTraits> is deprecated and will be removed. Use UxmlElementAttribute instead.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(28,63): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\Track\TimelineActionClipTrack\TimelineActionClip.cs(63,27): warning CS0618: 'VisualElement.transform' is obsolete: 'When writing the value, use VisualElement.style.translate, VisualElement.style.rotate or VisualElement.style.scale instead. When reading the value, use VisualElement.resolvedStyle.translate, scale and rotate'
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\Track\TimelineActionClipTrack\TimelineActionClip.cs(63,27): warning CS0618: 'ITransform.position' is obsolete: 'When reading the value, use VisualElement.resolvedStyle.translate. When writing the value, use VisualElement.style.translate instead.'
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\Track\TimelineActionClipTrack\TimelineActionClip.cs(65,13): warning CS0618: 'VisualElement.transform' is obsolete: 'When writing the value, use VisualElement.style.translate, VisualElement.style.rotate or VisualElement.style.scale instead. When reading the value, use VisualElement.resolvedStyle.translate, scale and rotate'
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\Track\TimelineActionClipTrack\TimelineActionClip.cs(65,13): warning CS0618: 'ITransform.position' is obsolete: 'When reading the value, use VisualElement.resolvedStyle.translate. When writing the value, use VisualElement.style.translate instead.'
+Assets\GAS\Editor\General\TreeDataModel\TreeViewWithTreeModel.cs(169,83): warning CS0618: 'TreeViewItem' is obsolete: 'TreeViewItem is now deprecated. You can likely now use TreeViewItem<int> instead and not think more about it. But if you were using that identifier to store InstanceID data, you should instead opt to upgrade your TreeViews to use TreeViewItem<InstanceID> to get the proper typing.'
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\EditorWindow\AbilityTimelineEditorWindow.cs(268,51): warning CS0618: 'VisualElement.transform' is obsolete: 'When writing the value, use VisualElement.style.translate, VisualElement.style.rotate or VisualElement.style.scale instead. When reading the value, use VisualElement.resolvedStyle.translate, scale and rotate'
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\EditorWindow\AbilityTimelineEditorWindow.cs(268,51): warning CS0618: 'ITransform.position' is obsolete: 'When reading the value, use VisualElement.resolvedStyle.translate. When writing the value, use VisualElement.style.translate instead.'
+Assets\GAS\Editor\General\ScriptingDefineSymbolsHelper.cs(19,33): warning CS0618: 'PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildTargetGroup)' is obsolete: 'Use GetScriptingDefineSymbols(NamedBuildTarget buildTarget) instead'
+Assets\GAS\Editor\General\ScriptingDefineSymbolsHelper.cs(28,13): warning CS0618: 'PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup, string)' is obsolete: 'Use SetScriptingDefineSymbols(NamedBuildTarget buildTarget, string defines) instead'
+Assets\GAS\Editor\General\ScriptingDefineSymbolsHelper.cs(40,33): warning CS0618: 'PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildTargetGroup)' is obsolete: 'Use GetScriptingDefineSymbols(NamedBuildTarget buildTarget) instead'
+Assets\GAS\Editor\General\ScriptingDefineSymbolsHelper.cs(49,13): warning CS0618: 'PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup, string)' is obsolete: 'Use SetScriptingDefineSymbols(NamedBuildTarget buildTarget, string defines) instead'
+Assets\GAS\Editor\Ability\AbilityTimelineEditor\EditorWindow\AbilityTimelineEditorWindow.cs(37,22): warning CS0414: The field 'AbilityTimelineEditorWindow._autoSaveRunning' is assigned but its value is never used
+AssetDatabase: script compilation time: 3.384360s
+Begin MonoManager ReloadAssembly
+- Loaded All Assemblies, in  1.550 seconds
+'Packages/com.unity.cinemachine/Editor/Editors/CinemachineVirtualCameraBaseEditor.cs' contains partial class of Unity.Object, exactly 1 of the partial classes needs to be in a file with the same filename. This is to know the one that can be referenced from ie. GameObjects
+'Packages/com.unity.cinemachine/Editor/Obsolete/CinemachineVirtualCameraBaseEditor.cs' contains partial class of Unity.Object, exactly 1 of the partial classes needs to be in a file with the same filename. This is to know the one that can be referenced from ie. GameObjects
+Refreshing native plugins compatible for Editor in 6.85 ms, found 6 plugins.
+Native extension for Android target not found
+Native extension for WindowsStandalone target not found
+Native extension for WebGL target not found
+Assembly reference Packages/com.unity.cinemachine/Editor/Samples/ExposeHDRPInternals/HDRP-Editor-ref.asmref has no target assembly definition
+Assembly reference Packages/com.unity.entities/Unity.Scenes.Editor/Internals/Properties/Unity.Properties.Internals.asmref has no target assembly definition
+[AIBridge] CommandRegistry initialized with 18 commands
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+AIBridge.Editor.AIBridgeLogger:LogInfo (string) (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Utils/AIBridgeLogger.cs:46)
+AIBridge.Editor.CommandRegistry:Initialize () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Commands/CommandRegistry.cs:89)
+AIBridge.Editor.AIBridge:Initialize () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:71)
+AIBridge.Editor.AIBridge:.cctor () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:56)
+System.Runtime.CompilerServices.RuntimeHelpers:RunClassConstructor (System.RuntimeTypeHandle)
+UnityEditor.EditorAssemblies:ProcessInitializeOnLoadAttributes (System.Type[])
+
+(Filename: ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Commands/CommandRegistry.cs Line: 89)
+
+[AIBridge] AI Bridge initialized. Directory: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\.aibridge
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+AIBridge.Editor.AIBridgeLogger:LogInfo (string) (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Utils/AIBridgeLogger.cs:46)
+AIBridge.Editor.AIBridge:Initialize () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:87)
+AIBridge.Editor.AIBridge:.cctor () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:56)
+System.Runtime.CompilerServices.RuntimeHelpers:RunClassConstructor (System.RuntimeTypeHandle)
+UnityEditor.EditorAssemblies:ProcessInitializeOnLoadAttributes (System.Type[])
+
+(Filename: ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs Line: 87)
+
+[AIBridge] Registered commands: asset, batch, code, compile, editor, gameobject, gameview, get_logs, help, input, inspector, menu_item, prefab, scene, screenshot, selection, test, transform
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+AIBridge.Editor.AIBridgeLogger:LogInfo (string) (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Utils/AIBridgeLogger.cs:46)
+AIBridge.Editor.AIBridge:Initialize () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:88)
+AIBridge.Editor.AIBridge:.cctor () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:56)
+System.Runtime.CompilerServices.RuntimeHelpers:RunClassConstructor (System.RuntimeTypeHandle)
+UnityEditor.EditorAssemblies:ProcessInitializeOnLoadAttributes (System.Type[])
+
+(Filename: ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs Line: 88)
+
+Refreshing native plugins compatible for Editor in 8.94 ms, found 6 plugins.
+TypeManager.Initialize took: 228ms
+[MODES] ModeService[none].Initialize
+[MODES] ModeService[none].LoadModes
+[MODES] Loading mode Default (0) for mode-current-id-My project
+ScheduleIndexationOnStartup MainProcess:True IndexOnStartup:True
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  7.228 seconds
+Domain Reload Profiling: 8766ms
+	BeginReloadAssembly (371ms)
+		ExecutionOrderSort (0ms)
+		DisableScriptedObjects (48ms)
+		BackupInstance (0ms)
+		ReleaseScriptingObjects (0ms)
+		CreateAndSetChildDomain (160ms)
+	RebuildCommonClasses (38ms)
+	RebuildNativeTypeToScriptingClass (10ms)
+	initialDomainReloadingComplete (45ms)
+	LoadAllAssembliesAndSetupDomain (1072ms)
+		LoadAssemblies (682ms)
+		RebuildTransferFunctionScriptingTraits (0ms)
+		AnalyzeDomain (513ms)
+			TypeCache.Refresh (365ms)
+				TypeCache.ScanAssembly (340ms)
+			BuildScriptInfoCaches (129ms)
+			ResolveRequiredComponents (13ms)
+	FinalizeReload (7229ms)
+		ReleaseScriptCaches (0ms)
+		RebuildScriptCaches (0ms)
+		SetupLoadedEditorAssemblies (6936ms)
+			LogAssemblyErrors (0ms)
+			InitializePlatformSupportModulesInManaged (36ms)
+			SetLoadedEditorAssemblies (10ms)
+			BeforeProcessingInitializeOnLoad (231ms)
+			ProcessInitializeOnLoadAttributes (6195ms)
+			ProcessInitializeOnLoadMethodAttributes (449ms)
+			AfterProcessingInitializeOnLoad (13ms)
+			EditorAssembliesLoaded (1ms)
+		ExecutionOrderSort2 (0ms)
+		AwakeInstancesAfterBackupRestoration (32ms)
+[ScriptCompilation] Requested script compilation because: Assetdatabase observed changes in script compilation related files
+AssetDatabase: script compilation time: 0.000747s
+Starting: E:\Unity\UnityEditor\6000.3.14f1\Editor\Data\Tools\BuildPipeline\bee_backend.exe --ipc --defer-dag-verification --dagfile="Library/Bee/1900b0aE.dag" --continue-on-failure --profile="Library/Bee/backend1.traceevents" ScriptAssemblies
+WorkingDir: E:/Unity/UnityProjects/_Git/gameplay-ability-system-for-unity
+ExitCode: 0 Duration: 1s950ms
+[1449/1929  0s] ILPP-Configuration Library/ilpp-configuration.nevergeneratedoutput
+[1909/1929  0s] Csc Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.autochessdemo.dll (+2 others)
+[1914/1929  0s] ILPostProcess Library/Bee/artifacts/1900b0aE.dag/post-processed/com.exhard.exgas.autochessdemo.dll (+pdb)
+Processing assembly Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.autochessdemo.dll, with 146 defines and 299 references
+
+processors: Unity.Entities.CodeGen.EntitiesILPostProcessors, Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+
+running Unity.Entities.CodeGen.EntitiesILPostProcessors
+
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+[1915/1929  0s] CopyFiles Library/ScriptAssemblies/com.exhard.exgas.autochessdemo.dll
+[1916/1929  0s] CopyFiles Library/ScriptAssemblies/com.exhard.exgas.autochessdemo.pdb
+[1917/1929  0s] ILPostProcess Library/Bee/artifacts/1900b0aE.dag/post-processed/com.exhard.exgas.autochessdemo.editor.dll (+pdb)
+Processing assembly Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.autochessdemo.editor.dll, with 144 defines and 302 references
+
+processors: Unity.Entities.CodeGen.EntitiesILPostProcessors, Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+
+running Unity.Entities.CodeGen.EntitiesILPostProcessors
+
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+[1918/1929  0s] ILPostProcess Library/Bee/artifacts/1900b0aE.dag/post-processed/Assembly-CSharp.dll (+pdb)
+Processing assembly Library/Bee/artifacts/1900b0aE.dag/Assembly-CSharp.dll, with 146 defines and 416 references
+
+processors: Unity.Entities.CodeGen.EntitiesILPostProcessors, Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+
+running Unity.Entities.CodeGen.EntitiesILPostProcessors
+
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+[1919/1929  0s] ILPostProcess Library/Bee/artifacts/1900b0aE.dag/post-processed/com.exhard.exgas.generated.editor.dll (+pdb)
+Processing assembly Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.generated.editor.dll, with 144 defines and 307 references
+
+processors: Unity.Entities.CodeGen.EntitiesILPostProcessors, Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+
+running Unity.Entities.CodeGen.EntitiesILPostProcessors
+
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+[1920/1929  0s] ILPostProcess Library/Bee/artifacts/1900b0aE.dag/post-processed/com.exhard.exgas.editor.dll (+pdb)
+Processing assembly Library/Bee/artifacts/1900b0aE.dag/com.exhard.exgas.editor.dll, with 144 defines and 306 references
+
+processors: Unity.Entities.CodeGen.EntitiesILPostProcessors, Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+
+running Unity.Entities.CodeGen.EntitiesILPostProcessors
+
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+*** Tundra build success (1.90 seconds), 9 items updated, 1929 evaluated
+Reloading assemblies after forced synchronous recompile.
+Begin MonoManager ReloadAssembly
+00:58:14.237 |V| RiderPlugin                    | :1                             | AppDomain.CurrentDomain.DomainUnload lifetimeDefinition.Terminate
+- Loaded All Assemblies, in  1.664 seconds
+Refreshing native plugins compatible for Editor in 6.29 ms, found 6 plugins.
+Native extension for Android target not found
+Native extension for WindowsStandalone target not found
+Native extension for WebGL target not found
+Assembly reference Packages/com.unity.cinemachine/Editor/Samples/ExposeHDRPInternals/HDRP-Editor-ref.asmref has no target assembly definition
+Assembly reference Packages/com.unity.entities/Unity.Scenes.Editor/Internals/Properties/Unity.Properties.Internals.asmref has no target assembly definition
+[AIBridge] CommandRegistry initialized with 18 commands
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+AIBridge.Editor.AIBridgeLogger:LogInfo (string) (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Utils/AIBridgeLogger.cs:46)
+AIBridge.Editor.CommandRegistry:Initialize () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Commands/CommandRegistry.cs:89)
+AIBridge.Editor.AIBridge:Initialize () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:71)
+AIBridge.Editor.AIBridge:.cctor () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:56)
+System.Runtime.CompilerServices.RuntimeHelpers:RunClassConstructor (System.RuntimeTypeHandle)
+UnityEditor.EditorAssemblies:ProcessInitializeOnLoadAttributes (System.Type[])
+
+(Filename: ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Commands/CommandRegistry.cs Line: 89)
+
+[AIBridge] AI Bridge initialized. Directory: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\.aibridge
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+AIBridge.Editor.AIBridgeLogger:LogInfo (string) (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Utils/AIBridgeLogger.cs:46)
+AIBridge.Editor.AIBridge:Initialize () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:87)
+AIBridge.Editor.AIBridge:.cctor () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:56)
+System.Runtime.CompilerServices.RuntimeHelpers:RunClassConstructor (System.RuntimeTypeHandle)
+UnityEditor.EditorAssemblies:ProcessInitializeOnLoadAttributes (System.Type[])
+
+(Filename: ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs Line: 87)
+
+[AIBridge] Registered commands: asset, batch, code, compile, editor, gameobject, gameview, get_logs, help, input, inspector, menu_item, prefab, scene, screenshot, selection, test, transform
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+AIBridge.Editor.AIBridgeLogger:LogInfo (string) (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Utils/AIBridgeLogger.cs:46)
+AIBridge.Editor.AIBridge:Initialize () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:88)
+AIBridge.Editor.AIBridge:.cctor () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:56)
+System.Runtime.CompilerServices.RuntimeHelpers:RunClassConstructor (System.RuntimeTypeHandle)
+UnityEditor.EditorAssemblies:ProcessInitializeOnLoadAttributes (System.Type[])
+
+(Filename: ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs Line: 88)
+
+TypeManager.Initialize took: 226ms
+[MODES] ModeService[none].Initialize
+[MODES] ModeService[none].LoadModes
+ScheduleIndexationOnStartup MainProcess:True IndexOnStartup:True
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  4.137 seconds
+Domain Reload Profiling: 5801ms
+	BeginReloadAssembly (959ms)
+		ExecutionOrderSort (0ms)
+		DisableScriptedObjects (114ms)
+		BackupInstance (0ms)
+		ReleaseScriptingObjects (1ms)
+		CreateAndSetChildDomain (570ms)
+	RebuildCommonClasses (44ms)
+	RebuildNativeTypeToScriptingClass (15ms)
+	initialDomainReloadingComplete (58ms)
+	LoadAllAssembliesAndSetupDomain (587ms)
+		LoadAssemblies (351ms)
+		RebuildTransferFunctionScriptingTraits (0ms)
+		AnalyzeDomain (405ms)
+			TypeCache.Refresh (20ms)
+				TypeCache.ScanAssembly (1ms)
+			BuildScriptInfoCaches (331ms)
+			ResolveRequiredComponents (46ms)
+	FinalizeReload (4138ms)
+		ReleaseScriptCaches (0ms)
+		RebuildScriptCaches (0ms)
+		SetupLoadedEditorAssemblies (3761ms)
+			LogAssemblyErrors (0ms)
+			InitializePlatformSupportModulesInManaged (38ms)
+			SetLoadedEditorAssemblies (5ms)
+			BeforeProcessingInitializeOnLoad (333ms)
+			ProcessInitializeOnLoadAttributes (2853ms)
+			ProcessInitializeOnLoadMethodAttributes (506ms)
+			AfterProcessingInitializeOnLoad (23ms)
+			EditorAssembliesLoaded (2ms)
+		ExecutionOrderSort2 (0ms)
+		AwakeInstancesAfterBackupRestoration (94ms)
+Start importing Packages/com.unity.render-pipelines.core/Tests/Editor/UnifiedRayTracing/TraceRays.urtshader using Guid(1142bbad8b9e8c44c83a9775ff120d37) (ScriptedImporter)Launched and connected shader compiler UnityShaderCompiler.exe after 0.02 seconds
+
+Compiling Ray Tracing Shader "TraceRays.urtshader", keywords = <no keywords>
+    finished in 0.02 seconds. Local cache hits 1, remote cache hits 0, compiled 0 platform variants
+ -> (artifact id: '11a5f153906246a58ca613cbdb6aebc2') in 0.1271981 seconds
+Start importing Packages/com.unity.render-pipelines.universal/Runtime/RendererFeatures/SurfaceCacheGI/SurfaceCacheCore/RisEstimation.urtshader using Guid(713f6141bd66a134383b787f2eaa7c11) (ScriptedImporter)
+Compiling Ray Tracing Shader "RisEstimation.urtshader", keywords = <no keywords>
+    finished in 0.00 seconds. Local cache hits 1, remote cache hits 0, compiled 0 platform variants
+ -> (artifact id: '1915a5a2468e50295390e98ec8196ade') in 0.0314111 seconds
+Start importing Packages/com.unity.render-pipelines.core/Editor/Lighting/ProbeVolume/RenderingLayerMask/TraceRenderingLayerMask.urtshader using Guid(94a070d33e408384bafc1dea4a565df9) (ScriptedImporter)
+Compiling Ray Tracing Shader "TraceRenderingLayerMask.urtshader", keywords = <no keywords>
+    finished in 0.00 seconds. Local cache hits 1, remote cache hits 0, compiled 0 platform variants
+ -> (artifact id: '8b76c8e97fad63d67d18c5940b1f8ec1') in 0.0330075 seconds
+Start importing Packages/com.unity.render-pipelines.universal/Runtime/RendererFeatures/SurfaceCacheGI/SurfaceCacheCore/UniformEstimation.urtshader using Guid(94a39d12848d8d64ca962a72b74e7c50) (ScriptedImporter)
+Compiling Ray Tracing Shader "UniformEstimation.urtshader", keywords = <no keywords>
+    finished in 0.00 seconds. Local cache hits 1, remote cache hits 0, compiled 0 platform variants
+ -> (artifact id: '139343fa79553209531fadef106395a2') in 0.0249266 seconds
+Start importing Packages/com.unity.render-pipelines.core/Tests/Editor/UnifiedRayTracing/TraceTransparentRays.urtshader using Guid(6513c3b892e933c4f8d00c19d5c47532) (ScriptedImporter)
+Compiling Ray Tracing Shader "TraceTransparentRays.urtshader", keywords = <no keywords>
+    finished in 0.00 seconds. Local cache hits 1, remote cache hits 0, compiled 0 platform variants
+ -> (artifact id: '4587e460a051e207e3eb2ea89d94589a') in 0.0131867 seconds
+Start importing Packages/com.unity.render-pipelines.core/Editor/Lighting/ProbeVolume/DynamicGI/DynamicGISkyOcclusion.urtshader using Guid(5a2a534753fbdb44e96c3c78b5a6999d) (ScriptedImporter)
+Compiling Ray Tracing Shader "DynamicGISkyOcclusion.urtshader", keywords = <no keywords>
+    finished in 0.00 seconds. Local cache hits 1, remote cache hits 0, compiled 0 platform variants
+ -> (artifact id: '5a7395f9813db5bddb933ac8142e31fe') in 0.0159197 seconds
+Start importing Packages/com.unity.render-pipelines.core/Tests/Editor/UnifiedRayTracing/TraceRaysAndFetchAttributes.urtshader using Guid(fbc59f55df2416344b008dc23753cae2) (ScriptedImporter)
+Compiling Ray Tracing Shader "TraceRaysAndFetchAttributes.urtshader", keywords = <no keywords>
+    finished in 0.00 seconds. Local cache hits 1, remote cache hits 0, compiled 0 platform variants
+ -> (artifact id: 'c3b509f4c4e6515e608dd3f2d6e35678') in 0.0118789 seconds
+Start importing Packages/com.unity.render-pipelines.universal/Runtime/RendererFeatures/SurfaceCacheGI/SurfaceCacheCore/RestirCandidateTemporal.urtshader using Guid(ad3a9f9982f8c4f4a839a78955e78458) (ScriptedImporter)
+Compiling Ray Tracing Shader "RestirCandidateTemporal.urtshader", keywords = <no keywords>
+    finished in 0.00 seconds. Local cache hits 1, remote cache hits 0, compiled 0 platform variants
+ -> (artifact id: 'd43d96235d473beae6fb6c7910b9316d') in 0.0177701 seconds
+Start importing Packages/com.unity.render-pipelines.core/Editor/Lighting/ProbeVolume/VirtualOffset/TraceVirtualOffset.urtshader using Guid(ff2cbab5da58bf04d82c5f34037ed123) (ScriptedImporter)
+Compiling Ray Tracing Shader "TraceVirtualOffset.urtshader", keywords = <no keywords>
+    finished in 0.00 seconds. Local cache hits 1, remote cache hits 0, compiled 0 platform variants
+ -> (artifact id: '290c95a690f17b21ff8dc2b57a7bf608') in 0.0164631 seconds
+Refreshing native plugins compatible for Editor in 9.61 ms, found 6 plugins.
+Preloading 0 native plugins for Editor in 0.00 ms.
+Asset Pipeline Refresh (id=03e97a7dca905084c88d11160a0faf4c): Total: 22.703 seconds - Initiated by InitialRefreshV2(ForceSynchronousImport)
+	Summary:
+		Imports: total=9 (actual=9, local cache=0, cache server=0)
+		Asset DB Process Time: managed=7 ms, native=12790 ms
+		Asset DB Callback time: managed=472 ms, native=213 ms
+		Scripting: domain reloads=2, domain reload time=3324 ms, compile time=5805 ms, other=88 ms
+		Project Asset Count: scripts=2594, non-scripts=4306
+		Asset File Changes: new=0, changed=3, moved=0, deleted=0
+		Scan Filter Count: 0
+	InvokeCustomDependenciesCallbacks: 0.004ms
+	InvokePackagesCallback: 49.100ms
+	ApplyChangesToAssetFolders: 1.491ms
+	Scan: 323.726ms
+	OnSourceAssetsModified: 1.764ms
+	CategorizeAssetsWithTransientArtifact: 87.160ms
+	ProcessAssetsWithTransientArtifactChanges: 182.634ms
+	CategorizeAssets: 127.606ms
+	ImportOutOfDateAssets: 11715.329ms (5589.894ms without children)
+		ImportManagerImport: 303.375ms (6.359ms without children)
+			ImportInProcess: 296.430ms
+			UpdateCategorizedAssets: 0.586ms
+		CompileScripts: 5805.354ms
+		CollectScriptTypesHashes: 8.004ms
+		ReloadNativeAssets: 1.470ms
+		UnloadImportedAssets: 1.009ms
+		ReloadImportedAssets: 2.397ms
+		EnsureUptoDateAssetsAreRegisteredWithGuidPM: 2.265ms
+		InitializingProgressBar: 0.021ms
+		PostProcessAllAssetNotificationsAddChangedAssets: 0.002ms
+		OnDemandSchedulerStart: 1.539ms
+	PostProcessAllAssets: 631.943ms
+	Hotreload: 13.478ms
+	GatherAllCurrentPrimaryArtifactRevisions: 0.002ms
+	UnloadStreamsBegin: 3.005ms
+	PersistCurrentRevisions: 0.822ms
+	UnloadStreamsEnd: 0.003ms
+	GenerateScriptTypeHashes: 7.676ms
+	Untracked: 9564.631ms
+
+Application.AssetDatabase Initial Refresh End
+Scanning for USB devices : 2.401ms
+Initializing Unity extensions:
+Unloading 31 Unused Serialized files (Serialized files now loaded: 0)
+Unloading 11346 unused Assets / (6.2 MB). Loaded Objects now: 12263.
+Memory consumption went from 271.7 MB to 265.5 MB.
+Total: 49.002900 ms (FindLiveObjects: 1.396300 ms CreateObjectMapping: 1.541000 ms MarkObjects: 40.747300 ms  DeleteObjects: 5.315800 ms)
+
+Unloading 0 Unused Serialized files (Serialized files now loaded: 0)
+Unloading 0 unused Assets / (7.8 MB). Loaded Objects now: 12263.
+Memory consumption went from 265.4 MB to 257.6 MB.
+Total: 35.824700 ms (FindLiveObjects: 0.816700 ms CreateObjectMapping: 0.853400 ms MarkObjects: 31.789300 ms  DeleteObjects: 2.363000 ms)
+
+AutoChessDemoRuntimeRunner: completed=True, winner=Player, expectedWinner=Player, scale=50, units=200, battleTicks=11, totalTicks=12, warmupDroppedTicks=3, measuredTicks=9, commands=1050, attributeChanges=898, periodTickDamageFacts=150, periodTickDamageTotal=150, executionOutputs=344, cueRequests=1404, debugEvents=147, debugWarnings=63, debugErrors=0, blockingDebugErrors=0, coreRequests=1600, coreFacts=5200, coreDeltas=650, coreCues=2500, presentationMarkers=0, presentationSourceLines=88, presentationDisplayedLines=88, presentationDroppedLines=0, presentationDisabledReason=headless-log-bridge, peakEventBus=950, replayLag=0, proofOnlyApiMask=131071, reselectTriggerMask=19, activeEffectSlots=100, activeEffectActiveSlots=100, activeEffectDuePeriodSlots=0, activeMutationCommands=200, activeMutationOwnerGroups=200, activeMutationMaxOwnerRange=1, activeMutationSortMoves=0, activeMutationEstimatedRandomLookups=0, activeMutationOwnerResourceLookups=0, activeMutationMigrationCarriers=0, pendingAttributeDeltas=350, pendingAttributeAppliedDeltas=250, pendingAttributeSkippedDeltas=100, pendingAttributeTargetGroups=250, pendingAttributeMaxTargetRange=2, pendingAttributeEstimatedRandomLookups=0, pendingAttributeFactPatches=250, pendingAttributeMigrationCarriers=0, streamCarrierPressureWarnings=34, streamCarrierPeak=950, streamCarrierCapacity=1024, observationMaterializedQueries=12, observationMaterializedEntities=2400, observationMaterializationUs=95, performancePassObservationPollutionRisks=0, magnitudeSourceCurrentValueLookups=0, magnitudeSourceCapturedValueHits=0, magnitudeSourceCaptureMisses=0, magnitudeSourceCaptureMissLiveLookups=0, magnitudeSourceFallbackValues=0, magnitudeSourceFallbackFacts=0, magnitudeSourceSourceAttributeLookups=0, magnitudeSourceTargetAttributeLookups=0, magnitudeSourceExecutionInputLookups=0, journalingCaptured=True, profilerCaptureState=profiler disabled; Entities profiler modules collect no data, ecsRuntimeTickOnly=True, officialDiffSeparatePass=True, physicsDisabledReason=reported-by-runtime, renderDisabledReason=reported-by-runtime, processWarmupRuns=1, totalElapsedMs=35.757, factsHash=0xA4A93C35, summaryHash=0x0D2FDB38, avgTickMs=2.260
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:56)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 56)
+
+AutoChessDemoValidationRunResult: passed=True, thresholdsPassed=True, runtimeChainPassed=True, repeatRunProbe=True, repeatRunPassed=True, officialDiffRequired=True, presentationMarkers=0, presentationDisplayedLines=88, presentationDroppedLines=0, presentationDisabledReason=headless-log-bridge, summaryHash=0x0D2FDB38
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:58)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 58)
+
+AutoChessDemoRepeatRunEvidence: passed=True, firstCommands=1050, secondCommands=1050, firstAttributeChanges=898, secondAttributeChanges=898, firstExecutionOutputs=344, secondExecutionOutputs=344, firstCueRequests=1404, secondCueRequests=1404, firstPeriodTickDamageFacts=150, secondPeriodTickDamageFacts=150, firstAvgTickMs=3.575, secondAvgTickMs=3.689, deterministicCountsPassed=True, firstRuntimeChainPassed=True, secondRuntimeChainPassed=True, firstRuntimeEvents=147, secondRuntimeEvents=147, firstBlockingErrors=0, secondBlockingErrors=0, firstPendingAttributeAppliedDeltas=250, secondPendingAttributeAppliedDeltas=250, firstBattleLogPassed=True, secondBattleLogPassed=True
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:60)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 60)
+
+AutoChessDemoRuntimeHotspots: primaryCommands=500, finisherCommands=350, lowestHealthSelections=450, tickAvgMs=2.244, coreRuntimeOwnerAvgMs=1.557, boundaryOwnerAvgMs=0.599, runnerOwnerAvgMs=0.088, debuggerOwnerAvgMs=40.430, commandResolveAvgMs=0.095, coreSimulationAvgMs=1.422, activeMutationCommands=200, activeMutationOwnerGroups=200, activeMutationMaxOwnerRange=1, activeMutationEstimatedRandomLookups=0, periodTickDamageFacts=150, pendingAttributeDeltas=350, pendingAttributeAppliedDeltas=250, pendingAttributeTargetGroups=250, pendingAttributeEstimatedRandomLookups=0, streamCarrierPressureWarnings=34, observationMaterializedQueries=12, observationMaterializationUs=95, performancePassObservationPollutionRisks=0, magnitudeSourceCaptureMisses=0, magnitudeSourceCaptureMissLiveLookups=0, magnitudeSourceFallbackValues=0, magnitudeSourceFallbackFacts=0, magnitudeSourceExecutionInputLookups=0, structuralCommitAvgMs=0.014, boundaryProjectionAvgMs=0.599, dependencyDrainAvgMs=0.088
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:62)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 62)
+
+AutoChessDemoBoundaryOwners: shellPublicRawEcsSurface=false, unitIdentity=AutoChessBattleUnitKey, unitRuntimeHandle=ASCHandle, unitCreateOwner=RuntimeShell.ASCCommandCapability, unitDestroyOwner=ASCCommandPort.RequestDestroy, driverLifecycleOwner=AutoChessBattleDriverRuntimeStore, catalogOwner=AutoChessGasCatalogSession, snapshotOwner=AutoChessGasBattleUnitSnapshotProjector.StructuredLog, observationOwner=AutoChessGasObservationGateway, runnerSyncOwner=GASDependencyDrain, reportProjectionOwner=AutoChessRuntimeUnitResolver.BoundaryReportKey, passed=True, entries=4800, sourceAscRefs=4800, sourceReportKeys=4800, missingSourceReportKeys=0, targetAscRefs=4800, targetReportKeys=4800, missingTargetReportKeys=0, factsHash=0xA4A93C35
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:64)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 64)
+
+AutoChessDemoBoundaryReportKeys: passed=True, entries=4800, sourceAscRefs=4800, sourceReportKeys=4800, missingSourceReportKeys=0, targetAscRefs=4800, targetReportKeys=4800, missingTargetReportKeys=0
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:66)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 66)
+
+AutoChessDemoBattlePresentation: markers=0, sourceLines=88, displayedLines=88, droppedLines=0, disabledReason=headless-log-bridge
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:69)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 69)
+
+AutoChessDemoRuntimeBattleLog:
+[F0000] 游戏开始：玩家A 对阵 玩家B，房间=标准双人自走棋对局，棋子数=200。
+[F0000] 玩家A 上阵 霜卫先锋（前排战士，槽位0，HP 72）。
+[F0000] 玩家A 上阵 游侠射手（后排射手，槽位1，HP 54）。
+[F0000] 玩家B 上阵 荒原斗士（前排斗士，槽位0，HP 48）。
+[F0000] 玩家B 上阵 秘术术士（后排法师，槽位1，HP 42）。
+[F0000] 玩家A 上阵 霜卫先锋 #2（前排战士，槽位0，HP 72）。
+[F0000] 玩家A 上阵 游侠射手 #2（后排射手，槽位1，HP 54）。
+[F0000] 玩家B 上阵 荒原斗士 #2（前排斗士，槽位0，HP 48）。
+[F0000] 玩家B 上阵 秘术术士 #2（后排法师，槽位1，HP 42）。
+[F0000] 其余 192 名缩放棋子已进入各自镜像战场。
+[F0002] 玩家A的霜卫先锋 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 16 点处决伤害。
+[F0002] 玩家A的霜卫先锋 对 玩家B的秘术术士 发动了 斩杀追击，造成 16 点伤害（HP 42 -> 26）。
+[F0002] 玩家A的霜卫先锋 #2 对 玩家B的秘术术士 #2 发动了 斩杀追击，造成 16 点伤害（HP 42 -> 26）。
+[F0002] 玩家A的霜卫先锋 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 16 点伤害（HP 42 -> 26）。
+[F0002] 玩家B的荒原斗士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 72 -> 64）。
+[F0002] 玩家B的秘术术士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 64 -> 56）。
+[F0002] 玩家B的荒原斗士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 72 -> 64）。
+[F0002] 玩家B的秘术术士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 64 -> 56）。
+[F0002] 玩家B的荒原斗士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 72 -> 64）。
+[F0002] 玩家B的秘术术士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 64 -> 56）。
+[F0003] 玩家A的游侠射手 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 24 点处决伤害。
+[F0003] 玩家A的游侠射手 对 玩家B的秘术术士 发动了 斩杀追击，造成 24 点伤害（HP 26 -> 2）。
+[F0003] 玩家A的游侠射手 #2 对 玩家B的秘术术士 #2 发动了 斩杀追击，造成 24 点伤害（HP 26 -> 2）。
+[F0003] 玩家A的游侠射手 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 24 点伤害（HP 26 -> 2）。
+[F0003] 玩家B的荒原斗士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 56 -> 48）。
+[F0003] 玩家B的秘术术士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 48 -> 40）。
+[F0003] 玩家B的荒原斗士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 56 -> 48）。
+[F0003] 玩家B的秘术术士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 48 -> 40）。
+[F0003] 玩家B的荒原斗士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 56 -> 48）。
+[F0003] 玩家B的秘术术士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 48 -> 40）。
+[F0004] 玩家A的霜卫先锋 对 玩家B的秘术术士 发动了 斩杀追击，造成 1 点处决伤害。
+[F0004] 玩家A的游侠射手 对 玩家B的秘术术士 发动了 斩杀追击，造成 36 点处决伤害。
+[F0004] 玩家A的霜卫先锋 #2 对 玩家B的秘术术士 #2 发动了 斩杀追击，造成 1 点处决伤害。
+[F0004] 玩家A的游侠射手 #2 对 玩家B的秘术术士 #2 发动了 斩杀追击，造成 36 点处决伤害。
+[F0004] 玩家A的霜卫先锋 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 1 点处决伤害。
+[F0004] 玩家A的游侠射手 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 36 点处决伤害。
+[F0004] 玩家A的霜卫先锋 对 玩家B的秘术术士 发动了 斩杀追击，造成 1 点伤害（HP 1 -> 0）。
+[F0004] 玩家B的秘术术士 受到致命伤害，死亡。
+[F0004] 玩家A的霜卫先锋 #2 对 玩家B的秘术术士 #2 发动了 斩杀追击，造成 1 点伤害（HP 1 -> 0）。
+[F0004] 玩家B的秘术术士 #2 受到致命伤害，死亡。
+[F0004] 玩家A的霜卫先锋 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 1 点伤害（HP 1 -> 0）。
+[F0004] 玩家B的秘术术士 #3 受到致命伤害，死亡。
+[F0004] 玩家B的荒原斗士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 40 -> 32）。
+[F0004] 玩家B的秘术术士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 32 -> 24）。
+[F0004] 玩家B的荒原斗士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 40 -> 32）。
+[F0004] 玩家B的秘术术士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 32 -> 24）。
+[F0004] 玩家B的荒原斗士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 40 -> 32）。
+[F0004] 玩家B的秘术术士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 32 -> 24）。
+[F0004] 玩家A的游侠射手 对 玩家B的秘术术士 发动了 毒刃，造成 1 点伤害（HP 2 -> 1）。
+[F0004] 玩家A的游侠射手 #2 对 玩家B的秘术术士 #2 发动了 毒刃，造成 1 点伤害（HP 2 -> 1）。
+[F0004] 玩家A的游侠射手 #3 对 玩家B的秘术术士 #3 发动了 毒刃，造成 1 点伤害（HP 2 -> 1）。
+[F0005] 玩家A的霜卫先锋 #2 对 玩家B的荒原斗士 #2 发动了 破阵斩，造成 12 点伤害（HP 48 -> 36）。
+[F0005] 玩家B的荒原斗士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 24 -> 16）。
+[F0005] 玩家A的霜卫先锋 #3 对 玩家B的荒原斗士 #3 发动了 破阵斩，造成 12 点伤害（HP 48 -> 36）。
+[F0005] 玩家B的荒原斗士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 24 -> 16）。
+[F0005] 玩家A的霜卫先锋 对 玩家B的荒原斗士 发动了 毒刃，造成 1 点伤害（HP 36 -> 35）。
+[F0005] 玩家A的霜卫先锋 #2 对 玩家B的荒原斗士 #2 发动了 毒刃，造成 1 点伤害（HP 36 -> 35）。
+[F0005] 玩家A的霜卫先锋 #3 对 玩家B的荒原斗士 #3 发动了 毒刃，造成 1 点伤害（HP 36 -> 35）。
+[F0006] 玩家A的游侠射手 #3 对 玩家B的荒原斗士 #3 发动了 斩杀追击，造成 22.5 点处决伤害。
+[F0006] 玩家A的游侠射手 对 玩家B的荒原斗士 发动了 斩杀追击，造成 22.5 点伤害（HP 35 -> 12.5）。
+[F0006] 玩家A的游侠射手 #2 对 玩家B的荒原斗士 #2 发动了 斩杀追击，造成 22.5 点伤害（HP 35 -> 12.5）。
+[F0006] 玩家A的游侠射手 #3 对 玩家B的荒原斗士 #3 发动了 斩杀追击，造成 22.5 点伤害（HP 35 -> 12.5）。
+[F0006] 玩家B的荒原斗士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 16 -> 8）。
+[F0006] 玩家B的荒原斗士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 16 -> 8）。
+[F0006] 玩家B的荒原斗士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 16 -> 8）。
+[F0007] 玩家A的霜卫先锋 对 玩家B的荒原斗士 发动了 斩杀追击，造成 11.5 点处决伤害。
+[F0007] 玩家A的游侠射手 对 玩家B的荒原斗士 发动了 斩杀追击，造成 33.8 点处决伤害。
+[F0007] 玩家A的霜卫先锋 #2 对 玩家B的荒原斗士 #2 发动了 斩杀追击，造成 11.5 点处决伤害。
+[F0007] 玩家A的游侠射手 #2 对 玩家B的荒原斗士 #2 发动了 斩杀追击，造成 33.8 点处决伤害。
+[F0007] 玩家A的霜卫先锋 #3 对 玩家B的荒原斗士 #3 发动了 斩杀追击，造成 11.5 点处决伤害。
+[F0007] 玩家A的游侠射手 #3 对 玩家B的荒原斗士 #3 发动了 斩杀追击，造成 33.8 点处决伤害。
+[F0007] 玩家A的霜卫先锋 对 玩家B的荒原斗士 发动了 斩杀追击，造成 11.5 点伤害（HP 11.5 -> 0）。
+[F0007] 玩家B的荒原斗士 受到致命伤害，死亡。
+[F0007] 玩家A的霜卫先锋 #2 对 玩家B的荒原斗士 #2 发动了 斩杀追击，造成 11.5 点伤害（HP 11.5 -> 0）。
+[F0007] 玩家B的荒原斗士 #2 受到致命伤害，死亡。
+[F0007] 玩家A的霜卫先锋 #3 对 玩家B的荒原斗士 #3 发动了 斩杀追击，造成 11.5 点伤害（HP 11.5 -> 0）。
+[F0007] 玩家B的荒原斗士 #3 受到致命伤害，死亡。
+[F0007] 玩家B的荒原斗士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 8 -> 0）。
+[F0007] 玩家A的霜卫先锋 受到致命伤害，死亡。
+[F0007] 玩家B的荒原斗士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 8 -> 0）。
+[F0007] 玩家A的霜卫先锋 #2 受到致命伤害，死亡。
+[F0007] 玩家B的荒原斗士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 8 -> 0）。
+[F0007] 玩家A的霜卫先锋 #3 受到致命伤害，死亡。
+[F0007] 玩家A的游侠射手 对 玩家B的荒原斗士 发动了 毒刃，造成 1 点伤害（HP 12.5 -> 11.5）。
+[F0007] 玩家A的游侠射手 #2 对 玩家B的荒原斗士 #2 发动了 毒刃，造成 1 点伤害（HP 12.5 -> 11.5）。
+[F0007] 玩家A的游侠射手 #3 对 玩家B的荒原斗士 #3 发动了 毒刃，造成 1 点伤害（HP 12.5 -> 11.5）。
+[F0011] 已折叠 1316 条镜像战场重复日志，当前画面只展示前 3 组的详细过程。
+[F0011] 战斗结束：胜者=玩家A，战斗帧=11。
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:71)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 71)
+
+AutoChessDemoRuntimeDebugger: runtimeDiagnostics events=147, dropped=0, warnings=63, errors=0, blockingErrors=0, requests=1600, specs=1400, deltas=650, facts=5200, cues=2500, presentation=7500, activeEffectOwners=200, activeEffectSlots=100, periodTickDamageFacts=150, queryBudget=13, lookupBudget=1, randomLookupBudget=1, syncQueryBudget=13, activeMutationCommands=200, activeMutationOwnerGroups=200, activeMutationMaxOwnerRange=1, activeMutationSortMoves=0, activeMutationEstimatedRandomLookups=0, activeMutationOwnerResourceLookups=0, activeMutationMigrationCarriers=0, pendingAttributeDeltas=350, pendingAttributeAppliedDeltas=250, pendingAttributeSkippedDeltas=100, pendingAttributeTargetGroups=250, pendingAttributeMaxTargetRange=2, pendingAttributeEstimatedRandomLookups=0, pendingAttributeFactPatches=250, pendingAttributeMigrationCarriers=0, streamCarrierPressureWarnings=34, observationMaterializedQueries=12, observationMaterializedEntities=2400, observationMaterializationUs=95, performancePassObservationPollutionRisks=12, magnitudeSourceCurrentValueLookups=0, magnitudeSourceCapturedValueHits=0, magnitudeSourceCaptureMisses=0, magnitudeSourceCaptureMissLiveLookups=0, magnitudeSourceFallbackValues=0, magnitudeSourceFallbackFacts=0, magnitudeSourceSourceAttributeLookups=0, magnitudeSourceTargetAttributeLookups=0, magnitudeSourceExecutionInputLookups=0, frameBackbonePhases=8, streams=6, migrationCarriers=6, profilerMarkerContracts=4, journalingMarkerContracts=1
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:72)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 72)
+
+AutoChessDemoRuntimeTiming: ecsRuntimeTickOnly=True, ownerSplit=core/boundary/debugger/runner/physics/render, physicsDisabledReason=reported-by-runtime, renderDisabledReason=reported-by-runtime, presentationDisabledReason=headless-log-bridge | CoreRuntimeOwner(samples=9,avgMs=1.557,maxMs=2.522) | BoundaryOwner(samples=9,avgMs=0.599,maxMs=1.485) | DebuggerOwner(samples=1,avgMs=40.430,maxMs=40.430) | RunnerOwner(samples=9,avgMs=0.088,maxMs=0.140) | PhysicsOwner(samples=0,avgMs=0.000,maxMs=0.000) | RenderOwner(samples=0,avgMs=0.000,maxMs=0.000) | GASTickTotal(samples=9,avgMs=2.244,maxMs=4.089) | GASFramePrepareSystemGroup(samples=9,avgMs=0.025,maxMs=0.037) | GASCommandResolveSystemGroup(samples=9,avgMs=0.095,maxMs=0.144) | GASCoreSimulationSystemGroup(samples=9,avgMs=1.422,maxMs=2.352) | GASStructuralCommitSystemGroup(samples=9,avgMs=0.014,maxMs=0.020) | GASBoundaryProjectionSystemGroup(samples=9,avgMs=0.599,maxMs=1.485) | GASDependencyDrain(samples=9,avgMs=0.088,maxMs=0.140)
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:74)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 74)
+
+AutoChessDemoOfficialToolDiff: runtimeSelfDiagnostics=events:0, officialDiffSeparatePass=True, journalingAvailable=True, journalingCaptured=True, journalingWorldRecords=48711, runtimeStructuralApprox=0, journalingStructural=0, deltaStructural=0, runtimeCreates=0, journalingCreates=0, deltaCreates=0, runtimeDestroys=0, journalingDestroys=0, deltaDestroys=0, journalingAddComponents=0, journalingRemoveComponents=0, journalingEnableComponents=900, journalingDisableComponents=0, journalingSetComponentData=0, journalingSetBuffer=0, journalingGetComponentDataRW=11468, journalingGetBufferRW=36343, profilerAvailable=True, profilerEnabled=False, structuralProfilerCategoryEnabled=False, memoryProfilerCategoryEnabled=False, profilerCaptureState=profiler disabled; Entities profiler modules collect no data, journalingRecordTopN=GetBufferRW=36343;GetComponentDataRW=11468;EnableComponent=900, journalingSystemTopN=GetBufferRW@GAS.Runtime.Generated.GASActiveEffectPreTickSystem=15600;GetBufferRW@GAS.Runtime.GASAttributeModifierDeltaApplySystem=5400;GetBufferRW@GAS.Runtime.Generated.GASActiveEffectMutationApplySystem=4309;GetBufferRW@GAS.Runtime.ASCCommandBufferResolveSystem=3900;GetComponentDataRW@GAS.Runtime.ASCCommandBufferResolveSystem=2600;GetComponentDataRW@GAS.Runtime.Generated.GASActiveEffectPreTickSystem=2400;GetComponentDataRW@GAS.Runtime.Generated.AbilityCatalogCommitSystem=2301;GetBufferRW@GAS.Runtime.Generated.AbilityCatalogCommitSystem=1950, journalingComponentTopN=GetBufferRW:GAS.Runtime.AttributeValueBuffer=7550;GetBufferRW:GAS.Runtime.GameplayEventBuffer=3386;GetComponentDataRW:GAS.Runtime.GEEffectCommandStreamComponent=3363;GetBufferRW:GAS.Runtime.AbilitySlotBuffer=2850;GetBufferRW:GAS.Runtime.AbilityCommandBuffer=2450;GetBufferRW:GAS.Runtime.ActiveEffectMutationBuffer=2209;GetBufferRW:GAS.Runtime.ActiveGameplayEffectBuffer=2200;GetBufferRW:GAS.Runtime.ActiveGameplayEffectCleanupRecordBuffer=2200
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:76)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 76)
+
+AutoChessDemoRuntimeDataFlow:
+```mermaid
+flowchart LR
+    CommandDrive["AutoChessBattleCommandDriveSystem\nscale: 50, units: 200\ncommands: 1050"] --> AbilityBuffer["AbilityCommandBuffer\nrequest entities avoided"]
+    AbilityBuffer --> RuntimeCore["GAS Runtime Core\nrequests: 0"]
+    RuntimeCore --> GEStream["GEEffectCommandBuffer / Spec / Delta\ndeltas: 0"]
+    GEStream --> Execution["AutoChessExecuteDamageCalculationSystem\nexecution outputs: 344"]
+    Execution --> PendingDelta["pending AttributeModifierBuffer\nexecution outputs: 344"]
+    PendingDelta --> Attribute["GASAttributeModifierDeltaApplySystem\nattribute changes: 898"]
+    Attribute --> Facts["GameplayEventBuffer typed facts\nfacts: 0"]
+    Facts --> Projection["Replay / Presentation / Layer 2 Diagnostics\nreplay events: 4800"]
+    Projection --> OfficialDiff["Official tool diff\nseparate pass, journaling records: 48711"]
+```
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:78)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 78)
+
+AutoChessDemoRuntimeSequence:
+```mermaid
+sequenceDiagram
+    participant Runner as AutoChess Demo Runner
+    participant Drive as AutoChessBattle Command Drive
+    participant Core as GAS Runtime Core
+    participant Exec as Execution Calculation
+    participant Obs as Replay / Projection
+    participant Debug as Layer 2 DiagnosticsSink
+    participant Unity as Unity Journaling / Profiler
+    Runner->>Drive: fixed ticks 12, battle ticks 11, scale 50
+    Drive->>Core: AbilityCommandBuffer commands 1050
+    Core->>Exec: execute GE commands, finishers 350
+    Exec->>Core: pending modifier + typed fact outputs 344
+    Core->>Core: apply pending modifier deltas 898
+    Core->>Obs: attribute changes 898, cue requests 1404
+    Obs->>Debug: counters 0, warnings 0, errors 0
+    Debug->>Unity: read EntitiesJournaling records in a separate official-diff pass
+    Unity-->>Debug: journaling structural records 0, profiler state profiler disabled; Entities profiler modules collect no data
+```
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:80)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 80)
+
+AutoChessDemoRuntimeDiagnostics:
+runtimeDiagnostics|events=147|dropped=0|warnings=63|errors=0|slowSystems=29|bufferPressureWarnings=34
+runtimeCoreCounters|requests=1600|specs=1400|deltas=650|facts=5200|cues=2500|presentation=7500|entityCreates=0|entityDestroys=0|ecbPlaybacks=0
+runtimeCoreCountersPeak|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=950|presentationCursorLag=0|replayCursorLag=0
+runtimeCoreActiveEffectStore|owners=200|slots=100|capacity=1600|pendingApply=0|active=100|inhibited=0|pendingRemove=0|legacyBacked=0|externalizedOwners=0|grantedTags=0|grantedAbilities=0|chunkSkipMatched=100|chunkSkipSkipped=100|chunkSkipDuePeriod=0|chunkSkipNoop=100|chunkSkipOwners=200|globalIndexOwners=1|globalIndexCount=0|globalIndexActive=0|globalIndexInhibited=0|globalIndexPendingRemove=0|globalIndexPeriodDue=0|globalIndexDurationDue=0|globalIndexStale=0|globalIndexBucketOwners=16|globalIndexBucketIndexCount=0|globalIndexMaxBucketLength=0|globalIndexStableRows=0|globalIndexStaleStableRows=0
+runtimeCoreActiveMutation|commands=200|ownerGroups=200|maxOwnerRange=1|sortMoves=0|estimatedRandomLookups=0|ownerResourceLookups=0|migrationCarriers=0
+runtimeCorePendingAttributeDelta|pending=350|applied=250|skipped=100|targetGroups=250|maxTargetRange=2|estimatedRandomLookups=0|factPatches=250|migrationCarriers=0
+runtimeCoreMagnitudeSource|currentValueLookups=0|capturedValueHits=0|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=0|targetAttributeLookups=0|executionInputLookups=0
+runtimeCoreFrameBudget|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeCoreFrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|dependencyWaitRisks=4|allocatorOwners=1|rewindableAllocatorCandidates=1|streams=6|migrationCarriers=6|nativeStreamCandidates=3|ownerLocalBufferCandidates=2|battleHashStreams=6|deterministicMergePolicies=6|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0
+runtimeCoreFrameBackboneEvidence|profilerMarkers=4|journalingMarkers=1|evidenceMask=131071|burstWarmupPolicy=1
+runtimeCoreCostSplit|core=1|physics=1|render=1|runner=1|physicsDisabledReasons=1|renderDisabledReasons=1
+runtimeCoreDebuggerOverhead|samplingInterval=1|overheadBudgetUs=50|disablePolicy=1|hotPathManagedStrings=0
+runtimeObservationMaterialization|queries=12|entities=2400|elapsedUs=95|activeEffectStoreQueries=12|activeEffectStoreEntities=2400|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=12
+runtimeMagnitudeSource|currentValueLookups=0|capturedValueHits=0|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=0|targetAttributeLookups=0|executionInputLookups=0
+runtimeDiagnostic|seq=0|frame=1|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=0|specs=0|deltas=0|facts=0|cues=0|presentation=0|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=0|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=0|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=0|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=0|activeEffectChunkSkipSkippedSlots=0|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=0|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=0|activeMutationOwnerGroups=0|activeMutationMaxOwnerRange=0|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=0|pendingAttributeAppliedDeltas=0|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=0|pendingAttributeMaxTargetRange=0|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=0|pendingAttributeMigrationCarriers=0|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=1|frame=1|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=8|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=2|frame=1|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=6|migrationCarriers=6|nativeStreamCandidates=3|battleHashStreams=6|deterministicMergePolicies=6|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=3|frame=2|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=200|specs=150|deltas=100|facts=850|cues=350|presentation=1100|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=850|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=50|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=50|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=50|activeEffectChunkSkipSkippedSlots=50|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=50|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=50|activeMutationOwnerGroups=50|activeMutationMaxOwnerRange=1|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=50|pendingAttributeAppliedDeltas=50|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=50|pendingAttributeMaxTargetRange=1|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=50|pendingAttributeMigrationCarriers=0|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=4|frame=2|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=9|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=5|frame=2|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectCommandBuffer|count=200|capacity=256|ratio=3.125|budget=64|overBudget=1
+runtimeDiagnostic|seq=6|frame=2|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectSpecBuffer|count=150|capacity=256|ratio=2.34375|budget=64|overBudget=1
+runtimeDiagnostic|seq=7|frame=2|kind=BufferPressure|severity=Trace|module=Effect|group=EffectCommandSpecStream|buffer=AttributeModifierBuffer|count=100|capacity=128|ratio=0.78125|budget=128|overBudget=0
+runtimeDiagnostic|seq=8|frame=2|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GameplayEventBuffer|count=850|capacity=1024|ratio=6.640625|budget=128|overBudget=1
+runtimeDiagnostic|seq=9|frame=2|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=6|migrationCarriers=6|nativeStreamCandidates=3|battleHashStreams=6|deterministicMergePolicies=6|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=10|frame=3|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=200|specs=150|deltas=100|facts=850|cues=350|presentation=1100|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=850|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=100|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=100|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=100|activeEffectChunkSkipSkippedSlots=100|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=100|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=50|activeMutationOwnerGroups=50|activeMutationMaxOwnerRange=1|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=50|pendingAttributeAppliedDeltas=50|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=50|pendingAttributeMaxTargetRange=1|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=50|pendingAttributeMigrationCarriers=0|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=11|frame=3|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=11|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=12|frame=3|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectCommandBuffer|count=200|capacity=256|ratio=3.125|budget=64|overBudget=1
+runtimeDiagnostic|seq=13|frame=3|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectSpecBuffer|count=150|capacity=256|ratio=2.34375|budget=64|overBudget=1
+runtimeDiagnostic|seq=14|frame=3|kind=BufferPressure|severity=Trace|module=Effect|group=EffectCommandSpecStream|buffer=AttributeModifierBuffer|count=100|capacity=128|ratio=0.78125|budget=128|overBudget=0
+runtimeDiagnostic|seq=15|frame=3|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GameplayEventBuffer|count=850|capacity=1024|ratio=6.640625|budget=128|overBudget=1
+runtimeDiagnostic|seq=16|frame=3|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=6|migrationCarriers=6|nativeStreamCandidates=3|battleHashStreams=6|deterministicMergePolicies=6|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=17|frame=4|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=250|specs=250|deltas=150|facts=950|cues=450|presentation=1500|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=950|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=100|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=100|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=100|activeEffectChunkSkipSkippedSlots=100|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=100|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=0|activeMutationOwnerGroups=0|activeMutationMaxOwnerRange=0|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=100|pendingAttributeAppliedDeltas=50|pendingAttributeSkippedDeltas=50|pendingAttributeTargetGroups=50|pendingAttributeMaxTargetRange=2|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=50|pendingAttributeMigrationCarriers=0|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=18|frame=4|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=11|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=19|frame=4|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectCommandBuffer|count=250|capacity=256|ratio=3.90625|budget=64|overBudget=1
+runtimeDiagnostic|seq=20|frame=4|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectSpecBuffer|count=250|capacity=256|ratio=3.90625|budget=64|overBudget=1
+runtimeDiagnostic|seq=21|frame=4|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=ActiveEffectMutationBuffer|count=50|capacity=64|ratio=1.5625|budget=32|overBudget=1
+runtimeDiagnostic|seq=22|frame=4|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=AttributeModifierBuffer|count=150|capacity=256|ratio=1.171875|budget=128|overBudget=1
+runtimeDiagnostic|seq=23|frame=4|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GameplayEventBuffer|count=950|capacity=1024|ratio=7.421875|budget=128|overBudget=1
+runtimeDiagnostic|seq=24|frame=4|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=6|migrationCarriers=6|nativeStreamCandidates=3|battleHashStreams=6|deterministicMergePolicies=6|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=25|frame=4|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASTickTotal|elapsedUs=4732|totalUs=4732|calls=1
+runtimeDiagnostic|seq=26|frame=4|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASFramePrepareSystemGroup|elapsedUs=103|totalUs=103|calls=1
+runtimeDiagnostic|seq=27|frame=4|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASCommandResolveSystemGroup|elapsedUs=98|totalUs=98|calls=1
+runtimeDiagnostic|seq=28|frame=4|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCoreSimulationSystemGroup|elapsedUs=2133|totalUs=2133|calls=1
+runtimeDiagnostic|seq=29|frame=4|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASStructuralCommitSystemGroup|elapsedUs=15|totalUs=15|calls=1
+runtimeDiagnostic|seq=30|frame=4|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASBoundaryProjectionSystemGroup|elapsedUs=2302|totalUs=2302|calls=1
+runtimeDiagnostic|seq=31|frame=4|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASDependencyDrain|elapsedUs=80|totalUs=80|calls=1
+runtimeDiagnostic|seq=32|frame=5|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=200|specs=150|deltas=150|facts=700|cues=350|presentation=900|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=700|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=150|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=150|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=150|activeEffectChunkSkipSkippedSlots=150|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=150|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=50|activeMutationOwnerGroups=50|activeMutationMaxOwnerRange=1|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=0|pendingAttributeAppliedDeltas=0|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=0|pendingAttributeMaxTargetRange=0|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=0|pendingAttributeMigrationCarriers=0|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=33|frame=5|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=7|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=34|frame=5|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectCommandBuffer|count=200|capacity=256|ratio=3.125|budget=64|overBudget=1
+runtimeDiagnostic|seq=35|frame=5|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectSpecBuffer|count=150|capacity=256|ratio=2.34375|budget=64|overBudget=1
+runtimeDiagnostic|seq=36|frame=5|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=ActiveEffectMutationBuffer|count=50|capacity=64|ratio=1.5625|budget=32|overBudget=1
+runtimeDiagnostic|seq=37|frame=5|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=AttributeModifierBuffer|count=150|capacity=256|ratio=1.171875|budget=128|overBudget=1
+runtimeDiagnostic|seq=38|frame=5|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GameplayEventBuffer|count=700|capacity=1024|ratio=5.46875|budget=128|overBudget=1
+runtimeDiagnostic|seq=39|frame=5|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=6|migrationCarriers=6|nativeStreamCandidates=3|battleHashStreams=6|deterministicMergePolicies=6|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=40|frame=5|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASTickTotal|elapsedUs=3411|totalUs=3411|calls=1
+runtimeDiagnostic|seq=41|frame=5|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASFramePrepareSystemGroup|elapsedUs=90|totalUs=90|calls=1
+runtimeDiagnostic|seq=42|frame=5|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASCommandResolveSystemGroup|elapsedUs=83|totalUs=83|calls=1
+runtimeDiagnostic|seq=43|frame=5|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCoreSimulationSystemGroup|elapsedUs=2058|totalUs=2058|calls=1
+runtimeDiagnostic|seq=44|frame=5|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASStructuralCommitSystemGroup|elapsedUs=13|totalUs=13|calls=1
+runtimeDiagnostic|seq=45|frame=5|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASBoundaryProjectionSystemGroup|elapsedUs=1098|totalUs=1098|calls=1
+runtimeDiagnostic|seq=46|frame=5|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASDependencyDrain|elapsedUs=69|totalUs=69|calls=1
+runtimeDiagnostic|seq=47|frame=6|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=200|specs=150|deltas=50|facts=700|cues=300|presentation=900|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=700|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=150|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=150|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=150|activeEffectChunkSkipSkippedSlots=150|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=150|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=50|activeMutationOwnerGroups=50|activeMutationMaxOwnerRange=1|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=50|pendingAttributeAppliedDeltas=50|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=50|pendingAttributeMaxTargetRange=1|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=50|pendingAttributeMigrationCarriers=0|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=48|frame=6|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=8|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=49|frame=6|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectCommandBuffer|count=200|capacity=256|ratio=3.125|budget=64|overBudget=1
+runtimeDiagnostic|seq=50|frame=6|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectSpecBuffer|count=150|capacity=256|ratio=2.34375|budget=64|overBudget=1
+runtimeDiagnostic|seq=51|frame=6|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=ActiveEffectMutationBuffer|count=50|capacity=64|ratio=1.5625|budget=32|overBudget=1
+runtimeDiagnostic|seq=52|frame=6|kind=BufferPressure|severity=Trace|module=Effect|group=EffectCommandSpecStream|buffer=AttributeModifierBuffer|count=50|capacity=256|ratio=0.390625|budget=128|overBudget=0
+runtimeDiagnostic|seq=53|frame=6|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GameplayEventBuffer|count=700|capacity=1024|ratio=5.46875|budget=128|overBudget=1
+runtimeDiagnostic|seq=54|frame=6|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=6|migrationCarriers=6|nativeStreamCandidates=3|battleHashStreams=6|deterministicMergePolicies=6|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=55|frame=6|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASTickTotal|elapsedUs=4202|totalUs=4202|calls=1
+runtimeDiagnostic|seq=56|frame=6|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASFramePrepareSystemGroup|elapsedUs=68|totalUs=68|calls=1
+runtimeDiagnostic|seq=57|frame=6|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASCommandResolveSystemGroup|elapsedUs=74|totalUs=74|calls=1
+runtimeDiagnostic|seq=58|frame=6|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCoreSimulationSystemGroup|elapsedUs=2049|totalUs=2049|calls=1
+runtimeDiagnostic|seq=59|frame=6|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASStructuralCommitSystemGroup|elapsedUs=14|totalUs=14|calls=1
+runtimeDiagnostic|seq=60|frame=6|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASBoundaryProjectionSystemGroup|elapsedUs=1916|totalUs=1916|calls=1
+runtimeDiagnostic|seq=61|frame=6|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASDependencyDrain|elapsedUs=81|totalUs=81|calls=1
+runtimeDiagnostic|seq=62|frame=7|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=200|specs=200|deltas=100|facts=750|cues=350|presentation=1200|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=750|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=150|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=150|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=150|activeEffectChunkSkipSkippedSlots=150|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=150|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=0|activeMutationOwnerGroups=0|activeMutationMaxOwnerRange=0|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=100|pendingAttributeAppliedDeltas=50|pendingAttributeSkippedDeltas=50|pendingAttributeTargetGroups=50|pendingAttributeMaxTargetRange=2|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=50|pendingAttributeMigrationCarriers=0|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=63|frame=7|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=13|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=64|frame=7|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectCommandBuffer|count=200|capacity=256|ratio=3.125|budget=64|overBudget=1
+runtimeDiagnostic|seq=65|frame=7|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectSpecBuffer|count=200|capacity=256|ratio=3.125|budget=64|overBudget=1
+runtimeDiagnostic|seq=66|frame=7|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=ActiveEffectMutationBuffer|count=50|capacity=64|ratio=1.5625|budget=32|overBudget=1
+runtimeDiagnostic|seq=67|frame=7|kind=BufferPressure|severity=Trace|module=Effect|group=EffectCommandSpecStream|buffer=AttributeModifierBuffer|count=100|capacity=256|ratio=0.78125|budget=128|overBudget=0
+runtimeDiagnostic|seq=68|frame=7|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GameplayEventBuffer|count=750|capacity=1024|ratio=5.859375|budget=128|overBudget=1
+runtimeDiagnostic|seq=69|frame=7|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=6|migrationCarriers=6|nativeStreamCandidates=3|battleHashStreams=6|deterministicMergePolicies=6|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=70|frame=7|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASTickTotal|elapsedUs=4611|totalUs=4611|calls=1
+runtimeDiagnostic|seq=71|frame=7|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASFramePrepareSystemGroup|elapsedUs=91|totalUs=91|calls=1
+runtimeDiagnostic|seq=72|frame=7|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCommandResolveSystemGroup|elapsedUs=106|totalUs=106|calls=1
+runtimeDiagnostic|seq=73|frame=7|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCoreSimulationSystemGroup|elapsedUs=2335|totalUs=2335|calls=1
+runtimeDiagnostic|seq=74|frame=7|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASStructuralCommitSystemGroup|elapsedUs=18|totalUs=18|calls=1
+runtimeDiagnostic|seq=75|frame=7|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASBoundaryProjectionSystemGroup|elapsedUs=1968|totalUs=1968|calls=1
+runtimeDiagnostic|seq=76|frame=7|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASDependencyDrain|elapsedUs=94|totalUs=94|calls=1
+runtimeDiagnostic|seq=77|frame=8|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=100|specs=100|deltas=0|facts=100|cues=100|presentation=200|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=100|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=150|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=150|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=150|activeEffectChunkSkipSkippedSlots=150|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=150|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=0|activeMutationOwnerGroups=0|activeMutationMaxOwnerRange=0|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=0|pendingAttributeAppliedDeltas=0|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=0|pendingAttributeMaxTargetRange=0|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=0|pendingAttributeMigrationCarriers=0|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=78|frame=8|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=7|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=79|frame=8|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectCommandBuffer|count=100|capacity=256|ratio=1.5625|budget=64|overBudget=1
+runtimeDiagnostic|seq=80|frame=8|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectSpecBuffer|count=100|capacity=256|ratio=1.5625|budget=64|overBudget=1
+runtimeDiagnostic|seq=81|frame=8|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=ActiveEffectMutationBuffer|count=100|capacity=128|ratio=3.125|budget=32|overBudget=1
+runtimeDiagnostic|seq=82|frame=8|kind=BufferPressure|severity=Trace|module=Effect|group=EffectCommandSpecStream|buffer=GameplayEventBuffer|count=100|capacity=1024|ratio=0.78125|budget=128|overBudget=0
+runtimeDiagnostic|seq=83|frame=8|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=6|migrationCarriers=6|nativeStreamCandidates=3|battleHashStreams=6|deterministicMergePolicies=6|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=84|frame=8|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASTickTotal|elapsedUs=1793|totalUs=1793|calls=1
+runtimeDiagnostic|seq=85|frame=8|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASFramePrepareSystemGroup|elapsedUs=72|totalUs=72|calls=1
+runtimeDiagnostic|seq=86|frame=8|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASCommandResolveSystemGroup|elapsedUs=88|totalUs=88|calls=1
+runtimeDiagnostic|seq=87|frame=8|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCoreSimulationSystemGroup|elapsedUs=879|totalUs=879|calls=1
+runtimeDiagnostic|seq=88|frame=8|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASStructuralCommitSystemGroup|elapsedUs=12|totalUs=12|calls=1
+runtimeDiagnostic|seq=89|frame=8|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASBoundaryProjectionSystemGroup|elapsedUs=672|totalUs=672|calls=1
+runtimeDiagnostic|seq=90|frame=8|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASDependencyDrain|elapsedUs=70|totalUs=70|calls=1
+runtimeDiagnostic|seq=91|frame=9|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=50|specs=50|deltas=0|facts=50|cues=50|presentation=100|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=50|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=150|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=150|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=150|activeEffectChunkSkipSkippedSlots=150|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=150|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=0|activeMutationOwnerGroups=0|activeMutationMaxOwnerRange=0|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=0|pendingAttributeAppliedDeltas=0|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=0|pendingAttributeMaxTargetRange=0|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=0|pendingAttributeMigrationCarriers=0|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=92|frame=9|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=5|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=93|frame=9|kind=BufferPressure|severity=Trace|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectCommandBuffer|count=50|capacity=256|ratio=0.78125|budget=64|overBudget=0
+runtimeDiagnostic|seq=94|frame=9|kind=BufferPressure|severity=Trace|module=Effect|group=EffectCommandSpecStream|buffer=GEEffectSpecBuffer|count=50|capacity=256|ratio=0.78125|budget=64|overBudget=0
+runtimeDiagnostic|seq=95|frame=9|kind=BufferPressure|severity=Warning|module=Effect|group=EffectCommandSpecStream|buffer=ActiveEffectMutationBuffer|count=50|capacity=128|ratio=1.5625|budget=32|overBudget=1
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:82)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:42)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:14)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:14)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 82)
+
+Unloading 1 Unused Serialized files (Serialized files now loaded: 0)
+Killing ADB server in 2.1212005 seconds.
+Unloading 1 unused Assets / (0.5 KB). Loaded Objects now: 12263.
+Memory consumption went from 296.8 MB to 296.8 MB.
+Total: 34.281200 ms (FindLiveObjects: 1.028200 ms CreateObjectMapping: 0.654400 ms MarkObjects: 32.528000 ms  DeleteObjects: 0.068500 ms)
+
+[Physics::Module] Cleanup current backend.
+[Physics::Module] Id: 0xf2b8ea05
+Input System module state changed to: ShutdownInProgress.
+Input System polling thread exited.
+Input System module state changed to: Shutdown.
+[Licensing::IpcConnector] LicenseClient-Y-6000.3.14-notifications channel disconnected successfully.
+[Licensing::IpcConnector] LicenseClient-Y-6000.3.14 channel disconnected successfully.
+AcceleratorClientConnectionCallback - disconnected - :0
+Cleanup mono
+00:58:36.256 |V| RiderPlugin                    | :1                             | AppDomain.CurrentDomain.DomainUnload lifetimeDefinition.Terminate
+Checking for leaked weakptr:
+  Found no leaked weakptrs.
+[Package Manager] Server process was shutdown
+##utp:{"type":"MemoryLeaks","version":2,"phase":"Immediate","time":1780851516640,"processId":32812,"allocatedMemory":22183443,"memoryLabels":[{"Default":29313},{"Permanent":15236},{"NewDelete":67891},{"Thread":4230384},{"Manager":3093357},{"VertexData":8},{"Geometry":816},{"Texture":160},{"Shader":81403},{"Material":24},{"GfxDevice":55865},{"Animation":392},{"Audio":2664},{"FreeType":8},{"FontEngine":736},{"Physics":2090},{"Physics2D":16},{"Serialization":528},{"Input":14984},{"JobScheduler":33024},{"TextLib":216},{"Mono":32},{"MonoCode":64},{"ScriptingNativeRuntime":155060},{"BaseObject":1620336},{"Resource":1336},{"Renderer":3000},{"Transform":4685},{"File":1016},{"WebCam":616},{"Culling":32},{"Terrain":11394},{"Wind":24},{"STL":40},{"String":18253},{"DynamicArray":131555},{"HashMap":98900},{"Utility":2660822},{"Curl":3098},{"PoolAlloc":7528},{"AI":80},{"TypeTree":66049},{"ScriptManager":512},{"RuntimeInitializeOnLoadManager":64},{"SpriteAtlas":112},{"GI":7792},{"Director":8240},{"CloudService":8784},{"WebRequest":845},{"VR":47994},{"SceneManager":504},{"Video":64},{"LazyScriptCache":32},{"Camera":17},{"Secure":2113},{"SerializationCache":1576},{"APIUpdating":10320},{"Subsystems":336},{"VirtualTexturing":57888},{"StaticSafetyDebugInfo":278528},{"Analytics":384},{"Hierarchy":608},{"CoreStats":13032},{"Identifiers":12960},{"Gui":96},{"EditorUtility":139792},{"VersionControl":4},{"Undo":947},{"AssetDatabase":9131889},{"EditorGi":328},{"UnityConnect":29208},{"Upm":1896},{"AssetCompliance":64},{"DrivenProperties":72},{"LocalIPC":176},{"ProfilerEditor":9746},{"CoreBusinessMetrics":2861},{"Licensing":664},{"AssetReference":32},{"IPCStream":32}]}
+~StackAllocator(ALLOC_TEMP_MAIN) m_LastAlloc not NULL. Did you forget to call FreeAllStackAllocations()? To get more information, run app with -diag-temp-memory-leak-validation cmd line argument

@@ -62,8 +62,8 @@
 | ID | 当前问题 | 状态 | 严重度 | 当前主线入口 |
 |---|---|---|---|---|
 | ISSUE-001 | GE 生命周期从 request/entity pipeline 迁入 command/spec/active store，但 legacy fallback 和 generated proof 仍未闭合 | Active | P0 | R2 / R7 |
-| ISSUE-002 | Observation 已进入 BoundaryProjection；gameplay event 已统一为 `GameplayEventBuffer` typed fact，Attribute/Cue/Tag 边界缓冲已由 BoundaryProjection 派生，Damage/EventBus helper 兼容写入口已删除，Presentation/Replay 只读 typed fact；Debugger observation materialization 已可归因，但 performance pass 污染风险仍存在 | Mitigated | P1 | R3 防回流 / R4 evidence |
-| ISSUE-003 | Debugger/Official diff 已有工具；Observation materialization 已进入专用 event/export/AutoChess evidence，但证据还需继续区分 Core、Boundary、Debugger 与 performance pass 污染 | Active | P1 | R4 / R8 |
+| ISSUE-002 | Observation 已进入 BoundaryProjection；gameplay event 已统一为 `GameplayEventBuffer` typed fact，Attribute/Cue/Tag 边界缓冲已由 BoundaryProjection 派生，Damage/EventBus helper 兼容写入口已删除，Presentation/Replay 只读 typed fact；Debugger observation materialization 已可归因，performance pass 污染风险已在 x50 pass-split 日志中收口为 0 | Mitigated | P1 | R3 防回流 / R4 evidence |
+| ISSUE-003 | Debugger/Official diff 已有工具；Observation materialization 与 Magnitude Source evidence 已进入专用 event/export/AutoChess evidence，但证据还需继续区分 Core、Boundary、Debugger、diagnostic pass 和真实 magnitude source 业务覆盖 | Active | P1 | R4 / R8 |
 | ISSUE-004 | StructuralCommit gate 已真实存在；boundary request entity 已退场，但 direct-EM 分类和证据闭环仍需收口 | Active | P0 | R4 / R6 |
 | ISSUE-005 | Generated 链路已反哺 Runtime Core；ability commit、instant spec/reduce、active mutation job 化和 static hot path gate 已同步模板，剩余风险集中在 active mutation store 选型、random lookup 与证据闭环 | Mitigated | P1 | R2 / R5 |
 | ISSUE-006 | AutoChessDemo 已移出 Runtime Core；当前风险转为 bridge 直接 `EntityManager` | Mitigated | P1 | R6 |

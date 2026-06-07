@@ -6,6 +6,60 @@
 
 本文件只记录当前代码事实、证据和 DOTS 判定；目标态设计正文回到 `../../01-目标态架构共识/`，任务拆分回到 `../../02-主线任务树/`。
 
+## 2026-06-08 续轮复核：Magnitude Source Evidence 与三 pass validation
+
+本轮代码截面显示，Magnitude Source 风险已经从“人工读 resolver / execution calculation 路径”推进到机器可读 evidence：frame-local counter、Debugger snapshot、text export、AutoChess validation evidence 和静态防回流门均已出现。同时 AutoChess validation runner 已把 performance pass、diagnostic pass 和 official diff pass 拆开。这个事实只说明证据链和 pass 隔离路径建立，不能写成 pre-tick / active effect slot tick snapshot lane、完整 SourceAttribute / TargetAttribute 捕获语义或 Profiler 性能闭环完成。
+
+### 事实消费卡
+
+```markdown
+来源类型：代码截面复核 / diagnostics 脚本审查 / 04 验证摘要消费
+原始证据：
+  - `GEEffectCommandStreamComponent` 已有 `MagnitudeSource*` frame-local counter 字段和 `AddMagnitudeSourceCounters(...)`
+  - `EffectMagnitudeResolver` 已记录 current value lookup、captured hit、capture miss、capture miss live lookup、fallback value / fact、source / target attribute lookup
+  - `GEExecutionCalculationSystem` 已用 `ExecutionMagnitudeSourceChunkCounters` / `NativeArray` 汇总 execution input lookup 和 attribute lookup，再在 deterministic merge job 写回 stream
+  - `GasRuntimeDebugger` 已有 `GasRuntimeMagnitudeSourceCounters`、`MagnitudeSource` diagnostic event、`runtimeMagnitudeSource` / `runtimeCoreMagnitudeSource` text export
+  - `DiagnosticsSnapshotSystem` 每帧采样 `RecordMagnitudeSourceEvidence(...)`
+  - `AutoChessBattleValidationReport` 代码路径已消费 diagnostic result 的 `RuntimeDiagnostics.MagnitudeSourceCounters`
+  - `AutoChessBattleValidationRun` 已拆 `performanceResult` / `diagnosticResult` / `officialDiffResult`；performance 与 official diff pass 关闭 Debugger、system timings 和 buffer pressure，diagnostic pass 打开这些观测
+  - `Verify-GAS-RuntimeCoreBoundary.ps1` 已加入 Magnitude Source evidence 与三 pass 分离静态门
+  - `_归档/2026-06-08-AutoChessBattleValidation-PassSplitMagnitudeSource-Run1.log`: `passed=True` / `runtimeChainPassed=True` / `repeatRunPassed=True`，performance summary 为 `performancePassObservationPollutionRisks=0`，diagnostic Debugger summary 仍有 `observationMaterializedQueries=12`，`runtimeCoreMagnitudeSource` / `runtimeMagnitudeSource` 导出字段全为 0
+第一 owner：00
+长期有效：待复核；counter 字段和 pass 形态会随 R3/R4/R5/R8 执行变化
+需要反哺：01 Debugger evidence model / 90 不变量，02 R3/R4/R5/R8 领取门，04 最近验证摘要
+```
+
+### 正向事实
+
+1. Magnitude Source 相关计数已进入 runtime stream owner：current value lookup、captured value hit、capture miss、capture miss live lookup、fallback value、fallback fact、source attribute lookup、target attribute lookup 和 execution input lookup 都有 frame-local counter。
+2. Managed resolver 路径不再只有人工读代码才能定位风险：resolver 在 capture hit / miss / fallback 和 SourceAttribute / TargetAttribute 解析时会写 counter；execution calculation job 也把 chunk 内 input lookup 与 attribute lookup 合并后写回 stream。
+3. Debugger evidence 已具备三层消费面：diagnostic event、snapshot counter 和 derived text export。它们能解释 magnitude source 热点来源，但 text export 仍只是派生格式，不是验收源。
+4. AutoChess validation report 的机器 evidence 已能消费 diagnostic pass 中的 magnitude source counter，并把 capture miss / live lookup / fallback / execution input lookup 输出到 summary / hotspot 口径。
+5. AutoChess validation runner 当前代码路径已经把 performance pass、diagnostic pass 和 official diff pass 分开：performance pass 用于业务和 tick 口径，diagnostic pass 负责 Debugger / timing / buffer pressure 证据，official diff pass 独立捕获并与 performance pass 对比关键业务计数。
+
+### 仍成立风险
+
+1. 当前已有 x50 pass split 原始日志，但没有 AutoChess x100 / x1000、Profiler enabled、Luban 或 SourceGenerator 重跑证据；不能把 counter 存在、静态门通过、build 通过或 x50 跑通写成 DOTS 性能优秀。
+2. `PassSplitMagnitudeSource-Run1` 中的 `magnitudeSource*` 字段全为 0，只能证明字段链路可导出且未破坏该业务链路；不能证明真实业务已经覆盖 capture miss、fallback、SourceAttribute / TargetAttribute 和 ExecutionCalculation 热点。
+3. Magnitude Source evidence 是风险显性化，不是 snapshot lane 终局。pre-tick、active effect slot tick、generated template capacity / spill、snapshot timing key 和 fallback fact 语义仍需要 R3/R5/R8 后续切片闭合。
+4. 三 pass 分离只把 Debugger observation 从 performance pass 中隔离出来；diagnostic pass 中仍允许 observation materialization，且这些成本必须继续归 Debugger / Boundary owner，不能混进 CoreSimulation 性能结论。
+
+### DOTS 判定
+
+| 规则 | 本轮判定 |
+|---|---|
+| `DBG-01..05` / `ODF-07` | Debugger 已具备 Magnitude Source 机器 evidence 和 pass 隔离字段；后续必须把这些字段并入统一 validation evidence，而不是只看字符串 summary。 |
+| `QRY-04` / `PRF-06` / `PRF-19` | counter 能定位 cross-owner / live lookup 风险，但 live lookup 只被显性化，尚未全部替换为 owner-local snapshot record。 |
+| `NAT-03` / `BUF-02` / `SEL-02` | frame-local counter 仍挂在迁移期 stream owner 上；它是观测证据，不证明 command/spec/delta/fact carrier 已 scale-ready。 |
+| `CASE-12` / `ODF-18` | performance / diagnostic / official diff pass 已有代码分工，但仍缺 Profiler enabled、规模曲线、warmup / measurement 长窗口和官方工具 capture 闭环。 |
+
+### 新任务输入
+
+1. R3：把 current / captured-on-apply / captured-on-tick / captured-before-execution 的 magnitude source timing key、owner 和 fallback fact 收敛为目标态 snapshot record。
+2. R4：把 magnitude source counter、observation materialization counter、official diff 和 timing split 纳入同一个 validation evidence model；禁止 derived export 作为机器验收源。
+3. R5：SourceGenerator 模板必须继续退出 active effect slot tick / execution calculation 隐藏 lookup owner；若暂留，必须标记 `MigrationProofOnly` 并绑定退出门。
+4. R8：AutoChess x100 / x1000 与 Profiler enabled 场景必须证明 performance pass、diagnostic pass 和 official diff pass 的业务计数可对齐，且 Debugger / Boundary 成本不污染 CoreSimulation 结论。
+
 ## 2026-06-07 整体复核：Boundary Snapshot 与 Magnitude Source Owner
 
 本轮继续对 `Assets/GAS/Runtime`、`Assets/GAS/Generated/CodeGen/Runtime`、`Assets/GAS/Editor/CodeGen/Phases`、`Assets/AutoChessDemo` 和 `Tools/Diagnostics/Verify-GAS-RuntimeCoreBoundary.ps1` 做静态复核并执行一轮收口。结论是：AutoChess 业务 report snapshot 已向 Boundary structured evidence 收敛，这是 R1/R6 的正向进展；active mutation 的跨 owner `SourceAttribute` 已进入 frame-local snapshot lane；但 Runtime pre-tick / execution calculation 仍存在 source attribute live lookup / snapshot lane 缺口，不能把当前状态写成全部 magnitude source capture 完成态。
@@ -42,6 +96,12 @@
 `00-当前架构事实/_归档/2026-06-07-AutoChessBattleValidation-SourceAttributeSnapshotLane-Run1.log` 已补入 active mutation SourceAttribute snapshot lane 的 x50 validation 证据。关键字段为：`completed=True`、`passed=True`、`runtimeChainPassed=True`、`repeatRunPassed=True`、`activeMutationCommands=200`、`activeMutationOwnerGroups=200`、`activeMutationEstimatedRandomLookups=0`、`activeMutationOwnerResourceLookups=0`、`activeMutationMigrationCarriers=0`、`streamCarrierPressureWarnings=34`、`summaryHash=0x6681A05F`。
 
 该日志只能证明 active mutation apply lane 在该规模下已通过 SourceAttribute snapshot map 消费并把旧 random lookup / owner resource lookup / migration carrier counter 压到 0；不能证明 `EffectMagnitudeResolver` capture miss 路径、`GEExecutionCalculationSystem` execution input、generated active effect slot tick、pre-tick magnitude source 或 Profiler 性能闭环已完成。日志仍显示 `profilerCaptureState=profiler disabled; Entities profiler modules collect no data`，因此不能写成 DOTS 优秀水平证明。
+
+### 验证补录：PassSplitMagnitudeSource Run1
+
+`00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-PassSplitMagnitudeSource-Run1.log` 已补入 performance / diagnostic / official diff pass 拆分和 Magnitude Source evidence 贯通后的 x50 validation 证据。关键字段为：`completed=True`、`passed=True`、`thresholdsPassed=True`、`runtimeChainPassed=True`、`repeatRunPassed=True`、`blockingDebugErrors=0`、`performancePassObservationPollutionRisks=0`、`observationMaterializedQueries=12`、`observationMaterializedEntities=2400`、`observationMaterializationUs=57`、`magnitudeSourceCurrentValueLookups=0`、`magnitudeSourceCaptureMisses=0`、`magnitudeSourceFallbackValues=0`、`magnitudeSourceExecutionInputLookups=0`、`factsHash=0xA4A93C35`、`summaryHash=0x0D2FDB38`。
+
+该日志证明 pass-split 后的 performance evidence 不再被 Debugger observation materialization 污染，并证明 `runtimeCoreMagnitudeSource` / `runtimeMagnitudeSource` export 可读；但它没有触发真实 magnitude source counter，因此不能写成 SourceAttribute / TargetAttribute / ExecutionCalculation 语义覆盖完成。`debuggerOwnerAvgMs=56.546` 来自最终 diagnostics export / Debugger snapshot 物化，不是 tick hot path；日志仍显示 `profiler disabled; Entities profiler modules collect no data`，因此也不能写成 Profiler 性能闭环。
 
 ### 剩余风险
 

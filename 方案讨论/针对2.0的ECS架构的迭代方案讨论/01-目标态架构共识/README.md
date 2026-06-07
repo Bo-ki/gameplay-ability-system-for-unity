@@ -72,6 +72,16 @@ Unity DOTS 官方依据不再维护在本目录内。所有 Runtime Core、Debug
 | [Luban / SourceGenerator 收权论证](15-SourceGenerator职责边界Spec.md) | 将官方 DOTS 规则映射到生成器职责边界，说明为什么 generated lifecycle 不是目标态 |
 | [DOTS 官方规范复核与性能红线](18-DOTS官方规范复核与性能红线Spec.md) | 将官方 DOTS 规则映射到四层划分、GAS 业务链路、API 选型门槛和性能红线 |
 
+## 整体重划分代码入口
+
+需要理解目标态 GAS 架构“应该如何重新划分、为什么这样划分更合理、完整代码骨架如何阅读”时，默认从 [16-01 目标分层、官方依据与不变量](16-纯ECS内核与边界重划分/16-01-目标分层官方依据与不变量Spec.md) 开始。该页给出 Shell capability、Boundary command、Core `IJobChunk`、`NativeStream` deterministic fan-in、Diagnostics evidence、GeneratedDefinitionGlue 和 StructuralCommit 的目标态完整代码骨架与代码级说明。
+
+阅读顺序：
+
+1. 先读 `目标态模块 Owner Map`，确认哪些 Module 是目标态 owner。
+2. 再读 `目标态职责重划分验收表`，确认每个 owner 必须拥有和不得拥有的内容。
+3. 最后读 `目标态最小完整代码骨架`、`代码解读` 和 `重新划分合理性的代码级说明`，确认接口为什么不泄露 ECS handle、query、ECB、NativeContainer owner 或 generated lifecycle。
+
 ## 维护规则
 
 本目录遵守 [规范手册](../规范手册.md) 第3节（目标态 Spec 规范），不在此重复。
