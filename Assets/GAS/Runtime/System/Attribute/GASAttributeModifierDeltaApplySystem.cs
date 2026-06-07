@@ -1,9 +1,7 @@
-using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Jobs;
 
 namespace GAS.Runtime
 {
@@ -37,7 +35,7 @@ namespace GAS.Runtime
         public void OnUpdate(ref SystemState state)
         {
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
-            var ownerApplyHandle = new ApplyOwnerLocalPendingAttributeModifierDeltaChunkJob
+            state.Dependency = new ApplyOwnerLocalPendingAttributeModifierDeltaChunkJob
             {
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
                 PendingOwnerTypeHandle =
@@ -50,26 +48,6 @@ namespace GAS.Runtime
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
             }.Schedule(_ownerDeltaQuery, state.Dependency);
-
-            var pendingDeltas = new NativeList<PendingDeltaApplyRecord>(64, state.WorldUpdateAllocator);
-            state.Dependency = new ApplyStreamMigrationPendingAttributeModifierDeltaJob
-            {
-                StreamEntity = streamEntity,
-                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(isReadOnly: false),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
-                AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: false),
-                DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
-                DirtyLookup = SystemAPI.GetComponentLookup<AttributeDirtyComponent>(isReadOnly: false),
-                PendingDeltas = pendingDeltas,
-            }.Schedule(ownerApplyHandle);
-        }
-
-        private struct PendingDeltaApplyRecord
-        {
-            public int DeltaIndex;
-            public int Sequence;
-            public Entity TargetAsc;
         }
 
         [BurstCompile]
@@ -194,8 +172,7 @@ namespace GAS.Runtime
                     targetGroupCount,
                     maxTargetRange,
                     estimatedRandomLookupCount: 0,
-                    factPatchCount,
-                    migrationCarrierCount: 0);
+                    factPatchCount);
                 StreamLookup[StreamEntity] = stream;
             }
 
@@ -220,166 +197,6 @@ namespace GAS.Runtime
                 deltas.Clear();
                 pendingOwners[entityIndex] = default;
                 pendingMask[entityIndex] = false;
-            }
-        }
-
-        [BurstCompile]
-        private struct ApplyStreamMigrationPendingAttributeModifierDeltaJob : IJob
-        {
-            public Entity StreamEntity;
-            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<AttributeModifierBuffer> DeltaLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
-            public BufferLookup<AttributeValueBuffer> AttributeLookup;
-            [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
-            public ComponentLookup<AttributeDirtyComponent> DirtyLookup;
-            public NativeList<PendingDeltaApplyRecord> PendingDeltas;
-
-            public void Execute()
-            {
-                if (StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !DeltaLookup.HasBuffer(StreamEntity)
-                    || !FactLookup.HasBuffer(StreamEntity))
-                {
-                    return;
-                }
-
-                PendingDeltas.Clear();
-                var pendingCount = 0;
-                var deltas = DeltaLookup[StreamEntity];
-                var facts = FactLookup[StreamEntity];
-                for (var i = 0; i < deltas.Length; i++)
-                {
-                    var delta = deltas[i];
-                    if (!AttributeModifierBufferFlags.RequiresApply(delta.Flags))
-                        continue;
-
-                    pendingCount++;
-                    PendingDeltas.Add(new PendingDeltaApplyRecord
-                    {
-                        DeltaIndex = i,
-                        Sequence = delta.Sequence,
-                        TargetAsc = delta.TargetAsc,
-                    });
-                }
-
-                if (pendingCount <= 0)
-                    return;
-
-                PendingDeltas.Sort(new PendingDeltaApplyRecordComparer());
-                var appliedCount = 0;
-                var skippedCount = 0;
-                var targetGroupCount = 0;
-                var maxTargetRange = 0;
-                var estimatedRandomLookupCount = 0;
-                var factPatchCount = 0;
-
-                var rangeStart = 0;
-                while (rangeStart < PendingDeltas.Length)
-                {
-                    var target = PendingDeltas[rangeStart].TargetAsc;
-                    var rangeEnd = rangeStart + 1;
-                    while (rangeEnd < PendingDeltas.Length
-                           && CompareEntity(target, PendingDeltas[rangeEnd].TargetAsc) == 0)
-                    {
-                        rangeEnd++;
-                    }
-
-                    var rangeLength = rangeEnd - rangeStart;
-                    if (target == Entity.Null
-                        || IsDestroying(target)
-                        || !AttributeLookup.HasBuffer(target))
-                    {
-                        skippedCount += rangeLength;
-                        rangeStart = rangeEnd;
-                        continue;
-                    }
-
-                    targetGroupCount++;
-                    if (rangeLength > maxTargetRange)
-                        maxTargetRange = rangeLength;
-                    estimatedRandomLookupCount++;
-
-                    var attributes = AttributeLookup[target];
-                    var groupApplied = false;
-                    for (var recordIndex = rangeStart; recordIndex < rangeEnd; recordIndex++)
-                    {
-                        var record = PendingDeltas[recordIndex];
-                        var delta = deltas[record.DeltaIndex];
-                        if (!AttributeModifierBufferFlags.RequiresApply(delta.Flags)
-                            || !ApplyDelta(
-                                attributes,
-                                delta.AttrSetCode,
-                                delta.AttributeCode,
-                                delta.Op,
-                                delta.Magnitude,
-                                out var oldValue,
-                                out var newValue))
-                        {
-                            skippedCount++;
-                            continue;
-                        }
-
-                        delta.OldValue = oldValue;
-                        delta.NewValue = newValue;
-                        delta.Flags = (delta.Flags & ~AttributeModifierBufferFlags.RequiresCoreApply)
-                                      | AttributeModifierBufferFlags.AppliedByCore;
-                        deltas[record.DeltaIndex] = delta;
-                        appliedCount++;
-                        groupApplied = true;
-                        factPatchCount += UpdateLinkedExecutionFact(facts, delta.Sequence, oldValue, newValue);
-                    }
-
-                    if (groupApplied)
-                    {
-                        MarkOwnerDirty(target);
-                        estimatedRandomLookupCount++;
-                    }
-
-                    rangeStart = rangeEnd;
-                }
-
-                var stream = StreamLookup[StreamEntity];
-                WritePendingAttributeDeltaStats(
-                    ref stream,
-                    pendingCount,
-                    appliedCount,
-                    skippedCount,
-                    targetGroupCount,
-                    maxTargetRange,
-                    estimatedRandomLookupCount,
-                    factPatchCount,
-                    migrationCarrierCount: 1);
-                StreamLookup[StreamEntity] = stream;
-            }
-
-            private bool IsDestroying(Entity asc)
-            {
-                return DestroyingLookup.HasComponent(asc)
-                       && DestroyingLookup.IsComponentEnabled(asc);
-            }
-
-            private void MarkOwnerDirty(Entity asc)
-            {
-                if (DirtyLookup.HasComponent(asc))
-                    DirtyLookup.SetComponentEnabled(asc, true);
-            }
-        }
-
-        private struct PendingDeltaApplyRecordComparer : IComparer<PendingDeltaApplyRecord>
-        {
-            public int Compare(PendingDeltaApplyRecord x, PendingDeltaApplyRecord y)
-            {
-                var result = CompareEntity(x.TargetAsc, y.TargetAsc);
-                if (result != 0)
-                    return result;
-
-                result = x.Sequence.CompareTo(y.Sequence);
-                if (result != 0)
-                    return result;
-
-                return x.DeltaIndex.CompareTo(y.DeltaIndex);
             }
         }
 
@@ -510,8 +327,7 @@ namespace GAS.Runtime
             int targetGroupCount,
             int maxTargetRange,
             int estimatedRandomLookupCount,
-            int factPatchCount,
-            int migrationCarrierCount)
+            int factPatchCount)
         {
             stream.PendingAttributeDeltaCount += pendingCount;
             stream.PendingAttributeAppliedDeltaCount += appliedCount;
@@ -521,7 +337,6 @@ namespace GAS.Runtime
                 stream.PendingAttributeMaxTargetRange = maxTargetRange;
             stream.PendingAttributeEstimatedRandomLookupCount += estimatedRandomLookupCount;
             stream.PendingAttributeFactPatchCount += factPatchCount;
-            stream.PendingAttributeMigrationCarrierCount += migrationCarrierCount;
         }
     }
 }

@@ -8,7 +8,7 @@
 
 本轮复核后，`Assets/GAS/Runtime/System` 与 `Assets/GAS/Generated/CodeGen/Runtime` 内 `SystemAPI.QueryBuilder().Build()` 扫描为 0；手写 Runtime Core stored query 已统一改为 `state.GetEntityQuery(EntityQueryDesc)`。因此本 issue 不能再以“多数 Runtime 系统 QueryBuilder 承载长期 query 生命周期”作为当前诊断。
 
-新的 API 承载风险是：singleton owner、global facade、bridge direct EntityManager、managed registry/helper、stream migration fallback、以及 generated active mutation 仍依赖 singleton command carrier。active mutation apply 和 pending AttributeDelta owner-local apply 本身已进入 ASC chunk-local applicator，不能再写成 random lookup store。
+新的 API 承载风险是：singleton owner、global facade、bridge direct EntityManager、managed registry/helper、singleton stream fact carrier、generated instant delta record / fan-in 证明，以及 generated active mutation 仍依赖 singleton command carrier。active mutation apply 和 pending AttributeDelta owner-local apply 本身已进入 ASC chunk-local applicator，旧 pending AttributeDelta stream migration fallback 已删除，不能再写成 random lookup store。
 
 ## 已缓解部分
 
@@ -35,7 +35,7 @@
 4. `GEEffectCommandStreamComponent` singleton owner 承载 command/spec/delta/fact，多职责过载。
 5. `AutoChessGasCoreBridge` 集中直接 EM 操作，需继续 owner 化。
 6. generated active mutation 仍从 singleton `GEEffectCommandBuffer` carrier gather command，并用 frame-local `NativeList` / owner range hash map 做迁移期排序；apply 已是 ASC chunk-local，但 command carrier 还不是 `NativeStream` / target grouped frame 终局。
-7. ability lifecycle cross-entity marker、attribute owner marker、execution output applied marker、active mutation owner resource apply 和 pending AttributeDelta owner-local apply 已分别收口到 request buffer / owner chunk applicator；剩余 API 承载风险集中在 stream migration fallback、singleton stream、剩余边界缓冲、global facade，以及 active mutation `SourceAttribute` 跨 owner snapshot lane 缺口。
+7. ability lifecycle cross-entity marker、attribute owner marker、execution output applied marker、active mutation owner resource apply 和 pending AttributeDelta owner-local apply 已分别收口到 request buffer / owner chunk applicator；旧 pending AttributeDelta stream migration fallback 已删除。剩余 API 承载风险集中在 singleton stream、generated instant delta record / fan-in 证明、剩余边界缓冲、global facade，以及 active mutation `SourceAttribute` 跨 owner snapshot lane 缺口。
 
 ## 代码证据
 

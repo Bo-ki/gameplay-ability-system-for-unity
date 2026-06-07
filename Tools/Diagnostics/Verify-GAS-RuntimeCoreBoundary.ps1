@@ -95,16 +95,28 @@ Assert-FileNotContains `
     -Message "Owner-local pending attribute delta apply must not regress to serial BufferLookup owner apply."
 Assert-FileNotContains `
     -Path $deltaApplyPath `
-    -Pattern "ApplyOwnerLocalPendingAttributeModifierDeltaChunkJob\s*:\s*IJobChunk[\s\S]*?estimatedRandomLookupCount\+\+[\s\S]*?ApplyStreamMigrationPendingAttributeModifierDeltaJob" `
+    -Pattern "estimatedRandomLookupCount\+\+" `
     -Message "Chunk-local pending attribute delta apply must not count owner chunk writes as random lookups."
 Assert-FileContains `
     -Path $deltaApplyPath `
-    -Pattern "migrationCarrierCount:\s*0" `
-    -Message "Owner-local pending attribute delta apply must not count as a migration carrier."
-Assert-FileContains `
+    -Pattern "estimatedRandomLookupCount:\s*0" `
+    -Message "Owner-local pending attribute delta apply must keep chunk-local random lookup pressure at zero."
+Assert-FileNotContains `
+    -Path $deltaApplyPath `
+    -Pattern "migrationCarrierCount" `
+    -Message "Pending AttributeDelta core apply must not expose a stream migration carrier path."
+Assert-FileNotContains `
     -Path $deltaApplyPath `
     -Pattern "ApplyStreamMigrationPendingAttributeModifierDeltaJob" `
-    -Message "GASAttributeModifierDeltaApplySystem must keep the legacy stream migration fallback observable."
+    -Message "GASAttributeModifierDeltaApplySystem must not reintroduce the legacy stream migration fallback."
+Assert-FileNotContains `
+    -Path $deltaApplyPath `
+    -Pattern "PendingDeltaApplyRecord" `
+    -Message "GASAttributeModifierDeltaApplySystem must not rebuild stream fallback sort records."
+Assert-FileNotContains `
+    -Path $deltaApplyPath `
+    -Pattern "DeltaLookup\s*=\s*SystemAPI\.GetBufferLookup<AttributeModifierBuffer>" `
+    -Message "Pending AttributeDelta core apply must not scan the singleton stream AttributeModifierBuffer fallback."
 Assert-FileContains `
     -Path $ascArchetypePath `
     -Pattern "PendingAttributeModifierComponent" `
@@ -195,5 +207,5 @@ Assert-FileNotContains `
     -Message "AutoChess execution calculation must not write pending attribute deltas to the stream migration carrier."
 
 Write-Host "GAS Runtime Core boundary check passed: no AutoChess references under Assets/GAS/Runtime."
-Write-Host "GAS Runtime Core pending attribute delta contract passed: owner-local apply, legacy migration evidence, and debugger counters are wired."
+Write-Host "GAS Runtime Core pending attribute delta contract passed: owner-local apply, stream migration fallback retired, and debugger counters are wired."
 Write-Host "GAS Runtime Core active mutation contract passed: generated gather + ASC chunk-local apply path is wired."
