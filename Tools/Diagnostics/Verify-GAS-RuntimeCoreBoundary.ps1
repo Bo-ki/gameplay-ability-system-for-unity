@@ -563,6 +563,26 @@ Assert-FileNotContains `
     -Path $gameplayEffectRequestWriterPath `
     -Pattern "BeginCommandWriter\(em\)|AppendCommand\(em," `
     -Message "GameplayEffectRequestWriter must resolve stream owner explicitly before writing commands."
+Assert-FileContains `
+    -Path $gameplayEffectRequestWriterPath `
+    -Pattern "AppendPreparedCommand\([\s\S]*?command\.Kind != GEEffectCommandKind\.ActiveMutation[\s\S]*?writer\.AppendOwnerLocalActiveMutationCommand" `
+    -Message "GameplayEffectRequestWriter must route active mutation runtime requests through owner-local ASC command buffers."
+Assert-FileContains `
+    -Path $gameplayEffectRequestWriterPath `
+    -Pattern "TryGetActiveMutationOwnerPayload\([\s\S]*?em\.GetBuffer<ActiveEffectMutationSetByCallerValueBuffer>\(targetAsc\)" `
+    -Message "GameplayEffectRequestWriter must resolve owner-local active mutation set-by-caller payload buffers."
+Assert-FileContains `
+    -Path $gameplayEffectRequestWriterPath `
+    -Pattern "TryGetActiveMutationOwnerPayload\([\s\S]*?em\.GetBuffer<ActiveEffectMutationCommandBuffer>\(targetAsc\)" `
+    -Message "GameplayEffectRequestWriter must resolve target ASC owner-local command buffers."
+Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "AppendOwnerLocalActiveMutationCommand[\s\S]*?ownerCommands\.Add\(new ActiveEffectMutationCommandBuffer" `
+    -Message "EffectCommandSpecStream writer must support owner-local active mutation command append without adding to the singleton command buffer."
+Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "AppendOwnerLocalActiveMutationCommand[\s\S]*?CopyRequestSetByCallerValues\(ownerSetByCallerValues" `
+    -Message "EffectCommandSpecStream writer must copy runtime request set-by-caller payloads to owner-local active mutation payload buffers."
 Assert-FileNotContains `
     -Path $abilityRuntimeActionsPath `
     -Pattern "AppendGameplayEvent\(entityManager" `
@@ -927,6 +947,26 @@ Assert-FileContains `
     -Path $codeGenTemplatePath `
     -Pattern "if\s*\(resolved\.Kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?AppendActiveMutationCommand\(in resolved\);[\s\S]*?else[\s\S]*?CommandLookup\[StreamEntity\]\.Add\(resolved\);" `
     -Message "CodeGen template must keep ability commit active mutation commands off the singleton command stream."
+Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "AppendOwnerLocalActiveMutationCommand\([\s\S]*?DynamicBuffer<ActiveEffectMutationCommandBuffer> ownerCommands[\s\S]*?DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> ownerSetByCallerValues" `
+    -Message "EffectCommandSpecStream.CommandWriter must expose owner-local active mutation append while retaining stream-owned sequence allocation."
+Assert-FileContains `
+    -Path $gameplayEffectRequestWriterPath `
+    -Pattern "AppendPreparedCommand\([\s\S]*?writer\.AppendOwnerLocalActiveMutationCommand" `
+    -Message "GameplayEffectRequestWriter must route runtime/simple active mutation commands to ASC owner-local command buffers."
+Assert-FileContains `
+    -Path $gameplayEffectRequestWriterPath `
+    -Pattern "CanAppendActiveMutationCommand\([\s\S]*?HasBuffer<ActiveEffectMutationCommandBuffer>[\s\S]*?HasBuffer<ActiveEffectMutationSetByCallerValueBuffer>" `
+    -Message "GameplayEffectRequestWriter must preflight owner-local active mutation payload buffers."
+Assert-FileNotContains `
+    -Path $gameplayEffectRequestWriterPath `
+    -Pattern "var resolved\s*=\s*writer\.AppendCommand\(command,\s*setByCallerValues\);" `
+    -Message "GameplayEffectRequestWriter must not directly append prepared commands to the singleton stream without lane selection."
+Assert-FileNotContains `
+    -Path $gameplayEffectRequestWriterPath `
+    -Pattern "PrepareOwnerLocalCommand|Allocate\(ref stream\.NextCommandSequence\)" `
+    -Message "GameplayEffectRequestWriter must not duplicate EffectCommandSpecStream command sequence allocation."
 Assert-FileContains `
     -Path $activeEffectLifecycleOwnerPath `
     -Pattern "MutationBufferTypeHandle\s*=\s*SystemAPI\.GetBufferTypeHandle<ActiveEffectMutationBuffer>\(isReadOnly:\s*false\)" `

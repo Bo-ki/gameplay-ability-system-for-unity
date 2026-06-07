@@ -398,6 +398,63 @@ namespace GAS.Runtime
                 return resolved;
             }
 
+            public GEEffectCommandBuffer AppendOwnerLocalActiveMutationCommand(
+                in GEEffectCommandBuffer command,
+                DynamicBuffer<ActiveEffectMutationCommandBuffer> ownerCommands,
+                DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> ownerSetByCallerValues,
+                IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues)
+            {
+                if (!_isCreated
+                    || !ownerCommands.IsCreated
+                    || !ownerSetByCallerValues.IsCreated)
+                {
+                    return default;
+                }
+
+                var resolved = PrepareCommand(
+                    ref _stream,
+                    ownerSetByCallerValues.Length,
+                    command,
+                    setByCallerValues?.Count ?? 0,
+                    _currentFrame);
+
+                CopyRequestSetByCallerValues(ownerSetByCallerValues, setByCallerValues, resolved.Sequence);
+                ownerCommands.Add(new ActiveEffectMutationCommandBuffer
+                {
+                    Command = resolved,
+                });
+                return resolved;
+            }
+
+            public GEEffectCommandBuffer AppendOwnerLocalActiveMutationCommand(
+                in GEEffectCommandBuffer command,
+                DynamicBuffer<ActiveEffectMutationCommandBuffer> ownerCommands,
+                DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> ownerSetByCallerValues,
+                DynamicBuffer<GESetByCallerRequestValueBuffer> setByCallerValues)
+            {
+                if (!_isCreated
+                    || !ownerCommands.IsCreated
+                    || !ownerSetByCallerValues.IsCreated)
+                {
+                    return default;
+                }
+
+                var setByCallerCount = setByCallerValues.IsCreated ? setByCallerValues.Length : 0;
+                var resolved = PrepareCommand(
+                    ref _stream,
+                    ownerSetByCallerValues.Length,
+                    command,
+                    setByCallerCount,
+                    _currentFrame);
+
+                CopyRequestSetByCallerValues(ownerSetByCallerValues, setByCallerValues, resolved.Sequence);
+                ownerCommands.Add(new ActiveEffectMutationCommandBuffer
+                {
+                    Command = resolved,
+                });
+                return resolved;
+            }
+
             public void Flush()
             {
                 if (!_isCreated
@@ -929,6 +986,21 @@ namespace GAS.Runtime
             int setByCallerCount,
             int currentFrame)
         {
+            return PrepareCommand(
+                ref stream,
+                setByCallerBuffer.Length,
+                command,
+                setByCallerCount,
+                currentFrame);
+        }
+
+        private static GEEffectCommandBuffer PrepareCommand(
+            ref GEEffectCommandStreamComponent stream,
+            int setByCallerStart,
+            in GEEffectCommandBuffer command,
+            int setByCallerCount,
+            int currentFrame)
+        {
             var resolved = command;
             if (resolved.Sequence <= 0)
                 resolved.Sequence = Allocate(ref stream.NextCommandSequence);
@@ -943,9 +1015,57 @@ namespace GAS.Runtime
             if (resolved.Causer == Entity.Null)
                 resolved.Causer = resolved.SourceAbility;
 
-            resolved.SetByCallerStart = setByCallerBuffer.Length;
+            resolved.SetByCallerStart = setByCallerStart;
             resolved.SetByCallerCount = setByCallerCount;
             return resolved;
+        }
+
+        private static void CopyRequestSetByCallerValues(
+            DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> target,
+            IReadOnlyList<GESetByCallerRequestValueBuffer> source,
+            int commandSequence)
+        {
+            if (source == null)
+                return;
+
+            for (var i = 0; i < source.Count; i++)
+            {
+                var value = source[i];
+                target.Add(new ActiveEffectMutationSetByCallerValueBuffer
+                {
+                    Value = new GESetByCallerValueBuffer
+                    {
+                        CommandSequence = commandSequence,
+                        SpecSequence = 0,
+                        Key = value.Key,
+                        Value = value.Value,
+                    },
+                });
+            }
+        }
+
+        private static void CopyRequestSetByCallerValues(
+            DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> target,
+            DynamicBuffer<GESetByCallerRequestValueBuffer> source,
+            int commandSequence)
+        {
+            if (!source.IsCreated)
+                return;
+
+            for (var i = 0; i < source.Length; i++)
+            {
+                var value = source[i];
+                target.Add(new ActiveEffectMutationSetByCallerValueBuffer
+                {
+                    Value = new GESetByCallerValueBuffer
+                    {
+                        CommandSequence = commandSequence,
+                        SpecSequence = 0,
+                        Key = value.Key,
+                        Value = value.Value,
+                    },
+                });
+            }
         }
 
         private static void SortParallelCommandFanInRecords(List<ParallelCommandFanInRecord> records)

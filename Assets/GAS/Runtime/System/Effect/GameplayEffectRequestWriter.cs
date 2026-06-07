@@ -71,14 +71,14 @@ namespace GAS.Runtime
             if (targetAscs == null || targetAscs.Count == 0)
                 return false;
 
+            if (!TryResolveStreamWriteContext(em, out var streamEntity, out var currentFrame))
+                return false;
+
             for (var i = 0; i < targetAscs.Count; i++)
             {
                 if (!CanAppendEffectCommand(em, request, targetAscs[i], targetDataKind, source))
                     return false;
             }
-
-            if (!TryResolveStreamWriteContext(em, out var streamEntity, out var currentFrame))
-                return false;
 
             var writer = EffectCommandSpecStream.BeginCommandWriter(em, streamEntity, currentFrame);
             if (!writer.IsCreated)
@@ -93,7 +93,9 @@ namespace GAS.Runtime
                     targetDataKind,
                     source,
                     out var command);
-                writer.AppendCommand(command, setByCallerValues);
+                var resolved = AppendPreparedCommand(em, ref writer, in command, setByCallerValues);
+                if (resolved.Sequence <= 0)
+                    return false;
             }
 
             writer.Flush();
@@ -134,7 +136,7 @@ namespace GAS.Runtime
             if (!writer.IsCreated)
                 return false;
 
-            var resolved = writer.AppendCommand(command, setByCallerValues);
+            var resolved = AppendPreparedCommand(em, ref writer, in command, setByCallerValues);
             writer.Flush();
             return resolved.Sequence > 0;
         }
@@ -157,7 +159,7 @@ namespace GAS.Runtime
             if (!writer.IsCreated)
                 return false;
 
-            var resolved = writer.AppendCommand(command, setByCallerValues);
+            var resolved = AppendPreparedCommand(em, ref writer, in command, setByCallerValues);
             writer.Flush();
             return resolved.Sequence > 0;
         }
@@ -179,6 +181,84 @@ namespace GAS.Runtime
                 out command);
         }
 
+        private static bool CanAppendActiveMutationCommand(
+            EntityManager em,
+            in GEEffectCommandBuffer command)
+        {
+            var targetAsc = ResolveTargetAsc(in command);
+            return targetAsc != Entity.Null
+                && em.Exists(targetAsc)
+                && em.HasBuffer<ActiveEffectMutationCommandBuffer>(targetAsc)
+                && em.HasBuffer<ActiveEffectMutationSetByCallerValueBuffer>(targetAsc);
+        }
+
+        private static GEEffectCommandBuffer AppendPreparedCommand(
+            EntityManager em,
+            ref EffectCommandSpecStream.CommandWriter writer,
+            in GEEffectCommandBuffer command,
+            IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues)
+        {
+            if (command.Kind != GEEffectCommandKind.ActiveMutation)
+                return writer.AppendCommand(command, setByCallerValues);
+
+            return TryGetActiveMutationOwnerPayload(
+                    em,
+                    in command,
+                    out var ownerCommands,
+                    out var ownerSetByCallerValues)
+                ? writer.AppendOwnerLocalActiveMutationCommand(
+                    command,
+                    ownerCommands,
+                    ownerSetByCallerValues,
+                    setByCallerValues)
+                : default;
+        }
+
+        private static GEEffectCommandBuffer AppendPreparedCommand(
+            EntityManager em,
+            ref EffectCommandSpecStream.CommandWriter writer,
+            in GEEffectCommandBuffer command,
+            DynamicBuffer<GESetByCallerRequestValueBuffer> setByCallerValues)
+        {
+            if (command.Kind != GEEffectCommandKind.ActiveMutation)
+                return writer.AppendCommand(command, setByCallerValues);
+
+            return TryGetActiveMutationOwnerPayload(
+                    em,
+                    in command,
+                    out var ownerCommands,
+                    out var ownerSetByCallerValues)
+                ? writer.AppendOwnerLocalActiveMutationCommand(
+                    command,
+                    ownerCommands,
+                    ownerSetByCallerValues,
+                    setByCallerValues)
+                : default;
+        }
+
+        private static bool TryGetActiveMutationOwnerPayload(
+            EntityManager em,
+            in GEEffectCommandBuffer command,
+            out DynamicBuffer<ActiveEffectMutationCommandBuffer> ownerCommands,
+            out DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> ownerSetByCallerValues)
+        {
+            ownerCommands = default;
+            ownerSetByCallerValues = default;
+
+            var targetAsc = ResolveTargetAsc(in command);
+            if (targetAsc == Entity.Null
+                || !em.Exists(targetAsc)
+                || !em.HasBuffer<ActiveEffectMutationCommandBuffer>(targetAsc)
+                || !em.HasBuffer<ActiveEffectMutationSetByCallerValueBuffer>(targetAsc))
+            {
+                return false;
+            }
+
+            ownerCommands = em.GetBuffer<ActiveEffectMutationCommandBuffer>(targetAsc);
+            ownerSetByCallerValues = em.GetBuffer<ActiveEffectMutationSetByCallerValueBuffer>(targetAsc);
+            return true;
+        }
+
         private static bool CanAppendEffectCommand(
             EntityManager em,
             in GEApplyRequestComponent request,
@@ -192,7 +272,9 @@ namespace GAS.Runtime
                 targetAsc,
                 targetDataKind,
                 source,
-                out _);
+                out var command)
+                && (command.Kind != GEEffectCommandKind.ActiveMutation
+                    || CanAppendActiveMutationCommand(em, in command));
         }
 
         private static bool PrepareAppendableCommand(
@@ -217,6 +299,11 @@ namespace GAS.Runtime
             return true;
         }
 
+        private static Entity ResolveTargetAsc(in GEEffectCommandBuffer command)
+        {
+            return command.TargetAsc != Entity.Null ? command.TargetAsc : command.SourceAsc;
+        }
+
         private static GEEffectCommandSource ResolveCommandSource(in GEApplyRequestComponent request)
         {
             return request.SourceAbility != Entity.Null
@@ -231,6 +318,8 @@ namespace GAS.Runtime
         {
             currentFrame = 0;
             if (!EffectCommandSpecStream.TryGetSingleton(em, out streamEntity))
+                return false;
+            if (!em.HasComponent<GEEffectCommandStreamComponent>(streamEntity))
                 return false;
 
             currentFrame = GASRuntimeFrameContext.ResolveCurrentFrame(em);
