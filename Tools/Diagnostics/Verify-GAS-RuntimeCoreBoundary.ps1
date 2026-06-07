@@ -201,6 +201,10 @@ Assert-FileContains `
     -Message "AutoChess damage execution must acquire target ASC owner-local fact buffers."
 Assert-FileContains `
     -Path $autoChessDamagePath `
+    -Pattern "if\s*\(OwnerFactLookup\.HasBuffer\(targetAsc\)\)" `
+    -Message "AutoChess damage execution must guard owner-local fact writes without blocking pending delta writes."
+Assert-FileContains `
+    -Path $autoChessDamagePath `
     -Pattern "OwnerFactLookup\[targetAsc\]\.Add\(new OwnerLocalGameplayFactBuffer" `
     -Message "AutoChess damage execution facts must append through owner-local facts so linked delta patching can update them."
 Assert-FileNotContains `
@@ -927,6 +931,18 @@ Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "BeginGameplayEventWriter\(EntityManager em\)" `
     -Message "GEEffectCommandSpecStream must not expose implicit singleton gameplay event writer helpers."
+Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "_em\.GetBuffer<OwnerLocalGameplayFactBuffer>\(owner\)\.Add\(new OwnerLocalGameplayFactBuffer" `
+    -Message "GEEffectCommandSpecStream gameplay event writer must append facts through ASC owner-local fact buffers."
+Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "ResolveFactOwner\(in GameplayEventBuffer fact\)" `
+    -Message "GEEffectCommandSpecStream gameplay event writer must resolve fact owner from TargetAsc/SourceAsc."
+Assert-FileNotContains `
+    -Path $streamPath `
+    -Pattern "DynamicBuffer<GameplayEventBuffer> _facts|_facts\.Add\(resolved\)|var facts = em\.GetBuffer<GameplayEventBuffer>\(streamEntity\)" `
+    -Message "GEEffectCommandSpecStream gameplay event writer must not keep singleton GameplayEventBuffer as its write target."
 Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "AppendCommand\(EntityManager em|AppendGameplayEvent\(EntityManager em" `

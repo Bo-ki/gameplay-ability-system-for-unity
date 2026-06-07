@@ -546,7 +546,6 @@ namespace GAS.Runtime
             private EntityManager _em;
             private Entity _streamEntity;
             private GEEffectCommandStreamComponent _stream;
-            private DynamicBuffer<GameplayEventBuffer> _facts;
             private int _currentFrame;
             private bool _isCreated;
 
@@ -554,13 +553,11 @@ namespace GAS.Runtime
                 EntityManager em,
                 Entity streamEntity,
                 GEEffectCommandStreamComponent stream,
-                DynamicBuffer<GameplayEventBuffer> facts,
                 int currentFrame)
             {
                 _em = em;
                 _streamEntity = streamEntity;
                 _stream = stream;
-                _facts = facts;
                 _currentFrame = currentFrame;
                 _isCreated = true;
             }
@@ -577,12 +574,23 @@ namespace GAS.Runtime
                     return default;
 
                 var resolved = fact;
+                var owner = ResolveFactOwner(in resolved);
+                if (owner == Entity.Null
+                    || !_em.Exists(owner)
+                    || !_em.HasBuffer<OwnerLocalGameplayFactBuffer>(owner))
+                {
+                    return default;
+                }
+
                 if (resolved.Sequence <= 0)
                     resolved.Sequence = Allocate(ref _stream.NextFactSequence);
                 if (resolved.Frame <= 0)
                     resolved.Frame = _currentFrame;
 
-                _facts.Add(resolved);
+                _em.GetBuffer<OwnerLocalGameplayFactBuffer>(owner).Add(new OwnerLocalGameplayFactBuffer
+                {
+                    Fact = resolved,
+                });
                 return resolved;
             }
 
@@ -596,6 +604,15 @@ namespace GAS.Runtime
                 }
 
                 _em.SetComponentData(_streamEntity, _stream);
+            }
+
+            private static Entity ResolveFactOwner(in GameplayEventBuffer fact)
+            {
+                if (fact.TargetAsc != Entity.Null)
+                    return fact.TargetAsc;
+                if (fact.SourceAsc != Entity.Null)
+                    return fact.SourceAsc;
+                return Entity.Null;
             }
         }
 
@@ -740,12 +757,10 @@ namespace GAS.Runtime
                 return default;
 
             var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
-            var facts = em.GetBuffer<GameplayEventBuffer>(streamEntity);
             return new GameplayEventWriter(
                 em,
                 streamEntity,
                 stream,
-                facts,
                 currentFrame);
         }
 
