@@ -92,6 +92,16 @@ namespace GAS.Runtime
         public int MagnitudeSourceSourceAttributeLookupCount;
         public int MagnitudeSourceTargetAttributeLookupCount;
         public int MagnitudeSourceExecutionInputLookupCount;
+        public int ActiveEffectSlotSourceSnapshotCapacity;
+        public int ActiveEffectSlotSourceSnapshotGatherAttemptCount;
+        public int ActiveEffectSlotSourceSnapshotWriteCount;
+        public int ActiveEffectSlotSourceSnapshotWriteFailureCount;
+        public int ActiveEffectSlotSourceSnapshotAttributeMissCount;
+        public int ActiveEffectSlotSourceSnapshotApplyHitCount;
+        public int ActiveEffectSlotSourceSnapshotApplyMissCount;
+        public int ActiveEffectSlotSourceSnapshotFallbackCount;
+        public int ActiveEffectSlotSourceSnapshotCapacityPressureCount;
+        public int ActiveEffectSlotSourceSnapshotSpillCount;
     }
 
     [InternalBufferCapacity(0)]
@@ -769,6 +779,16 @@ namespace GAS.Runtime
             stream.MagnitudeSourceSourceAttributeLookupCount = 0;
             stream.MagnitudeSourceTargetAttributeLookupCount = 0;
             stream.MagnitudeSourceExecutionInputLookupCount = 0;
+            stream.ActiveEffectSlotSourceSnapshotCapacity = 0;
+            stream.ActiveEffectSlotSourceSnapshotGatherAttemptCount = 0;
+            stream.ActiveEffectSlotSourceSnapshotWriteCount = 0;
+            stream.ActiveEffectSlotSourceSnapshotWriteFailureCount = 0;
+            stream.ActiveEffectSlotSourceSnapshotAttributeMissCount = 0;
+            stream.ActiveEffectSlotSourceSnapshotApplyHitCount = 0;
+            stream.ActiveEffectSlotSourceSnapshotApplyMissCount = 0;
+            stream.ActiveEffectSlotSourceSnapshotFallbackCount = 0;
+            stream.ActiveEffectSlotSourceSnapshotCapacityPressureCount = 0;
+            stream.ActiveEffectSlotSourceSnapshotSpillCount = 0;
         }
 
         public static void AddMagnitudeSourceCounters(
@@ -827,6 +847,36 @@ namespace GAS.Runtime
             stream.MagnitudeSourceSourceAttributeLookupCount += sourceAttributeLookups;
             stream.MagnitudeSourceTargetAttributeLookupCount += targetAttributeLookups;
             stream.MagnitudeSourceExecutionInputLookupCount += executionInputLookups;
+        }
+
+        public static void SetActiveEffectSlotSourceSnapshotCapacity(
+            ref GEEffectCommandStreamComponent stream,
+            int capacity)
+        {
+            stream.ActiveEffectSlotSourceSnapshotCapacity = capacity < 0 ? 0 : capacity;
+        }
+
+        public static void AddActiveEffectSlotSourceSnapshotCounters(
+            ref GEEffectCommandStreamComponent stream,
+            int gatherAttempts,
+            int snapshotWrites,
+            int snapshotWriteFailures,
+            int attributeMisses,
+            int applyHits,
+            int applyMisses,
+            int fallbackValues,
+            int capacityPressure,
+            int spillCount)
+        {
+            stream.ActiveEffectSlotSourceSnapshotGatherAttemptCount += gatherAttempts;
+            stream.ActiveEffectSlotSourceSnapshotWriteCount += snapshotWrites;
+            stream.ActiveEffectSlotSourceSnapshotWriteFailureCount += snapshotWriteFailures;
+            stream.ActiveEffectSlotSourceSnapshotAttributeMissCount += attributeMisses;
+            stream.ActiveEffectSlotSourceSnapshotApplyHitCount += applyHits;
+            stream.ActiveEffectSlotSourceSnapshotApplyMissCount += applyMisses;
+            stream.ActiveEffectSlotSourceSnapshotFallbackCount += fallbackValues;
+            stream.ActiveEffectSlotSourceSnapshotCapacityPressureCount += capacityPressure;
+            stream.ActiveEffectSlotSourceSnapshotSpillCount += spillCount;
         }
 
         public static GEEffectCommandBuffer ToCommand(

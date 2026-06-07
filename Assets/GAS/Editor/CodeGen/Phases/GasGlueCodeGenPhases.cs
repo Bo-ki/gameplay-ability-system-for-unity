@@ -2899,6 +2899,7 @@ using GAS.Runtime;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 
@@ -3132,16 +3133,32 @@ namespace __ROOT_NAMESPACE__
                 : Entity.Null;
             var structuralEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
+            var grantedAbilityArchetype = GASRuntimeEntityArchetypes.GrantedAbility(em);
+            var ownerChunkCount = _ownerQuery.CalculateChunkCountWithoutFiltering();
+            if (ownerChunkCount <= 0)
+                return;
+
             var ownerCapacity = _ownerQuery.CalculateEntityCount();
             ref var catalog = ref catalogComponent.Catalog.Value;
             var activeEffectSlotSourceAttributeSnapshotCapacity =
                 GASGeneratedActiveEffectRuntime.EstimateActiveEffectSlotSourceAttributeSnapshotCapacity(
                     ref catalog,
                     ownerCapacity);
+            var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
+            EffectCommandSpecStream.SetActiveEffectSlotSourceSnapshotCapacity(
+                ref stream,
+                activeEffectSlotSourceAttributeSnapshotCapacity);
+            em.SetComponentData(streamEntity, stream);
+
             var activeEffectSlotSourceAttributeSnapshots =
                 new NativeParallelHashMap<GASGeneratedActiveEffectRuntime.ActiveEffectSlotSourceAttributeSnapshotKey, float>(
                     activeEffectSlotSourceAttributeSnapshotCapacity,
                     state.WorldUpdateAllocator);
+            var activeEffectSlotSourceSnapshotLaneCounters =
+                CollectionHelper.CreateNativeArray<GASGeneratedActiveEffectRuntime.ActiveEffectSlotSourceSnapshotLaneCounters>(
+                    ownerChunkCount,
+                    state.WorldUpdateAllocator,
+                    NativeArrayOptions.ClearMemory);
             var snapshotGatherJob = new GASGeneratedActiveEffectRuntime.GEActiveEffectPreTickSourceAttributeSnapshotGatherJob
             {
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
@@ -3150,6 +3167,7 @@ namespace __ROOT_NAMESPACE__
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true),
                 Catalog = catalogComponent.Catalog,
                 ActiveEffectSlotSourceAttributeSnapshots = activeEffectSlotSourceAttributeSnapshots.AsParallelWriter(),
+                SnapshotLaneCounters = activeEffectSlotSourceSnapshotLaneCounters,
                 Frame = frame,
             };
             var snapshotDependency = snapshotGatherJob.ScheduleParallel(_ownerQuery, state.Dependency);
@@ -3183,9 +3201,10 @@ namespace __ROOT_NAMESPACE__
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
-                GrantedAbilityArchetype = GASRuntimeEntityArchetypes.GrantedAbility(em),
+                GrantedAbilityArchetype = grantedAbilityArchetype,
                 Catalog = catalogComponent.Catalog,
                 ActiveEffectSlotSourceAttributeSnapshots = activeEffectSlotSourceAttributeSnapshots,
+                SnapshotLaneCounters = activeEffectSlotSourceSnapshotLaneCounters,
                 StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
                 Frame = frame,
@@ -3230,6 +3249,19 @@ namespace __ROOT_NAMESPACE__
                 : Entity.Null;
             var structuralEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
+            var emptyActiveEffectSlotSourceAttributeSnapshots =
+                new NativeParallelHashMap<GASGeneratedActiveEffectRuntime.ActiveEffectSlotSourceAttributeSnapshotKey, float>(
+                    1,
+                    state.WorldUpdateAllocator);
+            var removeChunkCount = _removeCommandQuery.CalculateChunkCountWithoutFiltering();
+            if (removeChunkCount <= 0)
+                return;
+
+            var activeEffectSlotSourceSnapshotLaneCounters =
+                CollectionHelper.CreateNativeArray<GASGeneratedActiveEffectRuntime.ActiveEffectSlotSourceSnapshotLaneCounters>(
+                    removeChunkCount,
+                    state.WorldUpdateAllocator,
+                    NativeArrayOptions.ClearMemory);
 
             state.Dependency = new GASGeneratedActiveEffectRuntime.GEActiveEffectPreTickJob
             {
@@ -3261,6 +3293,8 @@ namespace __ROOT_NAMESPACE__
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
+                ActiveEffectSlotSourceAttributeSnapshots = emptyActiveEffectSlotSourceAttributeSnapshots,
+                SnapshotLaneCounters = activeEffectSlotSourceSnapshotLaneCounters,
                 StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
                 Frame = frame,
@@ -3360,6 +3394,62 @@ namespace __ROOT_NAMESPACE__
             int modifierIndex)
         {
             return new ActiveEffectSlotSourceAttributeSnapshotKey(owner, slotSequence, modifierIndex);
+        }
+
+        public struct ActiveEffectSlotSourceSnapshotLaneCounters
+        {
+            public int GatherAttemptCount;
+            public int SnapshotWriteCount;
+            public int SnapshotWriteFailureCount;
+            public int AttributeMissCount;
+            public int ApplyHitCount;
+            public int ApplyMissCount;
+            public int FallbackValueCount;
+            public int CapacityPressureCount;
+            public int SpillCount;
+
+            public bool HasEvidence =>
+                GatherAttemptCount > 0
+                || SnapshotWriteCount > 0
+                || SnapshotWriteFailureCount > 0
+                || AttributeMissCount > 0
+                || ApplyHitCount > 0
+                || ApplyMissCount > 0
+                || FallbackValueCount > 0
+                || CapacityPressureCount > 0
+                || SpillCount > 0;
+
+            public void RecordSnapshotWrite(bool success)
+            {
+                GatherAttemptCount++;
+                if (success)
+                {
+                    SnapshotWriteCount++;
+                    return;
+                }
+
+                SnapshotWriteFailureCount++;
+                CapacityPressureCount++;
+                SpillCount++;
+            }
+
+            public void AddToStream(ref GEEffectCommandStreamComponent stream)
+            {
+                if (!HasEvidence)
+                    return;
+
+                EffectCommandSpecStream.AddActiveEffectSlotSourceSnapshotCounters(
+                    ref stream,
+                    GatherAttemptCount,
+                    SnapshotWriteCount,
+                    SnapshotWriteFailureCount,
+                    AttributeMissCount,
+                    ApplyHitCount,
+                    ApplyMissCount,
+                    FallbackValueCount,
+                    CapacityPressureCount,
+                    SpillCount);
+            }
         }
 
         private struct ActiveEffectMagnitudeSourceCounters
@@ -4785,6 +4875,7 @@ namespace __ROOT_NAMESPACE__
             [ReadOnly] public BufferLookup<AttributeValueBuffer> AttributeLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public NativeParallelHashMap<ActiveEffectSlotSourceAttributeSnapshotKey, float>.ParallelWriter ActiveEffectSlotSourceAttributeSnapshots;
+            [NativeDisableParallelForRestriction] public NativeArray<ActiveEffectSlotSourceSnapshotLaneCounters> SnapshotLaneCounters;
             public int Frame;
 
             public void Execute(
@@ -4799,6 +4890,12 @@ namespace __ROOT_NAMESPACE__
                 ref var catalog = ref Catalog.Value;
                 var owners = chunk.GetNativeArray(EntityTypeHandle);
                 var slotBuffers = chunk.GetBufferAccessorRO(ref ActiveEffectSlotBufferTypeHandle);
+                var snapshotLaneCounters = default(ActiveEffectSlotSourceSnapshotLaneCounters);
+                var hasSnapshotLaneCounters = SnapshotLaneCounters.IsCreated
+                    && (uint)unfilteredChunkIndex < (uint)SnapshotLaneCounters.Length;
+                if (hasSnapshotLaneCounters)
+                    snapshotLaneCounters = SnapshotLaneCounters[unfilteredChunkIndex];
+
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
@@ -4829,17 +4926,26 @@ namespace __ROOT_NAMESPACE__
                                 continue;
 
                             var modifier = catalog.Modifiers[modifierIndex];
-                            if (modifier.MagnitudeSource != EMagnitudeSource.SourceAttribute
-                                || !TryReadSnapshotAttributeValue(sourceAttributes, in modifier, out var sourceValue))
+                            if (modifier.MagnitudeSource != EMagnitudeSource.SourceAttribute)
                             {
                                 continue;
                             }
 
+                            if (!TryReadSnapshotAttributeValue(sourceAttributes, in modifier, out var sourceValue))
+                            {
+                                snapshotLaneCounters.AttributeMissCount++;
+                                continue;
+                            }
+
                             var snapshotKey = MakeActiveEffectSlotSourceAttributeSnapshotKey(owner, slot.Sequence, modifierIndex);
-                            ActiveEffectSlotSourceAttributeSnapshots.TryAdd(snapshotKey, sourceValue);
+                            snapshotLaneCounters.RecordSnapshotWrite(
+                                ActiveEffectSlotSourceAttributeSnapshots.TryAdd(snapshotKey, sourceValue));
                         }
                     }
                 }
+
+                if (hasSnapshotLaneCounters)
+                    SnapshotLaneCounters[unfilteredChunkIndex] = snapshotLaneCounters;
             }
 
             private static bool TryReadSnapshotAttributeValue(
@@ -4901,6 +5007,7 @@ namespace __ROOT_NAMESPACE__
             public EntityArchetype GrantedAbilityArchetype;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             [ReadOnly] public NativeParallelHashMap<ActiveEffectSlotSourceAttributeSnapshotKey, float> ActiveEffectSlotSourceAttributeSnapshots;
+            [NativeDisableParallelForRestriction] public NativeArray<ActiveEffectSlotSourceSnapshotLaneCounters> SnapshotLaneCounters;
             public Entity StreamEntity;
             public Entity EventBusEntity;
             public int Frame;
@@ -4950,6 +5057,12 @@ namespace __ROOT_NAMESPACE__
                 var slotBuffers = chunk.GetBufferAccessor(ref ActiveEffectSlotBufferTypeHandle);
                 var mutations = MutationLookup[StreamEntity];
                 var magnitudeSourceCounters = default(ActiveEffectMagnitudeSourceCounters);
+                var snapshotLaneCounters = default(ActiveEffectSlotSourceSnapshotLaneCounters);
+                var hasSnapshotLaneCounters = SnapshotLaneCounters.IsCreated
+                    && (uint)unfilteredChunkIndex < (uint)SnapshotLaneCounters.Length;
+                if (hasSnapshotLaneCounters)
+                    snapshotLaneCounters = SnapshotLaneCounters[unfilteredChunkIndex];
+
                 var removeCommandBuffers = ProcessExplicitRemoveCommands
                     ? chunk.GetBufferAccessor(ref RemoveCommandBufferTypeHandle)
                     : default;
@@ -4976,7 +5089,8 @@ namespace __ROOT_NAMESPACE__
                                 ref ownerResources,
                                 mutations,
                                 ref catalog,
-                                ref magnitudeSourceCounters);
+                                ref magnitudeSourceCounters,
+                                ref snapshotLaneCounters);
                         }
                     }
 
@@ -5000,7 +5114,10 @@ namespace __ROOT_NAMESPACE__
                     stores[entityIndex] = ownerResources.Store;
                 }
 
-                FlushMagnitudeSourceCounters(ref magnitudeSourceCounters);
+                if (hasSnapshotLaneCounters)
+                    SnapshotLaneCounters[unfilteredChunkIndex] = snapshotLaneCounters;
+
+                FlushMagnitudeSourceCounters(ref magnitudeSourceCounters, ref snapshotLaneCounters);
             }
 
             private ActiveEffectOwnerResources CaptureActiveEffectOwnerResources(
@@ -5060,17 +5177,24 @@ namespace __ROOT_NAMESPACE__
                     TagMaskLookup[ownerResources.Owner] = ownerResources.TargetTags;
             }
 
-            private void FlushMagnitudeSourceCounters(ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
+            private void FlushMagnitudeSourceCounters(
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters,
+                ref ActiveEffectSlotSourceSnapshotLaneCounters snapshotLaneCounters)
             {
                 if (!magnitudeSourceCounters.HasEvidence
-                    || StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity))
+                    && !snapshotLaneCounters.HasEvidence)
+                {
+                    return;
+                }
+
+                if (StreamEntity == Entity.Null || !StreamLookup.HasComponent(StreamEntity))
                 {
                     return;
                 }
 
                 var stream = StreamLookup[StreamEntity];
                 magnitudeSourceCounters.AddToStream(ref stream);
+                snapshotLaneCounters.AddToStream(ref stream);
                 StreamLookup[StreamEntity] = stream;
             }
 
@@ -5087,7 +5211,8 @@ namespace __ROOT_NAMESPACE__
                 ref ActiveEffectOwnerResources ownerResources,
                 DynamicBuffer<ActiveEffectMutationBuffer> mutations,
                 ref GASDefinitionCatalogBlob catalog,
-                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters,
+                ref ActiveEffectSlotSourceSnapshotLaneCounters snapshotLaneCounters)
             {
                 if (!StreamLookup.HasComponent(StreamEntity))
                     return;
@@ -5127,10 +5252,11 @@ namespace __ROOT_NAMESPACE__
                     {
                         HandleDurationExpired(
                             ref ownerResources,
-                            slotIndex,
-                            ref catalog,
-                            mutations,
-                            ref magnitudeSourceCounters);
+                                slotIndex,
+                                ref catalog,
+                                mutations,
+                                ref magnitudeSourceCounters,
+                                ref snapshotLaneCounters);
                     }
                 }
             }
@@ -5158,7 +5284,8 @@ namespace __ROOT_NAMESPACE__
                 int slotIndex,
                 ref GASDefinitionCatalogBlob catalog,
                 DynamicBuffer<ActiveEffectMutationBuffer> mutations,
-                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters,
+                ref ActiveEffectSlotSourceSnapshotLaneCounters snapshotLaneCounters)
             {
                 if ((uint)slotIndex >= (uint)ownerResources.Slots.Length)
                     return;
@@ -5191,7 +5318,8 @@ namespace __ROOT_NAMESPACE__
                         ref catalog,
                         in gameplayEffect,
                         in slot,
-                        ref magnitudeSourceCounters);
+                        ref magnitudeSourceCounters,
+                        ref snapshotLaneCounters);
                     mutations.Add(CreateStackMutation(in slot, Frame));
                     EnqueueStackCountChangedEvent(in slot);
                     return;
@@ -5246,7 +5374,8 @@ namespace __ROOT_NAMESPACE__
                 ref GASDefinitionCatalogBlob catalog,
                 in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
                 in ActiveGameplayEffectBuffer slot,
-                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters,
+                ref ActiveEffectSlotSourceSnapshotLaneCounters snapshotLaneCounters)
             {
                 if (gameplayEffect.ModifierCount <= 0
                     || !ownerResources.HasAttributes
@@ -5279,7 +5408,8 @@ namespace __ROOT_NAMESPACE__
                         setByCallerSnapshot,
                         modifierIndex,
                         in modifier,
-                        ref magnitudeSourceCounters);
+                        ref magnitudeSourceCounters,
+                        ref snapshotLaneCounters);
                     if (!GASGeneratedMagnitudeEvaluator.TryResolveMagnitude(in modifier, in context, out var magnitude))
                         continue;
 
@@ -5307,7 +5437,8 @@ namespace __ROOT_NAMESPACE__
                 DynamicBuffer<ActiveGameplayEffectSetByCallerValueBuffer> setByCallerSnapshot,
                 int modifierIndex,
                 in GASCatalogModifierDefinitionBlob modifier,
-                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters,
+                ref ActiveEffectSlotSourceSnapshotLaneCounters snapshotLaneCounters)
             {
                 var context = new MagnitudeEvalContext
                 {
@@ -5335,6 +5466,7 @@ namespace __ROOT_NAMESPACE__
                             modifierIndex,
                             in modifier,
                             ref magnitudeSourceCounters,
+                            ref snapshotLaneCounters,
                             out var sourceValue))
                     {
                         context.HasSourceAttributeValue = 1;
@@ -5358,6 +5490,7 @@ namespace __ROOT_NAMESPACE__
                     else
                     {
                         magnitudeSourceCounters.FallbackValueCount++;
+                        snapshotLaneCounters.FallbackValueCount++;
                     }
                 }
 
@@ -5370,6 +5503,7 @@ namespace __ROOT_NAMESPACE__
                 int modifierIndex,
                 in GASCatalogModifierDefinitionBlob modifier,
                 ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters,
+                ref ActiveEffectSlotSourceSnapshotLaneCounters snapshotLaneCounters,
                 out float value)
             {
                 if (CompareEntity(ownerResources.Owner, slot.SourceAsc) == 0)
@@ -5382,6 +5516,7 @@ namespace __ROOT_NAMESPACE__
                 if (slot.SourceAsc == Entity.Null || !ActiveEffectSlotSourceAttributeSnapshots.IsCreated)
                 {
                     magnitudeSourceCounters.CaptureMissCount++;
+                    snapshotLaneCounters.ApplyMissCount++;
                     return false;
                 }
 
@@ -5389,10 +5524,12 @@ namespace __ROOT_NAMESPACE__
                 if (ActiveEffectSlotSourceAttributeSnapshots.TryGetValue(snapshotKey, out value))
                 {
                     magnitudeSourceCounters.CapturedValueHitCount++;
+                    snapshotLaneCounters.ApplyHitCount++;
                     return true;
                 }
 
                 magnitudeSourceCounters.CaptureMissCount++;
+                snapshotLaneCounters.ApplyMissCount++;
                 return false;
             }
 

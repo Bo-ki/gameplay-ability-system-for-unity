@@ -241,6 +241,16 @@ namespace GAS.Runtime
         public int MagnitudeSourceSourceAttributeLookupCount;
         public int MagnitudeSourceTargetAttributeLookupCount;
         public int MagnitudeSourceExecutionInputLookupCount;
+        public int ActiveEffectSlotSourceSnapshotCapacity;
+        public int ActiveEffectSlotSourceSnapshotGatherAttemptCount;
+        public int ActiveEffectSlotSourceSnapshotWriteCount;
+        public int ActiveEffectSlotSourceSnapshotWriteFailureCount;
+        public int ActiveEffectSlotSourceSnapshotAttributeMissCount;
+        public int ActiveEffectSlotSourceSnapshotApplyHitCount;
+        public int ActiveEffectSlotSourceSnapshotApplyMissCount;
+        public int ActiveEffectSlotSourceSnapshotFallbackCount;
+        public int ActiveEffectSlotSourceSnapshotCapacityPressureCount;
+        public int ActiveEffectSlotSourceSnapshotSpillCount;
         public int QueryBudget;
         public int FilteredQueryBudget;
         public int UnfilteredQueryBudget;
@@ -427,6 +437,16 @@ namespace GAS.Runtime
         public readonly int SourceAttributeLookupCount;
         public readonly int TargetAttributeLookupCount;
         public readonly int ExecutionInputLookupCount;
+        public readonly int ActiveEffectSlotSourceSnapshotCapacity;
+        public readonly int ActiveEffectSlotSourceSnapshotGatherAttemptCount;
+        public readonly int ActiveEffectSlotSourceSnapshotWriteCount;
+        public readonly int ActiveEffectSlotSourceSnapshotWriteFailureCount;
+        public readonly int ActiveEffectSlotSourceSnapshotAttributeMissCount;
+        public readonly int ActiveEffectSlotSourceSnapshotApplyHitCount;
+        public readonly int ActiveEffectSlotSourceSnapshotApplyMissCount;
+        public readonly int ActiveEffectSlotSourceSnapshotFallbackCount;
+        public readonly int ActiveEffectSlotSourceSnapshotCapacityPressureCount;
+        public readonly int ActiveEffectSlotSourceSnapshotSpillCount;
 
         public static GasRuntimeMagnitudeSourceCounters Empty => default;
 
@@ -439,7 +459,17 @@ namespace GAS.Runtime
             int fallbackFactCount,
             int sourceAttributeLookupCount,
             int targetAttributeLookupCount,
-            int executionInputLookupCount)
+            int executionInputLookupCount,
+            int activeEffectSlotSourceSnapshotCapacity = 0,
+            int activeEffectSlotSourceSnapshotGatherAttemptCount = 0,
+            int activeEffectSlotSourceSnapshotWriteCount = 0,
+            int activeEffectSlotSourceSnapshotWriteFailureCount = 0,
+            int activeEffectSlotSourceSnapshotAttributeMissCount = 0,
+            int activeEffectSlotSourceSnapshotApplyHitCount = 0,
+            int activeEffectSlotSourceSnapshotApplyMissCount = 0,
+            int activeEffectSlotSourceSnapshotFallbackCount = 0,
+            int activeEffectSlotSourceSnapshotCapacityPressureCount = 0,
+            int activeEffectSlotSourceSnapshotSpillCount = 0)
         {
             CurrentValueLookupCount = currentValueLookupCount;
             CapturedValueHitCount = capturedValueHitCount;
@@ -450,6 +480,16 @@ namespace GAS.Runtime
             SourceAttributeLookupCount = sourceAttributeLookupCount;
             TargetAttributeLookupCount = targetAttributeLookupCount;
             ExecutionInputLookupCount = executionInputLookupCount;
+            ActiveEffectSlotSourceSnapshotCapacity = activeEffectSlotSourceSnapshotCapacity;
+            ActiveEffectSlotSourceSnapshotGatherAttemptCount = activeEffectSlotSourceSnapshotGatherAttemptCount;
+            ActiveEffectSlotSourceSnapshotWriteCount = activeEffectSlotSourceSnapshotWriteCount;
+            ActiveEffectSlotSourceSnapshotWriteFailureCount = activeEffectSlotSourceSnapshotWriteFailureCount;
+            ActiveEffectSlotSourceSnapshotAttributeMissCount = activeEffectSlotSourceSnapshotAttributeMissCount;
+            ActiveEffectSlotSourceSnapshotApplyHitCount = activeEffectSlotSourceSnapshotApplyHitCount;
+            ActiveEffectSlotSourceSnapshotApplyMissCount = activeEffectSlotSourceSnapshotApplyMissCount;
+            ActiveEffectSlotSourceSnapshotFallbackCount = activeEffectSlotSourceSnapshotFallbackCount;
+            ActiveEffectSlotSourceSnapshotCapacityPressureCount = activeEffectSlotSourceSnapshotCapacityPressureCount;
+            ActiveEffectSlotSourceSnapshotSpillCount = activeEffectSlotSourceSnapshotSpillCount;
         }
 
         public bool HasEvidence =>
@@ -461,7 +501,17 @@ namespace GAS.Runtime
             || FallbackFactCount > 0
             || SourceAttributeLookupCount > 0
             || TargetAttributeLookupCount > 0
-            || ExecutionInputLookupCount > 0;
+            || ExecutionInputLookupCount > 0
+            || ActiveEffectSlotSourceSnapshotCapacity > 0
+            || ActiveEffectSlotSourceSnapshotGatherAttemptCount > 0
+            || ActiveEffectSlotSourceSnapshotWriteCount > 0
+            || ActiveEffectSlotSourceSnapshotWriteFailureCount > 0
+            || ActiveEffectSlotSourceSnapshotAttributeMissCount > 0
+            || ActiveEffectSlotSourceSnapshotApplyHitCount > 0
+            || ActiveEffectSlotSourceSnapshotApplyMissCount > 0
+            || ActiveEffectSlotSourceSnapshotFallbackCount > 0
+            || ActiveEffectSlotSourceSnapshotCapacityPressureCount > 0
+            || ActiveEffectSlotSourceSnapshotSpillCount > 0;
 
         public GasRuntimeMagnitudeSourceCounters Add(in GasRuntimeMagnitudeSourceCounters other)
         {
@@ -474,7 +524,17 @@ namespace GAS.Runtime
                 FallbackFactCount + other.FallbackFactCount,
                 SourceAttributeLookupCount + other.SourceAttributeLookupCount,
                 TargetAttributeLookupCount + other.TargetAttributeLookupCount,
-                ExecutionInputLookupCount + other.ExecutionInputLookupCount);
+                ExecutionInputLookupCount + other.ExecutionInputLookupCount,
+                ActiveEffectSlotSourceSnapshotCapacity + other.ActiveEffectSlotSourceSnapshotCapacity,
+                ActiveEffectSlotSourceSnapshotGatherAttemptCount + other.ActiveEffectSlotSourceSnapshotGatherAttemptCount,
+                ActiveEffectSlotSourceSnapshotWriteCount + other.ActiveEffectSlotSourceSnapshotWriteCount,
+                ActiveEffectSlotSourceSnapshotWriteFailureCount + other.ActiveEffectSlotSourceSnapshotWriteFailureCount,
+                ActiveEffectSlotSourceSnapshotAttributeMissCount + other.ActiveEffectSlotSourceSnapshotAttributeMissCount,
+                ActiveEffectSlotSourceSnapshotApplyHitCount + other.ActiveEffectSlotSourceSnapshotApplyHitCount,
+                ActiveEffectSlotSourceSnapshotApplyMissCount + other.ActiveEffectSlotSourceSnapshotApplyMissCount,
+                ActiveEffectSlotSourceSnapshotFallbackCount + other.ActiveEffectSlotSourceSnapshotFallbackCount,
+                ActiveEffectSlotSourceSnapshotCapacityPressureCount + other.ActiveEffectSlotSourceSnapshotCapacityPressureCount,
+                ActiveEffectSlotSourceSnapshotSpillCount + other.ActiveEffectSlotSourceSnapshotSpillCount);
         }
     }
 
@@ -2250,7 +2310,17 @@ namespace GAS.Runtime
                 stream.MagnitudeSourceFallbackFactCount,
                 stream.MagnitudeSourceSourceAttributeLookupCount,
                 stream.MagnitudeSourceTargetAttributeLookupCount,
-                stream.MagnitudeSourceExecutionInputLookupCount);
+                stream.MagnitudeSourceExecutionInputLookupCount,
+                stream.ActiveEffectSlotSourceSnapshotCapacity,
+                stream.ActiveEffectSlotSourceSnapshotGatherAttemptCount,
+                stream.ActiveEffectSlotSourceSnapshotWriteCount,
+                stream.ActiveEffectSlotSourceSnapshotWriteFailureCount,
+                stream.ActiveEffectSlotSourceSnapshotAttributeMissCount,
+                stream.ActiveEffectSlotSourceSnapshotApplyHitCount,
+                stream.ActiveEffectSlotSourceSnapshotApplyMissCount,
+                stream.ActiveEffectSlotSourceSnapshotFallbackCount,
+                stream.ActiveEffectSlotSourceSnapshotCapacityPressureCount,
+                stream.ActiveEffectSlotSourceSnapshotSpillCount);
 
             if (!counters.HasEvidence
                 || !TryGetWritableLog(em, debuggerEntity, out var state, out var log))
@@ -2283,6 +2353,16 @@ namespace GAS.Runtime
                     MagnitudeSourceSourceAttributeLookupCount = counters.SourceAttributeLookupCount,
                     MagnitudeSourceTargetAttributeLookupCount = counters.TargetAttributeLookupCount,
                     MagnitudeSourceExecutionInputLookupCount = counters.ExecutionInputLookupCount,
+                    ActiveEffectSlotSourceSnapshotCapacity = counters.ActiveEffectSlotSourceSnapshotCapacity,
+                    ActiveEffectSlotSourceSnapshotGatherAttemptCount = counters.ActiveEffectSlotSourceSnapshotGatherAttemptCount,
+                    ActiveEffectSlotSourceSnapshotWriteCount = counters.ActiveEffectSlotSourceSnapshotWriteCount,
+                    ActiveEffectSlotSourceSnapshotWriteFailureCount = counters.ActiveEffectSlotSourceSnapshotWriteFailureCount,
+                    ActiveEffectSlotSourceSnapshotAttributeMissCount = counters.ActiveEffectSlotSourceSnapshotAttributeMissCount,
+                    ActiveEffectSlotSourceSnapshotApplyHitCount = counters.ActiveEffectSlotSourceSnapshotApplyHitCount,
+                    ActiveEffectSlotSourceSnapshotApplyMissCount = counters.ActiveEffectSlotSourceSnapshotApplyMissCount,
+                    ActiveEffectSlotSourceSnapshotFallbackCount = counters.ActiveEffectSlotSourceSnapshotFallbackCount,
+                    ActiveEffectSlotSourceSnapshotCapacityPressureCount = counters.ActiveEffectSlotSourceSnapshotCapacityPressureCount,
+                    ActiveEffectSlotSourceSnapshotSpillCount = counters.ActiveEffectSlotSourceSnapshotSpillCount,
                 });
 
             ApplyRetention(log, ref state);
@@ -2534,7 +2614,17 @@ namespace GAS.Runtime
                             evt.MagnitudeSourceFallbackFactCount,
                             evt.MagnitudeSourceSourceAttributeLookupCount,
                             evt.MagnitudeSourceTargetAttributeLookupCount,
-                            evt.MagnitudeSourceExecutionInputLookupCount));
+                            evt.MagnitudeSourceExecutionInputLookupCount,
+                            evt.ActiveEffectSlotSourceSnapshotCapacity,
+                            evt.ActiveEffectSlotSourceSnapshotGatherAttemptCount,
+                            evt.ActiveEffectSlotSourceSnapshotWriteCount,
+                            evt.ActiveEffectSlotSourceSnapshotWriteFailureCount,
+                            evt.ActiveEffectSlotSourceSnapshotAttributeMissCount,
+                            evt.ActiveEffectSlotSourceSnapshotApplyHitCount,
+                            evt.ActiveEffectSlotSourceSnapshotApplyMissCount,
+                            evt.ActiveEffectSlotSourceSnapshotFallbackCount,
+                            evt.ActiveEffectSlotSourceSnapshotCapacityPressureCount,
+                            evt.ActiveEffectSlotSourceSnapshotSpillCount));
                 }
             }
 
@@ -3615,7 +3705,27 @@ namespace GAS.Runtime
                     .Append("|targetAttributeLookups=")
                     .Append(evt.MagnitudeSourceTargetAttributeLookupCount)
                     .Append("|executionInputLookups=")
-                    .Append(evt.MagnitudeSourceExecutionInputLookupCount);
+                    .Append(evt.MagnitudeSourceExecutionInputLookupCount)
+                    .Append("|activeEffectSlotSourceSnapshotCapacity=")
+                    .Append(evt.ActiveEffectSlotSourceSnapshotCapacity)
+                    .Append("|activeEffectSlotSourceSnapshotGatherAttempts=")
+                    .Append(evt.ActiveEffectSlotSourceSnapshotGatherAttemptCount)
+                    .Append("|activeEffectSlotSourceSnapshotWrites=")
+                    .Append(evt.ActiveEffectSlotSourceSnapshotWriteCount)
+                    .Append("|activeEffectSlotSourceSnapshotWriteFailures=")
+                    .Append(evt.ActiveEffectSlotSourceSnapshotWriteFailureCount)
+                    .Append("|activeEffectSlotSourceSnapshotAttributeMisses=")
+                    .Append(evt.ActiveEffectSlotSourceSnapshotAttributeMissCount)
+                    .Append("|activeEffectSlotSourceSnapshotApplyHits=")
+                    .Append(evt.ActiveEffectSlotSourceSnapshotApplyHitCount)
+                    .Append("|activeEffectSlotSourceSnapshotApplyMisses=")
+                    .Append(evt.ActiveEffectSlotSourceSnapshotApplyMissCount)
+                    .Append("|activeEffectSlotSourceSnapshotFallbacks=")
+                    .Append(evt.ActiveEffectSlotSourceSnapshotFallbackCount)
+                    .Append("|activeEffectSlotSourceSnapshotCapacityPressure=")
+                    .Append(evt.ActiveEffectSlotSourceSnapshotCapacityPressureCount)
+                    .Append("|activeEffectSlotSourceSnapshotSpills=")
+                    .Append(evt.ActiveEffectSlotSourceSnapshotSpillCount);
                 builder.AppendLine();
                 return;
             }
@@ -3869,6 +3979,26 @@ namespace GAS.Runtime
                 .Append(counters.TargetAttributeLookupCount)
                 .Append("|executionInputLookups=")
                 .Append(counters.ExecutionInputLookupCount)
+                .Append("|activeEffectSlotSourceSnapshotCapacity=")
+                .Append(counters.ActiveEffectSlotSourceSnapshotCapacity)
+                .Append("|activeEffectSlotSourceSnapshotGatherAttempts=")
+                .Append(counters.ActiveEffectSlotSourceSnapshotGatherAttemptCount)
+                .Append("|activeEffectSlotSourceSnapshotWrites=")
+                .Append(counters.ActiveEffectSlotSourceSnapshotWriteCount)
+                .Append("|activeEffectSlotSourceSnapshotWriteFailures=")
+                .Append(counters.ActiveEffectSlotSourceSnapshotWriteFailureCount)
+                .Append("|activeEffectSlotSourceSnapshotAttributeMisses=")
+                .Append(counters.ActiveEffectSlotSourceSnapshotAttributeMissCount)
+                .Append("|activeEffectSlotSourceSnapshotApplyHits=")
+                .Append(counters.ActiveEffectSlotSourceSnapshotApplyHitCount)
+                .Append("|activeEffectSlotSourceSnapshotApplyMisses=")
+                .Append(counters.ActiveEffectSlotSourceSnapshotApplyMissCount)
+                .Append("|activeEffectSlotSourceSnapshotFallbacks=")
+                .Append(counters.ActiveEffectSlotSourceSnapshotFallbackCount)
+                .Append("|activeEffectSlotSourceSnapshotCapacityPressure=")
+                .Append(counters.ActiveEffectSlotSourceSnapshotCapacityPressureCount)
+                .Append("|activeEffectSlotSourceSnapshotSpills=")
+                .Append(counters.ActiveEffectSlotSourceSnapshotSpillCount)
                 .AppendLine();
         }
 

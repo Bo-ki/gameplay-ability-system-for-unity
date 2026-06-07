@@ -238,6 +238,18 @@ Assert-FileContains `
     -Pattern "runtimeMagnitudeSource" `
     -Message "GasRuntimeDebugger text export must expose magnitude source counters."
 Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "ActiveEffectSlotSourceSnapshotGatherAttemptCount" `
+    -Message "Effect command stream must expose active effect slot source snapshot lane counters."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "activeEffectSlotSourceSnapshotWriteFailures" `
+    -Message "GasRuntimeDebugger text export must expose active effect slot source snapshot write failure evidence."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "activeEffectSlotSourceSnapshotCapacityPressure" `
+    -Message "GasRuntimeDebugger text export must expose active effect slot source snapshot capacity pressure evidence."
+Assert-FileContains `
     -Path $debuggerPath `
     -Pattern "runtimeCoreMagnitudeSource" `
     -Message "GasRuntimeDebugger RuntimeCore export must expose magnitude source owner counters."
@@ -475,6 +487,34 @@ Assert-FileContains `
     -Message "Generated active effect pre-tick snapshot gather must use bounded snapshot writes; misses are exposed by magnitude-source fallback counters."
 Assert-FileContains `
     -Path $generatedActiveEffectPath `
+    -Pattern "ActiveEffectSlotSourceSnapshotLaneCounters" `
+    -Message "Generated active effect pre-tick must expose lane-specific SourceAttribute snapshot counters."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "SnapshotLaneCounters\s*=\s*activeEffectSlotSourceSnapshotLaneCounters" `
+    -Message "Generated active effect pre-tick must pass SourceAttribute snapshot lane counters through gather and apply jobs."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "RecordSnapshotWrite\(\s*ActiveEffectSlotSourceAttributeSnapshots\.TryAdd\(snapshotKey,\s*sourceValue\)\)" `
+    -Message "Generated active effect pre-tick gather must record snapshot write success/failure evidence."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "snapshotLaneCounters\.ApplyHitCount\+\+" `
+    -Message "Generated active effect pre-tick apply must record source snapshot hit evidence."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "snapshotLaneCounters\.ApplyMissCount\+\+" `
+    -Message "Generated active effect pre-tick apply must record source snapshot miss evidence."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "snapshotLaneCounters\.FallbackValueCount\+\+" `
+    -Message "Generated active effect pre-tick apply must record source snapshot fallback evidence."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "SetActiveEffectSlotSourceSnapshotCapacity" `
+    -Message "Generated active effect pre-tick must record SourceAttribute snapshot capacity evidence."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
     -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(ownerResources\.Owner,\s*slot\.Sequence,\s*modifierIndex\)" `
     -Message "Generated active effect pre-tick apply must read SourceAttribute snapshots by the same target owner key."
 Assert-FileContains `
@@ -501,6 +541,34 @@ Assert-FileContains `
     -Path $codeGenTemplatePath `
     -Pattern "ActiveEffectSlotSourceAttributeSnapshots\.TryAdd\(snapshotKey,\s*sourceValue\)" `
     -Message "CodeGen template must keep bounded active effect pre-tick snapshot writes with fallback evidence."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "ActiveEffectSlotSourceSnapshotLaneCounters" `
+    -Message "CodeGen template must keep active effect SourceAttribute snapshot lane counters."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "SnapshotLaneCounters\s*=\s*activeEffectSlotSourceSnapshotLaneCounters" `
+    -Message "CodeGen template must pass active effect SourceAttribute snapshot lane counters through gather and apply jobs."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "RecordSnapshotWrite\(\s*ActiveEffectSlotSourceAttributeSnapshots\.TryAdd\(snapshotKey,\s*sourceValue\)\)" `
+    -Message "CodeGen template must preserve snapshot write success/failure evidence."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "snapshotLaneCounters\.ApplyHitCount\+\+" `
+    -Message "CodeGen template must keep source snapshot hit evidence."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "snapshotLaneCounters\.ApplyMissCount\+\+" `
+    -Message "CodeGen template must keep source snapshot miss evidence."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "snapshotLaneCounters\.FallbackValueCount\+\+" `
+    -Message "CodeGen template must keep source snapshot fallback evidence."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "SetActiveEffectSlotSourceSnapshotCapacity" `
+    -Message "CodeGen template must preserve SourceAttribute snapshot capacity evidence."
 Assert-FileContains `
     -Path $generatedActiveEffectPath `
     -Pattern "ActiveEffectMagnitudeSourceCounters[\s\S]*?CaptureMissCount[\s\S]*?FallbackValueCount" `
