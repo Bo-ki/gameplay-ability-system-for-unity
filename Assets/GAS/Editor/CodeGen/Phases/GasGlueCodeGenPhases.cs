@@ -3182,6 +3182,7 @@ namespace __ROOT_NAMESPACE__
                 All = new[]
                 {
                     ComponentType.ReadWrite<GEEffectCommandBuffer>(),
+                    ComponentType.ReadOnly<GESetByCallerValueBuffer>(),
                 },
             });
             state.RequireForUpdate(_query);
@@ -3197,8 +3198,11 @@ namespace __ROOT_NAMESPACE__
             state.Dependency = new GEEffectCommandCatalogNormalizeJob
             {
                 CommandTypeHandle = SystemAPI.GetBufferTypeHandle<GEEffectCommandBuffer>(),
+                SetByCallerTypeHandle = SystemAPI.GetBufferTypeHandle<GESetByCallerValueBuffer>(isReadOnly: true),
                 ActiveMutationCommandLookup =
                     SystemAPI.GetBufferLookup<ActiveEffectMutationCommandBuffer>(isReadOnly: false),
+                ActiveMutationSetByCallerLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: false),
                 Catalog = catalogComponent.Catalog,
             }.Schedule(_query, state.Dependency);
         }
@@ -3206,7 +3210,9 @@ namespace __ROOT_NAMESPACE__
         private struct GEEffectCommandCatalogNormalizeJob : IJobChunk
         {
             public BufferTypeHandle<GEEffectCommandBuffer> CommandTypeHandle;
+            [ReadOnly] public BufferTypeHandle<GESetByCallerValueBuffer> SetByCallerTypeHandle;
             public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;
+            public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
 
             public void Execute(
@@ -3220,33 +3226,85 @@ namespace __ROOT_NAMESPACE__
 
                 ref var catalog = ref Catalog.Value;
                 var commandBuffers = chunk.GetBufferAccessor(ref CommandTypeHandle);
+                var setByCallerBuffers = chunk.GetBufferAccessor(ref SetByCallerTypeHandle);
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var bufferIndex))
                 {
                     var commands = commandBuffers[bufferIndex];
+                    var setByCallerValues = setByCallerBuffers[bufferIndex];
                     for (var i = 0; i < commands.Length; i++)
                     {
                         var command = commands[i];
                         if (GASGeneratedActiveEffectRuntime.TryNormalizeCommand(ref catalog, ref command))
                             commands[i] = command;
-                        AppendActiveMutationCommand(in command);
+                        AppendActiveMutationCommand(in command, setByCallerValues);
                     }
                 }
             }
 
-            private void AppendActiveMutationCommand(in GEEffectCommandBuffer command)
+            private void AppendActiveMutationCommand(
+                in GEEffectCommandBuffer command,
+                DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues)
             {
                 if (command.Kind != GEEffectCommandKind.ActiveMutation
                     || command.TargetAsc == Entity.Null
-                    || !ActiveMutationCommandLookup.HasBuffer(command.TargetAsc))
+                    || !ActiveMutationCommandLookup.HasBuffer(command.TargetAsc)
+                    || !ActiveMutationSetByCallerLookup.HasBuffer(command.TargetAsc))
                 {
                     return;
                 }
 
+                var ownerSetByCallerValues = ActiveMutationSetByCallerLookup[command.TargetAsc];
+                var ownerCommand = CopySetByCallerValuesToOwner(in command, setByCallerValues, ownerSetByCallerValues);
                 ActiveMutationCommandLookup[command.TargetAsc].Add(new ActiveEffectMutationCommandBuffer
                 {
-                    Command = command,
+                    Command = ownerCommand,
                 });
+            }
+
+            private static GEEffectCommandBuffer CopySetByCallerValuesToOwner(
+                in GEEffectCommandBuffer command,
+                DynamicBuffer<GESetByCallerValueBuffer> source,
+                DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> target)
+            {
+                if (command.SetByCallerCount <= 0)
+                {
+                    var emptyCommand = command;
+                    emptyCommand.SetByCallerStart = 0;
+                    emptyCommand.SetByCallerCount = 0;
+                    return emptyCommand;
+                }
+
+                var ownerCommand = command;
+                var ownerStart = target.Length;
+                var copied = 0;
+                var start = command.SetByCallerStart < 0 ? 0 : command.SetByCallerStart;
+                var end = start + command.SetByCallerCount;
+                if (end > source.Length)
+                    end = source.Length;
+
+                for (var i = start; i < end; i++)
+                {
+                    var value = source[i];
+                    if (value.CommandSequence != command.Sequence)
+                        continue;
+
+                    target.Add(new ActiveEffectMutationSetByCallerValueBuffer
+                    {
+                        Value = new GESetByCallerValueBuffer
+                        {
+                            CommandSequence = command.Sequence,
+                            SpecSequence = value.SpecSequence,
+                            Key = value.Key,
+                            Value = value.Value,
+                        },
+                    });
+                    copied++;
+                }
+
+                ownerCommand.SetByCallerStart = copied > 0 ? ownerStart : 0;
+                ownerCommand.SetByCallerCount = copied;
+                return ownerCommand;
             }
         }
     }
@@ -3272,6 +3330,7 @@ namespace __ROOT_NAMESPACE__
                     ComponentType.ReadWrite<ActiveGameplayEffectSetByCallerValueBuffer>(),
                     ComponentType.ReadWrite<ActiveGameplayEffectCleanupRecordBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationCommandBuffer>(),
+                    ComponentType.ReadWrite<ActiveEffectMutationSetByCallerValueBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationBuffer>(),
                     ComponentType.ReadWrite<TagMaskComponent>(),
                     ComponentType.ReadOnly<TagFixedMaskComponent>(),
@@ -3310,6 +3369,8 @@ namespace __ROOT_NAMESPACE__
                 commandCapacity = 64;
 
             var activeMutationCommands = new NativeList<GEEffectCommandBuffer>(commandCapacity, state.WorldUpdateAllocator);
+            var activeMutationSetByCallerValues =
+                new NativeList<GESetByCallerValueBuffer>(commandCapacity * 2, state.WorldUpdateAllocator);
             var activeMutationOwnerRanges =
                 new NativeParallelHashMap<Entity, GASGeneratedActiveEffectRuntime.ActiveMutationCommandRange>(
                     commandCapacity,
@@ -3326,7 +3387,10 @@ namespace __ROOT_NAMESPACE__
             {
                 CommandBufferTypeHandle =
                     SystemAPI.GetBufferTypeHandle<ActiveEffectMutationCommandBuffer>(isReadOnly: true),
+                SetByCallerBufferTypeHandle =
+                    SystemAPI.GetBufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: true),
                 ActiveMutationCommands = activeMutationCommands,
+                ActiveMutationSetByCallerValues = activeMutationSetByCallerValues,
             };
             var collectDependency = collectJob.Schedule(_ownerQuery, state.Dependency);
 
@@ -3364,7 +3428,7 @@ namespace __ROOT_NAMESPACE__
                 AbilitySlotBufferTypeHandle = SystemAPI.GetBufferTypeHandle<AbilitySlotBuffer>(isReadOnly: false),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
-                CommandSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
+                StreamSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
                 AttributeOwnerMarkerRequestLookup =
                     SystemAPI.GetBufferLookup<AttributeOwnerMarkerRequestBuffer>(isReadOnly: false),
                 AbilityStateLookup = SystemAPI.GetComponentLookup<AbilityStateComponent>(isReadOnly: false),
@@ -3782,7 +3846,9 @@ namespace __ROOT_NAMESPACE__
         public struct GEActiveEffectMutationOwnerCommandCollectJob : IJobChunk
         {
             [ReadOnly] public BufferTypeHandle<ActiveEffectMutationCommandBuffer> CommandBufferTypeHandle;
+            [ReadOnly] public BufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer> SetByCallerBufferTypeHandle;
             public NativeList<GEEffectCommandBuffer> ActiveMutationCommands;
+            public NativeList<GESetByCallerValueBuffer> ActiveMutationSetByCallerValues;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -3791,17 +3857,62 @@ namespace __ROOT_NAMESPACE__
                 in v128 chunkEnabledMask)
             {
                 var commandBuffers = chunk.GetBufferAccessor(ref CommandBufferTypeHandle);
+                var setByCallerBuffers = chunk.GetBufferAccessor(ref SetByCallerBufferTypeHandle);
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
                     var commands = commandBuffers[entityIndex];
+                    var setByCallerValues = setByCallerBuffers[entityIndex];
                     for (var i = 0; i < commands.Length; i++)
                     {
                         var command = commands[i].Command;
-                        if (command.Kind == GEEffectCommandKind.ActiveMutation)
-                            ActiveMutationCommands.Add(command);
+                        if (command.Kind != GEEffectCommandKind.ActiveMutation)
+                            continue;
+
+                        ActiveMutationCommands.Add(CopySetByCallerValues(in command, setByCallerValues));
                     }
                 }
+            }
+
+            private GEEffectCommandBuffer CopySetByCallerValues(
+                in GEEffectCommandBuffer command,
+                DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> source)
+            {
+                if (command.SetByCallerCount <= 0)
+                {
+                    var emptyCommand = command;
+                    emptyCommand.SetByCallerStart = 0;
+                    emptyCommand.SetByCallerCount = 0;
+                    return emptyCommand;
+                }
+
+                var collectedCommand = command;
+                var collectedStart = ActiveMutationSetByCallerValues.Length;
+                var copied = 0;
+                var start = command.SetByCallerStart < 0 ? 0 : command.SetByCallerStart;
+                var end = start + command.SetByCallerCount;
+                if (end > source.Length)
+                    end = source.Length;
+
+                for (var i = start; i < end; i++)
+                {
+                    var value = source[i].Value;
+                    if (value.CommandSequence != command.Sequence)
+                        continue;
+
+                    ActiveMutationSetByCallerValues.Add(new GESetByCallerValueBuffer
+                    {
+                        CommandSequence = command.Sequence,
+                        SpecSequence = value.SpecSequence,
+                        Key = value.Key,
+                        Value = value.Value,
+                    });
+                    copied++;
+                }
+
+                collectedCommand.SetByCallerStart = copied > 0 ? collectedStart : 0;
+                collectedCommand.SetByCallerCount = copied;
+                return collectedCommand;
             }
         }
 
@@ -4008,7 +4119,7 @@ namespace __ROOT_NAMESPACE__
             public BufferTypeHandle<AbilitySlotBuffer> AbilitySlotBufferTypeHandle;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<GEEffectCommandBuffer> CommandLookup;
-            public BufferLookup<GESetByCallerValueBuffer> CommandSetByCallerLookup;
+            public BufferLookup<GESetByCallerValueBuffer> StreamSetByCallerLookup;
             public BufferLookup<AttributeOwnerMarkerRequestBuffer> AttributeOwnerMarkerRequestLookup;
             public ComponentLookup<AbilityStateComponent> AbilityStateLookup;
             [ReadOnly] public ComponentLookup<AbilityGrantedByEffectComponent> AbilityGrantedLookup;
@@ -4018,6 +4129,7 @@ namespace __ROOT_NAMESPACE__
             public EntityArchetype GrantedAbilityArchetype;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             [ReadOnly] public NativeList<GEEffectCommandBuffer> ActiveMutationCommands;
+            [ReadOnly] public NativeList<GESetByCallerValueBuffer> ActiveMutationSetByCallerValues;
             [ReadOnly] public NativeParallelHashMap<Entity, ActiveMutationCommandRange> ActiveMutationOwnerRanges;
             [ReadOnly] public NativeParallelHashMap<long, float> ActiveMutationSourceAttributeSnapshots;
             public Entity StreamEntity;
@@ -4056,9 +4168,7 @@ namespace __ROOT_NAMESPACE__
                 if (!Catalog.IsCreated
                     || ActiveMutationCommands.Length == 0
                     || StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !CommandLookup.HasBuffer(StreamEntity)
-                    || !CommandSetByCallerLookup.HasBuffer(StreamEntity))
+                    || !StreamLookup.HasComponent(StreamEntity))
                 {
                     return;
                 }
@@ -4077,8 +4187,8 @@ namespace __ROOT_NAMESPACE__
                 var tagSources = chunk.GetBufferAccessor(ref TagSourceBufferTypeHandle);
                 var abilitySlots = chunk.GetBufferAccessor(ref AbilitySlotBufferTypeHandle);
                 var stream = StreamLookup[StreamEntity];
-                var commands = CommandLookup[StreamEntity];
-                var setByCallerValues = CommandSetByCallerLookup[StreamEntity];
+                var commands = CommandLookup.HasBuffer(StreamEntity) ? CommandLookup[StreamEntity] : default;
+                var streamSetByCallerValues = StreamSetByCallerLookup.HasBuffer(StreamEntity) ? StreamSetByCallerLookup[StreamEntity] : default;
                 ref var catalog = ref Catalog.Value;
                 var magnitudeSourceCounters = default(ActiveEffectMagnitudeSourceCounters);
                 var enumerator = new ChunkEntityEnumerator(false, default, chunk.Count);
@@ -4124,7 +4234,8 @@ namespace __ROOT_NAMESPACE__
                             ref ownerResources,
                             in command,
                             commands,
-                            setByCallerValues,
+                            streamSetByCallerValues,
+                            ActiveMutationSetByCallerValues,
                             ref magnitudeSourceCounters);
                     }
 
@@ -4151,8 +4262,9 @@ namespace __ROOT_NAMESPACE__
                 ref GASDefinitionCatalogBlob catalog,
                 ref ActiveMutationOwnerResources ownerResources,
                 in GEEffectCommandBuffer command,
-                DynamicBuffer<GEEffectCommandBuffer> commands,
-                DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+                DynamicBuffer<GEEffectCommandBuffer> streamCommands,
+                DynamicBuffer<GESetByCallerValueBuffer> streamSetByCallerValues,
+                NativeList<GESetByCallerValueBuffer> setByCallerValues,
                 ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
             {
                 if (CompareEntity(ownerResources.Owner, command.TargetAsc) != 0
@@ -4213,8 +4325,8 @@ namespace __ROOT_NAMESPACE__
                     EmitOverflowCommand(
                         ref stream,
                         ref catalog,
-                        commands,
-                        setByCallerValues,
+                        streamCommands,
+                        streamSetByCallerValues,
                         in command,
                         in gameplayEffect);
                     EnqueueStackOverflowEvent(in command, in gameplayEffect);
@@ -4320,7 +4432,7 @@ namespace __ROOT_NAMESPACE__
                 ref ActiveMutationOwnerResources ownerResources,
                 in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
                 in GEEffectCommandBuffer command,
-                DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+                NativeList<GESetByCallerValueBuffer> setByCallerValues,
                 int slotSequence,
                 int stackCount,
                 ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
@@ -4381,7 +4493,7 @@ namespace __ROOT_NAMESPACE__
             private MagnitudeEvalContext BuildMagnitudeContext(
                 ref ActiveMutationOwnerResources ownerResources,
                 in GEEffectCommandBuffer command,
-                DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+                NativeList<GESetByCallerValueBuffer> setByCallerValues,
                 in GASCatalogModifierDefinitionBlob modifier,
                 int modifierIndex,
                 int stackCount,
@@ -4943,6 +5055,8 @@ namespace __ROOT_NAMESPACE__
             {
                 if (gameplayEffect.OverflowGameplayEffectCode <= 0
                     || gameplayEffect.OverflowGameplayEffectCode == sourceCommand.GameplayEffectCode
+                    || !commands.IsCreated
+                    || !setByCallerValues.IsCreated
                     || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, gameplayEffect.OverflowGameplayEffectCode, out var overflowIndex))
                 {
                     return;
@@ -6519,7 +6633,7 @@ namespace __ROOT_NAMESPACE__
 
         private static bool TryFindSetByCallerValue(
             in GEEffectCommandBuffer command,
-            DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+            NativeList<GESetByCallerValueBuffer> setByCallerValues,
             int key,
             out float value)
         {
@@ -6552,7 +6666,7 @@ namespace __ROOT_NAMESPACE__
 
         private static void CopySetByCallerSnapshot(
             in GEEffectCommandBuffer command,
-            DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+            NativeList<GESetByCallerValueBuffer> setByCallerValues,
             DynamicBuffer<ActiveGameplayEffectSetByCallerValueBuffer> snapshot,
             int slotSequence,
             int gameplayEffectCode)

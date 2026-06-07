@@ -216,6 +216,12 @@ namespace GAS.Runtime
         public GEEffectCommandBuffer Command;
     }
 
+    [InternalBufferCapacity(8)]
+    public struct ActiveEffectMutationSetByCallerValueBuffer : IBufferElementData
+    {
+        public GESetByCallerValueBuffer Value;
+    }
+
     [InternalBufferCapacity(0)]
     public struct GameplayEventBuffer : IBufferElementData
     {

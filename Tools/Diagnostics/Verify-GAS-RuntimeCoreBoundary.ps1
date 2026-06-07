@@ -71,6 +71,7 @@ function Assert-FileNotContains {
 
 $deltaApplyPath = Join-Path $runtimePath "System\Attribute\GASAttributeModifierDeltaApplySystem.cs"
 $ascArchetypePath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeEntityArchetypes.cs"
+$ascFactoryPath = Join-Path $runtimePath "AbilitySystem\ASCEntityFactory.cs"
 $streamPath = Join-Path $runtimePath "Effect\Component\Dynamic\GEEffectCommandSpecStream.cs"
 $streamPhasePath = Join-Path $runtimePath "System\Effect\GEEffectCommandSpecStreamPhases.cs"
 $gameplayEffectRequestWriterPath = Join-Path $runtimePath "System\Effect\GameplayEffectRequestWriter.cs"
@@ -278,6 +279,22 @@ Assert-FileContains `
     -Pattern "ComponentType\.ReadWrite<ActiveEffectMutationCommandBuffer>\(\)" `
     -Message "ASC runtime archetype must own ActiveEffectMutationCommandBuffer as an owner-local command source."
 Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "struct ActiveEffectMutationSetByCallerValueBuffer\s*:\s*IBufferElementData" `
+    -Message "Runtime Core must define an owner-local set-by-caller carrier for active mutation commands."
+Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<ActiveEffectMutationSetByCallerValueBuffer>\(\)" `
+    -Message "ASC runtime archetype must own ActiveEffectMutationSetByCallerValueBuffer as owner-local command payload."
+Assert-FileContains `
+    -Path $ascFactoryPath `
+    -Pattern "GetBuffer<ActiveEffectMutationSetByCallerValueBuffer>\(asc\)\.EnsureCapacity" `
+    -Message "ASC factory must initialize owner-local active mutation set-by-caller capacity."
+Assert-FileContains `
+    -Path $ascFactoryPath `
+    -Pattern "HasBuffer<ActiveEffectMutationSetByCallerValueBuffer>\(asc\)" `
+    -Message "ASC runtime component completeness check must require owner-local active mutation set-by-caller buffer."
+Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "ActiveEffectOwnerLocalMutationFramePrepareSystem" `
     -Message "Runtime Core must clear ASC owner-local active effect mutations during FramePrepare."
@@ -285,6 +302,10 @@ Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "BufferTypeHandle<ActiveEffectMutationCommandBuffer>" `
     -Message "Runtime Core must clear ASC owner-local active mutation commands during FramePrepare."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "BufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>" `
+    -Message "Runtime Core must clear ASC owner-local active mutation set-by-caller payloads during FramePrepare."
 Assert-FileContains `
     -Path $scheduleContractPath `
     -Pattern "ActiveEffectOwnerLocalMutationFramePrepareSystem" `
@@ -301,6 +322,10 @@ Assert-FileContains `
     -Path $queryLayoutPlanPath `
     -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.ActiveEffectMutationCommandBuffer" `
     -Message "ActiveEffectMutationCommandBuffer must be classified with the ASC ActiveEffectStore layout, not the command stream layout."
+Assert-FileContains `
+    -Path $queryLayoutPlanPath `
+    -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.ActiveEffectMutationSetByCallerBuffer" `
+    -Message "ActiveEffectMutationSetByCallerBuffer must be classified with the ASC ActiveEffectStore layout, not the command stream layout."
 Assert-FileNotContains `
     -Path $debuggerPath `
     -Pattern "RecordFrameStreamBufferPressure<ActiveEffectMutationBuffer>" `
@@ -810,9 +835,41 @@ Assert-FileContains `
     -Pattern "ActiveMutationCommandLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationCommandBuffer>" `
     -Message "Active mutation commands must be projected into ASC owner-local command buffers."
 Assert-FileContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "ActiveMutationSetByCallerLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>" `
+    -Message "Active mutation set-by-caller payloads must be projected into ASC owner-local buffers."
+Assert-FileContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "CopySetByCallerValuesToOwner" `
+    -Message "Active mutation normalize must copy stream set-by-caller ranges into owner-local command payloads."
+Assert-FileContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "SetByCallerBufferTypeHandle\s*=[\s\S]*?SystemAPI\.GetBufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>" `
+    -Message "Active mutation owner system must pass owner-local set-by-caller buffers into the collect job."
+Assert-FileContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationOwnerCommandCollectJob\s*:\s*IJobChunk" `
     -Message "Generated active mutation command source must collect from owner-local command buffers."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "BufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>\s+SetByCallerBufferTypeHandle" `
+    -Message "Generated active mutation command source must collect owner-local set-by-caller payloads."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "ActiveMutationSetByCallerValues\.Add\(new GESetByCallerValueBuffer" `
+    -Message "Generated active mutation collect must flatten owner-local set-by-caller payloads into a frame-local list."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "\[ReadOnly\] public NativeList<GESetByCallerValueBuffer> ActiveMutationSetByCallerValues" `
+    -Message "Generated active mutation apply must consume frame-local set-by-caller payloads."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "TryApplyActiveMutationToOwner[\s\S]*?NativeList<GESetByCallerValueBuffer> setByCallerValues" `
+    -Message "Generated active mutation apply must pass owner-local set-by-caller payloads through the active mutation path."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "TryFindSetByCallerValue\([\s\S]*?NativeList<GESetByCallerValueBuffer> setByCallerValues" `
+    -Message "Generated active mutation magnitude resolution must read set-by-caller payloads from the owner-local frame list."
 Assert-FileContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationOwnerCommandFinalizeJob\s*:\s*IJob" `
@@ -823,8 +880,44 @@ Assert-FileContains `
     -Message "CodeGen template must keep owner-local active mutation command collection."
 Assert-FileContains `
     -Path $codeGenTemplatePath `
+    -Pattern "SetByCallerBufferTypeHandle\s*=[\s\S]*?SystemAPI\.GetBufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>" `
+    -Message "CodeGen template must keep owner-local active mutation set-by-caller collection."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "BufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>\s+SetByCallerBufferTypeHandle" `
+    -Message "CodeGen template must keep active mutation collect job set-by-caller buffer field."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "ActiveMutationSetByCallerValues\.Add\(new GESetByCallerValueBuffer" `
+    -Message "CodeGen template must keep frame-local set-by-caller flattening for active mutation."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "\[ReadOnly\] public NativeList<GESetByCallerValueBuffer> ActiveMutationSetByCallerValues" `
+    -Message "CodeGen template must keep active mutation apply on owner-local set-by-caller payloads."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "TryFindSetByCallerValue\([\s\S]*?NativeList<GESetByCallerValueBuffer> setByCallerValues" `
+    -Message "CodeGen template must not regenerate stream-backed set-by-caller magnitude resolution for active mutation."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
     -Pattern "GEActiveEffectMutationOwnerCommandFinalizeJob\s*:\s*IJob" `
     -Message "CodeGen template must keep owner-local active mutation command finalization."
+Assert-FileNotContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]{0,3000}\|\| !CommandSetByCallerLookup\.HasBuffer\(StreamEntity\)" `
+    -Message "Generated active mutation apply must not require singleton stream set-by-caller buffers before processing owner-local commands."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]{0,3000}\|\| !CommandSetByCallerLookup\.HasBuffer\(StreamEntity\)" `
+    -Message "CodeGen template must not regenerate stream set-by-caller as an active mutation apply precondition."
+Assert-FileNotContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]{0,5000}var setByCallerValues\s*=\s*CommandSetByCallerLookup\[StreamEntity\]" `
+    -Message "Generated active mutation apply must not read active mutation set-by-caller input from the singleton stream buffer."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]{0,5000}var setByCallerValues\s*=\s*CommandSetByCallerLookup\[StreamEntity\]" `
+    -Message "CodeGen template must not regenerate singleton stream set-by-caller input reads for active mutation apply."
 Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "ActiveMutationCommandCursor" `
@@ -1088,6 +1181,7 @@ Write-Host "GAS Runtime Core debugger singleton contract passed: registered/cach
 Write-Host "GAS Runtime Core stream writer contract passed: runtime helpers resolve stream owners explicitly before writing commands or facts."
 Write-Host "GAS Runtime Core execution output fact contract passed: NativeStream collection and deterministic merge replaced structural ECB singleton append."
 Write-Host "GAS Runtime Core active mutation contract passed: owner-local command collect + ASC chunk-local apply path is wired."
+Write-Host "GAS Runtime Core active mutation set-by-caller contract passed: owner-local payload projection and frame-local apply inputs are wired."
 Write-Host "GAS Runtime Core active mutation SourceAttribute contract passed: read-only snapshot lane feeds chunk-local apply."
 Write-Host "GAS Runtime Core owner-local fact lane contract passed: Attribute facts use ASC-local carrier and debugger-visible flush counters."
 Write-Host "GAS Runtime Core AttributeDelta owner-local fact projection contract passed: generated instant and execution output no longer write stream deltas."

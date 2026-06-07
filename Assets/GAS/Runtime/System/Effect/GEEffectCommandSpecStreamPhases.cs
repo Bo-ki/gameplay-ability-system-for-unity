@@ -90,6 +90,7 @@ namespace GAS.Runtime
                 All = new[]
                 {
                     ComponentType.ReadWrite<ActiveEffectMutationCommandBuffer>(),
+                    ComponentType.ReadWrite<ActiveEffectMutationSetByCallerValueBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationBuffer>(),
                     ComponentType.ReadOnly<ASCIdentityComponent>(),
                 },
@@ -103,6 +104,7 @@ namespace GAS.Runtime
             state.Dependency = new ClearOwnerLocalActiveEffectMutationsJob
             {
                 CommandType = SystemAPI.GetBufferTypeHandle<ActiveEffectMutationCommandBuffer>(),
+                SetByCallerType = SystemAPI.GetBufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>(),
                 MutationType = SystemAPI.GetBufferTypeHandle<ActiveEffectMutationBuffer>(),
             }.Schedule(_ownerMutationQuery, state.Dependency);
         }
@@ -111,6 +113,7 @@ namespace GAS.Runtime
         private struct ClearOwnerLocalActiveEffectMutationsJob : IJobChunk
         {
             public BufferTypeHandle<ActiveEffectMutationCommandBuffer> CommandType;
+            public BufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer> SetByCallerType;
             public BufferTypeHandle<ActiveEffectMutationBuffer> MutationType;
 
             public void Execute(
@@ -120,11 +123,13 @@ namespace GAS.Runtime
                 in v128 chunkEnabledMask)
             {
                 var commands = chunk.GetBufferAccessor(ref CommandType);
+                var setByCallerValues = chunk.GetBufferAccessor(ref SetByCallerType);
                 var mutations = chunk.GetBufferAccessor(ref MutationType);
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
                     commands[entityIndex].Clear();
+                    setByCallerValues[entityIndex].Clear();
                     mutations[entityIndex].Clear();
                 }
             }

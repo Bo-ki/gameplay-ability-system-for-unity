@@ -21,6 +21,7 @@ namespace GAS.Runtime.Generated
                 All = new[]
                 {
                     ComponentType.ReadWrite<GEEffectCommandBuffer>(),
+                    ComponentType.ReadOnly<GESetByCallerValueBuffer>(),
                 },
             });
             state.RequireForUpdate(_query);
@@ -36,8 +37,11 @@ namespace GAS.Runtime.Generated
             state.Dependency = new GEEffectCommandCatalogNormalizeJob
             {
                 CommandTypeHandle = SystemAPI.GetBufferTypeHandle<GEEffectCommandBuffer>(),
+                SetByCallerTypeHandle = SystemAPI.GetBufferTypeHandle<GESetByCallerValueBuffer>(isReadOnly: true),
                 ActiveMutationCommandLookup =
                     SystemAPI.GetBufferLookup<ActiveEffectMutationCommandBuffer>(isReadOnly: false),
+                ActiveMutationSetByCallerLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: false),
                 Catalog = catalogComponent.Catalog,
             }.Schedule(_query, state.Dependency);
         }
@@ -45,7 +49,9 @@ namespace GAS.Runtime.Generated
         private struct GEEffectCommandCatalogNormalizeJob : IJobChunk
         {
             public BufferTypeHandle<GEEffectCommandBuffer> CommandTypeHandle;
+            [ReadOnly] public BufferTypeHandle<GESetByCallerValueBuffer> SetByCallerTypeHandle;
             public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;
+            public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
 
             public void Execute(
@@ -59,33 +65,85 @@ namespace GAS.Runtime.Generated
 
                 ref var catalog = ref Catalog.Value;
                 var commandBuffers = chunk.GetBufferAccessor(ref CommandTypeHandle);
+                var setByCallerBuffers = chunk.GetBufferAccessor(ref SetByCallerTypeHandle);
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var bufferIndex))
                 {
                     var commands = commandBuffers[bufferIndex];
+                    var setByCallerValues = setByCallerBuffers[bufferIndex];
                     for (var i = 0; i < commands.Length; i++)
                     {
                         var command = commands[i];
                         if (GASGeneratedActiveEffectRuntime.TryNormalizeCommand(ref catalog, ref command))
                             commands[i] = command;
-                        AppendActiveMutationCommand(in command);
+                        AppendActiveMutationCommand(in command, setByCallerValues);
                     }
                 }
             }
 
-            private void AppendActiveMutationCommand(in GEEffectCommandBuffer command)
+            private void AppendActiveMutationCommand(
+                in GEEffectCommandBuffer command,
+                DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues)
             {
                 if (command.Kind != GEEffectCommandKind.ActiveMutation
                     || command.TargetAsc == Entity.Null
-                    || !ActiveMutationCommandLookup.HasBuffer(command.TargetAsc))
+                    || !ActiveMutationCommandLookup.HasBuffer(command.TargetAsc)
+                    || !ActiveMutationSetByCallerLookup.HasBuffer(command.TargetAsc))
                 {
                     return;
                 }
 
+                var ownerSetByCallerValues = ActiveMutationSetByCallerLookup[command.TargetAsc];
+                var ownerCommand = CopySetByCallerValuesToOwner(in command, setByCallerValues, ownerSetByCallerValues);
                 ActiveMutationCommandLookup[command.TargetAsc].Add(new ActiveEffectMutationCommandBuffer
                 {
-                    Command = command,
+                    Command = ownerCommand,
                 });
+            }
+
+            private static GEEffectCommandBuffer CopySetByCallerValuesToOwner(
+                in GEEffectCommandBuffer command,
+                DynamicBuffer<GESetByCallerValueBuffer> source,
+                DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> target)
+            {
+                if (command.SetByCallerCount <= 0)
+                {
+                    var emptyCommand = command;
+                    emptyCommand.SetByCallerStart = 0;
+                    emptyCommand.SetByCallerCount = 0;
+                    return emptyCommand;
+                }
+
+                var ownerCommand = command;
+                var ownerStart = target.Length;
+                var copied = 0;
+                var start = command.SetByCallerStart < 0 ? 0 : command.SetByCallerStart;
+                var end = start + command.SetByCallerCount;
+                if (end > source.Length)
+                    end = source.Length;
+
+                for (var i = start; i < end; i++)
+                {
+                    var value = source[i];
+                    if (value.CommandSequence != command.Sequence)
+                        continue;
+
+                    target.Add(new ActiveEffectMutationSetByCallerValueBuffer
+                    {
+                        Value = new GESetByCallerValueBuffer
+                        {
+                            CommandSequence = command.Sequence,
+                            SpecSequence = value.SpecSequence,
+                            Key = value.Key,
+                            Value = value.Value,
+                        },
+                    });
+                    copied++;
+                }
+
+                ownerCommand.SetByCallerStart = copied > 0 ? ownerStart : 0;
+                ownerCommand.SetByCallerCount = copied;
+                return ownerCommand;
             }
         }
     }
@@ -111,6 +169,7 @@ namespace GAS.Runtime.Generated
                     ComponentType.ReadWrite<ActiveGameplayEffectSetByCallerValueBuffer>(),
                     ComponentType.ReadWrite<ActiveGameplayEffectCleanupRecordBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationCommandBuffer>(),
+                    ComponentType.ReadWrite<ActiveEffectMutationSetByCallerValueBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationBuffer>(),
                     ComponentType.ReadWrite<TagMaskComponent>(),
                     ComponentType.ReadOnly<TagFixedMaskComponent>(),
@@ -149,6 +208,8 @@ namespace GAS.Runtime.Generated
                 commandCapacity = 64;
 
             var activeMutationCommands = new NativeList<GEEffectCommandBuffer>(commandCapacity, state.WorldUpdateAllocator);
+            var activeMutationSetByCallerValues =
+                new NativeList<GESetByCallerValueBuffer>(commandCapacity * 2, state.WorldUpdateAllocator);
             var activeMutationOwnerRanges =
                 new NativeParallelHashMap<Entity, GASGeneratedActiveEffectRuntime.ActiveMutationCommandRange>(
                     commandCapacity,
@@ -165,7 +226,10 @@ namespace GAS.Runtime.Generated
             {
                 CommandBufferTypeHandle =
                     SystemAPI.GetBufferTypeHandle<ActiveEffectMutationCommandBuffer>(isReadOnly: true),
+                SetByCallerBufferTypeHandle =
+                    SystemAPI.GetBufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: true),
                 ActiveMutationCommands = activeMutationCommands,
+                ActiveMutationSetByCallerValues = activeMutationSetByCallerValues,
             };
             var collectDependency = collectJob.Schedule(_ownerQuery, state.Dependency);
 
@@ -203,7 +267,7 @@ namespace GAS.Runtime.Generated
                 AbilitySlotBufferTypeHandle = SystemAPI.GetBufferTypeHandle<AbilitySlotBuffer>(isReadOnly: false),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
-                CommandSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
+                StreamSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
                 AttributeOwnerMarkerRequestLookup =
                     SystemAPI.GetBufferLookup<AttributeOwnerMarkerRequestBuffer>(isReadOnly: false),
                 AbilityStateLookup = SystemAPI.GetComponentLookup<AbilityStateComponent>(isReadOnly: false),
@@ -215,6 +279,7 @@ namespace GAS.Runtime.Generated
                 GrantedAbilityArchetype = grantedAbilityArchetype,
                 Catalog = catalogComponent.Catalog,
                 ActiveMutationCommands = activeMutationCommands,
+                ActiveMutationSetByCallerValues = activeMutationSetByCallerValues,
                 ActiveMutationOwnerRanges = activeMutationOwnerRanges,
                 ActiveMutationSourceAttributeSnapshots = activeMutationSourceAttributeSnapshots,
                 StreamEntity = streamEntity,

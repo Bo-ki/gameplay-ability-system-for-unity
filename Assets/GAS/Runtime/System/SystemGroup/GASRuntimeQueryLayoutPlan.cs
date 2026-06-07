@@ -142,6 +142,7 @@ namespace GAS.Runtime
         ActiveEffectGlobalIndexStableRow = 48,
         CuePresentationRequest = 49,
         ActiveEffectMutationCommandBuffer = 50,
+        ActiveEffectMutationSetByCallerBuffer = 51,
     }
 
     public readonly struct GASRuntimeQueryLayoutEntry
@@ -487,6 +488,7 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.GrantedAbilityBuffer,
                         GASRuntimeLayoutComponentSlot.AttributeDeltaBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectMutationCommandBuffer,
+                        GASRuntimeLayoutComponentSlot.ActiveEffectMutationSetByCallerBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectMutationBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexStore,
                         GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexBuffer,
