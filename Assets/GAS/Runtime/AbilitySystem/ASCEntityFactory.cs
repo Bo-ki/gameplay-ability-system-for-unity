@@ -18,6 +18,7 @@ namespace GAS.Runtime
         private const int ActiveEffectSetByCallerInitialCapacity = ActiveEffectStore.InlineSetByCallerCapacity;
         private const int ActiveEffectCleanupRecordInitialCapacity = ActiveEffectStore.InlineCleanupRecordCapacity;
         private const int ActiveEffectMutationInitialCapacity = 4;
+        private const int OwnerLocalGameplayFactInitialCapacity = 8;
         private const int PresentationEventCapacity = 16;
 
         public static Entity Create(EntityManager entityManager)
@@ -72,6 +73,7 @@ namespace GAS.Runtime
             entityManager.GetBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(asc).EnsureCapacity(ActiveEffectSetByCallerInitialCapacity);
             entityManager.GetBuffer<ActiveGameplayEffectCleanupRecordBuffer>(asc).EnsureCapacity(ActiveEffectCleanupRecordInitialCapacity);
             entityManager.GetBuffer<ActiveEffectMutationBuffer>(asc).EnsureCapacity(ActiveEffectMutationInitialCapacity);
+            entityManager.GetBuffer<OwnerLocalGameplayFactBuffer>(asc).EnsureCapacity(OwnerLocalGameplayFactInitialCapacity);
             entityManager.GetBuffer<PresentationEventBuffer>(asc).EnsureCapacity(PresentationEventCapacity);
         }
 
@@ -100,6 +102,7 @@ namespace GAS.Runtime
             commandBuffer.SetBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(asc).EnsureCapacity(ActiveEffectSetByCallerInitialCapacity);
             commandBuffer.SetBuffer<ActiveGameplayEffectCleanupRecordBuffer>(asc).EnsureCapacity(ActiveEffectCleanupRecordInitialCapacity);
             commandBuffer.SetBuffer<ActiveEffectMutationBuffer>(asc).EnsureCapacity(ActiveEffectMutationInitialCapacity);
+            commandBuffer.SetBuffer<OwnerLocalGameplayFactBuffer>(asc).EnsureCapacity(OwnerLocalGameplayFactInitialCapacity);
             commandBuffer.SetBuffer<PresentationEventBuffer>(asc).EnsureCapacity(PresentationEventCapacity);
         }
 
@@ -134,6 +137,7 @@ namespace GAS.Runtime
                 && entityManager.HasBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(asc)
                 && entityManager.HasBuffer<ActiveGameplayEffectCleanupRecordBuffer>(asc)
                 && entityManager.HasBuffer<ActiveEffectMutationBuffer>(asc)
+                && entityManager.HasBuffer<OwnerLocalGameplayFactBuffer>(asc)
                 && entityManager.HasBuffer<PresentationEventBuffer>(asc);
         }
 

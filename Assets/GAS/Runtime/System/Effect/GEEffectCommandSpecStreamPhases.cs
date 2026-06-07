@@ -1,5 +1,7 @@
 using Unity.Burst;
+using System.Collections.Generic;
 using Unity.Collections;
+using Unity.Burst.Intrinsics;
 using Unity.Entities;
 using Unity.Jobs;
 using static GAS.Runtime.EffectCommandSpecStreamPhaseUtility;
@@ -76,6 +78,56 @@ namespace GAS.Runtime
                     FactLookup[StreamEntity],
                     Frame);
                 StreamLookup[StreamEntity] = stream;
+            }
+        }
+    }
+
+    [DisableAutoCreation]
+    [UpdateInGroup(typeof(GASFramePrepareSystemGroup))]
+    [UpdateAfter(typeof(GEEffectCommandSpecStreamFramePrepareSystem))]
+    [BurstCompile]
+    public partial struct GameplayOwnerLocalFactFramePrepareSystem : ISystem
+    {
+        private EntityQuery _ownerFactQuery;
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            _ownerFactQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadWrite<OwnerLocalGameplayFactBuffer>(),
+                    ComponentType.ReadOnly<ASCIdentityComponent>(),
+                },
+            });
+            state.RequireForUpdate(_ownerFactQuery);
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            state.Dependency = new ClearOwnerLocalGameplayFactsJob
+            {
+                OwnerFactType = SystemAPI.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>(),
+            }.Schedule(_ownerFactQuery, state.Dependency);
+        }
+
+        [BurstCompile]
+        private struct ClearOwnerLocalGameplayFactsJob : IJobChunk
+        {
+            public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactType;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var ownerFacts = chunk.GetBufferAccessor(ref OwnerFactType);
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                    ownerFacts[entityIndex].Clear();
             }
         }
     }
@@ -213,6 +265,176 @@ namespace GAS.Runtime
                 EventCode = (int)EGameplayCueEvent.OnApply,
                 ReasonCode = spec.CueRequestOnApplyCode,
             });
+        }
+    }
+
+    [DisableAutoCreation]
+    [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
+    [UpdateAfter(typeof(GameplayFactProjectionSystem))]
+    [BurstCompile]
+    public partial struct GameplayOwnerLocalFactFlushSystem : ISystem
+    {
+        private EntityQuery _ownerFactQuery;
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            _ownerFactQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<ASCIdentityComponent>(),
+                    ComponentType.ReadOnly<OwnerLocalGameplayFactBuffer>(),
+                },
+            });
+            state.RequireForUpdate<GEEffectCommandStreamComponent>();
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            if (!SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var streamEntity)
+                || !EffectCommandSpecStream.HasRequiredBuffers(state.EntityManager, streamEntity))
+            {
+                return;
+            }
+
+            var records = new NativeList<OwnerLocalGameplayFactRecord>(1, Allocator.TempJob);
+            var collectHandle = new CollectOwnerLocalGameplayFactsJob
+            {
+                EntityType = SystemAPI.GetEntityTypeHandle(),
+                OwnerFactType = SystemAPI.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>(isReadOnly: true),
+                Records = records,
+            }.Schedule(_ownerFactQuery, state.Dependency);
+            var flushHandle = new FlushOwnerLocalGameplayFactsJob
+            {
+                StreamEntity = streamEntity,
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
+                StreamFactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
+                Records = records,
+            }.Schedule(collectHandle);
+
+            state.Dependency = records.Dispose(flushHandle);
+        }
+
+        private struct OwnerLocalGameplayFactRecord
+        {
+            public Entity Owner;
+            public int LocalIndex;
+            public GameplayEventBuffer Fact;
+        }
+
+        [BurstCompile]
+        private struct CollectOwnerLocalGameplayFactsJob : IJobChunk
+        {
+            [ReadOnly] public EntityTypeHandle EntityType;
+            [ReadOnly] public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactType;
+            public NativeList<OwnerLocalGameplayFactRecord> Records;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var entities = chunk.GetNativeArray(EntityType);
+                var ownerFacts = chunk.GetBufferAccessor(ref OwnerFactType);
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    var owner = entities[entityIndex];
+                    var facts = ownerFacts[entityIndex];
+                    for (var factIndex = 0; factIndex < facts.Length; factIndex++)
+                    {
+                        Records.Add(new OwnerLocalGameplayFactRecord
+                        {
+                            Owner = owner,
+                            LocalIndex = factIndex,
+                            Fact = facts[factIndex].Fact,
+                        });
+                    }
+                }
+            }
+        }
+
+        [BurstCompile]
+        private struct FlushOwnerLocalGameplayFactsJob : IJob
+        {
+            public Entity StreamEntity;
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            public BufferLookup<GameplayEventBuffer> StreamFactLookup;
+            public NativeList<OwnerLocalGameplayFactRecord> Records;
+
+            public void Execute()
+            {
+                if (Records.Length == 0
+                    || StreamEntity == Entity.Null
+                    || !StreamLookup.HasComponent(StreamEntity)
+                    || !StreamFactLookup.HasBuffer(StreamEntity))
+                {
+                    return;
+                }
+
+                Records.Sort(new OwnerLocalGameplayFactRecordComparer());
+                var stream = StreamLookup[StreamEntity];
+                var streamFacts = StreamFactLookup[StreamEntity];
+                var ownerGroupCount = 0;
+                var maxOwnerRange = 0;
+                var flushCount = 0;
+                var groupStart = 0;
+                while (groupStart < Records.Length)
+                {
+                    var owner = Records[groupStart].Owner;
+                    var groupEnd = groupStart + 1;
+                    while (groupEnd < Records.Length
+                           && CompareEntity(Records[groupEnd].Owner, owner) == 0)
+                    {
+                        groupEnd++;
+                    }
+
+                    ownerGroupCount++;
+                    var ownerRange = groupEnd - groupStart;
+                    if (ownerRange > maxOwnerRange)
+                        maxOwnerRange = ownerRange;
+
+                    for (var i = groupStart; i < groupEnd; i++)
+                    {
+                        streamFacts.Add(Records[i].Fact);
+                        flushCount++;
+                    }
+
+                    groupStart = groupEnd;
+                }
+
+                stream.OwnerLocalFactCount += Records.Length;
+                stream.OwnerLocalFactOwnerGroupCount += ownerGroupCount;
+                if (maxOwnerRange > stream.OwnerLocalFactMaxOwnerRange)
+                    stream.OwnerLocalFactMaxOwnerRange = maxOwnerRange;
+                stream.OwnerLocalFactFlushCount += flushCount;
+                StreamLookup[StreamEntity] = stream;
+            }
+        }
+
+        private struct OwnerLocalGameplayFactRecordComparer : IComparer<OwnerLocalGameplayFactRecord>
+        {
+            public int Compare(OwnerLocalGameplayFactRecord x, OwnerLocalGameplayFactRecord y)
+            {
+                var result = CompareEntity(x.Owner, y.Owner);
+                if (result != 0)
+                    return result;
+
+                result = x.Fact.Sequence.CompareTo(y.Fact.Sequence);
+                if (result != 0)
+                    return result;
+
+                return x.LocalIndex.CompareTo(y.LocalIndex);
+            }
+        }
+
+        private static int CompareEntity(Entity left, Entity right)
+        {
+            var result = left.Index.CompareTo(right.Index);
+            return result != 0 ? result : left.Version.CompareTo(right.Version);
         }
     }
 

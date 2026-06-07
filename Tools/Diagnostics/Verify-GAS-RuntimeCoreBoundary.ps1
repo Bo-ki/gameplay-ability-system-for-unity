@@ -151,6 +151,42 @@ Assert-FileContains `
     -Pattern "ComponentType\.ReadWrite<AttributeModifierBuffer>\(\)" `
     -Message "ASC runtime archetype must own an owner-local AttributeModifierBuffer."
 Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "OwnerLocalGameplayFactBuffer" `
+    -Message "Runtime Core must define an owner-local gameplay fact buffer for ASC-local fact projection."
+Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<OwnerLocalGameplayFactBuffer>\(\)" `
+    -Message "ASC runtime archetype must own an owner-local gameplay fact buffer."
+Assert-FileContains `
+    -Path $deltaApplyPath `
+    -Pattern "BufferTypeHandle<OwnerLocalGameplayFactBuffer>" `
+    -Message "Pending AttributeDelta apply must write attribute facts through an owner-local fact buffer."
+Assert-FileContains `
+    -Path $deltaApplyPath `
+    -Pattern "AppendAttributeChangeFact\(ownerFacts" `
+    -Message "Pending AttributeDelta apply must append attribute facts to the ASC owner-local fact buffer before export."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "GameplayOwnerLocalFactFramePrepareSystem" `
+    -Message "Runtime Core must clear owner-local gameplay facts during FramePrepare."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "GameplayOwnerLocalFactFlushSystem" `
+    -Message "Runtime Core must flush owner-local gameplay facts through a dedicated projection system."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "OwnerLocalGameplayFactRecordComparer" `
+    -Message "Owner-local gameplay fact flush must define deterministic owner/sequence ordering."
+Assert-FileContains `
+    -Path $scheduleContractPath `
+    -Pattern "GameplayOwnerLocalFactFramePrepareSystem" `
+    -Message "Owner-local gameplay fact frame prepare system must be registered in the runtime schedule."
+Assert-FileContains `
+    -Path $scheduleContractPath `
+    -Pattern "GameplayOwnerLocalFactFlushSystem" `
+    -Message "Owner-local gameplay fact flush system must be registered in the runtime schedule."
+Assert-FileContains `
     -Path $deltaApplyPath `
     -Pattern "PendingAttributeTargetGroupCount" `
     -Message "GASAttributeModifierDeltaApplySystem must expose target group counters."

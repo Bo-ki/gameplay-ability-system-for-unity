@@ -168,11 +168,19 @@ namespace GAS.Runtime
                 EGasRuntimeCoreFramePhase.FramePrepare,
                 typeof(GASFramePrepareSystemGroup)),
             new(
+                typeof(GameplayOwnerLocalFactFramePrepareSystem),
+                EGasRuntimeCoreFramePhase.FramePrepare,
+                typeof(GASFramePrepareSystemGroup)),
+            new(
                 typeof(GASAttributeModifierDeltaApplySystem),
                 EGasRuntimeCoreFramePhase.DeltaApply,
                 typeof(GASCoreSimulationSystemGroup)),
             new(
                 typeof(GameplayFactProjectionSystem),
+                EGasRuntimeCoreFramePhase.TypedFactProjection,
+                typeof(GASCoreSimulationSystemGroup)),
+            new(
+                typeof(GameplayOwnerLocalFactFlushSystem),
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
                 typeof(GASCoreSimulationSystemGroup)),
             new(
@@ -199,6 +207,7 @@ namespace GAS.Runtime
             typeof(GameplayEventBusClearSystem),
             typeof(GASGlobalTimerSystem),
             typeof(GEEffectCommandSpecStreamFramePrepareSystem),
+            typeof(GameplayOwnerLocalFactFramePrepareSystem),
         };
 
         private static readonly Type[] CommandResolveSystemTypes =
@@ -227,6 +236,7 @@ namespace GAS.Runtime
             typeof(AbilityLifecycleRequestSystem),
             typeof(AbilityStateCleanupSystem),
             typeof(GameplayFactProjectionSystem),
+            typeof(GameplayOwnerLocalFactFlushSystem),
         };
 
         private static readonly string[] GeneratedCoreSimulationSystemTypeNames =
@@ -258,6 +268,7 @@ namespace GAS.Runtime
         {
             typeof(GEEffectCommandSpecStreamFramePrepareSystem),
             typeof(GameplayFactProjectionSystem),
+            typeof(GameplayOwnerLocalFactFlushSystem),
             typeof(GameplayFactBoundaryProjectionSystem),
         };
 

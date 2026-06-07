@@ -83,6 +83,10 @@ namespace GAS.Runtime
         public int PendingAttributeEstimatedRandomLookupCount;
         public int PendingAttributeFactPatchCount;
         public int PendingAttributeMigrationCarrierCount;
+        public int OwnerLocalFactCount;
+        public int OwnerLocalFactOwnerGroupCount;
+        public int OwnerLocalFactMaxOwnerRange;
+        public int OwnerLocalFactFlushCount;
         public int MagnitudeSourceCurrentValueLookupCount;
         public int MagnitudeSourceCapturedValueHitCount;
         public int MagnitudeSourceCaptureMissCount;
@@ -233,6 +237,12 @@ namespace GAS.Runtime
         public float Value;
         public float OldValue;
         public float NewValue;
+    }
+
+    [InternalBufferCapacity(8)]
+    public struct OwnerLocalGameplayFactBuffer : IBufferElementData
+    {
+        public GameplayEventBuffer Fact;
     }
 
     public static class EffectCommandSpecStream
@@ -770,6 +780,10 @@ namespace GAS.Runtime
             stream.PendingAttributeEstimatedRandomLookupCount = 0;
             stream.PendingAttributeFactPatchCount = 0;
             stream.PendingAttributeMigrationCarrierCount = 0;
+            stream.OwnerLocalFactCount = 0;
+            stream.OwnerLocalFactOwnerGroupCount = 0;
+            stream.OwnerLocalFactMaxOwnerRange = 0;
+            stream.OwnerLocalFactFlushCount = 0;
             stream.MagnitudeSourceCurrentValueLookupCount = 0;
             stream.MagnitudeSourceCapturedValueHitCount = 0;
             stream.MagnitudeSourceCaptureMissCount = 0;

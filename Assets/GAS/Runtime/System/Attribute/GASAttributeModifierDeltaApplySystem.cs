@@ -24,6 +24,7 @@ namespace GAS.Runtime
                     ComponentType.ReadWrite<PendingAttributeModifierComponent>(),
                     ComponentType.ReadWrite<AttributeModifierBuffer>(),
                     ComponentType.ReadWrite<AttributeValueBuffer>(),
+                    ComponentType.ReadWrite<OwnerLocalGameplayFactBuffer>(),
                     ComponentType.ReadWrite<AttributeDirtyComponent>(),
                     ComponentType.ReadOnly<ASCDestroyingComponent>(),
                 },
@@ -44,6 +45,8 @@ namespace GAS.Runtime
                 DirtyTypeHandle = SystemAPI.GetComponentTypeHandle<AttributeDirtyComponent>(isReadOnly: false),
                 DeltaBufferTypeHandle = SystemAPI.GetBufferTypeHandle<AttributeModifierBuffer>(isReadOnly: false),
                 AttributeBufferTypeHandle = SystemAPI.GetBufferTypeHandle<AttributeValueBuffer>(isReadOnly: false),
+                OwnerFactBufferTypeHandle =
+                    SystemAPI.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
                 StreamEntity = streamEntity,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
@@ -59,6 +62,7 @@ namespace GAS.Runtime
             public ComponentTypeHandle<AttributeDirtyComponent> DirtyTypeHandle;
             public BufferTypeHandle<AttributeModifierBuffer> DeltaBufferTypeHandle;
             public BufferTypeHandle<AttributeValueBuffer> AttributeBufferTypeHandle;
+            public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactBufferTypeHandle;
             public Entity StreamEntity;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<GameplayEventBuffer> FactLookup;
@@ -90,8 +94,9 @@ namespace GAS.Runtime
                 var dirtyMask = chunk.GetEnabledMask(ref DirtyTypeHandle);
                 var deltaBuffers = chunk.GetBufferAccessor(ref DeltaBufferTypeHandle);
                 var attributeBuffers = chunk.GetBufferAccessor(ref AttributeBufferTypeHandle);
+                var ownerFactBuffers = chunk.GetBufferAccessor(ref OwnerFactBufferTypeHandle);
                 var stream = StreamLookup[StreamEntity];
-                var facts = FactLookup[StreamEntity];
+                var streamFacts = FactLookup[StreamEntity];
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
@@ -120,6 +125,7 @@ namespace GAS.Runtime
                         maxTargetRange = ownerPendingCount;
 
                     var attributes = attributeBuffers[entityIndex];
+                    var ownerFacts = ownerFactBuffers[entityIndex];
                     var groupApplied = false;
                     for (var deltaIndex = 0; deltaIndex < deltas.Length; deltaIndex++)
                     {
@@ -151,8 +157,8 @@ namespace GAS.Runtime
                         deltas[deltaIndex] = delta;
                         appliedCount++;
                         groupApplied = true;
-                        factPatchCount += UpdateLinkedExecutionFact(facts, delta.Sequence, oldValue, newValue);
-                        AppendAttributeChangeFact(facts, ref stream, in delta, oldValue, newValue);
+                        factPatchCount += UpdateLinkedExecutionFact(streamFacts, delta.Sequence, oldValue, newValue);
+                        AppendAttributeChangeFact(ownerFacts, ref stream, in delta, oldValue, newValue);
                     }
 
                     if (groupApplied)
@@ -279,35 +285,38 @@ namespace GAS.Runtime
         }
 
         private static void AppendAttributeChangeFact(
-            DynamicBuffer<GameplayEventBuffer> facts,
+            DynamicBuffer<OwnerLocalGameplayFactBuffer> facts,
             ref GEEffectCommandStreamComponent stream,
             in AttributeModifierBuffer delta,
             float oldValue,
             float newValue)
         {
-            facts.Add(new GameplayEventBuffer
+            facts.Add(new OwnerLocalGameplayFactBuffer
             {
-                Sequence = Allocate(ref stream.NextFactSequence),
-                SourceCommandSequence = delta.SourceCommandSequence,
-                SourceSpecSequence = delta.SourceSpecSequence,
-                SourceDeltaSequence = delta.Sequence,
-                Frame = delta.Frame,
-                EventType = EGameplayEventType.AttributeBaseValueChanged,
-                Domain = EGameplayFactDomain.Attribute,
-                Category = EGameplayFactCategory.StateChange,
-                Severity = EGameplayFactSeverity.Info,
-                SourceAsc = delta.SourceAsc,
-                TargetAsc = delta.TargetAsc,
-                SourceAbility = delta.SourceAbility,
-                SourceEffect = delta.SourceEffect,
-                GameplayEffectCode = delta.GameplayEffectCode,
-                ContextId = delta.ContextId,
-                ParentContextId = delta.ParentContextId,
-                AttrSetCode = delta.AttrSetCode,
-                AttributeCode = delta.AttributeCode,
-                Value = delta.Magnitude,
-                OldValue = oldValue,
-                NewValue = newValue,
+                Fact = new GameplayEventBuffer
+                {
+                    Sequence = Allocate(ref stream.NextFactSequence),
+                    SourceCommandSequence = delta.SourceCommandSequence,
+                    SourceSpecSequence = delta.SourceSpecSequence,
+                    SourceDeltaSequence = delta.Sequence,
+                    Frame = delta.Frame,
+                    EventType = EGameplayEventType.AttributeBaseValueChanged,
+                    Domain = EGameplayFactDomain.Attribute,
+                    Category = EGameplayFactCategory.StateChange,
+                    Severity = EGameplayFactSeverity.Info,
+                    SourceAsc = delta.SourceAsc,
+                    TargetAsc = delta.TargetAsc,
+                    SourceAbility = delta.SourceAbility,
+                    SourceEffect = delta.SourceEffect,
+                    GameplayEffectCode = delta.GameplayEffectCode,
+                    ContextId = delta.ContextId,
+                    ParentContextId = delta.ParentContextId,
+                    AttrSetCode = delta.AttrSetCode,
+                    AttributeCode = delta.AttributeCode,
+                    Value = delta.Magnitude,
+                    OldValue = oldValue,
+                    NewValue = newValue,
+                },
             });
         }
 
