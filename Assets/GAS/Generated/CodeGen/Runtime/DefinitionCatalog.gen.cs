@@ -139,7 +139,7 @@ namespace GAS.Runtime.Generated
                 CooldownFrames = 120,
                 ActivationOwnedTagMaskIndex = 0,
                 RequirementStart = 0,
-                RequirementCount = 0,
+                RequirementCount = 1,
                 TargetRuleCode = 1458980686,
                 TargetRuleParam0 = 0,
                 TargetRuleParam1 = 0,
@@ -154,7 +154,7 @@ namespace GAS.Runtime.Generated
                 CooldownGameplayEffectCode = 0,
                 CooldownFrames = 0,
                 ActivationOwnedTagMaskIndex = -1,
-                RequirementStart = 0,
+                RequirementStart = 1,
                 RequirementCount = 0,
                 TargetRuleCode = 0,
                 TargetRuleParam0 = 0,
@@ -170,7 +170,7 @@ namespace GAS.Runtime.Generated
                 CooldownGameplayEffectCode = 0,
                 CooldownFrames = 0,
                 ActivationOwnedTagMaskIndex = -1,
-                RequirementStart = 0,
+                RequirementStart = 1,
                 RequirementCount = 0,
                 TargetRuleCode = 0,
                 TargetRuleParam0 = 0,
@@ -186,7 +186,7 @@ namespace GAS.Runtime.Generated
                 CooldownGameplayEffectCode = 0,
                 CooldownFrames = 0,
                 ActivationOwnedTagMaskIndex = -1,
-                RequirementStart = 0,
+                RequirementStart = 1,
                 RequirementCount = 0,
                 TargetRuleCode = 0,
                 TargetRuleParam0 = 0,
@@ -202,7 +202,7 @@ namespace GAS.Runtime.Generated
                 CooldownGameplayEffectCode = 0,
                 CooldownFrames = 0,
                 ActivationOwnedTagMaskIndex = -1,
-                RequirementStart = 0,
+                RequirementStart = 1,
                 RequirementCount = 0,
                 TargetRuleCode = 0,
                 TargetRuleParam0 = 0,
@@ -218,8 +218,8 @@ namespace GAS.Runtime.Generated
                 CooldownGameplayEffectCode = 0,
                 CooldownFrames = 0,
                 ActivationOwnedTagMaskIndex = -1,
-                RequirementStart = 0,
-                RequirementCount = 0,
+                RequirementStart = 1,
+                RequirementCount = 1,
                 TargetRuleCode = 0,
                 TargetRuleParam0 = 0,
                 TargetRuleParam1 = 0,
@@ -234,8 +234,8 @@ namespace GAS.Runtime.Generated
                 CooldownGameplayEffectCode = 0,
                 CooldownFrames = 0,
                 ActivationOwnedTagMaskIndex = 1,
-                RequirementStart = 0,
-                RequirementCount = 0,
+                RequirementStart = 2,
+                RequirementCount = 1,
                 TargetRuleCode = -944608227,
                 TargetRuleParam0 = 0,
                 TargetRuleParam1 = 0,
@@ -269,6 +269,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 9001,
                 GrantedTagMaskIndex = 2,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 0,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -285,7 +286,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 0,
                 ModifierCount = 0,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -298,6 +299,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = 3,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 0,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -314,7 +316,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 0,
                 ModifierCount = 1,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -327,6 +329,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 1001,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -343,7 +346,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 1,
                 ModifierCount = 1,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -356,6 +359,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 1001,
                 GrantedTagMaskIndex = 4,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 0,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -372,7 +376,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 1001,
                 ModifierStart = 2,
                 ModifierCount = 1,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -385,6 +389,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 0,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -401,7 +406,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 3,
                 ModifierCount = 1,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -414,6 +419,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 1006,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 0,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -430,7 +436,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 4,
                 ModifierCount = 0,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -443,6 +449,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 0,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -459,7 +466,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 4,
                 ModifierCount = 1,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -472,6 +479,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 3000,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -488,7 +496,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 5,
                 ModifierCount = 1,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -501,6 +509,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = 5,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 0,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -517,7 +526,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 6,
                 ModifierCount = 0,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -530,6 +539,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 0,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -546,7 +556,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 6,
                 ModifierCount = 1,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -559,6 +569,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = 6,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 0,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -575,7 +586,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 7,
                 ModifierCount = 0,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -588,6 +599,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 0,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -604,7 +616,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 7,
                 ModifierCount = 1,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -617,6 +629,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 9301,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -633,7 +646,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 8,
                 ModifierCount = 1,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -646,6 +659,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 9301,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -662,7 +676,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 9,
                 ModifierCount = 1,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -675,6 +689,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 9204,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 9301,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -691,7 +706,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 10,
                 ModifierCount = 0,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -704,6 +719,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 9301,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -720,7 +736,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 10,
                 ModifierCount = 1,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -733,6 +749,7 @@ namespace GAS.Runtime.Generated
                 PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
+                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
                 GameplayCueCode = 9301,
                 DamageTypeCode = 0,
                 ResistanceAttributeSetCode = 0,
@@ -749,7 +766,7 @@ namespace GAS.Runtime.Generated
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 11,
                 ModifierCount = 0,
-                RequirementStart = 0,
+                RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
                 GrantedAbilityCount = 0,
@@ -955,7 +972,37 @@ namespace GAS.Runtime.Generated
                 PostAdd = 0f,
             };
 
-            builder.Allocate(ref root.Requirements, 0);
+            var requirements = builder.Allocate(ref root.Requirements, 3);
+            requirements[0] = new GASCatalogRequirementDefinitionBlob
+            {
+                RequirementKind = 2,
+                TagMaskIndex = -1,
+                TagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 131074ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
+                AttributeSetCode = 0,
+                AttributeCode = 0,
+                CompareOp = 0,
+                CompareValue = 0f,
+            };
+            requirements[1] = new GASCatalogRequirementDefinitionBlob
+            {
+                RequirementKind = 1,
+                TagMaskIndex = -1,
+                TagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 65538ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
+                AttributeSetCode = 0,
+                AttributeCode = 0,
+                CompareOp = 0,
+                CompareValue = 0f,
+            };
+            requirements[2] = new GASCatalogRequirementDefinitionBlob
+            {
+                RequirementKind = 2,
+                TagMaskIndex = -1,
+                TagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 262146ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
+                AttributeSetCode = 0,
+                AttributeCode = 0,
+                CompareOp = 0,
+                CompareValue = 0f,
+            };
 
             var tagMaskCodes = builder.Allocate(ref root.TagMaskCodes, 7);
             tagMaskCodes[0] = 3002;
@@ -967,54 +1014,40 @@ namespace GAS.Runtime.Generated
             tagMaskCodes[6] = 4001004;
 
             var tagMasks = builder.Allocate(ref root.TagMasks, 7);
-            var tagMask0 = new TagMaskComponent();
-            tagMask0.AddTag(3002);
             tagMasks[0] = new GASCatalogTagMaskDefinitionBlob
             {
                 TagCode = 3002,
-                Mask = tagMask0,
+                Mask = new TagMaskComponent { Mask0 = 131074ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul },
             };
-            var tagMask1 = new TagMaskComponent();
-            tagMask1.AddTag(3003);
             tagMasks[1] = new GASCatalogTagMaskDefinitionBlob
             {
                 TagCode = 3003,
-                Mask = tagMask1,
+                Mask = new TagMaskComponent { Mask0 = 262146ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul },
             };
-            var tagMask2 = new TagMaskComponent();
-            tagMask2.AddTag(4001003);
             tagMasks[2] = new GASCatalogTagMaskDefinitionBlob
             {
                 TagCode = 4001003,
-                Mask = tagMask2,
+                Mask = new TagMaskComponent { Mask0 = 2148007940ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul },
             };
-            var tagMask3 = new TagMaskComponent();
-            tagMask3.AddTag(4001002);
             tagMasks[3] = new GASCatalogTagMaskDefinitionBlob
             {
                 TagCode = 4001002,
-                Mask = tagMask3,
+                Mask = new TagMaskComponent { Mask0 = 1074266116ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul },
             };
-            var tagMask4 = new TagMaskComponent();
-            tagMask4.AddTag(2006);
             tagMasks[4] = new GASCatalogTagMaskDefinitionBlob
             {
                 TagCode = 2006,
-                Mask = tagMask4,
+                Mask = new TagMaskComponent { Mask0 = 4097ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul },
             };
-            var tagMask5 = new TagMaskComponent();
-            tagMask5.AddTag(6001);
             tagMasks[5] = new GASCatalogTagMaskDefinitionBlob
             {
                 TagCode = 6001,
-                Mask = tagMask5,
+                Mask = new TagMaskComponent { Mask0 = 16777232ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul },
             };
-            var tagMask6 = new TagMaskComponent();
-            tagMask6.AddTag(4001004);
             tagMasks[6] = new GASCatalogTagMaskDefinitionBlob
             {
                 TagCode = 4001004,
-                Mask = tagMask6,
+                Mask = new TagMaskComponent { Mask0 = 4295491588ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul },
             };
 
             builder.Allocate(ref root.GrantedAbilities, 0);

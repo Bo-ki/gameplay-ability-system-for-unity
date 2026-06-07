@@ -15,6 +15,7 @@ namespace GAS.Editor
             new StaticLookupPhase(),
             new DefinitionCatalogPhase(),
             new RuntimeDefinitionGluePhase(),
+            new RuntimeLifecycleMigrationPhase(),
             new BakerGluePhase(),
             new ComponentTypeSetPhase(),
             new QueryLayoutPhase(),

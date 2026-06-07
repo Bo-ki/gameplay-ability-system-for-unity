@@ -131,6 +131,7 @@ namespace GAS.Runtime.Generated
                 : Entity.Null;
             var structuralEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
+            var grantedAbilityArchetype = GASRuntimeEntityArchetypes.GrantedAbility(em);
             var commandCapacity = state.EntityManager.GetBuffer<GEEffectCommandBuffer>(streamEntity).Length;
             if (commandCapacity < 64)
                 commandCapacity = 64;
@@ -192,7 +193,7 @@ namespace GAS.Runtime.Generated
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
-                GrantedAbilityArchetype = GASRuntimeEntityArchetypes.GrantedAbility(em),
+                GrantedAbilityArchetype = grantedAbilityArchetype,
                 Catalog = catalogComponent.Catalog,
                 ActiveMutationCommands = activeMutationCommands,
                 ActiveMutationOwnerRanges = activeMutationOwnerRanges,
@@ -970,7 +971,11 @@ namespace GAS.Runtime.Generated
                 }
 
                 ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
-                if (!EvaluateGameplayEffectRequirements(ref catalog, in gameplayEffect, in ownerResources.TargetTags))
+                if (!GASGeneratedRequirementEvaluator.EvaluateGameplayEffectRequirements(
+                        ref catalog,
+                        in gameplayEffect,
+                        in ownerResources.TargetTags,
+                        out _))
                     return false;
 
                 RemoveGameplayEffectsWithTags(
@@ -1621,14 +1626,8 @@ namespace GAS.Runtime.Generated
                 ref ActiveMutationOwnerResources ownerResources,
                 in GASCatalogGameplayEffectDefinitionBlob appliedGameplayEffect)
             {
-                if (appliedGameplayEffect.RemoveGameplayEffectTagMaskIndex < 0
-                    || appliedGameplayEffect.RemoveGameplayEffectTagMaskIndex >= catalog.TagMasks.Length)
-                {
-                    return;
-                }
-
-                var removeMask = catalog.TagMasks[appliedGameplayEffect.RemoveGameplayEffectTagMaskIndex].Mask;
-                if (removeMask.IsEmpty)
+                var removeQuery = appliedGameplayEffect.RemoveGameplayEffectTagQuery;
+                if (removeQuery.IsEmpty)
                     return;
 
                 for (var i = ownerResources.Slots.Length - 1; i >= 0; i--)
@@ -1645,7 +1644,7 @@ namespace GAS.Runtime.Generated
                     }
 
                     var slotGrantedMask = catalog.TagMasks[slotGameplayEffect.GrantedTagMaskIndex].Mask;
-                    if (slotGrantedMask.HasAnyTag(removeMask))
+                    if (removeQuery.Evaluate(slotGrantedMask))
                         RemoveSlotAt(ref ownerResources, i);
                 }
             }
@@ -3300,7 +3299,7 @@ namespace GAS.Runtime.Generated
             int durationFrame)
         {
             return HasPersistentRuntimeState(in gameplayEffect, durationFrame)
-                || gameplayEffect.RemoveGameplayEffectTagMaskIndex >= 0;
+                || !gameplayEffect.RemoveGameplayEffectTagQuery.IsEmpty;
         }
 
         private static int ResolveSlotFlags(
@@ -3477,34 +3476,6 @@ namespace GAS.Runtime.Generated
         }
 
 
-
-
-        private static bool EvaluateGameplayEffectRequirements(
-            ref GASDefinitionCatalogBlob catalog,
-            in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
-            in TagMaskComponent targetTags)
-        {
-            for (var i = 0; i < gameplayEffect.RequirementCount; i++)
-            {
-                var index = gameplayEffect.RequirementStart + i;
-                if ((uint)index >= (uint)catalog.Requirements.Length)
-                    return false;
-
-                var requirement = catalog.Requirements[index];
-                if (requirement.RequirementKind == GASRequirementKind.None)
-                    continue;
-                if (requirement.TagMaskIndex < 0 || requirement.TagMaskIndex >= catalog.TagMasks.Length)
-                    continue;
-
-                var mask = catalog.TagMasks[requirement.TagMaskIndex].Mask;
-                if (requirement.RequirementKind == GASRequirementKind.RequiredTags && !targetTags.HasAllTags(mask))
-                    return false;
-                if (requirement.RequirementKind == GASRequirementKind.BlockedTags && targetTags.HasAnyTag(mask))
-                    return false;
-            }
-
-            return true;
-        }
 
 
         private static int FindRefreshableSlot(DynamicBuffer<ActiveGameplayEffectBuffer> slots, in GEEffectCommandBuffer command)

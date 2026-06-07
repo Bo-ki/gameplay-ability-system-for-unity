@@ -25,7 +25,12 @@ namespace GAS.Editor
 
         public string ManifestPath => Path.Combine(_outputRoot, ManifestFileName);
 
-        public void AddGeneratedFile(string phaseName, string fullPath, string layer, bool runtimeVisible)
+        public void AddGeneratedFile(
+            string phaseName,
+            string fullPath,
+            string layer,
+            bool runtimeVisible,
+            string artifactCategory = null)
         {
             var normalizedPath = Normalize(fullPath);
             EnsureUnderProjectRoot(normalizedPath);
@@ -45,6 +50,7 @@ namespace GAS.Editor
                 _entries[i].FileName = Path.GetFileName(normalizedPath);
                 _entries[i].Layer = layer;
                 _entries[i].RuntimeVisible = runtimeVisible;
+                _entries[i].ArtifactCategory = artifactCategory ?? string.Empty;
                 _entries[i].VersionControlled = IsVersionControlledPath(normalizedPath);
                 return;
             }
@@ -56,6 +62,7 @@ namespace GAS.Editor
                 ProjectRelativePath = projectRelativePath,
                 Layer = layer,
                 RuntimeVisible = runtimeVisible,
+                ArtifactCategory = artifactCategory ?? string.Empty,
                 VersionControlled = IsVersionControlledPath(normalizedPath),
             });
         }
@@ -169,6 +176,7 @@ namespace GAS.Editor
             public string ProjectRelativePath;
             public string Layer;
             public bool RuntimeVisible;
+            public string ArtifactCategory;
             public bool VersionControlled;
         }
     }

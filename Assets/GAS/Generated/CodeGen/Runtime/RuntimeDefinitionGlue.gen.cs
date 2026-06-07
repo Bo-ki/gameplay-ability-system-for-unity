@@ -136,7 +136,7 @@ namespace GAS.Runtime.Generated
                     || gameplayEffect.PeriodFrames > 0
                     || gameplayEffect.StackLimitCount > 0
                     || gameplayEffect.GrantedTagMaskIndex >= 0
-                    || gameplayEffect.RemoveGameplayEffectTagMaskIndex >= 0
+                    || !gameplayEffect.RemoveGameplayEffectTagQuery.IsEmpty
                     || gameplayEffect.GrantedAbilityCount > 0
                     || gameplayEffect.ModifierCount == 0)
                     flags |= GASGECommandSeedFlags.ActiveMutation;
@@ -182,6 +182,32 @@ namespace GAS.Runtime.Generated
             return EvaluateRange(ref catalog, ability.RequirementStart, ability.RequirementCount, in ownerTags, out failureReasonCode);
         }
 
+        public static bool EvaluateGameplayEffectRequirements(
+            ref GASDefinitionCatalogBlob catalog,
+            int gameplayEffectDefinitionIndex,
+            in TagMaskComponent targetTags,
+            out int failureReasonCode)
+        {
+            failureReasonCode = GASFailureReasonCodes.None;
+            if ((uint)gameplayEffectDefinitionIndex >= (uint)catalog.GameplayEffects.Length)
+            {
+                failureReasonCode = GASFailureReasonCodes.GameplayEffectNotFound;
+                return false;
+            }
+
+            ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectDefinitionIndex);
+            return EvaluateGameplayEffectRequirements(ref catalog, in gameplayEffect, in targetTags, out failureReasonCode);
+        }
+
+        public static bool EvaluateGameplayEffectRequirements(
+            ref GASDefinitionCatalogBlob catalog,
+            in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
+            in TagMaskComponent targetTags,
+            out int failureReasonCode)
+        {
+            return EvaluateRange(ref catalog, gameplayEffect.RequirementStart, gameplayEffect.RequirementCount, in targetTags, out failureReasonCode);
+        }
+
         private static bool EvaluateRange(
             ref GASDefinitionCatalogBlob catalog,
             int start,
@@ -215,15 +241,15 @@ namespace GAS.Runtime.Generated
             if (requirement.RequirementKind == GASRequirementKind.None)
                 return true;
 
-            if (requirement.TagMaskIndex < 0 || requirement.TagMaskIndex >= catalog.TagMasks.Length)
-                return true;
+            if (requirement.TagQuery.IsEmpty)
+                return false;
 
-            var mask = catalog.TagMasks[requirement.TagMaskIndex].Mask;
+            var matches = requirement.TagQuery.Evaluate(ownerTags);
             if (requirement.RequirementKind == GASRequirementKind.RequiredTags)
-                return ownerTags.HasAllTags(mask);
+                return matches;
             if (requirement.RequirementKind == GASRequirementKind.BlockedTags)
-                return !ownerTags.HasAnyTag(mask);
-            return true;
+                return !matches;
+            return false;
         }
     }
 

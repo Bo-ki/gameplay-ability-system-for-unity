@@ -19,7 +19,7 @@
 
 ## 结论
 
-当前链路已经走到了正确方向，且旧复审中的 Core / Demo phase 混入问题已经被第一刀缓解；但 SourceGenerator 的权限边界仍然过大，generated runtime boundary gate 目前只阻断未分类命中，已分类的 `MigrationProofOnly` 仍会继续生成。
+当前链路已经走到了正确方向，且旧复审中的 Core / Demo phase 混入问题已经被第一刀缓解；`RuntimeDefinitionGluePhase` 也已从 lifecycle 输出中收窄为 pure glue 输出。但 SourceGenerator 的权限边界仍未完成，generated runtime boundary gate 目前只阻断未分类命中，显式登记为 `RuntimeLifecycleMigration` 的 `MigrationProofOnly` artifact 仍会继续生成。
 
 正确方向包括：
 
@@ -28,8 +28,9 @@
 3. `GASDefinitionCatalogBlob`、sorted code lookup、`ref readonly` definition 访问已经出现。
 4. `RuntimeForbiddenDependencyHits = 0` 能证明 managed config 没有直接泄漏到 generated Runtime。
 5. `GasCodeGenPipeline.s_corePhases` 已不再包含 `AutoChessDemoConfigPhase`，Demo 产物改由 standalone phase 写入 `Assets/AutoChessDemo/Generated`。
-6. validation report 已新增 generated lifecycle / structural / ownership / random lookup / managed config boundary 计数，并输出 `GeneratedRuntimeBoundaryGateMode: blocking-unclassified-migration-proof`。
+6. validation report 已新增 generated lifecycle / structural / ownership / random lookup / managed config boundary 计数，并输出 `GeneratedRuntimeBoundaryGateMode: blocking-unclassified-lifecycle-migration`。
 7. `GeneratedRuntimeSystemRegistrationHits = 0` 只说明 SourceGenerator 当前没有输出自注册 helper；手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 仍通过 `Type.GetType(...)` 反射解析 generated systems，但解析失败时当前已抛 `InvalidOperationException`，不再静默跳过。该事实具备 fail-fast 正向证据，仍需补缺失 artifact / type mismatch / assembly unavailable 的负例验证、system 数量和 phase budget 证据。
+8. `GasCodeGen.manifest.json` 当前把 `RuntimeDefinitionGlue.gen.cs` 标为 `ArtifactCategory=RuntimePureGlue`，把 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs` 标为 `ArtifactCategory=RuntimeLifecycleMigration`；validation 的 `MigrationProofOnly` 分类必须依赖该 manifest contract，而不是文件名白名单。
 
 必须修正的是：生成器不应继续生成 Runtime Core lifecycle system、隐藏结构变化 owner 或大量 runtime random lookup 驱动逻辑；新增 boundary hit 不能长期只报告不阻断。SourceGenerator 当前已经不只是“配置到代码”的胶水，而是在部分路径上替 Runtime Core 拥有 gameplay 时序。
 
@@ -114,19 +115,21 @@ Assets/DataGenerated/Luban/Json/GAS
 RuntimeForbiddenDependencyHits: 0
 RuntimeGeneratedNamingDebtHits: 0
 GeneratedNamingDebtHits: 0
-GeneratedRuntimeBoundaryHits: 135
+GeneratedRuntimeBoundaryHits: 121
+GeneratedRuntimePureGlueArtifacts: 1
+GeneratedRuntimeLifecycleMigrationArtifacts: 3
 GeneratedRuntimeLifecycleHits: 21
 GeneratedRuntimeSystemRegistrationHits: 0
 GeneratedRuntimeStructuralChangeHits: 8
-GeneratedRuntimeOwnershipHits: 2
-GeneratedRuntimeRandomWriteLookupHits: 104
+GeneratedRuntimeOwnershipHits: 6
+GeneratedRuntimeRandomWriteLookupHits: 86
 GeneratedRuntimeManagedConfigHits: 0
-GeneratedRuntimeBoundaryGateMode: blocking-unclassified-migration-proof
+GeneratedRuntimeBoundaryGateMode: blocking-unclassified-lifecycle-migration
 GeneratedRuntimeUnclassifiedBoundaryHits: 0
-CurrentMode: blocking-unclassified-migration-proof
+CurrentMode: blocking-unclassified-lifecycle-migration
 ```
 
-这说明扫描能力已经从 forbidden dependency 扩展到 generated runtime 职责边界，且未分类 boundary hit 已会阻断生成。剩余风险是 lifecycle、structural owner、NativeContainer owner 和 random lookup owner 仍被分类为 `MigrationProofOnly` / `BootstrapDefinitionOwner` 后允许存在；R5 的任务不再是“从 0 做 blocking”，而是把这些分类迁移证明逐项迁出、阈值化或失败化。
+这说明扫描能力已经从 forbidden dependency 扩展到 generated runtime 职责边界，且未分类 boundary hit 已会阻断生成。剩余风险是 lifecycle、structural owner、NativeContainer owner 和 random lookup owner 仍被分类为 `MigrationProofOnly` / `BootstrapDefinitionOwner` 后允许存在；R5 的任务不再是“从 0 做 blocking”，而是把这些分类迁移证明逐项迁出、阈值化或失败化。当前比旧快照更进一步的是：`MigrationProofOnly` 不再只靠文件名白名单，而是必须来自 manifest 中的 `RuntimeLifecycleMigration` 分类。
 
 ### 6. Core phase 与 Demo phase 已拆分，但默认 all 入口仍是复合消费链
 
@@ -139,6 +142,7 @@ new BlobSchemaPhase(),
 new StaticLookupPhase(),
 new DefinitionCatalogPhase(),
 new RuntimeDefinitionGluePhase(),
+new RuntimeLifecycleMigrationPhase(),
 new BakerGluePhase(),
 new ComponentTypeSetPhase(),
 new QueryLayoutPhase(),
@@ -157,18 +161,23 @@ new ValidationReportPhase(),
 
 剩余约束不是继续拆 `s_corePhases`，而是保持 Core report / manifest 与 Demo generated manifest 的 owner 分离：Core validation report 只能证明 Runtime generated artifact；AutoChessDemo standalone 产物只能作为业务验收 / scenario evidence，不能消费为通用 Core 合规证明。
 
-### P0：RuntimeDefinitionGluePhase 生成了 lifecycle system
+### 已缓解但未完成：RuntimeDefinitionGluePhase 不再生成 lifecycle system
 
 `RuntimeDefinitionGluePhase` 当前输出：
 
 ```text
 Runtime/RuntimeDefinitionGlue.gen.cs
+```
+
+迁移期 lifecycle system 由 `RuntimeLifecycleMigrationPhase` 输出：
+
+```text
 Runtime/RuntimeAbilityActivation.gen.cs
 Runtime/RuntimeEffectInstant.gen.cs
 Runtime/RuntimeActiveEffect.gen.cs
 ```
 
-其中后三类不再是 definition glue，而是 Runtime Core 执行管线。它们包含 `ISystem`、`OnUpdate()`、`ComponentLookup`、`BufferLookup`、`Schedule()`、ECB 和 structural owner。`RuntimeSystemRegistration.gen.cs` 当前已不在 output list，且 report 中 `GeneratedRuntimeSystemRegistrationHits = 0`，这是正向事实；但这只证明生成器没有自注册 helper，不能证明手写 schedule registry 整体达标。当前 `GASSystemScheduleContract.AddSystemsByTypeName()` 在 generated type 缺失时已 fail-fast，新增 registration helper 必须默认失败，手写 registry 还必须补缺失 artifact / type mismatch / assembly unavailable 的负例验证、system 数量和 phase budget。
+后三类不再挂在 definition glue phase 下，但仍是 Runtime Core 执行管线。它们包含 `ISystem`、`OnUpdate()`、`ComponentLookup`、`BufferLookup`、`Schedule()`、ECB 和 structural owner。`RuntimeSystemRegistration.gen.cs` 当前已不在 output list，且 report 中 `GeneratedRuntimeSystemRegistrationHits = 0`，这是正向事实；但这只证明生成器没有自注册 helper，不能证明手写 schedule registry 整体达标。当前 `GASSystemScheduleContract.AddSystemsByTypeName()` 在 generated type 缺失时已 fail-fast，新增 registration helper 必须默认失败，手写 registry 还必须补缺失 artifact / type mismatch / assembly unavailable 的负例验证、system 数量和 phase budget。
 
 官方判定：
 
@@ -191,7 +200,7 @@ EntityCommandBuffer
 NativeList<T>
 ```
 
-`Generated Runtime Boundary Gate` 的 `CurrentMode` 当前是 `blocking-unclassified-migration-proof`，未分类命中会被阻断；但 `GeneratedRuntimeBoundaryHits = 135` 仍被分类为迁移证明或 bootstrap owner 后允许生成。因此报告可以写 `RuntimeForbiddenDependencyHits = 0`、`GeneratedRuntimeUnclassifiedBoundaryHits = 0`，同时 generated Runtime 仍然生成实际 gameplay lifecycle。这已经从“自检盲区 / 纯报告”升级为“已阻断未知回流，但仍保留已分类迁移证明”的门禁缺口。
+`Generated Runtime Boundary Gate` 的 `CurrentMode` 当前是 `blocking-unclassified-lifecycle-migration`，未分类命中会被阻断；但 `GeneratedRuntimeBoundaryHits = 121` 仍被分类为迁移证明或 bootstrap owner 后允许生成。因此报告可以写 `RuntimeForbiddenDependencyHits = 0`、`GeneratedRuntimeUnclassifiedBoundaryHits = 0`，同时 generated Runtime 仍然生成实际 gameplay lifecycle。这已经从“自检盲区 / 纯报告”升级为“已阻断未知回流，但仍保留已分类迁移证明”的门禁缺口。当前 gate 的改进是：只有 manifest 分类为 `RuntimeLifecycleMigration` 的 artifact 才能承载 lifecycle / lookup / structural owner hit。
 
 ### P1：Catalog builder 的层级边界偏软
 
@@ -241,9 +250,9 @@ GetBufferLookup<T>()
 | 事实项 | 当前证据 | 官方规则 | 当前判定 |
 |---|---|---|---|
 | Core / Demo phase 已拆分 | `GasCodeGenPipeline.s_corePhases` 不含 `AutoChessDemoConfigPhase`，Demo 写入 standalone output root | `ODF-06`、`20-GASRuntimeCore-API选型基线.md` | 旧 P0 已缓解；继续保持 Core report 与 Demo evidence 分 owner |
-| RuntimeDefinitionGluePhase 过厚 | 同 phase 生成 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs` | `SYS-01`、`SYS-03`、`QRY-01` | SourceGenerator 越权生成 lifecycle |
+| RuntimeDefinitionGluePhase 已收窄 | `RuntimeDefinitionGluePhase` 当前只输出 `RuntimeDefinitionGlue.gen.cs`，manifest 分类为 `RuntimePureGlue`；lifecycle artifact 已拆到 `RuntimeLifecycleMigrationPhase` | `SYS-01`、`SYS-03`、`QRY-01` | phase ownership 已缓解，但 SourceGenerator 仍保留迁移期 lifecycle artifact |
 | generated runtime system registration 当前为 0 | report 输出 `GeneratedRuntimeSystemRegistrationHits: 0`，output list 不含 `RuntimeSystemRegistration.gen.cs`；手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 对缺失 generated type 当前 fail-fast | `SYS-01`、`SYS-03` | SourceGenerator 不自注册是正向事实；缺失 type 静默漏注册风险已缓解，但手写 registry 仍需负例验证、system 数量和 phase budget；新增 registration helper 必须默认失败 |
-| generated runtime boundary gate 阻断未分类命中 | report 输出 `GeneratedRuntimeBoundaryHits: 135`、`GeneratedRuntimeBoundaryGateMode: blocking-unclassified-migration-proof`、`GeneratedRuntimeUnclassifiedBoundaryHits: 0` | `ODF-18`、`SYS-01`、`QRY-04`、`SC-01` | 未分类回流已被阻断；已分类 `MigrationProofOnly` 仍可生成 |
+| generated runtime boundary gate 阻断未分类命中 | report 输出 `GeneratedRuntimeBoundaryHits: 121`、`GeneratedRuntimePureGlueArtifacts: 1`、`GeneratedRuntimeLifecycleMigrationArtifacts: 3`、`GeneratedRuntimeBoundaryGateMode: blocking-unclassified-lifecycle-migration`、`GeneratedRuntimeUnclassifiedBoundaryHits: 0` | `ODF-18`、`SYS-01`、`QRY-04`、`SC-01` | 未分类回流已被阻断；只有 manifest 分类为 `RuntimeLifecycleMigration` 的 artifact 可保留 `MigrationProofOnly` |
 | generated runtime 使用 random lookup | generated lifecycle 文件内使用 `ComponentLookup<T>` / `BufferLookup<T>` | `QRY-04`、`PRF-06`、`PRF-19` | 只能作为迁移期 proof，不是 scale-ready 终局 |
 | Catalog builder runtime-visible | `DefinitionCatalog.gen.cs` 暴露 `BuildCatalog()` / `BlobBuilder` | `BLOB-01`、`BLOB-02`、`BAKE-01` | 初始化可接受，但层级边界和 dispose owner 需继续证明 |
 | Forbidden dependency gate 通过 | `RuntimeForbiddenDependencyHits: 0` | `ODF-18` | 只证明 managed config 未泄漏，不能证明 lifecycle / query / ECB 合规 |
@@ -254,7 +263,7 @@ GetBufferLookup<T>()
 
 1. Core generation 默认入口必须持续证明 Core phase set 不包含 `AutoChessDemoConfigPhase` 或任何 Demo 专用 phase；Demo standalone manifest 不能反哺为 Core validation evidence。
 2. Runtime-visible generated artifact 必须能归类为 definition、Blob、lookup、pure glue、validation、Baker glue 或 Bootstrap glue；否则必须标记为迁移期 proof 并绑定移除任务。
-3. validation report 已新增 generated lifecycle / ownership / random lookup / NativeContainer / structural change gate，并已进入 `blocking-unclassified-migration-proof`；后续必须把允许存在的 `MigrationProofOnly` 迁出 Runtime-visible lifecycle、收紧阈值或转为失败条件。
+3. validation report 已新增 generated lifecycle / ownership / random lookup / NativeContainer / structural change gate，并已进入 `blocking-unclassified-lifecycle-migration`；后续必须把允许存在的 `MigrationProofOnly` 迁出 Runtime-visible lifecycle、收紧阈值或转为失败条件。
 4. `BlobBuilder` 与 catalog dispose owner 必须有 Baking / Bootstrap / initialization 证据；Runtime Core hot path 只能只读 catalog。
 5. generated `.gen.cs` 的修复必须落回 `GasGlueCodeGenPhases`、manifest、validation report、离线 sourcegen bat/CLI 或 Unity batchmode 生成链路；不能手改 generated output 当作架构修复。
 

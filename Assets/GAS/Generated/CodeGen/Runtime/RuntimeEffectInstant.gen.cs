@@ -41,6 +41,7 @@ namespace GAS.Runtime.Generated
                 SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(),
                 EntityStorageInfoLookup = SystemAPI.GetEntityStorageInfoLookup(),
                 DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
+                TagMaskLookup = SystemAPI.GetComponentLookup<TagMaskComponent>(isReadOnly: true),
                 Catalog = catalogComponent.Catalog,
                 StreamEntity = streamEntity,
             }.Schedule(state.Dependency);
@@ -55,6 +56,7 @@ namespace GAS.Runtime.Generated
             public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
             [ReadOnly] public EntityStorageInfoLookup EntityStorageInfoLookup;
             [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
+            [ReadOnly] public ComponentLookup<TagMaskComponent> TagMaskLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public Entity StreamEntity;
 
@@ -79,7 +81,7 @@ namespace GAS.Runtime.Generated
                     var command = commands[i];
                     if (command.Kind != GEEffectCommandKind.Instant)
                         continue;
-                    if (!CanBuildInstantSpec(ref catalog, in command, EntityStorageInfoLookup, DestroyingLookup, out var gameplayEffectIndex))
+                    if (!CanBuildInstantSpec(ref catalog, in command, EntityStorageInfoLookup, DestroyingLookup, TagMaskLookup, out var gameplayEffectIndex))
                         continue;
 
                     specs.Add(new GEEffectSpecBuffer
@@ -118,6 +120,7 @@ namespace GAS.Runtime.Generated
             in GEEffectCommandBuffer command,
             EntityStorageInfoLookup entityStorageInfoLookup,
             ComponentLookup<ASCDestroyingComponent> destroyingLookup,
+            ComponentLookup<TagMaskComponent> tagMaskLookup,
             out int gameplayEffectIndex)
         {
             gameplayEffectIndex = -1;
@@ -129,14 +132,26 @@ namespace GAS.Runtime.Generated
                 return false;
 
             ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
-            return gameplayEffect.DurationFrames <= 0
-                && gameplayEffect.PeriodFrames <= 0
-                && gameplayEffect.StackLimitCount <= 0
-                && gameplayEffect.GrantedTagMaskIndex < 0
-                && gameplayEffect.RemoveGameplayEffectTagMaskIndex < 0
-                && gameplayEffect.GrantedAbilityCount == 0
-                && (gameplayEffect.ModifierCount > 0
-                    || gameplayEffect.GameplayCueCode > 0);
+            if (gameplayEffect.DurationFrames > 0
+                || gameplayEffect.PeriodFrames > 0
+                || gameplayEffect.StackLimitCount > 0
+                || gameplayEffect.GrantedTagMaskIndex >= 0
+                || !gameplayEffect.RemoveGameplayEffectTagQuery.IsEmpty
+                || gameplayEffect.GrantedAbilityCount > 0
+                || (gameplayEffect.ModifierCount <= 0
+                    && gameplayEffect.GameplayCueCode <= 0))
+                return false;
+
+            if (gameplayEffect.RequirementCount > 0)
+            {
+                var targetTags = tagMaskLookup.HasComponent(command.TargetAsc)
+                    ? tagMaskLookup[command.TargetAsc]
+                    : default;
+                if (!GASGeneratedRequirementEvaluator.EvaluateGameplayEffectRequirements(ref catalog, in gameplayEffect, in targetTags, out _))
+                    return false;
+            }
+
+            return true;
         }
 
         private static int GetCueRequestOnApply(ref GASDefinitionCatalogBlob catalog, int gameplayEffectIndex)

@@ -62,6 +62,12 @@ namespace GAS.Editor
             writer.WriteLine("public int PrimaryGameplayEffectCode;");
             writer.WriteLine("public int SecondaryGameplayEffectCode;");
             writer.WriteLine("public int ActivationOwnedTagCode;");
+            writer.WriteLine("public int[] ActivationRequiredAllTagCodes;");
+            writer.WriteLine("public int[] ActivationRequiredAnyTagCodes;");
+            writer.WriteLine("public int[] ActivationRequiredNoneTagCodes;");
+            writer.WriteLine("public int[] ActivationBlockedAllTagCodes;");
+            writer.WriteLine("public int[] ActivationBlockedAnyTagCodes;");
+            writer.WriteLine("public int[] ActivationBlockedNoneTagCodes;");
             writer.WriteLine("public int CostGameplayEffectCode;");
             writer.WriteLine("public int CooldownGameplayEffectCode;");
             writer.WriteLine("public int CooldownFrames;");
@@ -97,6 +103,18 @@ namespace GAS.Editor
             writer.WriteLine("public int ResistanceAttributeCode;");
             writer.WriteLine("public float ResistanceCap;");
             writer.WriteLine("public int RemoveGameplayEffectTagCode;");
+            writer.WriteLine("public int[] ApplicationRequiredAllTagCodes;");
+            writer.WriteLine("public int[] ApplicationRequiredAnyTagCodes;");
+            writer.WriteLine("public int[] ApplicationRequiredNoneTagCodes;");
+            writer.WriteLine("public int[] OngoingRequiredAllTagCodes;");
+            writer.WriteLine("public int[] OngoingRequiredAnyTagCodes;");
+            writer.WriteLine("public int[] OngoingRequiredNoneTagCodes;");
+            writer.WriteLine("public int[] RemoveGameplayEffectAllTagCodes;");
+            writer.WriteLine("public int[] RemoveGameplayEffectAnyTagCodes;");
+            writer.WriteLine("public int[] RemoveGameplayEffectNoneTagCodes;");
+            writer.WriteLine("public int[] ImmunityAllTagCodes;");
+            writer.WriteLine("public int[] ImmunityAnyTagCodes;");
+            writer.WriteLine("public int[] ImmunityNoneTagCodes;");
             writer.WriteLine("public int StackingCode;");
             writer.WriteLine("public int StackLimitCount;");
             writer.WriteLine("public int StackType;");
@@ -212,6 +230,12 @@ namespace GAS.Editor
                 $"PrimaryGameplayEffectCode = {row.PrimaryGameplayEffectCode}, " +
                 $"SecondaryGameplayEffectCode = {row.SecondaryGameplayEffectCode}, " +
                 $"ActivationOwnedTagCode = {row.ActivationOwnedTagCode}, " +
+                $"ActivationRequiredAllTagCodes = {IntArrayLiteral(row.ActivationRequiredAllTagCodes)}, " +
+                $"ActivationRequiredAnyTagCodes = {IntArrayLiteral(row.ActivationRequiredAnyTagCodes)}, " +
+                $"ActivationRequiredNoneTagCodes = {IntArrayLiteral(row.ActivationRequiredNoneTagCodes)}, " +
+                $"ActivationBlockedAllTagCodes = {IntArrayLiteral(row.ActivationBlockedAllTagCodes)}, " +
+                $"ActivationBlockedAnyTagCodes = {IntArrayLiteral(row.ActivationBlockedAnyTagCodes)}, " +
+                $"ActivationBlockedNoneTagCodes = {IntArrayLiteral(row.ActivationBlockedNoneTagCodes)}, " +
                 $"CostGameplayEffectCode = {row.CostGameplayEffectCode}, " +
                 $"CooldownGameplayEffectCode = {row.CooldownGameplayEffectCode}, " +
                 $"CooldownFrames = {row.CooldownFrames}, " +
@@ -246,6 +270,18 @@ namespace GAS.Editor
                 $"ResistanceAttributeCode = {row.ResistanceAttributeCode}, " +
                 $"ResistanceCap = {FloatLiteral(row.ResistanceCap)}, " +
                 $"RemoveGameplayEffectTagCode = {row.RemoveGameplayEffectTagCode}, " +
+                $"ApplicationRequiredAllTagCodes = {IntArrayLiteral(row.ApplicationRequiredAllTagCodes)}, " +
+                $"ApplicationRequiredAnyTagCodes = {IntArrayLiteral(row.ApplicationRequiredAnyTagCodes)}, " +
+                $"ApplicationRequiredNoneTagCodes = {IntArrayLiteral(row.ApplicationRequiredNoneTagCodes)}, " +
+                $"OngoingRequiredAllTagCodes = {IntArrayLiteral(row.OngoingRequiredAllTagCodes)}, " +
+                $"OngoingRequiredAnyTagCodes = {IntArrayLiteral(row.OngoingRequiredAnyTagCodes)}, " +
+                $"OngoingRequiredNoneTagCodes = {IntArrayLiteral(row.OngoingRequiredNoneTagCodes)}, " +
+                $"RemoveGameplayEffectAllTagCodes = {IntArrayLiteral(row.RemoveGameplayEffectAllTagCodes)}, " +
+                $"RemoveGameplayEffectAnyTagCodes = {IntArrayLiteral(row.RemoveGameplayEffectAnyTagCodes)}, " +
+                $"RemoveGameplayEffectNoneTagCodes = {IntArrayLiteral(row.RemoveGameplayEffectNoneTagCodes)}, " +
+                $"ImmunityAllTagCodes = {IntArrayLiteral(row.ImmunityAllTagCodes)}, " +
+                $"ImmunityAnyTagCodes = {IntArrayLiteral(row.ImmunityAnyTagCodes)}, " +
+                $"ImmunityNoneTagCodes = {IntArrayLiteral(row.ImmunityNoneTagCodes)}, " +
                 $"StackingCode = {row.StackingCode}, " +
                 $"StackLimitCount = {row.StackLimitCount}, " +
                 $"StackType = {row.StackType}, " +
@@ -571,6 +607,9 @@ namespace GAS.Editor
                     secondaryGameplayEffectCode = ids.Length > 1 ? ids[1] : 0;
                 }
 
+                var activationRequiredTags = ParseTagRequirement(row["ActivationRequiredTags"]);
+                var activationBlockedTags = ParseTagRequirement(row["ActivationBlockedTags"]);
+
                 return new AbilityDefinitionRowModel
                 {
                     AbilityCode = abilityCode,
@@ -579,6 +618,12 @@ namespace GAS.Editor
                     PrimaryGameplayEffectCode = primaryGameplayEffectCode,
                     SecondaryGameplayEffectCode = secondaryGameplayEffectCode,
                     ActivationOwnedTagCode = FirstPositive(row["ActivationOwnedTags"]),
+                    ActivationRequiredAllTagCodes = activationRequiredTags.All,
+                    ActivationRequiredAnyTagCodes = activationRequiredTags.Any,
+                    ActivationRequiredNoneTagCodes = activationRequiredTags.None,
+                    ActivationBlockedAllTagCodes = activationBlockedTags.All,
+                    ActivationBlockedAnyTagCodes = activationBlockedTags.Any,
+                    ActivationBlockedNoneTagCodes = activationBlockedTags.None,
                     CostGameplayEffectCode = Int(row["Cost"]),
                     CooldownGameplayEffectCode = Int(row["CdEffect"]),
                     CooldownFrames = Int(row["Cd"]),
@@ -597,6 +642,10 @@ namespace GAS.Editor
                 var duration = row["Duration"];
                 var period = row["Period"];
                 var stacking = row["Stacking"];
+                var applicationRequiredTags = ParseTagRequirement(row["ApplicationRequiredTags"]);
+                var ongoingRequiredTags = ParseTagRequirement(row["OngoingRequiredTags"]);
+                var removeGameplayEffectsWithTags = ParseTagRequirement(row["RemoveGameplayEffectsWithTags"]);
+                var immunityTags = ParseTagRequirement(row["ImmunityTags"]);
 
                 return new GameplayEffectDefinitionRowModel
                 {
@@ -624,6 +673,18 @@ namespace GAS.Editor
                     ResistanceAttributeCode = 0,
                     ResistanceCap = 0f,
                     RemoveGameplayEffectTagCode = FirstRequirementTag(row["RemoveGameplayEffectsWithTags"]),
+                    ApplicationRequiredAllTagCodes = applicationRequiredTags.All,
+                    ApplicationRequiredAnyTagCodes = applicationRequiredTags.Any,
+                    ApplicationRequiredNoneTagCodes = applicationRequiredTags.None,
+                    OngoingRequiredAllTagCodes = ongoingRequiredTags.All,
+                    OngoingRequiredAnyTagCodes = ongoingRequiredTags.Any,
+                    OngoingRequiredNoneTagCodes = ongoingRequiredTags.None,
+                    RemoveGameplayEffectAllTagCodes = removeGameplayEffectsWithTags.All,
+                    RemoveGameplayEffectAnyTagCodes = removeGameplayEffectsWithTags.Any,
+                    RemoveGameplayEffectNoneTagCodes = removeGameplayEffectsWithTags.None,
+                    ImmunityAllTagCodes = immunityTags.All,
+                    ImmunityAnyTagCodes = immunityTags.Any,
+                    ImmunityNoneTagCodes = immunityTags.None,
                     StackingCode = Int(stacking?["StackCode"]),
                     StackLimitCount = Int(stacking?["LimitCount"]),
                     StackType = Int(stacking?["StackingType"]),
@@ -719,6 +780,20 @@ namespace GAS.Editor
                 return values.Length > 0 ? values[0] : 0;
             }
 
+            private static TagRequirementRowModel ParseTagRequirement(JToken token)
+            {
+                if (token == null || token.Type == JTokenType.Null)
+                    return TagRequirementRowModel.Empty;
+
+                if (token is JArray)
+                    return new TagRequirementRowModel(PositiveInts(token), System.Array.Empty<int>(), System.Array.Empty<int>());
+
+                return new TagRequirementRowModel(
+                    PositiveInts(token["All"]),
+                    PositiveInts(token["Any"]),
+                    PositiveInts(token["None"]));
+            }
+
             private static int FirstRequirementTag(JToken token)
             {
                 if (token == null || token.Type == JTokenType.Null)
@@ -779,6 +854,12 @@ namespace GAS.Editor
             public int PrimaryGameplayEffectCode;
             public int SecondaryGameplayEffectCode;
             public int ActivationOwnedTagCode;
+            public int[] ActivationRequiredAllTagCodes;
+            public int[] ActivationRequiredAnyTagCodes;
+            public int[] ActivationRequiredNoneTagCodes;
+            public int[] ActivationBlockedAllTagCodes;
+            public int[] ActivationBlockedAnyTagCodes;
+            public int[] ActivationBlockedNoneTagCodes;
             public int CostGameplayEffectCode;
             public int CooldownGameplayEffectCode;
             public int CooldownFrames;
@@ -811,6 +892,18 @@ namespace GAS.Editor
             public int ResistanceAttributeCode;
             public float ResistanceCap;
             public int RemoveGameplayEffectTagCode;
+            public int[] ApplicationRequiredAllTagCodes;
+            public int[] ApplicationRequiredAnyTagCodes;
+            public int[] ApplicationRequiredNoneTagCodes;
+            public int[] OngoingRequiredAllTagCodes;
+            public int[] OngoingRequiredAnyTagCodes;
+            public int[] OngoingRequiredNoneTagCodes;
+            public int[] RemoveGameplayEffectAllTagCodes;
+            public int[] RemoveGameplayEffectAnyTagCodes;
+            public int[] RemoveGameplayEffectNoneTagCodes;
+            public int[] ImmunityAllTagCodes;
+            public int[] ImmunityAnyTagCodes;
+            public int[] ImmunityNoneTagCodes;
             public int StackingCode;
             public int StackLimitCount;
             public int StackType;
@@ -820,6 +913,25 @@ namespace GAS.Editor
             public bool DenyOverflowApplication;
             public bool ClearStackOnOverflow;
             public int OverflowGameplayEffectCode;
+        }
+
+        private readonly struct TagRequirementRowModel
+        {
+            public readonly int[] All;
+            public readonly int[] Any;
+            public readonly int[] None;
+
+            public TagRequirementRowModel(int[] all, int[] any, int[] none)
+            {
+                All = all ?? System.Array.Empty<int>();
+                Any = any ?? System.Array.Empty<int>();
+                None = none ?? System.Array.Empty<int>();
+            }
+
+            public static TagRequirementRowModel Empty => new(
+                System.Array.Empty<int>(),
+                System.Array.Empty<int>(),
+                System.Array.Empty<int>());
         }
 
         private sealed class AttributeSetDefinitionRowModel

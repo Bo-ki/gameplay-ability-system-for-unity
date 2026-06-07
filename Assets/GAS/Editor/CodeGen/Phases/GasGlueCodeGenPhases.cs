@@ -35,6 +35,16 @@ namespace GAS.Editor
             manifest.AddGeneratedFile(phaseName, path, "Runtime", true);
         }
 
+        protected static void AddRuntimePureGlueManifest(GasCodeGenManifest manifest, string phaseName, string path)
+        {
+            manifest.AddGeneratedFile(phaseName, path, "Runtime", true, "RuntimePureGlue");
+        }
+
+        protected static void AddRuntimeLifecycleMigrationManifest(GasCodeGenManifest manifest, string phaseName, string path)
+        {
+            manifest.AddGeneratedFile(phaseName, path, "Runtime", true, "RuntimeLifecycleMigration");
+        }
+
         protected static void AddBakingManifest(GasCodeGenManifest manifest, string phaseName, string path)
         {
             manifest.AddGeneratedFile(phaseName, path, "Baking", false);
@@ -856,7 +866,7 @@ namespace GAS.Editor
             WriteIntArrayAllocation(writer, "GameplayEffectCodes", model.GameplayEffects.Select(item => item.GameplayEffectCode).ToArray());
             WriteGameplayEffectAllocation(writer, model.GameplayEffects);
             WriteModifierAllocation(writer, model.Modifiers);
-            WriteRequirementAllocation(writer);
+            WriteRequirementAllocation(writer, model.Requirements);
             WriteTagMaskAllocation(writer, model.TagMasks);
             WriteGrantedAbilityAllocation(writer);
             writer.WriteLine("");
@@ -920,6 +930,7 @@ namespace GAS.Editor
                 writer.WriteLine($"PeriodGameplayEffectCode = {item.PeriodGameplayEffectCode},");
                 writer.WriteLine($"GrantedTagMaskIndex = {item.GrantedTagMaskIndex},");
                 writer.WriteLine($"RemoveGameplayEffectTagMaskIndex = {item.RemoveGameplayEffectTagMaskIndex},");
+                writer.WriteLine($"RemoveGameplayEffectTagQuery = {TagRequirementMaskLiteral(item.RemoveGameplayEffectTagQuery)},");
                 writer.WriteLine($"GameplayCueCode = {item.GameplayCueCode},");
                 writer.WriteLine($"DamageTypeCode = {item.DamageTypeCode},");
                 writer.WriteLine($"ResistanceAttributeSetCode = {item.ResistanceAttributeSetCode},");
@@ -976,9 +987,25 @@ namespace GAS.Editor
             writer.WriteLine("");
         }
 
-        private static void WriteRequirementAllocation(IndentedWriter writer)
+        private static void WriteRequirementAllocation(IndentedWriter writer, IReadOnlyList<DefinitionCatalogPhase.CatalogRequirement> values)
         {
-            writer.WriteLine("builder.Allocate(ref root.Requirements, 0);");
+            writer.WriteLine($"var requirements = builder.Allocate(ref root.Requirements, {values.Count});");
+            for (var i = 0; i < values.Count; i++)
+            {
+                var item = values[i];
+                writer.WriteLine($"requirements[{i}] = new GASCatalogRequirementDefinitionBlob");
+                writer.WriteLine("{");
+                writer.Indent++;
+                writer.WriteLine($"RequirementKind = {item.RequirementKind},");
+                writer.WriteLine($"TagMaskIndex = {item.TagMaskIndex},");
+                writer.WriteLine($"TagQuery = {TagRequirementMaskLiteral(item.TagQuery)},");
+                writer.WriteLine($"AttributeSetCode = {item.AttributeSetCode},");
+                writer.WriteLine($"AttributeCode = {item.AttributeCode},");
+                writer.WriteLine($"CompareOp = {item.CompareOp},");
+                writer.WriteLine($"CompareValue = {FloatLiteral(item.CompareValue)},");
+                writer.Indent--;
+                writer.WriteLine("};");
+            }
             writer.WriteLine("");
         }
 
@@ -989,13 +1016,11 @@ namespace GAS.Editor
             for (var i = 0; i < values.Count; i++)
             {
                 var item = values[i];
-                writer.WriteLine($"var tagMask{i} = new TagMaskComponent();");
-                writer.WriteLine($"tagMask{i}.AddTag({item.TagCode});");
                 writer.WriteLine($"tagMasks[{i}] = new GASCatalogTagMaskDefinitionBlob");
                 writer.WriteLine("{");
                 writer.Indent++;
                 writer.WriteLine($"TagCode = {item.TagCode},");
-                writer.WriteLine($"Mask = tagMask{i},");
+                writer.WriteLine($"Mask = {TagMaskLiteral(item.Mask)},");
                 writer.Indent--;
                 writer.WriteLine("};");
             }
@@ -1023,22 +1048,70 @@ namespace GAS.Editor
             return value.ToString("R", CultureInfo.InvariantCulture) + "f";
         }
 
+        private static string TagRequirementMaskLiteral(GAS.Runtime.TagRequirementMask requirement)
+        {
+            return "new TagRequirementMask { " +
+                   $"All = {TagMaskLiteral(requirement.All)}, " +
+                   $"Any = {TagMaskLiteral(requirement.Any)}, " +
+                   $"None = {TagMaskLiteral(requirement.None)} }}";
+        }
+
+        private static string TagMaskLiteral(GAS.Runtime.TagMaskComponent mask)
+        {
+            return "new TagMaskComponent { " +
+                   $"Mask0 = {ULongLiteral(mask.Mask0)}, " +
+                   $"Mask1 = {ULongLiteral(mask.Mask1)}, " +
+                   $"Mask2 = {ULongLiteral(mask.Mask2)}, " +
+                   $"Mask3 = {ULongLiteral(mask.Mask3)} }}";
+        }
+
+        private static string ULongLiteral(ulong value)
+        {
+            return value.ToString(CultureInfo.InvariantCulture) + "ul";
+        }
+
         private sealed class CatalogModel
         {
             public List<CatalogAbility> Abilities { get; } = new List<CatalogAbility>();
             public List<CatalogGameplayEffect> GameplayEffects { get; } = new List<CatalogGameplayEffect>();
             public List<CatalogModifier> Modifiers { get; } = new List<CatalogModifier>();
+            public List<DefinitionCatalogPhase.CatalogRequirement> Requirements { get; } = new List<DefinitionCatalogPhase.CatalogRequirement>();
             public List<CatalogTagMask> TagMasks { get; } = new List<CatalogTagMask>();
 
             public static CatalogModel Create(GasCodeGenContext context)
             {
                 var model = new CatalogModel();
                 var tagMaskIndices = new Dictionary<int, int>();
+                var tagCatalog = BuildTagCatalog(context);
                 var timelinesById = BuildTimelines(context);
-                BuildAbilities(context, model, timelinesById, tagMaskIndices);
-                BuildGameplayEffects(context, model, tagMaskIndices);
-                BuildTagMasks(model, tagMaskIndices);
+                BuildAbilities(context, model, timelinesById, tagMaskIndices, tagCatalog);
+                BuildGameplayEffects(context, model, tagMaskIndices, tagCatalog);
+                BuildTagMasks(model, tagMaskIndices, tagCatalog);
                 return model;
+            }
+
+            private static DefinitionCatalogPhase.CatalogTagCatalog BuildTagCatalog(GasCodeGenContext context)
+            {
+                var row = context.Rows.FirstOrDefault(item => item.DefinitionKind == GAS.Runtime.GASDefinitionKind.GameplayTag);
+                var entries = new List<CatalogTagEntry>();
+                if (row?.RowValues != null)
+                {
+                    foreach (var snapshot in row.RowValues)
+                    {
+                        var tagCode = GetInt(snapshot.Row, "GameplayTagCode");
+                        if (tagCode <= 0)
+                            continue;
+
+                        entries.Add(new CatalogTagEntry
+                        {
+                            TagCode = tagCode,
+                            ParentCodes = ToPositiveIntArray(GetArrayValue(snapshot.Row, "ParentCodes")),
+                        });
+                    }
+                }
+
+                entries.Sort((left, right) => left.TagCode.CompareTo(right.TagCode));
+                return DefinitionCatalogPhase.CatalogTagCatalog.Create(entries);
             }
 
             private static Dictionary<int, CatalogTimeline> BuildTimelines(GasCodeGenContext context)
@@ -1070,7 +1143,8 @@ namespace GAS.Editor
                 GasCodeGenContext context,
                 CatalogModel model,
                 IReadOnlyDictionary<int, CatalogTimeline> timelinesById,
-                Dictionary<int, int> tagMaskIndices)
+                Dictionary<int, int> tagMaskIndices,
+                DefinitionCatalogPhase.CatalogTagCatalog tagCatalog)
             {
                 var row = context.Rows.FirstOrDefault(item => item.DefinitionKind == GAS.Runtime.GASDefinitionKind.Ability);
                 if (row?.RowValues == null)
@@ -1082,7 +1156,7 @@ namespace GAS.Editor
                     timelinesById.TryGetValue(timelineId, out var timeline);
                     var activationOwnedTagCode = GetInt(snapshot.Row, "ActivationOwnedTagCode");
 
-                    model.Abilities.Add(new CatalogAbility
+                    var ability = new CatalogAbility
                     {
                         AbilityCode = GetInt(snapshot.Row, "AbilityCode"),
                         Level = GetInt(snapshot.Row, "Level"),
@@ -1103,7 +1177,19 @@ namespace GAS.Editor
                             : GetInt(snapshot.Row, "TargetRuleCode"),
                         TargetRuleParam0 = 0,
                         TargetRuleParam1 = 0,
-                    });
+                    };
+
+                    ability.RequirementStart = model.Requirements.Count;
+                    AddTagRequirement(
+                        model.Requirements,
+                        GAS.Runtime.GASRequirementKind.RequiredTags,
+                        BuildTagRequirementMask(snapshot.Row, "ActivationRequired", tagCatalog));
+                    AddTagRequirement(
+                        model.Requirements,
+                        GAS.Runtime.GASRequirementKind.BlockedTags,
+                        BuildTagRequirementMask(snapshot.Row, "ActivationBlocked", tagCatalog));
+                    ability.RequirementCount = model.Requirements.Count - ability.RequirementStart;
+                    model.Abilities.Add(ability);
                 }
 
                 model.Abilities.Sort((left, right) => left.AbilityCode.CompareTo(right.AbilityCode));
@@ -1112,7 +1198,8 @@ namespace GAS.Editor
             private static void BuildGameplayEffects(
                 GasCodeGenContext context,
                 CatalogModel model,
-                Dictionary<int, int> tagMaskIndices)
+                Dictionary<int, int> tagMaskIndices,
+                DefinitionCatalogPhase.CatalogTagCatalog tagCatalog)
             {
                 var row = context.Rows.FirstOrDefault(item => item.DefinitionKind == GAS.Runtime.GASDefinitionKind.GameplayEffect);
                 if (row?.RowValues == null)
@@ -1129,6 +1216,7 @@ namespace GAS.Editor
                         PeriodGameplayEffectCode = GetInt(snapshot.Row, "PeriodGameplayEffectCode"),
                         GrantedTagMaskIndex = GetOrAddTagMaskIndex(tagMaskIndices, GetInt(snapshot.Row, "GrantedTagCode")),
                         RemoveGameplayEffectTagMaskIndex = GetOrAddTagMaskIndex(tagMaskIndices, GetInt(snapshot.Row, "RemoveGameplayEffectTagCode")),
+                        RemoveGameplayEffectTagQuery = BuildTagRequirementMask(snapshot.Row, "RemoveGameplayEffect", tagCatalog),
                         GameplayCueCode = GetInt(snapshot.Row, "GameplayCueCode"),
                         DamageTypeCode = GetInt(snapshot.Row, "DamageTypeCode"),
                         ResistanceAttributeSetCode = GetInt(snapshot.Row, "ResistanceAttributeSetCode"),
@@ -1143,11 +1231,24 @@ namespace GAS.Editor
                         DenyOverflowApplication = GetBool(snapshot.Row, "DenyOverflowApplication"),
                         ClearStackOnOverflow = GetBool(snapshot.Row, "ClearStackOnOverflow"),
                         OverflowGameplayEffectCode = GetInt(snapshot.Row, "OverflowGameplayEffectCode"),
-                        RequirementStart = 0,
-                        RequirementCount = 0,
                         GrantedAbilityStart = 0,
                         GrantedAbilityCount = 0,
                     };
+
+                    ge.RequirementStart = model.Requirements.Count;
+                    AddTagRequirement(
+                        model.Requirements,
+                        GAS.Runtime.GASRequirementKind.RequiredTags,
+                        BuildTagRequirementMask(snapshot.Row, "ApplicationRequired", tagCatalog));
+                    AddTagRequirement(
+                        model.Requirements,
+                        GAS.Runtime.GASRequirementKind.RequiredTags,
+                        BuildTagRequirementMask(snapshot.Row, "OngoingRequired", tagCatalog));
+                    AddTagRequirement(
+                        model.Requirements,
+                        GAS.Runtime.GASRequirementKind.BlockedTags,
+                        BuildTagRequirementMask(snapshot.Row, "Immunity", tagCatalog));
+                    ge.RequirementCount = model.Requirements.Count - ge.RequirementStart;
 
                     var modifierCount = GetModifierCount(snapshot.Row);
                     if (modifierCount > 0)
@@ -1213,15 +1314,52 @@ namespace GAS.Editor
                 model.Modifiers.AddRange(sortedModifiers);
             }
 
-            private static void BuildTagMasks(CatalogModel model, Dictionary<int, int> tagMaskIndices)
+            private static void BuildTagMasks(
+                CatalogModel model,
+                Dictionary<int, int> tagMaskIndices,
+                DefinitionCatalogPhase.CatalogTagCatalog tagCatalog)
             {
                 foreach (var pair in tagMaskIndices.OrderBy(item => item.Value))
                 {
                     model.TagMasks.Add(new CatalogTagMask
                     {
                         TagCode = pair.Key,
+                        Mask = tagCatalog.BuildMask(new[] { pair.Key }),
                     });
                 }
+            }
+
+            private static void AddTagRequirement(
+                List<DefinitionCatalogPhase.CatalogRequirement> requirements,
+                int requirementKind,
+                GAS.Runtime.TagRequirementMask tagQuery)
+            {
+                if (tagQuery.IsEmpty)
+                    return;
+
+                requirements.Add(new DefinitionCatalogPhase.CatalogRequirement
+                {
+                    RequirementKind = requirementKind,
+                    TagMaskIndex = -1,
+                    TagQuery = tagQuery,
+                    AttributeSetCode = 0,
+                    AttributeCode = 0,
+                    CompareOp = 0,
+                    CompareValue = 0f,
+                });
+            }
+
+            private static GAS.Runtime.TagRequirementMask BuildTagRequirementMask(
+                object row,
+                string memberPrefix,
+                DefinitionCatalogPhase.CatalogTagCatalog tagCatalog)
+            {
+                return new GAS.Runtime.TagRequirementMask
+                {
+                    All = tagCatalog.BuildMask(GetIntArray(row, memberPrefix + "AllTagCodes")),
+                    Any = tagCatalog.BuildMask(GetIntArray(row, memberPrefix + "AnyTagCodes")),
+                    None = tagCatalog.BuildMask(GetIntArray(row, memberPrefix + "NoneTagCodes")),
+                };
             }
 
             private static bool HasModifier(object row)
@@ -1295,6 +1433,27 @@ namespace GAS.Editor
                     return null;
 
                 return value as Array;
+            }
+
+            private static int[] GetIntArray(object row, string memberName)
+            {
+                return ToPositiveIntArray(GetArrayValue(row, memberName));
+            }
+
+            private static int[] ToPositiveIntArray(Array values)
+            {
+                if (values == null || values.Length == 0)
+                    return Array.Empty<int>();
+
+                var result = new List<int>(values.Length);
+                for (var i = 0; i < values.Length; i++)
+                {
+                    var value = Convert.ToInt32(values.GetValue(i), CultureInfo.InvariantCulture);
+                    if (value > 0)
+                        result.Add(value);
+                }
+
+                return result.ToArray();
             }
 
             private static int GetOrAddTagMaskIndex(Dictionary<int, int> tagMaskIndices, int tagCode)
@@ -1412,6 +1571,7 @@ namespace GAS.Editor
             public int PeriodGameplayEffectCode;
             public int GrantedTagMaskIndex;
             public int RemoveGameplayEffectTagMaskIndex;
+            public GAS.Runtime.TagRequirementMask RemoveGameplayEffectTagQuery;
             public int GameplayCueCode;
             public int DamageTypeCode;
             public int ResistanceAttributeSetCode;
@@ -1461,9 +1621,82 @@ namespace GAS.Editor
             public float PostAdd;
         }
 
+        private struct CatalogRequirement
+        {
+            public int RequirementKind;
+            public int TagMaskIndex;
+            public GAS.Runtime.TagRequirementMask TagQuery;
+            public int AttributeSetCode;
+            public int AttributeCode;
+            public int CompareOp;
+            public float CompareValue;
+        }
+
         private struct CatalogTagMask
         {
             public int TagCode;
+            public GAS.Runtime.TagMaskComponent Mask;
+        }
+
+        private struct CatalogTagEntry
+        {
+            public int TagCode;
+            public int[] ParentCodes;
+        }
+
+        private sealed class CatalogTagCatalog
+        {
+            private readonly Dictionary<int, int> _denseIndexByCode;
+            private readonly Dictionary<int, int[]> _parentCodesByCode;
+
+            private CatalogTagCatalog(
+                Dictionary<int, int> denseIndexByCode,
+                Dictionary<int, int[]> parentCodesByCode)
+            {
+                _denseIndexByCode = denseIndexByCode;
+                _parentCodesByCode = parentCodesByCode;
+            }
+
+            public static CatalogTagCatalog Create(IReadOnlyList<CatalogTagEntry> entries)
+            {
+                var denseIndexByCode = new Dictionary<int, int>();
+                var parentCodesByCode = new Dictionary<int, int[]>();
+                if (entries != null)
+                {
+                    for (var i = 0; i < entries.Count && i < GAS.Runtime.TagMaskComponent.Capacity; i++)
+                    {
+                        denseIndexByCode[entries[i].TagCode] = i;
+                        parentCodesByCode[entries[i].TagCode] = entries[i].ParentCodes ?? Array.Empty<int>();
+                    }
+                }
+
+                return new CatalogTagCatalog(denseIndexByCode, parentCodesByCode);
+            }
+
+            public GAS.Runtime.TagMaskComponent BuildMask(IEnumerable<int> tagCodes)
+            {
+                var mask = new GAS.Runtime.TagMaskComponent();
+                if (tagCodes == null)
+                    return mask;
+
+                foreach (var tagCode in tagCodes)
+                    AddTagAndParents(ref mask, tagCode);
+
+                return mask;
+            }
+
+            private void AddTagAndParents(ref GAS.Runtime.TagMaskComponent mask, int tagCode)
+            {
+                if (!_denseIndexByCode.TryGetValue(tagCode, out var denseIndex))
+                    return;
+
+                mask.AddTag(denseIndex);
+                if (!_parentCodesByCode.TryGetValue(tagCode, out var parentCodes))
+                    return;
+
+                for (var i = 0; i < parentCodes.Length; i++)
+                    AddTagAndParents(ref mask, parentCodes[i]);
+            }
         }
     }
 
@@ -1474,9 +1707,6 @@ namespace GAS.Editor
         public override IReadOnlyList<string> OutputFileNames { get; } = new[]
         {
             "Runtime/RuntimeDefinitionGlue.gen.cs",
-            "Runtime/RuntimeAbilityActivation.gen.cs",
-            "Runtime/RuntimeEffectInstant.gen.cs",
-            "Runtime/RuntimeActiveEffect.gen.cs",
         };
 
         public override bool RequiresRows => false;
@@ -1484,9 +1714,6 @@ namespace GAS.Editor
         public override void Execute(GasCodeGenContext context, GasCodeGenManifest manifest)
         {
             var gluePath = GetOutputPath(context, OutputFileNames[0]);
-            var systemPath = GetOutputPath(context, OutputFileNames[1]);
-            var instantEffectPath = GetOutputPath(context, OutputFileNames[2]);
-            var activeEffectPath = GetOutputPath(context, OutputFileNames[3]);
 
             using var writer = new IndentedWriter(new StreamWriter(gluePath));
             WriteHeader(writer);
@@ -1508,14 +1735,7 @@ namespace GAS.Editor
             writer.Indent--;
             writer.WriteLine("}");
 
-            WriteRuntimeAbilityActivationSystem(context, systemPath);
-            WriteRuntimeEffectInstantSystems(context, instantEffectPath);
-            WriteRuntimeActiveEffectSystems(context, activeEffectPath);
-
-            AddRuntimeManifest(manifest, PhaseName, gluePath);
-            AddRuntimeManifest(manifest, PhaseName, systemPath);
-            AddRuntimeManifest(manifest, PhaseName, instantEffectPath);
-            AddRuntimeManifest(manifest, PhaseName, activeEffectPath);
+            AddRuntimePureGlueManifest(manifest, PhaseName, gluePath);
         }
 
         private static void WriteRuntimeDefinitionResolver(IndentedWriter writer)
@@ -1686,7 +1906,7 @@ namespace GAS.Editor
             writer.WriteLine("|| gameplayEffect.PeriodFrames > 0");
             writer.WriteLine("|| gameplayEffect.StackLimitCount > 0");
             writer.WriteLine("|| gameplayEffect.GrantedTagMaskIndex >= 0");
-            writer.WriteLine("|| gameplayEffect.RemoveGameplayEffectTagMaskIndex >= 0");
+            writer.WriteLine("|| !gameplayEffect.RemoveGameplayEffectTagQuery.IsEmpty");
             writer.WriteLine("|| gameplayEffect.GrantedAbilityCount > 0");
             writer.WriteLine("|| gameplayEffect.ModifierCount == 0)");
             writer.Indent--;
@@ -1722,7 +1942,7 @@ namespace GAS.Editor
             writer.WriteLine("}");
         }
 
-        private static void WriteRuntimeAbilityActivationSystem(GasCodeGenContext context, string path)
+        internal static void WriteRuntimeAbilityActivationSystem(GasCodeGenContext context, string path)
         {
             var source = RuntimeAbilityActivationSystemTemplate.Replace("__ROOT_NAMESPACE__", context.RootNamespace);
             File.WriteAllText(path, source);
@@ -2323,7 +2543,7 @@ namespace __ROOT_NAMESPACE__
 }
 ";
 
-        private static void WriteRuntimeEffectInstantSystems(GasCodeGenContext context, string path)
+        internal static void WriteRuntimeEffectInstantSystems(GasCodeGenContext context, string path)
         {
             using var writer = new IndentedWriter(new StreamWriter(path));
             WriteHeader(writer);
@@ -2384,6 +2604,7 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine("SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(),");
             writer.WriteLine("EntityStorageInfoLookup = SystemAPI.GetEntityStorageInfoLookup(),");
             writer.WriteLine("DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),");
+            writer.WriteLine("TagMaskLookup = SystemAPI.GetComponentLookup<TagMaskComponent>(isReadOnly: true),");
             writer.WriteLine("Catalog = catalogComponent.Catalog,");
             writer.WriteLine("StreamEntity = streamEntity,");
             writer.Indent--;
@@ -2401,6 +2622,7 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine("public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;");
             writer.WriteLine("[ReadOnly] public EntityStorageInfoLookup EntityStorageInfoLookup;");
             writer.WriteLine("[ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;");
+            writer.WriteLine("[ReadOnly] public ComponentLookup<TagMaskComponent> TagMaskLookup;");
             writer.WriteLine("[ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;");
             writer.WriteLine("public Entity StreamEntity;");
             writer.WriteLine("");
@@ -2433,7 +2655,7 @@ namespace __ROOT_NAMESPACE__
             writer.Indent++;
             writer.WriteLine("continue;");
             writer.Indent--;
-            writer.WriteLine("if (!CanBuildInstantSpec(ref catalog, in command, EntityStorageInfoLookup, DestroyingLookup, out var gameplayEffectIndex))");
+            writer.WriteLine("if (!CanBuildInstantSpec(ref catalog, in command, EntityStorageInfoLookup, DestroyingLookup, TagMaskLookup, out var gameplayEffectIndex))");
             writer.Indent++;
             writer.WriteLine("continue;");
             writer.Indent--;
@@ -2480,6 +2702,7 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine("in GEEffectCommandBuffer command,");
             writer.WriteLine("EntityStorageInfoLookup entityStorageInfoLookup,");
             writer.WriteLine("ComponentLookup<ASCDestroyingComponent> destroyingLookup,");
+            writer.WriteLine("ComponentLookup<TagMaskComponent> tagMaskLookup,");
             writer.WriteLine("out int gameplayEffectIndex)");
             writer.Indent--;
             writer.WriteLine("{");
@@ -2497,16 +2720,36 @@ namespace __ROOT_NAMESPACE__
             writer.Indent--;
             writer.WriteLine("");
             writer.WriteLine("ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);");
-            writer.WriteLine("return gameplayEffect.DurationFrames <= 0");
+            writer.WriteLine("if (gameplayEffect.DurationFrames > 0");
             writer.Indent++;
-            writer.WriteLine("&& gameplayEffect.PeriodFrames <= 0");
-            writer.WriteLine("&& gameplayEffect.StackLimitCount <= 0");
-            writer.WriteLine("&& gameplayEffect.GrantedTagMaskIndex < 0");
-            writer.WriteLine("&& gameplayEffect.RemoveGameplayEffectTagMaskIndex < 0");
-            writer.WriteLine("&& gameplayEffect.GrantedAbilityCount == 0");
-            writer.WriteLine("&& (gameplayEffect.ModifierCount > 0");
-            writer.WriteLine("    || gameplayEffect.GameplayCueCode > 0);");
+            writer.WriteLine("|| gameplayEffect.PeriodFrames > 0");
+            writer.WriteLine("|| gameplayEffect.StackLimitCount > 0");
+            writer.WriteLine("|| gameplayEffect.GrantedTagMaskIndex >= 0");
+            writer.WriteLine("|| !gameplayEffect.RemoveGameplayEffectTagQuery.IsEmpty");
+            writer.WriteLine("|| gameplayEffect.GrantedAbilityCount > 0");
+            writer.WriteLine("|| (gameplayEffect.ModifierCount <= 0");
+            writer.WriteLine("    && gameplayEffect.GameplayCueCode <= 0))");
             writer.Indent--;
+            writer.Indent++;
+            writer.WriteLine("return false;");
+            writer.Indent--;
+            writer.WriteLine("");
+            writer.WriteLine("if (gameplayEffect.RequirementCount > 0)");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("var targetTags = tagMaskLookup.HasComponent(command.TargetAsc)");
+            writer.Indent++;
+            writer.WriteLine("? tagMaskLookup[command.TargetAsc]");
+            writer.WriteLine(": default;");
+            writer.Indent--;
+            writer.WriteLine("if (!GASGeneratedRequirementEvaluator.EvaluateGameplayEffectRequirements(ref catalog, in gameplayEffect, in targetTags, out _))");
+            writer.Indent++;
+            writer.WriteLine("return false;");
+            writer.Indent--;
+            writer.Indent--;
+            writer.WriteLine("}");
+            writer.WriteLine("");
+            writer.WriteLine("return true;");
             writer.Indent--;
             writer.WriteLine("}");
             writer.WriteLine("");
@@ -2882,7 +3125,7 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine("}");
         }
 
-        private static void WriteRuntimeActiveEffectSystems(GasCodeGenContext context, string path)
+        internal static void WriteRuntimeActiveEffectSystems(GasCodeGenContext context, string path)
         {
             File.WriteAllText(
                 path,
@@ -3022,6 +3265,7 @@ namespace __ROOT_NAMESPACE__
                 : Entity.Null;
             var structuralEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
+            var grantedAbilityArchetype = GASRuntimeEntityArchetypes.GrantedAbility(em);
             var commandCapacity = state.EntityManager.GetBuffer<GEEffectCommandBuffer>(streamEntity).Length;
             if (commandCapacity < 64)
                 commandCapacity = 64;
@@ -3083,7 +3327,7 @@ namespace __ROOT_NAMESPACE__
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
-                GrantedAbilityArchetype = GASRuntimeEntityArchetypes.GrantedAbility(em),
+                GrantedAbilityArchetype = grantedAbilityArchetype,
                 Catalog = catalogComponent.Catalog,
                 ActiveMutationCommands = activeMutationCommands,
                 ActiveMutationOwnerRanges = activeMutationOwnerRanges,
@@ -3861,7 +4105,11 @@ namespace __ROOT_NAMESPACE__
                 }
 
                 ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
-                if (!EvaluateGameplayEffectRequirements(ref catalog, in gameplayEffect, in ownerResources.TargetTags))
+                if (!GASGeneratedRequirementEvaluator.EvaluateGameplayEffectRequirements(
+                        ref catalog,
+                        in gameplayEffect,
+                        in ownerResources.TargetTags,
+                        out _))
                     return false;
 
                 RemoveGameplayEffectsWithTags(
@@ -4512,14 +4760,8 @@ namespace __ROOT_NAMESPACE__
                 ref ActiveMutationOwnerResources ownerResources,
                 in GASCatalogGameplayEffectDefinitionBlob appliedGameplayEffect)
             {
-                if (appliedGameplayEffect.RemoveGameplayEffectTagMaskIndex < 0
-                    || appliedGameplayEffect.RemoveGameplayEffectTagMaskIndex >= catalog.TagMasks.Length)
-                {
-                    return;
-                }
-
-                var removeMask = catalog.TagMasks[appliedGameplayEffect.RemoveGameplayEffectTagMaskIndex].Mask;
-                if (removeMask.IsEmpty)
+                var removeQuery = appliedGameplayEffect.RemoveGameplayEffectTagQuery;
+                if (removeQuery.IsEmpty)
                     return;
 
                 for (var i = ownerResources.Slots.Length - 1; i >= 0; i--)
@@ -4536,7 +4778,7 @@ namespace __ROOT_NAMESPACE__
                     }
 
                     var slotGrantedMask = catalog.TagMasks[slotGameplayEffect.GrantedTagMaskIndex].Mask;
-                    if (slotGrantedMask.HasAnyTag(removeMask))
+                    if (removeQuery.Evaluate(slotGrantedMask))
                         RemoveSlotAt(ref ownerResources, i);
                 }
             }
@@ -5475,6 +5717,7 @@ namespace __ROOT_NAMESPACE__
                     else
                     {
                         magnitudeSourceCounters.FallbackValueCount++;
+                        snapshotLaneCounters.FallbackValueCount++;
                     }
                 }
 
@@ -5490,7 +5733,6 @@ namespace __ROOT_NAMESPACE__
                     else
                     {
                         magnitudeSourceCounters.FallbackValueCount++;
-                        snapshotLaneCounters.FallbackValueCount++;
                     }
                 }
 
@@ -6191,7 +6433,7 @@ namespace __ROOT_NAMESPACE__
             int durationFrame)
         {
             return HasPersistentRuntimeState(in gameplayEffect, durationFrame)
-                || gameplayEffect.RemoveGameplayEffectTagMaskIndex >= 0;
+                || !gameplayEffect.RemoveGameplayEffectTagQuery.IsEmpty;
         }
 
         private static int ResolveSlotFlags(
@@ -6370,34 +6612,6 @@ namespace __ROOT_NAMESPACE__
 
 
 
-        private static bool EvaluateGameplayEffectRequirements(
-            ref GASDefinitionCatalogBlob catalog,
-            in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
-            in TagMaskComponent targetTags)
-        {
-            for (var i = 0; i < gameplayEffect.RequirementCount; i++)
-            {
-                var index = gameplayEffect.RequirementStart + i;
-                if ((uint)index >= (uint)catalog.Requirements.Length)
-                    return false;
-
-                var requirement = catalog.Requirements[index];
-                if (requirement.RequirementKind == GASRequirementKind.None)
-                    continue;
-                if (requirement.TagMaskIndex < 0 || requirement.TagMaskIndex >= catalog.TagMasks.Length)
-                    continue;
-
-                var mask = catalog.TagMasks[requirement.TagMaskIndex].Mask;
-                if (requirement.RequirementKind == GASRequirementKind.RequiredTags && !targetTags.HasAllTags(mask))
-                    return false;
-                if (requirement.RequirementKind == GASRequirementKind.BlockedTags && targetTags.HasAnyTag(mask))
-                    return false;
-            }
-
-            return true;
-        }
-
-
         private static int FindRefreshableSlot(DynamicBuffer<ActiveGameplayEffectBuffer> slots, in GEEffectCommandBuffer command)
         {
             for (var i = 0; i < slots.Length; i++)
@@ -6524,6 +6738,42 @@ namespace __ROOT_NAMESPACE__
             writer.Indent--;
             writer.WriteLine("}");
             writer.WriteLine("");
+            writer.WriteLine("public static bool EvaluateGameplayEffectRequirements(");
+            writer.Indent++;
+            writer.WriteLine("ref GASDefinitionCatalogBlob catalog,");
+            writer.WriteLine("int gameplayEffectDefinitionIndex,");
+            writer.WriteLine("in TagMaskComponent targetTags,");
+            writer.WriteLine("out int failureReasonCode)");
+            writer.Indent--;
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("failureReasonCode = GASFailureReasonCodes.None;");
+            writer.WriteLine("if ((uint)gameplayEffectDefinitionIndex >= (uint)catalog.GameplayEffects.Length)");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("failureReasonCode = GASFailureReasonCodes.GameplayEffectNotFound;");
+            writer.WriteLine("return false;");
+            writer.Indent--;
+            writer.WriteLine("}");
+            writer.WriteLine("");
+            writer.WriteLine("ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectDefinitionIndex);");
+            writer.WriteLine("return EvaluateGameplayEffectRequirements(ref catalog, in gameplayEffect, in targetTags, out failureReasonCode);");
+            writer.Indent--;
+            writer.WriteLine("}");
+            writer.WriteLine("");
+            writer.WriteLine("public static bool EvaluateGameplayEffectRequirements(");
+            writer.Indent++;
+            writer.WriteLine("ref GASDefinitionCatalogBlob catalog,");
+            writer.WriteLine("in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,");
+            writer.WriteLine("in TagMaskComponent targetTags,");
+            writer.WriteLine("out int failureReasonCode)");
+            writer.Indent--;
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("return EvaluateRange(ref catalog, gameplayEffect.RequirementStart, gameplayEffect.RequirementCount, in targetTags, out failureReasonCode);");
+            writer.Indent--;
+            writer.WriteLine("}");
+            writer.WriteLine("");
             writer.WriteLine("private static bool EvaluateRange(");
             writer.Indent++;
             writer.WriteLine("ref GASDefinitionCatalogBlob catalog,");
@@ -6570,21 +6820,21 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine("return true;");
             writer.Indent--;
             writer.WriteLine("");
-            writer.WriteLine("if (requirement.TagMaskIndex < 0 || requirement.TagMaskIndex >= catalog.TagMasks.Length)");
+            writer.WriteLine("if (requirement.TagQuery.IsEmpty)");
             writer.Indent++;
-            writer.WriteLine("return true;");
+            writer.WriteLine("return false;");
             writer.Indent--;
             writer.WriteLine("");
-            writer.WriteLine("var mask = catalog.TagMasks[requirement.TagMaskIndex].Mask;");
+            writer.WriteLine("var matches = requirement.TagQuery.Evaluate(ownerTags);");
             writer.WriteLine("if (requirement.RequirementKind == GASRequirementKind.RequiredTags)");
             writer.Indent++;
-            writer.WriteLine("return ownerTags.HasAllTags(mask);");
+            writer.WriteLine("return matches;");
             writer.Indent--;
             writer.WriteLine("if (requirement.RequirementKind == GASRequirementKind.BlockedTags)");
             writer.Indent++;
-            writer.WriteLine("return !ownerTags.HasAnyTag(mask);");
+            writer.WriteLine("return !matches;");
             writer.Indent--;
-            writer.WriteLine("return true;");
+            writer.WriteLine("return false;");
             writer.Indent--;
             writer.WriteLine("}");
             writer.Indent--;
@@ -6652,6 +6902,35 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine("}");
             writer.Indent--;
             writer.WriteLine("}");
+        }
+    }
+
+    internal sealed class RuntimeLifecycleMigrationPhase : GasCodeGenPhaseBase
+    {
+        public override string PhaseName => "RuntimeLifecycleMigration";
+
+        public override IReadOnlyList<string> OutputFileNames { get; } = new[]
+        {
+            "Runtime/RuntimeAbilityActivation.gen.cs",
+            "Runtime/RuntimeEffectInstant.gen.cs",
+            "Runtime/RuntimeActiveEffect.gen.cs",
+        };
+
+        public override bool RequiresRows => false;
+
+        public override void Execute(GasCodeGenContext context, GasCodeGenManifest manifest)
+        {
+            var systemPath = GetOutputPath(context, OutputFileNames[0]);
+            var instantEffectPath = GetOutputPath(context, OutputFileNames[1]);
+            var activeEffectPath = GetOutputPath(context, OutputFileNames[2]);
+
+            RuntimeDefinitionGluePhase.WriteRuntimeAbilityActivationSystem(context, systemPath);
+            RuntimeDefinitionGluePhase.WriteRuntimeEffectInstantSystems(context, instantEffectPath);
+            RuntimeDefinitionGluePhase.WriteRuntimeActiveEffectSystems(context, activeEffectPath);
+
+            AddRuntimeLifecycleMigrationManifest(manifest, PhaseName, systemPath);
+            AddRuntimeLifecycleMigrationManifest(manifest, PhaseName, instantEffectPath);
+            AddRuntimeLifecycleMigrationManifest(manifest, PhaseName, activeEffectPath);
         }
     }
 
@@ -7088,7 +7367,7 @@ namespace __ROOT_NAMESPACE__
             var abilityCommitQueryHits = CollectGeneratedAbilityCommitQueryHits(context);
             var runtimeBoundaryHits = CollectGeneratedRuntimeBoundaryHits(context);
             var unclassifiedRuntimeBoundaryHits = runtimeBoundaryHits
-                .Where(hit => !IsGeneratedRuntimeBoundaryAllowedClassifiedHit(context, hit))
+                .Where(hit => !IsGeneratedRuntimeBoundaryAllowedClassifiedHit(context, manifest, hit))
                 .ToArray();
 
             using var writer = new StreamWriter(path);
@@ -7109,13 +7388,15 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine($"AutoChessConfigBoundaryHits: `{autoChessBoundaryHits.Count}`");
             writer.WriteLine($"GeneratedAbilityCommitQueryHits: `{abilityCommitQueryHits.Count}`");
             writer.WriteLine($"GeneratedRuntimeBoundaryHits: `{runtimeBoundaryHits.Count}`");
+            writer.WriteLine($"GeneratedRuntimePureGlueArtifacts: `{CountManifestArtifactsByCategory(manifest, "RuntimePureGlue")}`");
+            writer.WriteLine($"GeneratedRuntimeLifecycleMigrationArtifacts: `{CountManifestArtifactsByCategory(manifest, "RuntimeLifecycleMigration")}`");
             writer.WriteLine($"GeneratedRuntimeLifecycleHits: `{CountGeneratedRuntimeBoundaryHits(runtimeBoundaryHits, "lifecycle-owner")}`");
             writer.WriteLine($"GeneratedRuntimeSystemRegistrationHits: `{CountGeneratedRuntimeBoundaryHits(runtimeBoundaryHits, "system-registration")}`");
             writer.WriteLine($"GeneratedRuntimeStructuralChangeHits: `{CountGeneratedRuntimeBoundaryHits(runtimeBoundaryHits, "structural-owner")}`");
             writer.WriteLine($"GeneratedRuntimeOwnershipHits: `{CountGeneratedRuntimeBoundaryHits(runtimeBoundaryHits, "native-container-owner")}`");
             writer.WriteLine($"GeneratedRuntimeRandomWriteLookupHits: `{CountGeneratedRuntimeBoundaryHits(runtimeBoundaryHits, "random-lookup-owner")}`");
             writer.WriteLine($"GeneratedRuntimeManagedConfigHits: `{CountGeneratedRuntimeBoundaryHits(runtimeBoundaryHits, "managed-config")}`");
-            writer.WriteLine("GeneratedRuntimeBoundaryGateMode: `blocking-unclassified-migration-proof`");
+            writer.WriteLine("GeneratedRuntimeBoundaryGateMode: `blocking-unclassified-lifecycle-migration`");
             writer.WriteLine($"GeneratedRuntimeUnclassifiedBoundaryHits: `{unclassifiedRuntimeBoundaryHits.Length}`");
             writer.WriteLine();
             writer.WriteLine("## Rows");
@@ -7183,9 +7464,9 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine();
             writer.WriteLine("## Generated Runtime Boundary Gate");
             writer.WriteLine();
-            writer.WriteLine("CurrentMode: `blocking-unclassified-migration-proof`");
+            writer.WriteLine("CurrentMode: `blocking-unclassified-lifecycle-migration`");
             writer.WriteLine("Target: SourceGenerator emits definition / blob / lookup / pure glue / validation only; Runtime lifecycle and ownership stay in handwritten ECS systems.");
-            writer.WriteLine("AllowedMigrationProof: `RuntimeAbilityActivation.gen.cs`, `RuntimeEffectInstant.gen.cs`, `RuntimeActiveEffect.gen.cs` lifecycle / lookup / structural owner hits must remain explicitly classified and bound to R2/R3/R5 exit work.");
+            writer.WriteLine("AllowedMigrationProof: only manifest artifacts categorized as `RuntimeLifecycleMigration` may carry lifecycle / lookup / structural owner hits, and they remain bound to R2/R3/R5 exit work.");
             writer.WriteLine();
             writer.WriteLine("| Rule | Gate | Disposition | File | Line | Evidence |");
             writer.WriteLine("| --- | --- | --- | --- | ---: | --- |");
@@ -7198,7 +7479,7 @@ namespace __ROOT_NAMESPACE__
                 foreach (var hit in runtimeBoundaryHits)
                 {
                     writer.WriteLine(
-                        $"| `{hit.Rule}` | `{hit.Kind}` | `{ClassifyGeneratedRuntimeBoundaryHit(context, hit)}` | `{ToProjectRelativePath(context, hit.Path)}` | `{hit.Line}` | `{EscapeMarkdown(hit.Evidence)}` |");
+                        $"| `{hit.Rule}` | `{hit.Kind}` | `{ClassifyGeneratedRuntimeBoundaryHit(context, manifest, hit)}` | `{ToProjectRelativePath(context, hit.Path)}` | `{hit.Line}` | `{EscapeMarkdown(hit.Evidence)}` |");
                 }
             }
 
@@ -7598,28 +7879,37 @@ namespace __ROOT_NAMESPACE__
             return hits.Count(hit => string.Equals(hit.Kind, kind, StringComparison.Ordinal));
         }
 
+        private static int CountManifestArtifactsByCategory(GasCodeGenManifest manifest, string artifactCategory)
+        {
+            return manifest.Entries.Count(entry =>
+                string.Equals(entry.ArtifactCategory, artifactCategory, StringComparison.Ordinal));
+        }
+
         private static string ClassifyGeneratedRuntimeBoundaryHit(
             GasCodeGenContext context,
+            GasCodeGenManifest manifest,
             GeneratedHotPathRegressionHit hit)
         {
             if (IsGeneratedRuntimeBoundaryBootstrapDefinitionOwner(context, hit))
                 return "BootstrapDefinitionOwner";
 
-            return IsGeneratedRuntimeBoundaryMigrationProof(context, hit)
+            return IsGeneratedRuntimeBoundaryMigrationProof(context, manifest, hit)
                 ? "MigrationProofOnly"
                 : "Blocking";
         }
 
         private static bool IsGeneratedRuntimeBoundaryAllowedClassifiedHit(
             GasCodeGenContext context,
+            GasCodeGenManifest manifest,
             GeneratedHotPathRegressionHit hit)
         {
-            return IsGeneratedRuntimeBoundaryMigrationProof(context, hit)
+            return IsGeneratedRuntimeBoundaryMigrationProof(context, manifest, hit)
                    || IsGeneratedRuntimeBoundaryBootstrapDefinitionOwner(context, hit);
         }
 
         private static bool IsGeneratedRuntimeBoundaryMigrationProof(
             GasCodeGenContext context,
+            GasCodeGenManifest manifest,
             GeneratedHotPathRegressionHit hit)
         {
             if (string.Equals(hit.Kind, "system-registration", StringComparison.Ordinal)
@@ -7628,14 +7918,24 @@ namespace __ROOT_NAMESPACE__
                 return false;
             }
 
-            var fileName = Path.GetFileName(hit.Path);
-            if (!IsKnownGeneratedRuntimeLifecycleArtifact(fileName))
+            if (!IsGeneratedRuntimeLifecycleMigrationArtifact(context, manifest, hit.Path))
                 return false;
 
             return string.Equals(hit.Kind, "lifecycle-owner", StringComparison.Ordinal)
                    || string.Equals(hit.Kind, "structural-owner", StringComparison.Ordinal)
                    || string.Equals(hit.Kind, "native-container-owner", StringComparison.Ordinal)
                    || string.Equals(hit.Kind, "random-lookup-owner", StringComparison.Ordinal);
+        }
+
+        private static bool IsGeneratedRuntimeLifecycleMigrationArtifact(
+            GasCodeGenContext context,
+            GasCodeGenManifest manifest,
+            string path)
+        {
+            var projectRelativePath = ToProjectRelativePath(context, path);
+            return manifest.Entries.Any(entry =>
+                string.Equals(entry.ProjectRelativePath, projectRelativePath, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(entry.ArtifactCategory, "RuntimeLifecycleMigration", StringComparison.Ordinal));
         }
 
         private static bool IsGeneratedRuntimeBoundaryBootstrapDefinitionOwner(
@@ -7645,13 +7945,6 @@ namespace __ROOT_NAMESPACE__
             var fileName = Path.GetFileName(hit.Path);
             return string.Equals(fileName, "DefinitionCatalog.gen.cs", StringComparison.Ordinal)
                    && string.Equals(hit.Kind, "native-container-owner", StringComparison.Ordinal);
-        }
-
-        private static bool IsKnownGeneratedRuntimeLifecycleArtifact(string fileName)
-        {
-            return string.Equals(fileName, "RuntimeAbilityActivation.gen.cs", StringComparison.Ordinal)
-                   || string.Equals(fileName, "RuntimeEffectInstant.gen.cs", StringComparison.Ordinal)
-                   || string.Equals(fileName, "RuntimeActiveEffect.gen.cs", StringComparison.Ordinal);
         }
 
         private static IReadOnlyList<GeneratedBoundaryHit> CollectGeneratedAbilityCommitQueryHits(

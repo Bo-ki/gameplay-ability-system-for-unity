@@ -25,6 +25,42 @@ namespace GAS.Runtime.Generated
             root.PrimaryGameplayEffectCode = row.PrimaryGameplayEffectCode;
             root.SecondaryGameplayEffectCode = row.SecondaryGameplayEffectCode;
             root.ActivationOwnedTagCode = row.ActivationOwnedTagCode;
+            if (row.ActivationRequiredAllTagCodes != null)
+            {
+                var count = row.ActivationRequiredAllTagCodes.Length;
+                var target = builder.Allocate(ref root.ActivationRequiredAllTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.ActivationRequiredAllTagCodes[i];
+            }
+            if (row.ActivationRequiredAnyTagCodes != null)
+            {
+                var count = row.ActivationRequiredAnyTagCodes.Length;
+                var target = builder.Allocate(ref root.ActivationRequiredAnyTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.ActivationRequiredAnyTagCodes[i];
+            }
+            if (row.ActivationRequiredNoneTagCodes != null)
+            {
+                var count = row.ActivationRequiredNoneTagCodes.Length;
+                var target = builder.Allocate(ref root.ActivationRequiredNoneTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.ActivationRequiredNoneTagCodes[i];
+            }
+            if (row.ActivationBlockedAllTagCodes != null)
+            {
+                var count = row.ActivationBlockedAllTagCodes.Length;
+                var target = builder.Allocate(ref root.ActivationBlockedAllTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.ActivationBlockedAllTagCodes[i];
+            }
+            if (row.ActivationBlockedAnyTagCodes != null)
+            {
+                var count = row.ActivationBlockedAnyTagCodes.Length;
+                var target = builder.Allocate(ref root.ActivationBlockedAnyTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.ActivationBlockedAnyTagCodes[i];
+            }
+            if (row.ActivationBlockedNoneTagCodes != null)
+            {
+                var count = row.ActivationBlockedNoneTagCodes.Length;
+                var target = builder.Allocate(ref root.ActivationBlockedNoneTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.ActivationBlockedNoneTagCodes[i];
+            }
             root.CostGameplayEffectCode = row.CostGameplayEffectCode;
             root.CooldownGameplayEffectCode = row.CooldownGameplayEffectCode;
             root.CooldownFrames = row.CooldownFrames;
@@ -145,6 +181,78 @@ namespace GAS.Runtime.Generated
             root.ResistanceAttributeCode = row.ResistanceAttributeCode;
             root.ResistanceCap = row.ResistanceCap;
             root.RemoveGameplayEffectTagCode = row.RemoveGameplayEffectTagCode;
+            if (row.ApplicationRequiredAllTagCodes != null)
+            {
+                var count = row.ApplicationRequiredAllTagCodes.Length;
+                var target = builder.Allocate(ref root.ApplicationRequiredAllTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.ApplicationRequiredAllTagCodes[i];
+            }
+            if (row.ApplicationRequiredAnyTagCodes != null)
+            {
+                var count = row.ApplicationRequiredAnyTagCodes.Length;
+                var target = builder.Allocate(ref root.ApplicationRequiredAnyTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.ApplicationRequiredAnyTagCodes[i];
+            }
+            if (row.ApplicationRequiredNoneTagCodes != null)
+            {
+                var count = row.ApplicationRequiredNoneTagCodes.Length;
+                var target = builder.Allocate(ref root.ApplicationRequiredNoneTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.ApplicationRequiredNoneTagCodes[i];
+            }
+            if (row.OngoingRequiredAllTagCodes != null)
+            {
+                var count = row.OngoingRequiredAllTagCodes.Length;
+                var target = builder.Allocate(ref root.OngoingRequiredAllTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.OngoingRequiredAllTagCodes[i];
+            }
+            if (row.OngoingRequiredAnyTagCodes != null)
+            {
+                var count = row.OngoingRequiredAnyTagCodes.Length;
+                var target = builder.Allocate(ref root.OngoingRequiredAnyTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.OngoingRequiredAnyTagCodes[i];
+            }
+            if (row.OngoingRequiredNoneTagCodes != null)
+            {
+                var count = row.OngoingRequiredNoneTagCodes.Length;
+                var target = builder.Allocate(ref root.OngoingRequiredNoneTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.OngoingRequiredNoneTagCodes[i];
+            }
+            if (row.RemoveGameplayEffectAllTagCodes != null)
+            {
+                var count = row.RemoveGameplayEffectAllTagCodes.Length;
+                var target = builder.Allocate(ref root.RemoveGameplayEffectAllTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.RemoveGameplayEffectAllTagCodes[i];
+            }
+            if (row.RemoveGameplayEffectAnyTagCodes != null)
+            {
+                var count = row.RemoveGameplayEffectAnyTagCodes.Length;
+                var target = builder.Allocate(ref root.RemoveGameplayEffectAnyTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.RemoveGameplayEffectAnyTagCodes[i];
+            }
+            if (row.RemoveGameplayEffectNoneTagCodes != null)
+            {
+                var count = row.RemoveGameplayEffectNoneTagCodes.Length;
+                var target = builder.Allocate(ref root.RemoveGameplayEffectNoneTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.RemoveGameplayEffectNoneTagCodes[i];
+            }
+            if (row.ImmunityAllTagCodes != null)
+            {
+                var count = row.ImmunityAllTagCodes.Length;
+                var target = builder.Allocate(ref root.ImmunityAllTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.ImmunityAllTagCodes[i];
+            }
+            if (row.ImmunityAnyTagCodes != null)
+            {
+                var count = row.ImmunityAnyTagCodes.Length;
+                var target = builder.Allocate(ref root.ImmunityAnyTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.ImmunityAnyTagCodes[i];
+            }
+            if (row.ImmunityNoneTagCodes != null)
+            {
+                var count = row.ImmunityNoneTagCodes.Length;
+                var target = builder.Allocate(ref root.ImmunityNoneTagCodes, count);
+                for (var i = 0; i < count; i++) target[i] = row.ImmunityNoneTagCodes[i];
+            }
             root.StackingCode = row.StackingCode;
             root.StackLimitCount = row.StackLimitCount;
             root.StackType = row.StackType;

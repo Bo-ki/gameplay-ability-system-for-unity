@@ -52,6 +52,7 @@ namespace GAS.Runtime
         public int PeriodGameplayEffectCode;
         public int GrantedTagMaskIndex;
         public int RemoveGameplayEffectTagMaskIndex;
+        public TagRequirementMask RemoveGameplayEffectTagQuery;
         public int GameplayCueCode;
         public int DamageTypeCode;
         public int ResistanceAttributeSetCode;
@@ -97,6 +98,7 @@ namespace GAS.Runtime
     {
         public int RequirementKind;
         public int TagMaskIndex;
+        public TagRequirementMask TagQuery;
         public int AttributeSetCode;
         public int AttributeCode;
         public int CompareOp;

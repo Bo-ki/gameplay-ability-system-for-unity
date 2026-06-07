@@ -45,7 +45,7 @@ namespace GAS.Runtime.Generated
             switch (index)
             {
                 case 0:
-                    entry = new GASGeneratedDefinitionIndexEntry(0, GASDefinitionKind.Ability, -7087823, 1943544664, -1181086457, 9, 10);
+                    entry = new GASGeneratedDefinitionIndexEntry(0, GASDefinitionKind.Ability, -7087823, 1943544664, -1181086457, 9, 16);
                     return true;
                 case 1:
                     entry = new GASGeneratedDefinitionIndexEntry(1, GASDefinitionKind.Attribute, 1660590223, -898914946, -626649207, 13, 7);
@@ -57,7 +57,7 @@ namespace GAS.Runtime.Generated
                     entry = new GASGeneratedDefinitionIndexEntry(3, GASDefinitionKind.GameplayCue, 2027271664, 1809634853, 1972995510, 4, 2);
                     return true;
                 case 4:
-                    entry = new GASGeneratedDefinitionIndexEntry(4, GASDefinitionKind.GameplayEffect, -917533084, 2050744081, -479655726, 17, 33);
+                    entry = new GASGeneratedDefinitionIndexEntry(4, GASDefinitionKind.GameplayEffect, -917533084, 2050744081, -479655726, 17, 45);
                     return true;
                 case 5:
                     entry = new GASGeneratedDefinitionIndexEntry(5, GASDefinitionKind.GameplayTag, -1940843005, -174959718, 1944373125, 33, 3);
@@ -73,7 +73,7 @@ namespace GAS.Runtime.Generated
             switch (definitionKind)
             {
                 case GASDefinitionKind.Ability:
-                    entry = new GASGeneratedDefinitionIndexEntry(0, GASDefinitionKind.Ability, -7087823, 1943544664, -1181086457, 9, 10);
+                    entry = new GASGeneratedDefinitionIndexEntry(0, GASDefinitionKind.Ability, -7087823, 1943544664, -1181086457, 9, 16);
                     return true;
                 case GASDefinitionKind.Attribute:
                     entry = new GASGeneratedDefinitionIndexEntry(1, GASDefinitionKind.Attribute, 1660590223, -898914946, -626649207, 13, 7);
@@ -85,7 +85,7 @@ namespace GAS.Runtime.Generated
                     entry = new GASGeneratedDefinitionIndexEntry(3, GASDefinitionKind.GameplayCue, 2027271664, 1809634853, 1972995510, 4, 2);
                     return true;
                 case GASDefinitionKind.GameplayEffect:
-                    entry = new GASGeneratedDefinitionIndexEntry(4, GASDefinitionKind.GameplayEffect, -917533084, 2050744081, -479655726, 17, 33);
+                    entry = new GASGeneratedDefinitionIndexEntry(4, GASDefinitionKind.GameplayEffect, -917533084, 2050744081, -479655726, 17, 45);
                     return true;
                 case GASDefinitionKind.GameplayTag:
                     entry = new GASGeneratedDefinitionIndexEntry(5, GASDefinitionKind.GameplayTag, -1940843005, -174959718, 1944373125, 33, 3);

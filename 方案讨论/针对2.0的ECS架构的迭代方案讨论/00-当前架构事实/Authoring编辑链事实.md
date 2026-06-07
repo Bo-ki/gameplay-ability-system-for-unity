@@ -27,7 +27,7 @@ flowchart LR
 5. 当前 UI 提供了一些 choice hint 和 ID 正规化，但主编辑体验仍是“表格行 + ID 列表 + 协议字符串 + 手动导出”，不是“业务能力包 + 图形化配置图 + 一键生成验证”。
 6. `GasCodeGenPipeline` 已有 Core phases：asmdef、definition index、Blob schema、static lookup、catalog、runtime glue、Baker glue、component type set、query layout、validation report。
 7. generated runtime glue 已能把 catalog definition 转成 `AbilityActivationPlanRecord`、`GECommandSeedRecord`、`ResolvedModifierRecord` 等 Runtime record。
-8. 当前 CodeGen validation 已输出 generated runtime boundary / hot path gate，并已进入 `blocking-unclassified-migration-proof`；未分类回流会阻断，已分类 `MigrationProofOnly` 仍待退出，具体事实见 `CodeGen链路复审事实.md`。
+8. 当前 CodeGen validation 已输出 generated runtime boundary / hot path gate，并已进入 `blocking-unclassified-lifecycle-migration`；未分类回流会阻断，只有 manifest 标成 `RuntimeLifecycleMigration` 的 artifact 可承载 `MigrationProofOnly` 命中，具体事实见 `CodeGen链路复审事实.md`。
 
 ## 当前业务编辑摩擦
 
