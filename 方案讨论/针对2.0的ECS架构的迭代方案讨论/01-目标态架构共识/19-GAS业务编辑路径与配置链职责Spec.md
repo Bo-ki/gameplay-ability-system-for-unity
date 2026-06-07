@@ -4,11 +4,11 @@
 
 本 Spec 用真实 GAS 业务视角重新审查配置编辑链：目标不是让 Editor 页更像表格，而是让使用者用更短路径表达“一个可运行的 GAS 业务能力”，再由 Luban / SourceGenerator 折叠为 Runtime Core 可消费的 definition catalog 和 pure glue。
 
-本文件只定义目标态业务编辑路径、Luban 配置链职责、Editor 配置链职责和验收口径。现实编辑链事实 owner 为 `../00-当前架构事实/Authoring编辑链事实.md`。
+本文件只定义目标态业务编辑路径、Luban 配置链职责、Editor 配置链职责和验收口径。当前代码事实写入 `../00-当前架构事实/Authoring编辑链事实.md`。
 
 ## 核心结论
 
-目标态必须承认一件事：GAS 的业务编辑对象不是单张 Ability 表，也不是单张 GameplayEffect 表，而是一个**业务能力包**。
+当前目标态必须承认一件事：GAS 的业务编辑对象不是单张 Ability 表，也不是单张 GameplayEffect 表，而是一个**业务能力包**。
 
 业务能力包是 Editor / Authoring 概念，不是 Runtime 概念。它聚合：
 

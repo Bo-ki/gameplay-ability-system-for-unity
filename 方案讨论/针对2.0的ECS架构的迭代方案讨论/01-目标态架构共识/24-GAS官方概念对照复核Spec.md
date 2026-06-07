@@ -182,7 +182,7 @@
 | 只改伤害、冷却、消耗、duration、period、stack、cue 绑定 | Configuration-Only Ability | 必须已有 lifecycle、GE spec、tag taxonomy、cue parameter、ASC binding 的模板覆盖 |
 | 新增公式 token、target rule、requirement evaluator、Tag Query evaluator | Generated Glue Extension | 只能生成 pure glue / Editor Binding / validation，不得生成 lifecycle 或 Runtime System |
 | 新增 wait target data、wait event、跨帧任务、链式目标、持续引导、表现完成驱动 gameplay | Runtime Semantic Extension 候选 | 若现有 ECS async / target / fact lane 已能表达，可降为 Generated Glue；否则必须走 DOTS Official Review Gate |
-| 新增网络预测、客户端回滚、UE 风格 replicated AbilityTask | 非目标态首期范围或后续扩展 | 目标态必须显式标注不支持，不能用 OOP 兼容层偷渡 |
+| 新增网络预测、客户端回滚、UE 风格 replicated AbilityTask | 非当前目标或后续扩展 | 当前目标态必须显式标注不支持，不能用 OOP 兼容层偷渡 |
 
 ## DOTS 规范复核
 

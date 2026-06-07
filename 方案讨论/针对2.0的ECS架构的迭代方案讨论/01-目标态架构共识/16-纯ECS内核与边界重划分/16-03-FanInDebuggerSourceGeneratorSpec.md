@@ -4,28 +4,6 @@
 
 本文件只描述 Effect fan-in、Debugger evidence projection 和 SourceGenerator pure glue 的目标代码骨架。
 
-## Evidence Tier 与 MigrationProofOnly 退出门
-
-目标态必须把 evidence 分为五类，禁止用低等级证据替代高等级证据：
-
-| Evidence tier | 含义 | 可证明 | 不可证明 |
-|---|---|---|---|
-| Contract / Plan | 目标约束、phase contract、stream owner plan、validation gate 定义 | 设计期约束存在 | runtime 已按约束执行 |
-| Runtime Counter | System / lane / carrier / lookup / buffer / structural counter | 当前运行中有可读计数 | 官方 Profiler / Journaling 已捕获 |
-| Official Capture | Entities Journaling / Profiler / PackageCache 官方规则对照 | 结构变化、record type、系统热点或 disabled reason | GAS 业务语义正确 |
-| Validation Evidence | AutoChess / scenario / scale gate 的结构化验收字段 | 业务链路和门槛是否满足 | 所有 Runtime Core 任务都完成 |
-| Derived Export | 字符串日志、Mermaid 图、中文 summary、HTML/Markdown 报告 | 人类阅读和复盘 | 机器验收源或性能完成证明 |
-
-`MigrationProofOnly` 的退出门必须同时满足：
-
-1. carrier / lifecycle / query / ECB / NativeContainer owner 已迁入手写 Runtime Core owner 或纯 generated glue。
-2. Runtime Counter 能解释 owner、phase、capacity、reselect trigger、random lookup、merge cost 和 dependency chain。
-3. Official Capture 能说明 captured / disabled / unsupported reason，不能只输出空字符串或图表。
-4. Validation Evidence 能复现业务场景、scale profile、battle hash / summary hash、blocking error 和 owner 分类。
-5. Derived Export 只能从结构化 evidence 派生，不能成为唯一 source。
-
-缺任一项时，目标态 Spec 只能把该链路标为 proof / migration，不得把它写成 scale-ready。
-
 ## 目标代码骨架（续）
 
 ### 3. Fan-in 默认 NativeStream + deterministic merge

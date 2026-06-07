@@ -4,7 +4,7 @@
 
 定义 EX-GAS 2.0 中 Definition & Generation Layer 的目标态链路：Luban 提供配置输入，SourceGenerator / CodeGen 生成不可变 definition、Blob、lookup、纯胶水和 validation artifact，Runtime Core 只消费 ECS/DOTS 友好的不可变输入。
 
-本文件只描述目标态设计，不记录实现状态、迁移进度、已生成文件或缺陷清单。现实链路事实 owner 为 `../00-当前架构事实/Definition配置事实.md`、`../00-当前架构事实/CodeGen链路复审事实.md` 和 `../00-当前架构事实/SourceGenerator链路复审事实.md`。
+本文件只描述目标态设计，不记录实现状态、迁移进度、已生成文件或缺陷清单。实现链路事实写入 `../00-当前架构事实/Definition配置事实.md`、`../00-当前架构事实/CodeGen链路复审事实.md` 和 `../00-当前架构事实/SourceGenerator链路复审事实.md`。
 
 ## 非目标
 
