@@ -4,16 +4,19 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using GAS.Runtime;
+using GAS.Runtime.Generated;
 
 namespace GAS.AutoChessDemo
 {
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(GEExecutionCalculationExtensionSystemGroup))]
+    [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
+    [UpdateAfter(typeof(GEEffectSpecBuildSystem))]
+    [UpdateBefore(typeof(GASAttributeModifierDeltaApplySystem))]
     public partial struct AutoChessExecuteDamageCalculationSystem : ISystem
     {
         private EntityQuery _driverQuery;
         private EntityQuery _calculationQuery;
-        private EntityQuery _ownerCommandQuery;
+        private EntityQuery _ownerSpecQuery;
 
         public void OnCreate(ref SystemState state)
         {
@@ -31,12 +34,12 @@ namespace GAS.AutoChessDemo
                     ComponentType.ReadOnly<AutoChessExecuteDamageCalculationComponent>(),
                 },
             });
-            _ownerCommandQuery = state.GetEntityQuery(new EntityQueryDesc
+            _ownerSpecQuery = state.GetEntityQuery(new EntityQueryDesc
             {
                 All = new[]
                 {
                     ComponentType.ReadOnly<ASCIdentityComponent>(),
-                    ComponentType.ReadOnly<GEEffectCommandBuffer>(),
+                    ComponentType.ReadOnly<GEEffectSpecBuffer>(),
                     ComponentType.ReadWrite<AttributeModifierBuffer>(),
                     ComponentType.ReadWrite<AttributeValueBuffer>(),
                     ComponentType.ReadWrite<PendingAttributeModifierComponent>(),
@@ -49,7 +52,7 @@ namespace GAS.AutoChessDemo
             state.RequireForUpdate<GEEffectCommandStreamComponent>();
             state.RequireForUpdate(_driverQuery);
             state.RequireForUpdate(_calculationQuery);
-            state.RequireForUpdate(_ownerCommandQuery);
+            state.RequireForUpdate(_ownerSpecQuery);
         }
 
         public void OnUpdate(ref SystemState state)
@@ -68,7 +71,7 @@ namespace GAS.AutoChessDemo
             state.Dependency = new ExecuteDamageCalculationChunkJob
             {
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
-                CommandTypeHandle = SystemAPI.GetBufferTypeHandle<GEEffectCommandBuffer>(isReadOnly: true),
+                SpecTypeHandle = SystemAPI.GetBufferTypeHandle<GEEffectSpecBuffer>(isReadOnly: true),
                 DeltaBufferTypeHandle = SystemAPI.GetBufferTypeHandle<AttributeModifierBuffer>(),
                 AttributeBufferTypeHandle = SystemAPI.GetBufferTypeHandle<AttributeValueBuffer>(isReadOnly: true),
                 OwnerFactBufferTypeHandle =
@@ -83,7 +86,7 @@ namespace GAS.AutoChessDemo
                 Frame = frame,
                 DriverLookup = SystemAPI.GetComponentLookup<AutoChessBattleDriverComponent>(),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
-            }.Schedule(_ownerCommandQuery, state.Dependency);
+            }.Schedule(_ownerSpecQuery, state.Dependency);
         }
 
         public void OnDestroy(ref SystemState state)
@@ -94,7 +97,7 @@ namespace GAS.AutoChessDemo
         private struct ExecuteDamageCalculationChunkJob : IJobChunk
         {
             [ReadOnly] public EntityTypeHandle EntityTypeHandle;
-            [ReadOnly] public BufferTypeHandle<GEEffectCommandBuffer> CommandTypeHandle;
+            [ReadOnly] public BufferTypeHandle<GEEffectSpecBuffer> SpecTypeHandle;
             public BufferTypeHandle<AttributeModifierBuffer> DeltaBufferTypeHandle;
             [ReadOnly] public BufferTypeHandle<AttributeValueBuffer> AttributeBufferTypeHandle;
             public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactBufferTypeHandle;
@@ -119,7 +122,7 @@ namespace GAS.AutoChessDemo
                     return;
 
                 var entities = chunk.GetNativeArray(EntityTypeHandle);
-                var commands = chunk.GetBufferAccessor(ref CommandTypeHandle);
+                var specs = chunk.GetBufferAccessor(ref SpecTypeHandle);
                 var deltas = chunk.GetBufferAccessor(ref DeltaBufferTypeHandle);
                 var attributes = chunk.GetBufferAccessor(ref AttributeBufferTypeHandle);
                 var pendingOwners = chunk.GetNativeArray(ref PendingOwnerTypeHandle);
@@ -137,18 +140,18 @@ namespace GAS.AutoChessDemo
                         continue;
 
                     var owner = entities[entityIndex];
-                    var ownerCommands = commands[entityIndex];
-                    if (ownerCommands.Length <= 0)
+                    var ownerSpecs = specs[entityIndex];
+                    if (ownerSpecs.Length <= 0)
                         continue;
 
                     var ownerAttributes = attributes[entityIndex];
                     var targetDeltas = deltas[entityIndex];
                     var targetFacts = hasOwnerFactBuffer ? ownerFacts[entityIndex] : default;
-                    for (var i = 0; i < ownerCommands.Length; i++)
+                    for (var i = 0; i < ownerSpecs.Length; i++)
                     {
-                        var command = ownerCommands[i];
-                        var targetAsc = ResolveTargetAsc(in command, owner);
-                        if (command.GameplayEffectCode != Calculation.GameplayEffectCode
+                        var spec = ownerSpecs[i];
+                        var targetAsc = ResolveTargetAsc(in spec, owner);
+                        if (spec.GameplayEffectCode != Calculation.GameplayEffectCode
                             || CompareEntity(targetAsc, owner) != 0)
                         {
                             continue;
@@ -162,21 +165,22 @@ namespace GAS.AutoChessDemo
                             continue;
                         }
 
-                        var commandFrame = command.Frame != 0 ? command.Frame : Frame;
+                        var commandFrame = spec.Frame != 0 ? spec.Frame : Frame;
                         var deltaSequence = Allocate(ref stream.NextDeltaSequence);
                         var factSequence = Allocate(ref stream.NextFactSequence);
                         targetDeltas.Add(new AttributeModifierBuffer
                         {
                             Sequence = deltaSequence,
-                            SourceCommandSequence = command.Sequence,
+                            SourceCommandSequence = spec.SourceCommandSequence,
+                            SourceSpecSequence = spec.Sequence,
                             Frame = commandFrame,
-                            SourceAsc = command.SourceAsc,
+                            SourceAsc = spec.SourceAsc,
                             TargetAsc = targetAsc,
-                            SourceAbility = command.SourceAbility,
-                            SourceEffect = command.SourceEffect,
-                            GameplayEffectCode = command.GameplayEffectCode,
-                            ContextId = command.ContextId,
-                            ParentContextId = command.ParentContextId,
+                            SourceAbility = spec.SourceAbility,
+                            SourceEffect = spec.SourceEffect,
+                            GameplayEffectCode = spec.GameplayEffectCode,
+                            ContextId = spec.ContextId,
+                            ParentContextId = spec.ParentContextId,
                             AttrSetCode = Calculation.HealthAttrSetCode,
                             AttributeCode = Calculation.HealthAttrCode,
                             Op = EModifierOp.Subtract,
@@ -199,20 +203,21 @@ namespace GAS.AutoChessDemo
                             Fact = new GameplayEventBuffer
                             {
                                 Sequence = factSequence,
-                                SourceCommandSequence = command.Sequence,
+                                SourceCommandSequence = spec.SourceCommandSequence,
+                                SourceSpecSequence = spec.Sequence,
                                 SourceDeltaSequence = deltaSequence,
                                 Frame = commandFrame,
                                 EventType = EGameplayEventType.ExecutionCalculationOutputUpdated,
                                 Domain = EGameplayFactDomain.ExecutionCalculation,
                                 Category = EGameplayFactCategory.StateChange,
                                 Severity = EGameplayFactSeverity.Info,
-                                SourceAsc = command.SourceAsc,
+                                SourceAsc = spec.SourceAsc,
                                 TargetAsc = targetAsc,
-                                SourceAbility = command.SourceAbility,
-                                SourceEffect = command.SourceEffect,
-                                GameplayEffectCode = command.GameplayEffectCode,
-                                ContextId = command.ContextId,
-                                ParentContextId = command.ParentContextId,
+                                SourceAbility = spec.SourceAbility,
+                                SourceEffect = spec.SourceEffect,
+                                GameplayEffectCode = spec.GameplayEffectCode,
+                                ContextId = spec.ContextId,
+                                ParentContextId = spec.ParentContextId,
                                 EventCode = Calculation.CalculationCode,
                                 AttrSetCode = Calculation.HealthAttrSetCode,
                                 AttributeCode = Calculation.HealthAttrCode,
@@ -230,9 +235,9 @@ namespace GAS.AutoChessDemo
             }
         }
 
-        private static Entity ResolveTargetAsc(in GEEffectCommandBuffer command, Entity owner)
+        private static Entity ResolveTargetAsc(in GEEffectSpecBuffer spec, Entity owner)
         {
-            return command.TargetAsc != Entity.Null ? command.TargetAsc : owner;
+            return spec.TargetAsc != Entity.Null ? spec.TargetAsc : owner;
         }
 
         private static int CompareEntity(Entity left, Entity right)

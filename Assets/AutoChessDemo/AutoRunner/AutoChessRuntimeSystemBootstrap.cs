@@ -28,7 +28,7 @@ namespace GAS.AutoChessDemo
             var fixedStepSimulation = world.GetExistingSystemManaged<FixedStepSimulationSystemGroup>();
 
             groups.CommandResolve.AddSystemToUpdateList(world.CreateSystem(typeof(AutoChessBattleCommandDriveSystem)));
-            groups.ExecutionCalculationExtension.AddSystemToUpdateList(
+            groups.CoreSimulation.AddSystemToUpdateList(
                 world.CreateSystem(typeof(AutoChessExecuteDamageCalculationSystem)));
             GASSystemScheduleContract.SortSystems(fixedStepSimulation, groups);
             _registeredWorld = world;

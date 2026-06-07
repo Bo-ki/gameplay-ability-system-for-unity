@@ -289,8 +289,6 @@ namespace GAS.Runtime
             private EntityManager _em;
             private Entity _streamEntity;
             private GEEffectCommandStreamComponent _stream;
-            private DynamicBuffer<GEEffectCommandBuffer> _commands;
-            private DynamicBuffer<GESetByCallerValueBuffer> _setByCallerBuffer;
             private int _currentFrame;
             private bool _isCreated;
 
@@ -298,15 +296,11 @@ namespace GAS.Runtime
                 EntityManager em,
                 Entity streamEntity,
                 GEEffectCommandStreamComponent stream,
-                DynamicBuffer<GEEffectCommandBuffer> commands,
-                DynamicBuffer<GESetByCallerValueBuffer> setByCallerBuffer,
                 int currentFrame)
             {
                 _em = em;
                 _streamEntity = streamEntity;
                 _stream = stream;
-                _commands = commands;
-                _setByCallerBuffer = setByCallerBuffer;
                 _currentFrame = currentFrame;
                 _isCreated = true;
             }
@@ -314,109 +308,6 @@ namespace GAS.Runtime
             public bool IsCreated => _isCreated;
             public Entity StreamEntity => _streamEntity;
             public int CurrentFrame => _currentFrame;
-
-            public GEEffectCommandBuffer AppendCommand(in GEEffectCommandBuffer command)
-            {
-                return AppendCommand(command, null);
-            }
-
-            public GEEffectCommandBuffer AppendCommand(
-                in GEEffectCommandBuffer command,
-                IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues)
-            {
-                if (!_isCreated)
-                    return default;
-
-                var resolved = PrepareCommand(
-                    ref _stream,
-                    _setByCallerBuffer,
-                    command,
-                    setByCallerValues?.Count ?? 0,
-                    _currentFrame);
-
-                if (setByCallerValues != null)
-                {
-                    for (var i = 0; i < setByCallerValues.Count; i++)
-                    {
-                        var value = setByCallerValues[i];
-                        _setByCallerBuffer.Add(new GESetByCallerValueBuffer
-                        {
-                            CommandSequence = resolved.Sequence,
-                            SpecSequence = 0,
-                            Key = value.Key,
-                            Value = value.Value,
-                        });
-                    }
-                }
-
-                _commands.Add(resolved);
-                return resolved;
-            }
-
-            public GEEffectCommandBuffer AppendCommand(
-                in GEEffectCommandBuffer command,
-                DynamicBuffer<GESetByCallerRequestValueBuffer> setByCallerValues)
-            {
-                if (!_isCreated)
-                    return default;
-
-                var setByCallerCount = setByCallerValues.IsCreated ? setByCallerValues.Length : 0;
-                var resolved = PrepareCommand(
-                    ref _stream,
-                    _setByCallerBuffer,
-                    command,
-                    setByCallerCount,
-                    _currentFrame);
-
-                if (setByCallerValues.IsCreated)
-                {
-                    for (var i = 0; i < setByCallerValues.Length; i++)
-                    {
-                        var value = setByCallerValues[i];
-                        _setByCallerBuffer.Add(new GESetByCallerValueBuffer
-                        {
-                            CommandSequence = resolved.Sequence,
-                            SpecSequence = 0,
-                            Key = value.Key,
-                            Value = value.Value,
-                        });
-                    }
-                }
-
-                _commands.Add(resolved);
-                return resolved;
-            }
-
-            public GEEffectCommandBuffer AppendCommand(
-                in GEEffectCommandBuffer command,
-                DynamicBuffer<ActiveGameplayEffectSetByCallerValueBuffer> setByCallerValues,
-                int sourceSequence,
-                int sourceGameplayEffectCode)
-            {
-                if (!_isCreated)
-                    return default;
-
-                var setByCallerCount = CountSetByCallerValues(
-                    setByCallerValues,
-                    sourceSequence,
-                    sourceGameplayEffectCode);
-                var resolved = PrepareCommand(
-                    ref _stream,
-                    _setByCallerBuffer,
-                    command,
-                    setByCallerCount,
-                    _currentFrame);
-
-                CopySetByCallerValues(
-                    _setByCallerBuffer,
-                    setByCallerValues,
-                    sourceSequence,
-                    sourceGameplayEffectCode,
-                    resolved.Sequence);
-
-                _commands.Add(resolved);
-                return resolved;
-            }
 
             public GEEffectCommandBuffer AppendOwnerLocalActiveMutationCommand(
                 in GEEffectCommandBuffer command,
@@ -614,13 +505,6 @@ namespace GAS.Runtime
             }
         }
 
-        public struct ParallelCommandFanInRecord
-        {
-            public int ProducerIndex;
-            public int LocalIndex;
-            public GEEffectCommandBuffer Command;
-        }
-
         public static Entity EnsureSingleton(EntityManager em)
         {
             if (TryGetSingleton(em, out var streamEntity))
@@ -672,8 +556,7 @@ namespace GAS.Runtime
             if (streamEntity == Entity.Null || !em.Exists(streamEntity))
                 return false;
 
-            return em.HasBuffer<GEEffectCommandBuffer>(streamEntity)
-                   && em.HasBuffer<GESetByCallerValueBuffer>(streamEntity);
+            return em.HasComponent<GEEffectCommandStreamComponent>(streamEntity);
         }
 
         public static void EnsureBuffers(EntityManager em, Entity streamEntity)
@@ -732,14 +615,10 @@ namespace GAS.Runtime
                 return default;
 
             var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
-            var commands = em.GetBuffer<GEEffectCommandBuffer>(streamEntity);
-            var setByCallerBuffer = em.GetBuffer<GESetByCallerValueBuffer>(streamEntity);
             return new CommandWriter(
                 em,
                 streamEntity,
                 stream,
-                commands,
-                setByCallerBuffer,
                 currentFrame);
         }
 
@@ -761,61 +640,6 @@ namespace GAS.Runtime
                 currentFrame);
         }
 
-        public static GEEffectCommandBuffer AppendPreparedCommand(
-            ref GEEffectCommandStreamComponent stream,
-            DynamicBuffer<GEEffectCommandBuffer> commands,
-            DynamicBuffer<GESetByCallerValueBuffer> setByCallerBuffer,
-            in GEEffectCommandBuffer command,
-            int currentFrame)
-        {
-            var resolved = PrepareCommand(
-                ref stream,
-                setByCallerBuffer,
-                command,
-                setByCallerCount: 0,
-                currentFrame);
-            commands.Add(resolved);
-            return resolved;
-        }
-
-        public static int MergeParallelCommandFanIn(
-            EntityManager em,
-            Entity streamEntity,
-            IReadOnlyList<ParallelCommandFanInRecord> records,
-            int currentFrame)
-        {
-            if (records == null || records.Count == 0)
-                return 0;
-
-            if (streamEntity == Entity.Null || !em.Exists(streamEntity) || !HasRequiredBuffers(em, streamEntity))
-                return 0;
-
-            var sorted = new List<ParallelCommandFanInRecord>(records.Count);
-            for (var i = 0; i < records.Count; i++)
-                sorted.Add(records[i]);
-            SortParallelCommandFanInRecords(sorted);
-
-            var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
-            var commands = em.GetBuffer<GEEffectCommandBuffer>(streamEntity);
-            var setByCallerBuffer = em.GetBuffer<GESetByCallerValueBuffer>(streamEntity);
-
-            for (var i = 0; i < sorted.Count; i++)
-            {
-                var resolved = PrepareCommand(
-                    ref stream,
-                    setByCallerBuffer,
-                    sorted[i].Command,
-                    setByCallerCount: 0,
-                    currentFrame);
-                AdvanceAfterExplicitSequence(ref stream.NextCommandSequence, resolved.Sequence);
-                AdvanceAfterExplicitSequence(ref stream.NextContextId, resolved.ContextId);
-                commands.Add(resolved);
-            }
-
-            em.SetComponentData(streamEntity, stream);
-            return sorted.Count;
-        }
-
         public static void ClearFrameLocalData(EntityManager em, Entity streamEntity, int frame)
         {
             if (streamEntity == Entity.Null || !em.Exists(streamEntity))
@@ -823,8 +647,6 @@ namespace GAS.Runtime
 
             if (!HasRequiredBuffers(em, streamEntity))
                 return;
-            em.GetBuffer<GEEffectCommandBuffer>(streamEntity).Clear();
-            em.GetBuffer<GESetByCallerValueBuffer>(streamEntity).Clear();
 
             var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
             stream.LastClearedFrame = frame;
@@ -843,11 +665,6 @@ namespace GAS.Runtime
             if (stream.LastClearedFrame == frame)
                 return;
 
-            var commands = em.GetBuffer<GEEffectCommandBuffer>(streamEntity);
-            var setByCallerValues = em.GetBuffer<GESetByCallerValueBuffer>(streamEntity);
-            commands.Clear();
-            setByCallerValues.Clear();
-
             stream.LastClearedFrame = frame;
             ResetFrameLocalCounters(ref stream);
             em.SetComponentData(streamEntity, stream);
@@ -855,15 +672,10 @@ namespace GAS.Runtime
 
         public static void PrepareFrameLocalData(
             ref GEEffectCommandStreamComponent stream,
-            DynamicBuffer<GEEffectCommandBuffer> commands,
-            DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
             int frame)
         {
             if (stream.LastClearedFrame == frame)
                 return;
-
-            commands.Clear();
-            setByCallerValues.Clear();
 
             stream.LastClearedFrame = frame;
             ResetFrameLocalCounters(ref stream);
@@ -1037,21 +849,6 @@ namespace GAS.Runtime
 
         private static GEEffectCommandBuffer PrepareCommand(
             ref GEEffectCommandStreamComponent stream,
-            DynamicBuffer<GESetByCallerValueBuffer> setByCallerBuffer,
-            in GEEffectCommandBuffer command,
-            int setByCallerCount,
-            int currentFrame)
-        {
-            return PrepareCommand(
-                ref stream,
-                setByCallerBuffer.Length,
-                command,
-                setByCallerCount,
-                currentFrame);
-        }
-
-        private static GEEffectCommandBuffer PrepareCommand(
-            ref GEEffectCommandStreamComponent stream,
             int setByCallerStart,
             in GEEffectCommandBuffer command,
             int setByCallerCount,
@@ -1156,115 +953,6 @@ namespace GAS.Runtime
             for (var i = 0; i < source.Length; i++)
             {
                 var value = source[i];
-                target.Add(new GESetByCallerValueBuffer
-                {
-                    CommandSequence = commandSequence,
-                    SpecSequence = 0,
-                    Key = value.Key,
-                    Value = value.Value,
-                });
-            }
-        }
-
-        private static void SortParallelCommandFanInRecords(List<ParallelCommandFanInRecord> records)
-        {
-            for (var i = 1; i < records.Count; i++)
-            {
-                var value = records[i];
-                var j = i - 1;
-                while (j >= 0 && CompareParallelCommandFanInRecords(records[j], value) > 0)
-                {
-                    records[j + 1] = records[j];
-                    j--;
-                }
-
-                records[j + 1] = value;
-            }
-        }
-
-        private static int CompareParallelCommandFanInRecords(
-            in ParallelCommandFanInRecord left,
-            in ParallelCommandFanInRecord right)
-        {
-            var result = CompareEntity(left.Command.TargetAsc, right.Command.TargetAsc);
-            if (result != 0)
-                return result;
-
-            result = left.Command.Sequence.CompareTo(right.Command.Sequence);
-            if (result != 0)
-                return result;
-
-            result = left.ProducerIndex.CompareTo(right.ProducerIndex);
-            if (result != 0)
-                return result;
-
-            return left.LocalIndex.CompareTo(right.LocalIndex);
-        }
-
-        private static int CompareEntity(Entity left, Entity right)
-        {
-            var result = left.Index.CompareTo(right.Index);
-            if (result != 0)
-                return result;
-
-            return left.Version.CompareTo(right.Version);
-        }
-
-        private static void AdvanceAfterExplicitSequence(ref int next, int value)
-        {
-            if (next <= value)
-                next = value + 1;
-        }
-
-        private static int CountSetByCallerValues(
-            DynamicBuffer<ActiveGameplayEffectSetByCallerValueBuffer> setByCallerValues,
-            int sourceSequence,
-            int sourceGameplayEffectCode)
-        {
-            if (!setByCallerValues.IsCreated
-                || sourceSequence <= 0
-                || sourceGameplayEffectCode <= 0)
-            {
-                return 0;
-            }
-
-            var count = 0;
-            for (var i = 0; i < setByCallerValues.Length; i++)
-            {
-                var value = setByCallerValues[i];
-                if (value.SourceSequence == sourceSequence
-                    && value.SourceGameplayEffectCode == sourceGameplayEffectCode)
-                {
-                    count++;
-                }
-            }
-
-            return count;
-        }
-
-        private static void CopySetByCallerValues(
-            DynamicBuffer<GESetByCallerValueBuffer> target,
-            DynamicBuffer<ActiveGameplayEffectSetByCallerValueBuffer> source,
-            int sourceSequence,
-            int sourceGameplayEffectCode,
-            int commandSequence)
-        {
-            if (!source.IsCreated
-                || sourceSequence <= 0
-                || sourceGameplayEffectCode <= 0)
-            {
-                return;
-            }
-
-            for (var i = 0; i < source.Length; i++)
-            {
-                var value = source[i];
-                if (value.SourceSequence != sourceSequence
-                    || value.SourceGameplayEffectCode != sourceGameplayEffectCode)
-                {
-                    continue;
-                }
-
                 target.Add(new GESetByCallerValueBuffer
                 {
                     CommandSequence = commandSequence,

@@ -115,6 +115,7 @@ $autoChessUnitSnapshotProjectorPath = Join-Path $ProjectPath "Assets\AutoChessDe
 $autoChessValidationReportPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Validation\AutoChessBattleValidationReport.cs"
 $autoChessValidationRunPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Validation\AutoChessBattleValidationRun.cs"
 $autoChessRuntimeHostPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasRuntimeHost.cs"
+$autoChessRuntimeSystemBootstrapPath = Join-Path $ProjectPath "Assets\AutoChessDemo\AutoRunner\AutoChessRuntimeSystemBootstrap.cs"
 $autoChessCatalogSessionPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasCatalogSession.cs"
 $autoChessRuntimeAccessPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasRuntimeAccess.cs"
 $autoChessDefinitionCatalogBuilderPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Ecs\AutoChessBattleDefinitionCatalogBuilder.cs"
@@ -198,15 +199,19 @@ Assert-FileNotContains `
 Assert-FileContains `
     -Path $autoChessDamagePath `
     -Pattern "ExecuteDamageCalculationChunkJob\s*:\s*IJobChunk" `
-    -Message "AutoChess damage execution must process owner-local ASC command buffers through a chunk-local job."
+    -Message "AutoChess damage execution must process owner-local ASC specs through a chunk-local job."
 Assert-FileContains `
     -Path $autoChessDamagePath `
-    -Pattern "CommandTypeHandle\s*=\s*SystemAPI\.GetBufferTypeHandle<GEEffectCommandBuffer>\(isReadOnly:\s*true\)" `
-    -Message "AutoChess damage execution must acquire owner-local GEEffectCommandBuffer through a chunk-local buffer handle."
+    -Pattern "SpecTypeHandle\s*=\s*SystemAPI\.GetBufferTypeHandle<GEEffectSpecBuffer>\(isReadOnly:\s*true\)" `
+    -Message "AutoChess damage execution must acquire owner-local GEEffectSpecBuffer through a chunk-local buffer handle."
 Assert-FileContains `
     -Path $autoChessDamagePath `
-    -Pattern "var targetAsc = ResolveTargetAsc\(in command,\s*owner\)" `
-    -Message "AutoChess damage execution must resolve command targets against the current ASC owner."
+    -Pattern "var targetAsc = ResolveTargetAsc\(in spec,\s*owner\)" `
+    -Message "AutoChess damage execution must resolve spec targets against the current ASC owner."
+Assert-FileContains `
+    -Path $autoChessDamagePath `
+    -Pattern "SourceSpecSequence = spec\.Sequence" `
+    -Message "AutoChess damage execution must preserve the source spec sequence on pending deltas and facts."
 Assert-FileContains `
     -Path $autoChessDamagePath `
     -Pattern "if\s*\(!hasOwnerFactBuffer\)[\s\S]*?continue;" `
@@ -221,8 +226,20 @@ Assert-FileNotContains `
     -Message "AutoChess damage execution must not read execution commands from the singleton GEEffectCommandBuffer stream."
 Assert-FileNotContains `
     -Path $autoChessDamagePath `
+    -Pattern "CommandTypeHandle\s*=\s*SystemAPI\.GetBufferTypeHandle<GEEffectCommandBuffer>|ComponentType\.ReadOnly<GEEffectCommandBuffer>\(\)|ComponentType\.ReadWrite<GEEffectCommandBuffer>\(\)" `
+    -Message "AutoChess damage execution must not use the owner-local instant command buffer after execution input moves to specs."
+Assert-FileNotContains `
+    -Path $autoChessDamagePath `
     -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>|public BufferLookup<GameplayEventBuffer> FactLookup|FactLookup\[StreamEntity\]|var facts = FactLookup\[StreamEntity\]|facts\.Add\(new GameplayEventBuffer" `
     -Message "AutoChess damage execution must not append execution facts directly to the singleton fact stream."
+Assert-FileContains `
+    -Path $autoChessRuntimeSystemBootstrapPath `
+    -Pattern "groups\.CoreSimulation\.AddSystemToUpdateList\([\s\r\n]*world\.CreateSystem\(typeof\(AutoChessExecuteDamageCalculationSystem\)\)\)" `
+    -Message "AutoChess damage execution must be registered in CoreSimulation so GEEffectSpecBuildSystem ordering applies."
+Assert-FileNotContains `
+    -Path $autoChessRuntimeSystemBootstrapPath `
+    -Pattern "groups\.ExecutionCalculationExtension\.AddSystemToUpdateList\([\s\r\n]*world\.CreateSystem\(typeof\(AutoChessExecuteDamageCalculationSystem\)\)\)" `
+    -Message "AutoChess damage execution must not stay in the extension group after moving its input to owner-local specs."
 Assert-FileContains `
     -Path $ascCommandBufferResolvePath `
     -Pattern "BufferTypeHandle<OwnerLocalGameplayFactBuffer>" `
@@ -551,14 +568,14 @@ Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "HasRequiredBuffers[\s\S]*HasBuffer<GEEffectSpecBuffer>" `
     -Message "EffectCommandSpecStream required buffers must not include GEEffectSpecBuffer after owner-local spec migration."
-Assert-FileContains `
+Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "PrepareFrameLocalData\(EntityManager[\s\S]*?commands\.Clear\(\);\s*[\r\n\s]*setByCallerValues\.Clear\(\);" `
-    -Message "EffectCommandSpecStream managed frame prepare must clear legacy singleton command payload every frame."
-Assert-FileContains `
+    -Message "EffectCommandSpecStream managed frame prepare must not clear singleton command payload after owner-local command migration."
+Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "PrepareFrameLocalData\(\s*ref GEEffectCommandStreamComponent stream[\s\S]*?commands\.Clear\(\);\s*[\r\n\s]*setByCallerValues\.Clear\(\);" `
-    -Message "EffectCommandSpecStream job frame prepare must clear legacy singleton command payload every frame."
+    -Message "EffectCommandSpecStream job frame prepare must not clear singleton command payload after owner-local command migration."
 Assert-FileContains `
     -Path $generatedInstantEffectPath `
     -Pattern "AttributeSetReduceApplyJob\s*:\s*IJobChunk" `
@@ -617,8 +634,16 @@ Assert-FileNotContains `
     -Message "EffectCommandStream archetype must not keep ActiveEffectMutationBuffer beside the singleton GameplayEventBuffer stream."
 Assert-FileNotContains `
     -Path $ascArchetypePath `
-    -Pattern "EffectCommandStream\(EntityManager em\)[\s\S]*ComponentType\.ReadWrite<GameplayEventBuffer>\(\)" `
+    -Pattern "EffectCommandStream\(EntityManager em\)[\s\S]*?ComponentType\.ReadWrite<GameplayEventBuffer>\(\)[\s\S]*?return _effectCommandStream;" `
     -Message "EffectCommandStream archetype must not own singleton GameplayEventBuffer after owner-local fact migration."
+Assert-FileNotContains `
+    -Path $ascArchetypePath `
+    -Pattern "EffectCommandStream\(EntityManager em\)[\s\S]*?ComponentType\.ReadWrite<GEEffectCommandBuffer>\(\)[\s\S]*?return _effectCommandStream;" `
+    -Message "EffectCommandStream archetype must not own singleton GEEffectCommandBuffer after owner-local command migration."
+Assert-FileNotContains `
+    -Path $ascArchetypePath `
+    -Pattern "EffectCommandStream\(EntityManager em\)[\s\S]*?ComponentType\.ReadWrite<GESetByCallerValueBuffer>\(\)[\s\S]*?return _effectCommandStream;" `
+    -Message "EffectCommandStream archetype must not own singleton GESetByCallerValueBuffer after owner-local command migration."
 Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "HasRequiredBuffers[\s\S]*ActiveEffectMutationBuffer" `
@@ -627,6 +652,10 @@ Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "HasRequiredBuffers[\s\S]*HasBuffer<GameplayEventBuffer>|GetBuffer<GameplayEventBuffer>\(streamEntity\)|DynamicBuffer<GameplayEventBuffer> facts|FactProjectionDeltaCursor|EventBridgeFactCursor" `
     -Message "EffectCommandSpecStream must not require or clear singleton GameplayEventBuffer after owner-local fact migration."
+Assert-FileNotContains `
+    -Path $streamPath `
+    -Pattern "HasRequiredBuffers[\s\S]*HasBuffer<GEEffectCommandBuffer>|HasRequiredBuffers[\s\S]*HasBuffer<GESetByCallerValueBuffer>|GetBuffer<GEEffectCommandBuffer>\(streamEntity\)|GetBuffer<GESetByCallerValueBuffer>\(streamEntity\)|DynamicBuffer<GEEffectCommandBuffer> commands|DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues|MergeParallelCommandFanIn|ParallelCommandFanInRecord" `
+    -Message "EffectCommandSpecStream must not require or mutate singleton command/set-by-caller stream carriers after owner-local command migration."
 Assert-FileContains `
     -Path $ascArchetypePath `
     -Pattern "ComponentType\.ReadWrite<ActiveEffectMutationBuffer>\(\)" `

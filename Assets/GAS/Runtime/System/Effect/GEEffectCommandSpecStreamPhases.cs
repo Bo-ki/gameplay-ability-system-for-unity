@@ -31,8 +31,6 @@ namespace GAS.Runtime
                 StreamEntity = streamEntity,
                 Frame = frame,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
-                SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
             }.Schedule(state.Dependency);
         }
 
@@ -42,15 +40,11 @@ namespace GAS.Runtime
             public Entity StreamEntity;
             public int Frame;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<GEEffectCommandBuffer> CommandLookup;
-            public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
 
             public void Execute()
             {
                 if (StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !CommandLookup.HasBuffer(StreamEntity)
-                    || !SetByCallerLookup.HasBuffer(StreamEntity))
+                    || !StreamLookup.HasComponent(StreamEntity))
                 {
                     return;
                 }
@@ -58,8 +52,6 @@ namespace GAS.Runtime
                 var stream = StreamLookup[StreamEntity];
                 EffectCommandSpecStream.PrepareFrameLocalData(
                     ref stream,
-                    CommandLookup[StreamEntity],
-                    SetByCallerLookup[StreamEntity],
                     Frame);
                 StreamLookup[StreamEntity] = stream;
             }
