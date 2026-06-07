@@ -856,7 +856,7 @@ namespace GAS.Runtime
             if (TryResolveCachedSingleton(em, out debuggerEntity))
                 return true;
 
-            return TryResolveSingletonByQuery(em, out debuggerEntity);
+            return TryResolveRegisteredSingleton(em, out debuggerEntity);
         }
 
         private static bool TryResolveCachedSingleton(EntityManager em, out Entity debuggerEntity)
@@ -879,18 +879,17 @@ namespace GAS.Runtime
             return false;
         }
 
-        private static bool TryResolveSingletonByQuery(EntityManager em, out Entity debuggerEntity)
+        private static bool TryResolveRegisteredSingleton(EntityManager em, out Entity debuggerEntity)
         {
             debuggerEntity = Entity.Null;
-            if (em.World == null || !em.World.IsCreated)
+            if (!GASManager.IsInitialized || !GASManager.EntityManager.Equals(em))
                 return false;
 
-            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<GASRuntimeDebuggerComponent>());
-            using var entities = query.ToEntityArray(Allocator.Temp);
-            if (entities.Length != 1 || !IsValidDebugger(em, entities[0]))
+            var registeredDebugger = GASManager.EntityRuntimeDebugger;
+            if (!IsValidDebugger(em, registeredDebugger))
                 return false;
 
-            debuggerEntity = entities[0];
+            debuggerEntity = registeredDebugger;
             RegisterKnownSingleton(em, debuggerEntity);
             return true;
         }

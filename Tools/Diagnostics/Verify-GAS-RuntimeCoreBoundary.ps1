@@ -180,6 +180,30 @@ Assert-FileContains `
     -Path $gasManagerPath `
     -Pattern "ActiveEffectStore\.ResetKnownGlobalIndexStore\(EntityManager\)" `
     -Message "GASManager shutdown must reset the ActiveEffectStore global index owner cache."
+Assert-FileNotContains `
+    -Path $debuggerPath `
+    -Pattern "CreateEntityQuery" `
+    -Message "GasRuntimeDebugger must not create singleton fallback queries."
+Assert-FileNotContains `
+    -Path $debuggerPath `
+    -Pattern "TryResolveSingletonByQuery" `
+    -Message "GasRuntimeDebugger must not keep singleton query fallback helpers."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "TryResolveRegisteredSingleton" `
+    -Message "GasRuntimeDebugger must prefer the registered runtime debugger owner before failing."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "GASManager\.EntityRuntimeDebugger" `
+    -Message "GasRuntimeDebugger registered lookup must consume the GASManager-owned runtime debugger entity."
+Assert-FileContains `
+    -Path $gasManagerPath `
+    -Pattern "GasRuntimeDebugger\.ResetKnownSingleton\(EntityManager\)" `
+    -Message "GASManager shutdown must reset the runtime debugger owner cache."
+Assert-FileContains `
+    -Path $gasManagerPath `
+    -Pattern "EntityRuntimeDebugger = GasRuntimeDebugger\.CreateSingleton\(ExWorld\.EntityManager\)" `
+    -Message "GASManager initialization must register the runtime debugger owner."
 Assert-FileContains `
     -Path $streamPath `
     -Pattern "ResetFrameLocalCounters\(ref stream\)" `
@@ -365,6 +389,7 @@ Write-Host "GAS Runtime Core boundary check passed: no AutoChess references unde
 Write-Host "GAS Runtime Core pending attribute delta contract passed: owner-local apply, stream migration fallback retired, and debugger counters are wired."
 Write-Host "GAS Runtime Core global timer contract passed: registered/cache owner lookup is wired and singleton fallback queries are blocked."
 Write-Host "GAS Runtime Core active effect global index contract passed: registered/cache owner lookup is wired and singleton fallback queries are blocked."
+Write-Host "GAS Runtime Core debugger singleton contract passed: registered/cache owner lookup is wired and singleton fallback queries are blocked."
 Write-Host "GAS Runtime Core stream writer contract passed: runtime helpers resolve stream owners explicitly before writing commands or facts."
 Write-Host "GAS Runtime Core execution output fact contract passed: NativeStream collection and deterministic merge replaced structural ECB singleton append."
 Write-Host "GAS Runtime Core active mutation contract passed: generated gather + ASC chunk-local apply path is wired."

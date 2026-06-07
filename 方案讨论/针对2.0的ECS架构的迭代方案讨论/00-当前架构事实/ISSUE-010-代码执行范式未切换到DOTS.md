@@ -1,6 +1,6 @@
 # ISSUE-010 代码执行范式未切换到 DOTS
 
-> 最近复核：2026-06-07 | 状态：Active | 严重度：P1
+> 最近复核：2026-06-08 | 状态：Active | 严重度：P1
 
 ## 当前结论
 
@@ -25,7 +25,7 @@
 - cross-entity ability lifecycle marker 写入已收口：ASC command、attribute threshold、generated active effect granted-ability cleanup 均写入 `AbilityLifecycleRequestBuffer`，由 `AbilityLifecycleRequestSystem` 在 ability chunk 内统一应用 cancel/end/destroy-on-cleanup marker。
 - cross-entity attribute owner marker 写入已收口：generated active effect 与 execution output modifier 均写入 `AttributeOwnerMarkerRequestBuffer`，由 `AttributeOwnerMarkerRequestSystem` 在 ASC chunk 内统一应用 dirty / active-modifier-present marker。
 - execution output applied marker 已收口：`GEExecutionCalculationOutputModifierSystem` 用 effect-owned `IJobChunk` + chunk `EnabledMask` 写 `GEExecutionCalculationOutputModifierAppliedComponent`，不再 random-access toggle arbitrary effect entity。
-- `ToEntityArray()` 当前运行命中 4 处：Debugger observation 3 处、Cue managed boundary 1 处；`GASRuntimeFrameContext` current-frame lookup 已改为 registered/cache owner，cache miss 直接失败，不再创建 fallback query。`ActiveEffectStore` global index owner 已改为 registered/cache owner，不再创建 fallback query。AutoChess catalog 初始化旧 `ToEntityArray` 事实已过期，pending AttributeDelta owner-local apply 也不再物化 owner entity list。
+- `EntityManager.CreateEntityQuery()` 当前 Runtime 可执行命中 0 处；`ToEntityArray()` 当前运行命中 3 处：Debugger observation 2 处、Cue managed boundary 1 处。`GasRuntimeDebugger` singleton lookup、`GASRuntimeFrameContext` current-frame lookup 和 `ActiveEffectStore` global index owner 均已改为 registered/cache owner，cache miss 不再创建 fallback query。AutoChess catalog 初始化旧 `ToEntityArray` 事实已过期，pending AttributeDelta owner-local apply 也不再物化 owner entity list。
 
 ## 仍成立风险
 

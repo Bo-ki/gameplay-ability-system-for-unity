@@ -1,6 +1,6 @@
 # Runtime 主链事实
 
-> 上次更新：2026-06-07 | 审查范围：`Assets/GAS/Runtime` + `Assets/GAS/Generated/CodeGen/Runtime`
+> 上次更新：2026-06-08 | 审查范围：`Assets/GAS/Runtime` + `Assets/GAS/Generated/CodeGen/Runtime`
 
 ## 已成立事实
 
@@ -102,7 +102,7 @@
 3. 这条事实用于对齐本地官方规则 `PRF-33` / `CASE-46`：stored query 归属 `SystemState`，不再由 `SystemAPI.QueryBuilder().Build()` 承载长期生命周期。
 4. 同轮扫描中，`IJobChunk.Execute` 内直接 `for (... chunk.Count ...)` 遍历已经清零；涉及 enableable mask 的 job 使用 `ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count)` 或已经不属于 `IJobChunk` 语义。
 5. 这不等于所有 query 成本已经终局优化：`CalculateChunkCountWithoutFiltering()`、singleton stream sizing、Debugger observation query、Cue managed lifecycle query 仍需按 owner / phase / cost 分类报告。
-6. 2026-06-07 codedb + 文本复核确认 `EntityManager.CreateEntityQuery(...)` 当前运行命中 0。`GASRuntimeFrameContext` current-frame lookup 与 `ActiveEffectStore` global index owner 均已改为 registered/cache owner，不再创建 fallback query；剩余工作是容量、cache integrity 和 hot path 触发证据。
+6. 2026-06-08 codedb + 文本复核确认 `EntityManager.CreateEntityQuery(...)` 当前 Runtime 可执行命中为 0。`GasRuntimeDebugger` singleton lookup、`GASRuntimeFrameContext` current-frame lookup 与 `ActiveEffectStore` global index owner 均已改为 registered/cache owner，不再创建 fallback query；剩余工作是容量、cache integrity、hot path 触发证据，以及 Debugger observation 成本归因和防回流门禁。
 
 ### 6. Observation / Debugger
 
@@ -140,11 +140,11 @@
 
 本条不等于 Runtime Core 已达终局：singleton stream carrier、ActiveMutation 的 serial gather / helper BufferLookup / ComponentLookup store、剩余边界缓冲仍需继续按 `QRY-01`、`PRF-09`、`BUF-02`、`NAT-03` 审查。隐式 stream writer/append helper 已收窄为显式 owner 写入，但 command/spec/delta/fact 仍共享同一个 stream owner。
 
-### P1：Hot path 主线程 Query 已继续收窄，但 singleton fallback 仍需 owner 化
+### P1：Hot path 主线程 Query 已继续收窄，singleton owner 需防回流和证据化
 
 旧文档中的 “22 个 ToEntityArray” 已不符合当前代码。当前更准确的问题是：
 
-1. `ToEntityArray` 当前运行命中 4 处，不再是旧的 22 处 hot path 诊断；当前命中集中在 Debugger observation 和 Cue managed boundary。
+1. `ToEntityArray` 当前运行命中 3 处，不再是旧的 22 处 hot path 诊断；当前命中集中在 Debugger observation 和 Cue managed boundary。
 2. `AutoChessBattleCommandDriveSystem`、`AutoChessExecuteDamageCalculationSystem`、`AbilityLifecycleRequestSystem`、`AbilityStateCleanupSystem` 已迁到 scheduled job；Core 主链的 `AttributeRecalculateSystem` 小规模主线程 fallback、ASC command resolve、generated ability commit、generated normalize/spec-build/reduce、generated ActiveEffect pre-scan、explicit remove 主线程 foreach、stream frame prepare 和 fact projection 主线程 buffer loop 均已退场。
 3. `Assets/GAS/Runtime/System` 与 generated runtime stored query 当前已统一使用 `state.GetEntityQuery(EntityQueryDesc)`；`SystemAPI.QueryBuilder().Build()` 扫描为 0。
 4. `Assets/GAS/Runtime` 与 generated runtime 内 `SystemAPI.Query<...>` / `SystemAPI.Query(...)` 当前 0 命中；Cue managed lifecycle 使用 stored query + `ToEntityArray`，归 Boundary managed presentation。
@@ -159,8 +159,8 @@
 | `SystemAPI.QueryBuilder().Build()` | `Assets/GAS/Runtime/System` 与 generated runtime 当前 0 命中 | 已按 `PRF-33` / `CASE-46` 迁到 `state.GetEntityQuery(EntityQueryDesc)` |
 | `IJobChunk` 直接 `for (... chunk.Count ...)` | Runtime/System 与 generated runtime 当前 0 命中 | 已按 `PRF-22` 改为 enabled mask aware 遍历 |
 | `SystemAPI.Query<...>` / `SystemAPI.Query(...)` | Runtime + generated runtime 当前 0 命中 | 不再是当前主诊断；managed cue 边界使用 stored query |
-| `ToEntityArray()` | `GasRuntimeDebugger.cs:889/2260/2458` | Debugger / observation-only |
-| `ToEntityArray()` | `CueManagedLifecycleSystem.cs:39` | Boundary managed presentation |
+| `ToEntityArray()` | `GasRuntimeDebugger.activeEffectStoreQuery` / `GasRuntimeDebugger.presentationOutboxQuery` | Debugger / observation-only |
+| `ToEntityArray()` | `CueManagedLifecycleSystem` cue query | Boundary managed presentation |
 | pending AttributeDelta owner-local apply | `GASAttributeModifierDeltaApplySystem.cs:37-195` | ASC chunk-local `IJobChunk`；`pendingAttributeEstimatedRandomLookups=0` / `pendingAttributeMigrationCarriers=0` 已由 AutoChess x50 复测证明，旧 stream migration fallback 已删除并由诊断脚本防回流 |
 | `GASRuntimeFrameContext` current-frame owner | `GASGlobalTimerSystem.cs:73-126` | registered/cache owner；cache miss 直接失败，不再创建 singleton fallback query |
 | ActiveEffectStore global index owner | `ActiveEffectStore.cs:1368-1419` | registered/cache owner；不再创建 fallback query，仍需 capacity / cache integrity / hot path 触发证据 |

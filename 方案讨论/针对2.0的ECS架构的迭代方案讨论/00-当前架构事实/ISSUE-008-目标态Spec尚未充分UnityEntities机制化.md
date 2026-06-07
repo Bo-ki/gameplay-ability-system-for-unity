@@ -17,7 +17,7 @@
 | `iterating-data-ijobchunk.md` | 多条 owner applicator 已用 `IJobChunk` + `ChunkEntityEnumerator` / `EnabledMask` | 所有 `IJobChunk` 需要有 query ownership、enabled-mask 语义和 dependency 证据；不能只凭类型名认定合规 |
 | `components-buffer-jobs.md` | `BufferLookup` 已把部分主线程 helper 迁到 job 内 | 需要把“随机访问工具”与“目标态 store”区分开，尤其是 active mutation、cleanup、fact bridge 的多 target 写入 |
 | `systems-entity-command-buffer-use.md` | Begin/End GAS ECB gate 已存在，部分 generated/remove/cleanup 写入 ECB | 需要用 Journaling/Profiler 证明 playback phase、数量、来源和是否存在绕过 gate 的 direct structural write |
-| `systems-entityquery-create.md` | Runtime stored query 已统一使用 `state.GetEntityQuery(EntityQueryDesc)`，`SystemAPI.Query` 热路径已清零 | 需要把 Boundary managed query、Debugger gather、singleton fallback 和 Core hot path query 分开计数和预算 |
+| `systems-entityquery-create.md` | Runtime stored query 已统一使用 `state.GetEntityQuery(EntityQueryDesc)`，`SystemAPI.Query` 热路径已清零，singleton fallback query 已由 registered/cache owner 替代 | 需要把 Boundary managed query、Debugger gather、registered singleton owner 防回流和 Core hot path query 分开计数和预算 |
 
 ## 已机制化部分
 
