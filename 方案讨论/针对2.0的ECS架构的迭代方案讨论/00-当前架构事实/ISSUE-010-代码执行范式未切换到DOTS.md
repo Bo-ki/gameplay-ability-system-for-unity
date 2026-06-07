@@ -25,7 +25,7 @@
 - cross-entity ability lifecycle marker 写入已收口：ASC command、attribute threshold、generated active effect granted-ability cleanup 均写入 `AbilityLifecycleRequestBuffer`，由 `AbilityLifecycleRequestSystem` 在 ability chunk 内统一应用 cancel/end/destroy-on-cleanup marker。
 - cross-entity attribute owner marker 写入已收口：generated active effect 与 execution output modifier 均写入 `AttributeOwnerMarkerRequestBuffer`，由 `AttributeOwnerMarkerRequestSystem` 在 ASC chunk 内统一应用 dirty / active-modifier-present marker。
 - execution output applied marker 已收口：`GEExecutionCalculationOutputModifierSystem` 用 effect-owned `IJobChunk` + chunk `EnabledMask` 写 `GEExecutionCalculationOutputModifierAppliedComponent`，不再 random-access toggle arbitrary effect entity。
-- `ToEntityArray()` 当前运行命中 5 处：Debugger observation 3 处、Cue managed boundary 1 处、`GASGlobalTimerSystem` current-frame singleton fallback 1 处；`ActiveEffectStore` global index fallback 当前通过 `CreateEntityQuery + CalculateEntityCount + GetSingletonEntity` 实现，不再是 `ToEntityArray` 命中。AutoChess catalog 初始化旧 `ToEntityArray` 事实已过期，pending AttributeDelta owner-local apply 也不再物化 owner entity list。
+- `ToEntityArray()` 当前运行命中 4 处：Debugger observation 3 处、Cue managed boundary 1 处；`GASGlobalTimerSystem` current-frame fallback 和 `ActiveEffectStore` global index fallback 当前通过 `CreateEntityQuery + CalculateEntityCount + GetSingletonEntity` 实现，不再是 `ToEntityArray` 命中。AutoChess catalog 初始化旧 `ToEntityArray` 事实已过期，pending AttributeDelta owner-local apply 也不再物化 owner entity list。
 
 ## 仍成立风险
 

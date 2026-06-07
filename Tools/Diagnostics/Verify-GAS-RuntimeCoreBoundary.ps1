@@ -75,6 +75,7 @@ $streamPath = Join-Path $runtimePath "Effect\Component\Dynamic\GEEffectCommandSp
 $streamPhasePath = Join-Path $runtimePath "System\Effect\GEEffectCommandSpecStreamPhases.cs"
 $scheduleContractPath = Join-Path $runtimePath "System\SystemGroup\GASSystemScheduleContract.cs"
 $streamOwnerContractPath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeStreamOwnerContract.cs"
+$globalTimerPath = Join-Path $runtimePath "System\Core\GASGlobalTimerSystem.cs"
 $debuggerPath = Join-Path $runtimePath "Debugger\GasRuntimeDebugger.cs"
 $generatedActiveEffectPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeActiveEffect.gen.cs"
 $codeGenTemplatePath = Join-Path $ProjectPath "Assets\GAS\Editor\CodeGen\Phases\GasGlueCodeGenPhases.cs"
@@ -120,6 +121,14 @@ Assert-FileContains `
     -Path $deltaApplyPath `
     -Pattern "PendingAttributeEstimatedRandomLookupCount" `
     -Message "GASAttributeModifierDeltaApplySystem must expose random lookup pressure counters."
+Assert-FileNotContains `
+    -Path $globalTimerPath `
+    -Pattern "ToEntityArray" `
+    -Message "GASRuntimeFrameContext must not materialize GlobalTimer singleton fallback entities."
+Assert-FileContains `
+    -Path $globalTimerPath `
+    -Pattern "TryResolveRegisteredGlobalTimer" `
+    -Message "GASRuntimeFrameContext must prefer the registered GlobalTimer owner before fallback singleton queries."
 Assert-FileContains `
     -Path $streamPath `
     -Pattern "ResetFrameLocalCounters\(ref stream\)" `

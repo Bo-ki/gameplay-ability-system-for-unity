@@ -1,5 +1,4 @@
 using Unity.Burst;
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
@@ -76,6 +75,9 @@ namespace GAS.Runtime
             if (TryResolveCachedGlobalTimer(em, out frame))
                 return true;
 
+            if (TryResolveRegisteredGlobalTimer(em, out frame))
+                return true;
+
             return TryResolveSingletonGlobalTimer(em, out frame);
         }
 
@@ -99,6 +101,21 @@ namespace GAS.Runtime
             return false;
         }
 
+        private static bool TryResolveRegisteredGlobalTimer(EntityManager em, out int frame)
+        {
+            frame = 0;
+            if (!GASManager.IsInitialized || !GASManager.EntityManager.Equals(em))
+                return false;
+
+            var globalTimer = GASManager.EntityGlobalTimer;
+            if (!IsValidGlobalTimer(em, globalTimer))
+                return false;
+
+            RegisterKnownGlobalTimer(em, globalTimer);
+            frame = em.GetComponentData<GlobalTimer>(globalTimer).Frame;
+            return true;
+        }
+
         private static bool TryResolveSingletonGlobalTimer(EntityManager em, out int frame)
         {
             frame = 0;
@@ -106,12 +123,15 @@ namespace GAS.Runtime
                 return false;
 
             using var query = em.CreateEntityQuery(ComponentType.ReadOnly<GlobalTimer>());
-            using var timers = query.ToEntityArray(Allocator.Temp);
-            if (timers.Length != 1 || !IsValidGlobalTimer(em, timers[0]))
+            if (query.CalculateEntityCount() != 1)
                 return false;
 
-            RegisterKnownGlobalTimer(em, timers[0]);
-            frame = em.GetComponentData<GlobalTimer>(timers[0]).Frame;
+            var globalTimer = query.GetSingletonEntity();
+            if (!IsValidGlobalTimer(em, globalTimer))
+                return false;
+
+            RegisterKnownGlobalTimer(em, globalTimer);
+            frame = em.GetComponentData<GlobalTimer>(globalTimer).Frame;
             return true;
         }
 

@@ -101,7 +101,7 @@
 3. 这条事实用于对齐本地官方规则 `PRF-33` / `CASE-46`：stored query 归属 `SystemState`，不再由 `SystemAPI.QueryBuilder().Build()` 承载长期生命周期。
 4. 同轮扫描中，`IJobChunk.Execute` 内直接 `for (... chunk.Count ...)` 遍历已经清零；涉及 enableable mask 的 job 使用 `ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count)` 或已经不属于 `IJobChunk` 语义。
 5. 这不等于所有 query 成本已经终局优化：`CalculateChunkCountWithoutFiltering()`、singleton stream sizing、Debugger observation query、Cue managed lifecycle query 仍需按 owner / phase / cost 分类报告。
-6. 2026-06-07 整体截面确认 `EntityManager.CreateEntityQuery(...)` 当前只剩 3 处：`GasRuntimeDebugger.cs:813` 属于 Debugger observation；`GASGlobalTimerSystem.cs:108` 属于 current-frame singleton fallback；`ActiveEffectStore.cs:1374` 属于 global index owner fallback。后两者不是旧“已删除”事实，需要在 R1/R4/R7 中继续 owner 化或计数证明低频。
+6. 2026-06-07 整体截面确认 `EntityManager.CreateEntityQuery(...)` 当前只剩 3 处：`GasRuntimeDebugger.cs:888` 属于 Debugger observation；`GASGlobalTimerSystem.cs:125` 属于 current-frame singleton cache-miss fallback；`ActiveEffectStore.cs:1374` 属于 global index owner fallback。后两者不是旧“已删除”事实，需要在 R1/R4/R7 中继续 owner 化或计数证明低频。
 
 ### 6. Observation / Debugger
 
@@ -143,7 +143,7 @@
 
 旧文档中的 “22 个 ToEntityArray” 已不符合当前代码。当前更准确的问题是：
 
-1. `ToEntityArray` 当前运行命中 5 处，不再是旧的 22 处 hot path 诊断；当前命中集中在 Debugger observation、Cue managed boundary 和 GlobalTimer singleton fallback。
+1. `ToEntityArray` 当前运行命中 4 处，不再是旧的 22 处 hot path 诊断；当前命中集中在 Debugger observation 和 Cue managed boundary。
 2. `AutoChessBattleCommandDriveSystem`、`AutoChessExecuteDamageCalculationSystem`、`AbilityLifecycleRequestSystem`、`AbilityStateCleanupSystem` 已迁到 scheduled job；Core 主链的 `AttributeRecalculateSystem` 小规模主线程 fallback、ASC command resolve、generated ability commit、generated normalize/spec-build/reduce、generated ActiveEffect pre-scan、explicit remove 主线程 foreach、stream frame prepare 和 fact projection 主线程 buffer loop 均已退场。
 3. `Assets/GAS/Runtime/System` 与 generated runtime stored query 当前已统一使用 `state.GetEntityQuery(EntityQueryDesc)`；`SystemAPI.QueryBuilder().Build()` 扫描为 0。
 4. `Assets/GAS/Runtime` 与 generated runtime 内 `SystemAPI.Query<...>` / `SystemAPI.Query(...)` 当前 0 命中；Cue managed lifecycle 使用 stored query + `ToEntityArray`，归 Boundary managed presentation。
@@ -159,8 +159,8 @@
 | `SystemAPI.Query<...>` / `SystemAPI.Query(...)` | Runtime + generated runtime 当前 0 命中 | 不再是当前主诊断；managed cue 边界使用 stored query |
 | `ToEntityArray()` | `GasRuntimeDebugger.cs:889/2260/2458` | Debugger / observation-only |
 | `ToEntityArray()` | `CueManagedLifecycleSystem.cs:39` | Boundary managed presentation |
-| `ToEntityArray()` | `GASGlobalTimerSystem.cs:109` | current-frame singleton fallback；需 owner 化或 cache miss 计数 |
 | pending AttributeDelta owner-local apply | `GASAttributeModifierDeltaApplySystem.cs:37-195` | ASC chunk-local `IJobChunk`；`pendingAttributeEstimatedRandomLookups=0` / `pendingAttributeMigrationCarriers=0` 已由 AutoChess x50 复测证明，stream migration fallback 仍保留为可观测 proof |
+| `EntityManager.CreateEntityQuery()` | `GASGlobalTimerSystem.cs:125` | current-frame singleton cache-miss fallback；已优先读取 `GASManager.EntityGlobalTimer` registered owner，不再 `ToEntityArray` materialize |
 | `EntityManager.CreateEntityQuery()` | `ActiveEffectStore.cs:1374-1382` | ActiveEffectStore global index fallback；当前使用 `CalculateEntityCount()` / `GetSingletonEntity()`，需 owner 注册 / capacity / cache miss 证据 |
 | `CalculateEntityCount()` | `GasRuntimeDebugger.cs:609` | observation-only |
 | `CalculateChunkCountWithoutFiltering()` | `AbilityStateCleanupSystem`、`GEExecutionCalculationSystem`、`GEExecutionCalculationOutputModifierSystem`、`ASCDestroyFinalizeSystem`、AutoChess command drive | scheduled job sizing；按 PRF-09 避免 enableable/filter sync，并匹配 `IJobChunk` unfiltered chunk index |
