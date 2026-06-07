@@ -8,7 +8,7 @@
 
 ## 2026-06-08 续轮复核：Magnitude Source Evidence 与三 pass validation
 
-本轮代码截面显示，Magnitude Source 风险已经从“人工读 resolver / execution calculation 路径”推进到机器可读 evidence：frame-local counter、Debugger snapshot、text export、AutoChess validation evidence 和静态防回流门均已出现。同时 AutoChess validation runner 已把 performance pass、diagnostic pass 和 official diff pass 拆开。这个事实只说明证据链和 pass 隔离路径建立，不能写成 pre-tick / active effect slot tick snapshot lane、完整 SourceAttribute / TargetAttribute 捕获语义或 Profiler 性能闭环完成。
+本轮代码截面显示，Magnitude Source 风险已经从“人工读 resolver / execution calculation 路径”推进到机器可读 evidence：frame-local counter、Debugger snapshot、text export、AutoChess validation evidence 和静态防回流门均已出现。同时 AutoChess validation runner 已把 performance pass、diagnostic pass 和 official diff pass 拆开。这个事实只说明证据链和 pass 隔离路径建立，不能写成完整 SourceAttribute / TargetAttribute 捕获语义或 Profiler 性能闭环完成。2026-06-08 追加复核后，active effect slot tick 的 SourceAttribute live lookup 已由 `06-ActiveEffectSlotMagnitudeSnapshot事实.md` 记录为 snapshot gather 正向进展，但仍缺 lane-specific attribution、capacity / spill、非零业务样本和规模 profile。
 
 ### 事实消费卡
 
@@ -41,7 +41,7 @@
 
 1. 当前已有 x50 pass split 原始日志，但没有 AutoChess x100 / x1000、Profiler enabled、Luban 或 SourceGenerator 重跑证据；不能把 counter 存在、静态门通过、build 通过或 x50 跑通写成 DOTS 性能优秀。
 2. `PassSplitMagnitudeSource-Run1` 中的 `magnitudeSource*` 字段全为 0，只能证明字段链路可导出且未破坏该业务链路；不能证明真实业务已经覆盖 capture miss、fallback、SourceAttribute / TargetAttribute 和 ExecutionCalculation 热点。
-3. Magnitude Source evidence 是风险显性化，不是 snapshot lane 终局。pre-tick、active effect slot tick、generated template capacity / spill、snapshot timing key 和 fallback fact 语义仍需要 R3/R5/R8 后续切片闭合。
+3. Magnitude Source evidence 是风险显性化，不是 snapshot lane 终局。active effect slot tick 已出现 SourceAttribute snapshot gather，但 generated template capacity / spill、snapshot timing key、fallback fact 语义、execution calculation snapshot lane 和 handwritten resolver capture miss 仍需要 R3/R5/R8 后续切片闭合。
 4. 三 pass 分离只把 Debugger observation 从 performance pass 中隔离出来；diagnostic pass 中仍允许 observation materialization，且这些成本必须继续归 Debugger / Boundary owner，不能混进 CoreSimulation 性能结论。
 
 ### DOTS 判定
@@ -57,12 +57,12 @@
 
 1. R3：把 current / captured-on-apply / captured-on-tick / captured-before-execution 的 magnitude source timing key、owner 和 fallback fact 收敛为目标态 snapshot record。
 2. R4：把 magnitude source counter、observation materialization counter、official diff 和 timing split 纳入同一个 validation evidence model；禁止 derived export 作为机器验收源。
-3. R5：SourceGenerator 模板必须继续退出 active effect slot tick / execution calculation 隐藏 lookup owner；若暂留，必须标记 `MigrationProofOnly` 并绑定退出门。
+3. R5：SourceGenerator 模板已补 active effect slot tick SourceAttribute snapshot gather，但 generated lifecycle / lookup owner 仍不能写成 pure glue 完成；execution calculation 隐藏 lookup owner 若暂留，必须标记 `MigrationProofOnly` 并绑定退出门。
 4. R8：AutoChess x100 / x1000 与 Profiler enabled 场景必须证明 performance pass、diagnostic pass 和 official diff pass 的业务计数可对齐，且 Debugger / Boundary 成本不污染 CoreSimulation 结论。
 
 ## 2026-06-07 整体复核：Boundary Snapshot 与 Magnitude Source Owner
 
-本轮继续对 `Assets/GAS/Runtime`、`Assets/GAS/Generated/CodeGen/Runtime`、`Assets/GAS/Editor/CodeGen/Phases`、`Assets/AutoChessDemo` 和 `Tools/Diagnostics/Verify-GAS-RuntimeCoreBoundary.ps1` 做静态复核并执行一轮收口。结论是：AutoChess 业务 report snapshot 已向 Boundary structured evidence 收敛，这是 R1/R6 的正向进展；active mutation 的跨 owner `SourceAttribute` 已进入 frame-local snapshot lane；但 Runtime pre-tick / execution calculation 仍存在 source attribute live lookup / snapshot lane 缺口，不能把当前状态写成全部 magnitude source capture 完成态。
+本轮继续对 `Assets/GAS/Runtime`、`Assets/GAS/Generated/CodeGen/Runtime`、`Assets/GAS/Editor/CodeGen/Phases`、`Assets/AutoChessDemo` 和 `Tools/Diagnostics/Verify-GAS-RuntimeCoreBoundary.ps1` 做静态复核并执行一轮收口。结论是：AutoChess 业务 report snapshot 已向 Boundary structured evidence 收敛，这是 R1/R6 的正向进展；active mutation 的跨 owner `SourceAttribute` 已进入 frame-local snapshot lane。2026-06-08 追加复核后，generated active effect slot tick 的跨 owner `SourceAttribute` 也已进入 owner-aware snapshot gather；但 execution calculation 和 handwritten resolver 仍只是 evidence 显性化，不能把当前状态写成全部 magnitude source capture 完成态。
 
 ### 事实消费卡
 
@@ -95,7 +95,7 @@
 
 `00-当前架构事实/_归档/2026-06-07-AutoChessBattleValidation-SourceAttributeSnapshotLane-Run1.log` 已补入 active mutation SourceAttribute snapshot lane 的 x50 validation 证据。关键字段为：`completed=True`、`passed=True`、`runtimeChainPassed=True`、`repeatRunPassed=True`、`activeMutationCommands=200`、`activeMutationOwnerGroups=200`、`activeMutationEstimatedRandomLookups=0`、`activeMutationOwnerResourceLookups=0`、`activeMutationMigrationCarriers=0`、`streamCarrierPressureWarnings=34`、`summaryHash=0x6681A05F`。
 
-该日志只能证明 active mutation apply lane 在该规模下已通过 SourceAttribute snapshot map 消费并把旧 random lookup / owner resource lookup / migration carrier counter 压到 0；不能证明 `EffectMagnitudeResolver` capture miss 路径、`GEExecutionCalculationSystem` execution input、generated active effect slot tick、pre-tick magnitude source 或 Profiler 性能闭环已完成。日志仍显示 `profilerCaptureState=profiler disabled; Entities profiler modules collect no data`，因此不能写成 DOTS 优秀水平证明。
+该日志只能证明 active mutation apply lane 在该规模下已通过 SourceAttribute snapshot map 消费并把旧 random lookup / owner resource lookup / migration carrier counter 压到 0；不能证明 `EffectMagnitudeResolver` capture miss 路径、`GEExecutionCalculationSystem` execution input、active effect slot tick snapshot gather 的非零业务覆盖、pre-tick magnitude source 或 Profiler 性能闭环已完成。日志仍显示 `profilerCaptureState=profiler disabled; Entities profiler modules collect no data`，因此不能写成 DOTS 优秀水平证明。
 
 ### 验证补录：PassSplitMagnitudeSource Run1
 
@@ -107,7 +107,7 @@
 
 1. `EffectMagnitudeResolver.ResolveAttributeCapture(...)` 仍支持在 capture miss 时通过 `EntityManager` 读取 `SourceAsc` / `TargetAsc` 的 `AttributeValueBuffer`，再写回 `GEAttributeCaptureValueBuffer`。其中 `StoreCapturedAttributeValue(EntityManager, ref EntityCommandBuffer, ...)` overload 实际没有使用 `ecb`，仍通过 `em.GetBuffer<GEAttributeCaptureValueBuffer>(ge).Add(...)` 直接写 buffer；该 overload 名称不能作为 deferred structural / playback 证明。
 2. `GEExecutionCalculationSystem` 的 `ResolveInput(...)` 对 `SourceAttribute` / `TargetAttribute` 走 `ResolveAttributeCapture(...)`，`CurrentValue` 时通过 `AttributeLookup[asc]` 读取 live attribute。它是 job 内 lookup 读路径，不是 owner-local magnitude snapshot lane。
-3. generated active effect slot tick 的 `BuildMagnitudeContextFromSlot(...)` 在 `SourceAttribute` 时会调用 `TryReadAttributeValue(ref ActiveEffectOwnerResources, slot.SourceAsc, ...)`；当 `slot.SourceAsc != ownerResources.Owner` 时，它仍通过 `AttributeLookup[owner]` 读取外部 owner attribute。模板 `GasGlueCodeGenPhases.cs` 中保留同一生成逻辑，因此不能手改 `.gen.cs` 规避，后续修复 owner 是 SourceGenerator 模板和目标 lane 设计。
+3. generated active effect slot tick 的旧 `BuildMagnitudeContextFromSlot(...) -> TryReadAttributeValue(ref ActiveEffectOwnerResources, slot.SourceAsc, ...)` 跨 owner live lookup 已被 2026-06-08 追加切片替换为 `GEActiveEffectPreTickSourceAttributeSnapshotGatherJob` + `ActiveEffectSlotSourceAttributeSnapshotKey`。最新事实见 [06 ActiveEffectSlot Magnitude Snapshot](06-ActiveEffectSlotMagnitudeSnapshot事实.md)。剩余风险转为 generated lifecycle owner、capacity / spill evidence、非零业务覆盖和 execution calculation / handwritten resolver snapshot lane。
 4. `EffectMagnitudeResolver.EnqueueMagnitudeFact(...)` 仍通过 `EffectCommandSpecStream.TryGetSingleton(...)` 与 `BeginGameplayEventWriter(...)` 把 execution calculation missing fact 写入 singleton fact carrier。这是 telemetry / boundary observation 的迁移路径，不是 Core reaction fact 的 scale-ready owner-local fact lane。
 
 ### DOTS 判定
@@ -115,13 +115,13 @@
 | 规则 | 本轮判定 |
 |---|---|
 | `SYS-05` / `ODF-09` | AutoChess report snapshot 从 structured boundary evidence 派生是正向进展；它把业务 report 与 live Core read 隔开，有利于后续 headless / scene / official diff 共用同一 evidence model。 |
-| `QRY-04` / `PRF-06` / `PRF-19` | active mutation apply 不再直接做跨 owner SourceAttribute lookup；但 handwritten resolver、execution calculation job 和 generated active effect slot tick 仍存在不同形态的 live attribute lookup 或 direct buffer capture。 |
+| `QRY-04` / `PRF-06` / `PRF-19` | active mutation apply 与 generated active effect slot tick 不再直接做跨 owner SourceAttribute live lookup；但 handwritten resolver、execution calculation job 仍存在 evidence-only live lookup / direct buffer capture 路径。 |
 | `BUF-02` / `STORE-03` / `NAT-03` / `SEL-02` | Missing execution fact、effect command、spec、delta、mutation、fact 当前仍经过 singleton stream carrier；可以作为 MigrationProofOnly / boundary observation proof，但不能作为 scale-ready fan-in。 |
-| `BLOB-01` / `BUR-01` / `ODF-05` | active mutation 修复已回到 CodeGen 模板并重新生成；generated active effect slot tick 的 source attribute lookup 仍来自 CodeGen 模板，后续任务仍必须回到 R5 / SourceGenerator pure glue 与 R3 / magnitude snapshot lane，而不是手工改生成文件。 |
+| `BLOB-01` / `BUR-01` / `ODF-05` | active mutation 与 active effect slot tick 的 SourceAttribute snapshot 修复都已回到 CodeGen 模板并重新生成；但 generated lifecycle owner 仍属 R5 / SourceGenerator pure glue 收权范围，不能写成 release-ready 完成。 |
 
 ### 新任务输入
 
 1. R1/R6：继续把 AutoChess report / unit result / validation summary 的长期验收建立在 structured evidence、report key 和 snapshot owner 上；禁止恢复 `ReadCombatAttributes` / live ASC read model 来构造业务结果。
 2. R2/R3：继续新增 pre-tick / execution Source / Target attribute magnitude snapshot lane 切片。目标是把 current/pre-capture/post-capture 的 source value 明确放入 command/spec/magnitude snapshot record 或 owner-local range，避免 resolver / generated tick 中随手读其他 owner。
-3. R5：SourceGenerator 模板已经区分 active mutation apply lane 的 source attribute snapshot；后续必须继续区分 active effect slot tick lane 和 execution calculation lane 的 source attribute 策略。generated artifact 不能继续生成隐藏 random lookup owner，除非显式 `MigrationProofOnly` 并绑定退出门。
+3. R5：SourceGenerator 模板已经区分 active mutation apply lane 与 active effect slot tick lane 的 SourceAttribute snapshot 策略；后续必须继续区分 execution calculation lane 的 source attribute 策略。generated artifact 不能继续生成隐藏 random lookup owner，除非显式 `MigrationProofOnly` 并绑定退出门。
 4. R4：Debugger evidence 必须输出 magnitude source snapshot miss / fallback / cross-owner lookup counter；否则 AutoChess 跑通无法证明 SourceAttribute lane 已达 DOTS owner-local 要求。

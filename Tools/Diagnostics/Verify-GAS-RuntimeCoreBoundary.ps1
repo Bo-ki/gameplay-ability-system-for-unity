@@ -445,6 +445,90 @@ Assert-FileContains `
     -Path $codeGenTemplatePath `
     -Pattern "BuildActiveMutationSourceAttributeSnapshots" `
     -Message "CodeGen template must keep active mutation SourceAttribute capture in the frame-local snapshot lane."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "GEActiveEffectPreTickSourceAttributeSnapshotGatherJob" `
+    -Message "Generated active effect pre-tick must gather SourceAttribute snapshots before slot rebuild."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "ActiveEffectSlotSourceAttributeSnapshots\s*=\s*activeEffectSlotSourceAttributeSnapshots\.AsParallelWriter" `
+    -Message "Generated active effect pre-tick snapshot gather must write SourceAttribute snapshots through a parallel writer."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "ActiveEffectSlotSourceAttributeSnapshotKey\s*:\s*IEquatable<ActiveEffectSlotSourceAttributeSnapshotKey>" `
+    -Message "Generated active effect pre-tick snapshot key must include owner identity, not only owner-local slot sequence."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "EstimateActiveEffectSlotSourceAttributeSnapshotCapacity[\s\S]*?maxSourceAttributeModifierCount" `
+    -Message "Generated active effect pre-tick snapshot capacity must be driven by catalog SourceAttribute modifier upper bound."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "GEActiveEffectPreTickJob\s*:\s*IJobChunk[\s\S]*?\[ReadOnly\] public NativeParallelHashMap<ActiveEffectSlotSourceAttributeSnapshotKey, float> ActiveEffectSlotSourceAttributeSnapshots" `
+    -Message "Generated active effect pre-tick apply must consume SourceAttribute snapshots instead of live cross-owner attribute lookup."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(owner,\s*slot\.Sequence,\s*modifierIndex\)" `
+    -Message "Generated active effect pre-tick gather must key SourceAttribute snapshots by target owner and owner-local slot sequence."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "ActiveEffectSlotSourceAttributeSnapshots\.TryAdd\(snapshotKey,\s*sourceValue\)" `
+    -Message "Generated active effect pre-tick snapshot gather must use bounded snapshot writes; misses are exposed by magnitude-source fallback counters."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(ownerResources\.Owner,\s*slot\.Sequence,\s*modifierIndex\)" `
+    -Message "Generated active effect pre-tick apply must read SourceAttribute snapshots by the same target owner key."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "GEActiveEffectPreTickSourceAttributeSnapshotGatherJob" `
+    -Message "CodeGen template must keep active effect pre-tick SourceAttribute snapshot gather."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "ActiveEffectSlotSourceAttributeSnapshots\s*=\s*activeEffectSlotSourceAttributeSnapshots\.AsParallelWriter" `
+    -Message "CodeGen template must keep active effect pre-tick SourceAttribute snapshots on a parallel writer."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "ActiveEffectSlotSourceAttributeSnapshotKey\s*:\s*IEquatable<ActiveEffectSlotSourceAttributeSnapshotKey>" `
+    -Message "CodeGen template must keep owner-aware active effect pre-tick snapshot keys."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "EstimateActiveEffectSlotSourceAttributeSnapshotCapacity[\s\S]*?maxSourceAttributeModifierCount" `
+    -Message "CodeGen template must keep catalog-driven active effect pre-tick snapshot capacity."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(owner,\s*slot\.Sequence,\s*modifierIndex\)" `
+    -Message "CodeGen template must keep pre-tick snapshot gather keyed by target owner."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "ActiveEffectSlotSourceAttributeSnapshots\.TryAdd\(snapshotKey,\s*sourceValue\)" `
+    -Message "CodeGen template must keep bounded active effect pre-tick snapshot writes with fallback evidence."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "ActiveEffectMagnitudeSourceCounters[\s\S]*?CaptureMissCount[\s\S]*?FallbackValueCount" `
+    -Message "Generated active effect magnitude snapshot lane must expose capture misses and fallback values."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "ActiveEffectMagnitudeSourceCounters[\s\S]*?CaptureMissCount[\s\S]*?FallbackValueCount" `
+    -Message "CodeGen template must keep active effect magnitude snapshot miss and fallback evidence."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(ownerResources\.Owner,\s*slot\.Sequence,\s*modifierIndex\)" `
+    -Message "CodeGen template must keep pre-tick snapshot apply keyed by target owner."
+Assert-FileNotContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "activeEffectSlotSourceAttributeSnapshotCapacity\s*=\s*ownerCapacity\s*\*" `
+    -Message "Generated active effect pre-tick snapshot capacity must not regress to a raw owner-count estimate."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "activeEffectSlotSourceAttributeSnapshotCapacity\s*=\s*ownerCapacity\s*\*" `
+    -Message "CodeGen template must not regenerate raw owner-count snapshot capacity."
+Assert-FileNotContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(slot\.Sequence,\s*modifierIndex\)" `
+    -Message "Generated active effect pre-tick snapshot key must not regress to owner-local slot sequence only."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(slot\.Sequence,\s*modifierIndex\)" `
+    -Message "CodeGen template must not regenerate owner-local-only pre-tick snapshot keys."
 Assert-FileNotContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationApplyJob\s*:\s*IJob" `
@@ -457,6 +541,14 @@ Assert-FileNotContains `
     -Path $codeGenTemplatePath `
     -Pattern "TryReadAttributeValue\(ref ownerResources,\s*command\.SourceAsc" `
     -Message "CodeGen template must not regenerate direct SourceAttribute owner-resource reads."
+Assert-FileNotContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "BuildMagnitudeContextFromSlot[\s\S]*?TryReadAttributeValue\(ref ownerResources,\s*slot\.SourceAsc" `
+    -Message "Generated active effect pre-tick must not read slot SourceAttribute through live owner-resource lookup."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "BuildMagnitudeContextFromSlot[\s\S]*?TryReadAttributeValue\(ref ownerResources,\s*slot\.SourceAsc" `
+    -Message "CodeGen template must not regenerate slot SourceAttribute live owner-resource lookup."
 Assert-FileNotContains `
     -Path $generatedActiveEffectPath `
     -Pattern "ActiveMutationOwnerResourceLookupCount \+= ownerGroupCount" `

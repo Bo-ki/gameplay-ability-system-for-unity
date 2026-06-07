@@ -27,7 +27,7 @@ Runtime Core 管线目标态定义 EX-GAS 2.0 的 ECS Gameplay Core：以 Unity 
 | 2 | [03B 业务调用链与配置消费](03-RuntimeCore管线/03B-业务调用链与配置消费Spec.md) | 需要理解业务调用链、Luban 生成链和 generated glue 消费方式 |
 | 3 | [03C SystemGroup 合约与核心数据形态](03-RuntimeCore管线/03C-SystemGroup合约与核心数据形态Spec.md) | 需要查看目标代码骨架中的 group contract、frame context 和核心 data/buffer |
 | 4 | [03D Command Resolve 与 Target Resolve](03-RuntimeCore管线/03D-CommandResolve与TargetResolveSpec.md) | 需要设计 command ingest、ability producer、target resolve 和 target data buffer |
-| 5 | [03E Effect Fan-In / State / Attribute / Fact](03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-FactSpec.md) | 需要设计 effect fan-in、active effect store、attribute reduce 和 gameplay fact |
+| 5 | [03E Effect Fan-In / State / Attribute / Fact](03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-FactSpec.md) / [03E 子页索引](03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact/README.md) | 需要设计 effect fan-in、active effect store、attribute reduce 和 gameplay fact |
 | 6 | [03F Structural Commit 与 Boundary Projection](03-RuntimeCore管线/03F-StructuralCommit与BoundaryProjectionSpec.md) | 需要设计 structural intent、ECB playback、outbox 和 snapshot projection |
 | 7 | [03G Component 矩阵 / Frame Arena / Job 拓扑](03-RuntimeCore管线/03G-Component矩阵-FrameArena-Job拓扑Spec.md) | 需要查看 component 读写矩阵、Frame Arena、Unity Entities 承载映射和 Job dependency |
 | 8 | [03H DOTS API 策略与 Backbone 验收](03-RuntimeCore管线/03H-DOTSAPI策略与Backbone验收Spec.md) | 需要查看 Enableable / Chunk Component / API budget / Backbone First 验收 |

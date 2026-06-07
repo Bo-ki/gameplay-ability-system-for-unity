@@ -234,6 +234,35 @@ namespace GAS.Runtime
         }
     }
 
+    public struct GASActiveEffectSlotMagnitudeSnapshotKey
+        : System.IEquatable<GASActiveEffectSlotMagnitudeSnapshotKey>
+    {
+        public Entity TargetOwner;
+        public int SlotSequence;
+        public int ModifierIndex;
+        public GASMagnitudeSnapshotTiming Timing;
+
+        public bool Equals(GASActiveEffectSlotMagnitudeSnapshotKey other)
+        {
+            return TargetOwner == other.TargetOwner
+                && SlotSequence == other.SlotSequence
+                && ModifierIndex == other.ModifierIndex
+                && Timing == other.Timing;
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hash = TargetOwner.GetHashCode();
+                hash = (hash * 397) ^ SlotSequence;
+                hash = (hash * 397) ^ ModifierIndex;
+                hash = (hash * 397) ^ (int)Timing;
+                return hash;
+            }
+        }
+    }
+
     public struct GASMagnitudeSourceSnapshotRecord
     {
         public GASMagnitudeSnapshotKey Key;
@@ -300,3 +329,7 @@ namespace GAS.Runtime
 ```
 
 解释：SourceAttribute / TargetAttribute 不允许在 evaluator、generated lifecycle 或 active effect tick 中临时打开跨 owner lookup。目标态必须先由明确的 snapshot lane 采集需要的 source / target attribute 值，再由 magnitude evaluator 消费 snapshot record。`CurrentValue`、apply-time capture、tick-time capture 和 execution-before capture 是不同 timing，必须进入 key / counter / Debugger evidence；缺失 snapshot 只能走显式 fallback fact，不能静默读取 live owner。
+
+active effect slot 的 sequence 是 target owner 内局部序号，不是全局唯一 id。slot tick snapshot key 必须至少包含 target owner、slot sequence、modifier index 和 timing；只用 slot sequence，或只用 slot sequence + modifier index，都会在多 owner 并行 tick 时产生碰撞风险。slot tick 的容量估算必须来自 definition catalog 中相关 modifier 上界，并输出 capacity pressure / spill / lane-specific hit-miss-fallback evidence。
+
+SourceGenerator 在该 lane 的目标职责只包括生成 key 类型、static lookup、pure evaluator glue、catalog metadata 和 validation graph。snapshot gather / apply lifecycle、query owner、NativeContainer allocator owner、dependency owner 和 Debugger counter 写入 owner 必须属于手写 Runtime Core lane；任何 generated lifecycle 只能作为迁移证明形态，并绑定退出门。

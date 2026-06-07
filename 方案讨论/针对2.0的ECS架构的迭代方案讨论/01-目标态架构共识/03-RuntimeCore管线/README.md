@@ -18,7 +18,7 @@
 | [03B 业务调用链与配置消费](03B-业务调用链与配置消费Spec.md) / [03B 子页索引](03B-业务调用链与配置消费/README.md) | 目标态业务调用链、Luban 配置生成链 Runtime 消费链和 Generated Runtime Glue 真实消费接口；根文件只保留短索引，正文在同名子目录。 |
 | [03C SystemGroup 合约与核心数据形态](03C-SystemGroup合约与核心数据形态Spec.md) | 目标代码骨架中的 SystemGroup 合约、核心组件、buffer、frame context、command/fact/outbox 数据形态。 |
 | [03D Command Resolve 与 Target Resolve](03D-CommandResolve与TargetResolveSpec.md) | 目标态 Ability command ingest、Core Ability Producer、NativeStream command records、target resolve 和 request-owned TargetDataBuffer。 |
-| [03E Effect Fan-In / State / Attribute / Fact](03E-EffectFanIn-State-Attribute-FactSpec.md) | 目标态 effect fan-in、active effect store、attribute reduce/apply 和 gameplay fact 数据流。 |
+| [03E Effect Fan-In / State / Attribute / Fact](03E-EffectFanIn-State-Attribute-FactSpec.md) / [03E 子页索引](03E-EffectFanIn-State-Attribute-Fact/README.md) | 目标态 effect fan-in、active effect store、attribute reduce/apply 和 gameplay fact 数据流；根文件只保留短索引，正文在同名子目录。 |
 | [03F Structural Commit 与 Boundary Projection](03F-StructuralCommit与BoundaryProjectionSpec.md) | 目标态 structural intent、ECB playback、presentation outbox 和 boundary projection 只读派生。 |
 | [03G Component 矩阵 / Frame Arena / Job 拓扑](03G-Component矩阵-FrameArena-Job拓扑Spec.md) | 目标态 per-phase component 读写矩阵、Frame Arena 物理设计、Unity Entities 承载映射和 Job 依赖拓扑。 |
 | [03H DOTS API 策略与 Backbone 验收](03H-DOTSAPI策略与Backbone验收Spec.md) | 目标态 DOTS API 选型修正、Enableable 策略、Chunk Component 策略、DOTS Backbone First 顺序和 API 预算。 |

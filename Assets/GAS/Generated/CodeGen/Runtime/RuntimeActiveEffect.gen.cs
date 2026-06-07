@@ -3,6 +3,7 @@
 ////     Do not modify it.     ////
 ///////////////////////////////////
 
+using System;
 using GAS.Runtime;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
@@ -138,7 +139,7 @@ namespace GAS.Runtime.Generated
                 new NativeParallelHashMap<Entity, GASGeneratedActiveEffectRuntime.ActiveMutationCommandRange>(
                     commandCapacity,
                     state.WorldUpdateAllocator);
-            var activeMutationSourceAttributeSnapshotCapacity = commandCapacity * 8;
+            var activeMutationSourceAttributeSnapshotCapacity = commandCapacity * 16;
             if (activeMutationSourceAttributeSnapshotCapacity < 256)
                 activeMutationSourceAttributeSnapshotCapacity = 256;
             var activeMutationSourceAttributeSnapshots =
@@ -240,6 +241,27 @@ namespace GAS.Runtime.Generated
                 : Entity.Null;
             var structuralEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
+            var ownerCapacity = _ownerQuery.CalculateEntityCount();
+            ref var catalog = ref catalogComponent.Catalog.Value;
+            var activeEffectSlotSourceAttributeSnapshotCapacity =
+                GASGeneratedActiveEffectRuntime.EstimateActiveEffectSlotSourceAttributeSnapshotCapacity(
+                    ref catalog,
+                    ownerCapacity);
+            var activeEffectSlotSourceAttributeSnapshots =
+                new NativeParallelHashMap<GASGeneratedActiveEffectRuntime.ActiveEffectSlotSourceAttributeSnapshotKey, float>(
+                    activeEffectSlotSourceAttributeSnapshotCapacity,
+                    state.WorldUpdateAllocator);
+            var snapshotGatherJob = new GASGeneratedActiveEffectRuntime.GEActiveEffectPreTickSourceAttributeSnapshotGatherJob
+            {
+                EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
+                ActiveEffectSlotBufferTypeHandle =
+                    SystemAPI.GetBufferTypeHandle<ActiveGameplayEffectBuffer>(isReadOnly: true),
+                AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true),
+                Catalog = catalogComponent.Catalog,
+                ActiveEffectSlotSourceAttributeSnapshots = activeEffectSlotSourceAttributeSnapshots.AsParallelWriter(),
+                Frame = frame,
+            };
+            var snapshotDependency = snapshotGatherJob.ScheduleParallel(_ownerQuery, state.Dependency);
             var tickJob = new GASGeneratedActiveEffectRuntime.GEActiveEffectPreTickJob
             {
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
@@ -272,12 +294,13 @@ namespace GAS.Runtime.Generated
                 StructuralEcb = structuralEcb,
                 GrantedAbilityArchetype = GASRuntimeEntityArchetypes.GrantedAbility(em),
                 Catalog = catalogComponent.Catalog,
+                ActiveEffectSlotSourceAttributeSnapshots = activeEffectSlotSourceAttributeSnapshots,
                 StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
                 Frame = frame,
                 ProcessTickRecords = true,
             };
-            state.Dependency = tickJob.Schedule(_ownerQuery, state.Dependency);
+            state.Dependency = tickJob.Schedule(_ownerQuery, snapshotDependency);
         }
     }
 
@@ -372,6 +395,116 @@ namespace GAS.Runtime.Generated
         private static long MakeActiveMutationSourceAttributeSnapshotKey(int commandSequence, int modifierIndex)
         {
             return ((long)commandSequence << 32) ^ (uint)modifierIndex;
+        }
+
+        public readonly struct ActiveEffectSlotSourceAttributeSnapshotKey : IEquatable<ActiveEffectSlotSourceAttributeSnapshotKey>
+        {
+            public readonly Entity Owner;
+            public readonly int SlotSequence;
+            public readonly int ModifierIndex;
+
+            public ActiveEffectSlotSourceAttributeSnapshotKey(Entity owner, int slotSequence, int modifierIndex)
+            {
+                Owner = owner;
+                SlotSequence = slotSequence;
+                ModifierIndex = modifierIndex;
+            }
+
+            public bool Equals(ActiveEffectSlotSourceAttributeSnapshotKey other)
+            {
+                return Owner.Equals(other.Owner)
+                       && SlotSequence == other.SlotSequence
+                       && ModifierIndex == other.ModifierIndex;
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is ActiveEffectSlotSourceAttributeSnapshotKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    var hash = Owner.GetHashCode();
+                    hash = (hash * 397) ^ SlotSequence;
+                    hash = (hash * 397) ^ ModifierIndex;
+                    return hash;
+                }
+            }
+        }
+
+        public static int EstimateActiveEffectSlotSourceAttributeSnapshotCapacity(
+            ref GASDefinitionCatalogBlob catalog,
+            int ownerCapacity)
+        {
+            var maxSourceAttributeModifierCount = 1;
+            for (var gameplayEffectIndex = 0; gameplayEffectIndex < catalog.GameplayEffects.Length; gameplayEffectIndex++)
+            {
+                ref readonly var gameplayEffect = ref catalog.GameplayEffects[gameplayEffectIndex];
+                var sourceAttributeModifierCount = 0;
+                for (var i = 0; i < gameplayEffect.ModifierCount; i++)
+                {
+                    var modifierIndex = gameplayEffect.ModifierStart + i;
+                    if ((uint)modifierIndex >= (uint)catalog.Modifiers.Length)
+                        continue;
+
+                    if (catalog.Modifiers[modifierIndex].MagnitudeSource == EMagnitudeSource.SourceAttribute)
+                        sourceAttributeModifierCount++;
+                }
+
+                if (sourceAttributeModifierCount > maxSourceAttributeModifierCount)
+                    maxSourceAttributeModifierCount = sourceAttributeModifierCount;
+            }
+
+            var capacity = (long)ownerCapacity * ActiveEffectStore.InlineSlotCapacity * maxSourceAttributeModifierCount;
+            if (capacity < 256)
+                return 256;
+            return capacity > int.MaxValue ? int.MaxValue : (int)capacity;
+        }
+
+        private static ActiveEffectSlotSourceAttributeSnapshotKey MakeActiveEffectSlotSourceAttributeSnapshotKey(
+            Entity owner,
+            int slotSequence,
+            int modifierIndex)
+        {
+            return new ActiveEffectSlotSourceAttributeSnapshotKey(owner, slotSequence, modifierIndex);
+        }
+
+        private struct ActiveEffectMagnitudeSourceCounters
+        {
+            public int CurrentValueLookupCount;
+            public int CapturedValueHitCount;
+            public int CaptureMissCount;
+            public int FallbackValueCount;
+            public int SourceAttributeLookupCount;
+            public int TargetAttributeLookupCount;
+
+            public bool HasEvidence =>
+                CurrentValueLookupCount > 0
+                || CapturedValueHitCount > 0
+                || CaptureMissCount > 0
+                || FallbackValueCount > 0
+                || SourceAttributeLookupCount > 0
+                || TargetAttributeLookupCount > 0;
+
+            public void AddToStream(ref GEEffectCommandStreamComponent stream)
+            {
+                if (!HasEvidence)
+                    return;
+
+                EffectCommandSpecStream.AddMagnitudeSourceCounters(
+                    ref stream,
+                    CurrentValueLookupCount,
+                    CapturedValueHitCount,
+                    CaptureMissCount,
+                    captureMissLiveLookups: 0,
+                    FallbackValueCount,
+                    fallbackFacts: 0,
+                    SourceAttributeLookupCount,
+                    TargetAttributeLookupCount,
+                    executionInputLookups: 0);
+            }
         }
 
         [BurstCompile]
@@ -665,6 +798,7 @@ namespace GAS.Runtime.Generated
                 var commands = CommandLookup[StreamEntity];
                 var setByCallerValues = CommandSetByCallerLookup[StreamEntity];
                 ref var catalog = ref Catalog.Value;
+                var magnitudeSourceCounters = default(ActiveEffectMagnitudeSourceCounters);
                 var enumerator = new ChunkEntityEnumerator(false, default, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
@@ -708,7 +842,8 @@ namespace GAS.Runtime.Generated
                             ref ownerResources,
                             in command,
                             commands,
-                            setByCallerValues);
+                            setByCallerValues,
+                            ref magnitudeSourceCounters);
                     }
 
                     stores[entityIndex] = ownerResources.Store;
@@ -716,6 +851,7 @@ namespace GAS.Runtime.Generated
                         tagMasks[entityIndex] = ownerResources.TargetTags;
                 }
 
+                magnitudeSourceCounters.AddToStream(ref stream);
                 StreamLookup[StreamEntity] = stream;
             }
 
@@ -734,7 +870,8 @@ namespace GAS.Runtime.Generated
                 ref ActiveMutationOwnerResources ownerResources,
                 in GEEffectCommandBuffer command,
                 DynamicBuffer<GEEffectCommandBuffer> commands,
-                DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues)
+                DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
             {
                 if (CompareEntity(ownerResources.Owner, command.TargetAsc) != 0
                     || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, command.GameplayEffectCode, out var gameplayEffectIndex))
@@ -839,7 +976,8 @@ namespace GAS.Runtime.Generated
                     in command,
                     setByCallerValues,
                     slot.Sequence,
-                    slot.StackCount);
+                    slot.StackCount,
+                    ref magnitudeSourceCounters);
                 slot.ActiveGrantedTagCount = ApplyGrantedTags(
                     ref catalog,
                     ref ownerResources,
@@ -898,7 +1036,8 @@ namespace GAS.Runtime.Generated
                 in GEEffectCommandBuffer command,
                 DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
                 int slotSequence,
-                int stackCount)
+                int stackCount,
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
             {
                 if (gameplayEffect.ModifierCount <= 0
                     || !ownerResources.HasAttributes
@@ -921,7 +1060,14 @@ namespace GAS.Runtime.Generated
                     if (attrIndex < 0)
                         continue;
 
-                    var context = BuildMagnitudeContext(ref ownerResources, in command, setByCallerValues, in modifier, modifierIndex, stackCount);
+                    var context = BuildMagnitudeContext(
+                        ref ownerResources,
+                        in command,
+                        setByCallerValues,
+                        in modifier,
+                        modifierIndex,
+                        stackCount,
+                        ref magnitudeSourceCounters);
                     if (!GASGeneratedMagnitudeEvaluator.TryResolveMagnitude(in modifier, in context, out var magnitude))
                         continue;
 
@@ -952,7 +1098,8 @@ namespace GAS.Runtime.Generated
                 DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
                 in GASCatalogModifierDefinitionBlob modifier,
                 int modifierIndex,
-                int stackCount)
+                int stackCount,
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
             {
                 var context = new MagnitudeEvalContext
                 {
@@ -971,18 +1118,39 @@ namespace GAS.Runtime.Generated
                     context.SetByCallerValue = setByCallerValue;
                 }
 
-                if (modifier.MagnitudeSource == EMagnitudeSource.SourceAttribute
-                    && TryReadSourceAttributeValue(ref ownerResources, in command, modifierIndex, in modifier, out var sourceValue))
+                if (modifier.MagnitudeSource == EMagnitudeSource.SourceAttribute)
                 {
-                    context.HasSourceAttributeValue = 1;
-                    context.SourceAttributeValue = sourceValue;
+                    magnitudeSourceCounters.SourceAttributeLookupCount++;
+                    if (TryReadSourceAttributeValue(
+                            ref ownerResources,
+                            in command,
+                            modifierIndex,
+                            in modifier,
+                            ref magnitudeSourceCounters,
+                            out var sourceValue))
+                    {
+                        context.HasSourceAttributeValue = 1;
+                        context.SourceAttributeValue = sourceValue;
+                    }
+                    else
+                    {
+                        magnitudeSourceCounters.FallbackValueCount++;
+                    }
                 }
 
-                if (modifier.MagnitudeSource == EMagnitudeSource.TargetAttribute
-                    && TryReadOwnerAttributeValue(ref ownerResources, in modifier, out var targetValue))
+                if (modifier.MagnitudeSource == EMagnitudeSource.TargetAttribute)
                 {
-                    context.HasTargetAttributeValue = 1;
-                    context.TargetAttributeValue = targetValue;
+                    magnitudeSourceCounters.TargetAttributeLookupCount++;
+                    magnitudeSourceCounters.CurrentValueLookupCount++;
+                    if (TryReadOwnerAttributeValue(ref ownerResources, in modifier, out var targetValue))
+                    {
+                        context.HasTargetAttributeValue = 1;
+                        context.TargetAttributeValue = targetValue;
+                    }
+                    else
+                    {
+                        magnitudeSourceCounters.FallbackValueCount++;
+                    }
                 }
 
                 return context;
@@ -993,19 +1161,31 @@ namespace GAS.Runtime.Generated
                 in GEEffectCommandBuffer command,
                 int modifierIndex,
                 in GASCatalogModifierDefinitionBlob modifier,
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters,
                 out float value)
             {
                 if (CompareEntity(ownerResources.Owner, command.SourceAsc) == 0)
+                {
+                    magnitudeSourceCounters.CurrentValueLookupCount++;
                     return TryReadOwnerAttributeValue(ref ownerResources, in modifier, out value);
+                }
 
                 if (command.SourceAsc == Entity.Null || !ActiveMutationSourceAttributeSnapshots.IsCreated)
                 {
+                    magnitudeSourceCounters.CaptureMissCount++;
                     value = 0f;
                     return false;
                 }
 
                 var snapshotKey = MakeActiveMutationSourceAttributeSnapshotKey(command.Sequence, modifierIndex);
-                return ActiveMutationSourceAttributeSnapshots.TryGetValue(snapshotKey, out value);
+                if (ActiveMutationSourceAttributeSnapshots.TryGetValue(snapshotKey, out value))
+                {
+                    magnitudeSourceCounters.CapturedValueHitCount++;
+                    return true;
+                }
+
+                magnitudeSourceCounters.CaptureMissCount++;
+                return false;
             }
 
             private bool TryReadOwnerAttributeValue(
@@ -1707,6 +1887,101 @@ namespace GAS.Runtime.Generated
         }
 
         [BurstCompile]
+        public struct GEActiveEffectPreTickSourceAttributeSnapshotGatherJob : IJobChunk
+        {
+            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
+            [ReadOnly] public BufferTypeHandle<ActiveGameplayEffectBuffer> ActiveEffectSlotBufferTypeHandle;
+            [ReadOnly] public BufferLookup<AttributeValueBuffer> AttributeLookup;
+            [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
+            public NativeParallelHashMap<ActiveEffectSlotSourceAttributeSnapshotKey, float>.ParallelWriter ActiveEffectSlotSourceAttributeSnapshots;
+            public int Frame;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                if (!Catalog.IsCreated)
+                    return;
+
+                ref var catalog = ref Catalog.Value;
+                var owners = chunk.GetNativeArray(EntityTypeHandle);
+                var slotBuffers = chunk.GetBufferAccessorRO(ref ActiveEffectSlotBufferTypeHandle);
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    var owner = owners[entityIndex];
+                    var slots = slotBuffers[entityIndex];
+                    for (var slotIndex = 0; slotIndex < slots.Length; slotIndex++)
+                    {
+                        var slot = slots[slotIndex];
+                        var actionFlags = ActiveEffectStore.CreateTickActionFlags(in slot, Frame);
+                        if (actionFlags == (int)ActiveEffectTickActionFlags.None
+                            || slot.SourceAsc == Entity.Null
+                            || CompareEntity(slot.SourceAsc, owner) == 0
+                            || !AttributeLookup.HasBuffer(slot.SourceAsc)
+                            || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, slot.GameplayEffectCode, out var gameplayEffectIndex))
+                        {
+                            continue;
+                        }
+
+                        ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
+                        if (gameplayEffect.ModifierCount <= 0)
+                            continue;
+
+                        var sourceAttributes = AttributeLookup[slot.SourceAsc];
+                        for (var i = 0; i < gameplayEffect.ModifierCount; i++)
+                        {
+                            var modifierIndex = gameplayEffect.ModifierStart + i;
+                            if ((uint)modifierIndex >= (uint)catalog.Modifiers.Length)
+                                continue;
+
+                            var modifier = catalog.Modifiers[modifierIndex];
+                            if (modifier.MagnitudeSource != EMagnitudeSource.SourceAttribute
+                                || !TryReadSnapshotAttributeValue(sourceAttributes, in modifier, out var sourceValue))
+                            {
+                                continue;
+                            }
+
+                            var snapshotKey = MakeActiveEffectSlotSourceAttributeSnapshotKey(owner, slot.Sequence, modifierIndex);
+                            ActiveEffectSlotSourceAttributeSnapshots.TryAdd(snapshotKey, sourceValue);
+                        }
+                    }
+                }
+            }
+
+            private static bool TryReadSnapshotAttributeValue(
+                DynamicBuffer<AttributeValueBuffer> attributes,
+                in GASCatalogModifierDefinitionBlob modifier,
+                out float value)
+            {
+                value = 0f;
+                var attrSetCode = modifier.CaptureAttributeSetCode != 0
+                    ? modifier.CaptureAttributeSetCode
+                    : modifier.AttributeSetCode;
+                var attrCode = modifier.CaptureAttributeCode != 0
+                    ? modifier.CaptureAttributeCode
+                    : modifier.AttributeCode;
+                var attrIndex = attributes.IndexOfAttribute(attrSetCode, attrCode);
+                if (attrIndex < 0)
+                    return false;
+
+                value = attributes[attrIndex].CurrentValue;
+                return true;
+            }
+
+            private static int CompareEntity(Entity left, Entity right)
+            {
+                var result = left.Index.CompareTo(right.Index);
+                if (result != 0)
+                    return result;
+
+                return left.Version.CompareTo(right.Version);
+            }
+        }
+
+        [BurstCompile]
         public struct GEActiveEffectPreTickJob : IJobChunk
         {
             [ReadOnly] public EntityTypeHandle EntityTypeHandle;
@@ -1734,6 +2009,7 @@ namespace GAS.Runtime.Generated
             public EntityCommandBuffer StructuralEcb;
             public EntityArchetype GrantedAbilityArchetype;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
+            [ReadOnly] public NativeParallelHashMap<ActiveEffectSlotSourceAttributeSnapshotKey, float> ActiveEffectSlotSourceAttributeSnapshots;
             public Entity StreamEntity;
             public Entity EventBusEntity;
             public int Frame;
@@ -1782,6 +2058,7 @@ namespace GAS.Runtime.Generated
                 var stores = chunk.GetNativeArray(ref ActiveEffectsTypeHandle);
                 var slotBuffers = chunk.GetBufferAccessor(ref ActiveEffectSlotBufferTypeHandle);
                 var mutations = MutationLookup[StreamEntity];
+                var magnitudeSourceCounters = default(ActiveEffectMagnitudeSourceCounters);
                 var removeCommandBuffers = ProcessExplicitRemoveCommands
                     ? chunk.GetBufferAccessor(ref RemoveCommandBufferTypeHandle)
                     : default;
@@ -1804,7 +2081,11 @@ namespace GAS.Runtime.Generated
                             || ownerResources.Store.CleanupRecordCount > 0)
                         {
                             ref var catalog = ref Catalog.Value;
-                            ProcessTickOwner(ref ownerResources, mutations, ref catalog);
+                            ProcessTickOwner(
+                                ref ownerResources,
+                                mutations,
+                                ref catalog,
+                                ref magnitudeSourceCounters);
                         }
                     }
 
@@ -1827,6 +2108,8 @@ namespace GAS.Runtime.Generated
                     FlushActiveEffectOwnerResources(ref ownerResources);
                     stores[entityIndex] = ownerResources.Store;
                 }
+
+                FlushMagnitudeSourceCounters(ref magnitudeSourceCounters);
             }
 
             private ActiveEffectOwnerResources CaptureActiveEffectOwnerResources(
@@ -1886,6 +2169,20 @@ namespace GAS.Runtime.Generated
                     TagMaskLookup[ownerResources.Owner] = ownerResources.TargetTags;
             }
 
+            private void FlushMagnitudeSourceCounters(ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
+            {
+                if (!magnitudeSourceCounters.HasEvidence
+                    || StreamEntity == Entity.Null
+                    || !StreamLookup.HasComponent(StreamEntity))
+                {
+                    return;
+                }
+
+                var stream = StreamLookup[StreamEntity];
+                magnitudeSourceCounters.AddToStream(ref stream);
+                StreamLookup[StreamEntity] = stream;
+            }
+
             private static int CompareEntity(Entity left, Entity right)
             {
                 var result = left.Index.CompareTo(right.Index);
@@ -1898,7 +2195,8 @@ namespace GAS.Runtime.Generated
             private void ProcessTickOwner(
                 ref ActiveEffectOwnerResources ownerResources,
                 DynamicBuffer<ActiveEffectMutationBuffer> mutations,
-                ref GASDefinitionCatalogBlob catalog)
+                ref GASDefinitionCatalogBlob catalog,
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
             {
                 if (!StreamLookup.HasComponent(StreamEntity))
                     return;
@@ -1935,7 +2233,14 @@ namespace GAS.Runtime.Generated
                     }
 
                     if ((actionFlags & (int)ActiveEffectTickActionFlags.DurationExpire) != 0)
-                        HandleDurationExpired(ref ownerResources, slotIndex, ref catalog, mutations);
+                    {
+                        HandleDurationExpired(
+                            ref ownerResources,
+                            slotIndex,
+                            ref catalog,
+                            mutations,
+                            ref magnitudeSourceCounters);
+                    }
                 }
             }
 
@@ -1961,7 +2266,8 @@ namespace GAS.Runtime.Generated
                 ref ActiveEffectOwnerResources ownerResources,
                 int slotIndex,
                 ref GASDefinitionCatalogBlob catalog,
-                DynamicBuffer<ActiveEffectMutationBuffer> mutations)
+                DynamicBuffer<ActiveEffectMutationBuffer> mutations,
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
             {
                 if ((uint)slotIndex >= (uint)ownerResources.Slots.Length)
                     return;
@@ -1989,7 +2295,12 @@ namespace GAS.Runtime.Generated
                     slot.StackCount--;
                     RefreshSlotDuration(ref slot, Frame, resetPeriod: true);
                     ownerResources.Slots[slotIndex] = slot;
-                    RebuildActiveModifiersForSlot(ref ownerResources, ref catalog, in gameplayEffect, in slot);
+                    RebuildActiveModifiersForSlot(
+                        ref ownerResources,
+                        ref catalog,
+                        in gameplayEffect,
+                        in slot,
+                        ref magnitudeSourceCounters);
                     mutations.Add(CreateStackMutation(in slot, Frame));
                     EnqueueStackCountChangedEvent(in slot);
                     return;
@@ -2043,7 +2354,8 @@ namespace GAS.Runtime.Generated
                 ref ActiveEffectOwnerResources ownerResources,
                 ref GASDefinitionCatalogBlob catalog,
                 in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
-                in ActiveGameplayEffectBuffer slot)
+                in ActiveGameplayEffectBuffer slot,
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
             {
                 if (gameplayEffect.ModifierCount <= 0
                     || !ownerResources.HasAttributes
@@ -2070,7 +2382,13 @@ namespace GAS.Runtime.Generated
                     if (attrIndex < 0)
                         continue;
 
-                    var context = BuildMagnitudeContextFromSlot(ref ownerResources, in slot, setByCallerSnapshot, in modifier);
+                    var context = BuildMagnitudeContextFromSlot(
+                        ref ownerResources,
+                        in slot,
+                        setByCallerSnapshot,
+                        modifierIndex,
+                        in modifier,
+                        ref magnitudeSourceCounters);
                     if (!GASGeneratedMagnitudeEvaluator.TryResolveMagnitude(in modifier, in context, out var magnitude))
                         continue;
 
@@ -2096,7 +2414,9 @@ namespace GAS.Runtime.Generated
                 ref ActiveEffectOwnerResources ownerResources,
                 in ActiveGameplayEffectBuffer slot,
                 DynamicBuffer<ActiveGameplayEffectSetByCallerValueBuffer> setByCallerSnapshot,
-                in GASCatalogModifierDefinitionBlob modifier)
+                int modifierIndex,
+                in GASCatalogModifierDefinitionBlob modifier,
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
             {
                 var context = new MagnitudeEvalContext
                 {
@@ -2115,49 +2435,74 @@ namespace GAS.Runtime.Generated
                     context.SetByCallerValue = setByCallerValue;
                 }
 
-                if (modifier.MagnitudeSource == EMagnitudeSource.SourceAttribute
-                    && TryReadAttributeValue(ref ownerResources, slot.SourceAsc, in modifier, out var sourceValue))
+                if (modifier.MagnitudeSource == EMagnitudeSource.SourceAttribute)
                 {
-                    context.HasSourceAttributeValue = 1;
-                    context.SourceAttributeValue = sourceValue;
+                    magnitudeSourceCounters.SourceAttributeLookupCount++;
+                    if (TryReadSourceAttributeValueFromSlot(
+                            ref ownerResources,
+                            in slot,
+                            modifierIndex,
+                            in modifier,
+                            ref magnitudeSourceCounters,
+                            out var sourceValue))
+                    {
+                        context.HasSourceAttributeValue = 1;
+                        context.SourceAttributeValue = sourceValue;
+                    }
+                    else
+                    {
+                        magnitudeSourceCounters.FallbackValueCount++;
+                    }
                 }
 
-                if (modifier.MagnitudeSource == EMagnitudeSource.TargetAttribute
-                    && TryReadOwnerAttributeValue(ref ownerResources, in modifier, out var targetValue))
+                if (modifier.MagnitudeSource == EMagnitudeSource.TargetAttribute)
                 {
-                    context.HasTargetAttributeValue = 1;
-                    context.TargetAttributeValue = targetValue;
+                    magnitudeSourceCounters.TargetAttributeLookupCount++;
+                    magnitudeSourceCounters.CurrentValueLookupCount++;
+                    if (TryReadOwnerAttributeValue(ref ownerResources, in modifier, out var targetValue))
+                    {
+                        context.HasTargetAttributeValue = 1;
+                        context.TargetAttributeValue = targetValue;
+                    }
+                    else
+                    {
+                        magnitudeSourceCounters.FallbackValueCount++;
+                    }
                 }
 
                 return context;
             }
 
-            private bool TryReadAttributeValue(
+            private bool TryReadSourceAttributeValueFromSlot(
                 ref ActiveEffectOwnerResources ownerResources,
-                Entity owner,
+                in ActiveGameplayEffectBuffer slot,
+                int modifierIndex,
                 in GASCatalogModifierDefinitionBlob modifier,
+                ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters,
                 out float value)
             {
-                if (CompareEntity(ownerResources.Owner, owner) == 0)
+                if (CompareEntity(ownerResources.Owner, slot.SourceAsc) == 0)
+                {
+                    magnitudeSourceCounters.CurrentValueLookupCount++;
                     return TryReadOwnerAttributeValue(ref ownerResources, in modifier, out value);
+                }
 
                 value = 0f;
-                if (owner == Entity.Null || !AttributeLookup.HasBuffer(owner))
+                if (slot.SourceAsc == Entity.Null || !ActiveEffectSlotSourceAttributeSnapshots.IsCreated)
+                {
+                    magnitudeSourceCounters.CaptureMissCount++;
                     return false;
+                }
 
-                var attrSetCode = modifier.CaptureAttributeSetCode != 0
-                    ? modifier.CaptureAttributeSetCode
-                    : modifier.AttributeSetCode;
-                var attributeCode = modifier.CaptureAttributeCode != 0
-                    ? modifier.CaptureAttributeCode
-                    : modifier.AttributeCode;
-                var attributes = AttributeLookup[owner];
-                var attrIndex = attributes.IndexOfAttribute(attrSetCode, attributeCode);
-                if (attrIndex < 0)
-                    return false;
+                var snapshotKey = MakeActiveEffectSlotSourceAttributeSnapshotKey(ownerResources.Owner, slot.Sequence, modifierIndex);
+                if (ActiveEffectSlotSourceAttributeSnapshots.TryGetValue(snapshotKey, out value))
+                {
+                    magnitudeSourceCounters.CapturedValueHitCount++;
+                    return true;
+                }
 
-                value = attributes[attrIndex].CurrentValue;
-                return true;
+                magnitudeSourceCounters.CaptureMissCount++;
+                return false;
             }
 
             private bool TryReadOwnerAttributeValue(
@@ -3115,9 +3460,6 @@ namespace GAS.Runtime.Generated
                 next = 1;
             return next++;
         }
-
-
-
 
 
 

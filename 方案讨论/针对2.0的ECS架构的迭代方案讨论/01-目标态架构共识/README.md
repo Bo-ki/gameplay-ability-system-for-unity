@@ -80,7 +80,8 @@ Unity DOTS 官方依据不再维护在本目录内。所有 Runtime Core、Debug
 
 1. 先读 `目标态模块 Owner Map`，确认哪些 Module 是目标态 owner。
 2. 再读 `目标态职责重划分验收表`，确认每个 owner 必须拥有和不得拥有的内容。
-3. 最后读 `目标态最小完整代码骨架`、`代码解读` 和 `重新划分合理性的代码级说明`，确认接口为什么不泄露 ECS handle、query、ECB、NativeContainer owner 或 generated lifecycle。
+3. 再读 `目标态消息流协议`，确认 Shell intent、Boundary command / snapshot、Core lane、Diagnostics evidence 和 Derived export 的消息边界。
+4. 最后读 `目标态最小完整代码骨架`、`代码解读` 和 `重新划分合理性的代码级说明`，确认接口为什么不泄露 ECS handle、query、ECB、NativeContainer owner 或 generated lifecycle。
 
 ## 维护规则
 

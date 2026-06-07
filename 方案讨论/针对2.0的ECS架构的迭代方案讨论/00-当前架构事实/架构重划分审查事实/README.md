@@ -14,6 +14,9 @@
 | 4 | [03-当前重划分与目标态差距事实](03-当前重划分与目标态差距事实.md) | 判断当前 Shell / Adapter / Core / Debugger / SourceGenerator 与目标态差距 |
 | 5 | [04-整体审查与Owner重划分事实](04-整体审查与Owner重划分事实.md) | 读取最新整体审查、Owner 错位和后续事实验证需求 |
 | 6 | [05-BoundarySnapshot与MagnitudeSourceOwner事实](05-BoundarySnapshot与MagnitudeSourceOwner事实.md) | 读取 Boundary snapshot、magnitude source owner 与验证补录 |
+| 7 | [06-ActiveEffectSlotMagnitudeSnapshot事实](06-ActiveEffectSlotMagnitudeSnapshot事实.md) | 读取 active effect slot tick 的 SourceAttribute snapshot lane 事实 |
+
+整体架构续轮审查默认先消费 `00-总览与代码证据事实` 的保留面 / 退出面，再消费 `04-整体审查与Owner重划分事实` 的 owner map 现实错位。`05` / `06` 只在任务触达 Boundary snapshot、magnitude source 或 active effect slot tick 时作为专题事实输入。
 
 ## 写入规则
 

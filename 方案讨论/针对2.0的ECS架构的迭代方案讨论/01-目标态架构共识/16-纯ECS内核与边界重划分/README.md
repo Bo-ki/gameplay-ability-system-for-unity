@@ -15,11 +15,15 @@
 
 | 文件 | 职责 |
 |---|---|
-| [16-01 目标分层、官方依据与不变量](16-01-目标分层官方依据与不变量Spec.md) | 目标态目的、官方规则映射、四层分层图和分层不变量。 |
+| [16-01 目标分层、官方依据与不变量](16-01-目标分层官方依据与不变量Spec.md) | 目标态目的、官方规则映射、四层分层图、分层不变量、目标态消息流协议、最小完整代码骨架和代码级合理性说明。 |
 | [16-02 Boundary Command 与 Core Command Resolve](16-02-BoundaryCommand与CoreCommandResolveSpec.md) | Boundary command record 和 Core `IJobChunk` command resolve 目标代码骨架。 |
 | [16-03 Fan-in、Debugger Evidence 与 SourceGenerator Pure Glue](16-03-FanInDebuggerSourceGeneratorSpec.md) | `NativeStream` deterministic merge、Debugger evidence projection 和 generated pure glue 目标代码骨架。 |
 | [16-04 Shell Capability Contract](16-04-ShellCapabilityContractSpec.md) | Shell / Adapter capability 分级、public seam、opaque handle 和 internal resolver contract。 |
 | [16-05 Snapshot、Identity、API Health 与验收](16-05-SnapshotIdentityApiHealthSpec.md) | Snapshot capture、identity exposure、report projection、API health owner model、验收与禁止方向。 |
+
+## 目标态代码入口
+
+需要用完整代码骨架审查新架构时，先读 `16-01` 的 `目标态消息流协议` 和 `目标态最小完整代码骨架`，再按业务链路跳到 `16-02`、`16-03`、`16-04`、`16-05`。本目录的代码样例只定义目标态 Spec 和验收约束，不记录当前代码做到哪里，也不替代 `00-当前架构事实` 的证据判断。
 
 ## 反向入口
 

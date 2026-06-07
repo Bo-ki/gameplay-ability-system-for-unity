@@ -36,7 +36,7 @@ Frame Arena / Runtime Infrastructure
 
 ## 关联 Spec
 
-1. Runtime Core fan-in、state、attribute 和 fact 规则：[03E Effect Fan-In / State / Attribute / Fact](../03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-FactSpec.md)。
+1. Runtime Core fan-in、state、attribute 和 fact 规则：[03E Effect Fan-In / State / Attribute / Fact](../03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-FactSpec.md)；具体正文见 [03E 子页索引](../03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact/README.md)。
 2. Entity / Component 物理布局规则：[13 EntityComponent 物理布局](../13-EntityComponent物理布局Spec.md)。
 3. Effect command / spec / attribute delta 规则：[04 EffectCommand-SpecStream-AttributeDelta](../04-EffectCommand-SpecStream-AttributeDeltaSpec.md)。
 4. Runtime Core Debugger evidence 规则：[07 RuntimeCoreDebugger](../07-RuntimeCoreDebuggerSpec.md)。

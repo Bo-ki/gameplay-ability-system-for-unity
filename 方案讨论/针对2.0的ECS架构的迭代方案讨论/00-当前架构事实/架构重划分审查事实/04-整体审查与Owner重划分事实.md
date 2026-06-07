@@ -59,6 +59,25 @@
 
 后续任何任务声称“Runtime Core 达标”，必须至少同时提交：owner 分类后的 API health、Core / Boundary / Debugger / Runner timing split、stream carrier pressure、structural playback official evidence、generated lifecycle 退出或接管表，以及 AutoChess x50 之外的 scale profile。缺任一项都只能写成阶段性迁移事实。
 
+### 本轮代码级 owner 重划分
+
+本轮不再只按“Runtime / Generated / AutoChess / Debugger”目录归类，而是按调用方必须知道多少实现细节来判定 owner 深度。当前代码已经把部分复杂度集中到可保留 owner 中，但还没有把 public / internal interface 切到目标态。
+
+| 目标 owner 名称 | 当前对应现实模块 | 代码级事实 | 本轮判定 |
+|---|---|---|---|
+| `RuntimeSession` | `GASManager`、`GASSystemScheduleContract`、AutoChess runtime host | World 创建、SystemGroup install、catalog install、singleton bootstrap 和 shutdown cache reset 已集中 | 保留为 bootstrap implementation；但 Shell / Demo 不能继续通过它直接取得 ECS handle |
+| `RunnerSync` | `GASRuntimeShell.TryDrainRuntimeJobs()`、AutoChess runtime ticker | 手动 `CompleteAllTrackedJobs()` 只剩 runner / measurement 入口 | 只能归 runner sync / diagnostics measurement；不能作为 Core 性能健康证明 |
+| `CommandPort` | `ASCCommandPort`、`ASCCommandGateway`、`AbilitySystemBinding`、`ASCCommandBufferResolveSystem` | command 写入口已经集中，但 Boundary implementation 仍直接追加 live buffer，Core resolve job 同时处理多类语义 | 继续保留为迁移期 command interface；目标态需拆出 request validation、owner-local append 和 core command resolve lane |
+| `SnapshotReadModel` | `ASCReadModel`、AutoChess structured snapshot projector、structured log export | snapshot 已从 live read 迁到 structured log / report key 的部分链路，但 Shell capture 仍可从 ECS 直接构造 read model | 正向切片成立；仍需统一 BoundaryProjection / snapshot ring 和 version cursor |
+| `DiagnosticsSink` | `GasRuntimeDebugger`、`DiagnosticsSnapshotSystem`、`GasStructuredLogExporter`、AutoChess observation gateway | runtime counter 与 derived export 并存；observation materialization 已能计数，但 exporter 仍是托管派生消费 | Debugger 继续作为 evidence owner；derived export / observation pass 必须从 Core timing 中隔离 |
+| `DefinitionCatalogLifetime` | generated `DefinitionCatalog`、runtime catalog component、AutoChess catalog session | Blob catalog / static lookup 正向存在；install/dispose owner 仍和 runtime host / generated systems 混合 | catalog lifetime 要独立于 command、snapshot、runner sync；generated lifecycle 不得借 catalog 名义保留 |
+| `GASFrameKernel` | handwritten `ISystem`、generated runtime systems、stream owner contracts | 多数 hot path 已 job 化，且 query / lookup owner 能静态追踪；generated runtime 仍拥有 lifecycle 和 ECB | 保留 handwritten lane，退出 generated lifecycle；所有 lane 必须显式声明 query、lookup、allocator、dependency 和 evidence |
+| `EffectFanInStore` | `GEEffectCommandSpecStream`、execution output typed fact NativeStream 切片 | stream owner contract 已把 singleton carrier 标记为 migration；局部 NativeStream 切片不能覆盖全部 command/spec/delta/fact/mutation | singleton carrier 继续按 proof-only 处理；scale-ready 必须补 deterministic merge、spill、segment、allocator 和 battle hash |
+| `ActiveEffectStore` | `ActiveEffectStore`、generated active effect runtime、`EffectRuntimeUtility` | owner-local slot 和 global index 方向正向；lifecycle helper、generated slot tick、source magnitude snapshot 仍分散 | Store owner 可以保留；lifecycle 应由手写 Core lane 接管，helper 只作迁移兼容 |
+| `StructuralCommit` | `Begin/EndGASStructuralCommitECBSystem`、Core ECB 写入点 | 结构变化 gate 已存在；多个系统仍可拿到 ECB 并写 structural intent / create / destroy | 保留唯一 playback phase；后续必须给出 source TopN、official diff 和 generated ECB 退出证据 |
+
+本轮 owner 结论：不要再把 `GASRuntimeShell` 扩成更大的 Application Shell，也不要把 SourceGenerator 扩成更大的 Runtime Core。正确方向是让每个 owner 拥有自己的 query、lookup、allocator、dependency、carrier、capacity、structural playback 和 evidence，并让 Shell 只看到业务 intent、opaque handle、snapshot 和 evidence。
+
 ### 本轮重新划分事实结论
 
 当前代码中最接近目标态的不是 Shell，而是 physical backbone、chunk-local applicator、registered owner、generated immutable catalog 和 structured evidence。当前最需要治理的也不是“是否 ECS 化”，而是这些深 owner 之外仍残留的浅 interface：
