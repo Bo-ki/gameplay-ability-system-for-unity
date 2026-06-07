@@ -71,7 +71,7 @@ namespace GAS.Runtime.Generated
                     SystemAPI.GetBufferLookup<ActiveEffectMutationCommandBuffer>(isReadOnly: false),
                 ActiveMutationSetByCallerLookup =
                     SystemAPI.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: false),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
+                OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(),
                 Catalog = catalogComponent.Catalog,
                 StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
@@ -99,7 +99,7 @@ namespace GAS.Runtime.Generated
             [ReadOnly] public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
             public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;
             public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public Entity StreamEntity;
             public Entity EventBusEntity;
@@ -187,6 +187,7 @@ namespace GAS.Runtime.Generated
                             ref endRequests,
                             endRequestMask,
                             entityIndex,
+                            owner: nextRuntime.Owner,
                             sourceAbility: ability,
                             sourceAbilityCode: nextRuntime.Code);
                     }
@@ -541,6 +542,7 @@ namespace GAS.Runtime.Generated
                 int entityIndex,
                 Entity sourceAbility = default,
                 Entity sourceEffect = default,
+                Entity owner = default,
                 int sourceAbilityCode = 0)
             {
                 if (endRequestMask[entityIndex])
@@ -562,6 +564,8 @@ namespace GAS.Runtime.Generated
                     Domain = EGameplayFactDomain.Ability,
                     Category = EGameplayFactCategory.Request,
                     Severity = EGameplayFactSeverity.Info,
+                    SourceAsc = owner,
+                    TargetAsc = owner,
                     SourceAbility = ability,
                     SourceEffect = sourceEffect,
                     ReasonCode = (int)reason,
@@ -624,7 +628,8 @@ namespace GAS.Runtime.Generated
 
             private void EnqueueGameplayEvent(GameplayEventBuffer evt)
             {
-                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
+                var owner = evt.TargetAsc != Entity.Null ? evt.TargetAsc : evt.SourceAsc;
+                if (owner == Entity.Null || !OwnerFactLookup.HasBuffer(owner))
                     return;
 
                 evt.Frame = Frame;
@@ -639,7 +644,10 @@ namespace GAS.Runtime.Generated
                     evt.Sequence = 0;
                 }
 
-                FactLookup[StreamEntity].Add(evt);
+                OwnerFactLookup[owner].Add(new OwnerLocalGameplayFactBuffer
+                {
+                    Fact = evt,
+                });
             }
 
             private static int Allocate(ref int next)

@@ -1248,6 +1248,22 @@ Assert-FileNotContains `
     -Pattern "CommandLookup\[StreamEntity\]\.Add\(resolved\)" `
     -Message "Generated ability commit must not append instant commands directly to the singleton command stream."
 Assert-FileContains `
+    -Path $generatedAbilityActivationPath `
+    -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>\(\)" `
+    -Message "Generated ability commit must acquire ASC owner-local gameplay fact buffers."
+Assert-FileContains `
+    -Path $generatedAbilityActivationPath `
+    -Pattern "OwnerFactLookup\[owner\]\.Add\(new OwnerLocalGameplayFactBuffer" `
+    -Message "Generated ability lifecycle facts must append to the ASC owner-local fact buffer."
+Assert-FileNotContains `
+    -Path $generatedAbilityActivationPath `
+    -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>\(\)" `
+    -Message "Generated ability commit must not acquire singleton GameplayEventBuffer for lifecycle facts."
+Assert-FileNotContains `
+    -Path $generatedAbilityActivationPath `
+    -Pattern "FactLookup\[StreamEntity\]\.Add\(evt\)" `
+    -Message "Generated ability lifecycle facts must not append directly to the singleton fact stream."
+Assert-FileContains `
     -Path $codeGenTemplatePath `
     -Pattern "ActiveMutationCommandLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationCommandBuffer>\(isReadOnly:\s*false\)" `
     -Message "CodeGen template must acquire ASC owner-local active mutation command buffers for ability commit."
@@ -1263,6 +1279,18 @@ Assert-FileNotContains `
     -Path $codeGenTemplatePath `
     -Pattern "private void AppendEffectCommand[\s\S]{0,1800}CommandLookup\[StreamEntity\]\.Add\(resolved\)" `
     -Message "CodeGen template must not regenerate ability commit instant singleton command append."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>\(\)" `
+    -Message "CodeGen template must acquire ASC owner-local gameplay fact buffers for ability lifecycle facts."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "OwnerFactLookup\[owner\]\.Add\(new OwnerLocalGameplayFactBuffer" `
+    -Message "CodeGen template must regenerate ability lifecycle owner-local fact append."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>\(\)" `
+    -Message "CodeGen template must not regenerate singleton GameplayEventBuffer lookup for ability lifecycle facts."
 Assert-FileContains `
     -Path $streamPath `
     -Pattern "AppendOwnerLocalActiveMutationCommand\([\s\S]*?DynamicBuffer<ActiveEffectMutationCommandBuffer> ownerCommands[\s\S]*?DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> ownerSetByCallerValues" `

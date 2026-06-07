@@ -2022,7 +2022,7 @@ namespace __ROOT_NAMESPACE__
                     SystemAPI.GetBufferLookup<ActiveEffectMutationCommandBuffer>(isReadOnly: false),
                 ActiveMutationSetByCallerLookup =
                     SystemAPI.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: false),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
+                OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(),
                 Catalog = catalogComponent.Catalog,
                 StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
@@ -2050,7 +2050,7 @@ namespace __ROOT_NAMESPACE__
             [ReadOnly] public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
             public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;
             public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public Entity StreamEntity;
             public Entity EventBusEntity;
@@ -2138,6 +2138,7 @@ namespace __ROOT_NAMESPACE__
                             ref endRequests,
                             endRequestMask,
                             entityIndex,
+                            owner: nextRuntime.Owner,
                             sourceAbility: ability,
                             sourceAbilityCode: nextRuntime.Code);
                     }
@@ -2492,6 +2493,7 @@ namespace __ROOT_NAMESPACE__
                 int entityIndex,
                 Entity sourceAbility = default,
                 Entity sourceEffect = default,
+                Entity owner = default,
                 int sourceAbilityCode = 0)
             {
                 if (endRequestMask[entityIndex])
@@ -2513,6 +2515,8 @@ namespace __ROOT_NAMESPACE__
                     Domain = EGameplayFactDomain.Ability,
                     Category = EGameplayFactCategory.Request,
                     Severity = EGameplayFactSeverity.Info,
+                    SourceAsc = owner,
+                    TargetAsc = owner,
                     SourceAbility = ability,
                     SourceEffect = sourceEffect,
                     ReasonCode = (int)reason,
@@ -5686,7 +5690,8 @@ namespace __ROOT_NAMESPACE__
 
             private void EnqueueGameplayEvent(GameplayEventBuffer evt)
             {
-                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
+                var owner = evt.TargetAsc != Entity.Null ? evt.TargetAsc : evt.SourceAsc;
+                if (owner == Entity.Null || !OwnerFactLookup.HasBuffer(owner))
                     return;
 
                 evt.Frame = Frame;
@@ -5701,7 +5706,10 @@ namespace __ROOT_NAMESPACE__
                     evt.Sequence = 0;
                 }
 
-                FactLookup[StreamEntity].Add(evt);
+                OwnerFactLookup[owner].Add(new OwnerLocalGameplayFactBuffer
+                {
+                    Fact = evt,
+                });
             }
 
             private void EnqueueTagChangedEvent(Entity owner, int tagIndex, bool added)
