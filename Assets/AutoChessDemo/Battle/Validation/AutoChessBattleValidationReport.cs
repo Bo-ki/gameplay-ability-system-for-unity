@@ -71,6 +71,12 @@ namespace GAS.AutoChessDemo
                 performanceResult.EventCounts.PeriodTickDamageFacts,
                 performanceResult.EventCounts.PeriodTickDamageTotal,
                 performanceResult.EventCounts.ExecutionCalculationOutputUpdated,
+                performanceResult.DriverExecutionSpecScans,
+                performanceResult.DriverExecutionMatchedEffectSpecs,
+                performanceResult.DriverExecutionTargetOwnerMismatches,
+                performanceResult.DriverExecutionMissingAttributes,
+                performanceResult.DriverExecutionEvaluatorRejects,
+                performanceResult.DriverExecutionOutputWrites,
                 performanceResult.EventCounts.CueRequests,
                 diagnosticResult.RuntimeDiagnostics.EventCount,
                 diagnosticResult.RuntimeDiagnostics.Stats.WarningCount,
@@ -199,10 +205,16 @@ namespace GAS.AutoChessDemo
                    + $"measuredTicks={evidence.MeasuredTicks}, "
                    + $"commands={evidence.CommandCount}, "
                    + $"attributeChanges={evidence.AttributeChangeCount}, "
-                   + $"periodTickDamageFacts={evidence.PeriodTickDamageFactCount}, "
-                   + $"periodTickDamageTotal={evidence.PeriodTickDamageTotal:0.###}, "
-                   + $"executionOutputs={evidence.ExecutionOutputCount}, "
-                   + $"cueRequests={evidence.CueRequestCount}, "
+                    + $"periodTickDamageFacts={evidence.PeriodTickDamageFactCount}, "
+                    + $"periodTickDamageTotal={evidence.PeriodTickDamageTotal:0.###}, "
+                    + $"executionOutputs={evidence.ExecutionOutputCount}, "
+                    + $"executionSpecScans={evidence.ExecutionSpecScanCount}, "
+                    + $"executionMatchedEffectSpecs={evidence.ExecutionMatchedEffectSpecCount}, "
+                    + $"executionTargetOwnerMismatches={evidence.ExecutionTargetOwnerMismatchCount}, "
+                    + $"executionMissingAttributes={evidence.ExecutionMissingAttributeCount}, "
+                    + $"executionEvaluatorRejects={evidence.ExecutionEvaluatorRejectCount}, "
+                    + $"executionOutputWrites={evidence.ExecutionOutputWriteCount}, "
+                    + $"cueRequests={evidence.CueRequestCount}, "
                    + $"debugEvents={evidence.RuntimeEventCount}, "
                    + $"debugWarnings={evidence.DebugWarningCount}, "
                    + $"debugErrors={evidence.DebugErrorCount}, "
@@ -394,6 +406,12 @@ namespace GAS.AutoChessDemo
                    + $"activeMutationMaxOwnerRange={counters.ActiveMutationMaxOwnerRange}, "
                    + $"activeMutationEstimatedRandomLookups={counters.ActiveMutationEstimatedRandomLookupCount}, "
                    + $"periodTickDamageFacts={performanceResult.EventCounts.PeriodTickDamageFacts}, "
+                   + $"executionSpecScans={performanceResult.DriverExecutionSpecScans}, "
+                   + $"executionMatchedEffectSpecs={performanceResult.DriverExecutionMatchedEffectSpecs}, "
+                   + $"executionTargetOwnerMismatches={performanceResult.DriverExecutionTargetOwnerMismatches}, "
+                   + $"executionMissingAttributes={performanceResult.DriverExecutionMissingAttributes}, "
+                   + $"executionEvaluatorRejects={performanceResult.DriverExecutionEvaluatorRejects}, "
+                   + $"executionOutputWrites={performanceResult.DriverExecutionOutputWrites}, "
                    + $"pendingAttributeDeltas={counters.PendingAttributeDeltaCount}, "
                    + $"pendingAttributeAppliedDeltas={counters.PendingAttributeAppliedDeltaCount}, "
                    + $"pendingAttributeTargetGroups={counters.PendingAttributeTargetGroupCount}, "
@@ -492,7 +510,7 @@ namespace GAS.AutoChessDemo
             return "```mermaid\n"
                    + "flowchart LR\n"
                    + $"    CommandDrive[\"AutoChessBattleCommandDriveSystem\\nscale: {result.ScenarioScale}, units: {result.Units.Length}\\ncommands: {result.DriverIssuedCommands}\"] --> AbilityBuffer[\"AbilityCommandBuffer\\nrequest entities avoided\"]\n"
-                   + $"    AbilityBuffer --> RuntimeCore[\"GAS Runtime Core\\nrequests: {result.RuntimeDiagnostics.CoreCounters.RequestCount}\"]\n"
+                   + $"    AbilityBuffer --> RuntimeCore[\"GAS Runtime Core\\nspecs: {result.RuntimeDiagnostics.CoreCounters.SpecCount}\"]\n"
                    + $"    RuntimeCore --> GEStream[\"GEEffectCommandBuffer / Spec / Delta\\ndeltas: {result.RuntimeDiagnostics.CoreCounters.DeltaCount}\"]\n"
                    + $"    GEStream --> Execution[\"AutoChessExecuteDamageCalculationSystem\\nexecution outputs: {result.EventCounts.ExecutionCalculationOutputUpdated}\"]\n"
                    + $"    Execution --> PendingDelta[\"pending AttributeModifierBuffer\\nexecution outputs: {result.EventCounts.ExecutionCalculationOutputUpdated}\"]\n"

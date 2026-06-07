@@ -33,6 +33,8 @@
 | [2026-06-08-OverflowInstantNextFrameOwnerLocalCommand](2026-06-08-OverflowInstantNextFrameOwnerLocalCommand.md) | overflow instant 派生命令退出 singleton command stream，改写 ASC next-frame owner-local instant carrier 的事实归档 |
 | [2026-06-08-InstantSpecBuildOwnerLocalConsumer](2026-06-08-InstantSpecBuildOwnerLocalConsumer.md) | instant spec build consumer 直接消费 ASC owner-local command/payload，旧 flush 回 singleton command stream 中间层退场的事实归档 |
 | [2026-06-08-InstantSpecCarrierOwnerLocal](2026-06-08-InstantSpecCarrierOwnerLocal.md) | instant spec carrier 与 generated AttributeReduce / cue projection 退出 singleton GEEffectSpecBuffer，改为 ASC owner-local buffer 的事实归档 |
+| [2026-06-08-EffectInstantHandwrittenRuntimeOwner](2026-06-08-EffectInstantHandwrittenRuntimeOwner.md) | RuntimeEffectInstant generated lifecycle 退为 marker，instant spec build 与 attribute reduce apply 改由手写 Runtime owner 承担的事实归档 |
+| [2026-06-08-ExecutionFactOwnerLocalSpecChain](2026-06-08-ExecutionFactOwnerLocalSpecChain.md) | execution-only GE 恢复 instant spec 链，AutoChess x50 验证 owner-local pending delta / fact / specs 的事实归档 |
 | [2026-06-08-BoundaryObservationFactCarrier](2026-06-08-BoundaryObservationFactCarrier.md) | Boundary observation fact carrier 接管表现、回放、typed event bridge 和 Debugger 的 fact 读面 |
 | [2026-06-08-AbilityLifecycleFactOwnerLocal](2026-06-08-AbilityLifecycleFactOwnerLocal.md) | generated ability lifecycle fact 退出 singleton GameplayEventBuffer direct append，改写 ASC owner-local fact buffer 的事实归档 |
 | [2026-06-08-HandwrittenAbilityFactOwnerLocal](2026-06-08-HandwrittenAbilityFactOwnerLocal.md) | hand-written ASC / ability lifecycle fact producer 退出 singleton GameplayEventBuffer direct append，改写 ASC owner-local fact buffer 的事实归档 |

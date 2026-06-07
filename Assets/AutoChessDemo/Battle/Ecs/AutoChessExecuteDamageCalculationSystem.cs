@@ -68,7 +68,9 @@ namespace GAS.AutoChessDemo
 
             var calculation = _calculationQuery.GetSingleton<AutoChessExecuteDamageCalculationComponent>();
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
-            state.Dependency = new ExecuteDamageCalculationChunkJob
+            var stats = new NativeReference<ExecutionCalculationStats>(Allocator.TempJob);
+            stats.Value = default;
+            var calculationHandle = new ExecuteDamageCalculationChunkJob
             {
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
                 SpecTypeHandle = SystemAPI.GetBufferTypeHandle<GEEffectSpecBuffer>(isReadOnly: true),
@@ -84,9 +86,18 @@ namespace GAS.AutoChessDemo
                 Calculation = calculation,
                 StreamEntity = streamEntity,
                 Frame = frame,
-                DriverLookup = SystemAPI.GetComponentLookup<AutoChessBattleDriverComponent>(),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
+                Stats = stats,
             }.Schedule(_ownerSpecQuery, state.Dependency);
+            var applyStatsHandle = new ApplyExecutionCalculationStatsJob
+            {
+                DriverEntity = driverEntity,
+                Driver = driver,
+                Frame = frame,
+                Stats = stats,
+                DriverLookup = SystemAPI.GetComponentLookup<AutoChessBattleDriverComponent>(),
+            }.Schedule(calculationHandle);
+            state.Dependency = stats.Dispose(applyStatsHandle);
         }
 
         public void OnDestroy(ref SystemState state)
@@ -108,8 +119,8 @@ namespace GAS.AutoChessDemo
             public AutoChessExecuteDamageCalculationComponent Calculation;
             public Entity StreamEntity;
             public int Frame;
-            public ComponentLookup<AutoChessBattleDriverComponent> DriverLookup;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            public NativeReference<ExecutionCalculationStats> Stats;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -121,6 +132,7 @@ namespace GAS.AutoChessDemo
                     || !StreamLookup.HasComponent(StreamEntity))
                     return;
 
+                var stats = default(ExecutionCalculationStats);
                 var entities = chunk.GetNativeArray(EntityTypeHandle);
                 var specs = chunk.GetBufferAccessor(ref SpecTypeHandle);
                 var deltas = chunk.GetBufferAccessor(ref DeltaBufferTypeHandle);
@@ -150,18 +162,28 @@ namespace GAS.AutoChessDemo
                     for (var i = 0; i < ownerSpecs.Length; i++)
                     {
                         var spec = ownerSpecs[i];
+                        stats.SpecScanCount++;
+                        if (spec.GameplayEffectCode != Calculation.GameplayEffectCode)
+                            continue;
+
+                        stats.MatchedEffectSpecCount++;
                         var targetAsc = ResolveTargetAsc(in spec, owner);
-                        if (spec.GameplayEffectCode != Calculation.GameplayEffectCode
-                            || CompareEntity(targetAsc, owner) != 0)
+                        if (CompareEntity(targetAsc, owner) != 0)
                         {
+                            stats.TargetOwnerMismatchCount++;
                             continue;
                         }
 
                         if (!TryEvaluateExecuteDamage(
                                 ownerAttributes,
                                 in Calculation,
-                                out var damage))
+                                out var damage,
+                                out var rejectReason))
                         {
+                            if (rejectReason == ExecuteDamageRejectReason.MissingAttribute)
+                                stats.MissingAttributeCount++;
+                            else if (rejectReason == ExecuteDamageRejectReason.EvaluatorRejected)
+                                stats.EvaluatorRejectCount++;
                             continue;
                         }
 
@@ -194,6 +216,7 @@ namespace GAS.AutoChessDemo
                             PendingCount = targetDeltas.Length,
                         };
                         pendingMask[entityIndex] = true;
+                        stats.OutputWriteCount++;
 
                         if (!hasOwnerFactBuffer)
                             continue;
@@ -229,10 +252,60 @@ namespace GAS.AutoChessDemo
                 }
 
                 StreamLookup[StreamEntity] = stream;
+                AddStats(stats);
+            }
 
+            private void AddStats(in ExecutionCalculationStats value)
+            {
+                var stats = Stats.Value;
+                stats.SpecScanCount += value.SpecScanCount;
+                stats.MatchedEffectSpecCount += value.MatchedEffectSpecCount;
+                stats.TargetOwnerMismatchCount += value.TargetOwnerMismatchCount;
+                stats.MissingAttributeCount += value.MissingAttributeCount;
+                stats.EvaluatorRejectCount += value.EvaluatorRejectCount;
+                stats.OutputWriteCount += value.OutputWriteCount;
+                Stats.Value = stats;
+            }
+        }
+
+        [BurstCompile]
+        private struct ApplyExecutionCalculationStatsJob : IJob
+        {
+            public Entity DriverEntity;
+            public AutoChessBattleDriverComponent Driver;
+            public int Frame;
+            [ReadOnly] public NativeReference<ExecutionCalculationStats> Stats;
+            public ComponentLookup<AutoChessBattleDriverComponent> DriverLookup;
+
+            public void Execute()
+            {
+                var stats = Stats.Value;
                 Driver.LastExecutionFrame = Frame;
+                Driver.ExecutionSpecScanCount += stats.SpecScanCount;
+                Driver.ExecutionMatchedEffectSpecCount += stats.MatchedEffectSpecCount;
+                Driver.ExecutionTargetOwnerMismatchCount += stats.TargetOwnerMismatchCount;
+                Driver.ExecutionMissingAttributeCount += stats.MissingAttributeCount;
+                Driver.ExecutionEvaluatorRejectCount += stats.EvaluatorRejectCount;
+                Driver.ExecutionOutputWriteCount += stats.OutputWriteCount;
                 DriverLookup[DriverEntity] = Driver;
             }
+        }
+
+        private struct ExecutionCalculationStats
+        {
+            public int SpecScanCount;
+            public int MatchedEffectSpecCount;
+            public int TargetOwnerMismatchCount;
+            public int MissingAttributeCount;
+            public int EvaluatorRejectCount;
+            public int OutputWriteCount;
+        }
+
+        private enum ExecuteDamageRejectReason : byte
+        {
+            None = 0,
+            MissingAttribute = 1,
+            EvaluatorRejected = 2,
         }
 
         private static Entity ResolveTargetAsc(in GEEffectSpecBuffer spec, Entity owner)
@@ -259,16 +332,21 @@ namespace GAS.AutoChessDemo
         private static bool TryEvaluateExecuteDamage(
             DynamicBuffer<AttributeValueBuffer> attributes,
             in AutoChessExecuteDamageCalculationComponent calculation,
-            out float damage)
+            out float damage,
+            out ExecuteDamageRejectReason rejectReason)
         {
             damage = 0f;
+            rejectReason = ExecuteDamageRejectReason.None;
 
             var attrIndex = IndexOfAttribute(
                 attributes,
                 calculation.HealthAttrSetCode,
                 calculation.HealthAttrCode);
             if (attrIndex < 0)
+            {
+                rejectReason = ExecuteDamageRejectReason.MissingAttribute;
                 return false;
+            }
 
             var attribute = attributes[attrIndex];
             if (!AutoChessGeneratedExecutionEvaluator.TryEvaluateExecuteDamage(
@@ -281,6 +359,7 @@ namespace GAS.AutoChessDemo
                     calculation.MaxDamage,
                     out var output))
             {
+                rejectReason = ExecuteDamageRejectReason.EvaluatorRejected;
                 return false;
             }
 

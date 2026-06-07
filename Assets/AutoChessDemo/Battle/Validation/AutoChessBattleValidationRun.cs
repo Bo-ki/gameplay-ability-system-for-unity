@@ -444,7 +444,7 @@ namespace GAS.AutoChessDemo
                    && result.EventCounts.PeriodTickDamageFacts > 0
                    && result.EventCounts.CueRequests > 0
                    && diagnosticResult.RuntimeDiagnostics.EventCount > 0
-                    && counters.RequestCount > 0
+                    && counters.SpecCount > 0
                     && counters.FactCount > 0
                     && counters.PendingAttributeAppliedDeltaCount > 0
                     && counters.OwnerLocalFactFlushCount > 0

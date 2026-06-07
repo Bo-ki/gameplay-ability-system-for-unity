@@ -22,6 +22,12 @@ namespace GAS.AutoChessDemo
         public int IssuedFinisherCommandCount;
         public int IssuedActiveCommandCount;
         public int LowestHealthTargetCount;
+        public int ExecutionSpecScanCount;
+        public int ExecutionMatchedEffectSpecCount;
+        public int ExecutionTargetOwnerMismatchCount;
+        public int ExecutionMissingAttributeCount;
+        public int ExecutionEvaluatorRejectCount;
+        public int ExecutionOutputWriteCount;
     }
 
     public readonly struct AutoChessBattleDriverOwnerSnapshot

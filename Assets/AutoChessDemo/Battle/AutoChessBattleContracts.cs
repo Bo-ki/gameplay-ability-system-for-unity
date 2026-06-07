@@ -379,6 +379,12 @@ namespace GAS.AutoChessDemo
         public readonly int PeriodTickDamageFactCount;
         public readonly float PeriodTickDamageTotal;
         public readonly int ExecutionOutputCount;
+        public readonly int ExecutionSpecScanCount;
+        public readonly int ExecutionMatchedEffectSpecCount;
+        public readonly int ExecutionTargetOwnerMismatchCount;
+        public readonly int ExecutionMissingAttributeCount;
+        public readonly int ExecutionEvaluatorRejectCount;
+        public readonly int ExecutionOutputWriteCount;
         public readonly int CueRequestCount;
         public readonly int RuntimeEventCount;
         public readonly int DebugWarningCount;
@@ -464,6 +470,12 @@ namespace GAS.AutoChessDemo
             int periodTickDamageFactCount,
             float periodTickDamageTotal,
             int executionOutputCount,
+            int executionSpecScanCount,
+            int executionMatchedEffectSpecCount,
+            int executionTargetOwnerMismatchCount,
+            int executionMissingAttributeCount,
+            int executionEvaluatorRejectCount,
+            int executionOutputWriteCount,
             int cueRequestCount,
             int runtimeEventCount,
             int debugWarningCount,
@@ -548,6 +560,12 @@ namespace GAS.AutoChessDemo
             PeriodTickDamageFactCount = periodTickDamageFactCount;
             PeriodTickDamageTotal = periodTickDamageTotal;
             ExecutionOutputCount = executionOutputCount;
+            ExecutionSpecScanCount = executionSpecScanCount;
+            ExecutionMatchedEffectSpecCount = executionMatchedEffectSpecCount;
+            ExecutionTargetOwnerMismatchCount = executionTargetOwnerMismatchCount;
+            ExecutionMissingAttributeCount = executionMissingAttributeCount;
+            ExecutionEvaluatorRejectCount = executionEvaluatorRejectCount;
+            ExecutionOutputWriteCount = executionOutputWriteCount;
             CueRequestCount = cueRequestCount;
             RuntimeEventCount = runtimeEventCount;
             DebugWarningCount = debugWarningCount;
@@ -634,6 +652,12 @@ namespace GAS.AutoChessDemo
         public readonly int DriverIssuedPrimaryCommands;
         public readonly int DriverIssuedFinisherCommands;
         public readonly int DriverLowestHealthTargetSelections;
+        public readonly int DriverExecutionSpecScans;
+        public readonly int DriverExecutionMatchedEffectSpecs;
+        public readonly int DriverExecutionTargetOwnerMismatches;
+        public readonly int DriverExecutionMissingAttributes;
+        public readonly int DriverExecutionEvaluatorRejects;
+        public readonly int DriverExecutionOutputWrites;
         public readonly AutoChessBattleDriverOwnerSnapshot DriverOwnerSnapshot;
         public readonly long ElapsedTicks;
         public readonly double ElapsedMilliseconds;
@@ -664,6 +688,12 @@ namespace GAS.AutoChessDemo
             int driverIssuedPrimaryCommands,
             int driverIssuedFinisherCommands,
             int driverLowestHealthTargetSelections,
+            int driverExecutionSpecScans,
+            int driverExecutionMatchedEffectSpecs,
+            int driverExecutionTargetOwnerMismatches,
+            int driverExecutionMissingAttributes,
+            int driverExecutionEvaluatorRejects,
+            int driverExecutionOutputWrites,
             AutoChessBattleDriverOwnerSnapshot driverOwnerSnapshot,
             long elapsedTicks,
             double elapsedMilliseconds,
@@ -692,6 +722,12 @@ namespace GAS.AutoChessDemo
             DriverIssuedPrimaryCommands = driverIssuedPrimaryCommands;
             DriverIssuedFinisherCommands = driverIssuedFinisherCommands;
             DriverLowestHealthTargetSelections = driverLowestHealthTargetSelections;
+            DriverExecutionSpecScans = driverExecutionSpecScans;
+            DriverExecutionMatchedEffectSpecs = driverExecutionMatchedEffectSpecs;
+            DriverExecutionTargetOwnerMismatches = driverExecutionTargetOwnerMismatches;
+            DriverExecutionMissingAttributes = driverExecutionMissingAttributes;
+            DriverExecutionEvaluatorRejects = driverExecutionEvaluatorRejects;
+            DriverExecutionOutputWrites = driverExecutionOutputWrites;
             DriverOwnerSnapshot = driverOwnerSnapshot;
             ElapsedTicks = elapsedTicks;
             ElapsedMilliseconds = elapsedMilliseconds;
@@ -725,6 +761,12 @@ namespace GAS.AutoChessDemo
                 DriverIssuedPrimaryCommands,
                 DriverIssuedFinisherCommands,
                 DriverLowestHealthTargetSelections,
+                DriverExecutionSpecScans,
+                DriverExecutionMatchedEffectSpecs,
+                DriverExecutionTargetOwnerMismatches,
+                DriverExecutionMissingAttributes,
+                DriverExecutionEvaluatorRejects,
+                DriverExecutionOutputWrites,
                 DriverOwnerSnapshot,
                 ElapsedTicks,
                 ElapsedMilliseconds,
