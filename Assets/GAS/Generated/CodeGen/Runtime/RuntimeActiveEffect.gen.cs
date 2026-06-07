@@ -2734,21 +2734,21 @@ namespace GAS.Runtime.Generated
                     return;
                 }
 
-                if (!CommandLookup.HasBuffer(StreamEntity)
-                    || !CommandSetByCallerLookup.HasBuffer(StreamEntity))
+                if (!CommandLookup.HasBuffer(ownerResources.Owner)
+                    || !CommandSetByCallerLookup.HasBuffer(ownerResources.Owner))
                 {
                     return;
                 }
 
-                var commandSetByCallerValues = CommandSetByCallerLookup[StreamEntity];
-                var resolved = PrepareCommand(ref stream, commandSetByCallerValues, in command, setByCallerCount, Frame);
+                var ownerInstantSetByCallerValues = CommandSetByCallerLookup[ownerResources.Owner];
+                var resolved = PrepareCommand(ref stream, ownerInstantSetByCallerValues, in command, setByCallerCount, Frame);
                 CopySetByCallerValues(
-                    commandSetByCallerValues,
+                    ownerInstantSetByCallerValues,
                     sourceSetByCallerValues,
                     slot.Sequence,
                     slot.GameplayEffectCode,
                     resolved.Sequence);
-                CommandLookup[StreamEntity].Add(resolved);
+                CommandLookup[ownerResources.Owner].Add(resolved);
                 StreamLookup[StreamEntity] = stream;
             }
 

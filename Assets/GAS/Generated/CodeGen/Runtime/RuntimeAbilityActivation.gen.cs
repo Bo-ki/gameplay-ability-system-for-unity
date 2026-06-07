@@ -113,9 +113,7 @@ namespace GAS.Runtime.Generated
             {
                 if (!Catalog.IsCreated
                     || StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !CommandLookup.HasBuffer(StreamEntity)
-                    || !SetByCallerLookup.HasBuffer(StreamEntity))
+                    || !StreamLookup.HasComponent(StreamEntity))
                 {
                     return;
                 }
@@ -345,30 +343,38 @@ namespace GAS.Runtime.Generated
                     return;
                 }
 
-                if (command.Kind != GEEffectCommandKind.ActiveMutation
-                    && (!CommandLookup.HasBuffer(StreamEntity)
-                        || !SetByCallerLookup.HasBuffer(StreamEntity)))
+                if (command.Kind == GEEffectCommandKind.Instant
+                    && !CanAppendInstantCommand(in command))
                 {
                     return;
                 }
 
                 var stream = StreamLookup[StreamEntity];
+                var targetAsc = ResolveTargetAsc(in command);
                 var resolved = PrepareCommand(
                     ref stream,
                     command.Kind == GEEffectCommandKind.ActiveMutation
                         ? 0
-                        : SetByCallerLookup[StreamEntity].Length,
+                        : SetByCallerLookup[targetAsc].Length,
                     in command);
                 if (resolved.Kind == GEEffectCommandKind.ActiveMutation)
                     AppendActiveMutationCommand(in resolved);
                 else
-                    CommandLookup[StreamEntity].Add(resolved);
+                    AppendInstantCommand(in resolved);
                 StreamLookup[StreamEntity] = stream;
+            }
+
+            private bool CanAppendInstantCommand(in GEEffectCommandBuffer command)
+            {
+                var targetAsc = ResolveTargetAsc(in command);
+                return targetAsc != Entity.Null
+                    && CommandLookup.HasBuffer(targetAsc)
+                    && SetByCallerLookup.HasBuffer(targetAsc);
             }
 
             private bool CanAppendActiveMutationCommand(in GEEffectCommandBuffer command)
             {
-                var targetAsc = command.TargetAsc != Entity.Null ? command.TargetAsc : command.SourceAsc;
+                var targetAsc = ResolveTargetAsc(in command);
                 return targetAsc != Entity.Null
                     && ActiveMutationCommandLookup.HasBuffer(targetAsc)
                     && ActiveMutationSetByCallerLookup.HasBuffer(targetAsc);
@@ -376,7 +382,7 @@ namespace GAS.Runtime.Generated
 
             private void AppendActiveMutationCommand(in GEEffectCommandBuffer command)
             {
-                var targetAsc = command.TargetAsc != Entity.Null ? command.TargetAsc : command.SourceAsc;
+                var targetAsc = ResolveTargetAsc(in command);
                 var ownerCommand = command;
                 ownerCommand.SetByCallerStart = 0;
                 ownerCommand.SetByCallerCount = 0;
@@ -384,6 +390,20 @@ namespace GAS.Runtime.Generated
                 {
                     Command = ownerCommand,
                 });
+            }
+
+            private void AppendInstantCommand(in GEEffectCommandBuffer command)
+            {
+                var targetAsc = ResolveTargetAsc(in command);
+                var ownerCommand = command;
+                ownerCommand.SetByCallerStart = SetByCallerLookup[targetAsc].Length;
+                ownerCommand.SetByCallerCount = 0;
+                CommandLookup[targetAsc].Add(ownerCommand);
+            }
+
+            private static Entity ResolveTargetAsc(in GEEffectCommandBuffer command)
+            {
+                return command.TargetAsc != Entity.Null ? command.TargetAsc : command.SourceAsc;
             }
 
             private GEEffectCommandBuffer PrepareCommand(

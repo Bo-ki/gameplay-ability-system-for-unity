@@ -1049,20 +1049,40 @@ Assert-FileContains `
     -Message "Generated ability commit must acquire ASC owner-local active mutation payload buffers."
 Assert-FileContains `
     -Path $generatedAbilityActivationPath `
-    -Pattern "if\s*\(resolved\.Kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?AppendActiveMutationCommand\(in resolved\);[\s\S]*?else[\s\S]*?CommandLookup\[StreamEntity\]\.Add\(resolved\);" `
-    -Message "Generated ability commit must route active mutation commands directly to owner-local ASC buffers while keeping instant commands on the spec stream."
+    -Pattern "CommandLookup\s*=\s*SystemAPI\.GetBufferLookup<GEEffectCommandBuffer>\(\)" `
+    -Message "Generated ability commit must acquire ASC owner-local instant command buffers."
+Assert-FileContains `
+    -Path $generatedAbilityActivationPath `
+    -Pattern "if\s*\(resolved\.Kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?AppendActiveMutationCommand\(in resolved\);[\s\S]*?else[\s\S]*?AppendInstantCommand\(in resolved\);" `
+    -Message "Generated ability commit must route active and instant commands through owner-local ASC command buffers."
 Assert-FileContains `
     -Path $generatedAbilityActivationPath `
     -Pattern "ActiveMutationCommandLookup\[targetAsc\]\.Add\(new ActiveEffectMutationCommandBuffer" `
     -Message "Generated ability commit must append active mutation commands to the target ASC owner-local command buffer."
+Assert-FileContains `
+    -Path $generatedAbilityActivationPath `
+    -Pattern "AppendInstantCommand[\s\S]*?CommandLookup\[targetAsc\]\.Add\(ownerCommand\)" `
+    -Message "Generated ability commit must append instant commands to the target ASC owner-local command buffer."
+Assert-FileNotContains `
+    -Path $generatedAbilityActivationPath `
+    -Pattern "CommandLookup\[StreamEntity\]\.Add\(resolved\)" `
+    -Message "Generated ability commit must not append instant commands directly to the singleton command stream."
 Assert-FileContains `
     -Path $codeGenTemplatePath `
     -Pattern "ActiveMutationCommandLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationCommandBuffer>\(isReadOnly:\s*false\)" `
     -Message "CodeGen template must acquire ASC owner-local active mutation command buffers for ability commit."
 Assert-FileContains `
     -Path $codeGenTemplatePath `
-    -Pattern "if\s*\(resolved\.Kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?AppendActiveMutationCommand\(in resolved\);[\s\S]*?else[\s\S]*?CommandLookup\[StreamEntity\]\.Add\(resolved\);" `
-    -Message "CodeGen template must keep ability commit active mutation commands off the singleton command stream."
+    -Pattern "if\s*\(resolved\.Kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?AppendActiveMutationCommand\(in resolved\);[\s\S]*?else[\s\S]*?AppendInstantCommand\(in resolved\);" `
+    -Message "CodeGen template must keep ability commit active and instant commands off the singleton command stream."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "AppendInstantCommand[\s\S]*?CommandLookup\[targetAsc\]\.Add\(ownerCommand\)" `
+    -Message "CodeGen template must regenerate ability commit instant owner-local command append."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "private void AppendEffectCommand[\s\S]{0,1800}CommandLookup\[StreamEntity\]\.Add\(resolved\)" `
+    -Message "CodeGen template must not regenerate ability commit instant singleton command append."
 Assert-FileContains `
     -Path $streamPath `
     -Pattern "AppendOwnerLocalActiveMutationCommand\([\s\S]*?DynamicBuffer<ActiveEffectMutationCommandBuffer> ownerCommands[\s\S]*?DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> ownerSetByCallerValues" `
@@ -1135,6 +1155,22 @@ Assert-FileContains `
     -Path $codeGenTemplatePath `
     -Pattern "var ownerCommand = PrepareCommand\([\s\S]*?ownerSetByCallerValues\.Length[\s\S]*?Command = ownerCommand" `
     -Message "CodeGen template must keep owner-local period set-by-caller payload remapping."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "var ownerInstantSetByCallerValues\s*=\s*CommandSetByCallerLookup\[ownerResources\.Owner\][\s\S]*?CommandLookup\[ownerResources\.Owner\]\.Add\(resolved\)" `
+    -Message "Generated period instant commands must be routed through ASC owner-local instant buffers."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "var ownerInstantSetByCallerValues\s*=\s*CommandSetByCallerLookup\[ownerResources\.Owner\][\s\S]*?CommandLookup\[ownerResources\.Owner\]\.Add\(resolved\)" `
+    -Message "CodeGen template must keep period instant commands on ASC owner-local instant buffers."
+Assert-FileNotContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "EmitPeriodCommand[\s\S]*?CommandSetByCallerLookup\[StreamEntity\][\s\S]*?CommandLookup\[StreamEntity\]\.Add\(resolved\)" `
+    -Message "Generated period instant commands must not append to singleton stream command buffers."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "EmitPeriodCommand[\s\S]*?CommandSetByCallerLookup\[StreamEntity\][\s\S]*?CommandLookup\[StreamEntity\]\.Add\(resolved\)" `
+    -Message "CodeGen template must not regenerate singleton stream appends for period instant commands."
 Assert-FileContains `
     -Path $activeEffectLifecycleOwnerPath `
     -Pattern "NextFrameActiveMutationCommandLookup\s*=\s*[\s\S]*?SystemAPI\.GetBufferLookup<ActiveEffectNextFrameMutationCommandBuffer>\(isReadOnly:\s*false\)" `
