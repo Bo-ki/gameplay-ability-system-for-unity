@@ -31,7 +31,7 @@
 
 ## 仍不足部分
 
-1. `SystemAPI.Query` 主线程 foreach 在 `Assets/GAS/Runtime` 与 generated runtime 当前 0 命中；后续不足不是数量，而是必须防止它重新进入 Core hot path，并继续把 Cue managed stored query、Debugger gather、GlobalTimer / ActiveEffectStore singleton fallback 分 owner 计数。
+1. `SystemAPI.Query` 主线程 foreach 在 `Assets/GAS/Runtime` 与 generated runtime 当前 0 命中；后续不足不是数量，而是必须防止它重新进入 Core hot path，并继续把 Cue managed stored query、Debugger gather、GlobalTimer singleton fallback 与 ActiveEffectStore registered owner cache 分 owner 计数。
 2. `Complete()` 已清零，并已进入 generated hot path gate；仍需作为 codegen/static validation 防回流项，而不是当前 runtime 事实。
 3. 实际 runtime authoring/Baker / `BlobAssetStore` 还没有落到当前业务验收链。
 4. NativeStream / deterministic merge 已在 OutputModifier 局部落地，但 singleton stream owner 与 generated active mutation serial job 的容量、ordering、budget 证据仍不足。

@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-旧“全是 `ToEntityArray` + foreach”的诊断已经过期。当前代码已经大量改为 `ISystem`、`state.GetEntityQuery(EntityQueryDesc)`、ECB system singleton、generated blob catalog 和 scheduled job。`AbilityCatalogCommit`、instant spec/reduce、active mutation/pre-tick/remove、ability lifecycle request aggregation、attribute owner marker aggregation、pending AttributeDelta owner-local apply 这些旧 generated/runtime 风险也已按 DOTS 规则推进。当前执行范式问题降为 P1：主要风险转为 singleton stream owner、stream migration fallback、BoundaryProjection 仍承载的边界缓冲、static validation 规则扩展、active mutation singleton command carrier 和 SourceAttribute snapshot lane 缺口。
+旧“全是 `ToEntityArray` + foreach”的诊断已经过期。当前代码已经大量改为 `ISystem`、`state.GetEntityQuery(EntityQueryDesc)`、ECB system singleton、generated blob catalog 和 scheduled job。`AbilityCatalogCommit`、instant spec/reduce、active mutation/pre-tick/remove、ability lifecycle request aggregation、attribute owner marker aggregation、pending AttributeDelta owner-local apply 这些旧 generated/runtime 风险也已按 DOTS 规则推进，pending AttributeDelta 旧 stream fallback 已退出。当前执行范式问题降为 P1：主要风险转为 singleton stream owner、generated instant / execution delta record carrier、BoundaryProjection 仍承载的边界缓冲、static validation 规则扩展、active mutation singleton command carrier 和 SourceAttribute snapshot lane 缺口。
 
 ## 当前事实
 
@@ -25,11 +25,11 @@
 - cross-entity ability lifecycle marker 写入已收口：ASC command、attribute threshold、generated active effect granted-ability cleanup 均写入 `AbilityLifecycleRequestBuffer`，由 `AbilityLifecycleRequestSystem` 在 ability chunk 内统一应用 cancel/end/destroy-on-cleanup marker。
 - cross-entity attribute owner marker 写入已收口：generated active effect 与 execution output modifier 均写入 `AttributeOwnerMarkerRequestBuffer`，由 `AttributeOwnerMarkerRequestSystem` 在 ASC chunk 内统一应用 dirty / active-modifier-present marker。
 - execution output applied marker 已收口：`GEExecutionCalculationOutputModifierSystem` 用 effect-owned `IJobChunk` + chunk `EnabledMask` 写 `GEExecutionCalculationOutputModifierAppliedComponent`，不再 random-access toggle arbitrary effect entity。
-- `ToEntityArray()` 当前运行命中 4 处：Debugger observation 3 处、Cue managed boundary 1 处；`GASGlobalTimerSystem` current-frame fallback 和 `ActiveEffectStore` global index fallback 当前通过 `CreateEntityQuery + CalculateEntityCount + GetSingletonEntity` 实现，不再是 `ToEntityArray` 命中。AutoChess catalog 初始化旧 `ToEntityArray` 事实已过期，pending AttributeDelta owner-local apply 也不再物化 owner entity list。
+- `ToEntityArray()` 当前运行命中 4 处：Debugger observation 3 处、Cue managed boundary 1 处；`GASGlobalTimerSystem` current-frame fallback 当前通过 `CreateEntityQuery + CalculateEntityCount + GetSingletonEntity` 实现，不再是 `ToEntityArray` 命中。`ActiveEffectStore` global index owner 已改为 registered/cache owner，不再创建 fallback query。AutoChess catalog 初始化旧 `ToEntityArray` 事实已过期，pending AttributeDelta owner-local apply 也不再物化 owner entity list。
 
 ## 仍成立风险
 
-1. generated systems 需要同等接受 Burst/job/query 审查；已修复链路需要 static validation 持续防回流，未修复重点是 active mutation singleton command carrier、stream migration fallback、BoundaryProjection 边界缓冲与 capacity/ordering 证据。
+1. generated systems 需要同等接受 Burst/job/query 审查；已修复链路需要 static validation 持续防回流，未修复重点是 active mutation singleton command carrier、generated instant / execution delta record carrier、BoundaryProjection 边界缓冲与 capacity/ordering 证据。
 2. singleton stream owner 仍是 proof carrier，不是 high-scale fan-in 终局。
 3. managed Cue / Registry / Helper 不能进入 CoreSimulation hot path。
 4. `EntityManager.GetBuffer/GetComponentData/SetComponentData` 在 boundary/prototype/OnUpdate preflight 路径中仍多；generated active mutation apply 与 pending AttributeDelta owner-local apply 已 chunk-local，剩余 lookup 风险必须转向 stream fallback、active pre-tick/source magnitude、boundary/prototype owner 分类治理。

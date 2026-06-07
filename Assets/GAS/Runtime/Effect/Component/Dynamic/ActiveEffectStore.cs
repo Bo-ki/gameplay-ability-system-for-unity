@@ -301,6 +301,10 @@ namespace GAS.Runtime
         public const int InlineCleanupRecordCapacity = 4;
         public const int MaxCleanupRecordCount = 16;
 
+        private static bool _hasCachedGlobalIndexStore;
+        private static EntityManager _cachedGlobalIndexEntityManager;
+        private static Entity _cachedGlobalIndexOwner;
+
         public static ASCActiveEffectsComponent CreateDefault()
         {
             return new ASCActiveEffectsComponent
@@ -343,12 +347,33 @@ namespace GAS.Runtime
             em.GetBuffer<ActiveGameplayEffectGlobalIndexBuffer>(indexOwner).EnsureCapacity(InlineGlobalIndexCapacity);
             em.GetBuffer<ActiveGameplayEffectGlobalIndexBucketOwnerBuffer>(indexOwner).EnsureCapacity(GlobalIndexBucketCount);
             EnsureGlobalIndexBucketOwners(em, indexOwner);
+            RegisterKnownGlobalIndexStore(em, indexOwner);
             return indexOwner;
         }
 
         public static bool TryGetGlobalIndexStore(EntityManager em, out Entity indexOwner)
         {
-            return TryResolveSingletonGlobalIndexStore(em, out indexOwner);
+            return TryResolveKnownGlobalIndexStore(em, out indexOwner);
+        }
+
+        public static void RegisterKnownGlobalIndexStore(EntityManager em, Entity indexOwner)
+        {
+            if (!IsValidGlobalIndexStore(em, indexOwner))
+                return;
+
+            _cachedGlobalIndexEntityManager = em;
+            _cachedGlobalIndexOwner = indexOwner;
+            _hasCachedGlobalIndexStore = true;
+        }
+
+        public static void ResetKnownGlobalIndexStore(EntityManager em)
+        {
+            if (_hasCachedGlobalIndexStore && _cachedGlobalIndexEntityManager.Equals(em))
+            {
+                _hasCachedGlobalIndexStore = false;
+                _cachedGlobalIndexEntityManager = default;
+                _cachedGlobalIndexOwner = Entity.Null;
+            }
         }
 
         public static void EnsureGlobalIndexBuffers(EntityManager em, Entity indexOwner)
@@ -1365,33 +1390,63 @@ namespace GAS.Runtime
             return -1;
         }
 
-        private static bool TryResolveSingletonGlobalIndexStore(EntityManager em, out Entity indexOwner)
+        private static bool TryResolveKnownGlobalIndexStore(EntityManager em, out Entity indexOwner)
         {
-            indexOwner = Entity.Null;
-            if (em.World == null || !em.World.IsCreated)
-                return false;
+            if (TryResolveCachedGlobalIndexStore(em, out indexOwner))
+                return true;
 
-            using var query = em.CreateEntityQuery(
-                ComponentType.ReadOnly<ActiveGameplayEffectGlobalIndexComponent>());
-            if (query.CalculateEntityCount() != 1)
+            if (TryResolveRegisteredGlobalIndexStore(em, out indexOwner))
+                return true;
+
+            indexOwner = Entity.Null;
+            return false;
+        }
+
+        private static bool TryResolveCachedGlobalIndexStore(EntityManager em, out Entity indexOwner)
+        {
+            if (!_hasCachedGlobalIndexStore || !_cachedGlobalIndexEntityManager.Equals(em))
             {
+                indexOwner = Entity.Null;
                 return false;
             }
 
-            var singleton = query.GetSingletonEntity();
-            if (!IsValidGlobalIndexStore(em, singleton))
+            if (IsValidGlobalIndexStore(em, _cachedGlobalIndexOwner))
+            {
+                indexOwner = _cachedGlobalIndexOwner;
+                return true;
+            }
+
+            _hasCachedGlobalIndexStore = false;
+            _cachedGlobalIndexEntityManager = default;
+            _cachedGlobalIndexOwner = Entity.Null;
+            indexOwner = Entity.Null;
+            return false;
+        }
+
+        private static bool TryResolveRegisteredGlobalIndexStore(EntityManager em, out Entity indexOwner)
+        {
+            indexOwner = Entity.Null;
+            if (!GASManager.IsInitialized || !GASManager.EntityManager.Equals(em))
                 return false;
 
-            indexOwner = singleton;
+            var registeredOwner = GASManager.EntityActiveEffectGlobalIndex;
+            if (!IsValidGlobalIndexStore(em, registeredOwner))
+                return false;
+
+            RegisterKnownGlobalIndexStore(em, registeredOwner);
+            indexOwner = registeredOwner;
             return true;
         }
 
         private static bool IsValidGlobalIndexStore(EntityManager em, Entity indexOwner)
         {
             return indexOwner != Entity.Null
+                   && em.World != null
+                   && em.World.IsCreated
                    && em.Exists(indexOwner)
                    && em.HasComponent<ActiveGameplayEffectGlobalIndexComponent>(indexOwner)
-                   && em.HasBuffer<ActiveGameplayEffectGlobalIndexBuffer>(indexOwner);
+                   && em.HasBuffer<ActiveGameplayEffectGlobalIndexBuffer>(indexOwner)
+                   && em.HasBuffer<ActiveGameplayEffectGlobalIndexBucketOwnerBuffer>(indexOwner);
         }
 
         private static ActiveGameplayEffectGlobalIndexBucketComponent CreateGlobalIndexBucketDefault(

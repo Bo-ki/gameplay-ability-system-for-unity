@@ -88,6 +88,7 @@ namespace GAS.Runtime
                 GASRuntimeFrameContext.ResetKnownGlobalTimer(EntityManager);
                 GasRuntimeDebugger.ResetKnownSingleton(EntityManager);
                 EffectCommandSpecStream.ResetKnownSingleton(EntityManager);
+                ActiveEffectStore.ResetKnownGlobalIndexStore(EntityManager);
                 GameplayEffectConfigRegistry.ReloadDefinitionCaches(EntityManager);
                 PresentationEntityBindingRegistry.ClearGameObjectBinding();
                 if (_attachedToPlayerLoop)

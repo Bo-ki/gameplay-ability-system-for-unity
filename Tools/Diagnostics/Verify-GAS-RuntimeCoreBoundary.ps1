@@ -76,6 +76,8 @@ $streamPhasePath = Join-Path $runtimePath "System\Effect\GEEffectCommandSpecStre
 $scheduleContractPath = Join-Path $runtimePath "System\SystemGroup\GASSystemScheduleContract.cs"
 $streamOwnerContractPath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeStreamOwnerContract.cs"
 $globalTimerPath = Join-Path $runtimePath "System\Core\GASGlobalTimerSystem.cs"
+$activeEffectStorePath = Join-Path $runtimePath "Effect\Component\Dynamic\ActiveEffectStore.cs"
+$gasManagerPath = Join-Path $runtimePath "General\GASManager.cs"
 $debuggerPath = Join-Path $runtimePath "Debugger\GasRuntimeDebugger.cs"
 $generatedActiveEffectPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeActiveEffect.gen.cs"
 $codeGenTemplatePath = Join-Path $ProjectPath "Assets\GAS\Editor\CodeGen\Phases\GasGlueCodeGenPhases.cs"
@@ -141,6 +143,22 @@ Assert-FileContains `
     -Path $globalTimerPath `
     -Pattern "TryResolveRegisteredGlobalTimer" `
     -Message "GASRuntimeFrameContext must prefer the registered GlobalTimer owner before fallback singleton queries."
+Assert-FileNotContains `
+    -Path $activeEffectStorePath `
+    -Pattern "CreateEntityQuery" `
+    -Message "ActiveEffectStore global index store lookup must not create singleton fallback queries."
+Assert-FileContains `
+    -Path $activeEffectStorePath `
+    -Pattern "TryResolveRegisteredGlobalIndexStore" `
+    -Message "ActiveEffectStore must prefer the registered global index store owner."
+Assert-FileContains `
+    -Path $activeEffectStorePath `
+    -Pattern "RegisterKnownGlobalIndexStore" `
+    -Message "ActiveEffectStore must expose a registered owner cache for the global index store."
+Assert-FileContains `
+    -Path $gasManagerPath `
+    -Pattern "ActiveEffectStore\.ResetKnownGlobalIndexStore\(EntityManager\)" `
+    -Message "GASManager shutdown must reset the ActiveEffectStore global index owner cache."
 Assert-FileContains `
     -Path $streamPath `
     -Pattern "ResetFrameLocalCounters\(ref stream\)" `
@@ -208,4 +226,5 @@ Assert-FileNotContains `
 
 Write-Host "GAS Runtime Core boundary check passed: no AutoChess references under Assets/GAS/Runtime."
 Write-Host "GAS Runtime Core pending attribute delta contract passed: owner-local apply, stream migration fallback retired, and debugger counters are wired."
+Write-Host "GAS Runtime Core active effect global index contract passed: registered/cache owner lookup is wired and singleton fallback queries are blocked."
 Write-Host "GAS Runtime Core active mutation contract passed: generated gather + ASC chunk-local apply path is wired."

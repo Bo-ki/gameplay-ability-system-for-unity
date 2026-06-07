@@ -13,7 +13,7 @@
 ## 已缓解部分
 
 1. 旧“22 个 ToEntityArray 热路径”不再成立。
-2. 当前 `ToEntityArray()` 运行命中 4 处：`GasRuntimeDebugger.cs:889/2260/2458` 属于 Debugger observation；`CueManagedLifecycleSystem.cs:39` 属于 Boundary managed presentation。`GASAttributeModifierDeltaApplySystem` 不再通过 `_ownerDeltaQuery.ToEntityArray` 物化 owner；`GASGlobalTimerSystem` 与 `ActiveEffectStore` global index owner fallback 当前都是 `CreateEntityQuery + CalculateEntityCount + GetSingletonEntity`，不再是 `ToEntityArray` 命中。
+2. 当前 `ToEntityArray()` 运行命中 4 处：`GasRuntimeDebugger.cs:889/2260/2458` 属于 Debugger observation；`CueManagedLifecycleSystem.cs:39` 属于 Boundary managed presentation。`GASAttributeModifierDeltaApplySystem` 不再通过 `_ownerDeltaQuery.ToEntityArray` 物化 owner；`GASGlobalTimerSystem` current-frame cache miss fallback 当前是 `CreateEntityQuery + CalculateEntityCount + GetSingletonEntity`，不再是 `ToEntityArray` 命中；`ActiveEffectStore` global index owner 已改为 registered/cache owner，不再创建 fallback query。
 3. Runtime Core stored query 已从 `SystemAPI.QueryBuilder().Build()` 迁到 `state.GetEntityQuery(EntityQueryDesc)`，对齐 `PRF-33` / `CASE-46`。
 4. current frame 主链由 `GlobalTimer` singleton 驱动；`GASRuntimeFrameContext` 已优先使用 registered `GASManager.EntityGlobalTimer` owner，cache miss 才走 `EntityManager.CreateEntityQuery + CalculateEntityCount + GetSingletonEntity` fallback，仍需要 owner 化或 cache miss 计数证明低频。
 5. generated `AbilityCatalogCommitJob` 已从 `ComponentLookup.SetComponentEnabled` 随机访问切到 chunk-local `EnabledMask`；同实体 commit request 关闭和 auto-end request 写入不再作为 API 承载选型错误记录。
@@ -56,7 +56,7 @@
 | pending AttributeDelta owner-local chunk apply | `GASAttributeModifierDeltaApplySystem.cs:37-195` |
 | debugger queries | `GasRuntimeDebugger.cs:888-889`, `:2260`, `:2458` |
 | current-frame fallback query | `GASGlobalTimerSystem.cs:125-129` |
-| active effect global index fallback query | `ActiveEffectStore.cs:1374-1382` |
+| active effect global index registered owner cache | `ActiveEffectStore.cs:1368-1419` |
 | demo catalog direct init | `AutoChessBattleDefinitionCatalogBuilder.cs:51-58` |
 | demo bridge | `AutoChessGasCoreBridge.cs` |
 
