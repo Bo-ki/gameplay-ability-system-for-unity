@@ -307,22 +307,18 @@ Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "OwnerLocalInstantCommandFramePrepareSystem[\s\S]*?NextFrameSetByCallerType[\s\S]*GetBufferTypeHandle<OwnerLocalInstantNextFrameSetByCallerValueBuffer>[\s\S]*deferredSetByCallerValues\.Clear\(\)" `
     -Message "FramePrepare must move next-frame instant payloads into current owner-local instant payloads before clearing the deferred carrier."
-Assert-FileContains `
+Assert-FileNotContains `
     -Path $streamPhasePath `
-    -Pattern "OwnerLocalInstantCommandFlushSystem[\s\S]*?CollectOwnerLocalInstantCommandsJob[\s\S]*?FlushOwnerLocalInstantCommandsJob" `
-    -Message "Runtime Core must flush ASC owner-local instant commands through a deterministic merge system."
-Assert-FileContains `
-    -Path $streamPhasePath `
-    -Pattern "OwnerLocalInstantCommandRecordComparer[\s\S]*?x\.Command\.Sequence\.CompareTo\(y\.Command\.Sequence\)" `
-    -Message "Owner-local instant command flush must sort by command sequence before appending to the spec stream."
+    -Pattern "OwnerLocalInstantCommandFlushSystem" `
+    -Message "OwnerLocalInstantCommandFlushSystem must stay deleted; instant spec build must consume ASC owner-local commands directly."
 Assert-FileContains `
     -Path $scheduleContractPath `
     -Pattern "OwnerLocalInstantCommandFramePrepareSystem" `
     -Message "Owner-local instant command frame prepare system must be registered in the runtime schedule."
-Assert-FileContains `
+Assert-FileNotContains `
     -Path $scheduleContractPath `
     -Pattern "OwnerLocalInstantCommandFlushSystem" `
-    -Message "Owner-local instant command flush system must be registered in the runtime schedule."
+    -Message "Runtime schedule must not register the deleted owner-local instant command flush system."
 Assert-FileContains `
     -Path $queryLayoutPlanPath `
     -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.EffectCommandBuffer[\s\S]*GASRuntimeLayoutComponentSlot\.EffectCommandSetByCallerBuffer" `
@@ -335,14 +331,58 @@ Assert-FileContains `
     -Path $streamOwnerContractPath `
     -Pattern "EGasRuntimeFrameStreamId\.OwnerLocalInstantNextFrame[\s\S]*EGasRuntimeFrameStreamCarrier\.OwnerLocalDynamicBuffer,\s*[\r\n\s]*EGasRuntimeFrameStreamCarrier\.OwnerLocalDynamicBuffer" `
     -Message "OwnerLocalInstantNextFrame stream owner contract must use owner-local carriers across the frame boundary."
+Assert-FileNotContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "OwnerLocalInstantCommandFlushSystem" `
+    -Message "Generated instant spec build must not depend on the deleted owner-local instant command flush system."
 Assert-FileContains `
     -Path $generatedInstantEffectPath `
-    -Pattern "UpdateAfter\(typeof\(OwnerLocalInstantCommandFlushSystem\)\)" `
-    -Message "Generated instant spec build must run after owner-local instant command flush."
+    -Pattern "UpdateAfter\(typeof\(GEEffectCommandCatalogNormalizeSystem\)\)" `
+    -Message "Generated instant spec build must run after owner-local command catalog normalization."
 Assert-FileContains `
     -Path $codeGenTemplatePath `
-    -Pattern 'writer\.WriteLine\("\[UpdateAfter\(typeof\(OwnerLocalInstantCommandFlushSystem\)\)\]"' `
-    -Message "CodeGen template must regenerate the instant spec build order after owner-local instant command flush."
+    -Pattern 'writer\.WriteLine\("\[UpdateAfter\(typeof\(GEEffectCommandCatalogNormalizeSystem\)\)\]"' `
+    -Message "CodeGen template must regenerate the instant spec build order after owner-local command catalog normalization."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "OwnerLocalInstantCommandFlushSystem" `
+    -Message "CodeGen template must not regenerate the deleted owner-local instant command flush system dependency."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "CollectOwnerLocalInstantSpecCommandsJob\s*:\s*IJobChunk" `
+    -Message "Generated instant spec build must collect ASC owner-local instant commands directly."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "BuildOwnerLocalInstantSpecsJob\s*:\s*IJob" `
+    -Message "Generated instant spec build must allocate specs from owner-local records without a singleton command flush."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "OwnerLocalInstantSpecCommandRecordComparer[\s\S]*?x\.Command\.Sequence\.CompareTo\(y\.Command\.Sequence\)" `
+    -Message "Generated instant spec build must keep deterministic command-sequence ordering before spec allocation."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "CopySetByCallerValues\(ownerSetByCallerValues,\s*in command,\s*Payloads\)" `
+    -Message "Generated instant spec build must copy set-by-caller payload from ASC owner-local buffers."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "CopySetByCallerValues\(\s*Payloads,\s*record\.PayloadStart,\s*record\.PayloadCount,\s*command\.Sequence,\s*specSequence,\s*setByCallerValues\)" `
+    -Message "Generated instant spec build must remap owner-local payload into spec-local payload ranges."
+Assert-FileNotContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "CommandLookup\s*=\s*SystemAPI\.GetBufferLookup<GEEffectCommandBuffer>" `
+    -Message "Generated instant spec build must not read singleton GEEffectCommandBuffer as its input."
+Assert-FileNotContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "SpecBuildCommandCursor" `
+    -Message "Generated instant spec build must not scan singleton command stream cursor after owner-local consumer migration."
+Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "PrepareFrameLocalData\(EntityManager[\s\S]*?if \(commands\.Length == 0\)\s*[\r\n\s]*setByCallerValues\.Clear\(\);" `
+    -Message "EffectCommandSpecStream managed frame prepare must clear spec-local set-by-caller payload when no singleton commands remain."
+Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "PrepareFrameLocalData\(\s*ref GEEffectCommandStreamComponent stream[\s\S]*?if \(commands\.Length == 0\)\s*[\r\n\s]*setByCallerValues\.Clear\(\);" `
+    -Message "EffectCommandSpecStream job frame prepare must clear spec-local set-by-caller payload when no singleton commands remain."
 Assert-FileNotContains `
     -Path $generatedInstantEffectPath `
     -Pattern "DeltaLookup\s*=\s*SystemAPI\.GetBufferLookup<AttributeModifierBuffer>" `

@@ -184,10 +184,6 @@ namespace GAS.Runtime
                 EGasRuntimeCoreFramePhase.DeltaApply,
                 typeof(GASCoreSimulationSystemGroup)),
             new(
-                typeof(OwnerLocalInstantCommandFlushSystem),
-                EGasRuntimeCoreFramePhase.SpecEvaluation,
-                typeof(GASCoreSimulationSystemGroup)),
-            new(
                 typeof(GameplayOwnerLocalFactFlushSystem),
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
                 typeof(GASCoreSimulationSystemGroup)),
@@ -249,7 +245,6 @@ namespace GAS.Runtime
             typeof(AttributeThresholdAbilityLifecycleRequestSystem),
             typeof(AbilityLifecycleRequestSystem),
             typeof(AbilityStateCleanupSystem),
-            typeof(OwnerLocalInstantCommandFlushSystem),
             typeof(GameplayOwnerLocalFactFlushSystem),
             typeof(GameplayFactProjectionSystem),
         };
@@ -282,7 +277,6 @@ namespace GAS.Runtime
         private static readonly Type[] EffectCommandSpecStreamTargetSystemTypes =
         {
             typeof(GEEffectCommandSpecStreamFramePrepareSystem),
-            typeof(OwnerLocalInstantCommandFlushSystem),
             typeof(GameplayOwnerLocalFactFlushSystem),
             typeof(GameplayFactProjectionSystem),
             typeof(GameplayFactBoundaryProjectionSystem),

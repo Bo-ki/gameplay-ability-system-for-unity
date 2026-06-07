@@ -3,8 +3,10 @@
 ////     Do not modify it.     ////
 ///////////////////////////////////
 
+using System.Collections.Generic;
 using GAS.Runtime;
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -12,11 +14,23 @@ using Unity.Jobs;
 namespace GAS.Runtime.Generated
 {
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
-    [UpdateAfter(typeof(OwnerLocalInstantCommandFlushSystem))]
+    [UpdateAfter(typeof(GEEffectCommandCatalogNormalizeSystem))]
     public partial struct GEEffectSpecBuildSystem : ISystem
     {
+        private EntityQuery _ownerInstantCommandQuery;
+
         public void OnCreate(ref SystemState state)
         {
+            _ownerInstantCommandQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<ASCIdentityComponent>(),
+                    ComponentType.ReadOnly<GEEffectCommandBuffer>(),
+                    ComponentType.ReadOnly<GESetByCallerValueBuffer>(),
+                },
+            });
+            state.RequireForUpdate(_ownerInstantCommandQuery);
             state.RequireForUpdate<GEEffectCommandStreamComponent>();
             state.RequireForUpdate<GASDefinitionCatalogComponent>();
         }
@@ -27,15 +41,22 @@ namespace GAS.Runtime.Generated
             if (!GASGeneratedDefinitionCatalogLookup.IsCatalogCreated(catalogComponent.Catalog))
                 return;
 
-            var em = state.EntityManager;
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
-            if (!EffectCommandSpecStream.HasRequiredBuffers(em, streamEntity))
-                return;
 
-            state.Dependency = new InstantSpecBuildJob
+            var records = new NativeList<OwnerLocalInstantSpecCommandRecord>(1, Allocator.TempJob);
+            var payloads = new NativeList<GESetByCallerValueBuffer>(1, Allocator.TempJob);
+            var collectHandle = new CollectOwnerLocalInstantSpecCommandsJob
+            {
+                EntityType = SystemAPI.GetEntityTypeHandle(),
+                CommandType = SystemAPI.GetBufferTypeHandle<GEEffectCommandBuffer>(isReadOnly: true),
+                SetByCallerType = SystemAPI.GetBufferTypeHandle<GESetByCallerValueBuffer>(isReadOnly: true),
+                Records = records,
+                Payloads = payloads,
+            }.Schedule(_ownerInstantCommandQuery, state.Dependency);
+
+            var buildHandle = new BuildOwnerLocalInstantSpecsJob
             {
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
-                CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: true),
                 SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(),
                 SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(),
                 EntityStorageInfoLookup = SystemAPI.GetEntityStorageInfoLookup(),
@@ -43,14 +64,75 @@ namespace GAS.Runtime.Generated
                 TagMaskLookup = SystemAPI.GetComponentLookup<TagMaskComponent>(isReadOnly: true),
                 Catalog = catalogComponent.Catalog,
                 StreamEntity = streamEntity,
-            }.Schedule(state.Dependency);
+                Records = records,
+                Payloads = payloads,
+            }.Schedule(collectHandle);
+
+            var disposeRecordsHandle = records.Dispose(buildHandle);
+            state.Dependency = payloads.Dispose(disposeRecordsHandle);
+        }
+
+        private struct OwnerLocalInstantSpecCommandRecord
+        {
+            public Entity Owner;
+            public int LocalIndex;
+            public int PayloadStart;
+            public int PayloadCount;
+            public GEEffectCommandBuffer Command;
         }
 
         [BurstCompile]
-        private struct InstantSpecBuildJob : IJob
+        private struct CollectOwnerLocalInstantSpecCommandsJob : IJobChunk
+        {
+            [ReadOnly] public EntityTypeHandle EntityType;
+            [ReadOnly] public BufferTypeHandle<GEEffectCommandBuffer> CommandType;
+            [ReadOnly] public BufferTypeHandle<GESetByCallerValueBuffer> SetByCallerType;
+            public NativeList<OwnerLocalInstantSpecCommandRecord> Records;
+            public NativeList<GESetByCallerValueBuffer> Payloads;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var entities = chunk.GetNativeArray(EntityType);
+                var commands = chunk.GetBufferAccessor(ref CommandType);
+                var setByCallerValues = chunk.GetBufferAccessor(ref SetByCallerType);
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    var owner = entities[entityIndex];
+                    var ownerCommands = commands[entityIndex];
+                    var ownerSetByCallerValues = setByCallerValues[entityIndex];
+                    for (var commandIndex = 0; commandIndex < ownerCommands.Length; commandIndex++)
+                    {
+                        var command = ownerCommands[commandIndex];
+                        if (command.Kind != GEEffectCommandKind.Instant
+                            || command.Sequence <= 0)
+                        {
+                            continue;
+                        }
+
+                        var payloadStart = Payloads.Length;
+                        var payloadCount = CopySetByCallerValues(ownerSetByCallerValues, in command, Payloads);
+                        Records.Add(new OwnerLocalInstantSpecCommandRecord
+                        {
+                            Owner = owner,
+                            LocalIndex = commandIndex,
+                            PayloadStart = payloadStart,
+                            PayloadCount = payloadCount,
+                            Command = command,
+                        });
+                    }
+                }
+            }
+        }
+
+        [BurstCompile]
+        private struct BuildOwnerLocalInstantSpecsJob : IJob
         {
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            [ReadOnly] public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             public BufferLookup<GEEffectSpecBuffer> SpecLookup;
             public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
             [ReadOnly] public EntityStorageInfoLookup EntityStorageInfoLookup;
@@ -58,34 +140,45 @@ namespace GAS.Runtime.Generated
             [ReadOnly] public ComponentLookup<TagMaskComponent> TagMaskLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public Entity StreamEntity;
+            public NativeList<OwnerLocalInstantSpecCommandRecord> Records;
+            [ReadOnly] public NativeList<GESetByCallerValueBuffer> Payloads;
 
             public void Execute()
             {
                 if (!Catalog.IsCreated
                     || StreamEntity == Entity.Null
                     || !StreamLookup.HasComponent(StreamEntity)
-                    || !CommandLookup.HasBuffer(StreamEntity)
                     || !SpecLookup.HasBuffer(StreamEntity)
                     || !SetByCallerLookup.HasBuffer(StreamEntity))
                     return;
 
+                if (Records.Length == 0)
+                    return;
+
+                Records.Sort(new OwnerLocalInstantSpecCommandRecordComparer());
                 var stream = StreamLookup[StreamEntity];
-                var commands = CommandLookup[StreamEntity];
                 var specs = SpecLookup[StreamEntity];
                 var setByCallerValues = SetByCallerLookup[StreamEntity];
                 ref var catalog = ref Catalog.Value;
-                var start = ClampCursor(stream.SpecBuildCommandCursor, commands.Length);
-                for (var i = start; i < commands.Length; i++)
+                for (var i = 0; i < Records.Length; i++)
                 {
-                    var command = commands[i];
-                    if (command.Kind != GEEffectCommandKind.Instant)
-                        continue;
+                    var record = Records[i];
+                    var command = record.Command;
                     if (!CanBuildInstantSpec(ref catalog, in command, EntityStorageInfoLookup, DestroyingLookup, TagMaskLookup, out var gameplayEffectIndex))
                         continue;
 
+                    var specSequence = Allocate(ref stream.NextSpecSequence);
+                    var setByCallerStart = setByCallerValues.Length;
+                    var setByCallerCount = CopySetByCallerValues(
+                        Payloads,
+                        record.PayloadStart,
+                        record.PayloadCount,
+                        command.Sequence,
+                        specSequence,
+                        setByCallerValues);
                     specs.Add(new GEEffectSpecBuffer
                     {
-                        Sequence = Allocate(ref stream.NextSpecSequence),
+                        Sequence = specSequence,
                         SourceCommandSequence = command.Sequence,
                         Frame = command.Frame,
                         SourceAsc = command.SourceAsc,
@@ -102,14 +195,12 @@ namespace GAS.Runtime.Generated
                         ContextId = command.ContextId,
                         ParentContextId = command.ParentContextId,
                         TargetDataKind = command.TargetDataKind,
-                        SetByCallerStart = command.SetByCallerStart,
-                        SetByCallerCount = command.SetByCallerCount,
+                        SetByCallerStart = setByCallerCount > 0 ? setByCallerStart : 0,
+                        SetByCallerCount = setByCallerCount,
                         Flags = gameplayEffectIndex,
                     });
-                    AssignSpecSequence(setByCallerValues, command.SetByCallerStart, command.SetByCallerCount, command.Sequence, specs[specs.Length - 1].Sequence);
                 }
 
-                stream.SpecBuildCommandCursor = commands.Length;
                 StreamLookup[StreamEntity] = stream;
             }
         }
@@ -193,27 +284,92 @@ namespace GAS.Runtime.Generated
                 && destroyingLookup.IsComponentEnabled(asc);
         }
 
-        private static void AssignSpecSequence(
-            DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+        private struct OwnerLocalInstantSpecCommandRecordComparer : IComparer<OwnerLocalInstantSpecCommandRecord>
+        {
+            public int Compare(OwnerLocalInstantSpecCommandRecord x, OwnerLocalInstantSpecCommandRecord y)
+            {
+                var result = x.Command.Sequence.CompareTo(y.Command.Sequence);
+                if (result != 0)
+                    return result;
+
+                result = CompareEntity(x.Owner, y.Owner);
+                if (result != 0)
+                    return result;
+
+                return x.LocalIndex.CompareTo(y.LocalIndex);
+            }
+        }
+
+        private static int CopySetByCallerValues(
+            DynamicBuffer<GESetByCallerValueBuffer> source,
+            in GEEffectCommandBuffer command,
+            NativeList<GESetByCallerValueBuffer> target)
+        {
+            if (!source.IsCreated || command.SetByCallerCount <= 0)
+                return 0;
+
+            var start = command.SetByCallerStart < 0 ? 0 : command.SetByCallerStart;
+            if (start >= source.Length)
+                return 0;
+
+            var count = command.SetByCallerCount;
+            if (start + count > source.Length)
+                count = source.Length - start;
+
+            var copied = 0;
+            for (var i = 0; i < count; i++)
+            {
+                var value = source[start + i];
+                if (value.CommandSequence != command.Sequence)
+                    continue;
+
+                value.CommandSequence = command.Sequence;
+                value.SpecSequence = 0;
+                target.Add(value);
+                copied++;
+            }
+
+            return copied;
+        }
+
+        private static int CopySetByCallerValues(
+            NativeList<GESetByCallerValueBuffer> source,
             int start,
             int count,
             int commandSequence,
-            int specSequence)
+            int specSequence,
+            DynamicBuffer<GESetByCallerValueBuffer> target)
         {
-            if (count <= 0)
-                return;
-            if (start < 0) start = 0;
-            var end = start + count;
-            if (end > setByCallerValues.Length)
-                end = setByCallerValues.Length;
-            for (var i = start; i < end; i++)
+            if (!source.IsCreated || count <= 0)
+                return 0;
+
+            if (start < 0)
+                start = 0;
+            if (start >= source.Length)
+                return 0;
+            if (start + count > source.Length)
+                count = source.Length - start;
+
+            var copied = 0;
+            for (var i = 0; i < count; i++)
             {
-                var value = setByCallerValues[i];
+                var value = source[start + i];
                 if (value.CommandSequence != commandSequence)
                     continue;
+
+                value.CommandSequence = commandSequence;
                 value.SpecSequence = specSequence;
-                setByCallerValues[i] = value;
+                target.Add(value);
+                copied++;
             }
+
+            return copied;
+        }
+
+        private static int CompareEntity(Entity left, Entity right)
+        {
+            var result = left.Index.CompareTo(right.Index);
+            return result != 0 ? result : left.Version.CompareTo(right.Version);
         }
     }
 

@@ -843,10 +843,13 @@ namespace GAS.Runtime
 
             var commands = em.GetBuffer<GEEffectCommandBuffer>(streamEntity);
             var setByCallerValues = em.GetBuffer<GESetByCallerValueBuffer>(streamEntity);
-            CompactConsumedCommands(
-                commands,
-                setByCallerValues,
-                ClampCursor(stream.SpecBuildCommandCursor, commands.Length));
+            if (commands.Length == 0)
+                setByCallerValues.Clear();
+            else
+                CompactConsumedCommands(
+                    commands,
+                    setByCallerValues,
+                    ClampCursor(stream.SpecBuildCommandCursor, commands.Length));
 
             em.GetBuffer<GEEffectSpecBuffer>(streamEntity).Clear();
             em.GetBuffer<GameplayEventBuffer>(streamEntity).Clear();
@@ -872,10 +875,13 @@ namespace GAS.Runtime
             if (stream.LastClearedFrame == frame)
                 return;
 
-            CompactConsumedCommands(
-                commands,
-                setByCallerValues,
-                ClampCursor(stream.SpecBuildCommandCursor, commands.Length));
+            if (commands.Length == 0)
+                setByCallerValues.Clear();
+            else
+                CompactConsumedCommands(
+                    commands,
+                    setByCallerValues,
+                    ClampCursor(stream.SpecBuildCommandCursor, commands.Length));
 
             specs.Clear();
             facts.Clear();
