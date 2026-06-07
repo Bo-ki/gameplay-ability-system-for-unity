@@ -38,7 +38,7 @@ flowchart TB
 
     Definition -->|"immutable definitions"| Core
     Shell -->|"intent, no EntityManager"| Boundary
-    Boundary -->|"request entity / command stream"| Core
+    Boundary -->|"command record / owner-local boundary buffer"| Core
     Core -->|"typed facts / deltas / diagnostics facts"| Boundary
     Boundary -->|"read model / markers / replay / logs / debugger snapshot"| Shell
 ```
@@ -100,7 +100,7 @@ flowchart TB
 
 ### 职责
 
-1. `CommandPort`：把应用壳层意图转换为 request entity、command buffer 或等价 command data；公开方法必须使用 `Request*` 命名，避免伪装成立即执行的 OOP 对象操作。
+1. `CommandPort`：把应用壳层意图转换为 command record、owner-local boundary buffer 或等价 command data；公开方法必须使用 `Request*` 命名，避免伪装成立即执行的 OOP 对象操作。低频 request entity 只能作为显式 structural lifecycle 例外，不是高频 gameplay 默认承载。
 2. `ReadModel`：提供只读镜像，不暴露 `EntityManager`、`EntityQuery`、runtime buffer 可写句柄。
 3. `PresentationOutboxBridge`：消费 Core facts，输出 UI/Cue/VFX/SFX/log marker；无头 Demo 也必须走同一 outbox 语义。
 4. `DiagnosticsSink` / `ReplaySink`：导出结构化日志、timing、buffer pressure、fact count、scale profile，不参与 gameplay routing。

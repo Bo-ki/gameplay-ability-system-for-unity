@@ -16,7 +16,7 @@ namespace GAS.Runtime
             float value,
             int calculationCode = 0)
         {
-            var eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(em);
+            var hasEventWriter = TryBeginGameplayEventWriter(em, out var eventWriter);
             var changed = SetOutputValue(
                 em,
                 ge,
@@ -25,7 +25,8 @@ namespace GAS.Runtime
                 value,
                 ref eventWriter,
                 calculationCode);
-            eventWriter.Flush();
+            if (hasEventWriter)
+                eventWriter.Flush();
             return changed;
         }
 
@@ -92,7 +93,9 @@ namespace GAS.Runtime
             int eventCode,
             float value)
         {
-            var eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(em);
+            if (!TryBeginGameplayEventWriter(em, out var eventWriter))
+                return;
+
             EnqueueOutputUpdatedFact(
                 ref eventWriter,
                 ge,
@@ -177,6 +180,21 @@ namespace GAS.Runtime
                 EventCode = eventCode,
                 Value = value,
             });
+        }
+
+        private static bool TryBeginGameplayEventWriter(
+            EntityManager em,
+            out EffectCommandSpecStream.GameplayEventWriter eventWriter)
+        {
+            eventWriter = default;
+            if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity))
+                return false;
+
+            eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(
+                em,
+                streamEntity,
+                GASRuntimeFrameContext.ResolveCurrentFrame(em));
+            return eventWriter.IsCreated;
         }
     }
 }

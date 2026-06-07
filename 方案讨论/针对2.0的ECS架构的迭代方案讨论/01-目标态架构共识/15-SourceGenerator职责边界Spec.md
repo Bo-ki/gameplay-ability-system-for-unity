@@ -4,7 +4,7 @@
 
 定义 Luban + SourceGenerator 在目标态 EX-GAS 2.0 中的权限边界。核心结论：SourceGenerator 负责把配置输入压缩成 Runtime Core 可消费的不可变数据和纯胶水；Runtime Core 的生命周期、调度、查询、NativeContainer、结构变化和性能归因必须由手写 ECS System 拥有。
 
-本文件是目标态 Spec，不记录实现生成文件、gate 结果或任务状态。实现链路事实写入 `../00-当前架构事实/SourceGenerator链路复审事实.md`。
+本文件是目标态 Spec，不记录实现生成文件、gate 结果或任务状态。现实链路事实 owner 为 `../00-当前架构事实/SourceGenerator链路复审事实.md`。
 
 ## 分层边界
 

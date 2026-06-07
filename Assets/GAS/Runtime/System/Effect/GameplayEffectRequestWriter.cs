@@ -77,7 +77,13 @@ namespace GAS.Runtime
                     return false;
             }
 
-            var writer = EffectCommandSpecStream.BeginCommandWriter(em);
+            if (!TryResolveStreamWriteContext(em, out var streamEntity, out var currentFrame))
+                return false;
+
+            var writer = EffectCommandSpecStream.BeginCommandWriter(em, streamEntity, currentFrame);
+            if (!writer.IsCreated)
+                return false;
+
             for (var i = 0; i < targetAscs.Count; i++)
             {
                 PrepareAppendableCommand(
@@ -121,8 +127,16 @@ namespace GAS.Runtime
             if (!PrepareAppendableCommand(em, request, targetAsc, targetDataKind, source, out var command))
                 return false;
 
-            EffectCommandSpecStream.AppendCommand(em, command, setByCallerValues);
-            return true;
+            if (!TryResolveStreamWriteContext(em, out var streamEntity, out var currentFrame))
+                return false;
+
+            var writer = EffectCommandSpecStream.BeginCommandWriter(em, streamEntity, currentFrame);
+            if (!writer.IsCreated)
+                return false;
+
+            var resolved = writer.AppendCommand(command, setByCallerValues);
+            writer.Flush();
+            return resolved.Sequence > 0;
         }
 
         public static bool TryAppendSimpleInstantCommand(
@@ -136,8 +150,16 @@ namespace GAS.Runtime
             if (!PrepareAppendableCommand(em, request, targetAsc, targetDataKind, source, out var command))
                 return false;
 
-            EffectCommandSpecStream.AppendCommand(em, command, setByCallerValues);
-            return true;
+            if (!TryResolveStreamWriteContext(em, out var streamEntity, out var currentFrame))
+                return false;
+
+            var writer = EffectCommandSpecStream.BeginCommandWriter(em, streamEntity, currentFrame);
+            if (!writer.IsCreated)
+                return false;
+
+            var resolved = writer.AppendCommand(command, setByCallerValues);
+            writer.Flush();
+            return resolved.Sequence > 0;
         }
 
         public static bool TryPrepareAppendableCommand(
@@ -200,6 +222,19 @@ namespace GAS.Runtime
             return request.SourceAbility != Entity.Null
                 ? GEEffectCommandSource.Ability
                 : GEEffectCommandSource.RuntimeBoundary;
+        }
+
+        private static bool TryResolveStreamWriteContext(
+            EntityManager em,
+            out Entity streamEntity,
+            out int currentFrame)
+        {
+            currentFrame = 0;
+            if (!EffectCommandSpecStream.TryGetSingleton(em, out streamEntity))
+                return false;
+
+            currentFrame = GASRuntimeFrameContext.ResolveCurrentFrame(em);
+            return true;
         }
 
         private static Entity ResolveAcceptedOwner(in GEApplyRequestComponent request, Entity fallbackTarget)

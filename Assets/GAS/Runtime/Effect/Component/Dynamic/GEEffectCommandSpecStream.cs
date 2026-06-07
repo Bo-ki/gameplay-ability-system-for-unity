@@ -538,20 +538,6 @@ namespace GAS.Runtime
                    && em.HasComponent<GEEffectCommandStreamComponent>(streamEntity);
         }
 
-        public static CommandWriter BeginCommandWriter(EntityManager em)
-        {
-            if (!TryGetSingleton(em, out var streamEntity))
-                return default;
-            return BeginCommandWriter(em, streamEntity, GASRuntimeFrameContext.ResolveCurrentFrame(em));
-        }
-
-        public static CommandWriter BeginCommandWriter(EntityManager em, int currentFrame)
-        {
-            if (!TryGetSingleton(em, out var streamEntity))
-                return default;
-            return BeginCommandWriter(em, streamEntity, currentFrame);
-        }
-
         public static CommandWriter BeginCommandWriter(
             EntityManager em,
             Entity streamEntity,
@@ -574,13 +560,6 @@ namespace GAS.Runtime
                 currentFrame);
         }
 
-        public static GameplayEventWriter BeginGameplayEventWriter(EntityManager em)
-        {
-            if (!TryGetSingleton(em, out var streamEntity))
-                return default;
-            return BeginGameplayEventWriter(em, streamEntity, GASRuntimeFrameContext.ResolveCurrentFrame(em));
-        }
-
         public static GameplayEventWriter BeginGameplayEventWriter(
             EntityManager em,
             Entity streamEntity,
@@ -599,41 +578,6 @@ namespace GAS.Runtime
                 stream,
                 facts,
                 currentFrame);
-        }
-
-        public static GameplayEventBuffer AppendGameplayEvent(EntityManager em, in GameplayEventBuffer fact)
-        {
-            var writer = BeginGameplayEventWriter(em);
-            var resolved = writer.AppendGameplayEvent(fact);
-            writer.Flush();
-            return resolved;
-        }
-
-        public static GEEffectCommandBuffer AppendCommand(EntityManager em, in GEEffectCommandBuffer command)
-        {
-            return AppendCommand(em, command, null);
-        }
-
-        public static GEEffectCommandBuffer AppendCommand(
-            EntityManager em,
-            in GEEffectCommandBuffer command,
-            IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues)
-        {
-            var writer = BeginCommandWriter(em);
-            var resolved = writer.AppendCommand(command, setByCallerValues);
-            writer.Flush();
-            return resolved;
-        }
-
-        public static GEEffectCommandBuffer AppendCommand(
-            EntityManager em,
-            in GEEffectCommandBuffer command,
-            DynamicBuffer<GESetByCallerRequestValueBuffer> setByCallerValues)
-        {
-            var writer = BeginCommandWriter(em);
-            var resolved = writer.AppendCommand(command, setByCallerValues);
-            writer.Flush();
-            return resolved;
         }
 
         public static GEEffectCommandBuffer AppendPreparedCommand(

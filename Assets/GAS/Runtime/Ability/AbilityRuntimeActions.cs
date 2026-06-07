@@ -289,7 +289,17 @@ namespace GAS.Runtime
             int sourceAbilityCode)
         {
             TryGetBaseInfo(entityManager, ability, out var baseInfo);
-            EffectCommandSpecStream.AppendGameplayEvent(entityManager, new GameplayEventBuffer
+            if (!EffectCommandSpecStream.TryGetSingleton(entityManager, out var streamEntity))
+                return;
+
+            var eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(
+                entityManager,
+                streamEntity,
+                GASRuntimeFrameContext.ResolveCurrentFrame(entityManager));
+            if (!eventWriter.IsCreated)
+                return;
+
+            eventWriter.AppendGameplayEvent(new GameplayEventBuffer
             {
                 EventType = type,
                 Domain = EGameplayFactDomain.Ability,
@@ -303,6 +313,7 @@ namespace GAS.Runtime
                 ReasonCode = (int)reason,
                 Value = sourceAbilityCode,
             });
+            eventWriter.Flush();
         }
 
         private static bool TryGetBaseInfo(EntityManager entityManager, Entity ability, out AbilityStateComponent baseInfo)

@@ -61,7 +61,7 @@
 
 这说明 AM3 不是纯 Contract，但当前仍属于 proof/migration 阶段：
 
-- command/spec/delta/fact 都挂在 singleton `GEEffectCommandStreamComponent` owner 的 DynamicBuffer 上。
+- command/spec/delta/fact 都挂在 singleton `GEEffectCommandStreamComponent` owner 的 DynamicBuffer 上。2026-06-07 本轮已删除 `GEEffectCommandSpecStream` 的隐式 singleton writer/append helper；Runtime helper 调用方现在需要先解析 stream owner，再以 `Begin*Writer(em, streamEntity, currentFrame)` 显式写入。这改善了 API 承载边界，但没有改变底层 singleton DynamicBuffer carrier 的 proof/migration 性质。
 - `GEEffectCommandSpecStreamFramePrepareSystem` 已从主线程 `EntityManager.GetBuffer` compact/clear 改为 scheduled `IJob`；`GameplayFactProjectionSystem` 已从主线程 projection/legacy bridge 改为 scheduled `IJob`，并且 Attribute/Cue/Tag 边界投影已移出 CoreSimulation。
 - `GEExecutionCalculationSystem`、`GEExecutionCalculationOutputModifierSystem`、`GASActiveEffectPreTickSystem`、`AbilityLifecycleRequestSystem`、`AbilityStateCleanupSystem` 已从 `Complete()` / 主线程 cleanup 消费改为 scheduled job chain；其中 output modifier 使用 `NativeStream` fan-in 后在 scheduled merge job 内排序、应用属性、写 delta，并把 ASC dirty 追加为 frame-local `AttributeOwnerMarkerRequestBuffer`。
 - `ASCCommandBufferResolveSystem`、generated `AbilityCatalogCommitSystem`、generated `GEEffectCommandCatalogNormalizeSystem`、generated `GEEffectSpecBuildSystem`、generated `GASAttributeSetReduceApplySystem`、generated `GASActiveEffectMutationApplySystem`、generated `GASActiveEffectPreTickSystem`、generated `GASActiveEffectRemoveSystem` 均已迁到 scheduled `IJob` / `IJobChunk` 路径，并且 codegen 模板已同步；ASC owner-local pending/destroying/dirty、ability commit/auto-end、explicit remove pending 和 ability cleanup current-entity marker 已使用 chunk `EnabledMask`。generated active mutation 当前仍是 singleton DynamicBuffer serial `IJob`，但已在 job 内按 owner range applicator 批处理，同 owner range 的 store/slot/snapshot 不再逐 command 重复获取；helper 内仍有 Buffer/ComponentLookup random access，不能写成 scale-ready 终局。
@@ -102,7 +102,7 @@
 3. 这条事实用于对齐本地官方规则 `PRF-33` / `CASE-46`：stored query 归属 `SystemState`，不再由 `SystemAPI.QueryBuilder().Build()` 承载长期生命周期。
 4. 同轮扫描中，`IJobChunk.Execute` 内直接 `for (... chunk.Count ...)` 遍历已经清零；涉及 enableable mask 的 job 使用 `ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count)` 或已经不属于 `IJobChunk` 语义。
 5. 这不等于所有 query 成本已经终局优化：`CalculateChunkCountWithoutFiltering()`、singleton stream sizing、Debugger observation query、Cue managed lifecycle query 仍需按 owner / phase / cost 分类报告。
-6. 2026-06-07 整体截面确认 `EntityManager.CreateEntityQuery(...)` 当前只剩 1 处：`GasRuntimeDebugger.cs:888` 属于 Debugger observation。`GASRuntimeFrameContext` current-frame lookup 与 `ActiveEffectStore` global index owner 均已改为 registered/cache owner，不再创建 fallback query；剩余工作是容量、cache integrity 和 hot path 触发证据。
+6. 2026-06-07 codedb + 文本复核确认 `EntityManager.CreateEntityQuery(...)` 当前运行命中 0。`GASRuntimeFrameContext` current-frame lookup 与 `ActiveEffectStore` global index owner 均已改为 registered/cache owner，不再创建 fallback query；剩余工作是容量、cache integrity 和 hot path 触发证据。
 
 ### 6. Observation / Debugger
 
@@ -138,7 +138,7 @@
 | generated `AbilityCatalogCommitSystem` | commit request 关闭与 auto-end request 写入均改为 chunk `EnabledMask`，不再使用 `ComponentLookup.SetComponentEnabled` 做当前 ability 同实体随机访问 |
 | generated `GEEffectSpecBuildSystem` / `GASAttributeSetReduceApplySystem` | codegen 输出 scheduled `[BurstCompile] IJob`，并修复 cue-only spec 与 `ASCDestroyingComponent` enabled bit 判定 |
 
-本条不等于 Runtime Core 已达终局：singleton stream 写入、ActiveMutation 的 serial `IJob` / helper BufferLookup / ComponentLookup store、剩余边界缓冲仍需继续按 `QRY-01`、`PRF-09`、`BUF-02`、`NAT-03` 审查。
+本条不等于 Runtime Core 已达终局：singleton stream carrier、ActiveMutation 的 serial gather / helper BufferLookup / ComponentLookup store、剩余边界缓冲仍需继续按 `QRY-01`、`PRF-09`、`BUF-02`、`NAT-03` 审查。隐式 stream writer/append helper 已收窄为显式 owner 写入，但 command/spec/delta/fact 仍共享同一个 stream owner。
 
 ### P1：Hot path 主线程 Query 已继续收窄，但 singleton fallback 仍需 owner 化
 
@@ -149,7 +149,8 @@
 3. `Assets/GAS/Runtime/System` 与 generated runtime stored query 当前已统一使用 `state.GetEntityQuery(EntityQueryDesc)`；`SystemAPI.QueryBuilder().Build()` 扫描为 0。
 4. `Assets/GAS/Runtime` 与 generated runtime 内 `SystemAPI.Query<...>` / `SystemAPI.Query(...)` 当前 0 命中；Cue managed lifecycle 使用 stored query + `ToEntityArray`，归 Boundary managed presentation。
 5. Runtime Core 的 pending AttributeDelta owner-local apply 已迁到 ASC chunk-local `IJobChunk`，不再通过 `_ownerDeltaQuery.ToEntityArray(Allocator.TempJob)` 物化 owner，也不再把 owner chunk 写入计为 random lookup；旧 stream migration fallback 已删除并由诊断脚本防回流。剩余 Runtime Core 风险集中在 singleton stream carrier、generated instant delta record / fan-in 证明、`ActiveEffectStore` global index capacity / cache integrity 证据。generated active mutation 逐 command store/slot/snapshot lookup 已收束为 owner range 入口，但 command source 仍来自 singleton carrier。
-6. 按 `QRY-01`、`PRF-05`、`CASE-01` 的规则口径，`SystemAPI.Query` 仍只能作为 managed boundary / proof / debug 工具，不能重新进入 Core hot path。
+6. `GEEffectCommandSpecStream` 不再暴露 `BeginCommandWriter(EntityManager)`、`BeginGameplayEventWriter(EntityManager)` 或 `AppendCommand/AppendGameplayEvent(EntityManager, ...)` 这种隐式 singleton 写入口；`GameplayEffectRequestWriter`、`AbilityRuntimeActions`、execution/magnitude/cleanup helper 当前都要显式解析 stream owner 后写入。该事实只说明 helper API 边界变窄，不说明 stream carrier 已达终局。
+7. 按 `QRY-01`、`PRF-05`、`CASE-01` 的规则口径，`SystemAPI.Query` 仍只能作为 managed boundary / proof / debug 工具，不能重新进入 Core hot path。
 
 当前检出：
 
@@ -195,6 +196,8 @@
 - `GameplayEventBuffer`
 
 `AbilityCommandBuffer` 已从 singleton stream owner 迁出，当前只保留在 ASC owner-local command buffer。上述 stream 仍符合迁移期最小接入成本，但违反 `BUF-02` 的终局要求。后续必须按数据性质分别收敛到 `NativeStream`、target-grouped range、owner-local store 或 compact buffer。
+
+补充事实：本轮 Runtime helper 隐式写入口已收窄，`GEEffectCommandSpecStream` 只保留显式 `BeginCommandWriter(em, streamEntity, currentFrame)` / `BeginGameplayEventWriter(em, streamEntity, currentFrame)` writer 构造。`TryGetSingleton` 仍是 owner 解析入口，不能把这次 API 收缩误写成 singleton stream owner 已退出。
 
 ### P1：Generated runtime 需要同等 DOTS 审查
 

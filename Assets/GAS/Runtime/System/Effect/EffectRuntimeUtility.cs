@@ -107,9 +107,10 @@ namespace GAS.Runtime
             EntityManager em,
             Entity ge)
         {
-            var eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(em);
+            var hasEventWriter = TryBeginGameplayEventWriter(em, out var eventWriter);
             CleanupActiveEffect(em, ge, ref eventWriter);
-            eventWriter.Flush();
+            if (hasEventWriter)
+                eventWriter.Flush();
         }
 
         public static void CleanupActiveEffect(
@@ -402,6 +403,21 @@ namespace GAS.Runtime
                 GameplayEffectCode = gameplayEffectCode,
                 EventCode = gameplayEffectCode,
             });
+        }
+
+        private static bool TryBeginGameplayEventWriter(
+            EntityManager em,
+            out EffectCommandSpecStream.GameplayEventWriter eventWriter)
+        {
+            eventWriter = default;
+            if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity))
+                return false;
+
+            eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(
+                em,
+                streamEntity,
+                GASRuntimeFrameContext.ResolveCurrentFrame(em));
+            return eventWriter.IsCreated;
         }
     }
 }

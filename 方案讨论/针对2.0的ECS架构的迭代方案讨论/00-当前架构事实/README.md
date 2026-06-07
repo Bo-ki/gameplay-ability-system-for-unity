@@ -49,11 +49,12 @@
 3. `GEExecutionCalculationExtensionSystemGroup` 是 CoreSimulation 内扩展插槽。
 4. generated runtime 不再通过 `RuntimeSystemRegistration.gen.cs` 生成注册 helper；当前由 `GASSystemScheduleContract` 的 generated type-name 列表把 1 个 CommandResolve system 与 6 个 CoreSimulation systems 注册进主链，generated runtime 仍是当前执行事实的一部分。
 5. `GASDefinitionCatalogBlob` 已被 generated runtime 读取；旧 managed config/prototype path 不能再代表 hot path。
-6. `ToEntityArray` 当前运行命中 4 处：Debugger observation 3 处、Cue managed boundary 1 处；`GASRuntimeFrameContext` current-frame lookup 已改为 registered/cache owner，cache miss 直接失败，不再创建 fallback query。`ActiveEffectStore` global index owner 已改为 registered/cache owner，不再创建 fallback query。当前热路径风险重点已收窄到 singleton stream owner、generated delta record carrier、`GASRuntimeShell` internal capability 面和容量/ordering 证据；active mutation apply 与 pending AttributeDelta owner-local apply 均已进入 ASC chunk-local IJobChunk，旧 random lookup 估算为 0。
+6. `EntityManager.CreateEntityQuery` 当前运行命中 0；`ToEntityArray` 当前运行命中 4 处：Debugger observation 3 处、Cue managed boundary 1 处；`GASRuntimeFrameContext` current-frame lookup 已改为 registered/cache owner，cache miss 直接失败，不再创建 fallback query。`ActiveEffectStore` global index owner 已改为 registered/cache owner，不再创建 fallback query。`GEEffectCommandSpecStream` 的隐式 singleton writer/append helper 已删除，Runtime helper 改为显式解析 stream owner 后写入。当前热路径风险重点已收窄到 singleton stream carrier、generated delta record carrier、`GASRuntimeShell` internal capability 面和容量/ordering 证据；active mutation apply 与 pending AttributeDelta owner-local apply 均已进入 ASC chunk-local IJobChunk，旧 random lookup 估算为 0。
 7. AutoChessDemo 当前已恢复为业务分层 demo，不是“删除后待重构”状态。
 8. Luban/sourcegen 已不再强制依赖 Unity Editor UI 或 Unity batchmode：`Tools/CodeGen/Generate-GAS-SourceGen.bat` 与 `Tools/GasCodeGenCli` 可直接通过 dotnet 驱动 Luban JSON/C# export + GAS CodeGen；Unity batchmode 仅作为编译域、`BeanUpdater`、`AssetDatabase` 和 asmdef import 验证路径。
 9. AutoChess 已从手写最小 catalog 切到通用 generated catalog：`AutoChessBattleDefinitionCatalogBuilder` 安装 `GASGeneratedDefinitionCatalogBuilder.BuildCatalog()`；2026-06-07 Run3 归档验证显示 `completed=True`、`blockingDebugErrors=0`，证据见 `_归档/2026-06-07-AutoChessBattleValidation-ActiveMutationChunkApply-Run3.log`。
 10. `GASRuntimeShell` 当前仍是多能力 ECS 句柄口：同一 facade 暴露 World、`EntityManager`、command port、read model、job drain 和 runtime singleton；消费者包括 runtime binding、AutoChess adapter 和 Editor watcher。该事实归入 R1/R6 收权，不应写成目标态 Shell 设计。
+11. `EffectRuntimeUtility` 当前是迁移期静态 helper，不是成熟 Runtime lane owner：`TryGetStaticDefinitionBlob`、`ApplyInstantEffect`、`ApplyInactiveDurationEffect`、`HasOngoingRequirements`、`TryMergeStackingApplication`、`HandleDurationExpired`、`ActivateDurationEffect`、`DeactivateOngoingEffect`、`ReactivateOngoingEffect`、`ShouldReject` 和无 ECB 版本 `FinalizeEffectDestroy` 仍为空/固定返回；已实现部分集中在 removal / cleanup、active modifier/tag 移除、typed removed event 写入和 store cleanup。这说明 active effect lifecycle 仍需回到明确 owner system / job / store，而不能把 helper 当目标态接口。
 
 ## 核心问题看板
 
@@ -69,7 +70,7 @@
 | ISSUE-008 | DOTS 官方机制已部分进入规则，但 contract 与 runtime proof 需继续拆分 | Active | P1 | R0 / R4 / R5 |
 | ISSUE-009 | 5 段主链已存在；frame/query/stream owner 仍未完全目标态化 | Active | P1 | R2 / R3 / R4 |
 | ISSUE-010 | 执行范式旧风险已收窄；ASC dirty/present、execution output applied、active mutation apply、pending AttributeDelta owner-local apply 已收口到 owner chunk applicator；当前主要是 singleton stream、SourceAttribute snapshot lane 与 boundary managed query 风险 | Active | P1 | R2 / R3 / R7 |
-| ISSUE-011 | 临时 query 泛滥旧口径已缓解；当前 API 承载风险集中在 singleton owner、`GASRuntimeShell` 多能力 facade、global facade、generated delta record carrier 和 active mutation singleton command carrier | Active | P1 | R1 / R2 / R3 / R6 |
+| ISSUE-011 | 临时 query 泛滥旧口径已缓解；隐式 stream writer/append helper 已收窄为显式 owner 写入；当前 API 承载风险集中在 singleton stream carrier、`GASRuntimeShell` 多能力 facade、global facade、generated delta record carrier 和 active mutation singleton command carrier | Active | P1 | R1 / R2 / R3 / R6 |
 | ISSUE-012 | 策划配置能力缺失：默认编辑对象仍是技术表行和协议字段，缺少业务能力包、影响分析、保存前配置图校验、Runtime trace preview 和发布校验快照 | Active | P1 | R5 / Authoring 配置链 / Spec 19 |
 | ISSUE-013 | 新增能力业务推进链路过长：策划和程序无法区分配置型能力、胶水扩展型能力与 Runtime 语义型能力，纯配置变化也容易被迫进入程序排错 | Active | P1 | R5 / Authoring 配置链 / Spec 22 |
 
@@ -81,7 +82,8 @@
 2. **已完成：收缩 Presentation/Replay 输入**：`PresentationOutboxProjectionSystem` 与 `ReplayLogSystem` 不再双读 Attribute/Cue/Tag/Damage 边界缓冲，只从 `GameplayEventBuffer` typed fact 投影。
 3. **已完成：generated active mutation 模板瘦身切口**：不把 `.gen.cs` 当唯一事实源，模板 `GasGlueCodeGenPhases` 与当前 generated 输出同步。active mutation 已从直接 serial stream loop 推进为 frame-local command list、owner/sequence/context 排序、owner range applicator 和 runtime counters。它仍不是 owner-local store 终局，后续按新任务继续拆 store。
 4. **已完成：global facade Runtime helper 收缩切口**：`GASManager.EntityManager` 只允许 bootstrap、authoring/prototype、Boundary facade、Debugger、demo adapter 和 store guard 使用；Runtime Core helper、config component 和 generated template 禁止通过全局 facade 写 ECS。当前 `EffectCommandSpecStream` fallback、`PresentationEntityBindingRegistry`、`GameplayCueUnit`、`GameplayCueBase` 的内部全局读取已删除，GameObject binding 已按 `World.SequenceNumber + Entity` 做 world-aware key。
-5. **继续：结构变化证据闭环**：用 `GasRuntimeOfficialToolDiff`、Profiler/Debugger counters 和 AutoChess 规模门拆分 Core/Boundary/Demo/Observation 成本。
+5. **已完成：Runtime helper 隐式 stream writer 收缩切口**：`GEEffectCommandSpecStream` 不再暴露 `BeginCommandWriter(EntityManager)`、`BeginGameplayEventWriter(EntityManager)` 或 `AppendCommand/AppendGameplayEvent(EntityManager, ...)`；Runtime helper 必须显式解析 stream owner 和 frame 后写 command/fact。该切口不改变 singleton DynamicBuffer carrier 仍是 proof/migration 的事实。
+6. **继续：结构变化证据闭环**：用 `GasRuntimeOfficialToolDiff`、Profiler/Debugger counters 和 AutoChess 规模门拆分 Core/Boundary/Demo/Observation 成本。
 
 ## 关键数据点
 
@@ -169,7 +171,7 @@
 
 1. ASC command resolve、generated ability commit、generated normalize/spec-build/reduce、active mutation/pre-tick/remove、ability lifecycle/cleanup 和 fact projection 已进入 scheduled job 形态；current-entity enableable 清理已大幅转向 chunk `EnabledMask`。
 2. active mutation 已完成 gather + ASC chunk-local apply，pending AttributeDelta owner-local apply 也已完成 ASC chunk-local apply；`activeMutationEstimatedRandomLookups=0`、`activeMutationOwnerResourceLookups=0`、`activeMutationMigrationCarriers=0`、`pendingAttributeEstimatedRandomLookups=0`、`pendingAttributeMigrationCarriers=0` 已有 AutoChess x50 runner 证据。pending AttributeDelta 旧 stream migration fallback 已删除；剩余最重风险转向 singleton stream fact carrier、generated instant delta record / fan-in 证明、SourceAttribute magnitude snapshot lane、frame backbone 的 `syncQueryBudget=13` / `dependencyWaitRisks=4`，以及结构变化证据闭环。runtime/generated/demo gameplay event 写入已切到 typed fact，legacy gameplay EventBus buffer、Damage 边界缓冲和 EventBus gameplay enqueue helper 已删除。
-3. singleton DynamicBuffer stream 是 proof carrier，不是 scale-ready 终局。
+3. singleton DynamicBuffer stream 是 proof carrier，不是 scale-ready 终局；本轮只删除隐式 singleton writer/append helper，不能把显式 owner 写入误判为 stream carrier 已拆分。
 4. StructuralCommit gate 需要 Journaling/Profiler 证明来源和相位。
 5. AutoChess bridge 需要把直接 `EntityManager` 操作从业务 adapter 中继续收口；`DestroyBattleUnit()` 当前已走 ASC destroy command request，旧 direct ability/effect cleanup 口径不再作为当前事实。
 6. Boundary request entity 链路已退场，但 owner-local command buffer / pending marker 必须作为唯一入口防回流。

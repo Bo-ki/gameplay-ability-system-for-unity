@@ -8,7 +8,7 @@
 
 本轮复核后，`Assets/GAS/Runtime/System` 与 `Assets/GAS/Generated/CodeGen/Runtime` 内 `SystemAPI.QueryBuilder().Build()` 扫描为 0；手写 Runtime Core stored query 已统一改为 `state.GetEntityQuery(EntityQueryDesc)`。因此本 issue 不能再以“多数 Runtime 系统 QueryBuilder 承载长期 query 生命周期”作为当前诊断。
 
-新的 API 承载风险是：singleton owner、global facade、bridge direct EntityManager、managed registry/helper、singleton stream fact carrier、generated instant delta record / fan-in 证明，以及 generated active mutation 仍依赖 singleton command carrier。active mutation apply 和 pending AttributeDelta owner-local apply 本身已进入 ASC chunk-local applicator，旧 pending AttributeDelta stream migration fallback 已删除，不能再写成 random lookup store。
+新的 API 承载风险是：singleton owner、global facade、bridge direct EntityManager、managed registry/helper、singleton stream proof carrier、generated instant delta record / fan-in 证明，以及 generated active mutation 仍依赖 singleton command carrier。active mutation apply 和 pending AttributeDelta owner-local apply 本身已进入 ASC chunk-local applicator，旧 pending AttributeDelta stream migration fallback 已删除，不能再写成 random lookup store。
 
 ## 已缓解部分
 
@@ -26,13 +26,14 @@
 12. `AbilityRuntimeActions.RequestCostGameplayEffect(Entity)`、`RequestCooldownGameplayEffect(Entity)` 与 `AttributeHelper.RecalculateCurrentValue(Entity, ...)`、`MarkCurrentValueDirty(Entity, ...)` 这类无参全局 `GASManager.EntityManager` facade 已删除；Runtime helper 调用方必须显式传入 `EntityManager` / buffer。
 13. generated hot path static gate 已扩展 `GASManager.EntityManager` 规则，防止 `.gen.cs` 或 codegen 模板把全局 EntityManager facade 写回 Runtime Core。
 14. `GameplayEffectComponentConfig` / `AbilityComponentConfig` 已删除 protected static `_entityManager => GASManager.EntityManager`，所有 config 子类的 `LoadTo...Entity` 改为显式 `EntityManager` 参数；`GameplayEffectEntityFactory` 在 prototype/runtime GE 构建时传入当前 world owner。
+15. `GEEffectCommandSpecStream` 已删除 `BeginCommandWriter(EntityManager)`、`BeginCommandWriter(EntityManager, int)`、`BeginGameplayEventWriter(EntityManager)`、`AppendCommand(EntityManager, ...)` 与 `AppendGameplayEvent(EntityManager, ...)` 这类隐式 singleton writer/append helper；`GameplayEffectRequestWriter`、`AbilityRuntimeActions`、`ExecutionCalculationRuntimeActions`、`EffectMagnitudeResolver`、`EffectRuntimeUtility` 当前必须先解析 stream owner，再以 `Begin*Writer(em, streamEntity, currentFrame)` 显式写入。
 
 ## 仍成立风险
 
-1. `EffectCommandSpecStream.TryGetSingleton(EntityManager, out Entity)` 等 helper 仍暴露 global singleton 查找入口。
+1. `EffectCommandSpecStream.TryGetSingleton(EntityManager, out Entity)` 仍是 stream owner 解析入口；它不再同时提供隐式写入 helper，但仍需要继续收口到注册 owner / 明确 owner 传递模型。
 2. `GASManager.EntityManager` 仍是全局 facade，外部可直接读写 World；当前已删除 Runtime helper 无参写入口、config component 隐式全局写入口，并用 generated 防回流规则阻断模板回流。handwritten bootstrap/prototype/boundary/debugger 使用面仍需分类收口。
 3. `ASCCommandPort` 是 command-only shell 入口；transient request entity 已退场，但该入口仍可让外部直接驱动 runtime owner-local command。
-4. `GEEffectCommandStreamComponent` singleton owner 承载 command/spec/delta/fact，多职责过载。
+4. `GEEffectCommandStreamComponent` singleton owner 承载 command/spec/delta/fact，多职责过载；本轮只收窄 Runtime helper 的隐式写入口，底层 DynamicBuffer carrier 仍是 proof/migration 形态。
 5. `AutoChessGasCoreBridge` 集中直接 EM 操作，需继续 owner 化。
 6. generated active mutation 仍从 singleton `GEEffectCommandBuffer` carrier gather command，并用 frame-local `NativeList` / owner range hash map 做迁移期排序；apply 已是 ASC chunk-local，但 command carrier 还不是 `NativeStream` / target grouped frame 终局。
 7. ability lifecycle cross-entity marker、attribute owner marker、execution output applied marker、active mutation owner resource apply 和 pending AttributeDelta owner-local apply 已分别收口到 request buffer / owner chunk applicator；旧 pending AttributeDelta stream migration fallback 已删除。剩余 API 承载风险集中在 singleton stream、generated instant delta record / fan-in 证明、剩余边界缓冲、global facade，以及 active mutation `SourceAttribute` 跨 owner snapshot lane 缺口。
@@ -41,7 +42,7 @@
 
 | 事实 | 文件 |
 |---|---|
-| singleton stream helper | `GEEffectCommandSpecStream.cs` |
+| stream owner 显式写入切口 | `GEEffectCommandSpecStream.cs`, `GameplayEffectRequestWriter.cs`, `AbilityRuntimeActions.cs`, `ExecutionCalculationRuntimeActions.cs`, `EffectMagnitudeResolver.cs`, `EffectRuntimeUtility.cs` |
 | global facade | `GASManager.cs` |
 | command port | `ASCCommandGateway.cs` |
 | Runtime Core stored query 已迁到 SystemState owner | `ASCCommandBufferResolveSystem.cs`, `ASCDestroyFinalizeSystem.cs`, `AbilityLifecycleRequestSystem.cs`, `AbilityStateCleanupSystem.cs`, `AbilityStateTickSystem.cs`, `AbilityTryActivateSystem.cs`, `AttributeThresholdAbilityLifecycleRequestSystem.cs`, `AttributeRecalculateSystem.cs`, `GEExecutionCalculationSystem.cs`, `GEExecutionCalculationOutputModifierSystem.cs` |

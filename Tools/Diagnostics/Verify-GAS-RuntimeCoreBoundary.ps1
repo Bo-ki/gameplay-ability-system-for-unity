@@ -73,6 +73,11 @@ $deltaApplyPath = Join-Path $runtimePath "System\Attribute\GASAttributeModifierD
 $ascArchetypePath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeEntityArchetypes.cs"
 $streamPath = Join-Path $runtimePath "Effect\Component\Dynamic\GEEffectCommandSpecStream.cs"
 $streamPhasePath = Join-Path $runtimePath "System\Effect\GEEffectCommandSpecStreamPhases.cs"
+$gameplayEffectRequestWriterPath = Join-Path $runtimePath "System\Effect\GameplayEffectRequestWriter.cs"
+$abilityRuntimeActionsPath = Join-Path $runtimePath "Ability\AbilityRuntimeActions.cs"
+$executionCalculationRuntimeActionsPath = Join-Path $runtimePath "Effect\ExecutionCalculationRuntimeActions.cs"
+$effectMagnitudeResolverPath = Join-Path $runtimePath "System\Effect\EffectMagnitudeResolver.cs"
+$effectRuntimeUtilityPath = Join-Path $runtimePath "System\Effect\EffectRuntimeUtility.cs"
 $scheduleContractPath = Join-Path $runtimePath "System\SystemGroup\GASSystemScheduleContract.cs"
 $streamOwnerContractPath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeStreamOwnerContract.cs"
 $globalTimerPath = Join-Path $runtimePath "System\Core\GASGlobalTimerSystem.cs"
@@ -171,6 +176,38 @@ Assert-FileContains `
     -Path $streamPath `
     -Pattern "ResetFrameLocalCounters\(ref stream\)" `
     -Message "GEEffectCommandSpecStream must reset frame-local debugger counters during frame prepare."
+Assert-FileNotContains `
+    -Path $streamPath `
+    -Pattern "BeginCommandWriter\(EntityManager em\)|BeginCommandWriter\(EntityManager em, int currentFrame\)" `
+    -Message "GEEffectCommandSpecStream must not expose implicit singleton command writer helpers."
+Assert-FileNotContains `
+    -Path $streamPath `
+    -Pattern "BeginGameplayEventWriter\(EntityManager em\)" `
+    -Message "GEEffectCommandSpecStream must not expose implicit singleton gameplay event writer helpers."
+Assert-FileNotContains `
+    -Path $streamPath `
+    -Pattern "AppendCommand\(EntityManager em|AppendGameplayEvent\(EntityManager em" `
+    -Message "GEEffectCommandSpecStream must not expose implicit singleton append helpers."
+Assert-FileNotContains `
+    -Path $gameplayEffectRequestWriterPath `
+    -Pattern "BeginCommandWriter\(em\)|AppendCommand\(em," `
+    -Message "GameplayEffectRequestWriter must resolve stream owner explicitly before writing commands."
+Assert-FileNotContains `
+    -Path $abilityRuntimeActionsPath `
+    -Pattern "AppendGameplayEvent\(entityManager" `
+    -Message "AbilityRuntimeActions must resolve stream owner explicitly before writing facts."
+Assert-FileNotContains `
+    -Path $executionCalculationRuntimeActionsPath `
+    -Pattern "BeginGameplayEventWriter\(em\)" `
+    -Message "ExecutionCalculationRuntimeActions must resolve stream owner explicitly before writing facts."
+Assert-FileNotContains `
+    -Path $effectMagnitudeResolverPath `
+    -Pattern "BeginGameplayEventWriter\(em\)" `
+    -Message "EffectMagnitudeResolver must resolve stream owner explicitly before writing facts."
+Assert-FileNotContains `
+    -Path $effectRuntimeUtilityPath `
+    -Pattern "BeginGameplayEventWriter\(em\)" `
+    -Message "EffectRuntimeUtility must resolve stream owner explicitly before writing facts."
 Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "UpdateAfter\(typeof\(GASAttributeModifierDeltaApplySystem\)\)" `
@@ -236,4 +273,5 @@ Write-Host "GAS Runtime Core boundary check passed: no AutoChess references unde
 Write-Host "GAS Runtime Core pending attribute delta contract passed: owner-local apply, stream migration fallback retired, and debugger counters are wired."
 Write-Host "GAS Runtime Core global timer contract passed: registered/cache owner lookup is wired and singleton fallback queries are blocked."
 Write-Host "GAS Runtime Core active effect global index contract passed: registered/cache owner lookup is wired and singleton fallback queries are blocked."
+Write-Host "GAS Runtime Core stream writer contract passed: runtime helpers resolve stream owners explicitly before writing commands or facts."
 Write-Host "GAS Runtime Core active mutation contract passed: generated gather + ASC chunk-local apply path is wired."
