@@ -4,7 +4,7 @@
 
 承载 Runtime / generated runtime / AutoChess 的 API 健康 owner 分类、静态复核补充和事实消费卡。
 
-本文件只记录当前代码事实、证据和 DOTS 判定；目标态设计正文回到 ../../01-目标态架构共识/，任务拆分回到 ../../02-主线任务树/。
+本文件只记录当前代码事实、证据和 DOTS 判定；目标态设计正文回到 `../../01-目标态架构共识/`，任务拆分回到 `../../02-主线任务树/`。
 
 ## 整体项目审查：DOTS API 健康 owner 分类
 
@@ -40,7 +40,7 @@ R0-R8 叶子任务拆分后，重新对 `Assets/GAS/Runtime`、`Assets/GAS/Gener
 
 ### codedb 恢复后的整体项目审查补充（2026-06-07）
 
-本截面使用 `codedb_status`（428 files / scan ready）和 `rg` 交叉复核。它只记录当前代码事实；目标态约束写入 `../01-目标态架构共识/90-目标态不变量.md`。
+本截面使用 `codedb_status`（428 files / scan ready）和 `rg` 交叉复核。它只记录当前代码事实；目标态约束写入 `../../01-目标态架构共识/90-目标态不变量.md`。
 
 1. Shell capability 风险仍集中在 `GASRuntimeShell`：`Assets/GAS/Runtime/General/GASRuntimeShell.cs:16-44` 解析 runtime `World` / `EntityManager`，`:49-115` 创建 command port，`:119-134` 捕获 read model，`:141-147` 执行 `CompleteAllTrackedJobs()`，`:168-234` 继续解析 runtime singleton，`:255-271` 解析 ASC runtime entity。public 面已经比旧版本窄，但 assembly 内仍是 bootstrap / command / snapshot / diagnostics / drain 共用 facade。
 2. AutoChess adapter 当前直接消费 Shell internal capability：`Assets/AutoChessDemo/Integration/GasCore/AutoChessGasRuntimeHost.cs:13-17` 注册 runtime systems 并安装 catalog，`:25-30` 卸载 catalog / reset cache / shutdown，`:36-59` 读取 5 段 physical group，`:62-65` 通过 Shell drain runtime jobs。`AutoChessGasBattleEntityLifecycle.cs:51-55` 创建 battle driver，`:85-102` 读写 driver runtime store，`:105-113` 通过 command port 请求销毁 ASC。`AutoChessBattleResultBuilder.cs:25-29` 与 `AutoChessGasBattleUnitSnapshotProjector.cs:8-56` 已把 unit result snapshot 改为 structured log 派生。

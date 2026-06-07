@@ -4,7 +4,7 @@
 
 承载 Boundary structured snapshot、SourceAttribute / TargetAttribute magnitude source owner、SourceAttributeSnapshotLane 验证补录和剩余风险。
 
-本文件只记录当前代码事实、证据和 DOTS 判定；目标态设计正文回到 ../../01-目标态架构共识/，任务拆分回到 ../../02-主线任务树/。
+本文件只记录当前代码事实、证据和 DOTS 判定；目标态设计正文回到 `../../01-目标态架构共识/`，任务拆分回到 `../../02-主线任务树/`。
 
 ## 2026-06-07 整体复核：Boundary Snapshot 与 Magnitude Source Owner
 
