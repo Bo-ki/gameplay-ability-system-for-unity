@@ -55,7 +55,7 @@
 | runtime helper global overload 已删除 | `AbilityRuntimeActions.cs`, `AttributeHelper.cs` |
 | config component global facade 已删除 | `GameplayEffectComponentConfig.cs`, `AbilityComponentConfig.cs`, `GameplayEffectEntityFactory.cs`, GE/Ability static config component classes |
 | pending AttributeDelta owner-local chunk apply | `GASAttributeModifierDeltaApplySystem.cs:37-195` |
-| debugger queries | `GasRuntimeDebugger.cs:888-889`, `:2260`, `:2458` |
+| debugger queries | `GasRuntimeDebugger.cs:889`, `:2260`, `:2458` |
 | current-frame registered/cache owner | `GASGlobalTimerSystem.cs:73-126` |
 | active effect global index registered owner cache | `ActiveEffectStore.cs:1368-1419` |
 | demo catalog direct init | `AutoChessBattleDefinitionCatalogBuilder.cs:51-58` |
