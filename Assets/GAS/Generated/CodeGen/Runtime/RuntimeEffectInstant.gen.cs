@@ -44,8 +44,8 @@ namespace GAS.Runtime.Generated
 
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
 
-            var records = new NativeList<OwnerLocalInstantSpecCommandRecord>(1, Allocator.TempJob);
-            var payloads = new NativeList<GESetByCallerValueBuffer>(1, Allocator.TempJob);
+            var records = new NativeList<OwnerLocalInstantSpecCommandRecord>(1, state.WorldUpdateAllocator);
+            var payloads = new NativeList<GESetByCallerValueBuffer>(1, state.WorldUpdateAllocator);
             var collectHandle = new CollectOwnerLocalInstantSpecCommandsJob
             {
                 EntityType = SystemAPI.GetEntityTypeHandle(),
@@ -69,8 +69,7 @@ namespace GAS.Runtime.Generated
                 Payloads = payloads,
             }.Schedule(collectHandle);
 
-            var disposeRecordsHandle = records.Dispose(buildHandle);
-            state.Dependency = payloads.Dispose(disposeRecordsHandle);
+            state.Dependency = buildHandle;
         }
 
         private struct OwnerLocalInstantSpecCommandRecord
@@ -258,39 +257,6 @@ namespace GAS.Runtime.Generated
             return catalog.GameplayEffects[gameplayEffectIndex].GameplayCueCode;
         }
 
-        private static int Allocate(ref int next)
-        {
-            if (next <= 0)
-                next = 1;
-            return next++;
-        }
-
-        private static int ClampCursor(int cursor, int length)
-        {
-            if (cursor < 0) return 0;
-            if (cursor > length) return length;
-            return cursor;
-        }
-
-        private static bool IsUnavailableAsc(
-            EntityStorageInfoLookup entityStorageInfoLookup,
-            ComponentLookup<ASCDestroyingComponent> destroyingLookup,
-            Entity asc)
-        {
-            return asc == Entity.Null
-                || !entityStorageInfoLookup.Exists(asc)
-                || IsDestroyingAsc(destroyingLookup, asc);
-        }
-
-        private static bool IsDestroyingAsc(
-            ComponentLookup<ASCDestroyingComponent> destroyingLookup,
-            Entity asc)
-        {
-            return asc != Entity.Null
-                && destroyingLookup.HasComponent(asc)
-                && destroyingLookup.IsComponentEnabled(asc);
-        }
-
         private struct OwnerLocalInstantSpecCommandRecordComparer : IComparer<OwnerLocalInstantSpecCommandRecord>
         {
             public int Compare(OwnerLocalInstantSpecCommandRecord x, OwnerLocalInstantSpecCommandRecord y)
@@ -378,6 +344,62 @@ namespace GAS.Runtime.Generated
             var result = left.Index.CompareTo(right.Index);
             return result != 0 ? result : left.Version.CompareTo(right.Version);
         }
+
+        private static int Allocate(ref int next)
+        {
+            if (next <= 0)
+                next = 1;
+            return next++;
+        }
+
+        private static int ClampCursor(int cursor, int length)
+        {
+            if (cursor < 0) return 0;
+            if (cursor > length) return length;
+            return cursor;
+        }
+
+        private static bool IsUnavailableAsc(
+            EntityStorageInfoLookup entityStorageInfoLookup,
+            ComponentLookup<ASCDestroyingComponent> destroyingLookup,
+            Entity asc)
+        {
+            return asc == Entity.Null
+                || !entityStorageInfoLookup.Exists(asc)
+                || IsDestroyingAsc(destroyingLookup, asc);
+        }
+
+        private static bool IsDestroyingAsc(
+            ComponentLookup<ASCDestroyingComponent> destroyingLookup,
+            Entity asc)
+        {
+            return asc != Entity.Null
+                && destroyingLookup.HasComponent(asc)
+                && destroyingLookup.IsComponentEnabled(asc);
+        }
+
+        private static void AssignSpecSequence(
+            DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
+            int start,
+            int count,
+            int commandSequence,
+            int specSequence)
+        {
+            if (count <= 0)
+                return;
+            if (start < 0) start = 0;
+            var end = start + count;
+            if (end > setByCallerValues.Length)
+                end = setByCallerValues.Length;
+            for (var i = start; i < end; i++)
+            {
+                var value = setByCallerValues[i];
+                if (value.CommandSequence != commandSequence)
+                    continue;
+                value.SpecSequence = specSequence;
+                setByCallerValues[i] = value;
+            }
+        }
     }
 
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
@@ -416,7 +438,6 @@ namespace GAS.Runtime.Generated
                 return;
 
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
-
             state.Dependency = new AttributeSetReduceApplyJob
             {
                 EntityType = SystemAPI.GetEntityTypeHandle(),

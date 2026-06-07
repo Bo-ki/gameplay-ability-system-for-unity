@@ -13,14 +13,14 @@ GeneratedDuplicateMethodHits: `0`
 LubanNormalizedRowBoundaryHits: `0`
 AutoChessConfigBoundaryHits: `0`
 GeneratedAbilityCommitQueryHits: `0`
-GeneratedRuntimeBoundaryHits: `63`
+GeneratedRuntimeBoundaryHits: `66`
 GeneratedRuntimePureGlueArtifacts: `1`
 GeneratedRuntimeLifecycleMigrationArtifacts: `3`
 GeneratedRuntimeLifecycleHits: `9`
 GeneratedRuntimeSystemRegistrationHits: `0`
 GeneratedRuntimeStructuralChangeHits: `5`
-GeneratedRuntimeOwnershipHits: `1`
-GeneratedRuntimeRandomWriteLookupHits: `48`
+GeneratedRuntimeOwnershipHits: `3`
+GeneratedRuntimeRandomWriteLookupHits: `49`
 GeneratedRuntimeManagedConfigHits: `0`
 GeneratedRuntimeBoundaryGateMode: `blocking-unclassified-lifecycle-migration`
 GeneratedRuntimeUnclassifiedBoundaryHits: `0`
@@ -56,27 +56,27 @@ GeneratedRuntimeUnclassifiedBoundaryHits: `0`
 
 ## Manifest Entries
 
-| Phase | File | Layer | RuntimeVisible | VersionControlled |
-| --- | --- | --- | --- | --- |
-| `LubanNormalizedRows` | `Assets/GAS/Generated/CodeGen/Editor/LubanNormalizedRows.gen.cs` | `Editor` | `False` | `True` |
-| `AssemblyDefinition` | `Assets/GAS/Generated/CodeGen/Runtime/com.exhard.exgas.generated.runtime.asmdef` | `Runtime` | `True` | `True` |
-| `AssemblyDefinition` | `Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef` | `Baking` | `False` | `True` |
-| `DefinitionIndex` | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionIndex.gen.cs` | `Runtime` | `True` | `True` |
-| `BlobSchema` | `Assets/GAS/Generated/CodeGen/Runtime/BlobSchemas.gen.cs` | `Runtime` | `True` | `True` |
-| `BlobSchema` | `Assets/GAS/Generated/CodeGen/Editor/BlobBuilders.gen.cs` | `Baking` | `False` | `True` |
-| `StaticLookup` | `Assets/GAS/Generated/CodeGen/Runtime/StaticLookups.gen.cs` | `Runtime` | `True` | `True` |
-| `StaticLookup` | `Assets/GAS/Generated/CodeGen/Editor/StaticLookupBuilders.gen.cs` | `Baking` | `False` | `True` |
-| `DefinitionCatalog` | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionCatalog.gen.cs` | `Runtime` | `True` | `True` |
-| `DefinitionCatalog` | `Assets/GAS/Generated/CodeGen/Editor/DefinitionCatalogBuilder.gen.cs` | `Baking` | `False` | `True` |
-| `RuntimeDefinitionGlue` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeDefinitionGlue.gen.cs` | `Runtime` | `True` | `True` |
-| `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `Runtime` | `True` | `True` |
-| `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `Runtime` | `True` | `True` |
-| `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `Runtime` | `True` | `True` |
-| `BakerGlue` | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionComponents.gen.cs` | `Runtime` | `True` | `True` |
-| `BakerGlue` | `Assets/GAS/Generated/CodeGen/Editor/BakerGlue.gen.cs` | `Baking` | `False` | `True` |
-| `ComponentTypeSet` | `Assets/GAS/Generated/CodeGen/Runtime/ComponentTypeSets.gen.cs` | `Runtime` | `True` | `True` |
-| `QueryLayout` | `Assets/GAS/Generated/CodeGen/Editor/QueryLayouts.gen.cs` | `Editor/CI` | `False` | `True` |
-| `ValidationReport` | `Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md` | `Editor/CI` | `False` | `True` |
+| Phase | File | Layer | RuntimeVisible | ArtifactCategory | VersionControlled |
+| --- | --- | --- | --- | --- | --- |
+| `LubanNormalizedRows` | `Assets/GAS/Generated/CodeGen/Editor/LubanNormalizedRows.gen.cs` | `Editor` | `False` | `None` | `True` |
+| `AssemblyDefinition` | `Assets/GAS/Generated/CodeGen/Runtime/com.exhard.exgas.generated.runtime.asmdef` | `Runtime` | `True` | `None` | `True` |
+| `AssemblyDefinition` | `Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef` | `Baking` | `False` | `None` | `True` |
+| `DefinitionIndex` | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionIndex.gen.cs` | `Runtime` | `True` | `None` | `True` |
+| `BlobSchema` | `Assets/GAS/Generated/CodeGen/Runtime/BlobSchemas.gen.cs` | `Runtime` | `True` | `None` | `True` |
+| `BlobSchema` | `Assets/GAS/Generated/CodeGen/Editor/BlobBuilders.gen.cs` | `Baking` | `False` | `None` | `True` |
+| `StaticLookup` | `Assets/GAS/Generated/CodeGen/Runtime/StaticLookups.gen.cs` | `Runtime` | `True` | `None` | `True` |
+| `StaticLookup` | `Assets/GAS/Generated/CodeGen/Editor/StaticLookupBuilders.gen.cs` | `Baking` | `False` | `None` | `True` |
+| `DefinitionCatalog` | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionCatalog.gen.cs` | `Runtime` | `True` | `None` | `True` |
+| `DefinitionCatalog` | `Assets/GAS/Generated/CodeGen/Editor/DefinitionCatalogBuilder.gen.cs` | `Baking` | `False` | `None` | `True` |
+| `RuntimeDefinitionGlue` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeDefinitionGlue.gen.cs` | `Runtime` | `True` | `RuntimePureGlue` | `True` |
+| `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `Runtime` | `True` | `RuntimeLifecycleMigration` | `True` |
+| `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `Runtime` | `True` | `RuntimeLifecycleMigration` | `True` |
+| `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `Runtime` | `True` | `RuntimeLifecycleMigration` | `True` |
+| `BakerGlue` | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionComponents.gen.cs` | `Runtime` | `True` | `None` | `True` |
+| `BakerGlue` | `Assets/GAS/Generated/CodeGen/Editor/BakerGlue.gen.cs` | `Baking` | `False` | `None` | `True` |
+| `ComponentTypeSet` | `Assets/GAS/Generated/CodeGen/Runtime/ComponentTypeSets.gen.cs` | `Runtime` | `True` | `None` | `True` |
+| `QueryLayout` | `Assets/GAS/Generated/CodeGen/Editor/QueryLayouts.gen.cs` | `Editor/CI` | `False` | `None` | `True` |
+| `ValidationReport` | `Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md` | `Editor/CI` | `False` | `None` | `True` |
 
 ## DOTS And Naming Checks
 
@@ -112,60 +112,63 @@ AllowedMigrationProof: only manifest artifacts categorized as `RuntimeLifecycleM
 | `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `64` | `CancelRequestLookup = SystemAPI.GetComponentLookup<AbilityCancelRequestComponent>(),` |
 | `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `67` | `StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),` |
 | `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `68` | `CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(),` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `70` | `FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `85` | `public ComponentLookup<TagMaskComponent> TagMaskLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `87` | `public BufferLookup<TagTemporarySourceBuffer> TemporaryTagSourceLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `90` | `public ComponentLookup<AbilityCancelRequestComponent> CancelRequestLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `93` | `public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `94` | `public BufferLookup<GEEffectCommandBuffer> CommandLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `96` | `public BufferLookup<GameplayEventBuffer> FactLookup;` |
-| `SYS-01/SYS-03` | `lifecycle-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `15` | `public partial struct GEEffectSpecBuildSystem : ISystem` |
-| `SYS-01/SYS-03` | `lifecycle-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `17` | `public void OnCreate(ref SystemState state)` |
-| `SYS-01/SYS-03` | `lifecycle-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `23` | `public void OnUpdate(ref SystemState state)` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `36` | `StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `38` | `SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(),` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `39` | `SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(),` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `51` | `public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `53` | `public BufferLookup<GEEffectSpecBuffer> SpecLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `54` | `public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;` |
-| `SYS-01/SYS-03` | `lifecycle-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `223` | `public partial struct GASAttributeSetReduceApplySystem : ISystem` |
-| `SYS-01/SYS-03` | `lifecycle-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `225` | `public void OnCreate(ref SystemState state)` |
-| `SYS-01/SYS-03` | `lifecycle-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `231` | `public void OnUpdate(ref SystemState state)` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `244` | `StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `245` | `SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(),` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `246` | `DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(),` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `248` | `AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(),` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `258` | `public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `259` | `public BufferLookup<GEEffectSpecBuffer> SpecLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `260` | `public BufferLookup<AttributeModifierBuffer> DeltaLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `262` | `public BufferLookup<AttributeValueBuffer> AttributeLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `205` | `public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `419` | `public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `420` | `public BufferLookup<GEEffectCommandBuffer> CommandLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `421` | `public BufferLookup<GESetByCallerValueBuffer> CommandSetByCallerLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `422` | `public BufferLookup<AttributeOwnerMarkerRequestBuffer> AttributeOwnerMarkerRequestLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `423` | `public ComponentLookup<AbilityStateComponent> AbilityStateLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `425` | `public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `426` | `public BufferLookup<GameplayEventBuffer> FactLookup;` |
-| `SC-01/ECB-03` | `structural-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `427` | `public EntityCommandBuffer StructuralEcb;` |
-| `SC-01/ECB-03` | `structural-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1073` | `var ability = StructuralEcb.CreateEntity(GrantedAbilityArchetype);` |
-| `SC-01/ECB-03` | `structural-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1190` | `StructuralEcb.DestroyEntity(ability);` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1697` | `public BufferLookup<ActiveGameplayEffectCleanupRecordBuffer> CleanupRecordLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1698` | `public BufferLookup<ActiveGameplayEffectSetByCallerValueBuffer> SetByCallerSnapshotLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1699` | `public BufferLookup<AttributeValueBuffer> AttributeLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1700` | `public BufferLookup<AttributeActiveModifierBuffer> ActiveModifierLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1701` | `public BufferLookup<AttributeOwnerMarkerRequestBuffer> AttributeOwnerMarkerRequestLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1702` | `public ComponentLookup<TagMaskComponent> TagMaskLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1704` | `public BufferLookup<TagTemporarySourceBuffer> TagSourceLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1705` | `public BufferLookup<AbilitySlotBuffer> AbilitySlotLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1709` | `public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1710` | `public BufferLookup<GEEffectCommandBuffer> CommandLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1711` | `public BufferLookup<GESetByCallerValueBuffer> CommandSetByCallerLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1712` | `public BufferLookup<ActiveEffectMutationBuffer> MutationLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1713` | `public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;` |
-| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1714` | `public BufferLookup<GameplayEventBuffer> FactLookup;` |
-| `SC-01/ECB-03` | `structural-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1715` | `public EntityCommandBuffer StructuralEcb;` |
-| `SC-01/ECB-03` | `structural-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `2457` | `StructuralEcb.DestroyEntity(ability);` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `71` | `SystemAPI.GetBufferLookup<ActiveEffectMutationCommandBuffer>(isReadOnly: false),` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `73` | `SystemAPI.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: false),` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `74` | `OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(),` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `89` | `public ComponentLookup<TagMaskComponent> TagMaskLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `91` | `public BufferLookup<TagTemporarySourceBuffer> TemporaryTagSourceLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `94` | `public ComponentLookup<AbilityCancelRequestComponent> CancelRequestLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `97` | `public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `98` | `public BufferLookup<GEEffectCommandBuffer> CommandLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `100` | `public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `101` | `public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `102` | `public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;` |
+| `SYS-01/SYS-03` | `lifecycle-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `18` | `public partial struct GEEffectSpecBuildSystem : ISystem` |
+| `SYS-01/SYS-03` | `lifecycle-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `22` | `public void OnCreate(ref SystemState state)` |
+| `SYS-01/SYS-03` | `lifecycle-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `39` | `public void OnUpdate(ref SystemState state)` |
+| `NAT-01/NAT-03` | `native-container-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `47` | `var records = new NativeList<OwnerLocalInstantSpecCommandRecord>(1, state.WorldUpdateAllocator);` |
+| `NAT-01/NAT-03` | `native-container-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `48` | `var payloads = new NativeList<GESetByCallerValueBuffer>(1, state.WorldUpdateAllocator);` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `60` | `StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `61` | `SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(),` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `62` | `SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(),` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `135` | `public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `136` | `public BufferLookup<GEEffectSpecBuffer> SpecLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `137` | `public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;` |
+| `SYS-01/SYS-03` | `lifecycle-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `410` | `public partial struct GASAttributeSetReduceApplySystem : ISystem` |
+| `SYS-01/SYS-03` | `lifecycle-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `414` | `public void OnCreate(ref SystemState state)` |
+| `SYS-01/SYS-03` | `lifecycle-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `434` | `public void OnUpdate(ref SystemState state)` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `449` | `StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `464` | `public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `279` | `public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `477` | `public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `478` | `public BufferLookup<OwnerLocalInstantNextFrameCommandBuffer> NextFrameInstantCommandLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `479` | `public BufferLookup<OwnerLocalInstantNextFrameSetByCallerValueBuffer> NextFrameInstantSetByCallerLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `480` | `public BufferLookup<ActiveEffectNextFrameMutationCommandBuffer> NextFrameActiveMutationCommandLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `481` | `public BufferLookup<ActiveEffectNextFrameMutationSetByCallerValueBuffer> NextFrameActiveMutationSetByCallerLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `482` | `public BufferLookup<AttributeOwnerMarkerRequestBuffer> AttributeOwnerMarkerRequestLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `483` | `public ComponentLookup<AbilityStateComponent> AbilityStateLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `485` | `public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `486` | `public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;` |
+| `SC-01/ECB-03` | `structural-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `487` | `public EntityCommandBuffer StructuralEcb;` |
+| `SC-01/ECB-03` | `structural-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1126` | `var ability = StructuralEcb.CreateEntity(GrantedAbilityArchetype);` |
+| `SC-01/ECB-03` | `structural-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1243` | `StructuralEcb.DestroyEntity(ability);` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1818` | `public BufferLookup<ActiveGameplayEffectCleanupRecordBuffer> CleanupRecordLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1819` | `public BufferLookup<ActiveGameplayEffectSetByCallerValueBuffer> SetByCallerSnapshotLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1820` | `public BufferLookup<AttributeValueBuffer> AttributeLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1821` | `public BufferLookup<AttributeActiveModifierBuffer> ActiveModifierLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1822` | `public BufferLookup<AttributeOwnerMarkerRequestBuffer> AttributeOwnerMarkerRequestLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1823` | `public ComponentLookup<TagMaskComponent> TagMaskLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1825` | `public BufferLookup<TagTemporarySourceBuffer> TagSourceLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1826` | `public BufferLookup<AbilitySlotBuffer> AbilitySlotLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1830` | `public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1831` | `public BufferLookup<GEEffectCommandBuffer> CommandLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1832` | `public BufferLookup<GESetByCallerValueBuffer> CommandSetByCallerLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1833` | `public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1834` | `public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1835` | `public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;` |
+| `QRY-04/PRF-06/PRF-19` | `random-lookup-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1836` | `public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;` |
+| `SC-01/ECB-03` | `structural-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `1837` | `public EntityCommandBuffer StructuralEcb;` |
+| `SC-01/ECB-03` | `structural-owner` | `MigrationProofOnly` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `2579` | `StructuralEcb.DestroyEntity(ability);` |
 
 ## Generated Runtime Hot Path Gate
 

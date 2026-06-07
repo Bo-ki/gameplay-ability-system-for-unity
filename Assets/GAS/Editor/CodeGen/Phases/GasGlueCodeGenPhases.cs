@@ -2679,8 +2679,8 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine("");
             writer.WriteLine("var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();");
             writer.WriteLine("");
-            writer.WriteLine("var records = new NativeList<OwnerLocalInstantSpecCommandRecord>(1, Allocator.TempJob);");
-            writer.WriteLine("var payloads = new NativeList<GESetByCallerValueBuffer>(1, Allocator.TempJob);");
+            writer.WriteLine("var records = new NativeList<OwnerLocalInstantSpecCommandRecord>(1, state.WorldUpdateAllocator);");
+            writer.WriteLine("var payloads = new NativeList<GESetByCallerValueBuffer>(1, state.WorldUpdateAllocator);");
             writer.WriteLine("var collectHandle = new CollectOwnerLocalInstantSpecCommandsJob");
             writer.WriteLine("{");
             writer.Indent++;
@@ -2708,8 +2708,7 @@ namespace __ROOT_NAMESPACE__
             writer.Indent--;
             writer.WriteLine("}.Schedule(collectHandle);");
             writer.WriteLine("");
-            writer.WriteLine("var disposeRecordsHandle = records.Dispose(buildHandle);");
-            writer.WriteLine("state.Dependency = payloads.Dispose(disposeRecordsHandle);");
+            writer.WriteLine("state.Dependency = buildHandle;");
             writer.Indent--;
             writer.WriteLine("}");
             writer.WriteLine("");
@@ -2779,8 +2778,6 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine("Command = command,");
             writer.Indent--;
             writer.WriteLine("});");
-            writer.Indent--;
-            writer.WriteLine("}");
             writer.Indent--;
             writer.WriteLine("}");
             writer.Indent--;
@@ -3079,14 +3076,6 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine("}");
             writer.WriteLine("");
             writer.WriteLine("return copied;");
-            writer.Indent--;
-            writer.WriteLine("}");
-            writer.WriteLine("");
-            writer.WriteLine("private static int CompareEntity(Entity left, Entity right)");
-            writer.WriteLine("{");
-            writer.Indent++;
-            writer.WriteLine("var result = left.Index.CompareTo(right.Index);");
-            writer.WriteLine("return result != 0 ? result : left.Version.CompareTo(right.Version);");
             writer.Indent--;
             writer.WriteLine("}");
             writer.WriteLine("");
@@ -8154,12 +8143,15 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine();
             writer.WriteLine("## Manifest Entries");
             writer.WriteLine();
-            writer.WriteLine("| Phase | File | Layer | RuntimeVisible | VersionControlled |");
-            writer.WriteLine("| --- | --- | --- | --- | --- |");
+            writer.WriteLine("| Phase | File | Layer | RuntimeVisible | ArtifactCategory | VersionControlled |");
+            writer.WriteLine("| --- | --- | --- | --- | --- | --- |");
             foreach (var entry in manifest.Entries)
             {
+                var artifactCategory = string.IsNullOrEmpty(entry.ArtifactCategory)
+                    ? "None"
+                    : entry.ArtifactCategory;
                 writer.WriteLine(
-                    $"| `{entry.PhaseName}` | `{entry.ProjectRelativePath}` | `{entry.Layer}` | `{entry.RuntimeVisible}` | `{entry.VersionControlled}` |");
+                    $"| `{entry.PhaseName}` | `{entry.ProjectRelativePath}` | `{entry.Layer}` | `{entry.RuntimeVisible}` | `{artifactCategory}` | `{entry.VersionControlled}` |");
             }
 
             writer.WriteLine();

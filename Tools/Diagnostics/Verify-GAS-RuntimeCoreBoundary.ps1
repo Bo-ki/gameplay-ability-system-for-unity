@@ -1141,6 +1141,22 @@ Assert-FileNotContains `
     -Pattern "ActiveEffectLifecycleOwnerSystems\.cs" `
     -Message "GasCodeGen validation report must not count the handwritten active-effect lifecycle owner as generated runtime boundary debt."
 Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "\| Phase \| File \| Layer \| RuntimeVisible \| ArtifactCategory \| VersionControlled \|" `
+    -Message "CodeGen validation report template must expose manifest ArtifactCategory for lifecycle migration debt accounting."
+Assert-FileContains `
+    -Path $codeGenReportPath `
+    -Pattern "\| Phase \| File \| Layer \| RuntimeVisible \| ArtifactCategory \| VersionControlled \|" `
+    -Message "GasCodeGen validation report must expose manifest ArtifactCategory for lifecycle migration debt accounting."
+Assert-FileContains `
+    -Path $codeGenReportPath `
+    -Pattern '\|\s*`?RuntimeDefinitionGlue`?\s*\|\s*`?Assets/GAS/Generated/CodeGen/Runtime/RuntimeDefinitionGlue\.gen\.cs`?\s*\|\s*`?Runtime`?\s*\|\s*`?True`?\s*\|\s*`?RuntimePureGlue`?\s*\|\s*`?True`?\s*\|' `
+    -Message "GasCodeGen validation report must classify RuntimeDefinitionGlue as RuntimePureGlue in the manifest table."
+Assert-FileContains `
+    -Path $codeGenReportPath `
+    -Pattern '\|\s*`?RuntimeLifecycleMigration`?\s*\|\s*`?Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation\.gen\.cs`?\s*\|\s*`?Runtime`?\s*\|\s*`?True`?\s*\|\s*`?RuntimeLifecycleMigration`?\s*\|\s*`?True`?\s*\|' `
+    -Message "GasCodeGen validation report must classify RuntimeAbilityActivation as RuntimeLifecycleMigration in the manifest table."
+Assert-FileContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationOwnerCommandCollectJob\s*:\s*IJobChunk" `
     -Message "Generated active effect runtime must collect active mutation commands from owner-local buffers before chunk-local apply."
