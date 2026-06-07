@@ -33,7 +33,6 @@ namespace GAS.Runtime
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
                 SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
-                SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
             }.Schedule(state.Dependency);
         }
@@ -46,7 +45,6 @@ namespace GAS.Runtime
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
-            public BufferLookup<GEEffectSpecBuffer> SpecLookup;
             public BufferLookup<GameplayEventBuffer> FactLookup;
 
             public void Execute()
@@ -55,7 +53,6 @@ namespace GAS.Runtime
                     || !StreamLookup.HasComponent(StreamEntity)
                     || !CommandLookup.HasBuffer(StreamEntity)
                     || !SetByCallerLookup.HasBuffer(StreamEntity)
-                    || !SpecLookup.HasBuffer(StreamEntity)
                     || !FactLookup.HasBuffer(StreamEntity))
                 {
                     return;
@@ -66,7 +63,6 @@ namespace GAS.Runtime
                     ref stream,
                     CommandLookup[StreamEntity],
                     SetByCallerLookup[StreamEntity],
-                    SpecLookup[StreamEntity],
                     FactLookup[StreamEntity],
                     Frame);
                 StreamLookup[StreamEntity] = stream;
@@ -91,6 +87,7 @@ namespace GAS.Runtime
                 {
                     ComponentType.ReadWrite<GEEffectCommandBuffer>(),
                     ComponentType.ReadWrite<GESetByCallerValueBuffer>(),
+                    ComponentType.ReadWrite<GEEffectSpecBuffer>(),
                     ComponentType.ReadWrite<OwnerLocalInstantNextFrameCommandBuffer>(),
                     ComponentType.ReadWrite<OwnerLocalInstantNextFrameSetByCallerValueBuffer>(),
                     ComponentType.ReadOnly<ASCIdentityComponent>(),
@@ -106,6 +103,7 @@ namespace GAS.Runtime
             {
                 CommandType = SystemAPI.GetBufferTypeHandle<GEEffectCommandBuffer>(),
                 SetByCallerType = SystemAPI.GetBufferTypeHandle<GESetByCallerValueBuffer>(),
+                SpecType = SystemAPI.GetBufferTypeHandle<GEEffectSpecBuffer>(),
                 NextFrameCommandType = SystemAPI.GetBufferTypeHandle<OwnerLocalInstantNextFrameCommandBuffer>(),
                 NextFrameSetByCallerType = SystemAPI.GetBufferTypeHandle<OwnerLocalInstantNextFrameSetByCallerValueBuffer>(),
             }.Schedule(_ownerInstantCommandQuery, state.Dependency);
@@ -116,6 +114,7 @@ namespace GAS.Runtime
         {
             public BufferTypeHandle<GEEffectCommandBuffer> CommandType;
             public BufferTypeHandle<GESetByCallerValueBuffer> SetByCallerType;
+            public BufferTypeHandle<GEEffectSpecBuffer> SpecType;
             public BufferTypeHandle<OwnerLocalInstantNextFrameCommandBuffer> NextFrameCommandType;
             public BufferTypeHandle<OwnerLocalInstantNextFrameSetByCallerValueBuffer> NextFrameSetByCallerType;
 
@@ -127,6 +126,7 @@ namespace GAS.Runtime
             {
                 var commands = chunk.GetBufferAccessor(ref CommandType);
                 var setByCallerValues = chunk.GetBufferAccessor(ref SetByCallerType);
+                var specs = chunk.GetBufferAccessor(ref SpecType);
                 var nextFrameCommands = chunk.GetBufferAccessor(ref NextFrameCommandType);
                 var nextFrameSetByCallerValues = chunk.GetBufferAccessor(ref NextFrameSetByCallerType);
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
@@ -134,11 +134,13 @@ namespace GAS.Runtime
                 {
                     var currentCommands = commands[entityIndex];
                     var currentSetByCallerValues = setByCallerValues[entityIndex];
+                    var currentSpecs = specs[entityIndex];
                     var deferredCommands = nextFrameCommands[entityIndex];
                     var deferredSetByCallerValues = nextFrameSetByCallerValues[entityIndex];
 
                     currentCommands.Clear();
                     currentSetByCallerValues.Clear();
+                    currentSpecs.Clear();
 
                     for (var i = 0; i < deferredSetByCallerValues.Length; i++)
                         currentSetByCallerValues.Add(deferredSetByCallerValues[i].Value);
@@ -301,103 +303,140 @@ namespace GAS.Runtime
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GEExecutionCalculationOutputModifierSystem))]
     [UpdateAfter(typeof(GASAttributeModifierDeltaApplySystem))]
+    [UpdateBefore(typeof(GameplayOwnerLocalFactFlushSystem))]
     [BurstCompile]
     public partial struct GameplayFactProjectionSystem : ISystem
     {
+        private EntityQuery _ownerSpecQuery;
+
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
+            _ownerSpecQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<ASCIdentityComponent>(),
+                    ComponentType.ReadOnly<ASCDestroyingComponent>(),
+                    ComponentType.ReadOnly<GEEffectSpecBuffer>(),
+                    ComponentType.ReadWrite<OwnerLocalGameplayFactBuffer>(),
+                },
+                Options = EntityQueryOptions.IgnoreComponentEnabledState,
+            });
+            state.RequireForUpdate(_ownerSpecQuery);
             state.RequireForUpdate<GEEffectCommandStreamComponent>();
-            state.RequireForUpdate<GlobalTimer>();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
-            var frame = SystemAPI.GetSingleton<GlobalTimer>().Frame;
 
             state.Dependency = new GameplayFactProjectionJob
             {
                 StreamEntity = streamEntity,
-                Frame = frame,
+                EntityType = SystemAPI.GetEntityTypeHandle(),
+                DestroyingType = SystemAPI.GetComponentTypeHandle<ASCDestroyingComponent>(isReadOnly: true),
+                SpecType = SystemAPI.GetBufferTypeHandle<GEEffectSpecBuffer>(isReadOnly: true),
+                OwnerFactType = SystemAPI.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>(),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(isReadOnly: true),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
-            }.Schedule(state.Dependency);
+            }.Schedule(_ownerSpecQuery, state.Dependency);
         }
 
         [BurstCompile]
-        private struct GameplayFactProjectionJob : IJob
+        private struct GameplayFactProjectionJob : IJobChunk
         {
             public Entity StreamEntity;
-            public int Frame;
+            [ReadOnly] public EntityTypeHandle EntityType;
+            [ReadOnly] public ComponentTypeHandle<ASCDestroyingComponent> DestroyingType;
+            [ReadOnly] public BufferTypeHandle<GEEffectSpecBuffer> SpecType;
+            public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactType;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<GEEffectSpecBuffer> SpecLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
 
-            public void Execute()
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
             {
                 if (StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !SpecLookup.HasBuffer(StreamEntity)
-                    || !FactLookup.HasBuffer(StreamEntity))
+                    || !StreamLookup.HasComponent(StreamEntity))
                 {
                     return;
                 }
 
                 var stream = StreamLookup[StreamEntity];
-                var specs = SpecLookup[StreamEntity];
-                var facts = FactLookup[StreamEntity];
+                var owners = chunk.GetNativeArray(EntityType);
+                var destroyingMask = chunk.GetEnabledMask(ref DestroyingType);
+                var specBuffers = chunk.GetBufferAccessor(ref SpecType);
+                var ownerFactBuffers = chunk.GetBufferAccessor(ref OwnerFactType);
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    if (destroyingMask[entityIndex])
+                        continue;
 
-                var cueStart = ClampCursor(stream.CueProjectionSpecCursor, specs.Length);
-                for (var i = cueStart; i < specs.Length; i++)
-                    ProjectCueRequest(specs[i], facts, ref stream);
+                    var owner = owners[entityIndex];
+                    var specs = specBuffers[entityIndex];
+                    var facts = ownerFactBuffers[entityIndex];
+                    for (var i = 0; i < specs.Length; i++)
+                        ProjectCueRequest(specs[i], owner, facts, ref stream);
+                }
 
-                stream.CueProjectionSpecCursor = specs.Length;
                 StreamLookup[StreamEntity] = stream;
             }
         }
 
         private static void ProjectCueRequest(
             in GEEffectSpecBuffer spec,
-            DynamicBuffer<GameplayEventBuffer> facts,
+            Entity owner,
+            DynamicBuffer<OwnerLocalGameplayFactBuffer> facts,
             ref GEEffectCommandStreamComponent stream)
         {
             if (spec.CueRequestOnApplyCode <= 0
-                || spec.TargetAsc == Entity.Null)
+                || spec.TargetAsc == Entity.Null
+                || CompareEntity(spec.TargetAsc, owner) != 0)
             {
                 return;
             }
 
             var factSequence = Allocate(ref stream.NextFactSequence);
-            facts.Add(new GameplayEventBuffer
+            facts.Add(new OwnerLocalGameplayFactBuffer
             {
-                Sequence = factSequence,
-                SourceCommandSequence = spec.SourceCommandSequence,
-                SourceSpecSequence = spec.Sequence,
-                Frame = spec.Frame,
-                EventType = EGameplayEventType.CueRequested,
-                Domain = EGameplayFactDomain.Cue,
-                Category = EGameplayFactCategory.Request,
-                Severity = EGameplayFactSeverity.Info,
-                SourceAsc = spec.SourceAsc,
-                TargetAsc = spec.TargetAsc,
-                SourceAbility = spec.SourceAbility,
-                SourceEffect = spec.SourceEffect,
-                GameplayEffectCode = spec.GameplayEffectCode,
-                ContextId = spec.ContextId,
-                ParentContextId = spec.ParentContextId,
-                EventCode = (int)EGameplayCueEvent.OnApply,
-                ReasonCode = spec.CueRequestOnApplyCode,
+                Fact = new GameplayEventBuffer
+                {
+                    Sequence = factSequence,
+                    SourceCommandSequence = spec.SourceCommandSequence,
+                    SourceSpecSequence = spec.Sequence,
+                    Frame = spec.Frame,
+                    EventType = EGameplayEventType.CueRequested,
+                    Domain = EGameplayFactDomain.Cue,
+                    Category = EGameplayFactCategory.Request,
+                    Severity = EGameplayFactSeverity.Info,
+                    SourceAsc = spec.SourceAsc,
+                    TargetAsc = spec.TargetAsc,
+                    SourceAbility = spec.SourceAbility,
+                    SourceEffect = spec.SourceEffect,
+                    GameplayEffectCode = spec.GameplayEffectCode,
+                    ContextId = spec.ContextId,
+                    ParentContextId = spec.ParentContextId,
+                    EventCode = (int)EGameplayCueEvent.OnApply,
+                    ReasonCode = spec.CueRequestOnApplyCode,
+                },
             });
+        }
+
+        private static int CompareEntity(Entity left, Entity right)
+        {
+            var result = left.Index.CompareTo(right.Index);
+            return result != 0 ? result : left.Version.CompareTo(right.Version);
         }
     }
 
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GASAttributeModifierDeltaApplySystem))]
-    [UpdateBefore(typeof(GameplayFactProjectionSystem))]
+    [UpdateAfter(typeof(GameplayFactProjectionSystem))]
     [BurstCompile]
     public partial struct GameplayOwnerLocalFactFlushSystem : ISystem
     {

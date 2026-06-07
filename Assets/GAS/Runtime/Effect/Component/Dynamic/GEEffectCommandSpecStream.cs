@@ -62,11 +62,8 @@ namespace GAS.Runtime
         public int NextDeltaSequence;
         public int NextFactSequence;
         public int LastClearedFrame;
-        public int SpecBuildCommandCursor;
-        public int DeltaApplySpecCursor;
         public int FactProjectionDeltaCursor;
         public int EventBridgeFactCursor;
-        public int CueProjectionSpecCursor;
         public int ActiveMutationCommandCount;
         public int ActiveMutationOwnerGroupCount;
         public int ActiveMutationMaxOwnerRange;
@@ -82,6 +79,7 @@ namespace GAS.Runtime
         public int PendingAttributeEstimatedRandomLookupCount;
         public int PendingAttributeFactPatchCount;
         public int PendingAttributeMigrationCarrierCount;
+        public int OwnerLocalSpecCount;
         public int OwnerLocalFactCount;
         public int OwnerLocalFactOwnerGroupCount;
         public int OwnerLocalFactMaxOwnerRange;
@@ -661,7 +659,6 @@ namespace GAS.Runtime
 
             return em.HasBuffer<GEEffectCommandBuffer>(streamEntity)
                    && em.HasBuffer<GESetByCallerValueBuffer>(streamEntity)
-                   && em.HasBuffer<GEEffectSpecBuffer>(streamEntity)
                    && em.HasBuffer<GameplayEventBuffer>(streamEntity);
         }
 
@@ -816,16 +813,12 @@ namespace GAS.Runtime
                 return;
             em.GetBuffer<GEEffectCommandBuffer>(streamEntity).Clear();
             em.GetBuffer<GESetByCallerValueBuffer>(streamEntity).Clear();
-            em.GetBuffer<GEEffectSpecBuffer>(streamEntity).Clear();
             em.GetBuffer<GameplayEventBuffer>(streamEntity).Clear();
 
             var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
             stream.LastClearedFrame = frame;
-            stream.SpecBuildCommandCursor = 0;
-            stream.DeltaApplySpecCursor = 0;
             stream.FactProjectionDeltaCursor = 0;
             stream.EventBridgeFactCursor = 0;
-            stream.CueProjectionSpecCursor = 0;
             ResetFrameLocalCounters(ref stream);
             em.SetComponentData(streamEntity, stream);
         }
@@ -843,23 +836,14 @@ namespace GAS.Runtime
 
             var commands = em.GetBuffer<GEEffectCommandBuffer>(streamEntity);
             var setByCallerValues = em.GetBuffer<GESetByCallerValueBuffer>(streamEntity);
-            if (commands.Length == 0)
-                setByCallerValues.Clear();
-            else
-                CompactConsumedCommands(
-                    commands,
-                    setByCallerValues,
-                    ClampCursor(stream.SpecBuildCommandCursor, commands.Length));
+            commands.Clear();
+            setByCallerValues.Clear();
 
-            em.GetBuffer<GEEffectSpecBuffer>(streamEntity).Clear();
             em.GetBuffer<GameplayEventBuffer>(streamEntity).Clear();
 
             stream.LastClearedFrame = frame;
-            stream.SpecBuildCommandCursor = 0;
-            stream.DeltaApplySpecCursor = 0;
             stream.FactProjectionDeltaCursor = 0;
             stream.EventBridgeFactCursor = 0;
-            stream.CueProjectionSpecCursor = 0;
             ResetFrameLocalCounters(ref stream);
             em.SetComponentData(streamEntity, stream);
         }
@@ -868,30 +852,20 @@ namespace GAS.Runtime
             ref GEEffectCommandStreamComponent stream,
             DynamicBuffer<GEEffectCommandBuffer> commands,
             DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
-            DynamicBuffer<GEEffectSpecBuffer> specs,
             DynamicBuffer<GameplayEventBuffer> facts,
             int frame)
         {
             if (stream.LastClearedFrame == frame)
                 return;
 
-            if (commands.Length == 0)
-                setByCallerValues.Clear();
-            else
-                CompactConsumedCommands(
-                    commands,
-                    setByCallerValues,
-                    ClampCursor(stream.SpecBuildCommandCursor, commands.Length));
+            commands.Clear();
+            setByCallerValues.Clear();
 
-            specs.Clear();
             facts.Clear();
 
             stream.LastClearedFrame = frame;
-            stream.SpecBuildCommandCursor = 0;
-            stream.DeltaApplySpecCursor = 0;
             stream.FactProjectionDeltaCursor = 0;
             stream.EventBridgeFactCursor = 0;
-            stream.CueProjectionSpecCursor = 0;
             ResetFrameLocalCounters(ref stream);
         }
 
@@ -912,6 +886,7 @@ namespace GAS.Runtime
             stream.PendingAttributeEstimatedRandomLookupCount = 0;
             stream.PendingAttributeFactPatchCount = 0;
             stream.PendingAttributeMigrationCarrierCount = 0;
+            stream.OwnerLocalSpecCount = 0;
             stream.OwnerLocalFactCount = 0;
             stream.OwnerLocalFactOwnerGroupCount = 0;
             stream.OwnerLocalFactMaxOwnerRange = 0;
@@ -1239,66 +1214,6 @@ namespace GAS.Runtime
         {
             if (next <= value)
                 next = value + 1;
-        }
-
-        private static void CompactConsumedCommands(
-            DynamicBuffer<GEEffectCommandBuffer> commands,
-            DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
-            int consumedCommandCount)
-        {
-            if (consumedCommandCount <= 0)
-                return;
-
-            if (consumedCommandCount >= commands.Length)
-            {
-                commands.Clear();
-                setByCallerValues.Clear();
-                return;
-            }
-
-            var setByCallerDropCount = setByCallerValues.Length;
-            var hasKeptSetByCallerRange = false;
-            for (var i = consumedCommandCount; i < commands.Length; i++)
-            {
-                var command = commands[i];
-                if (command.SetByCallerCount <= 0)
-                    continue;
-
-                hasKeptSetByCallerRange = true;
-                if (command.SetByCallerStart < setByCallerDropCount)
-                    setByCallerDropCount = command.SetByCallerStart;
-            }
-
-            commands.RemoveRange(0, consumedCommandCount);
-            if (hasKeptSetByCallerRange)
-            {
-                setByCallerDropCount = ClampCursor(setByCallerDropCount, setByCallerValues.Length);
-                if (setByCallerDropCount > 0)
-                    setByCallerValues.RemoveRange(0, setByCallerDropCount);
-            }
-            else
-            {
-                setByCallerValues.Clear();
-                setByCallerDropCount = 0;
-            }
-
-            for (var i = 0; i < commands.Length; i++)
-            {
-                var command = commands[i];
-                if (command.SetByCallerCount > 0)
-                    command.SetByCallerStart -= setByCallerDropCount;
-                else
-                    command.SetByCallerStart = 0;
-
-                commands[i] = command;
-            }
-        }
-
-        private static int ClampCursor(int cursor, int length)
-        {
-            if (cursor < 0)
-                return 0;
-            return cursor > length ? length : cursor;
         }
 
         private static int CountSetByCallerValues(

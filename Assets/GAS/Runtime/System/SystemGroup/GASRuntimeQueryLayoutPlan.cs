@@ -459,7 +459,6 @@ namespace GAS.Runtime
                     {
                         GASRuntimeLayoutComponentSlot.EffectCommandStreamOwner,
                         GASRuntimeLayoutComponentSlot.EffectCommandBuffer,
-                        GASRuntimeLayoutComponentSlot.InstantEffectSpecBuffer,
                         GASRuntimeLayoutComponentSlot.TypedSimulationFactBuffer,
                     },
                     new[]
@@ -493,6 +492,7 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.AttributeDeltaBuffer,
                         GASRuntimeLayoutComponentSlot.EffectCommandBuffer,
                         GASRuntimeLayoutComponentSlot.EffectCommandSetByCallerBuffer,
+                        GASRuntimeLayoutComponentSlot.InstantEffectSpecBuffer,
                         GASRuntimeLayoutComponentSlot.OwnerLocalInstantNextFrameCommandBuffer,
                         GASRuntimeLayoutComponentSlot.OwnerLocalInstantNextFrameSetByCallerBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectMutationCommandBuffer,

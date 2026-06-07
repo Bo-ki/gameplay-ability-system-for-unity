@@ -193,8 +193,8 @@ Assert-FileContains `
     -Message "Owner-local gameplay fact flush must define deterministic owner/sequence ordering."
 Assert-FileContains `
     -Path $streamPhasePath `
-    -Pattern "UpdateBefore\(typeof\(GameplayFactProjectionSystem\)\)[\s\S]*GameplayOwnerLocalFactFlushSystem" `
-    -Message "Owner-local gameplay fact flush must run before stream fact projection to preserve fact sequence order."
+    -Pattern "UpdateBefore\(typeof\(GameplayOwnerLocalFactFlushSystem\)\)[\s\S]*GameplayFactProjectionSystem" `
+    -Message "Owner-local cue fact projection must run before owner-local fact flush."
 Assert-FileContains `
     -Path $scheduleContractPath `
     -Pattern "GameplayOwnerLocalFactFramePrepareSystem" `
@@ -205,8 +205,8 @@ Assert-FileContains `
     -Message "Owner-local gameplay fact flush system must be registered in the runtime schedule."
 Assert-FileContains `
     -Path $scheduleContractPath `
-    -Pattern "GameplayOwnerLocalFactFlushSystem[\s\S]*GameplayFactProjectionSystem" `
-    -Message "Owner-local gameplay fact flush must precede GameplayFactProjectionSystem in the runtime schedule contract."
+    -Pattern "GameplayFactProjectionSystem[\s\S]*GameplayOwnerLocalFactFlushSystem" `
+    -Message "GameplayFactProjectionSystem must precede owner-local gameplay fact flush in the runtime schedule contract."
 Assert-FileContains `
     -Path $debuggerPath `
     -Pattern "RuntimeCoreOwnerLocalFactCount" `
@@ -248,6 +248,14 @@ Assert-FileContains `
     -Pattern "ComponentType\.ReadWrite<GESetByCallerValueBuffer>\(\)" `
     -Message "ASC runtime archetype must own GESetByCallerValueBuffer as owner-local instant command payload."
 Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "componentTypes\[index\+\+\]\s*=\s*ComponentType\.ReadWrite<GEEffectSpecBuffer>\(\)" `
+    -Message "ASC runtime archetype must own GEEffectSpecBuffer as owner-local instant spec carrier."
+Assert-FileNotContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<GEEffectCommandStreamComponent>\(\)[\s\S]{0,400}ComponentType\.ReadWrite<GEEffectSpecBuffer>\(\)" `
+    -Message "EffectCommandStream singleton archetype must not own GEEffectSpecBuffer after owner-local spec carrier migration."
+Assert-FileContains `
     -Path $ascFactoryPath `
     -Pattern "GetBuffer<GEEffectCommandBuffer>\(asc\)\.EnsureCapacity" `
     -Message "ASC factory must initialize owner-local instant command capacity."
@@ -257,12 +265,20 @@ Assert-FileContains `
     -Message "ASC factory must initialize owner-local instant set-by-caller capacity."
 Assert-FileContains `
     -Path $ascFactoryPath `
+    -Pattern "GetBuffer<GEEffectSpecBuffer>\(asc\)\.EnsureCapacity" `
+    -Message "ASC factory must initialize owner-local instant spec capacity."
+Assert-FileContains `
+    -Path $ascFactoryPath `
     -Pattern "HasBuffer<GEEffectCommandBuffer>\(asc\)" `
     -Message "ASC runtime component completeness check must require owner-local instant command buffer."
 Assert-FileContains `
     -Path $ascFactoryPath `
     -Pattern "HasBuffer<GESetByCallerValueBuffer>\(asc\)" `
     -Message "ASC runtime component completeness check must require owner-local instant set-by-caller buffer."
+Assert-FileContains `
+    -Path $ascFactoryPath `
+    -Pattern "HasBuffer<GEEffectSpecBuffer>\(asc\)" `
+    -Message "ASC runtime component completeness check must require owner-local instant spec buffer."
 Assert-FileContains `
     -Path $streamPath `
     -Pattern "struct OwnerLocalInstantNextFrameCommandBuffer\s*:\s*IBufferElementData" `
@@ -301,6 +317,14 @@ Assert-FileContains `
     -Message "Runtime Core must clear ASC owner-local instant set-by-caller payloads with a chunk buffer type handle."
 Assert-FileContains `
     -Path $streamPhasePath `
+    -Pattern "BufferTypeHandle<GEEffectSpecBuffer>" `
+    -Message "Runtime Core must clear ASC owner-local instant specs with a chunk buffer type handle."
+Assert-FileNotContains `
+    -Path $streamPhasePath `
+    -Pattern "GEEffectCommandSpecStreamFramePrepareSystem[\s\S]*SpecLookup\s*=\s*SystemAPI\.GetBufferLookup<GEEffectSpecBuffer>" `
+    -Message "FramePrepare must not clear GEEffectSpecBuffer from the singleton command stream."
+Assert-FileContains `
+    -Path $streamPhasePath `
     -Pattern "OwnerLocalInstantCommandFramePrepareSystem[\s\S]*?NextFrameCommandType[\s\S]*GetBufferTypeHandle<OwnerLocalInstantNextFrameCommandBuffer>[\s\S]*deferredCommands\.Clear\(\)" `
     -Message "FramePrepare must move next-frame instant commands into current owner-local instant commands before clearing the deferred carrier."
 Assert-FileContains `
@@ -323,14 +347,34 @@ Assert-FileContains `
     -Path $queryLayoutPlanPath `
     -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.EffectCommandBuffer[\s\S]*GASRuntimeLayoutComponentSlot\.EffectCommandSetByCallerBuffer" `
     -Message "Owner-local instant command buffers must be classified with the ASC owner-local layout."
+Assert-FileNotContains `
+    -Path $queryLayoutPlanPath `
+    -Pattern "GASRuntimeQueryLayoutEntryId\.GameplayEffectCommandSpecStream[\s\S]*?GASRuntimeLayoutComponentSlot\.InstantEffectSpecBuffer[\s\S]*?typeof\(GameplayFactProjectionSystem\)" `
+    -Message "InstantEffectSpecBuffer must not remain classified with the EffectCommandSpecStream layout."
+Assert-FileContains `
+    -Path $queryLayoutPlanPath `
+    -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.InstantEffectSpecBuffer" `
+    -Message "InstantEffectSpecBuffer must be classified with the ASC owner-local layout."
 Assert-FileContains `
     -Path $queryLayoutPlanPath `
     -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.OwnerLocalInstantNextFrameCommandBuffer" `
     -Message "OwnerLocalInstantNextFrameCommandBuffer must be classified with the ASC ActiveEffectStore layout."
 Assert-FileContains `
     -Path $streamOwnerContractPath `
+    -Pattern "EGasRuntimeFrameStreamId\.InstantEffectSpec[\s\S]*EGasRuntimeFrameStreamCarrier\.OwnerLocalDynamicBuffer,\s*[\r\n\s]*EGasRuntimeFrameStreamCarrier\.OwnerLocalDynamicBuffer" `
+    -Message "InstantEffectSpec stream owner contract must use ASC owner-local carriers."
+Assert-FileContains `
+    -Path $streamOwnerContractPath `
     -Pattern "EGasRuntimeFrameStreamId\.OwnerLocalInstantNextFrame[\s\S]*EGasRuntimeFrameStreamCarrier\.OwnerLocalDynamicBuffer,\s*[\r\n\s]*EGasRuntimeFrameStreamCarrier\.OwnerLocalDynamicBuffer" `
     -Message "OwnerLocalInstantNextFrame stream owner contract must use owner-local carriers across the frame boundary."
+Assert-FileNotContains `
+    -Path $debuggerPath `
+    -Pattern "RecordFrameStreamBufferPressure<GEEffectSpecBuffer>" `
+    -Message "Debugger stream pressure sampling must not treat owner-local GEEffectSpecBuffer as an EffectCommandSpecStream buffer."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "instantSpecCount\s*=\s*stream\.OwnerLocalSpecCount" `
+    -Message "Runtime Debugger must read instant spec telemetry from the owner-local spec counter."
 Assert-FileNotContains `
     -Path $generatedInstantEffectPath `
     -Pattern "OwnerLocalInstantCommandFlushSystem" `
@@ -367,6 +411,26 @@ Assert-FileContains `
     -Path $generatedInstantEffectPath `
     -Pattern "CopySetByCallerValues\(\s*Payloads,\s*record\.PayloadStart,\s*record\.PayloadCount,\s*command\.Sequence,\s*specSequence,\s*setByCallerValues\)" `
     -Message "Generated instant spec build must remap owner-local payload into spec-local payload ranges."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "SpecLookup\[record\.Owner\]" `
+    -Message "Generated instant spec build must write specs to ASC owner-local GEEffectSpecBuffer."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "SetByCallerLookup\[record\.Owner\]" `
+    -Message "Generated instant spec build must write spec-local set-by-caller payloads to ASC owner-local buffers."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "stream\.OwnerLocalSpecCount\s*\+=\s*builtCount" `
+    -Message "Generated instant spec build must expose owner-local spec counts through the stream telemetry component."
+Assert-FileNotContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "SpecLookup\[StreamEntity\]" `
+    -Message "Generated instant spec build must not write specs to singleton GEEffectSpecBuffer."
+Assert-FileNotContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "SpecLookup\.HasBuffer\(StreamEntity\)" `
+    -Message "Generated instant spec build must not require a singleton GEEffectSpecBuffer."
 Assert-FileNotContains `
     -Path $generatedInstantEffectPath `
     -Pattern "CommandLookup\s*=\s*SystemAPI\.GetBufferLookup<GEEffectCommandBuffer>" `
@@ -375,30 +439,66 @@ Assert-FileNotContains `
     -Path $generatedInstantEffectPath `
     -Pattern "SpecBuildCommandCursor" `
     -Message "Generated instant spec build must not scan singleton command stream cursor after owner-local consumer migration."
+Assert-FileNotContains `
+    -Path $streamPath `
+    -Pattern "SpecBuildCommandCursor|DeltaApplySpecCursor|CueProjectionSpecCursor" `
+    -Message "EffectCommandSpecStream must not keep obsolete singleton spec cursor state after owner-local spec migration."
+Assert-FileNotContains `
+    -Path $streamPath `
+    -Pattern "HasRequiredBuffers[\s\S]*HasBuffer<GEEffectSpecBuffer>" `
+    -Message "EffectCommandSpecStream required buffers must not include GEEffectSpecBuffer after owner-local spec migration."
 Assert-FileContains `
     -Path $streamPath `
-    -Pattern "PrepareFrameLocalData\(EntityManager[\s\S]*?if \(commands\.Length == 0\)\s*[\r\n\s]*setByCallerValues\.Clear\(\);" `
-    -Message "EffectCommandSpecStream managed frame prepare must clear spec-local set-by-caller payload when no singleton commands remain."
+    -Pattern "PrepareFrameLocalData\(EntityManager[\s\S]*?commands\.Clear\(\);\s*[\r\n\s]*setByCallerValues\.Clear\(\);" `
+    -Message "EffectCommandSpecStream managed frame prepare must clear legacy singleton command payload every frame."
 Assert-FileContains `
     -Path $streamPath `
-    -Pattern "PrepareFrameLocalData\(\s*ref GEEffectCommandStreamComponent stream[\s\S]*?if \(commands\.Length == 0\)\s*[\r\n\s]*setByCallerValues\.Clear\(\);" `
-    -Message "EffectCommandSpecStream job frame prepare must clear spec-local set-by-caller payload when no singleton commands remain."
+    -Pattern "PrepareFrameLocalData\(\s*ref GEEffectCommandStreamComponent stream[\s\S]*?commands\.Clear\(\);\s*[\r\n\s]*setByCallerValues\.Clear\(\);" `
+    -Message "EffectCommandSpecStream job frame prepare must clear legacy singleton command payload every frame."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "AttributeSetReduceApplyJob\s*:\s*IJobChunk" `
+    -Message "Generated instant AttributeReduce must consume owner-local specs with chunk-local buffers."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "Options\s*=\s*EntityQueryOptions\.IgnoreComponentEnabledState" `
+    -Message "Generated instant AttributeReduce must include disabled ASCDestroyingComponent owners and inspect the enabled mask itself."
 Assert-FileNotContains `
     -Path $generatedInstantEffectPath `
     -Pattern "DeltaLookup\s*=\s*SystemAPI\.GetBufferLookup<AttributeModifierBuffer>" `
     -Message "Generated instant AttributeDelta must not write facts through the singleton stream delta buffer."
 Assert-FileContains `
     -Path $generatedInstantEffectPath `
-    -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>" `
-    -Message "Generated instant AttributeDelta must write directly to ASC owner-local fact buffers."
+    -Pattern "OwnerFactType\s*=\s*SystemAPI\.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>" `
+    -Message "Generated instant AttributeDelta must write directly to ASC owner-local fact buffers through chunk-local handles."
 Assert-FileNotContains `
     -Path $codeGenTemplatePath `
     -Pattern 'writer\.WriteLine\("DeltaLookup = SystemAPI\.GetBufferLookup<AttributeModifierBuffer>' `
     -Message "CodeGen must not regenerate singleton stream DeltaLookup for instant AttributeDelta facts."
 Assert-FileContains `
     -Path $codeGenTemplatePath `
-    -Pattern 'writer\.WriteLine\("OwnerFactLookup = SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>' `
-    -Message "CodeGen must regenerate instant AttributeDelta owner-local fact output."
+    -Pattern 'writer\.WriteLine\("OwnerFactType = SystemAPI\.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>' `
+    -Message "CodeGen must regenerate instant AttributeDelta owner-local chunk fact output."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern 'writer\.WriteLine\("var specs = SpecLookup\[record\.Owner\];"\)' `
+    -Message "CodeGen must regenerate owner-local instant spec writes."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern 'writer\.WriteLine\("var setByCallerValues = SetByCallerLookup\[record\.Owner\];"\)' `
+    -Message "CodeGen must regenerate owner-local instant spec payload writes."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern 'writer\.WriteLine\("stream\.OwnerLocalSpecCount \+= builtCount;"\)' `
+    -Message "CodeGen must regenerate owner-local instant spec telemetry counters."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern 'writer\.WriteLine\("var specs = SpecLookup\[StreamEntity\]' `
+    -Message "CodeGen must not regenerate singleton instant spec writes."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern 'writer\.WriteLine\("stream\.DeltaApplySpecCursor = specs\.Length;"\)' `
+    -Message "CodeGen must not regenerate a singleton instant spec reduce cursor."
 Assert-FileNotContains `
     -Path $executionCalculationOutputModifierSystemPath `
     -Pattern "DeltaBufferLookup" `

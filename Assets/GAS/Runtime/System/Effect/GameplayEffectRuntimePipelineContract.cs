@@ -87,7 +87,7 @@ namespace GAS.Runtime
                 GameplayEffectRuntimePipelineStatus.TargetContract,
                 GameplayEffectRuntimePipelineRestriction.AvoidsRuntimeGameplayEffectEntity,
                 nameof(GEEffectCommandBuffer),
-                nameof(GEEffectSpecBuffer),
+                "ASC owner-local " + nameof(GEEffectSpecBuffer),
                 nameof(AttributeModifierBuffer) + " / " + nameof(GameplayEventBuffer),
                 typeof(GEEffectCommandBuffer),
                 typeof(GEEffectSpecBuffer),

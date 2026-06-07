@@ -2472,15 +2472,6 @@ namespace GAS.Runtime
                 frame,
                 log,
                 ref state);
-            RecordFrameStreamBufferPressure<GEEffectSpecBuffer>(
-                em,
-                streamEntity,
-                "GEEffectSpecBuffer",
-                EGasRuntimeFrameStreamId.InstantEffectSpec,
-                streamPlan,
-                frame,
-                log,
-                ref state);
             RecordFrameStreamBufferPressure<GameplayEventBuffer>(
                 em,
                 streamEntity,
@@ -2895,14 +2886,14 @@ namespace GAS.Runtime
             if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity))
                 return;
 
-            effectCommandCount = GetBufferLength<GEEffectCommandBuffer>(em, streamEntity);
-            instantSpecCount = GetBufferLength<GEEffectSpecBuffer>(em, streamEntity);
-            attributeDeltaCount = GetBufferLength<AttributeModifierBuffer>(em, streamEntity);
-            typedFactCount = GetBufferLength<GameplayEventBuffer>(em, streamEntity);
             if (!em.HasComponent<GEEffectCommandStreamComponent>(streamEntity))
                 return;
 
             var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
+            effectCommandCount = GetBufferLength<GEEffectCommandBuffer>(em, streamEntity);
+            instantSpecCount = stream.OwnerLocalSpecCount;
+            attributeDeltaCount = GetBufferLength<AttributeModifierBuffer>(em, streamEntity);
+            typedFactCount = GetBufferLength<GameplayEventBuffer>(em, streamEntity);
             activeMutationCommandCount = stream.ActiveMutationCommandCount;
             activeMutationOwnerGroupCount = stream.ActiveMutationOwnerGroupCount;
             activeMutationMaxOwnerRange = stream.ActiveMutationMaxOwnerRange;

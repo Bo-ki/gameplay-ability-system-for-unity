@@ -28,6 +28,7 @@ namespace GAS.Runtime.Generated
                     ComponentType.ReadOnly<ASCIdentityComponent>(),
                     ComponentType.ReadOnly<GEEffectCommandBuffer>(),
                     ComponentType.ReadOnly<GESetByCallerValueBuffer>(),
+                    ComponentType.ReadOnly<GEEffectSpecBuffer>(),
                 },
             });
             state.RequireForUpdate(_ownerInstantCommandQuery);
@@ -147,9 +148,7 @@ namespace GAS.Runtime.Generated
             {
                 if (!Catalog.IsCreated
                     || StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !SpecLookup.HasBuffer(StreamEntity)
-                    || !SetByCallerLookup.HasBuffer(StreamEntity))
+                    || !StreamLookup.HasComponent(StreamEntity))
                     return;
 
                 if (Records.Length == 0)
@@ -157,16 +156,22 @@ namespace GAS.Runtime.Generated
 
                 Records.Sort(new OwnerLocalInstantSpecCommandRecordComparer());
                 var stream = StreamLookup[StreamEntity];
-                var specs = SpecLookup[StreamEntity];
-                var setByCallerValues = SetByCallerLookup[StreamEntity];
                 ref var catalog = ref Catalog.Value;
+                var builtCount = 0;
                 for (var i = 0; i < Records.Length; i++)
                 {
                     var record = Records[i];
                     var command = record.Command;
                     if (!CanBuildInstantSpec(ref catalog, in command, EntityStorageInfoLookup, DestroyingLookup, TagMaskLookup, out var gameplayEffectIndex))
                         continue;
+                    if (!SpecLookup.HasBuffer(record.Owner)
+                        || !SetByCallerLookup.HasBuffer(record.Owner))
+                    {
+                        continue;
+                    }
 
+                    var specs = SpecLookup[record.Owner];
+                    var setByCallerValues = SetByCallerLookup[record.Owner];
                     var specSequence = Allocate(ref stream.NextSpecSequence);
                     var setByCallerStart = setByCallerValues.Length;
                     var setByCallerCount = CopySetByCallerValues(
@@ -199,8 +204,10 @@ namespace GAS.Runtime.Generated
                         SetByCallerCount = setByCallerCount,
                         Flags = gameplayEffectIndex,
                     });
+                    builtCount++;
                 }
 
+                stream.OwnerLocalSpecCount += builtCount;
                 StreamLookup[StreamEntity] = stream;
             }
         }
@@ -375,12 +382,29 @@ namespace GAS.Runtime.Generated
 
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GEExecutionCalculationOutputModifierSystem))]
+    [UpdateAfter(typeof(GEEffectSpecBuildSystem))]
     [UpdateBefore(typeof(GASAttributeModifierDeltaApplySystem))]
     [UpdateBefore(typeof(GameplayFactProjectionSystem))]
     public partial struct GASAttributeSetReduceApplySystem : ISystem
     {
+        private EntityQuery _ownerSpecQuery;
+
         public void OnCreate(ref SystemState state)
         {
+            _ownerSpecQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<ASCIdentityComponent>(),
+                    ComponentType.ReadOnly<ASCDestroyingComponent>(),
+                    ComponentType.ReadOnly<GEEffectSpecBuffer>(),
+                    ComponentType.ReadOnly<GESetByCallerValueBuffer>(),
+                    ComponentType.ReadWrite<AttributeValueBuffer>(),
+                    ComponentType.ReadWrite<OwnerLocalGameplayFactBuffer>(),
+                },
+                Options = EntityQueryOptions.IgnoreComponentEnabledState,
+            });
+            state.RequireForUpdate(_ownerSpecQuery);
             state.RequireForUpdate<GEEffectCommandStreamComponent>();
             state.RequireForUpdate<GASDefinitionCatalogComponent>();
         }
@@ -391,54 +415,72 @@ namespace GAS.Runtime.Generated
             if (!GASGeneratedDefinitionCatalogLookup.IsCatalogCreated(catalogComponent.Catalog))
                 return;
 
-            var em = state.EntityManager;
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
-            if (!EffectCommandSpecStream.HasRequiredBuffers(em, streamEntity))
-                return;
 
             state.Dependency = new AttributeSetReduceApplyJob
             {
+                EntityType = SystemAPI.GetEntityTypeHandle(),
+                DestroyingType = SystemAPI.GetComponentTypeHandle<ASCDestroyingComponent>(isReadOnly: true),
+                SpecType = SystemAPI.GetBufferTypeHandle<GEEffectSpecBuffer>(isReadOnly: true),
+                SetByCallerType = SystemAPI.GetBufferTypeHandle<GESetByCallerValueBuffer>(isReadOnly: true),
+                AttributeType = SystemAPI.GetBufferTypeHandle<AttributeValueBuffer>(),
+                OwnerFactType = SystemAPI.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>(),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
-                SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(),
-                OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(),
-                SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: true),
-                AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(),
-                DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
                 Catalog = catalogComponent.Catalog,
                 StreamEntity = streamEntity,
-            }.Schedule(state.Dependency);
+            }.Schedule(_ownerSpecQuery, state.Dependency);
         }
 
         [BurstCompile]
-        private struct AttributeSetReduceApplyJob : IJob
+        private struct AttributeSetReduceApplyJob : IJobChunk
         {
+            [ReadOnly] public EntityTypeHandle EntityType;
+            [ReadOnly] public ComponentTypeHandle<ASCDestroyingComponent> DestroyingType;
+            [ReadOnly] public BufferTypeHandle<GEEffectSpecBuffer> SpecType;
+            [ReadOnly] public BufferTypeHandle<GESetByCallerValueBuffer> SetByCallerType;
+            public BufferTypeHandle<AttributeValueBuffer> AttributeType;
+            public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactType;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<GEEffectSpecBuffer> SpecLookup;
-            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
-            [ReadOnly] public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
-            public BufferLookup<AttributeValueBuffer> AttributeLookup;
-            [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public Entity StreamEntity;
 
-            public void Execute()
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
             {
                 if (!Catalog.IsCreated
                     || StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !SpecLookup.HasBuffer(StreamEntity)
-                    || !SetByCallerLookup.HasBuffer(StreamEntity))
+                    || !StreamLookup.HasComponent(StreamEntity))
                     return;
 
                 var stream = StreamLookup[StreamEntity];
-                var specs = SpecLookup[StreamEntity];
-                var setByCallerValues = SetByCallerLookup[StreamEntity];
+                var owners = chunk.GetNativeArray(EntityType);
+                var destroyingMask = chunk.GetEnabledMask(ref DestroyingType);
+                var specBuffers = chunk.GetBufferAccessor(ref SpecType);
+                var setByCallerBuffers = chunk.GetBufferAccessor(ref SetByCallerType);
+                var attributeBuffers = chunk.GetBufferAccessor(ref AttributeType);
+                var ownerFactBuffers = chunk.GetBufferAccessor(ref OwnerFactType);
                 ref var catalog = ref Catalog.Value;
-                var start = ClampCursor(stream.DeltaApplySpecCursor, specs.Length);
-                for (var i = start; i < specs.Length; i++)
-                    ApplySpec(ref stream, ref catalog, specs[i], setByCallerValues, OwnerFactLookup, AttributeLookup, DestroyingLookup);
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    if (destroyingMask[entityIndex])
+                        continue;
 
-                stream.DeltaApplySpecCursor = specs.Length;
+                    var owner = owners[entityIndex];
+                    var specs = specBuffers[entityIndex];
+                    if (specs.Length == 0)
+                        continue;
+
+                    var setByCallerValues = setByCallerBuffers[entityIndex];
+                    var attributes = attributeBuffers[entityIndex];
+                    var facts = ownerFactBuffers[entityIndex];
+                    for (var i = 0; i < specs.Length; i++)
+                        ApplySpec(ref stream, ref catalog, owner, specs[i], setByCallerValues, attributes, facts);
+                }
+
                 StreamLookup[StreamEntity] = stream;
             }
         }
@@ -446,22 +488,18 @@ namespace GAS.Runtime.Generated
         private static void ApplySpec(
             ref GEEffectCommandStreamComponent stream,
             ref GASDefinitionCatalogBlob catalog,
+            Entity owner,
             in GEEffectSpecBuffer spec,
             DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
-            BufferLookup<OwnerLocalGameplayFactBuffer> ownerFactLookup,
-            BufferLookup<AttributeValueBuffer> attributeLookup,
-            ComponentLookup<ASCDestroyingComponent> destroyingLookup)
+            DynamicBuffer<AttributeValueBuffer> attributes,
+            DynamicBuffer<OwnerLocalGameplayFactBuffer> facts)
         {
             if (spec.TargetAsc == Entity.Null
-                || IsDestroyingAsc(destroyingLookup, spec.TargetAsc)
-                || !attributeLookup.HasBuffer(spec.TargetAsc)
-                || !ownerFactLookup.HasBuffer(spec.TargetAsc)
+                || CompareEntity(spec.TargetAsc, owner) != 0
                 || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, spec.GameplayEffectCode, out var gameplayEffectIndex))
                 return;
 
             ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
-            var attributes = attributeLookup[spec.TargetAsc];
-            var facts = ownerFactLookup[spec.TargetAsc];
             for (var i = 0; i < gameplayEffect.ModifierCount; i++)
             {
                 var modifierIndex = gameplayEffect.ModifierStart + i;
@@ -574,6 +612,12 @@ namespace GAS.Runtime.Generated
             }
             value = 0f;
             return false;
+        }
+
+        private static int CompareEntity(Entity left, Entity right)
+        {
+            var result = left.Index.CompareTo(right.Index);
+            return result != 0 ? result : left.Version.CompareTo(right.Version);
         }
 
         private static int Allocate(ref int next)
