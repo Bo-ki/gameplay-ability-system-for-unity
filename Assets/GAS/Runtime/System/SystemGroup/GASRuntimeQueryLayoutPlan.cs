@@ -145,6 +145,8 @@ namespace GAS.Runtime
         ActiveEffectMutationSetByCallerBuffer = 51,
         ActiveEffectNextFrameMutationCommandBuffer = 52,
         ActiveEffectNextFrameMutationSetByCallerBuffer = 53,
+        OwnerLocalInstantNextFrameCommandBuffer = 54,
+        OwnerLocalInstantNextFrameSetByCallerBuffer = 55,
     }
 
     public readonly struct GASRuntimeQueryLayoutEntry
@@ -491,6 +493,8 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.AttributeDeltaBuffer,
                         GASRuntimeLayoutComponentSlot.EffectCommandBuffer,
                         GASRuntimeLayoutComponentSlot.EffectCommandSetByCallerBuffer,
+                        GASRuntimeLayoutComponentSlot.OwnerLocalInstantNextFrameCommandBuffer,
+                        GASRuntimeLayoutComponentSlot.OwnerLocalInstantNextFrameSetByCallerBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectMutationCommandBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectMutationSetByCallerBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectNextFrameMutationCommandBuffer,

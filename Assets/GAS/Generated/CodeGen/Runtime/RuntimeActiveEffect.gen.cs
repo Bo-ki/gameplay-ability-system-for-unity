@@ -475,8 +475,8 @@ namespace GAS.Runtime.Generated
             public BufferTypeHandle<TagTemporarySourceBuffer> TagSourceBufferTypeHandle;
             public BufferTypeHandle<AbilitySlotBuffer> AbilitySlotBufferTypeHandle;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<GEEffectCommandBuffer> CommandLookup;
-            public BufferLookup<GESetByCallerValueBuffer> StreamSetByCallerLookup;
+            public BufferLookup<OwnerLocalInstantNextFrameCommandBuffer> NextFrameInstantCommandLookup;
+            public BufferLookup<OwnerLocalInstantNextFrameSetByCallerValueBuffer> NextFrameInstantSetByCallerLookup;
             public BufferLookup<ActiveEffectNextFrameMutationCommandBuffer> NextFrameActiveMutationCommandLookup;
             public BufferLookup<ActiveEffectNextFrameMutationSetByCallerValueBuffer> NextFrameActiveMutationSetByCallerLookup;
             public BufferLookup<AttributeOwnerMarkerRequestBuffer> AttributeOwnerMarkerRequestLookup;
@@ -546,8 +546,6 @@ namespace GAS.Runtime.Generated
                 var tagSources = chunk.GetBufferAccessor(ref TagSourceBufferTypeHandle);
                 var abilitySlots = chunk.GetBufferAccessor(ref AbilitySlotBufferTypeHandle);
                 var stream = StreamLookup[StreamEntity];
-                var commands = CommandLookup.HasBuffer(StreamEntity) ? CommandLookup[StreamEntity] : default;
-                var streamSetByCallerValues = StreamSetByCallerLookup.HasBuffer(StreamEntity) ? StreamSetByCallerLookup[StreamEntity] : default;
                 ref var catalog = ref Catalog.Value;
                 var magnitudeSourceCounters = default(ActiveEffectMagnitudeSourceCounters);
                 var enumerator = new ChunkEntityEnumerator(false, default, chunk.Count);
@@ -592,8 +590,6 @@ namespace GAS.Runtime.Generated
                             ref catalog,
                             ref ownerResources,
                             in command,
-                            commands,
-                            streamSetByCallerValues,
                             ActiveMutationSetByCallerValues,
                             ref magnitudeSourceCounters);
                     }
@@ -621,8 +617,6 @@ namespace GAS.Runtime.Generated
                 ref GASDefinitionCatalogBlob catalog,
                 ref ActiveMutationOwnerResources ownerResources,
                 in GEEffectCommandBuffer command,
-                DynamicBuffer<GEEffectCommandBuffer> streamCommands,
-                DynamicBuffer<GESetByCallerValueBuffer> streamSetByCallerValues,
                 NativeList<GESetByCallerValueBuffer> setByCallerValues,
                 ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters)
             {
@@ -684,8 +678,6 @@ namespace GAS.Runtime.Generated
                     EmitOverflowCommand(
                         ref stream,
                         ref catalog,
-                        streamCommands,
-                        streamSetByCallerValues,
                         in command,
                         in gameplayEffect);
                     EnqueueStackOverflowEvent(in command, in gameplayEffect);
@@ -1407,8 +1399,6 @@ namespace GAS.Runtime.Generated
             private void EmitOverflowCommand(
                 ref GEEffectCommandStreamComponent stream,
                 ref GASDefinitionCatalogBlob catalog,
-                DynamicBuffer<GEEffectCommandBuffer> commands,
-                DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
                 in GEEffectCommandBuffer sourceCommand,
                 in GASCatalogGameplayEffectDefinitionBlob gameplayEffect)
             {
@@ -1467,13 +1457,25 @@ namespace GAS.Runtime.Generated
                     return;
                 }
 
-                if (!commands.IsCreated
-                    || !setByCallerValues.IsCreated)
+                var instantTargetAsc = command.TargetAsc != Entity.Null ? command.TargetAsc : command.SourceAsc;
+                if (instantTargetAsc == Entity.Null
+                    || !NextFrameInstantCommandLookup.HasBuffer(instantTargetAsc)
+                    || !NextFrameInstantSetByCallerLookup.HasBuffer(instantTargetAsc))
                 {
                     return;
                 }
 
-                EffectCommandSpecStream.AppendPreparedCommand(ref stream, commands, setByCallerValues, command, Frame);
+                var instantSetByCallerValues = NextFrameInstantSetByCallerLookup[instantTargetAsc];
+                var instantCommand = PrepareCommand(
+                    ref stream,
+                    instantSetByCallerValues.Length,
+                    in command,
+                    0,
+                    Frame);
+                NextFrameInstantCommandLookup[instantTargetAsc].Add(new OwnerLocalInstantNextFrameCommandBuffer
+                {
+                    Command = instantCommand,
+                });
             }
 
             private GEEffectCommandBuffer PrepareCommand(

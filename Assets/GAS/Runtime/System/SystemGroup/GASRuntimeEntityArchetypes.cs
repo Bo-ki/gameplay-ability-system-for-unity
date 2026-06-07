@@ -4,7 +4,7 @@ namespace GAS.Runtime
 {
     public static class GASRuntimeEntityArchetypes
     {
-        private const int AscCoreComponentTypeCount = 35;
+        private const int AscCoreComponentTypeCount = 37;
 
         private static bool _hasCachedWorld;
         private static EntityManager _cachedEntityManager;
@@ -501,6 +501,8 @@ namespace GAS.Runtime
             componentTypes[index++] = ComponentType.ReadWrite<ActiveGameplayEffectCleanupRecordBuffer>();
             componentTypes[index++] = ComponentType.ReadWrite<GEEffectCommandBuffer>();
             componentTypes[index++] = ComponentType.ReadWrite<GESetByCallerValueBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<OwnerLocalInstantNextFrameCommandBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<OwnerLocalInstantNextFrameSetByCallerValueBuffer>();
             componentTypes[index++] = ComponentType.ReadWrite<ActiveEffectMutationCommandBuffer>();
             componentTypes[index++] = ComponentType.ReadWrite<ActiveEffectMutationSetByCallerValueBuffer>();
             componentTypes[index++] = ComponentType.ReadWrite<ActiveEffectNextFrameMutationCommandBuffer>();

@@ -19,6 +19,8 @@ namespace GAS.Runtime
         private const int ActiveEffectCleanupRecordInitialCapacity = ActiveEffectStore.InlineCleanupRecordCapacity;
         private const int OwnerLocalInstantCommandInitialCapacity = 4;
         private const int OwnerLocalInstantSetByCallerInitialCapacity = 8;
+        private const int OwnerLocalInstantNextFrameCommandInitialCapacity = 4;
+        private const int OwnerLocalInstantNextFrameSetByCallerInitialCapacity = 8;
         private const int ActiveEffectMutationCommandInitialCapacity = 4;
         private const int ActiveEffectMutationSetByCallerInitialCapacity = 8;
         private const int ActiveEffectNextFrameMutationCommandInitialCapacity = 4;
@@ -80,6 +82,8 @@ namespace GAS.Runtime
             entityManager.GetBuffer<ActiveGameplayEffectCleanupRecordBuffer>(asc).EnsureCapacity(ActiveEffectCleanupRecordInitialCapacity);
             entityManager.GetBuffer<GEEffectCommandBuffer>(asc).EnsureCapacity(OwnerLocalInstantCommandInitialCapacity);
             entityManager.GetBuffer<GESetByCallerValueBuffer>(asc).EnsureCapacity(OwnerLocalInstantSetByCallerInitialCapacity);
+            entityManager.GetBuffer<OwnerLocalInstantNextFrameCommandBuffer>(asc).EnsureCapacity(OwnerLocalInstantNextFrameCommandInitialCapacity);
+            entityManager.GetBuffer<OwnerLocalInstantNextFrameSetByCallerValueBuffer>(asc).EnsureCapacity(OwnerLocalInstantNextFrameSetByCallerInitialCapacity);
             entityManager.GetBuffer<ActiveEffectMutationCommandBuffer>(asc).EnsureCapacity(ActiveEffectMutationCommandInitialCapacity);
             entityManager.GetBuffer<ActiveEffectMutationSetByCallerValueBuffer>(asc).EnsureCapacity(ActiveEffectMutationSetByCallerInitialCapacity);
             entityManager.GetBuffer<ActiveEffectNextFrameMutationCommandBuffer>(asc).EnsureCapacity(ActiveEffectNextFrameMutationCommandInitialCapacity);
@@ -115,6 +119,8 @@ namespace GAS.Runtime
             commandBuffer.SetBuffer<ActiveGameplayEffectCleanupRecordBuffer>(asc).EnsureCapacity(ActiveEffectCleanupRecordInitialCapacity);
             commandBuffer.SetBuffer<GEEffectCommandBuffer>(asc).EnsureCapacity(OwnerLocalInstantCommandInitialCapacity);
             commandBuffer.SetBuffer<GESetByCallerValueBuffer>(asc).EnsureCapacity(OwnerLocalInstantSetByCallerInitialCapacity);
+            commandBuffer.SetBuffer<OwnerLocalInstantNextFrameCommandBuffer>(asc).EnsureCapacity(OwnerLocalInstantNextFrameCommandInitialCapacity);
+            commandBuffer.SetBuffer<OwnerLocalInstantNextFrameSetByCallerValueBuffer>(asc).EnsureCapacity(OwnerLocalInstantNextFrameSetByCallerInitialCapacity);
             commandBuffer.SetBuffer<ActiveEffectMutationCommandBuffer>(asc).EnsureCapacity(ActiveEffectMutationCommandInitialCapacity);
             commandBuffer.SetBuffer<ActiveEffectMutationSetByCallerValueBuffer>(asc).EnsureCapacity(ActiveEffectMutationSetByCallerInitialCapacity);
             commandBuffer.SetBuffer<ActiveEffectNextFrameMutationCommandBuffer>(asc).EnsureCapacity(ActiveEffectNextFrameMutationCommandInitialCapacity);
@@ -156,6 +162,8 @@ namespace GAS.Runtime
                 && entityManager.HasBuffer<ActiveGameplayEffectCleanupRecordBuffer>(asc)
                 && entityManager.HasBuffer<GEEffectCommandBuffer>(asc)
                 && entityManager.HasBuffer<GESetByCallerValueBuffer>(asc)
+                && entityManager.HasBuffer<OwnerLocalInstantNextFrameCommandBuffer>(asc)
+                && entityManager.HasBuffer<OwnerLocalInstantNextFrameSetByCallerValueBuffer>(asc)
                 && entityManager.HasBuffer<ActiveEffectMutationCommandBuffer>(asc)
                 && entityManager.HasBuffer<ActiveEffectMutationSetByCallerValueBuffer>(asc)
                 && entityManager.HasBuffer<ActiveEffectNextFrameMutationCommandBuffer>(asc)

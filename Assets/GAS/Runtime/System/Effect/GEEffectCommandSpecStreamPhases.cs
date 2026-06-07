@@ -91,6 +91,8 @@ namespace GAS.Runtime
                 {
                     ComponentType.ReadWrite<GEEffectCommandBuffer>(),
                     ComponentType.ReadWrite<GESetByCallerValueBuffer>(),
+                    ComponentType.ReadWrite<OwnerLocalInstantNextFrameCommandBuffer>(),
+                    ComponentType.ReadWrite<OwnerLocalInstantNextFrameSetByCallerValueBuffer>(),
                     ComponentType.ReadOnly<ASCIdentityComponent>(),
                 },
             });
@@ -100,18 +102,22 @@ namespace GAS.Runtime
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency = new ClearOwnerLocalInstantCommandsJob
+            state.Dependency = new PromoteOwnerLocalInstantCommandsJob
             {
                 CommandType = SystemAPI.GetBufferTypeHandle<GEEffectCommandBuffer>(),
                 SetByCallerType = SystemAPI.GetBufferTypeHandle<GESetByCallerValueBuffer>(),
+                NextFrameCommandType = SystemAPI.GetBufferTypeHandle<OwnerLocalInstantNextFrameCommandBuffer>(),
+                NextFrameSetByCallerType = SystemAPI.GetBufferTypeHandle<OwnerLocalInstantNextFrameSetByCallerValueBuffer>(),
             }.Schedule(_ownerInstantCommandQuery, state.Dependency);
         }
 
         [BurstCompile]
-        private struct ClearOwnerLocalInstantCommandsJob : IJobChunk
+        private struct PromoteOwnerLocalInstantCommandsJob : IJobChunk
         {
             public BufferTypeHandle<GEEffectCommandBuffer> CommandType;
             public BufferTypeHandle<GESetByCallerValueBuffer> SetByCallerType;
+            public BufferTypeHandle<OwnerLocalInstantNextFrameCommandBuffer> NextFrameCommandType;
+            public BufferTypeHandle<OwnerLocalInstantNextFrameSetByCallerValueBuffer> NextFrameSetByCallerType;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -121,11 +127,27 @@ namespace GAS.Runtime
             {
                 var commands = chunk.GetBufferAccessor(ref CommandType);
                 var setByCallerValues = chunk.GetBufferAccessor(ref SetByCallerType);
+                var nextFrameCommands = chunk.GetBufferAccessor(ref NextFrameCommandType);
+                var nextFrameSetByCallerValues = chunk.GetBufferAccessor(ref NextFrameSetByCallerType);
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
-                    commands[entityIndex].Clear();
-                    setByCallerValues[entityIndex].Clear();
+                    var currentCommands = commands[entityIndex];
+                    var currentSetByCallerValues = setByCallerValues[entityIndex];
+                    var deferredCommands = nextFrameCommands[entityIndex];
+                    var deferredSetByCallerValues = nextFrameSetByCallerValues[entityIndex];
+
+                    currentCommands.Clear();
+                    currentSetByCallerValues.Clear();
+
+                    for (var i = 0; i < deferredSetByCallerValues.Length; i++)
+                        currentSetByCallerValues.Add(deferredSetByCallerValues[i].Value);
+
+                    for (var i = 0; i < deferredCommands.Length; i++)
+                        currentCommands.Add(deferredCommands[i].Command);
+
+                    deferredCommands.Clear();
+                    deferredSetByCallerValues.Clear();
                 }
             }
         }

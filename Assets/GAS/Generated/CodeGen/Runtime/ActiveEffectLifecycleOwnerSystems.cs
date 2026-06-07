@@ -170,6 +170,8 @@ namespace GAS.Runtime.Generated
                     ComponentType.ReadWrite<ActiveGameplayEffectCleanupRecordBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationCommandBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationSetByCallerValueBuffer>(),
+                    ComponentType.ReadWrite<OwnerLocalInstantNextFrameCommandBuffer>(),
+                    ComponentType.ReadWrite<OwnerLocalInstantNextFrameSetByCallerValueBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectNextFrameMutationCommandBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectNextFrameMutationSetByCallerValueBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationBuffer>(),
@@ -268,8 +270,10 @@ namespace GAS.Runtime.Generated
                 TagSourceBufferTypeHandle = SystemAPI.GetBufferTypeHandle<TagTemporarySourceBuffer>(isReadOnly: false),
                 AbilitySlotBufferTypeHandle = SystemAPI.GetBufferTypeHandle<AbilitySlotBuffer>(isReadOnly: false),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
-                StreamSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
+                NextFrameInstantCommandLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalInstantNextFrameCommandBuffer>(isReadOnly: false),
+                NextFrameInstantSetByCallerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalInstantNextFrameSetByCallerValueBuffer>(isReadOnly: false),
                 NextFrameActiveMutationCommandLookup =
                     SystemAPI.GetBufferLookup<ActiveEffectNextFrameMutationCommandBuffer>(isReadOnly: false),
                 NextFrameActiveMutationSetByCallerLookup =

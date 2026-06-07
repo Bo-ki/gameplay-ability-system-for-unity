@@ -234,6 +234,18 @@ namespace GAS.Runtime
         public GESetByCallerValueBuffer Value;
     }
 
+    [InternalBufferCapacity(4)]
+    public struct OwnerLocalInstantNextFrameCommandBuffer : IBufferElementData
+    {
+        public GEEffectCommandBuffer Command;
+    }
+
+    [InternalBufferCapacity(8)]
+    public struct OwnerLocalInstantNextFrameSetByCallerValueBuffer : IBufferElementData
+    {
+        public GESetByCallerValueBuffer Value;
+    }
+
     [InternalBufferCapacity(0)]
     public struct GameplayEventBuffer : IBufferElementData
     {
