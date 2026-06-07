@@ -107,6 +107,10 @@ namespace GAS.AutoChessDemo
                 counters.PendingAttributeEstimatedRandomLookupCount,
                 counters.PendingAttributeFactPatchCount,
                 counters.PendingAttributeMigrationCarrierCount,
+                counters.OwnerLocalFactCount,
+                counters.OwnerLocalFactOwnerGroupCount,
+                counters.OwnerLocalFactMaxOwnerRange,
+                counters.OwnerLocalFactFlushCount,
                 streamCarrierPressure.WarningCount,
                 streamCarrierPressure.PeakCount,
                 streamCarrierPressure.PeakCapacity,
@@ -234,6 +238,10 @@ namespace GAS.AutoChessDemo
                     + $"pendingAttributeEstimatedRandomLookups={evidence.PendingAttributeEstimatedRandomLookupCount}, "
                     + $"pendingAttributeFactPatches={evidence.PendingAttributeFactPatchCount}, "
                     + $"pendingAttributeMigrationCarriers={evidence.PendingAttributeMigrationCarrierCount}, "
+                    + $"ownerLocalFacts={evidence.OwnerLocalFactCount}, "
+                    + $"ownerLocalFactOwnerGroups={evidence.OwnerLocalFactOwnerGroupCount}, "
+                    + $"ownerLocalFactMaxOwnerRange={evidence.OwnerLocalFactMaxOwnerRange}, "
+                    + $"ownerLocalFactFlushes={evidence.OwnerLocalFactFlushCount}, "
                     + $"streamCarrierPressureWarnings={evidence.StreamCarrierPressureWarningCount}, "
                     + $"streamCarrierPeak={evidence.StreamCarrierPeakCount}, "
                     + $"streamCarrierCapacity={evidence.StreamCarrierPeakCapacity}, "
@@ -303,6 +311,10 @@ namespace GAS.AutoChessDemo
                    + $"pendingAttributeEstimatedRandomLookups={counters.PendingAttributeEstimatedRandomLookupCount}, "
                    + $"pendingAttributeFactPatches={counters.PendingAttributeFactPatchCount}, "
                    + $"pendingAttributeMigrationCarriers={counters.PendingAttributeMigrationCarrierCount}, "
+                   + $"ownerLocalFacts={counters.OwnerLocalFactCount}, "
+                   + $"ownerLocalFactOwnerGroups={counters.OwnerLocalFactOwnerGroupCount}, "
+                   + $"ownerLocalFactMaxOwnerRange={counters.OwnerLocalFactMaxOwnerRange}, "
+                   + $"ownerLocalFactFlushes={counters.OwnerLocalFactFlushCount}, "
                    + $"streamCarrierPressureWarnings={CalculateStreamCarrierPressure(result.RuntimeDiagnostics).WarningCount}, "
                    + $"observationMaterializedQueries={observation.MaterializedQueryCount}, "
                    + $"observationMaterializedEntities={observation.MaterializedEntityCount}, "
@@ -386,6 +398,9 @@ namespace GAS.AutoChessDemo
                    + $"pendingAttributeAppliedDeltas={counters.PendingAttributeAppliedDeltaCount}, "
                    + $"pendingAttributeTargetGroups={counters.PendingAttributeTargetGroupCount}, "
                    + $"pendingAttributeEstimatedRandomLookups={counters.PendingAttributeEstimatedRandomLookupCount}, "
+                   + $"ownerLocalFacts={counters.OwnerLocalFactCount}, "
+                   + $"ownerLocalFactOwnerGroups={counters.OwnerLocalFactOwnerGroupCount}, "
+                   + $"ownerLocalFactFlushes={counters.OwnerLocalFactFlushCount}, "
                    + $"streamCarrierPressureWarnings={CalculateStreamCarrierPressure(diagnosticResult.RuntimeDiagnostics).WarningCount}, "
                    + $"observationMaterializedQueries={observation.MaterializedQueryCount}, "
                    + $"observationMaterializationUs={observation.ElapsedMicroseconds}, "

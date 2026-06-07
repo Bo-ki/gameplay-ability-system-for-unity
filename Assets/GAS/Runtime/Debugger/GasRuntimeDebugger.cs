@@ -112,6 +112,10 @@ namespace GAS.Runtime
         public int RuntimeCorePendingAttributeEstimatedRandomLookupCount;
         public int RuntimeCorePendingAttributeFactPatchCount;
         public int RuntimeCorePendingAttributeMigrationCarrierCount;
+        public int RuntimeCoreOwnerLocalFactCount;
+        public int RuntimeCoreOwnerLocalFactOwnerGroupCount;
+        public int RuntimeCoreOwnerLocalFactMaxOwnerRange;
+        public int RuntimeCoreOwnerLocalFactFlushCount;
         public int RuntimeCoreMagnitudeSourceCurrentValueLookupCount;
         public int RuntimeCoreMagnitudeSourceCapturedValueHitCount;
         public int RuntimeCoreMagnitudeSourceCaptureMissCount;
@@ -232,6 +236,10 @@ namespace GAS.Runtime
         public int PendingAttributeEstimatedRandomLookupCount;
         public int PendingAttributeFactPatchCount;
         public int PendingAttributeMigrationCarrierCount;
+        public int OwnerLocalFactCount;
+        public int OwnerLocalFactOwnerGroupCount;
+        public int OwnerLocalFactMaxOwnerRange;
+        public int OwnerLocalFactFlushCount;
         public int MagnitudeSourceCurrentValueLookupCount;
         public int MagnitudeSourceCapturedValueHitCount;
         public int MagnitudeSourceCaptureMissCount;
@@ -598,6 +606,10 @@ namespace GAS.Runtime
         public readonly int PendingAttributeEstimatedRandomLookupCount;
         public readonly int PendingAttributeFactPatchCount;
         public readonly int PendingAttributeMigrationCarrierCount;
+        public readonly int OwnerLocalFactCount;
+        public readonly int OwnerLocalFactOwnerGroupCount;
+        public readonly int OwnerLocalFactMaxOwnerRange;
+        public readonly int OwnerLocalFactFlushCount;
         public readonly int MagnitudeSourceCurrentValueLookupCount;
         public readonly int MagnitudeSourceCapturedValueHitCount;
         public readonly int MagnitudeSourceCaptureMissCount;
@@ -695,7 +707,11 @@ namespace GAS.Runtime
             int helperTempQueryRiskCount = 0,
             int dependencyWaitRiskCount = 0,
             int worldUpdateAllocatorOwnerCount = 0,
-            int rewindableAllocatorCandidateCount = 0)
+            int rewindableAllocatorCandidateCount = 0,
+            int ownerLocalFactCount = 0,
+            int ownerLocalFactOwnerGroupCount = 0,
+            int ownerLocalFactMaxOwnerRange = 0,
+            int ownerLocalFactFlushCount = 0)
         {
             RequestCount = requestCount;
             SpecCount = specCount;
@@ -755,6 +771,10 @@ namespace GAS.Runtime
             PendingAttributeEstimatedRandomLookupCount = pendingAttributeEstimatedRandomLookupCount;
             PendingAttributeFactPatchCount = pendingAttributeFactPatchCount;
             PendingAttributeMigrationCarrierCount = pendingAttributeMigrationCarrierCount;
+            OwnerLocalFactCount = ownerLocalFactCount;
+            OwnerLocalFactOwnerGroupCount = ownerLocalFactOwnerGroupCount;
+            OwnerLocalFactMaxOwnerRange = ownerLocalFactMaxOwnerRange;
+            OwnerLocalFactFlushCount = ownerLocalFactFlushCount;
             MagnitudeSourceCurrentValueLookupCount = magnitudeSourceCurrentValueLookupCount;
             MagnitudeSourceCapturedValueHitCount = magnitudeSourceCapturedValueHitCount;
             MagnitudeSourceCaptureMissCount = magnitudeSourceCaptureMissCount;
@@ -1296,6 +1316,10 @@ namespace GAS.Runtime
             state.RuntimeCorePendingAttributeEstimatedRandomLookupCount = 0;
             state.RuntimeCorePendingAttributeFactPatchCount = 0;
             state.RuntimeCorePendingAttributeMigrationCarrierCount = 0;
+            state.RuntimeCoreOwnerLocalFactCount = 0;
+            state.RuntimeCoreOwnerLocalFactOwnerGroupCount = 0;
+            state.RuntimeCoreOwnerLocalFactMaxOwnerRange = 0;
+            state.RuntimeCoreOwnerLocalFactFlushCount = 0;
             state.RuntimeCoreMagnitudeSourceCurrentValueLookupCount = 0;
             state.RuntimeCoreMagnitudeSourceCapturedValueHitCount = 0;
             state.RuntimeCoreMagnitudeSourceCaptureMissCount = 0;
@@ -1531,7 +1555,11 @@ namespace GAS.Runtime
                 counters.HelperTempQueryRiskCount,
                 counters.DependencyWaitRiskCount,
                 counters.WorldUpdateAllocatorOwnerCount,
-                counters.RewindableAllocatorCandidateCount);
+                counters.RewindableAllocatorCandidateCount,
+                counters.OwnerLocalFactCount,
+                counters.OwnerLocalFactOwnerGroupCount,
+                counters.OwnerLocalFactMaxOwnerRange,
+                counters.OwnerLocalFactFlushCount);
         }
 
         public static GasRuntimeCoreDiagnosticCounters CollectRuntimeCoreCounters(
@@ -1606,6 +1634,10 @@ namespace GAS.Runtime
                 out var pendingAttributeEstimatedRandomLookupCount,
                 out var pendingAttributeFactPatchCount,
                 out var pendingAttributeMigrationCarrierCount,
+                out var ownerLocalFactCount,
+                out var ownerLocalFactOwnerGroupCount,
+                out var ownerLocalFactMaxOwnerRange,
+                out var ownerLocalFactFlushCount,
                 out var magnitudeSourceCurrentValueLookupCount,
                 out var magnitudeSourceCapturedValueHitCount,
                 out var magnitudeSourceCaptureMissCount,
@@ -1774,7 +1806,11 @@ namespace GAS.Runtime
                 frameBudget.HelperTempQueryRiskCount,
                 frameBudget.DependencyWaitRiskCount,
                 frameBudget.WorldUpdateAllocatorOwnerCount,
-                frameBudget.RewindableAllocatorCandidateCount);
+                frameBudget.RewindableAllocatorCandidateCount,
+                ownerLocalFactCount,
+                ownerLocalFactOwnerGroupCount,
+                ownerLocalFactMaxOwnerRange,
+                ownerLocalFactFlushCount);
         }
 
         public static void CollectAndRecordRuntimeCoreCounters(
@@ -2062,7 +2098,11 @@ namespace GAS.Runtime
             int helperTempQueryRiskCount = 0,
             int dependencyWaitRiskCount = 0,
             int worldUpdateAllocatorOwnerCount = 0,
-            int rewindableAllocatorCandidateCount = 0)
+            int rewindableAllocatorCandidateCount = 0,
+            int ownerLocalFactCount = 0,
+            int ownerLocalFactOwnerGroupCount = 0,
+            int ownerLocalFactMaxOwnerRange = 0,
+            int ownerLocalFactFlushCount = 0)
         {
             if (!TryGetWritableLog(em, debuggerEntity, out var state, out var log))
                 return;
@@ -2132,6 +2172,11 @@ namespace GAS.Runtime
             state.RuntimeCorePendingAttributeEstimatedRandomLookupCount += pendingAttributeEstimatedRandomLookupCount;
             state.RuntimeCorePendingAttributeFactPatchCount += pendingAttributeFactPatchCount;
             state.RuntimeCorePendingAttributeMigrationCarrierCount += pendingAttributeMigrationCarrierCount;
+            state.RuntimeCoreOwnerLocalFactCount += ownerLocalFactCount;
+            state.RuntimeCoreOwnerLocalFactOwnerGroupCount += ownerLocalFactOwnerGroupCount;
+            if (ownerLocalFactMaxOwnerRange > state.RuntimeCoreOwnerLocalFactMaxOwnerRange)
+                state.RuntimeCoreOwnerLocalFactMaxOwnerRange = ownerLocalFactMaxOwnerRange;
+            state.RuntimeCoreOwnerLocalFactFlushCount += ownerLocalFactFlushCount;
             state.RuntimeCoreMagnitudeSourceCurrentValueLookupCount += magnitudeSourceCurrentValueLookupCount;
             state.RuntimeCoreMagnitudeSourceCapturedValueHitCount += magnitudeSourceCapturedValueHitCount;
             state.RuntimeCoreMagnitudeSourceCaptureMissCount += magnitudeSourceCaptureMissCount;
@@ -2221,6 +2266,10 @@ namespace GAS.Runtime
                     PendingAttributeEstimatedRandomLookupCount = pendingAttributeEstimatedRandomLookupCount,
                     PendingAttributeFactPatchCount = pendingAttributeFactPatchCount,
                     PendingAttributeMigrationCarrierCount = pendingAttributeMigrationCarrierCount,
+                    OwnerLocalFactCount = ownerLocalFactCount,
+                    OwnerLocalFactOwnerGroupCount = ownerLocalFactOwnerGroupCount,
+                    OwnerLocalFactMaxOwnerRange = ownerLocalFactMaxOwnerRange,
+                    OwnerLocalFactFlushCount = ownerLocalFactFlushCount,
                     MagnitudeSourceCurrentValueLookupCount = magnitudeSourceCurrentValueLookupCount,
                     MagnitudeSourceCapturedValueHitCount = magnitudeSourceCapturedValueHitCount,
                     MagnitudeSourceCaptureMissCount = magnitudeSourceCaptureMissCount,
@@ -2715,7 +2764,11 @@ namespace GAS.Runtime
                     state.RuntimeCoreHelperTempQueryRiskCount,
                     state.RuntimeCoreDependencyWaitRiskCount,
                     state.RuntimeCoreWorldUpdateAllocatorOwnerCount,
-                    state.RuntimeCoreRewindableAllocatorCandidateCount),
+                    state.RuntimeCoreRewindableAllocatorCandidateCount,
+                    state.RuntimeCoreOwnerLocalFactCount,
+                    state.RuntimeCoreOwnerLocalFactOwnerGroupCount,
+                    state.RuntimeCoreOwnerLocalFactMaxOwnerRange,
+                    state.RuntimeCoreOwnerLocalFactFlushCount),
                 CreateFrameBackboneCounters(state),
                 observationMaterializationCounters,
                 magnitudeSourceCounters,
@@ -2810,6 +2863,10 @@ namespace GAS.Runtime
             out int pendingAttributeEstimatedRandomLookupCount,
             out int pendingAttributeFactPatchCount,
             out int pendingAttributeMigrationCarrierCount,
+            out int ownerLocalFactCount,
+            out int ownerLocalFactOwnerGroupCount,
+            out int ownerLocalFactMaxOwnerRange,
+            out int ownerLocalFactFlushCount,
             out int magnitudeSourceCurrentValueLookupCount,
             out int magnitudeSourceCapturedValueHitCount,
             out int magnitudeSourceCaptureMissCount,
@@ -2839,6 +2896,10 @@ namespace GAS.Runtime
             pendingAttributeEstimatedRandomLookupCount = 0;
             pendingAttributeFactPatchCount = 0;
             pendingAttributeMigrationCarrierCount = 0;
+            ownerLocalFactCount = 0;
+            ownerLocalFactOwnerGroupCount = 0;
+            ownerLocalFactMaxOwnerRange = 0;
+            ownerLocalFactFlushCount = 0;
             magnitudeSourceCurrentValueLookupCount = 0;
             magnitudeSourceCapturedValueHitCount = 0;
             magnitudeSourceCaptureMissCount = 0;
@@ -2875,6 +2936,10 @@ namespace GAS.Runtime
             pendingAttributeEstimatedRandomLookupCount = stream.PendingAttributeEstimatedRandomLookupCount;
             pendingAttributeFactPatchCount = stream.PendingAttributeFactPatchCount;
             pendingAttributeMigrationCarrierCount = stream.PendingAttributeMigrationCarrierCount;
+            ownerLocalFactCount = stream.OwnerLocalFactCount;
+            ownerLocalFactOwnerGroupCount = stream.OwnerLocalFactOwnerGroupCount;
+            ownerLocalFactMaxOwnerRange = stream.OwnerLocalFactMaxOwnerRange;
+            ownerLocalFactFlushCount = stream.OwnerLocalFactFlushCount;
             magnitudeSourceCurrentValueLookupCount = stream.MagnitudeSourceCurrentValueLookupCount;
             magnitudeSourceCapturedValueHitCount = stream.MagnitudeSourceCapturedValueHitCount;
             magnitudeSourceCaptureMissCount = stream.MagnitudeSourceCaptureMissCount;
@@ -3567,6 +3632,14 @@ namespace GAS.Runtime
                 .Append(evt.PendingAttributeFactPatchCount)
                 .Append("|pendingAttributeMigrationCarriers=")
                 .Append(evt.PendingAttributeMigrationCarrierCount)
+                .Append("|ownerLocalFacts=")
+                .Append(evt.OwnerLocalFactCount)
+                .Append("|ownerLocalFactOwnerGroups=")
+                .Append(evt.OwnerLocalFactOwnerGroupCount)
+                .Append("|ownerLocalFactMaxOwnerRange=")
+                .Append(evt.OwnerLocalFactMaxOwnerRange)
+                .Append("|ownerLocalFactFlushes=")
+                .Append(evt.OwnerLocalFactFlushCount)
                 .Append("|magnitudeSourceCurrentValueLookups=")
                 .Append(evt.MagnitudeSourceCurrentValueLookupCount)
                 .Append("|magnitudeSourceCapturedValueHits=")
@@ -3891,6 +3964,14 @@ namespace GAS.Runtime
                 .Append(counters.PendingAttributeFactPatchCount)
                 .Append("|migrationCarriers=")
                 .Append(counters.PendingAttributeMigrationCarrierCount)
+                .Append("|ownerLocalFacts=")
+                .Append(counters.OwnerLocalFactCount)
+                .Append("|ownerGroups=")
+                .Append(counters.OwnerLocalFactOwnerGroupCount)
+                .Append("|maxOwnerRange=")
+                .Append(counters.OwnerLocalFactMaxOwnerRange)
+                .Append("|flushes=")
+                .Append(counters.OwnerLocalFactFlushCount)
                 .AppendLine();
             builder.Append("runtimeCoreMagnitudeSource|currentValueLookups=")
                 .Append(counters.MagnitudeSourceCurrentValueLookupCount)

@@ -415,6 +415,10 @@ namespace GAS.AutoChessDemo
         public readonly int PendingAttributeEstimatedRandomLookupCount;
         public readonly int PendingAttributeFactPatchCount;
         public readonly int PendingAttributeMigrationCarrierCount;
+        public readonly int OwnerLocalFactCount;
+        public readonly int OwnerLocalFactOwnerGroupCount;
+        public readonly int OwnerLocalFactMaxOwnerRange;
+        public readonly int OwnerLocalFactFlushCount;
         public readonly int StreamCarrierPressureWarningCount;
         public readonly int StreamCarrierPeakCount;
         public readonly int StreamCarrierPeakCapacity;
@@ -496,6 +500,10 @@ namespace GAS.AutoChessDemo
             int pendingAttributeEstimatedRandomLookupCount,
             int pendingAttributeFactPatchCount,
             int pendingAttributeMigrationCarrierCount,
+            int ownerLocalFactCount,
+            int ownerLocalFactOwnerGroupCount,
+            int ownerLocalFactMaxOwnerRange,
+            int ownerLocalFactFlushCount,
             int streamCarrierPressureWarningCount,
             int streamCarrierPeakCount,
             int streamCarrierPeakCapacity,
@@ -576,6 +584,10 @@ namespace GAS.AutoChessDemo
             PendingAttributeEstimatedRandomLookupCount = pendingAttributeEstimatedRandomLookupCount;
             PendingAttributeFactPatchCount = pendingAttributeFactPatchCount;
             PendingAttributeMigrationCarrierCount = pendingAttributeMigrationCarrierCount;
+            OwnerLocalFactCount = ownerLocalFactCount;
+            OwnerLocalFactOwnerGroupCount = ownerLocalFactOwnerGroupCount;
+            OwnerLocalFactMaxOwnerRange = ownerLocalFactMaxOwnerRange;
+            OwnerLocalFactFlushCount = ownerLocalFactFlushCount;
             StreamCarrierPressureWarningCount = streamCarrierPressureWarningCount;
             StreamCarrierPeakCount = streamCarrierPeakCount;
             StreamCarrierPeakCapacity = streamCarrierPeakCapacity;

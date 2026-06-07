@@ -316,7 +316,8 @@ namespace GAS.Runtime
 
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
-    [UpdateAfter(typeof(GameplayFactProjectionSystem))]
+    [UpdateAfter(typeof(GASAttributeModifierDeltaApplySystem))]
+    [UpdateBefore(typeof(GameplayFactProjectionSystem))]
     [BurstCompile]
     public partial struct GameplayOwnerLocalFactFlushSystem : ISystem
     {

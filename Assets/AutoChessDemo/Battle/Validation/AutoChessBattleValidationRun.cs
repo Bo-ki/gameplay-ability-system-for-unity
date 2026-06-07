@@ -447,6 +447,7 @@ namespace GAS.AutoChessDemo
                     && counters.RequestCount > 0
                     && counters.FactCount > 0
                     && counters.PendingAttributeAppliedDeltaCount > 0
+                    && counters.OwnerLocalFactFlushCount > 0
                     && HasRequiredBattleLog(result.BattleLog)
                     && AutoChessBattleValidationReport.HasBoundaryReportKeyCoverage(
                         result.StructuredLogSnapshot)

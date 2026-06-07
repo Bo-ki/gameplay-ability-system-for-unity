@@ -11,9 +11,11 @@
 1. `OwnerLocalGameplayFactBuffer` 新增为 ASC 本地 fact carrier，`GASRuntimeEntityArchetypes.ASC()` 和 `ASCEntityFactory` 已把它纳入 ASC archetype、初始化容量和完整性检查。
 2. `GASAttributeModifierDeltaApplySystem` 在 chunk-local `ApplyOwnerLocalPendingAttributeModifierDeltaChunkJob` 中继续应用 owner-local `AttributeModifierBuffer`，但新增 Attribute fact 先写入 `OwnerLocalGameplayFactBuffer`。
 3. `GameplayOwnerLocalFactFramePrepareSystem` 在 FramePrepare 清理上一帧 ASC 本地 fact。
-4. `GameplayOwnerLocalFactFlushSystem` 在 CoreSimulation 中收集 ASC 本地 fact，按 owner `Entity` + fact sequence + local index 排序后 flush 到现有 stream export，保持当前 `GameplayFactBoundaryProjectionSystem` 消费链不破。
+4. `GameplayOwnerLocalFactFlushSystem` 在 CoreSimulation 中收集 ASC 本地 fact，按 owner `Entity` + fact sequence + local index 排序后 flush 到现有 stream export；该系统显式 `UpdateBefore(GameplayFactProjectionSystem)`，避免 owner-local fact 已分配较小 `NextFactSequence` 却被物理追加到 projection fact 之后。
 5. `GEEffectCommandStreamComponent` 新增 owner-local fact counter：`OwnerLocalFactCount`、`OwnerLocalFactOwnerGroupCount`、`OwnerLocalFactMaxOwnerRange`、`OwnerLocalFactFlushCount`。
-6. `Verify-GAS-RuntimeCoreBoundary.ps1` 新增防回流门，要求 owner-local fact buffer、frame prepare、flush system、deterministic comparer 和 schedule registration 同时存在。
+6. `GasRuntimeDebugger` 采集这组 counter，并写入 retained runtime core state、diagnostic event、snapshot 文本和 `GasRuntimeCoreDiagnosticCounters`。
+7. AutoChess validation evidence / summary 输出 `ownerLocalFacts`、`ownerLocalFactOwnerGroups`、`ownerLocalFactMaxOwnerRange`、`ownerLocalFactFlushes`；runtime chain gate 要求 `OwnerLocalFactFlushCount > 0`。
+8. `Verify-GAS-RuntimeCoreBoundary.ps1` 新增防回流门，要求 owner-local fact buffer、frame prepare、flush system、deterministic comparer、flush-before-projection 调度、debugger counter export 和 AutoChess gate 同时存在。
 
 ## 代码证据
 
@@ -22,8 +24,10 @@
 | owner-local fact buffer 定义和计数器 | `Assets/GAS/Runtime/Effect/Component/Dynamic/GEEffectCommandSpecStream.cs` |
 | ASC archetype / factory 拥有本地 fact buffer | `Assets/GAS/Runtime/System/SystemGroup/GASRuntimeEntityArchetypes.cs`、`Assets/GAS/Runtime/AbilitySystem/ASCEntityFactory.cs` |
 | pending AttributeDelta apply 写 ASC 本地 fact | `Assets/GAS/Runtime/System/Attribute/GASAttributeModifierDeltaApplySystem.cs` |
-| 本地 fact frame clear / deterministic flush | `Assets/GAS/Runtime/System/Effect/GEEffectCommandSpecStreamPhases.cs` |
+| 本地 fact frame clear / deterministic flush-before-projection | `Assets/GAS/Runtime/System/Effect/GEEffectCommandSpecStreamPhases.cs` |
 | schedule 注册 | `Assets/GAS/Runtime/System/SystemGroup/GASSystemScheduleContract.cs` |
+| debugger-visible counters | `Assets/GAS/Runtime/Debugger/GasRuntimeDebugger.cs` |
+| AutoChess validation evidence / chain gate | `Assets/AutoChessDemo/Battle/AutoChessBattleContracts.cs`、`Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationReport.cs`、`Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs` |
 | 防回流验证 | `Tools/Diagnostics/Verify-GAS-RuntimeCoreBoundary.ps1` |
 
 ## 验证
@@ -50,4 +54,4 @@
 
 ## 复发入口
 
-如果 `GASAttributeModifierDeltaApplySystem` 重新直接把 Attribute fact 写入 singleton `GameplayEventBuffer`，或 `OwnerLocalGameplayFactBuffer` / `GameplayOwnerLocalFactFlushSystem` 从 schedule 中消失，应重新打开 P0-D。
+如果 `GASAttributeModifierDeltaApplySystem` 重新直接把 Attribute fact 写入 singleton `GameplayEventBuffer`，或 `OwnerLocalGameplayFactBuffer` / `GameplayOwnerLocalFactFlushSystem` 从 schedule 中消失，或 `GameplayOwnerLocalFactFlushSystem` 又排到 `GameplayFactProjectionSystem` 之后，或 Runtime Debugger / AutoChess validation 不再输出 `ownerLocalFactFlushes`，应重新打开 P0-D。

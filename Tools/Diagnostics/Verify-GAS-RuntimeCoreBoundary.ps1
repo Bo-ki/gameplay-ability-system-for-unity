@@ -82,6 +82,7 @@ $executionCalculationSystemPath = Join-Path $runtimePath "System\Effect\GEExecut
 $diagnosticsSnapshotSystemPath = Join-Path $runtimePath "System\Event\DiagnosticsSnapshotSystem.cs"
 $scheduleContractPath = Join-Path $runtimePath "System\SystemGroup\GASSystemScheduleContract.cs"
 $streamOwnerContractPath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeStreamOwnerContract.cs"
+$queryLayoutPlanPath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeQueryLayoutPlan.cs"
 $globalTimerPath = Join-Path $runtimePath "System\Core\GASGlobalTimerSystem.cs"
 $activeEffectStorePath = Join-Path $runtimePath "Effect\Component\Dynamic\ActiveEffectStore.cs"
 $gasManagerPath = Join-Path $runtimePath "General\GASManager.cs"
@@ -179,6 +180,10 @@ Assert-FileContains `
     -Pattern "OwnerLocalGameplayFactRecordComparer" `
     -Message "Owner-local gameplay fact flush must define deterministic owner/sequence ordering."
 Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "UpdateBefore\(typeof\(GameplayFactProjectionSystem\)\)[\s\S]*GameplayOwnerLocalFactFlushSystem" `
+    -Message "Owner-local gameplay fact flush must run before stream fact projection to preserve fact sequence order."
+Assert-FileContains `
     -Path $scheduleContractPath `
     -Pattern "GameplayOwnerLocalFactFramePrepareSystem" `
     -Message "Owner-local gameplay fact frame prepare system must be registered in the runtime schedule."
@@ -186,6 +191,58 @@ Assert-FileContains `
     -Path $scheduleContractPath `
     -Pattern "GameplayOwnerLocalFactFlushSystem" `
     -Message "Owner-local gameplay fact flush system must be registered in the runtime schedule."
+Assert-FileContains `
+    -Path $scheduleContractPath `
+    -Pattern "GameplayOwnerLocalFactFlushSystem[\s\S]*GameplayFactProjectionSystem" `
+    -Message "Owner-local gameplay fact flush must precede GameplayFactProjectionSystem in the runtime schedule contract."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "RuntimeCoreOwnerLocalFactCount" `
+    -Message "Runtime Debugger must keep owner-local fact counters in the retained runtime core state."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "OwnerLocalFactCount\s*=\s*stream\.OwnerLocalFactCount" `
+    -Message "Runtime Debugger must collect owner-local fact counters from the stream component."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "ownerLocalFactFlushes" `
+    -Message "Runtime Debugger text summaries must expose owner-local fact flush counters."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "ownerLocalFactFlushes" `
+    -Message "AutoChess validation summary must expose owner-local fact flush evidence."
+Assert-FileContains `
+    -Path $autoChessValidationRunPath `
+    -Pattern "OwnerLocalFactFlushCount\s*>\s*0" `
+    -Message "AutoChess runtime chain gate must require owner-local fact flush evidence."
+Assert-FileNotContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<ActiveEffectMutationBuffer>\(\),\s*[\r\n\s]*ComponentType\.ReadWrite<GameplayEventBuffer>\(\)" `
+    -Message "EffectCommandStream archetype must not keep ActiveEffectMutationBuffer beside the singleton GameplayEventBuffer stream."
+Assert-FileNotContains `
+    -Path $streamPath `
+    -Pattern "HasRequiredBuffers[\s\S]*ActiveEffectMutationBuffer" `
+    -Message "EffectCommandSpecStream required stream buffers must not include ActiveEffectMutationBuffer."
+Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<ActiveEffectMutationBuffer>\(\)" `
+    -Message "ASC runtime archetype must own ActiveEffectMutationBuffer as an owner-local carrier."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "ActiveEffectOwnerLocalMutationFramePrepareSystem" `
+    -Message "Runtime Core must clear ASC owner-local active effect mutations during FramePrepare."
+Assert-FileContains `
+    -Path $scheduleContractPath `
+    -Pattern "ActiveEffectOwnerLocalMutationFramePrepareSystem" `
+    -Message "ActiveEffect owner-local mutation frame prepare system must be registered in the runtime schedule."
+Assert-FileContains `
+    -Path $streamOwnerContractPath `
+    -Pattern "EGasRuntimeFrameStreamId\.ActiveEffectMutation[\s\S]*EGasRuntimeFrameStreamCarrier\.OwnerLocalDynamicBuffer,\s*[\r\n\s]*EGasRuntimeFrameStreamCarrier\.OwnerLocalDynamicBuffer" `
+    -Message "ActiveEffectMutation stream owner contract must use owner-local carriers for current and target state."
+Assert-FileContains `
+    -Path $queryLayoutPlanPath `
+    -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.ActiveEffectMutationBuffer" `
+    -Message "ActiveEffectMutationBuffer must be classified with the ASC ActiveEffectStore layout, not the command stream layout."
 Assert-FileContains `
     -Path $deltaApplyPath `
     -Pattern "PendingAttributeTargetGroupCount" `
@@ -852,6 +909,7 @@ Write-Host "GAS Runtime Core stream writer contract passed: runtime helpers reso
 Write-Host "GAS Runtime Core execution output fact contract passed: NativeStream collection and deterministic merge replaced structural ECB singleton append."
 Write-Host "GAS Runtime Core active mutation contract passed: generated gather + ASC chunk-local apply path is wired."
 Write-Host "GAS Runtime Core active mutation SourceAttribute contract passed: read-only snapshot lane feeds chunk-local apply."
+Write-Host "GAS Runtime Core owner-local fact lane contract passed: Attribute facts use ASC-local carrier and debugger-visible flush counters."
 Write-Host "AutoChess R1/R6 snapshot contract passed: unit result snapshots are projected from structured boundary evidence, not live ASCReadModel."
 Write-Host "AutoChess R6 driver owner contract passed: driver owner snapshot is exposed without raw Entity adapter APIs."
 Write-Host "AutoChess R6/R8 timing owner split contract passed: Runtime Debugger publishes core, boundary, and runner timing owners."

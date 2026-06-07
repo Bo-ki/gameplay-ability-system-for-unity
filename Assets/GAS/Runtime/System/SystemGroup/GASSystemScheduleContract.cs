@@ -180,11 +180,11 @@ namespace GAS.Runtime
                 EGasRuntimeCoreFramePhase.DeltaApply,
                 typeof(GASCoreSimulationSystemGroup)),
             new(
-                typeof(GameplayFactProjectionSystem),
+                typeof(GameplayOwnerLocalFactFlushSystem),
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
                 typeof(GASCoreSimulationSystemGroup)),
             new(
-                typeof(GameplayOwnerLocalFactFlushSystem),
+                typeof(GameplayFactProjectionSystem),
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
                 typeof(GASCoreSimulationSystemGroup)),
             new(
@@ -240,8 +240,8 @@ namespace GAS.Runtime
             typeof(AttributeThresholdAbilityLifecycleRequestSystem),
             typeof(AbilityLifecycleRequestSystem),
             typeof(AbilityStateCleanupSystem),
-            typeof(GameplayFactProjectionSystem),
             typeof(GameplayOwnerLocalFactFlushSystem),
+            typeof(GameplayFactProjectionSystem),
         };
 
         private static readonly string[] GeneratedCoreSimulationSystemTypeNames =
@@ -272,8 +272,8 @@ namespace GAS.Runtime
         private static readonly Type[] EffectCommandSpecStreamTargetSystemTypes =
         {
             typeof(GEEffectCommandSpecStreamFramePrepareSystem),
-            typeof(GameplayFactProjectionSystem),
             typeof(GameplayOwnerLocalFactFlushSystem),
+            typeof(GameplayFactProjectionSystem),
             typeof(GameplayFactBoundaryProjectionSystem),
         };
 
