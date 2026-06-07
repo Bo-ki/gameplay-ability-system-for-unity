@@ -63,7 +63,6 @@ namespace GAS.Runtime
         public int NextFactSequence;
         public int LastClearedFrame;
         public int SpecBuildCommandCursor;
-        public int ActiveMutationCommandCursor;
         public int DeltaApplySpecCursor;
         public int FactProjectionDeltaCursor;
         public int EventBridgeFactCursor;
@@ -209,6 +208,12 @@ namespace GAS.Runtime
         public int DurationFrameOverride;
         public int PeriodFrame;
         public int Flags;
+    }
+
+    [InternalBufferCapacity(4)]
+    public struct ActiveEffectMutationCommandBuffer : IBufferElementData
+    {
+        public GEEffectCommandBuffer Command;
     }
 
     [InternalBufferCapacity(0)]
@@ -679,7 +684,6 @@ namespace GAS.Runtime
             var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
             stream.LastClearedFrame = frame;
             stream.SpecBuildCommandCursor = 0;
-            stream.ActiveMutationCommandCursor = 0;
             stream.DeltaApplySpecCursor = 0;
             stream.FactProjectionDeltaCursor = 0;
             stream.EventBridgeFactCursor = 0;
@@ -704,16 +708,13 @@ namespace GAS.Runtime
             CompactConsumedCommands(
                 commands,
                 setByCallerValues,
-                MinCursor(
-                    ClampCursor(stream.SpecBuildCommandCursor, commands.Length),
-                    ClampCursor(stream.ActiveMutationCommandCursor, commands.Length)));
+                ClampCursor(stream.SpecBuildCommandCursor, commands.Length));
 
             em.GetBuffer<GEEffectSpecBuffer>(streamEntity).Clear();
             em.GetBuffer<GameplayEventBuffer>(streamEntity).Clear();
 
             stream.LastClearedFrame = frame;
             stream.SpecBuildCommandCursor = 0;
-            stream.ActiveMutationCommandCursor = 0;
             stream.DeltaApplySpecCursor = 0;
             stream.FactProjectionDeltaCursor = 0;
             stream.EventBridgeFactCursor = 0;
@@ -736,16 +737,13 @@ namespace GAS.Runtime
             CompactConsumedCommands(
                 commands,
                 setByCallerValues,
-                MinCursor(
-                    ClampCursor(stream.SpecBuildCommandCursor, commands.Length),
-                    ClampCursor(stream.ActiveMutationCommandCursor, commands.Length)));
+                ClampCursor(stream.SpecBuildCommandCursor, commands.Length));
 
             specs.Clear();
             facts.Clear();
 
             stream.LastClearedFrame = frame;
             stream.SpecBuildCommandCursor = 0;
-            stream.ActiveMutationCommandCursor = 0;
             stream.DeltaApplySpecCursor = 0;
             stream.FactProjectionDeltaCursor = 0;
             stream.EventBridgeFactCursor = 0;
@@ -1052,11 +1050,6 @@ namespace GAS.Runtime
             if (cursor < 0)
                 return 0;
             return cursor > length ? length : cursor;
-        }
-
-        private static int MinCursor(int left, int right)
-        {
-            return left < right ? left : right;
         }
 
         private static int CountSetByCallerValues(

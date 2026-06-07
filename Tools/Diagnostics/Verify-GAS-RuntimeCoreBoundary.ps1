@@ -274,9 +274,17 @@ Assert-FileContains `
     -Pattern "ComponentType\.ReadWrite<ActiveEffectMutationBuffer>\(\)" `
     -Message "ASC runtime archetype must own ActiveEffectMutationBuffer as an owner-local carrier."
 Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<ActiveEffectMutationCommandBuffer>\(\)" `
+    -Message "ASC runtime archetype must own ActiveEffectMutationCommandBuffer as an owner-local command source."
+Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "ActiveEffectOwnerLocalMutationFramePrepareSystem" `
     -Message "Runtime Core must clear ASC owner-local active effect mutations during FramePrepare."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "BufferTypeHandle<ActiveEffectMutationCommandBuffer>" `
+    -Message "Runtime Core must clear ASC owner-local active mutation commands during FramePrepare."
 Assert-FileContains `
     -Path $scheduleContractPath `
     -Pattern "ActiveEffectOwnerLocalMutationFramePrepareSystem" `
@@ -289,6 +297,14 @@ Assert-FileContains `
     -Path $queryLayoutPlanPath `
     -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.ActiveEffectMutationBuffer" `
     -Message "ActiveEffectMutationBuffer must be classified with the ASC ActiveEffectStore layout, not the command stream layout."
+Assert-FileContains `
+    -Path $queryLayoutPlanPath `
+    -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.ActiveEffectMutationCommandBuffer" `
+    -Message "ActiveEffectMutationCommandBuffer must be classified with the ASC ActiveEffectStore layout, not the command stream layout."
+Assert-FileNotContains `
+    -Path $debuggerPath `
+    -Pattern "RecordFrameStreamBufferPressure<ActiveEffectMutationBuffer>" `
+    -Message "Debugger stream pressure sampling must not treat owner-local ActiveEffectMutationBuffer as an EffectCommandSpecStream buffer."
 Assert-FileContains `
     -Path $deltaApplyPath `
     -Pattern "PendingAttributeTargetGroupCount" `
@@ -619,8 +635,8 @@ Assert-FileNotContains `
     -Message "GasCodeGen validation report must not count the handwritten active-effect lifecycle owner as generated runtime boundary debt."
 Assert-FileContains `
     -Path $generatedActiveEffectPath `
-    -Pattern "GEActiveEffectMutationGatherJob" `
-    -Message "Generated active effect runtime must gather active mutation commands before chunk-local apply."
+    -Pattern "GEActiveEffectMutationOwnerCommandCollectJob\s*:\s*IJobChunk" `
+    -Message "Generated active effect runtime must collect active mutation commands from owner-local buffers before chunk-local apply."
 Assert-FileContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk" `
@@ -631,8 +647,8 @@ Assert-FileContains `
     -Message "Generated active mutation must build a frame-local SourceAttribute snapshot before chunk-local apply."
 Assert-FileContains `
     -Path $generatedActiveEffectPath `
-    -Pattern "GEActiveEffectMutationGatherJob\s*:\s*IJob[\s\S]*?\[ReadOnly\] public BufferLookup<AttributeValueBuffer> AttributeLookup" `
-    -Message "Generated active mutation SourceAttribute capture must happen in the read-only gather/snapshot lane."
+    -Pattern "GEActiveEffectMutationOwnerCommandFinalizeJob\s*:\s*IJob[\s\S]*?\[ReadOnly\] public BufferLookup<AttributeValueBuffer> AttributeLookup" `
+    -Message "Generated active mutation SourceAttribute capture must happen in the read-only owner-local finalize/snapshot lane."
 Assert-FileContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]*?\[ReadOnly\] public NativeParallelHashMap<long, float> ActiveMutationSourceAttributeSnapshots" `
@@ -789,6 +805,38 @@ Assert-FileNotContains `
     -Path $codeGenTemplatePath `
     -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(slot\.Sequence,\s*modifierIndex\)" `
     -Message "CodeGen template must not regenerate owner-local-only pre-tick snapshot keys."
+Assert-FileContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "ActiveMutationCommandLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationCommandBuffer>" `
+    -Message "Active mutation commands must be projected into ASC owner-local command buffers."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "GEActiveEffectMutationOwnerCommandCollectJob\s*:\s*IJobChunk" `
+    -Message "Generated active mutation command source must collect from owner-local command buffers."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "GEActiveEffectMutationOwnerCommandFinalizeJob\s*:\s*IJob" `
+    -Message "Generated active mutation finalize must keep owner-local commands separate from singleton stream gather."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "GEActiveEffectMutationOwnerCommandCollectJob\s*:\s*IJobChunk" `
+    -Message "CodeGen template must keep owner-local active mutation command collection."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "GEActiveEffectMutationOwnerCommandFinalizeJob\s*:\s*IJob" `
+    -Message "CodeGen template must keep owner-local active mutation command finalization."
+Assert-FileNotContains `
+    -Path $streamPath `
+    -Pattern "ActiveMutationCommandCursor" `
+    -Message "EffectCommandStream must not retain the old active mutation singleton command cursor."
+Assert-FileNotContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "GEActiveEffectMutationGatherJob\s*:\s*IJob" `
+    -Message "Generated active mutation command source must not regress to singleton stream gather."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "GEActiveEffectMutationGatherJob\s*:\s*IJob" `
+    -Message "CodeGen template must not regenerate singleton stream active mutation gather."
 Assert-FileNotContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationApplyJob\s*:\s*IJob" `
@@ -1039,7 +1087,7 @@ Write-Host "GAS Runtime Core active effect global index contract passed: registe
 Write-Host "GAS Runtime Core debugger singleton contract passed: registered/cache owner lookup is wired and singleton fallback queries are blocked."
 Write-Host "GAS Runtime Core stream writer contract passed: runtime helpers resolve stream owners explicitly before writing commands or facts."
 Write-Host "GAS Runtime Core execution output fact contract passed: NativeStream collection and deterministic merge replaced structural ECB singleton append."
-Write-Host "GAS Runtime Core active mutation contract passed: generated gather + ASC chunk-local apply path is wired."
+Write-Host "GAS Runtime Core active mutation contract passed: owner-local command collect + ASC chunk-local apply path is wired."
 Write-Host "GAS Runtime Core active mutation SourceAttribute contract passed: read-only snapshot lane feeds chunk-local apply."
 Write-Host "GAS Runtime Core owner-local fact lane contract passed: Attribute facts use ASC-local carrier and debugger-visible flush counters."
 Write-Host "GAS Runtime Core AttributeDelta owner-local fact projection contract passed: generated instant and execution output no longer write stream deltas."

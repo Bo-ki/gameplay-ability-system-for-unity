@@ -2481,15 +2481,6 @@ namespace GAS.Runtime
                 frame,
                 log,
                 ref state);
-            RecordFrameStreamBufferPressure<ActiveEffectMutationBuffer>(
-                em,
-                streamEntity,
-                "ActiveEffectMutationBuffer",
-                EGasRuntimeFrameStreamId.ActiveEffectMutation,
-                streamPlan,
-                frame,
-                log,
-                ref state);
             RecordFrameStreamBufferPressure<GameplayEventBuffer>(
                 em,
                 streamEntity,

@@ -3197,6 +3197,8 @@ namespace __ROOT_NAMESPACE__
             state.Dependency = new GEEffectCommandCatalogNormalizeJob
             {
                 CommandTypeHandle = SystemAPI.GetBufferTypeHandle<GEEffectCommandBuffer>(),
+                ActiveMutationCommandLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectMutationCommandBuffer>(isReadOnly: false),
                 Catalog = catalogComponent.Catalog,
             }.Schedule(_query, state.Dependency);
         }
@@ -3204,6 +3206,7 @@ namespace __ROOT_NAMESPACE__
         private struct GEEffectCommandCatalogNormalizeJob : IJobChunk
         {
             public BufferTypeHandle<GEEffectCommandBuffer> CommandTypeHandle;
+            public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
 
             public void Execute(
@@ -3226,8 +3229,24 @@ namespace __ROOT_NAMESPACE__
                         var command = commands[i];
                         if (GASGeneratedActiveEffectRuntime.TryNormalizeCommand(ref catalog, ref command))
                             commands[i] = command;
+                        AppendActiveMutationCommand(in command);
                     }
                 }
+            }
+
+            private void AppendActiveMutationCommand(in GEEffectCommandBuffer command)
+            {
+                if (command.Kind != GEEffectCommandKind.ActiveMutation
+                    || command.TargetAsc == Entity.Null
+                    || !ActiveMutationCommandLookup.HasBuffer(command.TargetAsc))
+                {
+                    return;
+                }
+
+                ActiveMutationCommandLookup[command.TargetAsc].Add(new ActiveEffectMutationCommandBuffer
+                {
+                    Command = command,
+                });
             }
         }
     }
@@ -3252,6 +3271,7 @@ namespace __ROOT_NAMESPACE__
                     ComponentType.ReadWrite<ActiveGameplayEffectBuffer>(),
                     ComponentType.ReadWrite<ActiveGameplayEffectSetByCallerValueBuffer>(),
                     ComponentType.ReadWrite<ActiveGameplayEffectCleanupRecordBuffer>(),
+                    ComponentType.ReadWrite<ActiveEffectMutationCommandBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationBuffer>(),
                     ComponentType.ReadWrite<TagMaskComponent>(),
                     ComponentType.ReadOnly<TagFixedMaskComponent>(),
@@ -3285,7 +3305,7 @@ namespace __ROOT_NAMESPACE__
             var structuralEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
             var grantedAbilityArchetype = GASRuntimeEntityArchetypes.GrantedAbility(em);
-            var commandCapacity = state.EntityManager.GetBuffer<GEEffectCommandBuffer>(streamEntity).Length;
+            var commandCapacity = _ownerQuery.CalculateEntityCountWithoutFiltering() * 4;
             if (commandCapacity < 64)
                 commandCapacity = 64;
 
@@ -3302,10 +3322,17 @@ namespace __ROOT_NAMESPACE__
                     activeMutationSourceAttributeSnapshotCapacity,
                     state.WorldUpdateAllocator);
 
-            var gatherJob = new GASGeneratedActiveEffectRuntime.GEActiveEffectMutationGatherJob
+            var collectJob = new GASGeneratedActiveEffectRuntime.GEActiveEffectMutationOwnerCommandCollectJob
+            {
+                CommandBufferTypeHandle =
+                    SystemAPI.GetBufferTypeHandle<ActiveEffectMutationCommandBuffer>(isReadOnly: true),
+                ActiveMutationCommands = activeMutationCommands,
+            };
+            var collectDependency = collectJob.Schedule(_ownerQuery, state.Dependency);
+
+            var gatherJob = new GASGeneratedActiveEffectRuntime.GEActiveEffectMutationOwnerCommandFinalizeJob
             {
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: true),
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true),
                 Catalog = catalogComponent.Catalog,
                 ActiveMutationCommands = activeMutationCommands,
@@ -3313,7 +3340,7 @@ namespace __ROOT_NAMESPACE__
                 ActiveMutationSourceAttributeSnapshots = activeMutationSourceAttributeSnapshots,
                 StreamEntity = streamEntity,
             };
-            var gatherDependency = gatherJob.Schedule(state.Dependency);
+            var gatherDependency = gatherJob.Schedule(collectDependency);
 
             state.Dependency = new GASGeneratedActiveEffectRuntime.GEActiveEffectMutationChunkApplyJob
             {
@@ -3752,10 +3779,36 @@ namespace __ROOT_NAMESPACE__
         }
 
         [BurstCompile]
-        public struct GEActiveEffectMutationGatherJob : IJob
+        public struct GEActiveEffectMutationOwnerCommandCollectJob : IJobChunk
+        {
+            [ReadOnly] public BufferTypeHandle<ActiveEffectMutationCommandBuffer> CommandBufferTypeHandle;
+            public NativeList<GEEffectCommandBuffer> ActiveMutationCommands;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var commandBuffers = chunk.GetBufferAccessor(ref CommandBufferTypeHandle);
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    var commands = commandBuffers[entityIndex];
+                    for (var i = 0; i < commands.Length; i++)
+                    {
+                        var command = commands[i].Command;
+                        if (command.Kind == GEEffectCommandKind.ActiveMutation)
+                            ActiveMutationCommands.Add(command);
+                    }
+                }
+            }
+        }
+
+        [BurstCompile]
+        public struct GEActiveEffectMutationOwnerCommandFinalizeJob : IJob
         {
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            [ReadOnly] public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             [ReadOnly] public BufferLookup<AttributeValueBuffer> AttributeLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public NativeList<GEEffectCommandBuffer> ActiveMutationCommands;
@@ -3765,40 +3818,25 @@ namespace __ROOT_NAMESPACE__
 
             public void Execute()
             {
-                if (StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !CommandLookup.HasBuffer(StreamEntity))
-                {
+                ActiveMutationOwnerRanges.Clear();
+                ActiveMutationSourceAttributeSnapshots.Clear();
+                if (ActiveMutationCommands.Length == 0)
                     return;
-                }
 
-                var stream = StreamLookup[StreamEntity];
-                var commands = CommandLookup[StreamEntity];
-                var start = ClampCursor(stream.ActiveMutationCommandCursor, commands.Length);
-                CollectActiveMutationCommands(commands, start);
                 var sortMoveCount = SortActiveMutationCommandsByOwner();
                 var ownerGroupCount = BuildActiveMutationOwnerRanges(out var maxOwnerRange);
                 BuildActiveMutationSourceAttributeSnapshots();
-                WriteActiveMutationStats(ref stream, sortMoveCount, ownerGroupCount, maxOwnerRange);
 
-                stream.ActiveMutationCommandCursor = commands.Length;
-                StreamLookup[StreamEntity] = stream;
-            }
-
-            private void CollectActiveMutationCommands(DynamicBuffer<GEEffectCommandBuffer> commands, int start)
-            {
-                ActiveMutationCommands.Clear();
-                for (var i = start; i < commands.Length; i++)
+                if (StreamEntity != Entity.Null && StreamLookup.HasComponent(StreamEntity))
                 {
-                    var command = commands[i];
-                    if (command.Kind == GEEffectCommandKind.ActiveMutation)
-                        ActiveMutationCommands.Add(command);
+                    var stream = StreamLookup[StreamEntity];
+                    WriteActiveMutationStats(ref stream, sortMoveCount, ownerGroupCount, maxOwnerRange);
+                    StreamLookup[StreamEntity] = stream;
                 }
             }
 
             private void BuildActiveMutationSourceAttributeSnapshots()
             {
-                ActiveMutationSourceAttributeSnapshots.Clear();
                 if (!Catalog.IsCreated || ActiveMutationCommands.Length == 0)
                     return;
 

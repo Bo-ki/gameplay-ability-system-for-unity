@@ -200,10 +200,36 @@ namespace GAS.Runtime.Generated
         }
 
         [BurstCompile]
-        public struct GEActiveEffectMutationGatherJob : IJob
+        public struct GEActiveEffectMutationOwnerCommandCollectJob : IJobChunk
+        {
+            [ReadOnly] public BufferTypeHandle<ActiveEffectMutationCommandBuffer> CommandBufferTypeHandle;
+            public NativeList<GEEffectCommandBuffer> ActiveMutationCommands;
+
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var commandBuffers = chunk.GetBufferAccessor(ref CommandBufferTypeHandle);
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    var commands = commandBuffers[entityIndex];
+                    for (var i = 0; i < commands.Length; i++)
+                    {
+                        var command = commands[i].Command;
+                        if (command.Kind == GEEffectCommandKind.ActiveMutation)
+                            ActiveMutationCommands.Add(command);
+                    }
+                }
+            }
+        }
+
+        [BurstCompile]
+        public struct GEActiveEffectMutationOwnerCommandFinalizeJob : IJob
         {
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            [ReadOnly] public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             [ReadOnly] public BufferLookup<AttributeValueBuffer> AttributeLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public NativeList<GEEffectCommandBuffer> ActiveMutationCommands;
@@ -213,40 +239,25 @@ namespace GAS.Runtime.Generated
 
             public void Execute()
             {
-                if (StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !CommandLookup.HasBuffer(StreamEntity))
-                {
+                ActiveMutationOwnerRanges.Clear();
+                ActiveMutationSourceAttributeSnapshots.Clear();
+                if (ActiveMutationCommands.Length == 0)
                     return;
-                }
 
-                var stream = StreamLookup[StreamEntity];
-                var commands = CommandLookup[StreamEntity];
-                var start = ClampCursor(stream.ActiveMutationCommandCursor, commands.Length);
-                CollectActiveMutationCommands(commands, start);
                 var sortMoveCount = SortActiveMutationCommandsByOwner();
                 var ownerGroupCount = BuildActiveMutationOwnerRanges(out var maxOwnerRange);
                 BuildActiveMutationSourceAttributeSnapshots();
-                WriteActiveMutationStats(ref stream, sortMoveCount, ownerGroupCount, maxOwnerRange);
 
-                stream.ActiveMutationCommandCursor = commands.Length;
-                StreamLookup[StreamEntity] = stream;
-            }
-
-            private void CollectActiveMutationCommands(DynamicBuffer<GEEffectCommandBuffer> commands, int start)
-            {
-                ActiveMutationCommands.Clear();
-                for (var i = start; i < commands.Length; i++)
+                if (StreamEntity != Entity.Null && StreamLookup.HasComponent(StreamEntity))
                 {
-                    var command = commands[i];
-                    if (command.Kind == GEEffectCommandKind.ActiveMutation)
-                        ActiveMutationCommands.Add(command);
+                    var stream = StreamLookup[StreamEntity];
+                    WriteActiveMutationStats(ref stream, sortMoveCount, ownerGroupCount, maxOwnerRange);
+                    StreamLookup[StreamEntity] = stream;
                 }
             }
 
             private void BuildActiveMutationSourceAttributeSnapshots()
             {
-                ActiveMutationSourceAttributeSnapshots.Clear();
                 if (!Catalog.IsCreated || ActiveMutationCommands.Length == 0)
                     return;
 

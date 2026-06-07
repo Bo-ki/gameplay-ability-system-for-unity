@@ -89,6 +89,7 @@ namespace GAS.Runtime
             {
                 All = new[]
                 {
+                    ComponentType.ReadWrite<ActiveEffectMutationCommandBuffer>(),
                     ComponentType.ReadWrite<ActiveEffectMutationBuffer>(),
                     ComponentType.ReadOnly<ASCIdentityComponent>(),
                 },
@@ -101,6 +102,7 @@ namespace GAS.Runtime
         {
             state.Dependency = new ClearOwnerLocalActiveEffectMutationsJob
             {
+                CommandType = SystemAPI.GetBufferTypeHandle<ActiveEffectMutationCommandBuffer>(),
                 MutationType = SystemAPI.GetBufferTypeHandle<ActiveEffectMutationBuffer>(),
             }.Schedule(_ownerMutationQuery, state.Dependency);
         }
@@ -108,6 +110,7 @@ namespace GAS.Runtime
         [BurstCompile]
         private struct ClearOwnerLocalActiveEffectMutationsJob : IJobChunk
         {
+            public BufferTypeHandle<ActiveEffectMutationCommandBuffer> CommandType;
             public BufferTypeHandle<ActiveEffectMutationBuffer> MutationType;
 
             public void Execute(
@@ -116,10 +119,14 @@ namespace GAS.Runtime
                 bool useEnabledMask,
                 in v128 chunkEnabledMask)
             {
+                var commands = chunk.GetBufferAccessor(ref CommandType);
                 var mutations = chunk.GetBufferAccessor(ref MutationType);
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
+                {
+                    commands[entityIndex].Clear();
                     mutations[entityIndex].Clear();
+                }
             }
         }
     }
