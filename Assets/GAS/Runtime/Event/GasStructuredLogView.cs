@@ -40,6 +40,8 @@ namespace GAS.Runtime
         public readonly EGameplayCueEvent CueEvent;
         public readonly Entity SourceAsc;
         public readonly Entity TargetAsc;
+        public readonly int SourceReportKey;
+        public readonly int TargetReportKey;
         public readonly Entity SourceAbility;
         public readonly Entity GameplayEffect;
         public readonly Entity SourceEntity;
@@ -90,7 +92,9 @@ namespace GAS.Runtime
             float oldValue,
             float newValue,
             float damageAmount,
-            byte flag)
+            byte flag,
+            int sourceReportKey = 0,
+            int targetReportKey = 0)
         {
             LogIndex = logIndex;
             Frame = frame;
@@ -105,6 +109,8 @@ namespace GAS.Runtime
             CueEvent = cueEvent;
             SourceAsc = sourceAsc;
             TargetAsc = targetAsc;
+            SourceReportKey = sourceReportKey;
+            TargetReportKey = targetReportKey;
             SourceAbility = sourceAbility;
             GameplayEffect = gameplayEffect;
             SourceEntity = sourceEntity;
@@ -123,6 +129,44 @@ namespace GAS.Runtime
             NewValue = newValue;
             DamageAmount = damageAmount;
             Flag = flag;
+        }
+
+        public GasStructuredLogEntry WithBoundaryReportKeys(int sourceReportKey, int targetReportKey)
+        {
+            return new GasStructuredLogEntry(
+                LogIndex,
+                Frame,
+                Sequence,
+                Level,
+                Module,
+                FactDomain,
+                FactCategory,
+                FactSeverity,
+                ReplayKind,
+                GameplayEventType,
+                CueEvent,
+                SourceAsc,
+                TargetAsc,
+                SourceAbility,
+                GameplayEffect,
+                SourceEntity,
+                RelatedAbility,
+                CueEntity,
+                CueSourceType,
+                ContextId,
+                EventCode,
+                ReasonCode,
+                RelatedAbilityCode,
+                AttrSetCode,
+                AttributeCode,
+                TagIndex,
+                Value,
+                OldValue,
+                NewValue,
+                DamageAmount,
+                Flag,
+                sourceReportKey,
+                targetReportKey);
         }
 
         public bool IsReplayBacked => LogIndex >= 0;

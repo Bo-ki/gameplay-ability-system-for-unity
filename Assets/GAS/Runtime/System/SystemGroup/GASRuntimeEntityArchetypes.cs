@@ -4,7 +4,7 @@ namespace GAS.Runtime
 {
     public static class GASRuntimeEntityArchetypes
     {
-        private const int AscCoreComponentTypeCount = 27;
+        private const int AscCoreComponentTypeCount = 28;
 
         private static bool _hasCachedWorld;
         private static EntityManager _cachedEntityManager;
@@ -476,6 +476,7 @@ namespace GAS.Runtime
         {
             var index = 0;
             componentTypes[index++] = ComponentType.ReadWrite<ASCIdentityComponent>();
+            componentTypes[index++] = ComponentType.ReadWrite<ASCBoundaryReportKeyComponent>();
             componentTypes[index++] = ComponentType.ReadWrite<ASCCommandPendingComponent>();
             componentTypes[index++] = ComponentType.ReadWrite<GERemoveCommandPendingComponent>();
             componentTypes[index++] = ComponentType.ReadWrite<ASCDestroyingComponent>();

@@ -20,6 +20,8 @@ namespace GAS.AutoChessDemo
             return new AutoChessBattleUnitKey(value);
         }
 
+        internal int ReportKey => _value;
+
         public bool Equals(AutoChessBattleUnitKey other)
         {
             return _value == other._value;

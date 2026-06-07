@@ -51,6 +51,10 @@ namespace GAS.Runtime
         public Entity SourceAsc;
         public bool HasTargetAsc;
         public Entity TargetAsc;
+        public bool HasSourceReportKey;
+        public int SourceReportKey;
+        public bool HasTargetReportKey;
+        public int TargetReportKey;
         public bool HasContextId;
         public int ContextId;
         public bool HasEventCode;
@@ -82,6 +86,12 @@ namespace GAS.Runtime
                 return false;
 
             if (HasTargetAsc && entry.TargetAsc != TargetAsc)
+                return false;
+
+            if (HasSourceReportKey && entry.SourceReportKey != SourceReportKey)
+                return false;
+
+            if (HasTargetReportKey && entry.TargetReportKey != TargetReportKey)
                 return false;
 
             if (HasContextId && entry.ContextId != ContextId)
@@ -185,6 +195,8 @@ namespace GAS.Runtime
             AppendHumanField(builder, "old", entry.OldValue);
             AppendHumanField(builder, "new", entry.NewValue);
             AppendHumanField(builder, "damage", entry.DamageAmount);
+            AppendHumanField(builder, "sourceReportKey", entry.SourceReportKey);
+            AppendHumanField(builder, "targetReportKey", entry.TargetReportKey);
             AppendHumanField(builder, "sourceAsc", entry.SourceAsc);
             AppendHumanField(builder, "targetAsc", entry.TargetAsc);
             AppendHumanField(builder, "ability", entry.SourceAbility);
@@ -221,6 +233,8 @@ namespace GAS.Runtime
             AppendAssertionField(builder, "new", FormatFloat(entry.NewValue));
             AppendAssertionField(builder, "damage", FormatFloat(entry.DamageAmount));
             AppendAssertionField(builder, "flag", entry.Flag);
+            AppendAssertionField(builder, "sourceReportKey", entry.SourceReportKey);
+            AppendAssertionField(builder, "targetReportKey", entry.TargetReportKey);
             AppendAssertionField(builder, "sourceAsc", FormatEntity(entry.SourceAsc));
             AppendAssertionField(builder, "targetAsc", FormatEntity(entry.TargetAsc));
             AppendAssertionField(builder, "ability", FormatEntity(entry.SourceAbility));
@@ -303,6 +317,22 @@ namespace GAS.Runtime
         }
 
         public static GasStructuredLogExportSnapshot CreateSnapshot(
+            EntityManager entityManager,
+            DynamicBuffer<ReplayLogEventBuffer> replayLog,
+            in GameplayEventLogSinkComponent sinkState)
+        {
+            var stats = GasReplaySinkPolicy.GetStats(sinkState, replayLog);
+            return CreateSnapshot(
+                entityManager,
+                true,
+                replayLog,
+                stats,
+                new GasReplayCursor(stats.FirstRetainedLogIndex),
+                GasReplayEventFilter.All,
+                GasStructuredLogFilter.All);
+        }
+
+        public static GasStructuredLogExportSnapshot CreateSnapshot(
             DynamicBuffer<ReplayLogEventBuffer> replayLog,
             in GameplayEventLogSinkComponent sinkState,
             in GasReplayCursor cursor,
@@ -310,6 +340,24 @@ namespace GAS.Runtime
             in GasStructuredLogFilter logFilter)
         {
             return CreateSnapshot(
+                replayLog,
+                GasReplaySinkPolicy.GetStats(sinkState, replayLog),
+                cursor,
+                replayFilter,
+                logFilter);
+        }
+
+        public static GasStructuredLogExportSnapshot CreateSnapshot(
+            EntityManager entityManager,
+            DynamicBuffer<ReplayLogEventBuffer> replayLog,
+            in GameplayEventLogSinkComponent sinkState,
+            in GasReplayCursor cursor,
+            in GasReplayEventFilter replayFilter,
+            in GasStructuredLogFilter logFilter)
+        {
+            return CreateSnapshot(
+                entityManager,
+                true,
                 replayLog,
                 GasReplaySinkPolicy.GetStats(sinkState, replayLog),
                 cursor,
@@ -358,6 +406,25 @@ namespace GAS.Runtime
             in GasReplayEventFilter replayFilter,
             in GasStructuredLogFilter logFilter)
         {
+            return CreateSnapshot(
+                default,
+                false,
+                replayLog,
+                stats,
+                cursor,
+                replayFilter,
+                logFilter);
+        }
+
+        private static GasStructuredLogExportSnapshot CreateSnapshot(
+            EntityManager entityManager,
+            bool resolveBoundaryReportKeys,
+            DynamicBuffer<ReplayLogEventBuffer> replayLog,
+            in GasReplaySinkStats stats,
+            in GasReplayCursor cursor,
+            in GasReplayEventFilter replayFilter,
+            in GasStructuredLogFilter logFilter)
+        {
             var entries = new List<GasStructuredLogEntry>(replayLog.Length);
 
             for (var i = 0; i < replayLog.Length; i++)
@@ -370,6 +437,13 @@ namespace GAS.Runtime
                     continue;
 
                 var entry = GasStructuredLogView.FromReplay(replayEvent);
+                if (resolveBoundaryReportKeys)
+                {
+                    entry = entry.WithBoundaryReportKeys(
+                        ResolveBoundaryReportKey(entityManager, entry.SourceAsc),
+                        ResolveBoundaryReportKey(entityManager, entry.TargetAsc));
+                }
+
                 if (!logFilter.Matches(entry))
                     continue;
 
@@ -381,6 +455,21 @@ namespace GAS.Runtime
                 GasReplaySinkPolicy.IsCursorExpired(cursor, stats),
                 stats,
                 entries.ToArray());
+        }
+
+        private static int ResolveBoundaryReportKey(EntityManager entityManager, Entity asc)
+        {
+            if (asc == Entity.Null
+                || entityManager.World == null
+                || !entityManager.World.IsCreated
+                || !entityManager.Exists(asc)
+                || !entityManager.HasComponent<ASCBoundaryReportKeyComponent>(asc))
+            {
+                return 0;
+            }
+
+            var reportKey = entityManager.GetComponentData<ASCBoundaryReportKeyComponent>(asc);
+            return reportKey.IsValid ? reportKey.Key : 0;
         }
 
         private static void AppendHeader(

@@ -63,6 +63,9 @@ namespace GAS.AutoChessDemo
                       + AutoChessBattleValidationReport.CreateHotspotSummary(result));
             Debug.Log("AutoChessDemoBoundaryOwners: "
                       + AutoChessBattleValidationReport.CreateBoundaryOwnerSummary(result));
+            Debug.Log("AutoChessDemoBoundaryReportKeys: "
+                      + AutoChessBattleValidationReport.CreateBoundaryReportKeyCoverageSummary(
+                          result.StructuredLogSnapshot));
             Debug.Log("AutoChessDemoBattlePresentation: "
                       + AutoChessBattleValidationReport.CreatePresentationSummary(runResult.Presentation));
             Debug.Log("AutoChessDemoRuntimeBattleLog:\n" + runResult.Presentation.ToText());

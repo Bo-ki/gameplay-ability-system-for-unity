@@ -108,6 +108,7 @@ namespace GAS.Runtime
             return asc != Entity.Null
                 && entityManager.Exists(asc)
                 && entityManager.HasComponent<ASCIdentityComponent>(asc)
+                && entityManager.HasComponent<ASCBoundaryReportKeyComponent>(asc)
                 && entityManager.HasComponent<ASCDestroyingComponent>(asc)
                 && entityManager.HasComponent<ASCCommandPendingComponent>(asc)
                 && entityManager.HasComponent<GERemoveCommandPendingComponent>(asc)

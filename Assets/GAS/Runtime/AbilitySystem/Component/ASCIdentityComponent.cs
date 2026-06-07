@@ -9,4 +9,24 @@ namespace GAS.Runtime
     {
         public int Level;
     }
+
+    /// <summary>
+    /// Boundary-only stable key for report / snapshot projection. Runtime Core still uses Entity internally.
+    /// </summary>
+    public struct ASCBoundaryReportKeyComponent : IComponentData
+    {
+        public int Key;
+        public int Version;
+
+        public bool IsValid => Key > 0;
+
+        public static ASCBoundaryReportKeyComponent Create(int key, int version = 1)
+        {
+            return new ASCBoundaryReportKeyComponent
+            {
+                Key = key,
+                Version = version,
+            };
+        }
+    }
 }

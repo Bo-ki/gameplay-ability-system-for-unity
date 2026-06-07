@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using GAS.Runtime;
+using Unity.Entities;
 
 namespace GAS.AutoChessDemo
 {
@@ -114,6 +115,26 @@ namespace GAS.AutoChessDemo
                    + $"displayedLines={presentation.DisplayLineCount}, "
                    + $"droppedLines={presentation.DroppedLineCount}, "
                    + $"disabledReason={presentation.DisabledReason}";
+        }
+
+        public static string CreateBoundaryReportKeyCoverageSummary(
+            in GasStructuredLogExportSnapshot snapshot)
+        {
+            var coverage = CalculateBoundaryReportKeyCoverage(snapshot);
+            return $"passed={coverage.Passed}, "
+                   + $"entries={coverage.EntryCount}, "
+                   + $"sourceAscRefs={coverage.SourceAscReferenceCount}, "
+                   + $"sourceReportKeys={coverage.SourceReportKeyCount}, "
+                   + $"missingSourceReportKeys={coverage.MissingSourceReportKeyCount}, "
+                   + $"targetAscRefs={coverage.TargetAscReferenceCount}, "
+                   + $"targetReportKeys={coverage.TargetReportKeyCount}, "
+                   + $"missingTargetReportKeys={coverage.MissingTargetReportKeyCount}";
+        }
+
+        public static bool HasBoundaryReportKeyCoverage(
+            in GasStructuredLogExportSnapshot snapshot)
+        {
+            return CalculateBoundaryReportKeyCoverage(snapshot).Passed;
         }
 
         public static string CreateSummary(in AutoChessValidationEvidence evidence)
@@ -294,8 +315,9 @@ namespace GAS.AutoChessDemo
                    + "snapshotOwner=GASRuntimeShell.TryCaptureASCReadModel, "
                    + "observationOwner=AutoChessGasObservationGateway, "
                    + "runnerSyncOwner=GASDependencyDrain, "
-                   + "reportProjectionOwner=AutoChessRuntimeUnitResolver.DiagnosticAscMatch, "
-                   + $"factsHash=0x{CalculateFactsHash(result.StructuredLogSnapshot):X8}";
+                   + "reportProjectionOwner=AutoChessRuntimeUnitResolver.BoundaryReportKey, "
+                   + CreateBoundaryReportKeyCoverageSummary(result.StructuredLogSnapshot)
+                   + $", factsHash=0x{CalculateFactsHash(result.StructuredLogSnapshot):X8}";
         }
 
         public static string CreateOfficialToolDiffSummary(
@@ -413,14 +435,57 @@ namespace GAS.AutoChessDemo
                     hash = AppendHash(hash, entry.AttrSetCode);
                     hash = AppendHash(hash, entry.AttributeCode);
                     hash = AppendHash(hash, entry.TagIndex);
-                    hash = AppendHash(hash, entry.SourceAsc.Index);
-                    hash = AppendHash(hash, entry.TargetAsc.Index);
+                    hash = AppendHash(hash, entry.SourceReportKey);
+                    hash = AppendHash(hash, entry.TargetReportKey);
                     hash = AppendHash(hash, entry.SourceAbility.Index);
                     hash = AppendHash(hash, entry.GameplayEffect.Index);
                 }
 
                 return hash;
             }
+        }
+
+        private static BoundaryReportKeyCoverage CalculateBoundaryReportKeyCoverage(
+            in GasStructuredLogExportSnapshot snapshot)
+        {
+            var entries = snapshot.Entries ?? Array.Empty<GasStructuredLogEntry>();
+            var sourceAscReferenceCount = 0;
+            var targetAscReferenceCount = 0;
+            var sourceReportKeyCount = 0;
+            var targetReportKeyCount = 0;
+            var missingSourceReportKeyCount = 0;
+            var missingTargetReportKeyCount = 0;
+
+            for (var i = 0; i < entries.Length; i++)
+            {
+                var entry = entries[i];
+                if (entry.SourceAsc != Entity.Null)
+                {
+                    sourceAscReferenceCount++;
+                    if (entry.SourceReportKey > 0)
+                        sourceReportKeyCount++;
+                    else
+                        missingSourceReportKeyCount++;
+                }
+
+                if (entry.TargetAsc != Entity.Null)
+                {
+                    targetAscReferenceCount++;
+                    if (entry.TargetReportKey > 0)
+                        targetReportKeyCount++;
+                    else
+                        missingTargetReportKeyCount++;
+                }
+            }
+
+            return new BoundaryReportKeyCoverage(
+                entries.Length,
+                sourceAscReferenceCount,
+                sourceReportKeyCount,
+                missingSourceReportKeyCount,
+                targetAscReferenceCount,
+                targetReportKeyCount,
+                missingTargetReportKeyCount);
         }
 
         private static uint CalculateSummaryHash(
@@ -453,6 +518,42 @@ namespace GAS.AutoChessDemo
             {
                 hash ^= (uint)value;
                 return hash * 16777619u;
+            }
+        }
+
+        private readonly struct BoundaryReportKeyCoverage
+        {
+            public readonly int EntryCount;
+            public readonly int SourceAscReferenceCount;
+            public readonly int SourceReportKeyCount;
+            public readonly int MissingSourceReportKeyCount;
+            public readonly int TargetAscReferenceCount;
+            public readonly int TargetReportKeyCount;
+            public readonly int MissingTargetReportKeyCount;
+
+            public bool Passed =>
+                EntryCount > 0
+                && SourceAscReferenceCount > 0
+                && TargetAscReferenceCount > 0
+                && MissingSourceReportKeyCount == 0
+                && MissingTargetReportKeyCount == 0;
+
+            public BoundaryReportKeyCoverage(
+                int entryCount,
+                int sourceAscReferenceCount,
+                int sourceReportKeyCount,
+                int missingSourceReportKeyCount,
+                int targetAscReferenceCount,
+                int targetReportKeyCount,
+                int missingTargetReportKeyCount)
+            {
+                EntryCount = entryCount;
+                SourceAscReferenceCount = sourceAscReferenceCount;
+                SourceReportKeyCount = sourceReportKeyCount;
+                MissingSourceReportKeyCount = missingSourceReportKeyCount;
+                TargetAscReferenceCount = targetAscReferenceCount;
+                TargetReportKeyCount = targetReportKeyCount;
+                MissingTargetReportKeyCount = missingTargetReportKeyCount;
             }
         }
     }

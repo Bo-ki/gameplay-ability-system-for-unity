@@ -410,12 +410,14 @@ namespace GAS.AutoChessDemo
                    && result.EventCounts.PeriodTickDamageFacts > 0
                    && result.EventCounts.CueRequests > 0
                    && diagnosticResult.RuntimeDiagnostics.EventCount > 0
-                   && counters.RequestCount > 0
-                   && counters.FactCount > 0
-                   && counters.PendingAttributeAppliedDeltaCount > 0
-                   && HasRequiredBattleLog(result.BattleLog)
-                   && !HasBlockingDiagnosticErrors(diagnosticResult.RuntimeDiagnostics)
-                   && (!requireOfficialToolDiff || result.OfficialToolDiff.JournalingCaptured);
+                    && counters.RequestCount > 0
+                    && counters.FactCount > 0
+                    && counters.PendingAttributeAppliedDeltaCount > 0
+                    && HasRequiredBattleLog(result.BattleLog)
+                    && AutoChessBattleValidationReport.HasBoundaryReportKeyCoverage(
+                        result.StructuredLogSnapshot)
+                    && !HasBlockingDiagnosticErrors(diagnosticResult.RuntimeDiagnostics)
+                    && (!requireOfficialToolDiff || result.OfficialToolDiff.JournalingCaptured);
         }
 
         public static bool HasBlockingDiagnosticErrors(GAS.Runtime.GasRuntimeDiagnosticSnapshot diagnostics)

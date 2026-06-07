@@ -43,7 +43,7 @@ namespace GAS.AutoChessDemo
                 definition.CreateAbilityCodes(),
                 1);
 
-            return RegisterBattleUnit(commandPort.Handle);
+            return RegisterBattleUnit(commandPort);
         }
 
         public static AutoChessGasBattleDriverHandle CreateBattleDriver()
@@ -73,8 +73,7 @@ namespace GAS.AutoChessDemo
             var links = new AutoChessRuntimeUnitLink[handles.Length];
             for (var i = 0; i < handles.Length; i++)
             {
-                TryResolveAscHandle(handles[i], out var ascHandle);
-                links[i] = new AutoChessRuntimeUnitLink(i, ascHandle);
+                links[i] = new AutoChessRuntimeUnitLink(i, handles[i].Key.ReportKey);
             }
 
             return new AutoChessRuntimeUnitResolver(links);
@@ -135,15 +134,18 @@ namespace GAS.AutoChessDemo
         public static void ResetRuntimeCache()
         {
             BattleUnitRegistry.Clear();
+            _nextBattleUnitKey = 0;
         }
 
-        private static AutoChessGasBattleUnitHandle RegisterBattleUnit(ASCHandle ascHandle)
+        private static AutoChessGasBattleUnitHandle RegisterBattleUnit(ASCCommandPort commandPort)
         {
+            var ascHandle = commandPort.Handle;
             if (!ascHandle.IsValid)
                 return default;
 
             var key = AutoChessBattleUnitKey.Create(++_nextBattleUnitKey);
             BattleUnitRegistry[key] = ascHandle;
+            commandPort.TrySetComponentData(ASCBoundaryReportKeyComponent.Create(key.ReportKey));
             return new AutoChessGasBattleUnitHandle(key);
         }
 
@@ -215,15 +217,15 @@ namespace GAS.AutoChessDemo
             _links = links ?? Array.Empty<AutoChessRuntimeUnitLink>();
         }
 
-        public int ResolveUnitIndex(Entity ascEntity)
+        public int ResolveUnitIndex(int reportKey)
         {
-            if (ascEntity == Entity.Null || _links == null)
+            if (reportKey <= 0 || _links == null)
                 return -1;
 
             for (var i = 0; i < _links.Length; i++)
             {
                 var link = _links[i];
-                if (link.Matches(ascEntity))
+                if (link.Matches(reportKey))
                     return link.UnitIndex;
             }
 
@@ -233,19 +235,19 @@ namespace GAS.AutoChessDemo
 
     internal readonly struct AutoChessRuntimeUnitLink
     {
-        private readonly ASCHandle _ascHandle;
+        private readonly int _reportKey;
 
         public readonly int UnitIndex;
 
-        public AutoChessRuntimeUnitLink(int unitIndex, ASCHandle ascHandle)
+        public AutoChessRuntimeUnitLink(int unitIndex, int reportKey)
         {
             UnitIndex = unitIndex;
-            _ascHandle = ascHandle;
+            _reportKey = reportKey;
         }
 
-        public bool Matches(Entity ascEntity)
+        public bool Matches(int reportKey)
         {
-            return _ascHandle.MatchesRuntimeEntity(ascEntity);
+            return _reportKey > 0 && _reportKey == reportKey;
         }
     }
 }

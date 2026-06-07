@@ -42,8 +42,8 @@ namespace GAS.AutoChessDemo
             fact = new AutoChessBattleReportFact(
                 entry.Frame,
                 AutoChessBattleReportFactKind.SkillResolved,
-                runtimeUnitResolver.ResolveUnitIndex(entry.SourceAsc),
-                runtimeUnitResolver.ResolveUnitIndex(entry.TargetAsc),
+                runtimeUnitResolver.ResolveUnitIndex(entry.SourceReportKey),
+                runtimeUnitResolver.ResolveUnitIndex(entry.TargetReportKey),
                 AutoChessBattleRules.AbilityPlayerExecute,
                 AutoChessBattleRules.GameplayEffectPlayerExecute,
                 entry.Value,
@@ -69,8 +69,8 @@ namespace GAS.AutoChessDemo
             fact = new AutoChessBattleReportFact(
                 entry.Frame,
                 AutoChessBattleReportFactKind.CombatHealthReduced,
-                runtimeUnitResolver.ResolveUnitIndex(entry.SourceAsc),
-                runtimeUnitResolver.ResolveUnitIndex(entry.TargetAsc),
+                runtimeUnitResolver.ResolveUnitIndex(entry.SourceReportKey),
+                runtimeUnitResolver.ResolveUnitIndex(entry.TargetReportKey),
                 0,
                 entry.EventCode,
                 entry.OldValue - entry.NewValue,

@@ -67,7 +67,7 @@ namespace GAS.AutoChessDemo
 
             var log = entityManager.GetBuffer<ReplayLogEventBuffer>(eventLogSink);
             var sinkState = entityManager.GetComponentData<GameplayEventLogSinkComponent>(eventLogSink);
-            var structuredLog = GasStructuredLogExporter.CreateSnapshot(log, sinkState);
+            var structuredLog = GasStructuredLogExporter.CreateSnapshot(entityManager, log, sinkState);
             var assertionLog = GasStructuredLogExporter.ExportToText(
                 structuredLog,
                 GasStructuredLogFormatOptions.AssertionText);
