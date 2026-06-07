@@ -622,6 +622,7 @@ namespace GAS.AutoChessDemo
         public readonly int DriverIssuedPrimaryCommands;
         public readonly int DriverIssuedFinisherCommands;
         public readonly int DriverLowestHealthTargetSelections;
+        public readonly AutoChessBattleDriverOwnerSnapshot DriverOwnerSnapshot;
         public readonly long ElapsedTicks;
         public readonly double ElapsedMilliseconds;
         public readonly long MeasuredElapsedTicks;
@@ -651,6 +652,7 @@ namespace GAS.AutoChessDemo
             int driverIssuedPrimaryCommands,
             int driverIssuedFinisherCommands,
             int driverLowestHealthTargetSelections,
+            AutoChessBattleDriverOwnerSnapshot driverOwnerSnapshot,
             long elapsedTicks,
             double elapsedMilliseconds,
             long measuredElapsedTicks,
@@ -678,6 +680,7 @@ namespace GAS.AutoChessDemo
             DriverIssuedPrimaryCommands = driverIssuedPrimaryCommands;
             DriverIssuedFinisherCommands = driverIssuedFinisherCommands;
             DriverLowestHealthTargetSelections = driverLowestHealthTargetSelections;
+            DriverOwnerSnapshot = driverOwnerSnapshot;
             ElapsedTicks = elapsedTicks;
             ElapsedMilliseconds = elapsedMilliseconds;
             MeasuredElapsedTicks = measuredElapsedTicks;
@@ -710,6 +713,7 @@ namespace GAS.AutoChessDemo
                 DriverIssuedPrimaryCommands,
                 DriverIssuedFinisherCommands,
                 DriverLowestHealthTargetSelections,
+                DriverOwnerSnapshot,
                 ElapsedTicks,
                 ElapsedMilliseconds,
                 MeasuredElapsedTicks,

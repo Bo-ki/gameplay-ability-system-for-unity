@@ -24,11 +24,50 @@ namespace GAS.AutoChessDemo
         public int LowestHealthTargetCount;
     }
 
+    public readonly struct AutoChessBattleDriverOwnerSnapshot
+    {
+        public readonly bool OwnerInstalled;
+        public readonly bool OwnerEnabled;
+        public readonly bool HandleMatched;
+        public readonly int DriverId;
+        public readonly int Version;
+        public readonly int StructuralCreateCount;
+        public readonly int EnableCount;
+        public readonly int DisableCount;
+        public readonly int UninstallCount;
+
+        public AutoChessBattleDriverOwnerSnapshot(
+            bool ownerInstalled,
+            bool ownerEnabled,
+            bool handleMatched,
+            int driverId,
+            int version,
+            int structuralCreateCount,
+            int enableCount,
+            int disableCount,
+            int uninstallCount)
+        {
+            OwnerInstalled = ownerInstalled;
+            OwnerEnabled = ownerEnabled;
+            HandleMatched = handleMatched;
+            DriverId = driverId;
+            Version = version;
+            StructuralCreateCount = structuralCreateCount;
+            EnableCount = enableCount;
+            DisableCount = disableCount;
+            UninstallCount = uninstallCount;
+        }
+    }
+
     internal static class AutoChessBattleDriverRuntimeStore
     {
         private static int _nextDriverId;
         private static int _driverId;
         private static int _driverVersion;
+        private static int _structuralCreateCount;
+        private static int _enableCount;
+        private static int _disableCount;
+        private static int _uninstallCount;
         private static World _driverWorld;
         private static Entity _driverEntity;
 
@@ -44,6 +83,7 @@ namespace GAS.AutoChessDemo
                 return default;
 
             AdvanceDriverVersion();
+            _enableCount++;
             entityManager.SetComponentData(driver, CreateInitialState(enabled: true));
             return CreateHandle();
         }
@@ -67,11 +107,13 @@ namespace GAS.AutoChessDemo
             var state = entityManager.GetComponentData<AutoChessBattleDriverComponent>(driver);
             state.Enabled = false;
             entityManager.SetComponentData(driver, state);
+            _disableCount++;
             AdvanceDriverVersion();
         }
 
         public static void Uninstall(EntityManager entityManager)
         {
+            _uninstallCount++;
             if (!CanUse(entityManager))
             {
                 Reset();
@@ -90,24 +132,50 @@ namespace GAS.AutoChessDemo
             Reset();
         }
 
+        public static AutoChessBattleDriverOwnerSnapshot CreateOwnerSnapshot(
+            EntityManager entityManager,
+            AutoChessGasBattleDriverHandle handle)
+        {
+            var ownerInstalled = TryResolveInstalledDriver(entityManager, out var driver);
+            var ownerEnabled = ownerInstalled
+                               && entityManager.GetComponentData<AutoChessBattleDriverComponent>(driver).Enabled;
+            return new AutoChessBattleDriverOwnerSnapshot(
+                ownerInstalled,
+                ownerEnabled,
+                IsCurrentHandle(handle),
+                _driverId,
+                _driverVersion,
+                _structuralCreateCount,
+                _enableCount,
+                _disableCount,
+                _uninstallCount);
+        }
+
+        public static void ResetRuntimeCache()
+        {
+            Reset();
+            _structuralCreateCount = 0;
+            _enableCount = 0;
+            _disableCount = 0;
+            _uninstallCount = 0;
+        }
+
         private static Entity EnsureEntity(EntityManager entityManager)
         {
             if (!CanUse(entityManager))
                 return Entity.Null;
 
-            if (_driverWorld == entityManager.World
-                && _driverEntity != Entity.Null
-                && entityManager.Exists(_driverEntity)
-                && entityManager.HasComponent<AutoChessBattleDriverComponent>(_driverEntity))
+            if (TryResolveInstalledDriver(entityManager, out var driver))
             {
                 EnsureHandleIdentity();
-                return _driverEntity;
+                return driver;
             }
 
             _driverEntity = entityManager.CreateEntity(ComponentType.ReadWrite<AutoChessBattleDriverComponent>());
             _driverWorld = entityManager.World;
             _driverId = ++_nextDriverId;
             _driverVersion = 0;
+            _structuralCreateCount++;
             entityManager.SetName(_driverEntity, "AutoChessBattleCommandDriver");
             entityManager.SetComponentData(_driverEntity, CreateInitialState(enabled: false));
             return _driverEntity;
@@ -120,9 +188,21 @@ namespace GAS.AutoChessDemo
         {
             driver = Entity.Null;
             if (!handle.IsValid
-                || handle.DriverId != _driverId
-                || handle.Version != _driverVersion
-                || !CanUse(entityManager)
+                || !IsCurrentHandle(handle)
+                || !TryResolveInstalledDriver(entityManager, out driver))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool TryResolveInstalledDriver(
+            EntityManager entityManager,
+            out Entity driver)
+        {
+            driver = Entity.Null;
+            if (!CanUse(entityManager)
                 || _driverWorld != entityManager.World
                 || _driverEntity == Entity.Null
                 || !entityManager.Exists(_driverEntity)
@@ -154,6 +234,13 @@ namespace GAS.AutoChessDemo
         private static AutoChessGasBattleDriverHandle CreateHandle()
         {
             return new AutoChessGasBattleDriverHandle(_driverId, _driverVersion);
+        }
+
+        private static bool IsCurrentHandle(AutoChessGasBattleDriverHandle handle)
+        {
+            return handle.IsValid
+                   && handle.DriverId == _driverId
+                   && handle.Version == _driverVersion;
         }
 
         private static void EnsureHandleIdentity()

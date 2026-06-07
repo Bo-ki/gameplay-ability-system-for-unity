@@ -27,6 +27,12 @@ namespace GAS.AutoChessDemo
             return AutoChessGasBattleEntityLifecycle.GetBattleDriverStats(driverHandle);
         }
 
+        public static AutoChessBattleDriverOwnerSnapshot GetBattleDriverOwnerSnapshot(
+            AutoChessGasBattleDriverHandle driverHandle)
+        {
+            return AutoChessGasBattleEntityLifecycle.GetBattleDriverOwnerSnapshot(driverHandle);
+        }
+
         public static void CloseBattleDriver(AutoChessGasBattleDriverHandle driverHandle)
         {
             AutoChessGasBattleEntityLifecycle.CloseBattleDriver(driverHandle);

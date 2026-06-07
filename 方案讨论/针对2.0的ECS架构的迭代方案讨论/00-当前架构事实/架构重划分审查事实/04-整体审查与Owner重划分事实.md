@@ -13,9 +13,9 @@
 ```markdown
 来源类型：整体架构审查 / codedb 截面 / DOTS 官方规则对照
 原始证据：
-  - `codedb_status`: 429 files / 429 outlines / 767 chunks / graph 443 nodes / 1766 edges / 32 communities / scan ready
-  - `codedb_module_map path_prefix=Assets/GAS/Runtime`: Runtime 主社群 141 files / 1968 indexed symbols，Core、Definition、Debugger、Shell、generated runtime 仍聚在同一依赖社群
-  - `codedb_deps GASRuntimeShell.cs imported_by`: AutoChess lifecycle / observation / runtime host、Editor GASWatcher、AbilitySystemBinding 共 5 个直接消费者
+  - `codedb_status`: 429 files / 429 outlines / 768 chunks / graph 443 nodes / 808 edges / 258 communities / scan ready
+  - `codedb_module_map path_prefix=Assets/GAS/Runtime`: Runtime 主社群 109 files / 1253 indexed symbols，Core、Definition、Debugger、Shell、generated runtime 仍聚在同一依赖社群
+  - `codedb_deps GASRuntimeShell.cs imported_by`: AutoChess lifecycle / catalog session / observation / runtime host 共 4 个直接图依赖；`rg` 另显示 Editor GASWatcher、AbilitySystemBinding 2 个文本消费者
   - `codedb_outline GASRuntimeShell.cs`: 281 lines，包含 runtime world / entity manager、command port、read model capture、job drain、presentation bind、runtime singleton resolver
   - `codedb_outline GEEffectCommandSpecStream.cs`: 1118 lines，集中 singleton carrier、frame-local counter、command/spec/delta/mutation/fact buffer 和 merge helper
   - `codedb_outline GasRuntimeDebugger.cs`: 4092 lines，集中 diagnostic event、runtime counter、observation materialization、magnitude source evidence 和 derived export
@@ -28,7 +28,7 @@
 需要反哺：01 owner map / target invariant，02 R 任务领取前截面，04 最近验证摘要
 ```
 
-续轮校准：当前 codedb 状态为 429 files / 429 outlines / 767 chunks / scan ready。`GASRuntimeShell.cs` 仍有 5 个直接消费者：AutoChess lifecycle、observation、runtime host、Editor `GASWatcher` 和 `AbilitySystemBinding`。本次数字校准只更新事实截面，不改变“多能力 Shell facade、generated lifecycle、singleton carrier 和 Debugger / Cue observation cost 仍需 owner 分类”的判定。
+续轮校准：当前 codedb 状态为 429 files / 429 outlines / 768 chunks / graph 443 nodes / 808 edges / 258 communities / scan ready。`GASRuntimeShell.cs` 在依赖图里有 4 个 AutoChess 直接文件消费者，文本扫描另有 Editor `GASWatcher` 和 `AbilitySystemBinding`。本次数字校准只更新事实截面，不改变“多能力 Shell facade、generated lifecycle、singleton carrier 和 Debugger / Cue observation cost 仍需 owner 分类”的判定。
 
 ### 2026-06-08 续轮整体架构审查补充
 
@@ -36,8 +36,8 @@
 
 | 审查面 | 当前证据 | 事实判定 |
 |---|---|---|
-| codedb 截面 | `codedb_status` 为 429 files / 429 outlines / 767 chunks / graph 443 nodes / 1766 edges / 32 communities | 当前索引已覆盖新增 `ActiveEffectLifecycleOwnerSystems.cs`；旧 428 files 截面不再代表本轮最新事实 |
-| Shell consumers | `codedb_deps GASRuntimeShell.cs imported_by` 仍为 AutoChess lifecycle / observation / runtime host、Editor `GASWatcher`、`AbilitySystemBinding` 共 5 个 | Shell 仍是多 capability implementation facade；外部业务虽多经 wrapper 进入，但 adapter / editor 仍共享同一 ECS handle 解析面 |
+| codedb 截面 | `codedb_status` 为 429 files / 429 outlines / 768 chunks / graph 443 nodes / 808 edges / 258 communities | 当前索引已覆盖新增 `ActiveEffectLifecycleOwnerSystems.cs` 和本轮 AutoChess owner snapshot；旧 428 files 截面不再代表本轮最新事实 |
+| Shell consumers | `codedb_deps GASRuntimeShell.cs imported_by` 为 AutoChess lifecycle / catalog session / observation / runtime host 共 4 个图依赖；`rg` 另有 Editor `GASWatcher` 与 `AbilitySystemBinding` | Shell 仍是多 capability implementation facade；外部业务虽多经 wrapper 进入，但 adapter / editor / binding 仍共享同一 ECS handle 解析面 |
 | Command resolve | `ASCCommandBufferResolveSystem.cs` 为 924 行，单个 `ASCCommandBufferResolveJob` 同时处理 ASC command、Ability grant / activate / remove、Tag diff、Attribute base value、lifecycle request 和 fact | DOTS API 形态正向；但 lane interface 仍过宽，调用方和审查者仍需理解多类 gameplay 语义如何在同一 job 内交织 |
 | Generated lifecycle | generated runtime 物理 asmdef `: ISystem` 与 `OnUpdate(ref SystemState)` 各 7 个，分布在 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`ActiveEffectLifecycleOwnerSystems.cs`；`RuntimeActiveEffect.gen.cs` 当前含 generated helper / job / lookup / ECB / NativeContainer owner | `ActiveEffectLifecycleOwnerSystems.cs` 已退出 SourceGenerator 输出，但仍是 generated runtime 物理 asmdef 内的手写 companion owner；剩余 manifest lifecycle artifact 仍为 `MigrationProofOnly` |
 | CodeGen gate | `GasCodeGenValidationReport.md` 显示 `GeneratedRuntimePureGlueArtifacts=1`、`GeneratedRuntimeLifecycleMigrationArtifacts=3`、`GeneratedRuntimeBoundaryHits=63`、`GeneratedRuntimeLifecycleHits=9`、`GeneratedRuntimeStructuralChangeHits=5`、`GeneratedRuntimeOwnershipHits=1`、`GeneratedRuntimeRandomWriteLookupHits=48`、`GeneratedRuntimeSystemRegistrationHits=0` | gate 已能分类并阻断 unclassified lifecycle migration；但分类命中不是目标态完成证明，release-ready SourceGenerator mode 仍应让 lifecycle / ownership hit 归零或由手写 Core owner 接管 |
@@ -57,6 +57,18 @@
 | `ActiveEffectLifecycleOwnerSystems.cs` | 4 个手写 companion `ISystem` 位于 `GAS.Runtime.Generated` namespace：catalog normalize、active mutation apply、pre-tick、remove；`OnUpdate` 中仍创建 query、ECB、`NativeParallelHashMap`、`NativeArray` 并刷新多个 lookup | 它不再由 SourceGenerator 输出，也不进入 manifest / generated boundary report；但物理 asmdef、namespace 和 owner 职责仍与 generated helper/job 绑定，不能算 ActiveEffect lifecycle release-ready |
 | `RuntimeActiveEffect.gen.cs` | generated helper/job 仍包含 source attribute snapshot gather、pre-tick job、mutation gather/apply helper、magnitude counter、cleanup / granted ability / tag / event helper | 它是 pure glue 之外的 runtime helper/job 迁移面；只要 helper 仍拥有 lookup / ECB / NativeContainer / lifecycle 行为，R5/R7 必须按 `MigrationProofOnly` 审查 |
 | API health | Runtime `SystemAPI.Query=0`、`EntityManager.CreateEntityQuery=0`、`state.Dependency.Complete=0`、`.Run(` 静态命中 0；`ToEntityArray` 可执行运行调用仍集中在 Debugger observation 两处和 Cue managed boundary 一处；`new EntityQueryDesc` Runtime 命中 19 处，分布在 13 个文件 | 当前已经不是主线程 foreach 旧形态，但 query owner、materialization owner 和 stored query cost 仍要分 Core / Boundary / Diagnostics；不能把静态 0 命中写成 DOTS 性能优秀 |
+
+### 2026-06-08 三次校准：整体 owner map 事实
+
+本次用 codedb 当前索引继续校准整体架构，不引入新目标态设计。新增事实如下：
+
+| 审查面 | 当前证据 | 事实判定 |
+|---|---|---|
+| Runtime dependency graph | `codedb_module_map path_prefix=Assets/GAS/Runtime` 返回主社群 109 files / 1253 indexed symbols，internal edges 202、boundary edges 66、incoming 66、outgoing 0；中心文件覆盖 Runtime archetype、ActiveEffectStore、Debugger、ScheduleContract、Stream、Effect utility、Config registry 和 ASC entity factory | Runtime 已有 DOTS backbone，但不是按 Shell / Boundary / Core / Definition / Diagnostics 切开的深 Module；后续不能用移动文件夹、改 namespace 或 facade 名称替代 dependency graph 证据 |
+| Shell consumers | `GASRuntimeShell.cs` imported_by 图依赖当前为 AutoChess lifecycle、catalog session、observation、runtime host 4 个文件；文本消费者另有 Editor `GASWatcher`、`AbilitySystemBinding` | Shell 消费面比“业务层外壳”更宽；它仍横跨 Demo adapter、Editor watcher 和 runtime binding，是 R1/R6 的当前事实输入 |
+| Command resolve depth | `ASCCommandBufferResolveSystem.cs` depends_on 18 个 runtime 文件，覆盖 Ability、ASC、Attribute、Definition、Event、Archetype、Tag 等目录 | 它是 job 化正向面，但 also 是 lane 过宽事实；目标重划分必须继续拆 command / ability / tag / attribute / fact owner，而不是只保留一个更大的 command resolver |
+| ActiveEffect companion depth | `ActiveEffectLifecycleOwnerSystems.cs` depends_on 多个 runtime/generated 文件，仍拥有 query / ECB / NativeContainer allocation / lookup refresh；`RuntimeActiveEffect.gen.cs` 承载 snapshot key、mutation gather/apply helper、pre-tick job、magnitude counter、cleanup/grant/tag/event helper | active effect lifecycle 已退出 SourceGenerator 输出，但 companion owner 还不是 release-ready Core lane；R5/R7 必须继续把 generated helper 与 hand-written lifecycle owner 拆清 |
+| Debugger depth | `GasRuntimeDebugger.cs` 4092 行，覆盖 diagnostics event、observation materialization、magnitude source counters、runtime core counters、official diff/export 读面 | Debugger 已是核心 evidence owner；但其 interface 深度应体现在 evidence tier 和 cost domain，不应变成 command / snapshot / gameplay decision 的共享 seam |
 
 ### 当前职责重新划分事实
 
@@ -125,7 +137,7 @@
 来源类型：整体架构审查 / codedb 截面 / DOTS 官方规则对照
 原始证据：
   - `codedb_status`: 428 files / scan ready
-  - `codedb_module_map`: `Assets/GAS/Runtime` 主要社群 141 files / 1968 indexed symbols
+  - `codedb_module_map`: `Assets/GAS/Runtime` 主要社群 109 files / 1253 indexed symbols
   - `Assets/GAS/Runtime/General/GASRuntimeShell.cs:11-279`
   - `Assets/GAS/Runtime/System/SystemGroup/GASSystemScheduleContract.cs:99-434`
   - `Assets/GAS/Runtime/Effect/Component/Dynamic/GEEffectCommandSpecStream.cs:483-698`

@@ -402,6 +402,7 @@ namespace GAS.AutoChessDemo
 
         public static string CreateBoundaryOwnerSummary(in AutoChessBattleResult result)
         {
+            var driverOwner = result.DriverOwnerSnapshot;
             return "shellPublicRawEcsSurface=false, "
                    + "unitIdentity=AutoChessBattleUnitKey, "
                    + "unitRuntimeHandle=ASCHandle, "
@@ -410,6 +411,13 @@ namespace GAS.AutoChessDemo
                    + "driverLifecycleOwner=AutoChessBattleDriverRuntimeStore, "
                    + "driverHandle=OpaqueDriverIdVersion, "
                    + "driverAdapterRawEntity=false, "
+                   + $"driverOwnerInstalled={Bool(driverOwner.OwnerInstalled)}, "
+                   + $"driverOwnerEnabled={Bool(driverOwner.OwnerEnabled)}, "
+                   + $"driverOwnerHandleMatched={Bool(driverOwner.HandleMatched)}, "
+                   + $"driverStructuralCreates={driverOwner.StructuralCreateCount}, "
+                   + $"driverEnableRequests={driverOwner.EnableCount}, "
+                   + $"driverDisableRequests={driverOwner.DisableCount}, "
+                   + $"driverUninstallRequests={driverOwner.UninstallCount}, "
                    + "catalogOwner=AutoChessGasCatalogSession, "
                    + "snapshotOwner=AutoChessGasBattleUnitSnapshotProjector.StructuredLog, "
                    + "observationOwner=AutoChessGasObservationGateway, "
@@ -417,6 +425,11 @@ namespace GAS.AutoChessDemo
                    + "reportProjectionOwner=AutoChessRuntimeUnitResolver.BoundaryReportKey, "
                    + CreateBoundaryReportKeyCoverageSummary(result.StructuredLogSnapshot)
                    + $", factsHash=0x{CalculateFactsHash(result.StructuredLogSnapshot):X8}";
+        }
+
+        private static string Bool(bool value)
+        {
+            return value ? "true" : "false";
         }
 
         public static string CreateOfficialToolDiffSummary(

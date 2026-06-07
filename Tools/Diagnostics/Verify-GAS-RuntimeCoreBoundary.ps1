@@ -92,6 +92,7 @@ $generatedInstantEffectPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeG
 $codeGenTemplatePath = Join-Path $ProjectPath "Assets\GAS\Editor\CodeGen\Phases\GasGlueCodeGenPhases.cs"
 $codeGenManifestPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\GasCodeGen.manifest.json"
 $codeGenReportPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\GasCodeGenValidationReport.md"
+$autoChessDriverPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Ecs\AutoChessBattleDriverComponents.cs"
 $autoChessDamagePath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Ecs\AutoChessExecuteDamageCalculationSystem.cs"
 $autoChessSessionPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\AutoChessBattleSession.cs"
 $autoChessResultBuilderPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\AutoChessBattleResultBuilder.cs"
@@ -100,6 +101,9 @@ $autoChessLifecyclePath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integrati
 $autoChessUnitSnapshotProjectorPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasBattleUnitSnapshotProjector.cs"
 $autoChessValidationReportPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Validation\AutoChessBattleValidationReport.cs"
 $autoChessValidationRunPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Validation\AutoChessBattleValidationRun.cs"
+$autoChessRuntimeHostPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasRuntimeHost.cs"
+$autoChessCatalogSessionPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasCatalogSession.cs"
+$autoChessDefinitionCatalogBuilderPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Ecs\AutoChessBattleDefinitionCatalogBuilder.cs"
 
 Assert-FileContains `
     -Path $deltaApplyPath `
@@ -697,6 +701,34 @@ Assert-FileContains `
     -Path $autoChessValidationReportPath `
     -Pattern "streamCarrierPressureWarnings" `
     -Message "AutoChess validation evidence must export stream carrier pressure warnings for R3 scale gates."
+Assert-FileNotContains `
+    -Path $autoChessRuntimeHostPath `
+    -Pattern "TryResolveRuntimeEntityManager" `
+    -Message "AutoChess runtime host must not resolve EntityManager for definition catalog lifetime; AutoChessGasCatalogSession owns that capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeHostPath `
+    -Pattern "AutoChessGasCatalogSession\.TryInstall\(\)" `
+    -Message "AutoChess runtime host must install catalog lifetime through the catalog session capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeHostPath `
+    -Pattern "AutoChessGasCatalogSession\.Uninstall\(\)" `
+    -Message "AutoChess runtime host must uninstall catalog lifetime through the catalog session capability."
+Assert-FileContains `
+    -Path $autoChessCatalogSessionPath `
+    -Pattern "TryInstall\(\)[\s\S]*?GASRuntimeShell\.TryResolveRuntimeEntityManager" `
+    -Message "AutoChess catalog session must own Runtime EntityManager resolution for definition/catalog lifetime."
+Assert-FileNotContains `
+    -Path $autoChessCatalogSessionPath `
+    -Pattern "public\s+static\s+\w+\s+\w+\s*\(\s*EntityManager" `
+    -Message "AutoChess catalog session public API must not expose EntityManager parameters."
+Assert-FileContains `
+    -Path $autoChessDefinitionCatalogBuilderPath `
+    -Pattern "internal static class AutoChessBattleDefinitionCatalogBuilder" `
+    -Message "AutoChess generated catalog installer must stay an internal implementation detail."
+Assert-FileNotContains `
+    -Path $autoChessDefinitionCatalogBuilderPath `
+    -Pattern "public static class AutoChessBattleDefinitionCatalogBuilder" `
+    -Message "AutoChess generated catalog installer must not be a public API seam."
 Assert-FileContains `
     -Path $autoChessDamagePath `
     -Pattern "PendingOwnerLookup\.SetComponentEnabled\(targetAsc,\s*true\)" `
@@ -729,6 +761,38 @@ Assert-FileContains `
     -Path $autoChessValidationReportPath `
     -Pattern "snapshotOwner=AutoChessGasBattleUnitSnapshotProjector\.StructuredLog" `
     -Message "AutoChess validation evidence must report structured-log snapshot ownership."
+Assert-FileContains `
+    -Path $autoChessDriverPath `
+    -Pattern "AutoChessBattleDriverOwnerSnapshot" `
+    -Message "AutoChess driver runtime store must expose a raw-Entity-free owner snapshot."
+Assert-FileContains `
+    -Path $autoChessDriverPath `
+    -Pattern "CreateOwnerSnapshot[\s\S]*?AutoChessGasBattleDriverHandle handle" `
+    -Message "AutoChess driver runtime store must publish owner evidence through the opaque driver handle."
+Assert-FileNotContains `
+    -Path $autoChessDriverPath `
+    -Pattern "TryGetEntityForAdapter|public\s+static\s+Entity\s+|internal\s+static\s+Entity\s+" `
+    -Message "AutoChess driver runtime store must not expose raw driver Entity through public or adapter APIs."
+Assert-FileContains `
+    -Path $autoChessSessionPath `
+    -Pattern "GetDriverOwnerSnapshot" `
+    -Message "AutoChess battle session must capture driver owner evidence before closing the driver."
+Assert-FileContains `
+    -Path $autoChessResultBuilderPath `
+    -Pattern "driverOwnerSnapshot" `
+    -Message "AutoChess battle result builder must carry driver owner evidence into the validation result."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "driverOwnerHandleMatched" `
+    -Message "AutoChess validation evidence must report driver owner handle matching."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "driverStructuralCreates" `
+    -Message "AutoChess validation evidence must report driver structural owner creation count."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "driverAdapterRawEntity=false" `
+    -Message "AutoChess validation evidence must keep raw driver Entity hidden from adapter APIs."
 
 Write-Host "GAS Runtime Core boundary check passed: no AutoChess references under Assets/GAS/Runtime."
 Write-Host "GAS Runtime Core pending attribute delta contract passed: owner-local apply, stream migration fallback retired, and debugger counters are wired."
@@ -740,3 +804,4 @@ Write-Host "GAS Runtime Core execution output fact contract passed: NativeStream
 Write-Host "GAS Runtime Core active mutation contract passed: generated gather + ASC chunk-local apply path is wired."
 Write-Host "GAS Runtime Core active mutation SourceAttribute contract passed: read-only snapshot lane feeds chunk-local apply."
 Write-Host "AutoChess R1/R6 snapshot contract passed: unit result snapshots are projected from structured boundary evidence, not live ASCReadModel."
+Write-Host "AutoChess R6 driver owner contract passed: driver owner snapshot is exposed without raw Entity adapter APIs."

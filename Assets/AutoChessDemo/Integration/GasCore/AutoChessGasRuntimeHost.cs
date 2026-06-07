@@ -13,8 +13,7 @@ namespace GAS.AutoChessDemo
             if (GASRuntimeShell.TryResolveRuntimeWorld(out var world))
                 AutoChessRuntimeSystemBootstrap.RegisterSystems(world);
 
-            if (GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
-                AutoChessGasCatalogSession.Install(entityManager);
+            AutoChessGasCatalogSession.TryInstall();
         }
 
         public static void ShutdownRuntime()
@@ -22,8 +21,7 @@ namespace GAS.AutoChessDemo
             if (!GASManager.IsInitialized)
                 return;
 
-            if (GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
-                AutoChessGasCatalogSession.Uninstall(entityManager);
+            AutoChessGasCatalogSession.Uninstall();
 
             AutoChessRuntimeSystemBootstrap.Reset();
             AutoChessGasBattleEntityLifecycle.ResetRuntimeCache();

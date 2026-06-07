@@ -107,6 +107,7 @@ namespace GAS.AutoChessDemo
 
             _stopwatch.Stop();
             var driverStats = _session.GetDriverStats();
+            var driverOwnerSnapshot = _session.GetDriverOwnerSnapshot();
             var diagnosticsStart = Stopwatch.GetTimestamp();
             var coreObservation = _runtime.ExportDiagnostics();
             _runtimeTiming.AddDebuggerExport(Stopwatch.GetTimestamp() - diagnosticsStart);
@@ -122,6 +123,7 @@ namespace GAS.AutoChessDemo
                 _droppedWarmupTicks,
                 _measuredTicks,
                 driverStats,
+                driverOwnerSnapshot,
                 _stopwatch.ElapsedTicks,
                 _stopwatch.Elapsed.TotalMilliseconds,
                 _measuredElapsedTicks,

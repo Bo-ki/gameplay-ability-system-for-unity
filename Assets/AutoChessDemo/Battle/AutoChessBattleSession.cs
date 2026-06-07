@@ -61,6 +61,11 @@ namespace GAS.AutoChessDemo
             return AutoChessGasCoreBridge.GetBattleDriverStats(DriverHandle);
         }
 
+        public AutoChessBattleDriverOwnerSnapshot GetDriverOwnerSnapshot()
+        {
+            return AutoChessGasCoreBridge.GetBattleDriverOwnerSnapshot(DriverHandle);
+        }
+
         public AutoChessBattleUnitResult[] CreateUnitResults(
             in GasStructuredLogExportSnapshot structuredLog)
         {

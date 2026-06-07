@@ -87,6 +87,15 @@ namespace GAS.AutoChessDemo
             return AutoChessBattleDriverRuntimeStore.Read(entityManager, driverHandle);
         }
 
+        public static AutoChessBattleDriverOwnerSnapshot GetBattleDriverOwnerSnapshot(
+            AutoChessGasBattleDriverHandle driverHandle)
+        {
+            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
+                return default;
+
+            return AutoChessBattleDriverRuntimeStore.CreateOwnerSnapshot(entityManager, driverHandle);
+        }
+
         public static void CloseBattleDriver(AutoChessGasBattleDriverHandle driverHandle)
         {
             if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
@@ -110,6 +119,7 @@ namespace GAS.AutoChessDemo
         {
             BattleUnitRegistry.Clear();
             _nextBattleUnitKey = 0;
+            AutoChessBattleDriverRuntimeStore.ResetRuntimeCache();
         }
 
         private static AutoChessGasBattleUnitHandle RegisterBattleUnit(ASCCommandPort commandPort)

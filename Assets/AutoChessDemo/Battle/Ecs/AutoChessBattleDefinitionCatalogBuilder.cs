@@ -5,14 +5,14 @@ using GAS.Runtime.Generated;
 
 namespace GAS.AutoChessDemo
 {
-    public static class AutoChessBattleDefinitionCatalogBuilder
+    internal static class AutoChessBattleDefinitionCatalogBuilder
     {
         private static BlobAssetReference<GASDefinitionCatalogBlob> _installedCatalog;
         private static Entity _catalogEntity;
         private static Entity _executionCalculationEntity;
         private static World _catalogWorld;
 
-        public static void Install(EntityManager entityManager)
+        internal static void Install(EntityManager entityManager)
         {
             if (_installedCatalog.IsCreated)
                 _installedCatalog.Dispose();
@@ -29,7 +29,7 @@ namespace GAS.AutoChessDemo
             InstallExecutionCalculationConfig(entityManager);
         }
 
-        public static void Uninstall(EntityManager entityManager)
+        internal static void Uninstall(EntityManager entityManager)
         {
             if (entityManager.World == null || !entityManager.World.IsCreated)
             {
