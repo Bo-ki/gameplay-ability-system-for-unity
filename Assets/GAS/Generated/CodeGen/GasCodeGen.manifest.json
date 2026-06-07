@@ -116,7 +116,7 @@
       "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs",
       "Layer": "Runtime",
       "RuntimeVisible": true,
-      "ArtifactCategory": "RuntimeLifecycleMigration",
+      "ArtifactCategory": "RuntimePureGlue",
       "VersionControlled": true
     },
     {

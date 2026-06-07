@@ -2628,20 +2628,15 @@ namespace __ROOT_NAMESPACE__
         {
             using var writer = new IndentedWriter(new StreamWriter(path));
             WriteHeader(writer);
-            writer.WriteLine("using System.Collections.Generic;");
-            writer.WriteLine("using GAS.Runtime;");
-            writer.WriteLine("using Unity.Burst;");
-            writer.WriteLine("using Unity.Burst.Intrinsics;");
-            writer.WriteLine("using Unity.Collections;");
-            writer.WriteLine("using Unity.Entities;");
-            writer.WriteLine("using Unity.Jobs;");
-            writer.WriteLine("");
             writer.WriteLine($"namespace {context.RootNamespace}");
             writer.WriteLine("{");
             writer.Indent++;
-            WriteGeneratedInstantSpecBuildSystem(writer);
-            writer.WriteLine("");
-            WriteGeneratedAttributeDeltaApplySystem(writer);
+            writer.WriteLine("public static class GASGeneratedEffectInstantRuntimeMarker");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("public const bool HandwrittenRuntimeOwner = true;");
+            writer.Indent--;
+            writer.WriteLine("}");
             writer.Indent--;
             writer.WriteLine("}");
         }
@@ -2931,9 +2926,7 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine("|| gameplayEffect.StackLimitCount > 0");
             writer.WriteLine("|| gameplayEffect.GrantedTagMaskIndex >= 0");
             writer.WriteLine("|| !gameplayEffect.RemoveGameplayEffectTagQuery.IsEmpty");
-            writer.WriteLine("|| gameplayEffect.GrantedAbilityCount > 0");
-            writer.WriteLine("|| (gameplayEffect.ModifierCount <= 0");
-            writer.WriteLine("    && gameplayEffect.GameplayCueCode <= 0))");
+            writer.WriteLine("|| gameplayEffect.GrantedAbilityCount > 0)");
             writer.Indent--;
             writer.Indent++;
             writer.WriteLine("return false;");
@@ -7647,7 +7640,7 @@ namespace __ROOT_NAMESPACE__
             RuntimeDefinitionGluePhase.WriteRuntimeActiveEffectSystems(context, activeEffectPath);
 
             AddRuntimePureGlueManifest(manifest, PhaseName, systemPath);
-            AddRuntimeLifecycleMigrationManifest(manifest, PhaseName, instantEffectPath);
+            AddRuntimePureGlueManifest(manifest, PhaseName, instantEffectPath);
             AddRuntimeLifecycleMigrationManifest(manifest, PhaseName, activeEffectPath);
         }
     }

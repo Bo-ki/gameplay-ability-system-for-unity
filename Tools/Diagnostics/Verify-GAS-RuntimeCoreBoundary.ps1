@@ -86,6 +86,7 @@ $effectMagnitudeResolverPath = Join-Path $runtimePath "System\Effect\EffectMagni
 $effectRuntimeUtilityPath = Join-Path $runtimePath "System\Effect\EffectRuntimeUtility.cs"
 $executionCalculationSystemPath = Join-Path $runtimePath "System\Effect\GEExecutionCalculationSystem.cs"
 $executionCalculationOutputModifierSystemPath = Join-Path $runtimePath "System\Effect\GEExecutionCalculationOutputModifierSystem.cs"
+$effectInstantSystemsPath = Join-Path $runtimePath "System\Effect\GEEffectInstantSystems.cs"
 $diagnosticsSnapshotSystemPath = Join-Path $runtimePath "System\Event\DiagnosticsSnapshotSystem.cs"
 $scheduleContractPath = Join-Path $runtimePath "System\SystemGroup\GASSystemScheduleContract.cs"
 $streamOwnerContractPath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeStreamOwnerContract.cs"
@@ -500,67 +501,79 @@ Assert-FileContains `
 Assert-FileNotContains `
     -Path $generatedInstantEffectPath `
     -Pattern "OwnerLocalInstantCommandFlushSystem" `
-    -Message "Generated instant spec build must not depend on the deleted owner-local instant command flush system."
+    -Message "Generated instant marker must not depend on the deleted owner-local instant command flush system."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
-    -Pattern "UpdateAfter\(typeof\(GEEffectCommandCatalogNormalizeSystem\)\)" `
-    -Message "Generated instant spec build must run after owner-local command catalog normalization."
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "\[UpdateBefore\(typeof\(GEEffectSpecBuildSystem\)\)\][\s\S]*?GEEffectCommandCatalogNormalizeSystem\s*:\s*ISystem" `
+    -Message "Active-effect normalize wrapper must still order before the handwritten instant spec build owner."
 Assert-FileContains `
     -Path $codeGenTemplatePath `
-    -Pattern 'writer\.WriteLine\("\[UpdateAfter\(typeof\(GEEffectCommandCatalogNormalizeSystem\)\)\]"' `
-    -Message "CodeGen template must regenerate the instant spec build order after owner-local command catalog normalization."
+    -Pattern "GASGeneratedEffectInstantRuntimeMarker" `
+    -Message "CodeGen must generate only the instant effect marker after handwritten GEEffect instant ownership migration."
 Assert-FileNotContains `
     -Path $codeGenTemplatePath `
     -Pattern "OwnerLocalInstantCommandFlushSystem" `
     -Message "CodeGen template must not regenerate the deleted owner-local instant command flush system dependency."
+Assert-FileNotContains `
+    -Path $effectInstantSystemsPath `
+    -Pattern "GEEffectCommandCatalogNormalizeSystem" `
+    -Message "Handwritten instant effect owner must not take a direct type dependency on generated active-effect lifecycle systems."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "CollectOwnerLocalInstantSpecCommandsJob\s*:\s*IJobChunk" `
-    -Message "Generated instant spec build must collect ASC owner-local instant commands directly."
+    -Message "Handwritten instant spec build must collect ASC owner-local instant commands directly."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "BuildOwnerLocalInstantSpecsJob\s*:\s*IJob" `
-    -Message "Generated instant spec build must allocate specs from owner-local records without a singleton command flush."
+    -Message "Handwritten instant spec build must allocate specs from owner-local records without a singleton command flush."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "OwnerLocalInstantSpecCommandRecordComparer[\s\S]*?x\.Command\.Sequence\.CompareTo\(y\.Command\.Sequence\)" `
-    -Message "Generated instant spec build must keep deterministic command-sequence ordering before spec allocation."
+    -Message "Handwritten instant spec build must keep deterministic command-sequence ordering before spec allocation."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "CopySetByCallerValues\(ownerSetByCallerValues,\s*in command,\s*Payloads\)" `
-    -Message "Generated instant spec build must copy set-by-caller payload from ASC owner-local buffers."
+    -Message "Handwritten instant spec build must copy set-by-caller payload from ASC owner-local buffers."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "CopySetByCallerValues\(\s*Payloads,\s*record\.PayloadStart,\s*record\.PayloadCount,\s*command\.Sequence,\s*specSequence,\s*setByCallerValues\)" `
-    -Message "Generated instant spec build must remap owner-local payload into spec-local payload ranges."
+    -Message "Handwritten instant spec build must remap owner-local payload into spec-local payload ranges."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "SpecLookup\[record\.Owner\]" `
-    -Message "Generated instant spec build must write specs to ASC owner-local GEEffectSpecBuffer."
+    -Message "Handwritten instant spec build must write specs to ASC owner-local GEEffectSpecBuffer."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "SetByCallerLookup\[record\.Owner\]" `
-    -Message "Generated instant spec build must write spec-local set-by-caller payloads to ASC owner-local buffers."
+    -Message "Handwritten instant spec build must write spec-local set-by-caller payloads to ASC owner-local buffers."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "stream\.OwnerLocalSpecCount\s*\+=\s*builtCount" `
-    -Message "Generated instant spec build must expose owner-local spec counts through the stream telemetry component."
+    -Message "Handwritten instant spec build must expose owner-local spec counts through the stream telemetry component."
 Assert-FileNotContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "SpecLookup\[StreamEntity\]" `
-    -Message "Generated instant spec build must not write specs to singleton GEEffectSpecBuffer."
+    -Message "Handwritten instant spec build must not write specs to singleton GEEffectSpecBuffer."
 Assert-FileNotContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
+    -Pattern "ModifierCount\s*<=\s*0[\s\S]*?GameplayCueCode\s*<=\s*0" `
+    -Message "Handwritten instant spec build must not reject execution-only or cue-less instant GE by modifier count."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern 'writer\.WriteLine\("\|\| \(gameplayEffect\.ModifierCount <= 0"\)' `
+    -Message "CodeGen template must not preserve modifier-count instant spec rejection."
+Assert-FileNotContains `
+    -Path $effectInstantSystemsPath `
     -Pattern "SpecLookup\.HasBuffer\(StreamEntity\)" `
-    -Message "Generated instant spec build must not require a singleton GEEffectSpecBuffer."
+    -Message "Handwritten instant spec build must not require a singleton GEEffectSpecBuffer."
 Assert-FileNotContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "CommandLookup\s*=\s*SystemAPI\.GetBufferLookup<GEEffectCommandBuffer>" `
-    -Message "Generated instant spec build must not read singleton GEEffectCommandBuffer as its input."
+    -Message "Handwritten instant spec build must not read singleton GEEffectCommandBuffer as its input."
 Assert-FileNotContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "SpecBuildCommandCursor" `
-    -Message "Generated instant spec build must not scan singleton command stream cursor after owner-local consumer migration."
+    -Message "Handwritten instant spec build must not scan singleton command stream cursor after owner-local consumer migration."
 Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "SpecBuildCommandCursor|DeltaApplySpecCursor|CueProjectionSpecCursor" `
@@ -578,49 +591,49 @@ Assert-FileNotContains `
     -Pattern "PrepareFrameLocalData\(\s*ref GEEffectCommandStreamComponent stream[\s\S]*?commands\.Clear\(\);\s*[\r\n\s]*setByCallerValues\.Clear\(\);" `
     -Message "EffectCommandSpecStream job frame prepare must not clear singleton command payload after owner-local command migration."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "AttributeSetReduceApplyJob\s*:\s*IJobChunk" `
-    -Message "Generated instant AttributeReduce must consume owner-local specs with chunk-local buffers."
+    -Message "Handwritten instant AttributeReduce must consume owner-local specs with chunk-local buffers."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "Options\s*=\s*EntityQueryOptions\.IgnoreComponentEnabledState" `
-    -Message "Generated instant AttributeReduce must include disabled ASCDestroyingComponent owners and inspect the enabled mask itself."
+    -Message "Handwritten instant AttributeReduce must include disabled ASCDestroyingComponent owners and inspect the enabled mask itself."
 Assert-FileNotContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "DeltaLookup\s*=\s*SystemAPI\.GetBufferLookup<AttributeModifierBuffer>" `
-    -Message "Generated instant AttributeDelta must not write facts through the singleton stream delta buffer."
+    -Message "Handwritten instant AttributeDelta must not write facts through the singleton stream delta buffer."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "OwnerFactType\s*=\s*SystemAPI\.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>" `
-    -Message "Generated instant AttributeDelta must write directly to ASC owner-local fact buffers through chunk-local handles."
+    -Message "Handwritten instant AttributeDelta must write directly to ASC owner-local fact buffers through chunk-local handles."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
-    -Pattern 'writer\.WriteLine\("DeltaLookup = SystemAPI\.GetBufferLookup<AttributeModifierBuffer>' `
-    -Message "CodeGen must not regenerate singleton stream DeltaLookup for instant AttributeDelta facts."
+    -Path $effectInstantSystemsPath `
+    -Pattern "DeltaLookup\s*=\s*SystemAPI\.GetBufferLookup<AttributeModifierBuffer>" `
+    -Message "Handwritten instant AttributeDelta must not use singleton stream DeltaLookup."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
-    -Pattern 'writer\.WriteLine\("OwnerFactType = SystemAPI\.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>' `
-    -Message "CodeGen must regenerate instant AttributeDelta owner-local chunk fact output."
+    -Path $effectInstantSystemsPath `
+    -Pattern "OwnerFactType\s*=\s*SystemAPI\.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>" `
+    -Message "Handwritten instant AttributeDelta must keep owner-local chunk fact output."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
-    -Pattern 'writer\.WriteLine\("var specs = SpecLookup\[record\.Owner\];"\)' `
-    -Message "CodeGen must regenerate owner-local instant spec writes."
+    -Path $effectInstantSystemsPath `
+    -Pattern "var specs = SpecLookup\[record\.Owner\];" `
+    -Message "Handwritten instant spec build must keep owner-local spec writes."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
-    -Pattern 'writer\.WriteLine\("var setByCallerValues = SetByCallerLookup\[record\.Owner\];"\)' `
-    -Message "CodeGen must regenerate owner-local instant spec payload writes."
+    -Path $effectInstantSystemsPath `
+    -Pattern "var setByCallerValues = SetByCallerLookup\[record\.Owner\];" `
+    -Message "Handwritten instant spec build must keep owner-local spec payload writes."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
-    -Pattern 'writer\.WriteLine\("stream\.OwnerLocalSpecCount \+= builtCount;"\)' `
-    -Message "CodeGen must regenerate owner-local instant spec telemetry counters."
+    -Path $effectInstantSystemsPath `
+    -Pattern "stream\.OwnerLocalSpecCount \+= builtCount;" `
+    -Message "Handwritten instant spec build must keep owner-local instant spec telemetry counters."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
-    -Pattern 'writer\.WriteLine\("var specs = SpecLookup\[StreamEntity\]' `
-    -Message "CodeGen must not regenerate singleton instant spec writes."
+    -Path $effectInstantSystemsPath `
+    -Pattern "var specs = SpecLookup\[StreamEntity\]" `
+    -Message "Handwritten instant spec build must not write singleton instant specs."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
-    -Pattern 'writer\.WriteLine\("stream\.DeltaApplySpecCursor = specs\.Length;"\)' `
-    -Message "CodeGen must not regenerate a singleton instant spec reduce cursor."
+    -Path $effectInstantSystemsPath `
+    -Pattern "stream\.DeltaApplySpecCursor = specs\.Length;" `
+    -Message "Handwritten instant AttributeReduce must not use a singleton instant spec reduce cursor."
 Assert-FileNotContains `
     -Path $executionCalculationOutputModifierSystemPath `
     -Pattern "DeltaBufferLookup" `
@@ -866,21 +879,21 @@ Assert-FileContains `
     -Pattern "activeEffectSlotSourceSnapshotCapacityPressure" `
     -Message "GasRuntimeDebugger text export must expose active effect slot source snapshot capacity pressure evidence."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
+    -Path $effectInstantSystemsPath `
     -Pattern "TagMaskLookup\s*=\s*SystemAPI\.GetComponentLookup<TagMaskComponent>\(isReadOnly:\s*true\)" `
-    -Message "Generated instant GE spec build must read target tag masks for GameplayEffect tag requirement evaluation."
+    -Message "Handwritten instant GE spec build must read target tag masks for GameplayEffect tag requirement evaluation."
 Assert-FileContains `
-    -Path $generatedInstantEffectPath `
-    -Pattern "GASGeneratedRequirementEvaluator\.EvaluateGameplayEffectRequirements\(ref catalog, in gameplayEffect, in targetTags, out _\)" `
-    -Message "Generated instant GE spec build must evaluate GameplayEffect tag requirements before creating specs."
+    -Path $effectInstantSystemsPath `
+    -Pattern "GASRuntimeRequirementEvaluator\.EvaluateGameplayEffectRequirements\(\s*ref catalog,\s*in gameplayEffect,\s*in targetTags,\s*out _\)" `
+    -Message "Handwritten instant GE spec build must evaluate GameplayEffect tag requirements before creating specs."
 Assert-FileContains `
     -Path $codeGenTemplatePath `
-    -Pattern "TagMaskLookup\s*=\s*SystemAPI\.GetComponentLookup<TagMaskComponent>\(isReadOnly:\s*true\)" `
-    -Message "CodeGen template must keep instant GE target tag mask lookup."
+    -Pattern "GASGeneratedEffectInstantRuntimeMarker" `
+    -Message "CodeGen template must keep RuntimeEffectInstant as a marker after handwritten instant owner migration."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
-    -Pattern "GASGeneratedRequirementEvaluator\.EvaluateGameplayEffectRequirements\(ref catalog, in gameplayEffect, in targetTags, out _\)" `
-    -Message "CodeGen template must keep instant GE tag requirement evaluation."
+    -Path $effectInstantSystemsPath `
+    -Pattern "GASRuntimeMagnitudeEvaluator\.TryResolveMagnitude\(in modifier, in context, out var magnitude\)" `
+    -Message "Handwritten instant attribute set apply must resolve modifier magnitudes through runtime helper."
 Assert-FileContains `
     -Path $debuggerPath `
     -Pattern "runtimeCoreMagnitudeSource" `
@@ -1158,6 +1171,10 @@ Assert-FileContains `
     -Pattern '\|\s*`?RuntimeLifecycleMigration`?\s*\|\s*`?Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation\.gen\.cs`?\s*\|\s*`?Runtime`?\s*\|\s*`?True`?\s*\|\s*`?RuntimePureGlue`?\s*\|\s*`?True`?\s*\|' `
     -Message "GasCodeGen validation report must classify RuntimeAbilityActivation as RuntimePureGlue after the handwritten ability commit owner migration."
 Assert-FileContains `
+    -Path $codeGenReportPath `
+    -Pattern '\|\s*`?RuntimeLifecycleMigration`?\s*\|\s*`?Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant\.gen\.cs`?\s*\|\s*`?Runtime`?\s*\|\s*`?True`?\s*\|\s*`?RuntimePureGlue`?\s*\|\s*`?True`?\s*\|' `
+    -Message "GasCodeGen validation report must classify RuntimeEffectInstant as RuntimePureGlue after the handwritten instant effect owner migration."
+Assert-FileContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationOwnerCommandCollectJob\s*:\s*IJobChunk" `
     -Message "Generated active effect runtime must collect active mutation commands from owner-local buffers before chunk-local apply."
@@ -1414,6 +1431,14 @@ Assert-FileContains `
     -Pattern "GASGeneratedAbilityActivationRuntimeMarker" `
     -Message "CodeGen must generate only the ability activation marker after handwritten AbilityCommitSystem takes lifecycle ownership."
 Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "GASGeneratedEffectInstantRuntimeMarker[\s\S]*?HandwrittenRuntimeOwner\s*=\s*true" `
+    -Message "Generated instant effect artifact must be a pure marker after handwritten GEEffect instant systems take lifecycle ownership."
+Assert-FileNotContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "GEEffectSpecBuildSystem|GASAttributeSetReduceApplySystem|:\s*ISystem|SystemAPI\.GetComponentLookup|SystemAPI\.GetBufferLookup|CollectOwnerLocalInstantSpecCommandsJob|AttributeSetReduceApplyJob" `
+    -Message "Generated instant effect artifact must not own lifecycle, query refresh, lookups, spec build, or attribute apply jobs."
+Assert-FileContains `
     -Path $abilityCommitSystemPath `
     -Pattern "public partial struct AbilityCommitSystem\s*:\s*ISystem" `
     -Message "Handwritten AbilityCommitSystem must own ability commit lifecycle execution."
@@ -1481,6 +1506,14 @@ Assert-FileNotContains `
     -Path $scheduleContractPath `
     -Pattern "AbilityCatalogCommitSystem" `
     -Message "Runtime schedule contract must not reference generated AbilityCatalogCommitSystem after handwritten ownership migration."
+Assert-FileContains `
+    -Path $scheduleContractPath `
+    -Pattern "typeof\(GEEffectSpecBuildSystem\)[\s\S]*?typeof\(GASAttributeSetReduceApplySystem\)[\s\S]*?typeof\(GASAttributeModifierDeltaApplySystem\)" `
+    -Message "Runtime schedule contract must register handwritten instant spec build and attribute set reduce/apply before modifier delta apply."
+Assert-FileNotContains `
+    -Path $scheduleContractPath `
+    -Pattern "GAS\.Runtime\.Generated\.GEEffectSpecBuildSystem|GAS\.Runtime\.Generated\.GASAttributeSetReduceApplySystem" `
+    -Message "Runtime schedule contract must not register generated instant effect systems after handwritten ownership migration."
 Assert-FileContains `
     -Path $ascCommandResolvePath `
     -Pattern "OwnerFactBufferTypeHandle\s*=\s*SystemAPI\.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>\(\)" `

@@ -126,6 +126,39 @@ namespace GAS.Runtime
             return EvaluateRange(ref catalog, ability.RequirementStart, ability.RequirementCount, in ownerTags, out failureReasonCode);
         }
 
+        public static bool EvaluateGameplayEffectRequirements(
+            ref GASDefinitionCatalogBlob catalog,
+            int gameplayEffectDefinitionIndex,
+            in TagMaskComponent targetTags,
+            out int failureReasonCode)
+        {
+            failureReasonCode = GASFailureReasonCodes.None;
+            if ((uint)gameplayEffectDefinitionIndex >= (uint)catalog.GameplayEffects.Length)
+            {
+                failureReasonCode = GASFailureReasonCodes.GameplayEffectNotFound;
+                return false;
+            }
+
+            ref readonly var gameplayEffect = ref GASDefinitionCatalogLookup.GetGameplayEffect(
+                ref catalog,
+                gameplayEffectDefinitionIndex);
+            return EvaluateGameplayEffectRequirements(ref catalog, in gameplayEffect, in targetTags, out failureReasonCode);
+        }
+
+        public static bool EvaluateGameplayEffectRequirements(
+            ref GASDefinitionCatalogBlob catalog,
+            in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
+            in TagMaskComponent targetTags,
+            out int failureReasonCode)
+        {
+            return EvaluateRange(
+                ref catalog,
+                gameplayEffect.RequirementStart,
+                gameplayEffect.RequirementCount,
+                in targetTags,
+                out failureReasonCode);
+        }
+
         private static bool EvaluateRange(
             ref GASDefinitionCatalogBlob catalog,
             int start,
@@ -170,6 +203,39 @@ namespace GAS.Runtime
             if (requirement.RequirementKind == GASRequirementKind.BlockedTags)
                 return !matches;
             return false;
+        }
+    }
+
+    public static class GASRuntimeMagnitudeEvaluator
+    {
+        public static bool TryResolveMagnitude(
+            in GASCatalogModifierDefinitionBlob modifier,
+            in MagnitudeEvalContext context,
+            out float magnitude)
+        {
+            var rawMagnitude = modifier.MagnitudeSource switch
+            {
+                EMagnitudeSource.Constant => modifier.BaseMagnitude,
+                EMagnitudeSource.SetByCaller => context.HasSetByCallerValue != 0
+                    && context.SetByCallerKey == modifier.MagnitudeKey
+                        ? context.SetByCallerValue
+                        : modifier.FallbackMagnitude,
+                EMagnitudeSource.SourceAttribute => context.HasSourceAttributeValue != 0
+                    ? context.SourceAttributeValue
+                    : modifier.FallbackMagnitude,
+                EMagnitudeSource.TargetAttribute => context.HasTargetAttributeValue != 0
+                    ? context.TargetAttributeValue
+                    : modifier.FallbackMagnitude,
+                EMagnitudeSource.ExecutionCalculation => context.HasExecutionValue != 0
+                    ? context.ExecutionValue
+                    : modifier.FallbackMagnitude,
+                EMagnitudeSource.StackCount => context.StackCount,
+                _ => modifier.BaseMagnitude,
+            };
+
+            var coefficient = modifier.Coefficient == 0f ? 1f : modifier.Coefficient;
+            magnitude = ((rawMagnitude + modifier.PreAdd) * coefficient) + modifier.PostAdd;
+            return true;
         }
     }
 }
