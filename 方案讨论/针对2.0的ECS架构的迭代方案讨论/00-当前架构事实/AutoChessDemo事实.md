@@ -110,6 +110,7 @@ flowchart TD
 18. 2026-06-08 TagRequirement query 切片最终以 `_归档/2026-06-08-AutoChessBattleValidation-TagRequirementQuery-Run5.log` 为有效 x50 证据，证明当前 AutoChess 链路未被 TagRequirement catalog / evaluator 贯通破坏；它不证明所有 tag 组合、SourceAttribute 非零业务样本、Profiler enabled 或 x100/x1000 规模门完成。完整字段、代码证据和不能推出的结论集中维护在 [架构重划分审查事实/08-TagRequirementQueryDefinitionGlue事实.md](架构重划分审查事实/08-TagRequirementQueryDefinitionGlue事实.md)，本文件只保留 Demo 验收摘要。
 19. 当前 `AutoChessGasBattleDriverHandle` 不再包装 raw `Entity`，而是保存 opaque `driverId/version`；`AutoChessBattleDriverRuntimeStore` 负责在 adapter implementation 内部解析 `_driverEntity`，并通过 `AutoChessBattleDriverOwnerSnapshot` 把 `driverOwnerInstalled`、`driverOwnerEnabled`、`driverOwnerHandleMatched`、`driverStructuralCreates`、`driverEnableRequests`、`driverDisableRequests`、`driverUninstallRequests` 输出到 validation summary。`Verify-GAS-RuntimeCoreBoundary.ps1` 已阻断旧 adapter entity resolver 和 public/internal static raw `Entity` 导出口回流。这是 R1/R6 raw driver identity 的正向收缩，但不证明 driver lifecycle 已进入 structural commit owner；`AutoChessBattleDriverRuntimeStore` 仍直接持有 `_driverEntity` 并通过 `EntityManager` 读写 driver component。
 20. 2026-06-08 catalog lifetime Interface 收窄：`AutoChessGasRuntimeHost` 不再调用 `GASRuntimeShell.TryResolveRuntimeEntityManager`，只通过 `AutoChessGasCatalogSession.TryInstall()` / `Uninstall()` 管理 catalog lifetime；`AutoChessGasCatalogSession` 内部解析 `EntityManager` 并调用 internal `AutoChessBattleDefinitionCatalogBuilder.Install/Uninstall`。这集中了一处 shallow Module Interface，但仍不证明 runtime-created catalog entity / Blob dispose 已进入最终 `DefinitionCatalogLifetime` 目标态。
+21. 2026-06-08 R6/R8 timing owner split 切片把 Runtime Debugger timing evidence 从纯 `PhysicalGroup` 扩展为 `OwnerSplit` 聚合：`AutoChessGasObservationGateway.RecordRuntimeTickTiming(...)` 现在额外发布 `CoreRuntimeOwner`、`BoundaryOwner`、`RunnerOwner` 三类 owner cost。`AutoChessBattleRuntimeTiming` / validation summary 已有 `CoreRuntimeOwner`、`BoundaryOwner`、`DebuggerOwner`、`RunnerOwner`、`PhysicsOwner`、`RenderOwner` 字段和 disabled reason 输出；本切片补的是 Debugger aggregate 层的同口径证据，而不是性能终局证明。
 
 ## 代码证据矩阵
 
@@ -118,7 +119,7 @@ flowchart TD
 | Demo systems 通过 bootstrap 插入当前 GAS group | `Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeSystemBootstrap.cs:20-33` | runtime-extension |
 | bridge facade 已把职责转发给 integration 子 owner | `Assets/AutoChessDemo/Integration/GasCore/AutoChessGasCoreBridge.cs:5-45` | adapter-facade；当前只负责 unit / driver / report / attribute facade，不再承载 runtime bootstrap / observation / ticker |
 | runtime host 初始化 GAS、注册 systems、安装 catalog session | `Assets/AutoChessDemo/Integration/GasCore/AutoChessGasRuntimeHost.cs:7-29`、`AutoChessGasCatalogSession.cs:6-25` | host bootstrap + catalog session owner；host 不再直接解析 catalog `EntityManager` |
-| observation gateway 负责 official diff、observation reset、diagnostics snapshot 和 timing counter | `Assets/AutoChessDemo/Integration/GasCore/AutoChessGasObservationGateway.cs:11-168`、`:170-255` | observation-only / diagnostics |
+| observation gateway 负责 official diff、observation reset、diagnostics snapshot、PhysicalGroup timing counter 和 OwnerSplit timing aggregate | `Assets/AutoChessDemo/Integration/GasCore/AutoChessGasObservationGateway.cs:11-199`、`:201-286` | observation-only / diagnostics |
 | runtime ticker 手动推进 5 段 GAS group 并记录 timing | `Assets/AutoChessDemo/Integration/GasCore/AutoChessGasRuntimeTicker.cs:9-37`、`:44-49`、`:53-113` | demo-runner/observation |
 | adapter 对外 unit handle 已换成 battle unit key，driver handle 已换成 opaque id/version，report / unit result 投影已转 report key，driver owner 证据不暴露 raw `Entity` | `Assets/AutoChessDemo/Integration/GasCore/AutoChessGasCoreContracts.cs:7-76`、`AutoChessGasBattleEntityLifecycle.cs:49-103`、`:130-157`、`AutoChessGasBattleUnitSnapshotProjector.cs:8-56`、`AutoChessGasBattleReportFactProjector.cs:7-77`、`Assets/GAS/Runtime/Event/GasStructuredLogExport.cs:419-473`、`Assets/AutoChessDemo/Battle/Ecs/AutoChessBattleDriverComponents.cs:27-214`、`Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationReport.cs:403-431`、`Tools/Diagnostics/Verify-GAS-RuntimeCoreBoundary.ps1` | adapter/report-key-projection；剩余 raw identity 风险在 registry compatibility handle / driver runtime store 内部 `_driverEntity`，但 adapter public raw driver `Entity` 已有脚本防回流 |
 | command drive 是 `ISystem` 并挂入 CommandResolve | `Assets/AutoChessDemo/Battle/Ecs/AutoChessBattleCommandDriveSystem.cs:7-11` | runtime-extension |
@@ -154,7 +155,7 @@ flowchart TD
 | 结构变化 | `AutoChessGasBattleEntityLifecycle` 仍直接创建 driver、切换 driver destroy request、给 ASC 添加 demo component，并维护 battle unit key -> `ASCHandle` registry；`DestroyBattleUnit()` 当前已走 `ASCCommandPort.RequestDestroy()`，不再直接销毁 ASC / granted ability / active effect；unit result 不再通过 live `ASCReadModel` 刷新 | Demo 集成层仍有 direct-EM P1 风险，但旧 cleanup direct destroy / granted ability cache / result live read 口径已过期 |
 | Definition | 安装通用 generated catalog，不依赖旧 Headless generated rows | Luban/sourcegen catalog 链路已进入 AutoChess |
 | Observation | 使用 Replay/Diagnostics/Official diff/structured log | 正向，但 observation 不等于性能证明 |
-| Timing split | `AutoChessBattleRuntimeTiming` 当前只有 `FramePrepare`、`CommandResolve`、`CoreSimulation`、`StructuralCommit`、`BoundaryProjection` 和 total tick；runner/debugger/physics/render 没有独立字段 | 只能证明 ECS group timing，不能证明 R6/R8 需要的完整 cost split |
+| Timing split | `AutoChessBattleRuntimeTiming` 已拆出 `CoreRuntime`、`Boundary`、`Runner`、`Debugger`、`Physics`、`Render` owner timing；validation summary 输出 owner split 与 physics/render/presentation disabled reason；Runtime Debugger 现在额外发布 `OwnerSplit/CoreRuntimeOwner`、`OwnerSplit/BoundaryOwner`、`OwnerSplit/RunnerOwner` aggregate | 证据口径已从纯 ECS group timing 推进到 owner cost split，但尚未证明 x100/x1000、Profiler enabled、physics/render 实测或 PlayerLoop 场景表现成本 |
 
 ## 当前风险
 
@@ -242,9 +243,9 @@ raw ASC identity 已从 report projector 退出，但 Boundary / adapter 内部 
 
 当前场景 `AutoChessLogDemo.unity` 只显示日志。没有棋子模型、VFX、SFX 资源；这不是缺失的 gameplay 链路，而是当前 demo 的无资源表现约束。表现层不能被用来证明 CoreSimulation 性能。
 
-### AC-06：Timing summary 仍是 ECS group timing，不是完整 cost split
+### AC-06：Timing owner split 已结构化，但仍不是性能终局
 
-`AutoChessBattleRuntimeTiming` 当前只记录：
+`AutoChessBattleRuntimeTiming` 当前同时记录 physical group timing 与 owner split timing：
 
 ```text
 TickTotal
@@ -253,11 +254,18 @@ CommandResolve
 CoreSimulation
 StructuralCommit
 BoundaryProjection
+DependencyDrain
+CoreRuntime
+Boundary
+Runner
+Debugger
+Physics
+Render
 ```
 
-`AutoChessGasRuntimeTicker.TickRuntime()` 对 5 段 GAS group 分别调用 `UpdateTimed()`，并在每段后调用 `CompleteAllTrackedJobs()`；`AutoChessRuntimeRunner.CreateTimingSummary()` 输出 `ecsRuntimeTickOnly=true` 和上述 group timing。它没有独立表达 runner loop、debugger export、official diff separate pass、physics disabled reason、render disabled reason 或 scene presentation cost。
+`AutoChessGasRuntimeTicker.TickRuntime()` 对 5 段 GAS group 分别调用 `UpdateTimed()`，并在每段后调用 `CompleteAllTrackedJobs()`；`AutoChessBattleRuntimeTiming.Add(...)` 把 `FramePrepare + CommandResolve + CoreSimulation + StructuralCommit` 归入 `CoreRuntime`，把 `BoundaryProjection` 归入 `Boundary`，把 dependency drain sync 归入 `Runner`。`AutoChessBattleValidationReport.CreateTimingSummary(...)` 输出 `ownerSplit=core/boundary/debugger/runner/physics/render`、`PhysicsOwner`、`RenderOwner`、`physicsDisabledReason`、`renderDisabledReason`、`presentationDisabledReason`。本轮 `AutoChessGasObservationGateway.RecordRuntimeTickTiming(...)` 还向 Runtime Debugger 写入 `OwnerSplit/CoreRuntimeOwner`、`OwnerSplit/BoundaryOwner`、`OwnerSplit/RunnerOwner`，避免 debugger 侧只剩 physical group 口径。
 
-因此当前 timing 证据只能说明“GAS physical group 的测量窗口”，不能直接消费为 R6/R8 的完整 `core / boundary / debugger / runner / physics / render` cost split。后续交还必须把现有 group timing 与 runner/debugger/physics/render 口径拆开，至少在无 physics/render 时输出 disabled reason，而不是把 `GASTickTotal` 或 `avgTickMs` 写成 DOTS 优秀水平证明。
+因此当前 timing 证据已经可以说明 owner cost split 的结构化口径，但仍不能写成 DOTS 性能优秀：本切片没有运行 Unity headless、x100/x1000、Profiler/Journaling，也没有 physics/render 实测样本。后续交还应继续补 scale profile、Profiler enabled 数据、官方 Entities profiler / journaling 证据，并把 PlayerLoop / scene presentation 成本与 ECS runtime tick 成本保持分离。
 
 ## 与 Runtime Core 的边界
 
@@ -280,4 +288,4 @@ AutoChessDemo 已经不是“已删除后待重构”的状态。它现在是一
 3. execution extension 同时写 delta/fact，需要纳入 Runtime 写权限治理。
 4. Demo catalog 已来自 generated builder；unit result live read 已退为 structured evidence projection；未完成的是 unit/scenario/scale/validation expectation 与 Baker/BlobAssetStore 目标态。
 5. 当前日志场景证明业务可读性，不证明资源表现、不证明高规模性能。
-6. 当前 timing summary 只覆盖 GAS group timing，不证明 runner/debugger/physics/render cost split。
+6. 当前 timing summary 与 Runtime Debugger aggregate 已覆盖 core/boundary/debugger/runner/physics/render owner split 口径，但不证明 x100/x1000、Profiler enabled、physics/render 实测或 PlayerLoop 场景表现成本。

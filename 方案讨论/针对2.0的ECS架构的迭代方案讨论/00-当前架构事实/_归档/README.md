@@ -23,4 +23,5 @@
 | [2026-06-08-AutoChessBattleValidation-TagRequirementQuery-Run5](2026-06-08-AutoChessBattleValidation-TagRequirementQuery-Run5.log) | TagRequirement all-any-none catalog / runtime evaluator / instant GE gate 贯通后的 AutoChess x50 原始日志 |
 | [2026-06-08-AutoChessBattleValidation-OpaqueDriverHandle-Run7](2026-06-08-AutoChessBattleValidation-OpaqueDriverHandle-Run7.log) | AutoChess driver public raw Entity handle 退出后的 AutoChess x50 原始日志 |
 | [2026-06-08-AutoChessDriverOwnerSnapshot](2026-06-08-AutoChessDriverOwnerSnapshot.md) | AutoChess driver owner snapshot 与 raw driver Entity 防回流切片记录 |
+| [2026-06-08-AutoChessTimingOwnerSplit](2026-06-08-AutoChessTimingOwnerSplit.md) | AutoChess Runtime Debugger timing owner split 与防回流门归档 |
 | [2026-06-08-架构重划分审查事实拆分前](2026-06-08-架构重划分审查事实拆分前.md) | `../架构重划分审查事实.md` 拆分前全文快照 |

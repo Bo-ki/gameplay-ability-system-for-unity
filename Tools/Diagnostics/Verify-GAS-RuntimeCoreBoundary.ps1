@@ -98,6 +98,7 @@ $autoChessSessionPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Auto
 $autoChessResultBuilderPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\AutoChessBattleResultBuilder.cs"
 $autoChessCoreBridgePath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasCoreBridge.cs"
 $autoChessLifecyclePath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasBattleEntityLifecycle.cs"
+$autoChessObservationGatewayPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasObservationGateway.cs"
 $autoChessUnitSnapshotProjectorPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasBattleUnitSnapshotProjector.cs"
 $autoChessValidationReportPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Validation\AutoChessBattleValidationReport.cs"
 $autoChessValidationRunPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Validation\AutoChessBattleValidationRun.cs"
@@ -793,6 +794,18 @@ Assert-FileContains `
     -Path $autoChessValidationReportPath `
     -Pattern "driverAdapterRawEntity=false" `
     -Message "AutoChess validation evidence must keep raw driver Entity hidden from adapter APIs."
+Assert-FileContains `
+    -Path $autoChessObservationGatewayPath `
+    -Pattern 'RecordSystemTimingAggregate[\s\S]*?"OwnerSplit"[\s\S]*?"CoreRuntimeOwner"' `
+    -Message "AutoChess Runtime Debugger timing evidence must publish core runtime owner split, not only physical group timing."
+Assert-FileContains `
+    -Path $autoChessObservationGatewayPath `
+    -Pattern 'RecordSystemTimingAggregate[\s\S]*?"OwnerSplit"[\s\S]*?"BoundaryOwner"' `
+    -Message "AutoChess Runtime Debugger timing evidence must publish boundary owner split."
+Assert-FileContains `
+    -Path $autoChessObservationGatewayPath `
+    -Pattern 'RecordSystemTimingAggregate[\s\S]*?"OwnerSplit"[\s\S]*?"RunnerOwner"' `
+    -Message "AutoChess Runtime Debugger timing evidence must publish runner/dependency-drain owner split."
 
 Write-Host "GAS Runtime Core boundary check passed: no AutoChess references under Assets/GAS/Runtime."
 Write-Host "GAS Runtime Core pending attribute delta contract passed: owner-local apply, stream migration fallback retired, and debugger counters are wired."
@@ -805,3 +818,4 @@ Write-Host "GAS Runtime Core active mutation contract passed: generated gather +
 Write-Host "GAS Runtime Core active mutation SourceAttribute contract passed: read-only snapshot lane feeds chunk-local apply."
 Write-Host "AutoChess R1/R6 snapshot contract passed: unit result snapshots are projected from structured boundary evidence, not live ASCReadModel."
 Write-Host "AutoChess R6 driver owner contract passed: driver owner snapshot is exposed without raw Entity adapter APIs."
+Write-Host "AutoChess R6/R8 timing owner split contract passed: Runtime Debugger publishes core, boundary, and runner timing owners."

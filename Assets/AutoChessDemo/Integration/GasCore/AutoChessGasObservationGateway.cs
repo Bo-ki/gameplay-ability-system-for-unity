@@ -101,6 +101,10 @@ namespace GAS.AutoChessDemo
                              + structuralCommitTicks
                              + boundaryProjectionTicks
                              + dependencyDrainTicks;
+            var coreRuntimeTicks = framePrepareTicks
+                                   + commandResolveTicks
+                                   + coreSimulationTicks
+                                   + structuralCommitTicks;
 
             GasRuntimeDebugger.RecordSystemTimingAggregate(
                 entityManager,
@@ -162,6 +166,33 @@ namespace GAS.AutoChessDemo
                 frame,
                 "PhysicalGroup",
                 "GASDependencyDrain",
+                1,
+                dependencyDrainTicks,
+                frequency);
+            GasRuntimeDebugger.RecordSystemTimingAggregate(
+                entityManager,
+                runtimeDebugger,
+                frame,
+                "OwnerSplit",
+                "CoreRuntimeOwner",
+                1,
+                coreRuntimeTicks,
+                frequency);
+            GasRuntimeDebugger.RecordSystemTimingAggregate(
+                entityManager,
+                runtimeDebugger,
+                frame,
+                "OwnerSplit",
+                "BoundaryOwner",
+                1,
+                boundaryProjectionTicks,
+                frequency);
+            GasRuntimeDebugger.RecordSystemTimingAggregate(
+                entityManager,
+                runtimeDebugger,
+                frame,
+                "OwnerSplit",
+                "RunnerOwner",
                 1,
                 dependencyDrainTicks,
                 frequency);
