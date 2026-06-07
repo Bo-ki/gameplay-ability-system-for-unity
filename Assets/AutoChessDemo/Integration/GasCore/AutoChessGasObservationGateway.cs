@@ -10,7 +10,7 @@ namespace GAS.AutoChessDemo
 
         public static AutoChessGasCoreOfficialToolDiffCapture BeginOfficialToolDiffCapture()
         {
-            return GASRuntimeShell.TryResolveRuntimeWorld(out var world)
+            return AutoChessGasRuntimeAccess.TryResolveDiagnosticsWorld(out var world)
                 ? new AutoChessGasCoreOfficialToolDiffCapture(
                     GasRuntimeOfficialToolDiffCapture.Begin(world))
                 : default;
@@ -18,10 +18,10 @@ namespace GAS.AutoChessDemo
 
         public static void ResetObservationState(in AutoChessBattleOptions options)
         {
-            if (GASRuntimeShell.TryResolveGlobalTimer(out var entityManager, out var globalTimer))
+            if (AutoChessGasRuntimeAccess.TryResolveDiagnosticsGlobalTimer(out var entityManager, out var globalTimer))
                 entityManager.SetComponentData(globalTimer, new GlobalTimer());
 
-            if (GASRuntimeShell.TryResolveEventBus(out entityManager, out var eventBus))
+            if (AutoChessGasRuntimeAccess.TryResolveDiagnosticsEventBus(out entityManager, out var eventBus))
             {
                 entityManager.SetComponentData(eventBus, new GameplayEventBusComponent());
                 if (entityManager.HasComponent<PresentationOutboxProjectionStateComponent>(eventBus))
@@ -39,13 +39,13 @@ namespace GAS.AutoChessDemo
                 ClearBuffer<CueRequestBuffer>(entityManager, eventBus);
             }
 
-            if (GASRuntimeShell.TryResolveEventLogSink(out entityManager, out var eventLogSink))
+            if (AutoChessGasRuntimeAccess.TryResolveDiagnosticsEventLogSink(out entityManager, out var eventLogSink))
             {
                 entityManager.SetComponentData(eventLogSink, new GameplayEventLogSinkComponent());
                 ClearBuffer<ReplayLogEventBuffer>(entityManager, eventLogSink);
             }
 
-            if (GASRuntimeShell.TryResolveRuntimeDebugger(out entityManager, out var runtimeDebugger))
+            if (AutoChessGasRuntimeAccess.TryResolveDiagnosticsRuntimeDebugger(out entityManager, out var runtimeDebugger))
             {
                 GasRuntimeDebugger.Reset(entityManager, runtimeDebugger);
                 GasRuntimeDebugger.Configure(
@@ -59,8 +59,8 @@ namespace GAS.AutoChessDemo
 
         public static AutoChessGasCoreObservationSnapshot CreateObservationSnapshot()
         {
-            if (!GASRuntimeShell.TryResolveEventLogSink(out var entityManager, out var eventLogSink)
-                || !GASRuntimeShell.TryResolveRuntimeDebugger(out _, out var runtimeDebugger))
+            if (!AutoChessGasRuntimeAccess.TryResolveDiagnosticsEventLogSink(out var entityManager, out var eventLogSink)
+                || !AutoChessGasRuntimeAccess.TryResolveDiagnosticsRuntimeDebugger(out _, out var runtimeDebugger))
             {
                 return default;
             }
@@ -91,7 +91,7 @@ namespace GAS.AutoChessDemo
             long dependencyDrainTicks,
             long frequency)
         {
-            if (!GASRuntimeShell.TryResolveRuntimeDebugger(out var entityManager, out var runtimeDebugger))
+            if (!AutoChessGasRuntimeAccess.TryResolveDiagnosticsRuntimeDebugger(out var entityManager, out var runtimeDebugger))
                 return;
 
             var frame = GASRuntimeFrameContext.ResolveCurrentFrame(entityManager);

@@ -10,7 +10,7 @@ namespace GAS.AutoChessDemo
             if (!GASManager.IsInitialized)
                 GASManager.Initialize(attachToPlayerLoop: false);
 
-            if (GASRuntimeShell.TryResolveRuntimeWorld(out var world))
+            if (AutoChessGasRuntimeAccess.TryResolveSessionWorld(out var world))
                 AutoChessRuntimeSystemBootstrap.RegisterSystems(world);
 
             AutoChessGasCatalogSession.TryInstall();
@@ -31,7 +31,7 @@ namespace GAS.AutoChessDemo
         public static bool TryGetRuntimeTickGroups(out AutoChessGasRuntimeTickGroups groups)
         {
             groups = default;
-            if (!GASRuntimeShell.TryResolveRuntimeWorld(out var world))
+            if (!AutoChessGasRuntimeAccess.TryResolveSessionWorld(out var world))
                 return false;
 
             var framePrepare = world.GetExistingSystemManaged<GASFramePrepareSystemGroup>();
@@ -59,7 +59,7 @@ namespace GAS.AutoChessDemo
 
         public static bool TryCompleteRuntimeJobs()
         {
-            return GASRuntimeShell.TryDrainRuntimeJobs();
+            return AutoChessGasRuntimeAccess.TryDrainRunnerJobs();
         }
     }
 

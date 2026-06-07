@@ -7,7 +7,7 @@ namespace GAS.AutoChessDemo
     {
         internal static bool TryInstall()
         {
-            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
+            if (!AutoChessGasRuntimeAccess.TryResolveDefinitionEntityManager(out var entityManager))
                 return false;
 
             AutoChessBattleDefinitionCatalogBuilder.Install(entityManager);
@@ -17,7 +17,7 @@ namespace GAS.AutoChessDemo
 
         internal static void Uninstall()
         {
-            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
+            if (!AutoChessGasRuntimeAccess.TryResolveDefinitionEntityManager(out var entityManager))
                 return;
 
             AutoChessBattleDriverRuntimeStore.Uninstall(entityManager);

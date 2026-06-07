@@ -34,7 +34,6 @@ namespace GAS.Runtime
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
                 SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
                 SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(isReadOnly: false),
-                DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
             }.Schedule(state.Dependency);
         }
@@ -48,7 +47,6 @@ namespace GAS.Runtime
             public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
             public BufferLookup<GEEffectSpecBuffer> SpecLookup;
-            public BufferLookup<AttributeModifierBuffer> DeltaLookup;
             public BufferLookup<GameplayEventBuffer> FactLookup;
 
             public void Execute()
@@ -58,7 +56,6 @@ namespace GAS.Runtime
                     || !CommandLookup.HasBuffer(StreamEntity)
                     || !SetByCallerLookup.HasBuffer(StreamEntity)
                     || !SpecLookup.HasBuffer(StreamEntity)
-                    || !DeltaLookup.HasBuffer(StreamEntity)
                     || !FactLookup.HasBuffer(StreamEntity))
                 {
                     return;
@@ -70,7 +67,6 @@ namespace GAS.Runtime
                     CommandLookup[StreamEntity],
                     SetByCallerLookup[StreamEntity],
                     SpecLookup[StreamEntity],
-                    DeltaLookup[StreamEntity],
                     FactLookup[StreamEntity],
                     Frame);
                 StreamLookup[StreamEntity] = stream;
@@ -203,7 +199,6 @@ namespace GAS.Runtime
                 StreamEntity = streamEntity,
                 Frame = frame,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(isReadOnly: true),
                 SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(isReadOnly: true),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
             }.Schedule(state.Dependency);
@@ -215,7 +210,6 @@ namespace GAS.Runtime
             public Entity StreamEntity;
             public int Frame;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<AttributeModifierBuffer> DeltaLookup;
             public BufferLookup<GEEffectSpecBuffer> SpecLookup;
             public BufferLookup<GameplayEventBuffer> FactLookup;
 
@@ -223,7 +217,6 @@ namespace GAS.Runtime
             {
                 if (StreamEntity == Entity.Null
                     || !StreamLookup.HasComponent(StreamEntity)
-                    || !DeltaLookup.HasBuffer(StreamEntity)
                     || !SpecLookup.HasBuffer(StreamEntity)
                     || !FactLookup.HasBuffer(StreamEntity))
                 {
@@ -231,49 +224,13 @@ namespace GAS.Runtime
                 }
 
                 var stream = StreamLookup[StreamEntity];
-                var deltas = DeltaLookup[StreamEntity];
                 var specs = SpecLookup[StreamEntity];
                 var facts = FactLookup[StreamEntity];
-
-                var deltaStart = ClampCursor(stream.FactProjectionDeltaCursor, deltas.Length);
-                for (var i = deltaStart; i < deltas.Length; i++)
-                {
-                    var delta = deltas[i];
-                    if (!AttributeModifierBufferFlags.ShouldProjectFact(delta.Flags))
-                        continue;
-
-                    var fact = new GameplayEventBuffer
-                    {
-                        Sequence = Allocate(ref stream.NextFactSequence),
-                        SourceCommandSequence = delta.SourceCommandSequence,
-                        SourceSpecSequence = delta.SourceSpecSequence,
-                        SourceDeltaSequence = delta.Sequence,
-                        Frame = delta.Frame,
-                        EventType = EGameplayEventType.AttributeBaseValueChanged,
-                        Domain = EGameplayFactDomain.Attribute,
-                        Category = EGameplayFactCategory.StateChange,
-                        Severity = EGameplayFactSeverity.Info,
-                        SourceAsc = delta.SourceAsc,
-                        TargetAsc = delta.TargetAsc,
-                        SourceAbility = delta.SourceAbility,
-                        SourceEffect = delta.SourceEffect,
-                        GameplayEffectCode = delta.GameplayEffectCode,
-                        ContextId = delta.ContextId,
-                        ParentContextId = delta.ParentContextId,
-                        AttrSetCode = delta.AttrSetCode,
-                        AttributeCode = delta.AttributeCode,
-                        Value = delta.Magnitude,
-                        OldValue = delta.OldValue,
-                        NewValue = delta.NewValue,
-                    };
-                    facts.Add(fact);
-                }
 
                 var cueStart = ClampCursor(stream.CueProjectionSpecCursor, specs.Length);
                 for (var i = cueStart; i < specs.Length; i++)
                     ProjectCueRequest(specs[i], facts, ref stream);
 
-                stream.FactProjectionDeltaCursor = deltas.Length;
                 stream.CueProjectionSpecCursor = specs.Length;
                 StreamLookup[StreamEntity] = stream;
             }

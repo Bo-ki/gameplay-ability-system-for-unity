@@ -2490,15 +2490,6 @@ namespace GAS.Runtime
                 frame,
                 log,
                 ref state);
-            RecordFrameStreamBufferPressure<AttributeModifierBuffer>(
-                em,
-                streamEntity,
-                "AttributeModifierBuffer",
-                EGasRuntimeFrameStreamId.AttributeDelta,
-                streamPlan,
-                frame,
-                log,
-                ref state);
             RecordFrameStreamBufferPressure<GameplayEventBuffer>(
                 em,
                 streamEntity,

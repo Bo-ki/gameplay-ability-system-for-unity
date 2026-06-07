@@ -454,7 +454,6 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.EffectCommandStreamOwner,
                         GASRuntimeLayoutComponentSlot.EffectCommandBuffer,
                         GASRuntimeLayoutComponentSlot.InstantEffectSpecBuffer,
-                        GASRuntimeLayoutComponentSlot.AttributeDeltaBuffer,
                         GASRuntimeLayoutComponentSlot.TypedSimulationFactBuffer,
                     },
                     new[]
@@ -485,6 +484,7 @@ namespace GAS.Runtime
                         GASRuntimeLayoutComponentSlot.GameplayEffectBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveModifierBuffer,
                         GASRuntimeLayoutComponentSlot.GrantedAbilityBuffer,
+                        GASRuntimeLayoutComponentSlot.AttributeDeltaBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectMutationBuffer,
                         GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexStore,
                         GASRuntimeLayoutComponentSlot.ActiveEffectGlobalIndexBuffer,

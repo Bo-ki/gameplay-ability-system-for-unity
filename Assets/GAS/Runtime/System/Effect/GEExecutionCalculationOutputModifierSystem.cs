@@ -87,7 +87,7 @@ namespace GAS.Runtime
                 AttributeOwnerMarkerRequests = attributeOwnerMarkerRequests,
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: false),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                DeltaBufferLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(isReadOnly: false),
+                OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
                 StreamEntity = streamEntity,
                 Frame = frame,
             };
@@ -282,7 +282,7 @@ namespace GAS.Runtime
             public NativeList<AttributeOwnerMarkerRequestRecord> AttributeOwnerMarkerRequests;
             public BufferLookup<AttributeValueBuffer> AttributeLookup;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<AttributeModifierBuffer> DeltaBufferLookup;
+            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             public Entity StreamEntity;
             public int Frame;
 
@@ -304,7 +304,8 @@ namespace GAS.Runtime
                     {
                         var record = ModifierRecords[recordIndex];
                         if (record.TargetAsc == Entity.Null
-                            || !AttributeLookup.HasBuffer(record.TargetAsc))
+                            || !AttributeLookup.HasBuffer(record.TargetAsc)
+                            || !OwnerFactLookup.HasBuffer(record.TargetAsc))
                         {
                             continue;
                         }
@@ -345,42 +346,51 @@ namespace GAS.Runtime
                     }
                 }
 
-                AppendPendingDeltas();
+                AppendPendingAttributeFacts();
             }
 
-            private void AppendPendingDeltas()
+            private void AppendPendingAttributeFacts()
             {
                 if (PendingDeltas.Length == 0
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !DeltaBufferLookup.HasBuffer(StreamEntity))
+                    || !StreamLookup.HasComponent(StreamEntity))
                 {
                     return;
                 }
 
                 PendingDeltas.Sort(new PendingAttributeModifierDeltaRecordComparer());
                 var stream = StreamLookup[StreamEntity];
-                var deltas = DeltaBufferLookup[StreamEntity];
                 for (var i = 0; i < PendingDeltas.Length; i++)
                 {
                     var record = PendingDeltas[i];
-                    deltas.Add(new AttributeModifierBuffer
+                    if (record.TargetAsc == Entity.Null || !OwnerFactLookup.HasBuffer(record.TargetAsc))
+                        continue;
+
+                    var deltaSequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextDeltaSequence);
+                    var facts = OwnerFactLookup[record.TargetAsc];
+                    facts.Add(new OwnerLocalGameplayFactBuffer
                     {
-                        Sequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextDeltaSequence),
-                        Frame = record.Frame,
-                        SourceAsc = record.SourceAsc,
-                        TargetAsc = record.TargetAsc,
-                        SourceAbility = record.SourceAbility,
-                        SourceEffect = record.Effect,
-                        GameplayEffectCode = record.GameplayEffectCode,
-                        ContextId = record.ContextId,
-                        ParentContextId = record.ParentContextId,
-                        AttrSetCode = record.AttrSetCode,
-                        AttributeCode = record.AttributeCode,
-                        Op = record.Op,
-                        ValueKind = AttributeDeltaValueKind.BaseValue,
-                        Magnitude = record.Magnitude,
-                        OldValue = record.OldValue,
-                        NewValue = record.NewValue,
+                        Fact = new GameplayEventBuffer
+                        {
+                            Sequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextFactSequence),
+                            SourceDeltaSequence = deltaSequence,
+                            Frame = record.Frame,
+                            EventType = EGameplayEventType.AttributeBaseValueChanged,
+                            Domain = EGameplayFactDomain.Attribute,
+                            Category = EGameplayFactCategory.StateChange,
+                            Severity = EGameplayFactSeverity.Info,
+                            SourceAsc = record.SourceAsc,
+                            TargetAsc = record.TargetAsc,
+                            SourceAbility = record.SourceAbility,
+                            SourceEffect = record.Effect,
+                            GameplayEffectCode = record.GameplayEffectCode,
+                            ContextId = record.ContextId,
+                            ParentContextId = record.ParentContextId,
+                            AttrSetCode = record.AttrSetCode,
+                            AttributeCode = record.AttributeCode,
+                            Value = record.Magnitude,
+                            OldValue = record.OldValue,
+                            NewValue = record.NewValue,
+                        },
                     });
                 }
                 StreamLookup[StreamEntity] = stream;

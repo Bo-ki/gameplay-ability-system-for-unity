@@ -370,7 +370,7 @@ namespace GAS.Runtime
                     EGasRuntimeCoreFramePhase.TypedFactProjection,
                     EGasRuntimeCoreFramePhase.DeltaApply,
                     EGasRuntimeFrameStreamAuthority.GameplayDeterministic,
-                    EGasRuntimeFrameStreamCarrier.SingletonDynamicBuffer,
+                    EGasRuntimeFrameStreamCarrier.OwnerLocalDynamicBuffer,
                     EGasRuntimeFrameStreamCarrier.OwnerLocalDynamicBuffer,
                     EGasRuntimeFrameStreamMergePolicy.StableSortByTargetAttributeThenSequence,
                     EGasRuntimeFrameStreamSortKey.TargetAscThenAttributeThenDeltaSequence,

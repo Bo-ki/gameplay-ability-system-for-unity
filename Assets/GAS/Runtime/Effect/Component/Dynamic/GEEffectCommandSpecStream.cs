@@ -519,7 +519,6 @@ namespace GAS.Runtime
             return em.HasBuffer<GEEffectCommandBuffer>(streamEntity)
                    && em.HasBuffer<GESetByCallerValueBuffer>(streamEntity)
                    && em.HasBuffer<GEEffectSpecBuffer>(streamEntity)
-                   && em.HasBuffer<AttributeModifierBuffer>(streamEntity)
                    && em.HasBuffer<GameplayEventBuffer>(streamEntity);
         }
 
@@ -675,7 +674,6 @@ namespace GAS.Runtime
             em.GetBuffer<GEEffectCommandBuffer>(streamEntity).Clear();
             em.GetBuffer<GESetByCallerValueBuffer>(streamEntity).Clear();
             em.GetBuffer<GEEffectSpecBuffer>(streamEntity).Clear();
-            em.GetBuffer<AttributeModifierBuffer>(streamEntity).Clear();
             em.GetBuffer<GameplayEventBuffer>(streamEntity).Clear();
 
             var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
@@ -711,7 +709,6 @@ namespace GAS.Runtime
                     ClampCursor(stream.ActiveMutationCommandCursor, commands.Length)));
 
             em.GetBuffer<GEEffectSpecBuffer>(streamEntity).Clear();
-            em.GetBuffer<AttributeModifierBuffer>(streamEntity).Clear();
             em.GetBuffer<GameplayEventBuffer>(streamEntity).Clear();
 
             stream.LastClearedFrame = frame;
@@ -730,7 +727,6 @@ namespace GAS.Runtime
             DynamicBuffer<GEEffectCommandBuffer> commands,
             DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
             DynamicBuffer<GEEffectSpecBuffer> specs,
-            DynamicBuffer<AttributeModifierBuffer> deltas,
             DynamicBuffer<GameplayEventBuffer> facts,
             int frame)
         {
@@ -745,7 +741,6 @@ namespace GAS.Runtime
                     ClampCursor(stream.ActiveMutationCommandCursor, commands.Length)));
 
             specs.Clear();
-            deltas.Clear();
             facts.Clear();
 
             stream.LastClearedFrame = frame;

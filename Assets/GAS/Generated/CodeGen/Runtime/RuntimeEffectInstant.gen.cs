@@ -243,7 +243,7 @@ namespace GAS.Runtime.Generated
             {
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
                 SpecLookup = SystemAPI.GetBufferLookup<GEEffectSpecBuffer>(),
-                DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(),
+                OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(),
                 SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: true),
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(),
                 DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
@@ -257,7 +257,7 @@ namespace GAS.Runtime.Generated
         {
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<GEEffectSpecBuffer> SpecLookup;
-            public BufferLookup<AttributeModifierBuffer> DeltaLookup;
+            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             [ReadOnly] public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
             public BufferLookup<AttributeValueBuffer> AttributeLookup;
             [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
@@ -270,18 +270,16 @@ namespace GAS.Runtime.Generated
                     || StreamEntity == Entity.Null
                     || !StreamLookup.HasComponent(StreamEntity)
                     || !SpecLookup.HasBuffer(StreamEntity)
-                    || !DeltaLookup.HasBuffer(StreamEntity)
                     || !SetByCallerLookup.HasBuffer(StreamEntity))
                     return;
 
                 var stream = StreamLookup[StreamEntity];
                 var specs = SpecLookup[StreamEntity];
-                var deltas = DeltaLookup[StreamEntity];
                 var setByCallerValues = SetByCallerLookup[StreamEntity];
                 ref var catalog = ref Catalog.Value;
                 var start = ClampCursor(stream.DeltaApplySpecCursor, specs.Length);
                 for (var i = start; i < specs.Length; i++)
-                    ApplySpec(ref stream, ref catalog, specs[i], setByCallerValues, deltas, AttributeLookup, DestroyingLookup);
+                    ApplySpec(ref stream, ref catalog, specs[i], setByCallerValues, OwnerFactLookup, AttributeLookup, DestroyingLookup);
 
                 stream.DeltaApplySpecCursor = specs.Length;
                 StreamLookup[StreamEntity] = stream;
@@ -293,18 +291,20 @@ namespace GAS.Runtime.Generated
             ref GASDefinitionCatalogBlob catalog,
             in GEEffectSpecBuffer spec,
             DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
-            DynamicBuffer<AttributeModifierBuffer> deltas,
+            BufferLookup<OwnerLocalGameplayFactBuffer> ownerFactLookup,
             BufferLookup<AttributeValueBuffer> attributeLookup,
             ComponentLookup<ASCDestroyingComponent> destroyingLookup)
         {
             if (spec.TargetAsc == Entity.Null
                 || IsDestroyingAsc(destroyingLookup, spec.TargetAsc)
                 || !attributeLookup.HasBuffer(spec.TargetAsc)
+                || !ownerFactLookup.HasBuffer(spec.TargetAsc)
                 || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, spec.GameplayEffectCode, out var gameplayEffectIndex))
                 return;
 
             ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
             var attributes = attributeLookup[spec.TargetAsc];
+            var facts = ownerFactLookup[spec.TargetAsc];
             for (var i = 0; i < gameplayEffect.ModifierCount; i++)
             {
                 var modifierIndex = gameplayEffect.ModifierStart + i;
@@ -338,26 +338,33 @@ namespace GAS.Runtime.Generated
                         attribute.CurrentValueChangePending = true;
                     }
 
-                    deltas.Add(new AttributeModifierBuffer
+                    var deltaSequence = Allocate(ref stream.NextDeltaSequence);
+                    facts.Add(new OwnerLocalGameplayFactBuffer
                     {
-                        Sequence = Allocate(ref stream.NextDeltaSequence),
-                        SourceCommandSequence = spec.SourceCommandSequence,
-                        SourceSpecSequence = spec.Sequence,
-                        Frame = spec.Frame,
-                        SourceAsc = spec.SourceAsc,
-                        TargetAsc = spec.TargetAsc,
-                        SourceAbility = spec.SourceAbility,
-                        SourceEffect = spec.SourceEffect,
-                        GameplayEffectCode = spec.GameplayEffectCode,
-                        ContextId = spec.ContextId,
-                        ParentContextId = spec.ParentContextId,
-                        AttrSetCode = modifier.AttributeSetCode,
-                        AttributeCode = modifier.AttributeCode,
-                        Op = modifier.Operation,
-                        ValueKind = AttributeDeltaValueKind.BaseValue,
-                        Magnitude = magnitude,
-                        OldValue = oldValue,
-                        NewValue = newValue,
+                        Fact = new GameplayEventBuffer
+                        {
+                            Sequence = Allocate(ref stream.NextFactSequence),
+                            SourceCommandSequence = spec.SourceCommandSequence,
+                            SourceSpecSequence = spec.Sequence,
+                            SourceDeltaSequence = deltaSequence,
+                            Frame = spec.Frame,
+                            EventType = EGameplayEventType.AttributeBaseValueChanged,
+                            Domain = EGameplayFactDomain.Attribute,
+                            Category = EGameplayFactCategory.StateChange,
+                            Severity = EGameplayFactSeverity.Info,
+                            SourceAsc = spec.SourceAsc,
+                            TargetAsc = spec.TargetAsc,
+                            SourceAbility = spec.SourceAbility,
+                            SourceEffect = spec.SourceEffect,
+                            GameplayEffectCode = spec.GameplayEffectCode,
+                            ContextId = spec.ContextId,
+                            ParentContextId = spec.ParentContextId,
+                            AttrSetCode = modifier.AttributeSetCode,
+                            AttributeCode = modifier.AttributeCode,
+                            Value = magnitude,
+                            OldValue = oldValue,
+                            NewValue = newValue,
+                        },
                     });
                 }
 

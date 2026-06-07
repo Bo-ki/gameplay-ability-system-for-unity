@@ -79,6 +79,7 @@ $executionCalculationRuntimeActionsPath = Join-Path $runtimePath "Effect\Executi
 $effectMagnitudeResolverPath = Join-Path $runtimePath "System\Effect\EffectMagnitudeResolver.cs"
 $effectRuntimeUtilityPath = Join-Path $runtimePath "System\Effect\EffectRuntimeUtility.cs"
 $executionCalculationSystemPath = Join-Path $runtimePath "System\Effect\GEExecutionCalculationSystem.cs"
+$executionCalculationOutputModifierSystemPath = Join-Path $runtimePath "System\Effect\GEExecutionCalculationOutputModifierSystem.cs"
 $diagnosticsSnapshotSystemPath = Join-Path $runtimePath "System\Event\DiagnosticsSnapshotSystem.cs"
 $scheduleContractPath = Join-Path $runtimePath "System\SystemGroup\GASSystemScheduleContract.cs"
 $streamOwnerContractPath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeStreamOwnerContract.cs"
@@ -105,6 +106,7 @@ $autoChessValidationReportPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Ba
 $autoChessValidationRunPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Validation\AutoChessBattleValidationRun.cs"
 $autoChessRuntimeHostPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasRuntimeHost.cs"
 $autoChessCatalogSessionPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasCatalogSession.cs"
+$autoChessRuntimeAccessPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasRuntimeAccess.cs"
 $autoChessDefinitionCatalogBuilderPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Ecs\AutoChessBattleDefinitionCatalogBuilder.cs"
 
 Assert-FileContains `
@@ -151,6 +153,14 @@ Assert-FileContains `
     -Path $ascArchetypePath `
     -Pattern "ComponentType\.ReadWrite<AttributeModifierBuffer>\(\)" `
     -Message "ASC runtime archetype must own an owner-local AttributeModifierBuffer."
+Assert-FileNotContains `
+    -Path $ascArchetypePath `
+    -Pattern "EffectCommandStream\(EntityManager em\)[\s\S]*?ComponentType\.ReadWrite<AttributeModifierBuffer>\(\)[\s\S]*?return _effectCommandStream;" `
+    -Message "EffectCommandStream archetype must not carry AttributeModifierBuffer after AttributeDelta moves owner-local."
+Assert-FileNotContains `
+    -Path $streamPath `
+    -Pattern "HasRequiredBuffers[\s\S]*AttributeModifierBuffer" `
+    -Message "EffectCommandSpecStream required stream buffers must not include AttributeModifierBuffer."
 Assert-FileContains `
     -Path $streamPath `
     -Pattern "OwnerLocalGameplayFactBuffer" `
@@ -215,6 +225,42 @@ Assert-FileContains `
     -Path $autoChessValidationRunPath `
     -Pattern "OwnerLocalFactFlushCount\s*>\s*0" `
     -Message "AutoChess runtime chain gate must require owner-local fact flush evidence."
+Assert-FileContains `
+    -Path $streamOwnerContractPath `
+    -Pattern "EGasRuntimeFrameStreamId\.AttributeDelta[\s\S]*EGasRuntimeFrameStreamCarrier\.OwnerLocalDynamicBuffer,\s*[\r\n\s]*EGasRuntimeFrameStreamCarrier\.OwnerLocalDynamicBuffer" `
+    -Message "AttributeDelta stream owner contract must use owner-local carriers for current and target state."
+Assert-FileNotContains `
+    -Path $queryLayoutPlanPath `
+    -Pattern "GASRuntimeQueryLayoutEntryId\.GameplayEffectCommandSpecStream[\s\S]*GASRuntimeLayoutComponentSlot\.AttributeDeltaBuffer[\s\S]*typeof\(GameplayFactProjectionSystem\)" `
+    -Message "AttributeDeltaBuffer must not remain classified with the EffectCommandSpecStream layout."
+Assert-FileContains `
+    -Path $queryLayoutPlanPath `
+    -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.AttributeDeltaBuffer" `
+    -Message "AttributeDeltaBuffer must be classified with the ASC owner-local layout."
+Assert-FileNotContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "DeltaLookup\s*=\s*SystemAPI\.GetBufferLookup<AttributeModifierBuffer>" `
+    -Message "Generated instant AttributeDelta must not write facts through the singleton stream delta buffer."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>" `
+    -Message "Generated instant AttributeDelta must write directly to ASC owner-local fact buffers."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern 'writer\.WriteLine\("DeltaLookup = SystemAPI\.GetBufferLookup<AttributeModifierBuffer>' `
+    -Message "CodeGen must not regenerate singleton stream DeltaLookup for instant AttributeDelta facts."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern 'writer\.WriteLine\("OwnerFactLookup = SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>' `
+    -Message "CodeGen must regenerate instant AttributeDelta owner-local fact output."
+Assert-FileNotContains `
+    -Path $executionCalculationOutputModifierSystemPath `
+    -Pattern "DeltaBufferLookup" `
+    -Message "Execution output AttributeDelta facts must not use the singleton stream delta buffer."
+Assert-FileContains `
+    -Path $executionCalculationOutputModifierSystemPath `
+    -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>" `
+    -Message "Execution output AttributeDelta facts must write directly to ASC owner-local fact buffers."
 Assert-FileNotContains `
     -Path $ascArchetypePath `
     -Pattern "ComponentType\.ReadWrite<ActiveEffectMutationBuffer>\(\),\s*[\r\n\s]*ComponentType\.ReadWrite<GameplayEventBuffer>\(\)" `
@@ -795,6 +841,92 @@ Assert-FileContains `
     -Path $autoChessValidationReportPath `
     -Pattern "streamCarrierPressureWarnings" `
     -Message "AutoChess validation evidence must export stream carrier pressure warnings for R3 scale gates."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "internal static class AutoChessGasRuntimeAccess" `
+    -Message "AutoChess runtime access capability owner must stay internal to the AutoChess adapter."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "TryResolveSessionWorld" `
+    -Message "AutoChess runtime access must expose a session world capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "TryResolveDefinitionEntityManager" `
+    -Message "AutoChess runtime access must expose a definition/catalog EntityManager capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "TryResolveBattleLifecycleEntityManager" `
+    -Message "AutoChess runtime access must expose a battle lifecycle EntityManager capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "TryResolveDiagnosticsWorld" `
+    -Message "AutoChess runtime access must expose a diagnostics world capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "TryResolveDiagnosticsGlobalTimer" `
+    -Message "AutoChess runtime access must expose a diagnostics GlobalTimer capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "TryResolveDiagnosticsEventBus" `
+    -Message "AutoChess runtime access must expose a diagnostics EventBus capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "TryResolveDiagnosticsEventLogSink" `
+    -Message "AutoChess runtime access must expose a diagnostics EventLogSink capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "TryResolveDiagnosticsRuntimeDebugger" `
+    -Message "AutoChess runtime access must expose a diagnostics RuntimeDebugger capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "TryCreateBattleUnitCommandPort" `
+    -Message "AutoChess runtime access must expose battle unit command port capabilities."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "TryDrainRunnerJobs" `
+    -Message "AutoChess runtime access must expose runner dependency drain capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "GASRuntimeShell\.TryResolveRuntimeWorld" `
+    -Message "AutoChess runtime access must centralize RuntimeWorld resolution."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "GASRuntimeShell\.TryResolveRuntimeEntityManager" `
+    -Message "AutoChess runtime access must centralize Runtime EntityManager resolution."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "GASRuntimeShell\.TryResolveGlobalTimer" `
+    -Message "AutoChess runtime access must centralize GlobalTimer resolution."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "GASRuntimeShell\.TryResolveEventBus" `
+    -Message "AutoChess runtime access must centralize EventBus resolution."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "GASRuntimeShell\.TryResolveEventLogSink" `
+    -Message "AutoChess runtime access must centralize EventLogSink resolution."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "GASRuntimeShell\.TryResolveRuntimeDebugger" `
+    -Message "AutoChess runtime access must centralize RuntimeDebugger resolution."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "GASRuntimeShell\.TryCreateASCCommandPort" `
+    -Message "AutoChess runtime access must centralize ASCCommandPort creation."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "GASRuntimeShell\.TryDrainRuntimeJobs" `
+    -Message "AutoChess runtime access must centralize runner dependency drain."
+foreach ($autoChessRuntimeAccessConsumerPath in @(
+        $autoChessRuntimeHostPath,
+        $autoChessCatalogSessionPath,
+        $autoChessLifecyclePath,
+        $autoChessObservationGatewayPath)) {
+    Assert-FileNotContains `
+        -Path $autoChessRuntimeAccessConsumerPath `
+        -Pattern "GASRuntimeShell\.Try(Resolve|Get|Create|Drain|Complete)" `
+        -Message "AutoChess runtime access consumers must not call raw GASRuntimeShell Try* seams directly: $autoChessRuntimeAccessConsumerPath"
+}
 Assert-FileNotContains `
     -Path $autoChessRuntimeHostPath `
     -Pattern "TryResolveRuntimeEntityManager" `
@@ -809,8 +941,8 @@ Assert-FileContains `
     -Message "AutoChess runtime host must uninstall catalog lifetime through the catalog session capability."
 Assert-FileContains `
     -Path $autoChessCatalogSessionPath `
-    -Pattern "TryInstall\(\)[\s\S]*?GASRuntimeShell\.TryResolveRuntimeEntityManager" `
-    -Message "AutoChess catalog session must own Runtime EntityManager resolution for definition/catalog lifetime."
+    -Pattern "TryInstall\(\)[\s\S]*?AutoChessGasRuntimeAccess\.TryResolveDefinitionEntityManager" `
+    -Message "AutoChess catalog session must resolve definition/catalog lifetime through AutoChessGasRuntimeAccess."
 Assert-FileNotContains `
     -Path $autoChessCatalogSessionPath `
     -Pattern "public\s+static\s+\w+\s+\w+\s*\(\s*EntityManager" `
@@ -910,6 +1042,8 @@ Write-Host "GAS Runtime Core execution output fact contract passed: NativeStream
 Write-Host "GAS Runtime Core active mutation contract passed: generated gather + ASC chunk-local apply path is wired."
 Write-Host "GAS Runtime Core active mutation SourceAttribute contract passed: read-only snapshot lane feeds chunk-local apply."
 Write-Host "GAS Runtime Core owner-local fact lane contract passed: Attribute facts use ASC-local carrier and debugger-visible flush counters."
+Write-Host "GAS Runtime Core AttributeDelta owner-local fact projection contract passed: generated instant and execution output no longer write stream deltas."
 Write-Host "AutoChess R1/R6 snapshot contract passed: unit result snapshots are projected from structured boundary evidence, not live ASCReadModel."
+Write-Host "AutoChess R1/R6 runtime access capability contract passed: raw GASRuntimeShell ECS seams are centralized behind AutoChessGasRuntimeAccess."
 Write-Host "AutoChess R6 driver owner contract passed: driver owner snapshot is exposed without raw Entity adapter APIs."
 Write-Host "AutoChess R6/R8 timing owner split contract passed: Runtime Debugger publishes core, boundary, and runner timing owners."

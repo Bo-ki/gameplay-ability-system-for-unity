@@ -48,7 +48,7 @@ namespace GAS.AutoChessDemo
 
         public static AutoChessGasBattleDriverHandle CreateBattleDriver()
         {
-            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
+            if (!AutoChessGasRuntimeAccess.TryResolveBattleLifecycleEntityManager(out var entityManager))
                 return default;
 
             return AutoChessBattleDriverRuntimeStore.ResetAndEnable(entityManager);
@@ -81,7 +81,7 @@ namespace GAS.AutoChessDemo
         public static AutoChessBattleDriverComponent GetBattleDriverStats(
             AutoChessGasBattleDriverHandle driverHandle)
         {
-            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
+            if (!AutoChessGasRuntimeAccess.TryResolveBattleLifecycleEntityManager(out var entityManager))
                 return default;
 
             return AutoChessBattleDriverRuntimeStore.Read(entityManager, driverHandle);
@@ -90,7 +90,7 @@ namespace GAS.AutoChessDemo
         public static AutoChessBattleDriverOwnerSnapshot GetBattleDriverOwnerSnapshot(
             AutoChessGasBattleDriverHandle driverHandle)
         {
-            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
+            if (!AutoChessGasRuntimeAccess.TryResolveBattleLifecycleEntityManager(out var entityManager))
                 return default;
 
             return AutoChessBattleDriverRuntimeStore.CreateOwnerSnapshot(entityManager, driverHandle);
@@ -98,7 +98,7 @@ namespace GAS.AutoChessDemo
 
         public static void CloseBattleDriver(AutoChessGasBattleDriverHandle driverHandle)
         {
-            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
+            if (!AutoChessGasRuntimeAccess.TryResolveBattleLifecycleEntityManager(out var entityManager))
                 return;
 
             AutoChessBattleDriverRuntimeStore.Disable(entityManager, driverHandle);
@@ -107,7 +107,7 @@ namespace GAS.AutoChessDemo
         public static void DestroyBattleUnit(AutoChessGasBattleUnitHandle handle)
         {
             if (TryResolveAscHandle(handle, out var ascHandle)
-                && GASRuntimeShell.TryCreateASCCommandPort(ascHandle, out var commandPort))
+                && AutoChessGasRuntimeAccess.TryCreateBattleUnitCommandPort(ascHandle, out var commandPort))
             {
                 commandPort.RequestDestroy();
             }
@@ -157,7 +157,7 @@ namespace GAS.AutoChessDemo
             out ASCCommandPort commandPort)
         {
             commandPort = default;
-            if (!GASRuntimeShell.TryCreateASCCommandPort(
+            if (!AutoChessGasRuntimeAccess.TryCreateBattleUnitCommandPort(
                     ComponentType.ReadWrite<AutoChessBattleUnitComponent>(),
                     out commandPort))
             {
