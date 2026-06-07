@@ -303,6 +303,7 @@ namespace GAS.Runtime.Generated
                 {
                     ComponentType.ReadWrite<ASCActiveEffectsComponent>(),
                     ComponentType.ReadWrite<ActiveGameplayEffectBuffer>(),
+                    ComponentType.ReadWrite<ActiveEffectMutationBuffer>(),
                 },
             });
             state.RequireForUpdate(_ownerQuery);
@@ -370,6 +371,7 @@ namespace GAS.Runtime.Generated
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
                 ActiveEffectsTypeHandle = SystemAPI.GetComponentTypeHandle<ASCActiveEffectsComponent>(isReadOnly: false),
                 ActiveEffectSlotBufferTypeHandle = SystemAPI.GetBufferTypeHandle<ActiveGameplayEffectBuffer>(isReadOnly: false),
+                MutationBufferTypeHandle = SystemAPI.GetBufferTypeHandle<ActiveEffectMutationBuffer>(isReadOnly: false),
                 CleanupRecordLookup =
                     SystemAPI.GetBufferLookup<ActiveGameplayEffectCleanupRecordBuffer>(isReadOnly: false),
                 SetByCallerSnapshotLookup =
@@ -390,7 +392,10 @@ namespace GAS.Runtime.Generated
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
                 CommandSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
-                MutationLookup = SystemAPI.GetBufferLookup<ActiveEffectMutationBuffer>(isReadOnly: false),
+                ActiveMutationCommandLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectMutationCommandBuffer>(isReadOnly: false),
+                ActiveMutationSetByCallerLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: false),
                 AbilityLifecycleRequestLookup =
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
@@ -425,6 +430,7 @@ namespace GAS.Runtime.Generated
                     ComponentType.ReadWrite<GERemoveCommandBuffer>(),
                     ComponentType.ReadWrite<ASCActiveEffectsComponent>(),
                     ComponentType.ReadWrite<ActiveGameplayEffectBuffer>(),
+                    ComponentType.ReadWrite<ActiveEffectMutationBuffer>(),
                 },
             });
             state.RequireForUpdate(_removeCommandQuery);
@@ -462,6 +468,7 @@ namespace GAS.Runtime.Generated
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
                 ActiveEffectsTypeHandle = SystemAPI.GetComponentTypeHandle<ASCActiveEffectsComponent>(isReadOnly: false),
                 ActiveEffectSlotBufferTypeHandle = SystemAPI.GetBufferTypeHandle<ActiveGameplayEffectBuffer>(isReadOnly: false),
+                MutationBufferTypeHandle = SystemAPI.GetBufferTypeHandle<ActiveEffectMutationBuffer>(isReadOnly: false),
                 RemoveCommandBufferTypeHandle = SystemAPI.GetBufferTypeHandle<GERemoveCommandBuffer>(isReadOnly: false),
                 CleanupRecordLookup =
                     SystemAPI.GetBufferLookup<ActiveGameplayEffectCleanupRecordBuffer>(isReadOnly: false),
@@ -482,7 +489,6 @@ namespace GAS.Runtime.Generated
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
                 CommandSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
-                MutationLookup = SystemAPI.GetBufferLookup<ActiveEffectMutationBuffer>(isReadOnly: false),
                 AbilityLifecycleRequestLookup =
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),

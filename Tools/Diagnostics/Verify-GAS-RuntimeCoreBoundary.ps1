@@ -92,6 +92,7 @@ $debuggerPath = Join-Path $runtimePath "Debugger\GasRuntimeDebugger.cs"
 $generatedActiveEffectPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeActiveEffect.gen.cs"
 $activeEffectLifecycleOwnerPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\ActiveEffectLifecycleOwnerSystems.cs"
 $generatedInstantEffectPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeEffectInstant.gen.cs"
+$generatedAbilityActivationPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeAbilityActivation.gen.cs"
 $codeGenTemplatePath = Join-Path $ProjectPath "Assets\GAS\Editor\CodeGen\Phases\GasGlueCodeGenPhases.cs"
 $codeGenManifestPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\GasCodeGen.manifest.json"
 $codeGenReportPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\GasCodeGenValidationReport.md"
@@ -902,6 +903,74 @@ Assert-FileContains `
     -Path $codeGenTemplatePath `
     -Pattern "GEActiveEffectMutationOwnerCommandFinalizeJob\s*:\s*IJob" `
     -Message "CodeGen template must keep owner-local active mutation command finalization."
+Assert-FileContains `
+    -Path $generatedAbilityActivationPath `
+    -Pattern "ActiveMutationCommandLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationCommandBuffer>\(isReadOnly:\s*false\)" `
+    -Message "Generated ability commit must acquire ASC owner-local active mutation command buffers."
+Assert-FileContains `
+    -Path $generatedAbilityActivationPath `
+    -Pattern "ActiveMutationSetByCallerLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>\(isReadOnly:\s*false\)" `
+    -Message "Generated ability commit must acquire ASC owner-local active mutation payload buffers."
+Assert-FileContains `
+    -Path $generatedAbilityActivationPath `
+    -Pattern "if\s*\(resolved\.Kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?AppendActiveMutationCommand\(in resolved\);[\s\S]*?else[\s\S]*?CommandLookup\[StreamEntity\]\.Add\(resolved\);" `
+    -Message "Generated ability commit must route active mutation commands directly to owner-local ASC buffers while keeping instant commands on the spec stream."
+Assert-FileContains `
+    -Path $generatedAbilityActivationPath `
+    -Pattern "ActiveMutationCommandLookup\[targetAsc\]\.Add\(new ActiveEffectMutationCommandBuffer" `
+    -Message "Generated ability commit must append active mutation commands to the target ASC owner-local command buffer."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "ActiveMutationCommandLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationCommandBuffer>\(isReadOnly:\s*false\)" `
+    -Message "CodeGen template must acquire ASC owner-local active mutation command buffers for ability commit."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "if\s*\(resolved\.Kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?AppendActiveMutationCommand\(in resolved\);[\s\S]*?else[\s\S]*?CommandLookup\[StreamEntity\]\.Add\(resolved\);" `
+    -Message "CodeGen template must keep ability commit active mutation commands off the singleton command stream."
+Assert-FileContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "MutationBufferTypeHandle\s*=\s*SystemAPI\.GetBufferTypeHandle<ActiveEffectMutationBuffer>\(isReadOnly:\s*false\)" `
+    -Message "Generated active effect pre-tick/remove must pass ASC owner-local mutation buffers by chunk type handle."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "public BufferTypeHandle<ActiveEffectMutationBuffer>\s+MutationBufferTypeHandle" `
+    -Message "Generated active effect pre-tick/remove job must own ActiveEffectMutationBuffer as an owner-local chunk buffer."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "var mutationBuffers\s*=\s*chunk\.GetBufferAccessor\(ref MutationBufferTypeHandle\)[\s\S]*?var mutations\s*=\s*mutationBuffers\[entityIndex\]" `
+    -Message "Generated active effect pre-tick/remove must write mutations to the current ASC owner-local buffer."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "var mutationBuffers\s*=\s*chunk\.GetBufferAccessor\(ref MutationBufferTypeHandle\)[\s\S]*?var mutations\s*=\s*mutationBuffers\[entityIndex\]" `
+    -Message "CodeGen template must keep active effect pre-tick/remove mutation output owner-local."
+Assert-FileNotContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "MutationLookup\.HasBuffer\(StreamEntity\)|MutationLookup\[StreamEntity\]|public BufferLookup<ActiveEffectMutationBuffer>\s+MutationLookup" `
+    -Message "Generated active effect pre-tick/remove must not read ActiveEffectMutationBuffer from the singleton stream owner."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "MutationLookup\.HasBuffer\(StreamEntity\)|MutationLookup\[StreamEntity\]|public BufferLookup<ActiveEffectMutationBuffer>\s+MutationLookup" `
+    -Message "CodeGen template must not regenerate singleton stream ActiveEffectMutationBuffer access for pre-tick/remove."
+Assert-FileContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "ActiveMutationCommandLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationCommandBuffer>\(isReadOnly:\s*false\)" `
+    -Message "Generated active effect pre-tick must acquire ASC owner-local active mutation command buffers for period commands."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "if\s*\(kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?ActiveMutationCommandLookup\[ownerResources\.Owner\]\.Add\(new ActiveEffectMutationCommandBuffer" `
+    -Message "Generated period active mutation commands must be routed to owner-local ASC buffers."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "var ownerCommand = PrepareCommand\([\s\S]*?ownerSetByCallerValues\.Length[\s\S]*?Command = ownerCommand" `
+    -Message "Generated period active mutation route must remap set-by-caller payloads into owner-local command payload ranges."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "if\s*\(kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?ActiveMutationCommandLookup\[ownerResources\.Owner\]\.Add\(new ActiveEffectMutationCommandBuffer" `
+    -Message "CodeGen template must keep period active mutation commands off the singleton command stream."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "var ownerCommand = PrepareCommand\([\s\S]*?ownerSetByCallerValues\.Length[\s\S]*?Command = ownerCommand" `
+    -Message "CodeGen template must keep owner-local period set-by-caller payload remapping."
 Assert-FileNotContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]{0,3000}\|\| !CommandSetByCallerLookup\.HasBuffer\(StreamEntity\)" `

@@ -27,6 +27,7 @@
 | [2026-06-08-OwnerLocalGameplayFactLane](2026-06-08-OwnerLocalGameplayFactLane.md) | pending AttributeDelta 产生的 Attribute fact 迁入 ASC owner-local fact lane 的切片记录 |
 | [2026-06-08-ActiveEffectMutationOwnerLocalCarrier](2026-06-08-ActiveEffectMutationOwnerLocalCarrier.md) | ActiveEffectMutationBuffer 与 active mutation command source 退出 singleton stream owner、转为 ASC owner-local carrier 的事实归档 |
 | [2026-06-08-ActiveEffectMutationSetByCallerOwnerLocalPayload](2026-06-08-ActiveEffectMutationSetByCallerOwnerLocalPayload.md) | active mutation set-by-caller payload 退出 singleton stream 输入、转为 ASC owner-local payload + frame-local apply list 的事实归档 |
+| [2026-06-08-AbilityCommitActiveMutationOwnerLocalCommand](2026-06-08-AbilityCommitActiveMutationOwnerLocalCommand.md) | ability commit / active period GE 跳过 singleton command stream，pre-tick/remove mutation output 改写 ASC owner-local buffer 的事实归档 |
 | [2026-06-08-AttributeDeltaOwnerLocalFactProjection](2026-06-08-AttributeDeltaOwnerLocalFactProjection.md) | AttributeDelta fact 退出 EffectCommandSpecStream singleton delta carrier、改写 ASC owner-local fact 的切片记录 |
 | [2026-06-08-AutoChessRuntimeAccessCapability](2026-06-08-AutoChessRuntimeAccessCapability.md) | AutoChess adapter raw GASRuntimeShell ECS seam 集中到 AutoChessGasRuntimeAccess 的切片记录 |
 | [2026-06-08-架构重划分审查事实拆分前](2026-06-08-架构重划分审查事实拆分前.md) | `../架构重划分审查事实.md` 拆分前全文快照 |

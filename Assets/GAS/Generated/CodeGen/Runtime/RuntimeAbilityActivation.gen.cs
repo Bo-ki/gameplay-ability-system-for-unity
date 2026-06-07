@@ -67,6 +67,10 @@ namespace GAS.Runtime.Generated
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(),
                 SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: true),
+                ActiveMutationCommandLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectMutationCommandBuffer>(isReadOnly: false),
+                ActiveMutationSetByCallerLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
                 Catalog = catalogComponent.Catalog,
                 StreamEntity = streamEntity,
@@ -93,6 +97,8 @@ namespace GAS.Runtime.Generated
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             [ReadOnly] public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
+            public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;
+            public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;
             public BufferLookup<GameplayEventBuffer> FactLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public Entity StreamEntity;
@@ -328,9 +334,20 @@ namespace GAS.Runtime.Generated
             private void AppendEffectCommand(in GEEffectCommandBuffer command)
             {
                 if (StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !CommandLookup.HasBuffer(StreamEntity)
-                    || !SetByCallerLookup.HasBuffer(StreamEntity))
+                    || !StreamLookup.HasComponent(StreamEntity))
+                {
+                    return;
+                }
+
+                if (command.Kind == GEEffectCommandKind.ActiveMutation
+                    && !CanAppendActiveMutationCommand(in command))
+                {
+                    return;
+                }
+
+                if (command.Kind != GEEffectCommandKind.ActiveMutation
+                    && (!CommandLookup.HasBuffer(StreamEntity)
+                        || !SetByCallerLookup.HasBuffer(StreamEntity)))
                 {
                     return;
                 }
@@ -338,10 +355,35 @@ namespace GAS.Runtime.Generated
                 var stream = StreamLookup[StreamEntity];
                 var resolved = PrepareCommand(
                     ref stream,
-                    SetByCallerLookup[StreamEntity].Length,
+                    command.Kind == GEEffectCommandKind.ActiveMutation
+                        ? 0
+                        : SetByCallerLookup[StreamEntity].Length,
                     in command);
-                CommandLookup[StreamEntity].Add(resolved);
+                if (resolved.Kind == GEEffectCommandKind.ActiveMutation)
+                    AppendActiveMutationCommand(in resolved);
+                else
+                    CommandLookup[StreamEntity].Add(resolved);
                 StreamLookup[StreamEntity] = stream;
+            }
+
+            private bool CanAppendActiveMutationCommand(in GEEffectCommandBuffer command)
+            {
+                var targetAsc = command.TargetAsc != Entity.Null ? command.TargetAsc : command.SourceAsc;
+                return targetAsc != Entity.Null
+                    && ActiveMutationCommandLookup.HasBuffer(targetAsc)
+                    && ActiveMutationSetByCallerLookup.HasBuffer(targetAsc);
+            }
+
+            private void AppendActiveMutationCommand(in GEEffectCommandBuffer command)
+            {
+                var targetAsc = command.TargetAsc != Entity.Null ? command.TargetAsc : command.SourceAsc;
+                var ownerCommand = command;
+                ownerCommand.SetByCallerStart = 0;
+                ownerCommand.SetByCallerCount = 0;
+                ActiveMutationCommandLookup[targetAsc].Add(new ActiveEffectMutationCommandBuffer
+                {
+                    Command = ownerCommand,
+                });
             }
 
             private GEEffectCommandBuffer PrepareCommand(

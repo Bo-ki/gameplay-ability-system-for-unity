@@ -1754,6 +1754,7 @@ namespace GAS.Runtime.Generated
             [ReadOnly] public EntityTypeHandle EntityTypeHandle;
             public ComponentTypeHandle<ASCActiveEffectsComponent> ActiveEffectsTypeHandle;
             public BufferTypeHandle<ActiveGameplayEffectBuffer> ActiveEffectSlotBufferTypeHandle;
+            public BufferTypeHandle<ActiveEffectMutationBuffer> MutationBufferTypeHandle;
             public BufferTypeHandle<GERemoveCommandBuffer> RemoveCommandBufferTypeHandle;
             public BufferLookup<ActiveGameplayEffectCleanupRecordBuffer> CleanupRecordLookup;
             public BufferLookup<ActiveGameplayEffectSetByCallerValueBuffer> SetByCallerSnapshotLookup;
@@ -1770,7 +1771,8 @@ namespace GAS.Runtime.Generated
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             public BufferLookup<GESetByCallerValueBuffer> CommandSetByCallerLookup;
-            public BufferLookup<ActiveEffectMutationBuffer> MutationLookup;
+            public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;
+            public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;
             public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
             public BufferLookup<GameplayEventBuffer> FactLookup;
             public EntityCommandBuffer StructuralEcb;
@@ -1816,7 +1818,6 @@ namespace GAS.Runtime.Generated
             {
                 if ((!ProcessTickRecords && !ProcessExplicitRemoveCommands)
                     || StreamEntity == Entity.Null
-                    || !MutationLookup.HasBuffer(StreamEntity)
                     || (ProcessTickRecords && !Catalog.IsCreated))
                 {
                     return;
@@ -1825,7 +1826,7 @@ namespace GAS.Runtime.Generated
                 var owners = chunk.GetNativeArray(EntityTypeHandle);
                 var stores = chunk.GetNativeArray(ref ActiveEffectsTypeHandle);
                 var slotBuffers = chunk.GetBufferAccessor(ref ActiveEffectSlotBufferTypeHandle);
-                var mutations = MutationLookup[StreamEntity];
+                var mutationBuffers = chunk.GetBufferAccessor(ref MutationBufferTypeHandle);
                 var magnitudeSourceCounters = default(ActiveEffectMagnitudeSourceCounters);
                 var snapshotLaneCounters = default(ActiveEffectSlotSourceSnapshotLaneCounters);
                 var hasSnapshotLaneCounters = SnapshotLaneCounters.IsCreated
@@ -1843,6 +1844,7 @@ namespace GAS.Runtime.Generated
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
                     var owner = owners[entityIndex];
+                    var mutations = mutationBuffers[entityIndex];
                     var ownerResources = CaptureActiveEffectOwnerResources(
                         owner,
                         stores[entityIndex],
@@ -2617,9 +2619,7 @@ namespace GAS.Runtime.Generated
                 ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
                 if (gameplayEffect.PeriodGameplayEffectCode <= 0
                     || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, gameplayEffect.PeriodGameplayEffectCode, out var periodGameplayEffectIndex)
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !CommandLookup.HasBuffer(StreamEntity)
-                    || !CommandSetByCallerLookup.HasBuffer(StreamEntity))
+                    || !StreamLookup.HasComponent(StreamEntity))
                 {
                     return;
                 }
@@ -2647,12 +2647,47 @@ namespace GAS.Runtime.Generated
                     Flags = kind == GEEffectCommandKind.ActiveMutation ? GASGECommandSeedFlags.ActiveMutation : GASGECommandSeedFlags.None,
                 };
 
-                var commandSetByCallerValues = CommandSetByCallerLookup[StreamEntity];
                 var sourceSetByCallerValues = ownerResources.HasSetByCallerSnapshot
                     ? ownerResources.SetByCallerSnapshot
                     : default;
                 var setByCallerCount = CountSetByCallerValues(sourceSetByCallerValues, slot.Sequence, slot.GameplayEffectCode);
                 var stream = StreamLookup[StreamEntity];
+                if (kind == GEEffectCommandKind.ActiveMutation)
+                {
+                    if (!ActiveMutationCommandLookup.HasBuffer(ownerResources.Owner)
+                        || !ActiveMutationSetByCallerLookup.HasBuffer(ownerResources.Owner))
+                    {
+                        return;
+                    }
+
+                    var ownerSetByCallerValues = ActiveMutationSetByCallerLookup[ownerResources.Owner];
+                    var ownerCommand = PrepareCommand(
+                        ref stream,
+                        ownerSetByCallerValues.Length,
+                        in command,
+                        setByCallerCount,
+                        Frame);
+                    CopySetByCallerValues(
+                        ownerSetByCallerValues,
+                        sourceSetByCallerValues,
+                        slot.Sequence,
+                        slot.GameplayEffectCode,
+                        ownerCommand.Sequence);
+                    ActiveMutationCommandLookup[ownerResources.Owner].Add(new ActiveEffectMutationCommandBuffer
+                    {
+                        Command = ownerCommand,
+                    });
+                    StreamLookup[StreamEntity] = stream;
+                    return;
+                }
+
+                if (!CommandLookup.HasBuffer(StreamEntity)
+                    || !CommandSetByCallerLookup.HasBuffer(StreamEntity))
+                {
+                    return;
+                }
+
+                var commandSetByCallerValues = CommandSetByCallerLookup[StreamEntity];
                 var resolved = PrepareCommand(ref stream, commandSetByCallerValues, in command, setByCallerCount, Frame);
                 CopySetByCallerValues(
                     commandSetByCallerValues,
@@ -2686,6 +2721,32 @@ namespace GAS.Runtime.Generated
                     resolved.Causer = resolved.SourceAbility;
 
                 resolved.SetByCallerStart = setByCallerBuffer.Length;
+                resolved.SetByCallerCount = setByCallerCount;
+                return resolved;
+            }
+
+            private GEEffectCommandBuffer PrepareCommand(
+                ref GEEffectCommandStreamComponent stream,
+                int setByCallerStart,
+                in GEEffectCommandBuffer command,
+                int setByCallerCount,
+                int currentFrame)
+            {
+                var resolved = command;
+                if (resolved.Sequence <= 0)
+                    resolved.Sequence = Allocate(ref stream.NextCommandSequence);
+                if (resolved.Frame <= 0)
+                    resolved.Frame = currentFrame;
+                if (resolved.ContextId <= 0)
+                    resolved.ContextId = Allocate(ref stream.NextContextId);
+                if (resolved.TargetAsc == Entity.Null)
+                    resolved.TargetAsc = resolved.SourceAsc;
+                if (resolved.Instigator == Entity.Null)
+                    resolved.Instigator = resolved.SourceAsc;
+                if (resolved.Causer == Entity.Null)
+                    resolved.Causer = resolved.SourceAbility;
+
+                resolved.SetByCallerStart = setByCallerStart;
                 resolved.SetByCallerCount = setByCallerCount;
                 return resolved;
             }
@@ -2737,6 +2798,38 @@ namespace GAS.Runtime.Generated
                         SpecSequence = 0,
                         Key = value.Key,
                         Value = value.Value,
+                    });
+                }
+            }
+
+            private void CopySetByCallerValues(
+                DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> target,
+                DynamicBuffer<ActiveGameplayEffectSetByCallerValueBuffer> source,
+                int sourceSequence,
+                int sourceGameplayEffectCode,
+                int commandSequence)
+            {
+                if (!source.IsCreated)
+                    return;
+
+                for (var i = 0; i < source.Length; i++)
+                {
+                    var value = source[i];
+                    if (value.SourceSequence != sourceSequence
+                        || value.SourceGameplayEffectCode != sourceGameplayEffectCode)
+                    {
+                        continue;
+                    }
+
+                    target.Add(new ActiveEffectMutationSetByCallerValueBuffer
+                    {
+                        Value = new GESetByCallerValueBuffer
+                        {
+                            CommandSequence = commandSequence,
+                            SpecSequence = 0,
+                            Key = value.Key,
+                            Value = value.Value,
+                        },
                     });
                 }
             }
