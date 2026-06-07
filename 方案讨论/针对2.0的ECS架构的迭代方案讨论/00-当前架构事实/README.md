@@ -23,7 +23,8 @@
 | 文件 | 内容 |
 |---|---|
 | [Runtime主链事实](Runtime主链事实.md) | 当前 5 段 GAS 主链、generated runtime 接入、command/spec/delta/fact 链 |
-| [架构重划分审查事实](架构重划分审查事实.md) | 本轮纯 ECS Core / OOP Shell / Thin Adapter / Debugger / Luban SourceGenerator 重划分对应的当前代码事实、证据矩阵和 DOTS 判定 |
+| [架构重划分审查事实](架构重划分审查事实.md) | 本轮纯 ECS Core / OOP Shell / Thin Adapter / Debugger / Luban SourceGenerator 重划分事实索引；正文已拆入同名子目录 |
+| [架构重划分审查事实子页](架构重划分审查事实/README.md) | 架构总览、API 健康、R1-R6 证据、Owner 重划分和 Boundary Snapshot / Magnitude Source 事实子页 |
 | [当前架构图](当前架构图.md) | 当前实际链路图、EffectCommand 链路、DOTS 对照热图 |
 | [模块索引](模块索引.md) | Runtime / Generated Runtime / AutoChessDemo / 配置生成当前索引 |
 | [AutoChessDemo事实](AutoChessDemo事实.md) | 当前业务 demo 分层、GAS bridge、demo ECS 扩展和风险 |

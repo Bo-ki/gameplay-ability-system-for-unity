@@ -15,9 +15,9 @@
 
 ## 复核结论
 
-近期更新的四份文档方向成立，但必须补上 **GAS Official Concept Mapping** 作为配置链 guardrail。
+配置链目标态必须补上 **GAS Official Concept Mapping** 作为 guardrail。
 
-当前设计做对的部分：
+目标态必须保留的方向：
 
 1. `Ability Package / Effect Package` 被定义为 Authoring 聚合，不进入 Runtime Core。
 2. Luban rows 仍是长期权威，Editor draft 只能投影为 row diff 和发布快照。
@@ -25,7 +25,7 @@
 4. Runtime Trace Preview、Impact Analysis、Scenario Validation Binding 被前置到保存 / 发布前。
 5. Cue / UI / VFX / SFX 被限定为 Boundary / Presentation 派生，不反向决定 gameplay。
 
-仍需补强的概念边界：
+必须补强的概念边界：
 
 1. Ability 不能只被理解为“模板 + rows”，必须保留 grant、activation、can activate、commit、cancel、end、block / cancel tags、failure reason 的 lifecycle contract。
 2. GameplayEffect 必须区分 immutable definition 与 runtime GameplayEffectSpec shape；instant、duration、periodic、stacking、execution、immunity、requirement、granted state 和 cue 触发不能被压平成同一种 row。
@@ -46,7 +46,7 @@
 | GameplayTag | 层级标签、Tag Container、Tag Query；用于对象状态、事件、能力交互、阻断、取消和条件判断 | generated dense tag id、tag mask、tag query evaluator、tag taxonomy metadata | 只当字符串 / int ID 引用，缺少 taxonomy、query 和条件语义 |
 | GameplayCue | 由 Ability / GE 触发表现反馈；通常通过 GameplayCue tag 路由，表达 OnActive / WhileActive / Removed / Executed 等事件 | Boundary cue outbox + `CueParameterContract` + headless marker | Cue 写 gameplay state，或无头验收删除 Cue 链路 |
 
-## 当前文档对照矩阵
+## 目标文档对照矩阵
 
 | 文档 | 已对齐部分 | 概念风险 | 修正要求 |
 |---|---|---|---|

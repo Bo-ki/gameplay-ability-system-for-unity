@@ -16,3 +16,5 @@
 |---|---|
 | [2026-06-07-GAS架构瘦身执行记录](2026-06-07-GAS架构瘦身执行记录.md) | 本轮 GAS Runtime 瘦身执行记录、验证证据和复发入口 |
 | [2026-06-08-AutoChessBattleValidation-DebuggerRegisteredOwner-Run1](2026-06-08-AutoChessBattleValidation-DebuggerRegisteredOwner-Run1.log) | Debugger registered owner 切片的 AutoChess x50 原始日志 |
+| [2026-06-08-AutoChessBattleValidation-ObservationMaterialization-Run1](2026-06-08-AutoChessBattleValidation-ObservationMaterialization-Run1.log) | Debugger observation materialization 归因切片的 AutoChess x50 原始日志 |
+| [2026-06-08-架构重划分审查事实拆分前](2026-06-08-架构重划分审查事实拆分前.md) | `../架构重划分审查事实.md` 拆分前全文快照 |
