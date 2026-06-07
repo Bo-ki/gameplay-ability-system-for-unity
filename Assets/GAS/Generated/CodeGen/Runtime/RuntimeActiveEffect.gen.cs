@@ -581,7 +581,7 @@ namespace GAS.Runtime.Generated
                 var commands = CommandLookup[StreamEntity];
                 var setByCallerValues = CommandSetByCallerLookup[StreamEntity];
                 ref var catalog = ref Catalog.Value;
-                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                var enumerator = new ChunkEntityEnumerator(false, default, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
                     if (destroyingMask[entityIndex])

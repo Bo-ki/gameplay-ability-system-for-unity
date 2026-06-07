@@ -2531,6 +2531,7 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine("[UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]");
             writer.WriteLine("[UpdateAfter(typeof(GASActiveEffectMutationApplySystem))]");
             writer.WriteLine("[UpdateAfter(typeof(GEExecutionCalculationOutputModifierSystem))]");
+            writer.WriteLine("[UpdateBefore(typeof(GASAttributeModifierDeltaApplySystem))]");
             writer.WriteLine("[UpdateBefore(typeof(GameplayFactProjectionSystem))]");
             writer.WriteLine("public partial struct GASAttributeSetReduceApplySystem : ISystem");
             writer.WriteLine("{");
@@ -3471,7 +3472,7 @@ namespace __ROOT_NAMESPACE__
                 var commands = CommandLookup[StreamEntity];
                 var setByCallerValues = CommandSetByCallerLookup[StreamEntity];
                 ref var catalog = ref Catalog.Value;
-                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                var enumerator = new ChunkEntityEnumerator(false, default, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
                     if (destroyingMask[entityIndex])
