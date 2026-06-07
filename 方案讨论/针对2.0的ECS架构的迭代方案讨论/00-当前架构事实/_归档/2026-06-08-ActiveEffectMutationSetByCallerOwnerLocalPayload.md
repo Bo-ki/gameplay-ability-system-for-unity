@@ -1,30 +1,48 @@
-# ActiveEffectMutation set-by-caller owner-local payload 事实归档
+# ActiveEffectMutation SetByCaller Owner-Local Payload
 
-> 日期：2026-06-08
-> 范围：P0-D singleton stream owner / ActiveMutation command payload
+归档日期：2026-06-08
 
-## 变更事实
+## 原问题
 
-1. 新增 `ActiveEffectMutationSetByCallerValueBuffer`，作为 ASC owner-local 的 ActiveMutation command payload carrier。
-2. `ASCEntityFactory`、`GASRuntimeEntityArchetypes.ASC()`、`GASRuntimeQueryLayoutPlan` 已纳入该 buffer；`ActiveEffectOwnerLocalMutationFramePrepareSystem` 每帧同时清空 command、set-by-caller payload 与 mutation output。
-3. `GEEffectCommandCatalogNormalizeSystem` 在投影 `GEEffectCommandKind.ActiveMutation` 到目标 ASC 时，会把 stream `GESetByCallerValueBuffer` 中对应 command sequence 的 range 复制到目标 ASC 的 `ActiveEffectMutationSetByCallerValueBuffer`，并把 command 的 `SetByCallerStart/Count` 重映射为 owner-local range。
-4. `GEActiveEffectMutationOwnerCommandCollectJob` 从 ASC owner-local command + set-by-caller payload 收集，压平成 frame-local `NativeList<GEEffectCommandBuffer>` 与 `NativeList<GESetByCallerValueBuffer>`。
-5. `GEActiveEffectMutationChunkApplyJob` 的 ActiveMutation 主路径不再以 `CommandSetByCallerLookup.HasBuffer(StreamEntity)` 作为处理前置条件；magnitude resolution 与 persistent slot `CopySetByCallerSnapshot(...)` 均读取 frame-local owner payload list。
-6. `GasGlueCodeGenPhases.cs` 模板已同步 normalize、collect、apply 和 helper 签名，避免 SourceGenerator 回生 stream-backed set-by-caller active mutation path。
-7. `Verify-GAS-RuntimeCoreBoundary.ps1` 已新增防回流门：ASC archetype、frame prepare、query layout、normalize projection、collect flatten、apply payload consumption 和 template 同步均被断言覆盖。
+P0-D `singleton stream owner` 中，active mutation command 虽已投影到 ASC owner-local `ActiveEffectMutationCommandBuffer`，但 command 的 `SetByCallerStart/SetByCallerCount` 仍指向 singleton `GESetByCallerValueBuffer`。这会让 `GEActiveEffectMutationChunkApplyJob` 在 magnitude resolution / set-by-caller snapshot copy 时继续把 singleton stream 当 active mutation 输入源。
 
-## 明确不能推出的结论
+## 本轮处理
 
-1. 本切片不证明 active mutation 全链路完全退出 singleton command/spec stream；原始 `GEEffectCommandBuffer` producer 仍先进入 singleton stream 后由 normalize 投影到 ASC。
-2. overflow / period derived command append 仍保留 stream fallback；本切片只保证 ActiveMutation 本体的 set-by-caller payload 在消费侧不再依赖 singleton stream buffer。
-3. instant spec build、execution extension、Boundary fact export、Unity headless AutoChess x50/x100/x1000 与 profiler pass 未由本切片证明。
+1. 新增并接线 ASC owner-local `ActiveEffectMutationSetByCallerValueBuffer`。
+2. `GEEffectCommandCatalogNormalizeSystem` 在投影 `ActiveMutation` command 到目标 ASC 时，同步把该 command 的 `GESetByCallerValueBuffer` range 复制到目标 ASC owner-local payload buffer，并重写 owner-local command 的 `SetByCallerStart/SetByCallerCount`。
+3. `GASActiveEffectMutationApplySystem` 的 collect 阶段读取 owner-local command + owner-local set-by-caller payload，展平成 frame-local `NativeList<GEEffectCommandBuffer>` 与 `NativeList<GESetByCallerValueBuffer>`。
+4. `GEActiveEffectMutationChunkApplyJob` 的 active mutation magnitude resolution 与 active effect set-by-caller snapshot copy 读取 frame-local payload list，不再读取 singleton stream set-by-caller 作为 active mutation 输入。
+5. `StreamSetByCallerLookup` 只保留给 overflow 派生命令写回 singleton command stream；这不代表 command/spec stream 全链路退出。
+6. `GasGlueCodeGenPhases.cs` 模板同步，防止 `.gen.cs` 回流。
+7. `Verify-GAS-RuntimeCoreBoundary.ps1` 新增 owner-local payload projection / collect / apply / template 防回流断言。
 
-## 本轮验证
+## 代码证据
 
-1. `.\Tools\Diagnostics\Verify-GAS-RuntimeCoreBoundary.ps1` 通过。
-2. `dotnet build .\com.exhard.exgas.runtime.csproj -m:1 -p:UseSharedCompilation=false --no-restore --nologo --verbosity:minimal` 通过，保留既有 `MSB3277` warning。
-3. `dotnet build .\com.exhard.exgas.autochessdemo.csproj -m:1 -p:UseSharedCompilation=false --no-restore --nologo --verbosity:minimal` 通过，保留既有 `MSB3277` warning。
+- `Assets/GAS/Runtime/Effect/Component/Dynamic/GEEffectCommandSpecStream.cs`
+- `Assets/GAS/Runtime/System/SystemGroup/GASRuntimeEntityArchetypes.cs`
+- `Assets/GAS/Runtime/AbilitySystem/ASCEntityFactory.cs`
+- `Assets/GAS/Runtime/System/Effect/GEEffectCommandSpecStreamPhases.cs`
+- `Assets/GAS/Runtime/System/SystemGroup/GASRuntimeQueryLayoutPlan.cs`
+- `Assets/GAS/Generated/CodeGen/Runtime/ActiveEffectLifecycleOwnerSystems.cs`
+- `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs`
+- `Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs`
+- `Tools/Diagnostics/Verify-GAS-RuntimeCoreBoundary.ps1`
 
-## 后续入口
+## 仍未解决
 
-后续 P0-D/R3 继续处理 `GEEffectCommandBuffer` producer 直写 owner-local lane、instant spec build / execution extension 的 stream 依赖；P0-C/R5 继续迁出 overflow / period derived command append。
+本切片只退出 active mutation 输入侧的 set-by-caller singleton 依赖。以下内容仍是 P0-D / R3 后续范围：
+
+- 原始 `GEEffectCommandBuffer` producer 仍写 singleton command stream。
+- 非 active mutation 的 `GESetByCallerValueBuffer` 仍是 command/spec stream payload。
+- instant spec build 仍读取 singleton command/spec stream。
+- overflow / period derived command append 仍写 singleton command stream。
+- `GameplayEventBuffer` stream export 仍是 BoundaryProjection 前的 typed fact export carrier。
+
+## 复发入口
+
+如果后续出现以下任一回流，应重新打开 P0-D / R3：
+
+- `GEActiveEffectMutationChunkApplyJob` 重新以 `CommandSetByCallerLookup[StreamEntity]` 作为 active mutation 输入。
+- generated 模板重新生成 active mutation 的 singleton set-by-caller precondition。
+- ASC archetype / factory / frame prepare / query layout 丢失 `ActiveEffectMutationSetByCallerValueBuffer`。
+- active mutation command 投影不再同步复制 set-by-caller payload。
