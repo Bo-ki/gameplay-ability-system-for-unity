@@ -32,6 +32,10 @@
 | StructuralCommit | create / destroy / add / remove 只能消费 structural intent，并在明确 ECB playback phase 发生 | Core simulation lane、Shell 或 generated glue 直接执行结构变化 |
 | Diagnostics evidence | Debugger 输出机器可读 counter / fact / official capture state；日志、Mermaid、战报和 UI 只能派生 | 字符串日志、summary hash、Mermaid 图或 disabled profiler reason 单独证明性能 |
 | Definition & Generation | SourceGenerator 只生成 immutable Blob lookup、static index、pure evaluator、validation metadata | SourceGenerator 生成 runtime lifecycle owner、query、ECB、NativeContainer owner 或 hidden scheduler |
+| Module depth | 每个 Module 的 Interface 只暴露业务 intent、record、snapshot、evidence 或 owner-local result，Implementation 隐藏 query / lookup / allocator / dependency / carrier / capacity / merge / structural playback | facade 名义很薄，但调用方仍要理解 ECS handle、singleton owner、NativeContainer owner、capacity 或 diagnostics owner |
+| Dependency graph | Shell / Adapter、Runtime Core、Diagnostics、Presentation、Definition Glue 之间是单向依赖，无反向环；每条依赖都能解释消息方向和 owner | 目录或 namespace 看似分层，但 Core 反向依赖 Shell / Debugger，或 generated lifecycle 与 Runtime Core 互相拥有调度 |
+| Cost domain | Core、Boundary、Diagnostics、Runner、Presentation、Official Capture 和 Derived Export 有独立 timing / evidence 字段 | 平均 tick、字符串 summary 或单个 runner 耗时混合多个成本域 |
+| Generation purity | generated artifact 只输出 catalog、lookup、pure evaluator、validation、Editor / Baker metadata；runtime lifecycle 由 hand-written Core owner 承担 | generated artifact 拥有 `OnUpdate`、system registration、query、ECB、NativeContainer allocator、mutation lifecycle 或 hidden dependency |
 | DOTS API 依据 | 每个承载选择能对照 `SYS/JOB/QRY/SC/ECB/BUF/NAT/DBG/BLOB/BUR` 规则说明 | proof-only carrier、managed lookup 或同步 fence 没有重新选型触发条件 |
 
 ## 阅读顺序
