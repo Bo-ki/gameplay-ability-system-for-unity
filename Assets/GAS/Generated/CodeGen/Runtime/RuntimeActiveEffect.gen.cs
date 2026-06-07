@@ -138,13 +138,23 @@ namespace GAS.Runtime.Generated
                 new NativeParallelHashMap<Entity, GASGeneratedActiveEffectRuntime.ActiveMutationCommandRange>(
                     commandCapacity,
                     state.WorldUpdateAllocator);
+            var activeMutationSourceAttributeSnapshotCapacity = commandCapacity * 8;
+            if (activeMutationSourceAttributeSnapshotCapacity < 256)
+                activeMutationSourceAttributeSnapshotCapacity = 256;
+            var activeMutationSourceAttributeSnapshots =
+                new NativeParallelHashMap<long, float>(
+                    activeMutationSourceAttributeSnapshotCapacity,
+                    state.WorldUpdateAllocator);
 
             var gatherJob = new GASGeneratedActiveEffectRuntime.GEActiveEffectMutationGatherJob
             {
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: true),
+                AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true),
+                Catalog = catalogComponent.Catalog,
                 ActiveMutationCommands = activeMutationCommands,
                 ActiveMutationOwnerRanges = activeMutationOwnerRanges,
+                ActiveMutationSourceAttributeSnapshots = activeMutationSourceAttributeSnapshots,
                 StreamEntity = streamEntity,
             };
             var gatherDependency = gatherJob.Schedule(state.Dependency);
@@ -184,6 +194,7 @@ namespace GAS.Runtime.Generated
                 Catalog = catalogComponent.Catalog,
                 ActiveMutationCommands = activeMutationCommands,
                 ActiveMutationOwnerRanges = activeMutationOwnerRanges,
+                ActiveMutationSourceAttributeSnapshots = activeMutationSourceAttributeSnapshots,
                 StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
                 Frame = frame,
@@ -358,13 +369,21 @@ namespace GAS.Runtime.Generated
             }
         }
 
+        private static long MakeActiveMutationSourceAttributeSnapshotKey(int commandSequence, int modifierIndex)
+        {
+            return ((long)commandSequence << 32) ^ (uint)modifierIndex;
+        }
+
         [BurstCompile]
         public struct GEActiveEffectMutationGatherJob : IJob
         {
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             [ReadOnly] public BufferLookup<GEEffectCommandBuffer> CommandLookup;
+            [ReadOnly] public BufferLookup<AttributeValueBuffer> AttributeLookup;
+            [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public NativeList<GEEffectCommandBuffer> ActiveMutationCommands;
             public NativeParallelHashMap<Entity, ActiveMutationCommandRange> ActiveMutationOwnerRanges;
+            public NativeParallelHashMap<long, float> ActiveMutationSourceAttributeSnapshots;
             public Entity StreamEntity;
 
             public void Execute()
@@ -382,6 +401,7 @@ namespace GAS.Runtime.Generated
                 CollectActiveMutationCommands(commands, start);
                 var sortMoveCount = SortActiveMutationCommandsByOwner();
                 var ownerGroupCount = BuildActiveMutationOwnerRanges(out var maxOwnerRange);
+                BuildActiveMutationSourceAttributeSnapshots();
                 WriteActiveMutationStats(ref stream, sortMoveCount, ownerGroupCount, maxOwnerRange);
 
                 stream.ActiveMutationCommandCursor = commands.Length;
@@ -397,6 +417,69 @@ namespace GAS.Runtime.Generated
                     if (command.Kind == GEEffectCommandKind.ActiveMutation)
                         ActiveMutationCommands.Add(command);
                 }
+            }
+
+            private void BuildActiveMutationSourceAttributeSnapshots()
+            {
+                ActiveMutationSourceAttributeSnapshots.Clear();
+                if (!Catalog.IsCreated || ActiveMutationCommands.Length == 0)
+                    return;
+
+                ref var catalog = ref Catalog.Value;
+                for (var commandIndex = 0; commandIndex < ActiveMutationCommands.Length; commandIndex++)
+                {
+                    var command = ActiveMutationCommands[commandIndex];
+                    if (command.SourceAsc == Entity.Null
+                        || CompareEntity(command.SourceAsc, command.TargetAsc) == 0
+                        || !AttributeLookup.HasBuffer(command.SourceAsc)
+                        || !GASGeneratedDefinitionCatalogLookup.TryGetGameplayEffectIndex(ref catalog, command.GameplayEffectCode, out var gameplayEffectIndex))
+                    {
+                        continue;
+                    }
+
+                    ref readonly var gameplayEffect = ref GASGeneratedDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
+                    var durationFrame = ResolveDurationFrame(in command, in gameplayEffect);
+                    if (!HasPersistentRuntimeState(in gameplayEffect, durationFrame) || gameplayEffect.ModifierCount <= 0)
+                        continue;
+
+                    var sourceAttributes = AttributeLookup[command.SourceAsc];
+                    for (var i = 0; i < gameplayEffect.ModifierCount; i++)
+                    {
+                        var modifierIndex = gameplayEffect.ModifierStart + i;
+                        if ((uint)modifierIndex >= (uint)catalog.Modifiers.Length)
+                            continue;
+
+                        var modifier = catalog.Modifiers[modifierIndex];
+                        if (modifier.MagnitudeSource != EMagnitudeSource.SourceAttribute
+                            || !TryReadSnapshotAttributeValue(sourceAttributes, in modifier, out var sourceValue))
+                        {
+                            continue;
+                        }
+
+                        var snapshotKey = MakeActiveMutationSourceAttributeSnapshotKey(command.Sequence, modifierIndex);
+                        ActiveMutationSourceAttributeSnapshots.TryAdd(snapshotKey, sourceValue);
+                    }
+                }
+            }
+
+            private static bool TryReadSnapshotAttributeValue(
+                DynamicBuffer<AttributeValueBuffer> attributes,
+                in GASCatalogModifierDefinitionBlob modifier,
+                out float value)
+            {
+                value = 0f;
+                var attrSetCode = modifier.CaptureAttributeSetCode != 0
+                    ? modifier.CaptureAttributeSetCode
+                    : modifier.AttributeSetCode;
+                var attrCode = modifier.CaptureAttributeCode != 0
+                    ? modifier.CaptureAttributeCode
+                    : modifier.AttributeCode;
+                var attrIndex = attributes.IndexOfAttribute(attrSetCode, attrCode);
+                if (attrIndex < 0)
+                    return false;
+
+                value = attributes[attrIndex].CurrentValue;
+                return true;
             }
 
             private int BuildActiveMutationOwnerRanges(out int maxOwnerRange)
@@ -521,6 +604,7 @@ namespace GAS.Runtime.Generated
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             [ReadOnly] public NativeList<GEEffectCommandBuffer> ActiveMutationCommands;
             [ReadOnly] public NativeParallelHashMap<Entity, ActiveMutationCommandRange> ActiveMutationOwnerRanges;
+            [ReadOnly] public NativeParallelHashMap<long, float> ActiveMutationSourceAttributeSnapshots;
             public Entity StreamEntity;
             public Entity EventBusEntity;
             public int Frame;
@@ -837,7 +921,7 @@ namespace GAS.Runtime.Generated
                     if (attrIndex < 0)
                         continue;
 
-                    var context = BuildMagnitudeContext(ref ownerResources, in command, setByCallerValues, in modifier, stackCount);
+                    var context = BuildMagnitudeContext(ref ownerResources, in command, setByCallerValues, in modifier, modifierIndex, stackCount);
                     if (!GASGeneratedMagnitudeEvaluator.TryResolveMagnitude(in modifier, in context, out var magnitude))
                         continue;
 
@@ -867,6 +951,7 @@ namespace GAS.Runtime.Generated
                 in GEEffectCommandBuffer command,
                 DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
                 in GASCatalogModifierDefinitionBlob modifier,
+                int modifierIndex,
                 int stackCount)
             {
                 var context = new MagnitudeEvalContext
@@ -887,7 +972,7 @@ namespace GAS.Runtime.Generated
                 }
 
                 if (modifier.MagnitudeSource == EMagnitudeSource.SourceAttribute
-                    && TryReadAttributeValue(ref ownerResources, command.SourceAsc, in modifier, out var sourceValue))
+                    && TryReadSourceAttributeValue(ref ownerResources, in command, modifierIndex, in modifier, out var sourceValue))
                 {
                     context.HasSourceAttributeValue = 1;
                     context.SourceAttributeValue = sourceValue;
@@ -903,17 +988,24 @@ namespace GAS.Runtime.Generated
                 return context;
             }
 
-            private bool TryReadAttributeValue(
+            private bool TryReadSourceAttributeValue(
                 ref ActiveMutationOwnerResources ownerResources,
-                Entity owner,
+                in GEEffectCommandBuffer command,
+                int modifierIndex,
                 in GASCatalogModifierDefinitionBlob modifier,
                 out float value)
             {
-                if (CompareEntity(ownerResources.Owner, owner) == 0)
+                if (CompareEntity(ownerResources.Owner, command.SourceAsc) == 0)
                     return TryReadOwnerAttributeValue(ref ownerResources, in modifier, out value);
 
-                value = 0f;
-                return false;
+                if (command.SourceAsc == Entity.Null || !ActiveMutationSourceAttributeSnapshots.IsCreated)
+                {
+                    value = 0f;
+                    return false;
+                }
+
+                var snapshotKey = MakeActiveMutationSourceAttributeSnapshotKey(command.Sequence, modifierIndex);
+                return ActiveMutationSourceAttributeSnapshots.TryGetValue(snapshotKey, out value);
             }
 
             private bool TryReadOwnerAttributeValue(

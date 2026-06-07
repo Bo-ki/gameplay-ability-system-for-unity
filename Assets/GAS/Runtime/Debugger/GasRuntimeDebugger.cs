@@ -1857,6 +1857,80 @@ namespace GAS.Runtime
             em.SetComponentData(debuggerEntity, state);
         }
 
+        public static void RecordEffectCommandSpecStreamPressure(
+            EntityManager em,
+            Entity debuggerEntity,
+            int frame)
+        {
+            if (!TryGetWritableLog(em, debuggerEntity, out var state, out var log)
+                || state.CaptureBufferPressure == 0
+                || !EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity)
+                || streamEntity == Entity.Null
+                || !em.Exists(streamEntity))
+            {
+                return;
+            }
+
+            var streamPlan = GASRuntimeFrameStreamOwnerPlanner.CreateCurrent();
+            RecordFrameStreamBufferPressure<GEEffectCommandBuffer>(
+                em,
+                streamEntity,
+                "GEEffectCommandBuffer",
+                EGasRuntimeFrameStreamId.EffectCommand,
+                streamPlan,
+                frame,
+                log,
+                ref state);
+            RecordFrameStreamBufferPressure<GESetByCallerValueBuffer>(
+                em,
+                streamEntity,
+                "GESetByCallerValueBuffer",
+                EGasRuntimeFrameStreamId.EffectCommandSetByCaller,
+                streamPlan,
+                frame,
+                log,
+                ref state);
+            RecordFrameStreamBufferPressure<GEEffectSpecBuffer>(
+                em,
+                streamEntity,
+                "GEEffectSpecBuffer",
+                EGasRuntimeFrameStreamId.InstantEffectSpec,
+                streamPlan,
+                frame,
+                log,
+                ref state);
+            RecordFrameStreamBufferPressure<ActiveEffectMutationBuffer>(
+                em,
+                streamEntity,
+                "ActiveEffectMutationBuffer",
+                EGasRuntimeFrameStreamId.ActiveEffectMutation,
+                streamPlan,
+                frame,
+                log,
+                ref state);
+            RecordFrameStreamBufferPressure<AttributeModifierBuffer>(
+                em,
+                streamEntity,
+                "AttributeModifierBuffer",
+                EGasRuntimeFrameStreamId.AttributeDelta,
+                streamPlan,
+                frame,
+                log,
+                ref state);
+            RecordFrameStreamBufferPressure<GameplayEventBuffer>(
+                em,
+                streamEntity,
+                "GameplayEventBuffer",
+                EGasRuntimeFrameStreamId.TypedSimulationFact,
+                streamPlan,
+                frame,
+                log,
+                ref state);
+
+            ApplyRetention(log, ref state);
+            em.SetComponentData(debuggerEntity, state);
+        }
+
         private static void ApplyRuntimeCoreFrameBackboneCounters(
             ref GASRuntimeDebuggerComponent state,
             in GasRuntimeFrameBackboneDiagnosticCounters counters)
@@ -2599,6 +2673,57 @@ namespace GAS.Runtime
                 });
         }
 
+        private static void RecordFrameStreamBufferPressure<T>(
+            EntityManager em,
+            Entity entity,
+            string bufferName,
+            EGasRuntimeFrameStreamId streamId,
+            in GASRuntimeFrameStreamOwnerPlan streamPlan,
+            int frame,
+            DynamicBuffer<GASRuntimeDiagnosticEventBuffer> log,
+            ref GASRuntimeDebuggerComponent state)
+            where T : unmanaged, IBufferElementData
+        {
+            if (!em.HasBuffer<T>(entity))
+                return;
+
+            var buffer = em.GetBuffer<T>(entity);
+            if (buffer.Length == 0)
+                return;
+
+            var budget = 0;
+            if (streamPlan.TryFind(streamId, out var entry))
+                budget = entry.InternalBufferCapacity;
+
+            var overBudget = budget > 0 && buffer.Length > budget;
+            var ratio = budget > 0
+                ? (float)buffer.Length / budget
+                : buffer.Capacity > 0
+                    ? (float)buffer.Length / buffer.Capacity
+                    : 1f;
+
+            Append(
+                log,
+                ref state,
+                new GASRuntimeDiagnosticEventBuffer
+                {
+                    Frame = frame,
+                    Kind = EGasRuntimeDiagnosticKind.BufferPressure,
+                    Severity = overBudget
+                        ? EGasRuntimeDiagnosticSeverity.Warning
+                        : EGasRuntimeDiagnosticSeverity.Trace,
+                    Module = EGasRuntimeDiagnosticModule.Effect,
+                    GroupName = "EffectCommandSpecStream",
+                    BufferName = bufferName,
+                    Entity = entity,
+                    Count = buffer.Length,
+                    Capacity = buffer.Capacity,
+                    ValueA = budget,
+                    ValueB = overBudget ? 1 : 0,
+                    Ratio = ratio,
+                });
+        }
+
         private static void Append(
             DynamicBuffer<GASRuntimeDiagnosticEventBuffer> log,
             ref GASRuntimeDebuggerComponent state,
@@ -2916,6 +3041,14 @@ namespace GAS.Runtime
                     .Append(evt.Capacity)
                     .Append("|ratio=")
                     .Append(evt.Ratio.ToString("G9", System.Globalization.CultureInfo.InvariantCulture));
+            }
+            if (evt.Kind == EGasRuntimeDiagnosticKind.BufferPressure
+                && evt.ValueA > 0)
+            {
+                builder.Append("|budget=")
+                    .Append(evt.ValueA)
+                    .Append("|overBudget=")
+                    .Append(evt.ValueB);
             }
 
             builder.AppendLine();

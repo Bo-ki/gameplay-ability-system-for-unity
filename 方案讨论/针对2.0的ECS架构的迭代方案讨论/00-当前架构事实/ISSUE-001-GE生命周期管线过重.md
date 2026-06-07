@@ -54,5 +54,5 @@
 2. active effect tick/remove 不再依赖无解释的主线程 `Complete()`；mutation apply 保持 chunk-local 防回流，command carrier 和 SourceAttribute snapshot lane 有明确 store chain 或 deterministic merge 路径。
 3. singleton stream owner 有容量、ordering、merge 证据，或已迁出到更合适 carrier。
 4. legacy request fallback 被限制到低频边界，并有调用点清单。
-5. pending AttributeDelta owner-local apply 保持 ASC chunk-local 并禁止 stream fallback 回流；active/pre-tick 的 `BufferLookup` / `ComponentLookup` 写入被 owner-local store、target-grouped merge、snapshot lane 或可量化 profile 证明覆盖。
+5. pending AttributeDelta owner-local apply 保持 ASC chunk-local 并禁止 stream fallback 回流；active mutation SourceAttribute 通过 snapshot lane 防止跨 owner random lookup 回流；pre-tick / execution 的 `BufferLookup` / `ComponentLookup` 写入继续由 owner-local store、target-grouped merge、snapshot lane 或可量化 profile 证明覆盖。
 6. gameplay event 已走 typed fact，Core gameplay reaction 不再依赖 observation bus；剩余边界缓冲必须继续保持只读/投影职责。

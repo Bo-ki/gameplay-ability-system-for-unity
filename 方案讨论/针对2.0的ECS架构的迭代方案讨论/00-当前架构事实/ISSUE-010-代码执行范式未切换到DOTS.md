@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-旧“全是 `ToEntityArray` + foreach”的诊断已经过期。当前代码已经大量改为 `ISystem`、`state.GetEntityQuery(EntityQueryDesc)`、ECB system singleton、generated blob catalog 和 scheduled job。`AbilityCatalogCommit`、instant spec/reduce、active mutation/pre-tick/remove、ability lifecycle request aggregation、attribute owner marker aggregation、pending AttributeDelta owner-local apply 这些旧 generated/runtime 风险也已按 DOTS 规则推进，pending AttributeDelta 旧 stream fallback 已退出。当前执行范式问题降为 P1：主要风险转为 singleton stream owner、generated instant / execution delta record carrier、BoundaryProjection 仍承载的边界缓冲、static validation 规则扩展、active mutation singleton command carrier 和 SourceAttribute snapshot lane 缺口。
+旧“全是 `ToEntityArray` + foreach”的诊断已经过期。当前代码已经大量改为 `ISystem`、`state.GetEntityQuery(EntityQueryDesc)`、ECB system singleton、generated blob catalog 和 scheduled job。`AbilityCatalogCommit`、instant spec/reduce、active mutation/pre-tick/remove、ability lifecycle request aggregation、attribute owner marker aggregation、pending AttributeDelta owner-local apply 这些旧 generated/runtime 风险也已按 DOTS 规则推进，pending AttributeDelta 旧 stream fallback 已退出，active mutation 跨 owner `SourceAttribute` 已进入 read-only snapshot lane。当前执行范式问题降为 P1：主要风险转为 singleton stream owner、generated instant / execution delta record carrier、BoundaryProjection 仍承载的边界缓冲、static validation 规则扩展、active mutation singleton command carrier / snapshot capacity 证据，以及 pre-tick / execution SourceAttribute snapshot lane 缺口。
 
 ## 当前事实
 

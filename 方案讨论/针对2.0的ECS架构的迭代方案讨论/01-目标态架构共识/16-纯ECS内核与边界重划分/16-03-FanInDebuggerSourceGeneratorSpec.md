@@ -187,3 +187,116 @@ namespace GAS.Runtime.Generated
 ```
 
 解释：generated glue 只做 code -> index -> immutable definition -> frame-local record。它不拥有 `ISystem`、query、ECB、NativeContainer、`EntityManager` 或生命周期。
+
+### 6. Magnitude Source Snapshot Lane
+
+```csharp
+using Unity.Burst;
+using Unity.Burst.Intrinsics;
+using Unity.Collections;
+using Unity.Entities;
+
+namespace GAS.Runtime
+{
+    public enum GASMagnitudeSnapshotTiming : byte
+    {
+        Current = 0,
+        CapturedOnApply = 1,
+        CapturedOnTick = 2,
+        CapturedBeforeExecution = 3,
+    }
+
+    public struct GASMagnitudeSnapshotKey : System.IEquatable<GASMagnitudeSnapshotKey>
+    {
+        public Entity Owner;
+        public int AttributeSetCode;
+        public int AttributeCode;
+        public GASMagnitudeSnapshotTiming Timing;
+
+        public bool Equals(GASMagnitudeSnapshotKey other)
+        {
+            return Owner == other.Owner
+                && AttributeSetCode == other.AttributeSetCode
+                && AttributeCode == other.AttributeCode
+                && Timing == other.Timing;
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hash = Owner.GetHashCode();
+                hash = (hash * 397) ^ AttributeSetCode;
+                hash = (hash * 397) ^ AttributeCode;
+                hash = (hash * 397) ^ (int)Timing;
+                return hash;
+            }
+        }
+    }
+
+    public struct GASMagnitudeSourceSnapshotRecord
+    {
+        public GASMagnitudeSnapshotKey Key;
+        public Entity SourceAsc;
+        public Entity TargetAsc;
+        public int SourceCommandSequence;
+        public int SourceSpecSequence;
+        public float Value;
+    }
+
+    public struct GASMagnitudeInputRecord
+    {
+        public Entity SourceAsc;
+        public Entity TargetAsc;
+        public int AttributeSetCode;
+        public int AttributeCode;
+        public GASMagnitudeSnapshotTiming Timing;
+        public float FallbackValue;
+    }
+
+    [BurstCompile]
+    public struct GASMagnitudeSourceSnapshotResolveJob : IJobChunk
+    {
+        [ReadOnly] public EntityTypeHandle EntityType;
+        [ReadOnly] public BufferTypeHandle<AttributeValueBuffer> AttributeValuesType;
+        public NativeParallelHashMap<GASMagnitudeSnapshotKey, GASMagnitudeSourceSnapshotRecord>.ParallelWriter Snapshots;
+
+        public void Execute(
+            in ArchetypeChunk chunk,
+            int unfilteredChunkIndex,
+            bool useEnabledMask,
+            in v128 chunkEnabledMask)
+        {
+            var entities = chunk.GetNativeArray(EntityType);
+            var attributesAccessor = chunk.GetBufferAccessor(ref AttributeValuesType);
+
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                var owner = entities[i];
+                var attributes = attributesAccessor[i];
+                for (var attrIndex = 0; attrIndex < attributes.Length; attrIndex++)
+                {
+                    var attr = attributes[attrIndex];
+                    var key = new GASMagnitudeSnapshotKey
+                    {
+                        Owner = owner,
+                        AttributeSetCode = attr.AttrSetCode,
+                        AttributeCode = attr.Code,
+                        Timing = GASMagnitudeSnapshotTiming.CapturedBeforeExecution,
+                    };
+
+                    Snapshots.TryAdd(key, new GASMagnitudeSourceSnapshotRecord
+                    {
+                        Key = key,
+                        SourceAsc = owner,
+                        TargetAsc = owner,
+                        Value = attr.CurrentValue,
+                    });
+                }
+            }
+        }
+    }
+}
+```
+
+解释：SourceAttribute / TargetAttribute 不允许在 evaluator、generated lifecycle 或 active effect tick 中临时打开跨 owner lookup。目标态必须先由明确的 snapshot lane 采集需要的 source / target attribute 值，再由 magnitude evaluator 消费 snapshot record。`CurrentValue`、apply-time capture、tick-time capture 和 execution-before capture 是不同 timing，必须进入 key / counter / Debugger evidence；缺失 snapshot 只能走显式 fallback fact，不能静默读取 live owner。

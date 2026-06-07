@@ -113,24 +113,6 @@ namespace GAS.AutoChessDemo
             UnregisterBattleUnit(handle);
         }
 
-        public static AutoChessCombatAttributeSnapshot ReadCombatAttributes(
-            AutoChessGasBattleUnitHandle handle)
-        {
-            if (!TryResolveAscHandle(handle, out var ascHandle)
-                || !GASRuntimeShell.TryCaptureASCReadModel(ascHandle, out var readModel))
-            {
-                return default;
-            }
-
-            var health = readModel.GetAttributeValue(
-                AutoChessBattleRules.AttributeSetCombat,
-                AutoChessBattleRules.AttributeHealth);
-            var energy = readModel.GetAttributeValue(
-                AutoChessBattleRules.AttributeSetCombat,
-                AutoChessBattleRules.AttributeEnergy);
-            return new AutoChessCombatAttributeSnapshot(health, energy);
-        }
-
         public static void ResetRuntimeCache()
         {
             BattleUnitRegistry.Clear();

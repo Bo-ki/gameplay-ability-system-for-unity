@@ -17,6 +17,7 @@ namespace GAS.AutoChessDemo
             var backbone = result.RuntimeDiagnostics.FrameBackboneCounters;
             var factsHash = CalculateFactsHash(result.StructuredLogSnapshot);
             var summaryHash = CalculateSummaryHash(result, presentation.RuntimeMarkerCount, factsHash);
+            var streamCarrierPressure = CalculateStreamCarrierPressure(result.RuntimeDiagnostics);
             var reselectTriggerMask = 0;
             if (counters.RandomLookupBudget > 0)
                 reselectTriggerMask |= 1;
@@ -26,6 +27,8 @@ namespace GAS.AutoChessDemo
                 reselectTriggerMask |= 4;
             if (counters.ActiveMutationEstimatedRandomLookupCount > 0)
                 reselectTriggerMask |= 8;
+            if (streamCarrierPressure.WarningCount > 0)
+                reselectTriggerMask |= 16;
 
             return new AutoChessValidationEvidence(
                 result.Completed,
@@ -78,6 +81,9 @@ namespace GAS.AutoChessDemo
                 counters.PendingAttributeEstimatedRandomLookupCount,
                 counters.PendingAttributeFactPatchCount,
                 counters.PendingAttributeMigrationCarrierCount,
+                streamCarrierPressure.WarningCount,
+                streamCarrierPressure.PeakCount,
+                streamCarrierPressure.PeakCapacity,
                 result.ElapsedMilliseconds,
                 result.AverageTickMilliseconds,
                 factsHash,
@@ -186,10 +192,13 @@ namespace GAS.AutoChessDemo
                      + $"pendingAttributeSkippedDeltas={evidence.PendingAttributeSkippedDeltaCount}, "
                      + $"pendingAttributeTargetGroups={evidence.PendingAttributeTargetGroupCount}, "
                      + $"pendingAttributeMaxTargetRange={evidence.PendingAttributeMaxTargetRange}, "
-                     + $"pendingAttributeEstimatedRandomLookups={evidence.PendingAttributeEstimatedRandomLookupCount}, "
-                     + $"pendingAttributeFactPatches={evidence.PendingAttributeFactPatchCount}, "
-                     + $"pendingAttributeMigrationCarriers={evidence.PendingAttributeMigrationCarrierCount}, "
-                     + $"journalingCaptured={evidence.JournalingCaptured}, "
+                      + $"pendingAttributeEstimatedRandomLookups={evidence.PendingAttributeEstimatedRandomLookupCount}, "
+                      + $"pendingAttributeFactPatches={evidence.PendingAttributeFactPatchCount}, "
+                      + $"pendingAttributeMigrationCarriers={evidence.PendingAttributeMigrationCarrierCount}, "
+                      + $"streamCarrierPressureWarnings={evidence.StreamCarrierPressureWarningCount}, "
+                      + $"streamCarrierPeak={evidence.StreamCarrierPeakCount}, "
+                      + $"streamCarrierCapacity={evidence.StreamCarrierPeakCapacity}, "
+                      + $"journalingCaptured={evidence.JournalingCaptured}, "
                    + $"profilerCaptureState={evidence.ProfilerCaptureState}, "
                    + $"ecsRuntimeTickOnly={evidence.EcsRuntimeTickOnly}, "
                    + $"officialDiffSeparatePass={evidence.OfficialDiffSeparatePass}, "
@@ -237,10 +246,11 @@ namespace GAS.AutoChessDemo
                      + $"pendingAttributeSkippedDeltas={counters.PendingAttributeSkippedDeltaCount}, "
                      + $"pendingAttributeTargetGroups={counters.PendingAttributeTargetGroupCount}, "
                      + $"pendingAttributeMaxTargetRange={counters.PendingAttributeMaxTargetRange}, "
-                     + $"pendingAttributeEstimatedRandomLookups={counters.PendingAttributeEstimatedRandomLookupCount}, "
-                     + $"pendingAttributeFactPatches={counters.PendingAttributeFactPatchCount}, "
-                     + $"pendingAttributeMigrationCarriers={counters.PendingAttributeMigrationCarrierCount}, "
-                     + $"frameBackbonePhases={backbone.PhaseCount}, "
+                      + $"pendingAttributeEstimatedRandomLookups={counters.PendingAttributeEstimatedRandomLookupCount}, "
+                      + $"pendingAttributeFactPatches={counters.PendingAttributeFactPatchCount}, "
+                      + $"pendingAttributeMigrationCarriers={counters.PendingAttributeMigrationCarrierCount}, "
+                      + $"streamCarrierPressureWarnings={CalculateStreamCarrierPressure(result.RuntimeDiagnostics).WarningCount}, "
+                      + $"frameBackbonePhases={backbone.PhaseCount}, "
                    + $"streams={backbone.StreamCount}, "
                    + $"migrationCarriers={backbone.MigrationCarrierCount}, "
                    + $"profilerMarkerContracts={backbone.ProfilerMarkerCount}, "
@@ -294,11 +304,12 @@ namespace GAS.AutoChessDemo
                    + $"activeMutationMaxOwnerRange={result.RuntimeDiagnostics.CoreCounters.ActiveMutationMaxOwnerRange}, "
                    + $"activeMutationEstimatedRandomLookups={result.RuntimeDiagnostics.CoreCounters.ActiveMutationEstimatedRandomLookupCount}, "
                    + $"periodTickDamageFacts={result.EventCounts.PeriodTickDamageFacts}, "
-                   + $"pendingAttributeDeltas={result.RuntimeDiagnostics.CoreCounters.PendingAttributeDeltaCount}, "
-                   + $"pendingAttributeAppliedDeltas={result.RuntimeDiagnostics.CoreCounters.PendingAttributeAppliedDeltaCount}, "
-                   + $"pendingAttributeTargetGroups={result.RuntimeDiagnostics.CoreCounters.PendingAttributeTargetGroupCount}, "
-                   + $"pendingAttributeEstimatedRandomLookups={result.RuntimeDiagnostics.CoreCounters.PendingAttributeEstimatedRandomLookupCount}, "
-                   + $"structuralCommitAvgMs={result.RuntimeTiming.StructuralCommit.AverageMilliseconds:0.000}, "
+                    + $"pendingAttributeDeltas={result.RuntimeDiagnostics.CoreCounters.PendingAttributeDeltaCount}, "
+                    + $"pendingAttributeAppliedDeltas={result.RuntimeDiagnostics.CoreCounters.PendingAttributeAppliedDeltaCount}, "
+                    + $"pendingAttributeTargetGroups={result.RuntimeDiagnostics.CoreCounters.PendingAttributeTargetGroupCount}, "
+                    + $"pendingAttributeEstimatedRandomLookups={result.RuntimeDiagnostics.CoreCounters.PendingAttributeEstimatedRandomLookupCount}, "
+                    + $"streamCarrierPressureWarnings={CalculateStreamCarrierPressure(result.RuntimeDiagnostics).WarningCount}, "
+                    + $"structuralCommitAvgMs={result.RuntimeTiming.StructuralCommit.AverageMilliseconds:0.000}, "
                    + $"boundaryProjectionAvgMs={result.RuntimeTiming.BoundaryProjection.AverageMilliseconds:0.000}, "
                    + $"dependencyDrainAvgMs={result.RuntimeTiming.DependencyDrain.AverageMilliseconds:0.000}";
         }
@@ -312,7 +323,7 @@ namespace GAS.AutoChessDemo
                    + "unitDestroyOwner=ASCCommandPort.RequestDestroy, "
                    + "driverLifecycleOwner=AutoChessBattleDriverRuntimeStore, "
                    + "catalogOwner=AutoChessGasCatalogSession, "
-                   + "snapshotOwner=GASRuntimeShell.TryCaptureASCReadModel, "
+                   + "snapshotOwner=AutoChessGasBattleUnitSnapshotProjector.StructuredLog, "
                    + "observationOwner=AutoChessGasObservationGateway, "
                    + "runnerSyncOwner=GASDependencyDrain, "
                    + "reportProjectionOwner=AutoChessRuntimeUnitResolver.BoundaryReportKey, "
@@ -488,6 +499,40 @@ namespace GAS.AutoChessDemo
                 missingTargetReportKeyCount);
         }
 
+        private static StreamCarrierPressure CalculateStreamCarrierPressure(
+            in GasRuntimeDiagnosticSnapshot diagnostics)
+        {
+            var events = diagnostics.Events ?? Array.Empty<GASRuntimeDiagnosticEventBuffer>();
+            var warningCount = 0;
+            var peakCount = 0;
+            var peakCapacity = 0;
+
+            for (var i = 0; i < events.Length; i++)
+            {
+                var evt = events[i];
+                if (evt.Kind != EGasRuntimeDiagnosticKind.BufferPressure
+                    || evt.Module != EGasRuntimeDiagnosticModule.Effect
+                    || evt.GroupName.ToString() != "EffectCommandSpecStream")
+                {
+                    continue;
+                }
+
+                if (evt.Severity >= EGasRuntimeDiagnosticSeverity.Warning
+                    || evt.ValueB > 0)
+                {
+                    warningCount++;
+                }
+
+                if (evt.Count > peakCount)
+                {
+                    peakCount = evt.Count;
+                    peakCapacity = evt.Capacity;
+                }
+            }
+
+            return new StreamCarrierPressure(warningCount, peakCount, peakCapacity);
+        }
+
         private static uint CalculateSummaryHash(
             in AutoChessBattleResult result,
             int presentationMarkerCount,
@@ -554,6 +599,23 @@ namespace GAS.AutoChessDemo
                 TargetAscReferenceCount = targetAscReferenceCount;
                 TargetReportKeyCount = targetReportKeyCount;
                 MissingTargetReportKeyCount = missingTargetReportKeyCount;
+            }
+        }
+
+        private readonly struct StreamCarrierPressure
+        {
+            public readonly int WarningCount;
+            public readonly int PeakCount;
+            public readonly int PeakCapacity;
+
+            public StreamCarrierPressure(
+                int warningCount,
+                int peakCount,
+                int peakCapacity)
+            {
+                WarningCount = warningCount;
+                PeakCount = peakCount;
+                PeakCapacity = peakCapacity;
             }
         }
     }

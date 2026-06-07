@@ -34,49 +34,23 @@ namespace GAS.AutoChessDemo
         public bool TryResolveWinner(out AutoChessTeam winner)
         {
             var driverStats = GetDriverStats();
-            if (driverStats.LastOutcomeFrame >= 0)
-            {
-                var playerAliveFromDriver = driverStats.PlayerAliveCount > 0;
-                var enemyAliveFromDriver = driverStats.EnemyAliveCount > 0;
-                if (playerAliveFromDriver && enemyAliveFromDriver)
-                {
-                    winner = AutoChessTeam.None;
-                    return false;
-                }
-
-                winner = playerAliveFromDriver == enemyAliveFromDriver
-                    ? AutoChessTeam.Draw
-                    : playerAliveFromDriver
-                        ? AutoChessTeam.Player
-                        : AutoChessTeam.Enemy;
-                return true;
-            }
-
-            RefreshUnits();
-            var playerAlive = false;
-            var enemyAlive = false;
-
-            for (var i = 0; i < _units.Length; i++)
-            {
-                var unit = _units[i];
-                if (!unit.Alive)
-                    continue;
-
-                if (unit.Definition.Team == AutoChessTeam.Player)
-                    playerAlive = true;
-                else if (unit.Definition.Team == AutoChessTeam.Enemy)
-                    enemyAlive = true;
-            }
-
-            if (playerAlive && enemyAlive)
+            if (driverStats.LastOutcomeFrame < 0)
             {
                 winner = AutoChessTeam.None;
                 return false;
             }
 
-            winner = playerAlive == enemyAlive
+            var playerAliveFromDriver = driverStats.PlayerAliveCount > 0;
+            var enemyAliveFromDriver = driverStats.EnemyAliveCount > 0;
+            if (playerAliveFromDriver && enemyAliveFromDriver)
+            {
+                winner = AutoChessTeam.None;
+                return false;
+            }
+
+            winner = playerAliveFromDriver == enemyAliveFromDriver
                 ? AutoChessTeam.Draw
-                : playerAlive
+                : playerAliveFromDriver
                     ? AutoChessTeam.Player
                     : AutoChessTeam.Enemy;
             return true;
@@ -87,14 +61,15 @@ namespace GAS.AutoChessDemo
             return AutoChessGasCoreBridge.GetBattleDriverStats(DriverHandle);
         }
 
-        public AutoChessBattleUnitResult[] CreateUnitResults()
+        public AutoChessBattleUnitResult[] CreateUnitResults(
+            in GasStructuredLogExportSnapshot structuredLog)
         {
-            RefreshUnits();
-
+            var snapshots = CreateCombatAttributeSnapshots(structuredLog);
             var units = new AutoChessBattleUnitResult[_units.Length];
             for (var i = 0; i < _units.Length; i++)
             {
                 var unit = _units[i];
+                var snapshot = i < snapshots.Length ? snapshots[i] : default;
                 units[i] = new AutoChessBattleUnitResult(
                     unit.Definition.Id,
                     unit.Definition.DisplayName,
@@ -102,9 +77,9 @@ namespace GAS.AutoChessDemo
                     unit.Definition.ArchetypeName,
                     unit.Definition.Team,
                     unit.Definition.Slot,
-                    unit.Health,
-                    unit.Energy,
-                    unit.Alive);
+                    snapshot.Health,
+                    snapshot.Energy,
+                    snapshot.Alive);
             }
 
             return units;
@@ -132,54 +107,44 @@ namespace GAS.AutoChessDemo
             }
         }
 
-        private void RefreshUnits()
+        private AutoChessCombatAttributeSnapshot[] CreateCombatAttributeSnapshots(
+            in GasStructuredLogExportSnapshot structuredLog)
         {
+            var handles = new AutoChessGasBattleUnitHandle[_units.Length];
+            var definitions = new AutoChessUnitDefinition[_units.Length];
             for (var i = 0; i < _units.Length; i++)
-                _units[i] = _units[i].Refresh();
+            {
+                handles[i] = _units[i].GasHandle;
+                definitions[i] = _units[i].Definition;
+            }
+
+            return AutoChessGasBattleUnitSnapshotProjector.Project(
+                structuredLog,
+                handles,
+                definitions);
         }
 
         private readonly struct AutoChessBattleUnitRuntime
         {
             public readonly AutoChessUnitDefinition Definition;
             public readonly AutoChessGasBattleUnitHandle GasHandle;
-            public readonly float Health;
-            public readonly float Energy;
-            public readonly bool Alive;
 
             public AutoChessBattleUnitRuntime(AutoChessUnitDefinition definition)
-                : this(definition, default, definition.Health, definition.Energy, false)
+                : this(definition, default)
             {
             }
 
             private AutoChessBattleUnitRuntime(
                 AutoChessUnitDefinition definition,
-                AutoChessGasBattleUnitHandle gasHandle,
-                float health,
-                float energy,
-                bool alive)
+                AutoChessGasBattleUnitHandle gasHandle)
             {
                 Definition = definition;
                 GasHandle = gasHandle;
-                Health = health;
-                Energy = energy;
-                Alive = alive;
             }
 
             public AutoChessBattleUnitRuntime WithGasHandle(AutoChessGasBattleUnitHandle gasHandle)
             {
-                var alive = gasHandle.IsValid;
-                return new AutoChessBattleUnitRuntime(Definition, gasHandle, Health, Energy, alive);
-            }
-
-            public AutoChessBattleUnitRuntime Refresh()
-            {
-                var attributes = AutoChessGasCoreBridge.ReadCombatAttributes(GasHandle);
-                return new AutoChessBattleUnitRuntime(
-                    Definition,
-                    GasHandle,
-                    attributes.Health,
-                    attributes.Energy,
-                    attributes.Alive);
+                return new AutoChessBattleUnitRuntime(Definition, gasHandle);
             }
         }
     }

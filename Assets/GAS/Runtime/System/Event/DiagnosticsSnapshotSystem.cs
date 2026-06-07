@@ -39,6 +39,10 @@ namespace GAS.Runtime
                 eventBusEntity,
                 eventLogSinkEntity,
                 _queries);
+            GasRuntimeDebugger.RecordEffectCommandSpecStreamPressure(
+                em,
+                debuggerEntity,
+                currentFrame);
             GasRuntimeDebugger.RecordCurrentRuntimeCoreFrameBackboneEvidence(
                 em,
                 debuggerEntity,

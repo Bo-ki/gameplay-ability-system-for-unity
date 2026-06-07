@@ -78,6 +78,8 @@ $abilityRuntimeActionsPath = Join-Path $runtimePath "Ability\AbilityRuntimeActio
 $executionCalculationRuntimeActionsPath = Join-Path $runtimePath "Effect\ExecutionCalculationRuntimeActions.cs"
 $effectMagnitudeResolverPath = Join-Path $runtimePath "System\Effect\EffectMagnitudeResolver.cs"
 $effectRuntimeUtilityPath = Join-Path $runtimePath "System\Effect\EffectRuntimeUtility.cs"
+$executionCalculationSystemPath = Join-Path $runtimePath "System\Effect\GEExecutionCalculationSystem.cs"
+$diagnosticsSnapshotSystemPath = Join-Path $runtimePath "System\Event\DiagnosticsSnapshotSystem.cs"
 $scheduleContractPath = Join-Path $runtimePath "System\SystemGroup\GASSystemScheduleContract.cs"
 $streamOwnerContractPath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeStreamOwnerContract.cs"
 $globalTimerPath = Join-Path $runtimePath "System\Core\GASGlobalTimerSystem.cs"
@@ -87,6 +89,12 @@ $debuggerPath = Join-Path $runtimePath "Debugger\GasRuntimeDebugger.cs"
 $generatedActiveEffectPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeActiveEffect.gen.cs"
 $codeGenTemplatePath = Join-Path $ProjectPath "Assets\GAS\Editor\CodeGen\Phases\GasGlueCodeGenPhases.cs"
 $autoChessDamagePath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Ecs\AutoChessExecuteDamageCalculationSystem.cs"
+$autoChessSessionPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\AutoChessBattleSession.cs"
+$autoChessResultBuilderPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\AutoChessBattleResultBuilder.cs"
+$autoChessCoreBridgePath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasCoreBridge.cs"
+$autoChessLifecyclePath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasBattleEntityLifecycle.cs"
+$autoChessUnitSnapshotProjectorPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasBattleUnitSnapshotProjector.cs"
+$autoChessValidationReportPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Validation\AutoChessBattleValidationReport.cs"
 
 Assert-FileContains `
     -Path $deltaApplyPath `
@@ -209,6 +217,26 @@ Assert-FileNotContains `
     -Pattern "BeginGameplayEventWriter\(em\)" `
     -Message "EffectRuntimeUtility must resolve stream owner explicitly before writing facts."
 Assert-FileContains `
+    -Path $executionCalculationSystemPath `
+    -Pattern "FactWriter\s*=\s*factStream\.AsWriter\(\)" `
+    -Message "GEExecutionCalculationSystem must collect execution output facts through a NativeStream writer."
+Assert-FileContains `
+    -Path $executionCalculationSystemPath `
+    -Pattern "GEExecutionCalculationFactMergeJob\s*:\s*IJob" `
+    -Message "GEExecutionCalculationSystem must merge execution output facts through a deterministic merge job."
+Assert-FileContains `
+    -Path $executionCalculationSystemPath `
+    -Pattern "PendingFacts\.Sort\(new PendingExecutionOutputFactRecordComparer\(\)\)" `
+    -Message "GEExecutionCalculationSystem execution output facts must be stable-sorted before entering the typed fact buffer."
+Assert-FileContains `
+    -Path $executionCalculationSystemPath `
+    -Pattern "EffectCommandSpecStreamPhaseUtility\.Allocate\(ref stream\.NextFactSequence\)" `
+    -Message "GEExecutionCalculationSystem merge job must allocate deterministic fact sequences."
+Assert-FileNotContains `
+    -Path $executionCalculationSystemPath `
+    -Pattern "EndGASStructuralCommitECBSystem|FactEcb|EntityCommandBuffer|AppendToBuffer" `
+    -Message "GEExecutionCalculationSystem must not write execution output facts through structural ECB append to the singleton stream."
+Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "UpdateAfter\(typeof\(GASAttributeModifierDeltaApplySystem\)\)" `
     -Message "GameplayFactProjectionSystem must run after core pending attribute delta apply."
@@ -234,16 +262,40 @@ Assert-FileContains `
     -Message "Generated active effect runtime must apply active mutations through ASC chunk-local IJobChunk."
 Assert-FileContains `
     -Path $generatedActiveEffectPath `
+    -Pattern "BuildActiveMutationSourceAttributeSnapshots" `
+    -Message "Generated active mutation must build a frame-local SourceAttribute snapshot before chunk-local apply."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "GEActiveEffectMutationGatherJob\s*:\s*IJob[\s\S]*?\[ReadOnly\] public BufferLookup<AttributeValueBuffer> AttributeLookup" `
+    -Message "Generated active mutation SourceAttribute capture must happen in the read-only gather/snapshot lane."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]*?\[ReadOnly\] public NativeParallelHashMap<long, float> ActiveMutationSourceAttributeSnapshots" `
+    -Message "Generated active mutation chunk apply must consume SourceAttribute snapshots instead of live cross-owner attribute lookup."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
     -Pattern "ActiveMutationCommands\.Length == 0" `
     -Message "Generated active mutation chunk apply must skip ASC chunk scans when there are no active mutation commands."
 Assert-FileContains `
     -Path $codeGenTemplatePath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk" `
     -Message "CodeGen template must keep active mutation apply on the chunk-local path."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "BuildActiveMutationSourceAttributeSnapshots" `
+    -Message "CodeGen template must keep active mutation SourceAttribute capture in the frame-local snapshot lane."
 Assert-FileNotContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationApplyJob\s*:\s*IJob" `
     -Message "Generated active effect runtime must not regress to serial active mutation owner lookup apply."
+Assert-FileNotContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "TryReadAttributeValue\(ref ownerResources,\s*command\.SourceAsc" `
+    -Message "Generated active mutation apply must not read cross-owner SourceAttribute through owner resources directly."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "TryReadAttributeValue\(ref ownerResources,\s*command\.SourceAsc" `
+    -Message "CodeGen template must not regenerate direct SourceAttribute owner-resource reads."
 Assert-FileNotContains `
     -Path $generatedActiveEffectPath `
     -Pattern "ActiveMutationOwnerResourceLookupCount \+= ownerGroupCount" `
@@ -261,6 +313,22 @@ Assert-FileContains `
     -Pattern "RuntimeCorePendingAttributeAppliedDeltaCount \+= pendingAttributeAppliedDeltaCount" `
     -Message "GasRuntimeDebugger snapshot counters must accumulate pending attribute frame-local evidence."
 Assert-FileContains `
+    -Path $diagnosticsSnapshotSystemPath `
+    -Pattern "RecordEffectCommandSpecStreamPressure" `
+    -Message "DiagnosticsSnapshotSystem must sample proof-only stream carrier pressure."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "EffectCommandSpecStream" `
+    -Message "GasRuntimeDebugger must tag EffectCommandSpecStream carrier pressure as structured evidence."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "EGasRuntimeDiagnosticModule\.Effect" `
+    -Message "GasRuntimeDebugger must classify stream carrier pressure under the Effect module, not EventBus."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "streamCarrierPressureWarnings" `
+    -Message "AutoChess validation evidence must export stream carrier pressure warnings for R3 scale gates."
+Assert-FileContains `
     -Path $autoChessDamagePath `
     -Pattern "PendingOwnerLookup\.SetComponentEnabled\(targetAsc,\s*true\)" `
     -Message "AutoChess execution calculation must publish pending attribute deltas to the target ASC owner-local lane."
@@ -268,10 +336,37 @@ Assert-FileNotContains `
     -Path $autoChessDamagePath `
     -Pattern "DeltaLookup\[StreamEntity\]" `
     -Message "AutoChess execution calculation must not write pending attribute deltas to the stream migration carrier."
+Assert-FileContains `
+    -Path $autoChessUnitSnapshotProjectorPath `
+    -Pattern "GasStructuredLogExportSnapshot" `
+    -Message "AutoChess unit result snapshots must be projected from structured boundary evidence."
+Assert-FileNotContains `
+    -Path $autoChessSessionPath `
+    -Pattern "ReadCombatAttributes|RefreshUnits|TryCaptureASCReadModel" `
+    -Message "AutoChess session must not refresh unit results through live ASC read model."
+Assert-FileContains `
+    -Path $autoChessResultBuilderPath `
+    -Pattern "session\.CreateUnitResults\(coreObservation\.StructuredLog\)" `
+    -Message "AutoChess result builder must pass structured boundary evidence into unit result snapshots."
+Assert-FileNotContains `
+    -Path $autoChessCoreBridgePath `
+    -Pattern "ReadCombatAttributes" `
+    -Message "AutoChess GasCore bridge must not expose live combat attribute read APIs."
+Assert-FileNotContains `
+    -Path $autoChessLifecyclePath `
+    -Pattern "ReadCombatAttributes|TryCaptureASCReadModel" `
+    -Message "AutoChess lifecycle must not capture ASCReadModel for business unit snapshots."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "snapshotOwner=AutoChessGasBattleUnitSnapshotProjector\.StructuredLog" `
+    -Message "AutoChess validation evidence must report structured-log snapshot ownership."
 
 Write-Host "GAS Runtime Core boundary check passed: no AutoChess references under Assets/GAS/Runtime."
 Write-Host "GAS Runtime Core pending attribute delta contract passed: owner-local apply, stream migration fallback retired, and debugger counters are wired."
 Write-Host "GAS Runtime Core global timer contract passed: registered/cache owner lookup is wired and singleton fallback queries are blocked."
 Write-Host "GAS Runtime Core active effect global index contract passed: registered/cache owner lookup is wired and singleton fallback queries are blocked."
 Write-Host "GAS Runtime Core stream writer contract passed: runtime helpers resolve stream owners explicitly before writing commands or facts."
+Write-Host "GAS Runtime Core execution output fact contract passed: NativeStream collection and deterministic merge replaced structural ECB singleton append."
 Write-Host "GAS Runtime Core active mutation contract passed: generated gather + ASC chunk-local apply path is wired."
+Write-Host "GAS Runtime Core active mutation SourceAttribute contract passed: read-only snapshot lane feeds chunk-local apply."
+Write-Host "AutoChess R1/R6 snapshot contract passed: unit result snapshots are projected from structured boundary evidence, not live ASCReadModel."

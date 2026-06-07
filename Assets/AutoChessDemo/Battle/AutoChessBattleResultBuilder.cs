@@ -22,7 +22,7 @@ namespace GAS.AutoChessDemo
             AutoChessBattleRuntimeTiming runtimeTiming,
             GasRuntimeOfficialToolDiffSnapshot officialToolDiff)
         {
-            var units = session.CreateUnitResults();
+            var units = session.CreateUnitResults(coreObservation.StructuredLog);
             var reportFacts = session.CreateReportFacts(coreObservation.StructuredLog);
             var battleReport = AutoChessBattleReportBuilder.Build(
                 units,

@@ -37,10 +37,5 @@ namespace GAS.AutoChessDemo
             AutoChessGasBattleEntityLifecycle.DestroyBattleUnit(handle);
         }
 
-        public static AutoChessCombatAttributeSnapshot ReadCombatAttributes(
-            AutoChessGasBattleUnitHandle handle)
-        {
-            return AutoChessGasBattleEntityLifecycle.ReadCombatAttributes(handle);
-        }
     }
 }

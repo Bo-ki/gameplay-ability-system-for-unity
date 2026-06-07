@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 
 namespace GAS.Runtime
 {
@@ -32,12 +34,15 @@ namespace GAS.Runtime
             if (effectChunkCount <= 0)
                 return;
 
+            var em = state.EntityManager;
             var streamEntity = SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var resolvedStream)
                 ? resolvedStream
                 : Entity.Null;
-            var factEcb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
-                .CreateCommandBuffer(state.WorldUnmanaged)
-                .AsParallelWriter();
+            var currentFrame = GASRuntimeFrameContext.ResolveCurrentFrame(em);
+            var factStream = new NativeStream(effectChunkCount, Allocator.TempJob);
+            var pendingFacts = new NativeList<PendingExecutionOutputFactRecord>(
+                effectChunkCount > 0 ? effectChunkCount * 16 : 1,
+                Allocator.TempJob);
             var calculationJob = new GEExecutionCalculationJob
             {
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
@@ -51,12 +56,37 @@ namespace GAS.Runtime
                 CaptureLookup = SystemAPI.GetBufferLookup<GEAttributeCaptureValueBuffer>(isReadOnly: true),
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true),
                 StreamEntity = streamEntity,
-                FactEcb = factEcb,
+                FactWriter = factStream.AsWriter(),
+                Frame = currentFrame,
             };
-            state.Dependency = calculationJob.ScheduleParallel(_definitionQuery, state.Dependency);
+            var calculationHandle = calculationJob.ScheduleParallel(_definitionQuery, state.Dependency);
+            state.Dependency = new GEExecutionCalculationFactMergeJob
+            {
+                FactReader = factStream.AsReader(),
+                PendingFacts = pendingFacts,
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
+                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
+                StreamEntity = streamEntity,
+            }.Schedule(calculationHandle);
+            state.Dependency = factStream.Dispose(state.Dependency);
+            state.Dependency = pendingFacts.Dispose(state.Dependency);
         }
 
         public void OnDestroy(ref SystemState state) { }
+
+        private struct PendingExecutionOutputFactRecord
+        {
+            public int Order;
+            public int Frame;
+            public Entity SourceAsc;
+            public Entity TargetAsc;
+            public Entity SourceAbility;
+            public Entity SourceEffect;
+            public int ContextId;
+            public int ParentContextId;
+            public int EventCode;
+            public float Value;
+        }
 
         [BurstCompile]
         private struct GEExecutionCalculationJob : IJobChunk
@@ -71,7 +101,8 @@ namespace GAS.Runtime
             [ReadOnly] public BufferLookup<GEAttributeCaptureValueBuffer> CaptureLookup;
             [ReadOnly] public BufferLookup<AttributeValueBuffer> AttributeLookup;
             public Entity StreamEntity;
-            public EntityCommandBuffer.ParallelWriter FactEcb;
+            public NativeStream.Writer FactWriter;
+            public int Frame;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -79,6 +110,8 @@ namespace GAS.Runtime
                 bool useEnabledMask,
                 in v128 chunkEnabledMask)
             {
+                FactWriter.BeginForEachIndex(unfilteredChunkIndex);
+
                 var effects = chunk.GetNativeArray(EntityTypeHandle);
                 var contexts = chunk.GetNativeArray(ref ContextTypeHandle);
                 var specs = chunk.GetNativeArray(ref SpecTypeHandle);
@@ -88,17 +121,17 @@ namespace GAS.Runtime
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
                     EvaluateEffect(
-                        unfilteredChunkIndex,
                         effects[entityIndex],
                         contexts[entityIndex],
                         specs[entityIndex],
                         definitions[entityIndex],
                         outputs[entityIndex]);
                 }
+
+                FactWriter.EndForEachIndex();
             }
 
             private void EvaluateEffect(
-                int sortKey,
                 Entity effect,
                 in GEContextComponent context,
                 in GEEffectSpecComponent spec,
@@ -144,7 +177,6 @@ namespace GAS.Runtime
                     if (ExecutionCalculationRuntimeActions.WriteOutputValue(outputs, definition.OutputKey, value))
                     {
                         AppendOutputUpdatedFact(
-                            sortKey,
                             effect,
                             in context,
                             definition.CalculationCode != 0 ? definition.CalculationCode : definition.OutputKey,
@@ -315,7 +347,6 @@ namespace GAS.Runtime
             }
 
             private void AppendOutputUpdatedFact(
-                int sortKey,
                 Entity effect,
                 in GEContextComponent context,
                 int eventCode,
@@ -324,17 +355,15 @@ namespace GAS.Runtime
                 if (StreamEntity == Entity.Null)
                     return;
 
-                FactEcb.AppendToBuffer(sortKey, StreamEntity, new GameplayEventBuffer
+                FactWriter.Write(new PendingExecutionOutputFactRecord
                 {
-                    EventType = EGameplayEventType.ExecutionCalculationOutputUpdated,
-                    Domain = EGameplayFactDomain.ExecutionCalculation,
-                    Category = EGameplayFactCategory.StateChange,
-                    Severity = EGameplayFactSeverity.Info,
+                    Frame = Frame,
                     SourceAsc = context.SourceAsc,
                     TargetAsc = context.TargetAsc,
                     SourceAbility = context.SourceAbility,
                     SourceEffect = effect,
                     ContextId = context.ContextId,
+                    ParentContextId = context.ParentContextId,
                     EventCode = eventCode,
                     Value = value,
                 });
@@ -348,6 +377,91 @@ namespace GAS.Runtime
             {
                 var resolvedCoefficient = coefficient == 0f ? 1f : coefficient;
                 return ((value + preAdd) * resolvedCoefficient) + postAdd;
+            }
+        }
+
+        [BurstCompile]
+        private struct GEExecutionCalculationFactMergeJob : IJob
+        {
+            public NativeStream.Reader FactReader;
+            public NativeList<PendingExecutionOutputFactRecord> PendingFacts;
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public Entity StreamEntity;
+
+            public void Execute()
+            {
+                if (StreamEntity == Entity.Null
+                    || !StreamLookup.HasComponent(StreamEntity)
+                    || !FactLookup.HasBuffer(StreamEntity))
+                {
+                    return;
+                }
+
+                PendingFacts.Clear();
+                ReadFactRecords(FactReader, PendingFacts);
+                if (PendingFacts.Length == 0)
+                    return;
+
+                PendingFacts.Sort(new PendingExecutionOutputFactRecordComparer());
+                var stream = StreamLookup[StreamEntity];
+                var facts = FactLookup[StreamEntity];
+                for (var i = 0; i < PendingFacts.Length; i++)
+                {
+                    var record = PendingFacts[i];
+                    facts.Add(new GameplayEventBuffer
+                    {
+                        Sequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextFactSequence),
+                        Frame = record.Frame,
+                        EventType = EGameplayEventType.ExecutionCalculationOutputUpdated,
+                        Domain = EGameplayFactDomain.ExecutionCalculation,
+                        Category = EGameplayFactCategory.StateChange,
+                        Severity = EGameplayFactSeverity.Info,
+                        SourceAsc = record.SourceAsc,
+                        TargetAsc = record.TargetAsc,
+                        SourceAbility = record.SourceAbility,
+                        SourceEffect = record.SourceEffect,
+                        ContextId = record.ContextId,
+                        ParentContextId = record.ParentContextId,
+                        EventCode = record.EventCode,
+                        Value = record.Value,
+                    });
+                }
+
+                StreamLookup[StreamEntity] = stream;
+            }
+        }
+
+        private static void ReadFactRecords(
+            NativeStream.Reader factReader,
+            NativeList<PendingExecutionOutputFactRecord> pendingFacts)
+        {
+            for (var streamIndex = 0; streamIndex < factReader.ForEachCount; streamIndex++)
+            {
+                var recordCount = factReader.BeginForEachIndex(streamIndex);
+                for (var i = 0; i < recordCount; i++)
+                {
+                    var record = factReader.Read<PendingExecutionOutputFactRecord>();
+                    record.Order = pendingFacts.Length;
+                    pendingFacts.Add(record);
+                }
+                factReader.EndForEachIndex();
+            }
+        }
+
+        private struct PendingExecutionOutputFactRecordComparer : IComparer<PendingExecutionOutputFactRecord>
+        {
+            public int Compare(PendingExecutionOutputFactRecord x, PendingExecutionOutputFactRecord y)
+            {
+                var targetCompare = x.TargetAsc.Index.CompareTo(y.TargetAsc.Index);
+                if (targetCompare != 0)
+                    return targetCompare;
+
+                targetCompare = x.TargetAsc.Version.CompareTo(y.TargetAsc.Version);
+                if (targetCompare != 0)
+                    return targetCompare;
+
+                return x.Order.CompareTo(y.Order);
             }
         }
     }

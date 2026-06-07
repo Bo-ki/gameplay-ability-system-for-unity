@@ -415,6 +415,9 @@ namespace GAS.AutoChessDemo
         public readonly int PendingAttributeEstimatedRandomLookupCount;
         public readonly int PendingAttributeFactPatchCount;
         public readonly int PendingAttributeMigrationCarrierCount;
+        public readonly int StreamCarrierPressureWarningCount;
+        public readonly int StreamCarrierPeakCount;
+        public readonly int StreamCarrierPeakCapacity;
         public readonly double TotalElapsedMilliseconds;
         public readonly double AverageTickMilliseconds;
         public readonly uint FactsHash;
@@ -480,6 +483,9 @@ namespace GAS.AutoChessDemo
             int pendingAttributeEstimatedRandomLookupCount,
             int pendingAttributeFactPatchCount,
             int pendingAttributeMigrationCarrierCount,
+            int streamCarrierPressureWarningCount,
+            int streamCarrierPeakCount,
+            int streamCarrierPeakCapacity,
             double totalElapsedMilliseconds,
             double averageTickMilliseconds,
             uint factsHash,
@@ -544,6 +550,9 @@ namespace GAS.AutoChessDemo
             PendingAttributeEstimatedRandomLookupCount = pendingAttributeEstimatedRandomLookupCount;
             PendingAttributeFactPatchCount = pendingAttributeFactPatchCount;
             PendingAttributeMigrationCarrierCount = pendingAttributeMigrationCarrierCount;
+            StreamCarrierPressureWarningCount = streamCarrierPressureWarningCount;
+            StreamCarrierPeakCount = streamCarrierPeakCount;
+            StreamCarrierPeakCapacity = streamCarrierPeakCapacity;
             TotalElapsedMilliseconds = totalElapsedMilliseconds;
             AverageTickMilliseconds = averageTickMilliseconds;
             FactsHash = factsHash;
