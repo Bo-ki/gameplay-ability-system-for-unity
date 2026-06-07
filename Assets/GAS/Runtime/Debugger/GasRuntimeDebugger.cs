@@ -1647,6 +1647,7 @@ namespace GAS.Runtime
                 out var magnitudeSourceSourceAttributeLookupCount,
                 out var magnitudeSourceTargetAttributeLookupCount,
                 out var magnitudeSourceExecutionInputLookupCount);
+            typedFactCount = gameplayEventCount;
             var currentFrame = ResolveCurrentFrame(em);
             ReadActiveEffectGlobalIndexCounters(
                 em,
@@ -2435,6 +2436,7 @@ namespace GAS.Runtime
             RecordBufferPressure<AttributeChangeEventBuffer>(em, eventBusEntity, "AttributeChangeEventBuffer", frame, log, ref state);
             RecordBufferPressure<CueRequestBuffer>(em, eventBusEntity, "CueRequestBuffer", frame, log, ref state);
             RecordBufferPressure<TagChangeEventBuffer>(em, eventBusEntity, "TagChangeEventBuffer", frame, log, ref state);
+            RecordBufferPressure<BoundaryObservationFactBuffer>(em, eventBusEntity, "BoundaryObservationFactBuffer", frame, log, ref state);
             ApplyRetention(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
@@ -2472,16 +2474,6 @@ namespace GAS.Runtime
                 frame,
                 log,
                 ref state);
-            RecordFrameStreamBufferPressure<GameplayEventBuffer>(
-                em,
-                streamEntity,
-                "GameplayEventBuffer",
-                EGasRuntimeFrameStreamId.TypedSimulationFact,
-                streamPlan,
-                frame,
-                log,
-                ref state);
-
             ApplyRetention(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
@@ -2813,6 +2805,23 @@ namespace GAS.Runtime
             attributeChangeCount = GetBufferLength<AttributeChangeEventBuffer>(em, eventBusEntity);
             cueRequestCount = GetBufferLength<CueRequestBuffer>(em, eventBusEntity);
             tagChangeCount = GetBufferLength<TagChangeEventBuffer>(em, eventBusEntity);
+            gameplayEventCount = GetBufferLength<BoundaryObservationFactBuffer>(em, eventBusEntity);
+            if (!em.HasBuffer<BoundaryObservationFactBuffer>(eventBusEntity))
+                return;
+
+            var facts = em.GetBuffer<BoundaryObservationFactBuffer>(eventBusEntity);
+            for (var i = 0; i < facts.Length; i++)
+            {
+                var fact = facts[i].Fact;
+                if (fact.Domain == EGameplayFactDomain.Damage)
+                    damageEventCount++;
+                if (fact.EventType == EGameplayEventType.GameplayEffectRequested)
+                    gameplayRequestFactCount++;
+                if (fact.EventType == EGameplayEventType.GameplayEffectInstanced)
+                    gameplayEffectInstancedCount++;
+                if (fact.EventType == EGameplayEventType.GameplayEffectRemoved)
+                    gameplayEffectRemovedCount++;
+            }
         }
 
         private static void ReadEffectCommandSpecStreamCounters(
@@ -2893,7 +2902,7 @@ namespace GAS.Runtime
             effectCommandCount = GetBufferLength<GEEffectCommandBuffer>(em, streamEntity);
             instantSpecCount = stream.OwnerLocalSpecCount;
             attributeDeltaCount = GetBufferLength<AttributeModifierBuffer>(em, streamEntity);
-            typedFactCount = GetBufferLength<GameplayEventBuffer>(em, streamEntity);
+            typedFactCount = 0;
             activeMutationCommandCount = stream.ActiveMutationCommandCount;
             activeMutationOwnerGroupCount = stream.ActiveMutationOwnerGroupCount;
             activeMutationMaxOwnerRange = stream.ActiveMutationMaxOwnerRange;
@@ -2924,19 +2933,20 @@ namespace GAS.Runtime
             magnitudeSourceExecutionInputLookupCount = stream.MagnitudeSourceExecutionInputLookupCount;
         }
 
-        private static int CountTypedDamageFacts(EntityManager em)
+        private static int CountTypedDamageFacts(EntityManager em, Entity eventBusEntity)
         {
-            if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity)
-                || !em.HasBuffer<GameplayEventBuffer>(streamEntity))
+            if (eventBusEntity == Entity.Null
+                || !em.Exists(eventBusEntity)
+                || !em.HasBuffer<BoundaryObservationFactBuffer>(eventBusEntity))
             {
                 return 0;
             }
 
-            var facts = em.GetBuffer<GameplayEventBuffer>(streamEntity);
+            var facts = em.GetBuffer<BoundaryObservationFactBuffer>(eventBusEntity);
             var count = 0;
             for (var i = 0; i < facts.Length; i++)
             {
-                if (facts[i].Domain == EGameplayFactDomain.Damage)
+                if (facts[i].Fact.Domain == EGameplayFactDomain.Damage)
                     count++;
             }
 

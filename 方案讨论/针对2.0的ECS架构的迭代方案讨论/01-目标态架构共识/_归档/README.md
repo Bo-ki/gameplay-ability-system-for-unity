@@ -18,6 +18,7 @@
 | [2026-06-08-OverflowInstantNextFrameOwnerLocalCommand](2026-06-08-OverflowInstantNextFrameOwnerLocalCommand.md) | active effect overflow instant producer 首跳 singleton 退出与 next-frame owner-local 晋升闭环已完成归档 | `../../00-当前架构事实/P0-致命缺陷.md` |
 | [2026-06-08-InstantSpecBuildOwnerLocalConsumer](2026-06-08-InstantSpecBuildOwnerLocalConsumer.md) | instant spec build 直接消费 ASC owner-local command/payload，旧 flush 中间层退场 | `../../00-当前架构事实/P0-致命缺陷.md` |
 | [2026-06-08-InstantSpecCarrierOwnerLocal](2026-06-08-InstantSpecCarrierOwnerLocal.md) | instant spec carrier、generated AttributeReduce 和 cue fact projection 退出 singleton spec stream | `../../00-当前架构事实/P0-致命缺陷.md` |
+| [2026-06-08-BoundaryObservationFactCarrier](2026-06-08-BoundaryObservationFactCarrier.md) | BoundaryObservationFact carrier 接管表现、回放、typed event bridge 和 Debugger 读面 | `../03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact/03E-04-GameplayFactSpec.md` |
 | [2026-06-08-AbilityLifecycleFactOwnerLocal](2026-06-08-AbilityLifecycleFactOwnerLocal.md) | generated ability lifecycle fact 退出 singleton fact direct append，改写 ASC owner-local fact lane | `../../00-当前架构事实/P0-致命缺陷.md` |
 | [2026-06-07-10B-AutoChess完整业务案例设计Spec拆分前](2026-06-07-10B-AutoChess完整业务案例设计Spec拆分前.md) | AutoChess 完整业务案例根 Spec 已拆到 `../10B-AutoChess完整业务案例/` | `../10B-AutoChess完整业务案例设计Spec.md` |
 | [2026-06-07-10B-03-羁绊与Runtime基础设施Spec拆分前](2026-06-07-10B-03-羁绊与Runtime基础设施Spec拆分前.md) | 10B-03 同时承载羁绊业务机制和 Runtime 基础设施，已拆为 10B-03A / 10B-03B | `../10B-AutoChess完整业务案例/10B-03-羁绊与Runtime基础设施Spec.md` |

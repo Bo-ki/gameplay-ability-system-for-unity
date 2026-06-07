@@ -14,6 +14,25 @@ namespace GAS.Runtime
         public int NextContextId;
     }
 
+    public enum EBoundaryObservationFactSource : byte
+    {
+        LegacyStream = 0,
+        OwnerLocalCore = 1,
+    }
+
+    /// <summary>
+    /// Boundary-only observation facts exported from core carriers for presentation, replay and diagnostics.
+    /// Gameplay systems must not read this buffer as simulation input.
+    /// </summary>
+    [InternalBufferCapacity(0)]
+    public struct BoundaryObservationFactBuffer : IBufferElementData
+    {
+        public GameplayEventBuffer Fact;
+        public Entity Owner;
+        public int LocalIndex;
+        public EBoundaryObservationFactSource Source;
+    }
+
     /// <summary>
     /// Tag 变更事件。入队到事件总线 Singleton 的 TagChangeEventBuffer Buffer。
     /// </summary>

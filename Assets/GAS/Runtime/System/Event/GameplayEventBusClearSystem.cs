@@ -32,6 +32,8 @@ namespace GAS.Runtime
                 em.GetBuffer<AbilityLifecycleRequestBuffer>(eventBus).Clear();
             if (em.HasBuffer<AttributeOwnerMarkerRequestBuffer>(eventBus))
                 em.GetBuffer<AttributeOwnerMarkerRequestBuffer>(eventBus).Clear();
+            if (em.HasBuffer<BoundaryObservationFactBuffer>(eventBus))
+                em.GetBuffer<BoundaryObservationFactBuffer>(eventBus).Clear();
             if (em.HasBuffer<AttributeChangeEventBuffer>(eventBus))
                 em.GetBuffer<AttributeChangeEventBuffer>(eventBus).Clear();
             if (em.HasBuffer<CueRequestBuffer>(eventBus))

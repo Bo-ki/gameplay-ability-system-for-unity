@@ -188,9 +188,9 @@ namespace GAS.Runtime
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
                 typeof(GASCoreSimulationSystemGroup)),
             new(
-                typeof(GameplayOwnerLocalFactFlushSystem),
-                EGasRuntimeCoreFramePhase.TypedFactProjection,
-                typeof(GASCoreSimulationSystemGroup)),
+                typeof(GameplayBoundaryFactExportSystem),
+                EGasRuntimeCoreFramePhase.ObservationProjection,
+                typeof(GASBoundaryProjectionSystemGroup)),
             new(
                 typeof(GameplayFactBoundaryProjectionSystem),
                 EGasRuntimeCoreFramePhase.ObservationProjection,
@@ -246,7 +246,6 @@ namespace GAS.Runtime
             typeof(AbilityLifecycleRequestSystem),
             typeof(AbilityStateCleanupSystem),
             typeof(GameplayFactProjectionSystem),
-            typeof(GameplayOwnerLocalFactFlushSystem),
         };
 
         private static readonly string[] GeneratedCoreSimulationSystemTypeNames =
@@ -267,6 +266,7 @@ namespace GAS.Runtime
 
         private static readonly Type[] BoundaryProjectionSystemTypes =
         {
+            typeof(GameplayBoundaryFactExportSystem),
             typeof(GameplayFactBoundaryProjectionSystem),
             typeof(PresentationOutboxProjectionSystem),
             typeof(ReplayLogSystem),
@@ -278,7 +278,7 @@ namespace GAS.Runtime
         {
             typeof(GEEffectCommandSpecStreamFramePrepareSystem),
             typeof(GameplayFactProjectionSystem),
-            typeof(GameplayOwnerLocalFactFlushSystem),
+            typeof(GameplayBoundaryFactExportSystem),
             typeof(GameplayFactBoundaryProjectionSystem),
         };
 

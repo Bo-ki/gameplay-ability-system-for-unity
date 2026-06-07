@@ -74,6 +74,10 @@ $ascArchetypePath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeEntityA
 $ascFactoryPath = Join-Path $runtimePath "AbilitySystem\ASCEntityFactory.cs"
 $streamPath = Join-Path $runtimePath "Effect\Component\Dynamic\GEEffectCommandSpecStream.cs"
 $streamPhasePath = Join-Path $runtimePath "System\Effect\GEEffectCommandSpecStreamPhases.cs"
+$eventBusComponentPath = Join-Path $runtimePath "Event\GameplayEventBusComponent.cs"
+$eventBusClearPath = Join-Path $runtimePath "System\Event\GameplayEventBusClearSystem.cs"
+$presentationOutboxProjectionPath = Join-Path $runtimePath "System\Event\PresentationOutboxProjectionSystem.cs"
+$replayLogPath = Join-Path $runtimePath "System\Event\ReplayLogSystem.cs"
 $gameplayEffectRequestWriterPath = Join-Path $runtimePath "System\Effect\GameplayEffectRequestWriter.cs"
 $abilityRuntimeActionsPath = Join-Path $runtimePath "Ability\AbilityRuntimeActions.cs"
 $executionCalculationRuntimeActionsPath = Join-Path $runtimePath "Effect\ExecutionCalculationRuntimeActions.cs"
@@ -185,28 +189,56 @@ Assert-FileContains `
     -Message "Runtime Core must clear owner-local gameplay facts during FramePrepare."
 Assert-FileContains `
     -Path $streamPhasePath `
-    -Pattern "GameplayOwnerLocalFactFlushSystem" `
-    -Message "Runtime Core must flush owner-local gameplay facts through a dedicated projection system."
+    -Pattern "GameplayBoundaryFactExportSystem" `
+    -Message "Boundary Projection must export owner-local gameplay facts through a dedicated observation system."
 Assert-FileContains `
     -Path $streamPhasePath `
-    -Pattern "OwnerLocalGameplayFactRecordComparer" `
-    -Message "Owner-local gameplay fact flush must define deterministic owner/sequence ordering."
+    -Pattern "BoundaryObservationFactRecordComparer" `
+    -Message "Boundary fact export must define deterministic owner/frame/sequence ordering."
+Assert-FileContains `
+    -Path $eventBusComponentPath `
+    -Pattern "BoundaryObservationFactBuffer" `
+    -Message "Runtime Boundary must define a dedicated boundary observation fact buffer."
+Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<BoundaryObservationFactBuffer>\(\)" `
+    -Message "Gameplay event bus archetype must own BoundaryObservationFactBuffer."
+Assert-FileContains `
+    -Path $eventBusClearPath `
+    -Pattern "GetBuffer<BoundaryObservationFactBuffer>\(eventBus\)\.Clear\(\)" `
+    -Message "Boundary observation fact buffer must be cleared during FramePrepare."
 Assert-FileContains `
     -Path $streamPhasePath `
-    -Pattern "UpdateBefore\(typeof\(GameplayOwnerLocalFactFlushSystem\)\)[\s\S]*GameplayFactProjectionSystem" `
-    -Message "Owner-local cue fact projection must run before owner-local fact flush."
+    -Pattern "BoundaryObservationLookup\s*=\s*SystemAPI\.GetBufferLookup<BoundaryObservationFactBuffer>\(isReadOnly:\s*false\)" `
+    -Message "Boundary fact export must write BoundaryObservationFactBuffer."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "LegacyFactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>\(isReadOnly:\s*true\)" `
+    -Message "Boundary fact export must treat legacy stream facts as read-only migration input."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "BoundaryObservationLookup\s*=\s*SystemAPI\.GetBufferLookup<BoundaryObservationFactBuffer>\(isReadOnly:\s*true\)" `
+    -Message "GameplayFactBoundaryProjectionSystem must consume boundary observation facts, not stream facts."
+Assert-FileNotContains `
+    -Path $presentationOutboxProjectionPath `
+    -Pattern "GetBuffer<GameplayEventBuffer>\(streamEntity\)|TryGetSingletonEntity<GEEffectCommandStreamComponent>" `
+    -Message "Presentation outbox projection must not read typed facts directly from the command stream."
+Assert-FileNotContains `
+    -Path $replayLogPath `
+    -Pattern "GetBuffer<GameplayEventBuffer>\(streamEntity\)|TryGetSingletonEntity<GEEffectCommandStreamComponent>" `
+    -Message "Replay log projection must not read typed facts directly from the command stream."
 Assert-FileContains `
     -Path $scheduleContractPath `
     -Pattern "GameplayOwnerLocalFactFramePrepareSystem" `
     -Message "Owner-local gameplay fact frame prepare system must be registered in the runtime schedule."
 Assert-FileContains `
     -Path $scheduleContractPath `
-    -Pattern "GameplayOwnerLocalFactFlushSystem" `
-    -Message "Owner-local gameplay fact flush system must be registered in the runtime schedule."
+    -Pattern "GameplayBoundaryFactExportSystem" `
+    -Message "Boundary fact export system must be registered in the runtime schedule."
 Assert-FileContains `
     -Path $scheduleContractPath `
-    -Pattern "GameplayFactProjectionSystem[\s\S]*GameplayOwnerLocalFactFlushSystem" `
-    -Message "GameplayFactProjectionSystem must precede owner-local gameplay fact flush in the runtime schedule contract."
+    -Pattern "GameplayBoundaryFactExportSystem[\s\S]*GameplayFactBoundaryProjectionSystem" `
+    -Message "Boundary fact export must precede GameplayFactBoundaryProjectionSystem in the runtime schedule contract."
 Assert-FileContains `
     -Path $debuggerPath `
     -Pattern "RuntimeCoreOwnerLocalFactCount" `
@@ -218,7 +250,7 @@ Assert-FileContains `
 Assert-FileContains `
     -Path $debuggerPath `
     -Pattern "ownerLocalFactFlushes" `
-    -Message "Runtime Debugger text summaries must expose owner-local fact flush counters."
+    -Message "Runtime Debugger text summaries must expose owner-local fact export counters."
 Assert-FileContains `
     -Path $autoChessValidationReportPath `
     -Pattern "ownerLocalFactFlushes" `
@@ -1700,7 +1732,7 @@ Write-Host "GAS Runtime Core execution output fact contract passed: NativeStream
 Write-Host "GAS Runtime Core active mutation contract passed: owner-local command collect + ASC chunk-local apply path is wired."
 Write-Host "GAS Runtime Core active mutation set-by-caller contract passed: owner-local payload projection and frame-local apply inputs are wired."
 Write-Host "GAS Runtime Core active mutation SourceAttribute contract passed: read-only snapshot lane feeds chunk-local apply."
-Write-Host "GAS Runtime Core owner-local fact lane contract passed: Attribute facts use ASC-local carrier and debugger-visible flush counters."
+Write-Host "GAS Runtime Core owner-local fact lane contract passed: Attribute facts use ASC-local carrier and debugger-visible export counters."
 Write-Host "GAS Runtime Core AttributeDelta owner-local fact projection contract passed: generated instant and execution output no longer write stream deltas."
 Write-Host "AutoChess R1/R6 snapshot contract passed: unit result snapshots are projected from structured boundary evidence, not live ASCReadModel."
 Write-Host "AutoChess R1/R6 runtime access capability contract passed: raw GASRuntimeShell ECS seams are centralized behind AutoChessGasRuntimeAccess."

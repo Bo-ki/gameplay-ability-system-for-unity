@@ -132,7 +132,7 @@ namespace GAS.Runtime
         InstantEffectSpecBuffer = 38,
         AttributeDeltaBuffer = 39,
         ActiveEffectMutationBuffer = 40,
-        TypedSimulationFactBuffer = 41,
+        BoundaryObservationFactBuffer = 41,
         ActiveEffectStore = 42,
         ActiveEffectSlotBuffer = 43,
         EffectCleanup = 44,
@@ -459,14 +459,13 @@ namespace GAS.Runtime
                     {
                         GASRuntimeLayoutComponentSlot.EffectCommandStreamOwner,
                         GASRuntimeLayoutComponentSlot.EffectCommandBuffer,
-                        GASRuntimeLayoutComponentSlot.TypedSimulationFactBuffer,
                     },
                     new[]
                     {
                         GASRuntimeLayoutComponentSlot.EffectCommandSetByCallerBuffer,
                     },
                     typeof(GameplayFactProjectionSystem),
-                    typeof(GameplayFactBoundaryProjectionSystem)),
+                    typeof(GameplayBoundaryFactExportSystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.ActiveEffectStore,
                     GASRuntimeLayoutDomain.GameplayEffect,
@@ -623,14 +622,14 @@ namespace GAS.Runtime
                     new[]
                     {
                         GASRuntimeLayoutComponentSlot.GameplayEventBus,
+                        GASRuntimeLayoutComponentSlot.BoundaryObservationFactBuffer,
                         GASRuntimeLayoutComponentSlot.PresentationOutbox,
                         GASRuntimeLayoutComponentSlot.DebugReplayLog,
                     },
-                    new[]
-                    {
-                        GASRuntimeLayoutComponentSlot.TypedSimulationFactBuffer,
-                    },
+                    Array.Empty<GASRuntimeLayoutComponentSlot>(),
                     typeof(GameplayEventBusClearSystem),
+                    typeof(GameplayBoundaryFactExportSystem),
+                    typeof(GameplayFactBoundaryProjectionSystem),
                     typeof(PresentationOutboxProjectionSystem),
                     typeof(ReplayLogSystem)),
             });

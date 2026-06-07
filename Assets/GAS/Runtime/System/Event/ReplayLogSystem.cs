@@ -39,12 +39,10 @@ namespace GAS.Runtime
 
             var log = em.GetBuffer<ReplayLogEventBuffer>(logSink);
 
-            if (SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var streamEntity)
-                && em.Exists(streamEntity)
-                && em.HasBuffer<GameplayEventBuffer>(streamEntity))
+            if (em.HasBuffer<BoundaryObservationFactBuffer>(eventBus))
             {
-                ProjectTypedSimulationFacts(
-                    em.GetBuffer<GameplayEventBuffer>(streamEntity),
+                ProjectBoundaryObservationFacts(
+                    em.GetBuffer<BoundaryObservationFactBuffer>(eventBus),
                     log,
                     ref sinkState,
                     currentFrame);
@@ -63,17 +61,17 @@ namespace GAS.Runtime
             sinkState.ProcessedTypedFactCount = 0;
         }
 
-        private static void ProjectTypedSimulationFacts(
-            DynamicBuffer<GameplayEventBuffer> facts,
+        private static void ProjectBoundaryObservationFacts(
+            DynamicBuffer<BoundaryObservationFactBuffer> observations,
             DynamicBuffer<ReplayLogEventBuffer> log,
             ref GameplayEventLogSinkComponent sinkState,
             int fallbackFrame)
         {
-            for (var i = 0; i < facts.Length; i++)
+            var start = ClampCursor(sinkState.ProcessedTypedFactCount, observations.Length);
+            for (var i = start; i < observations.Length; i++)
             {
-                var fact = facts[i];
-                if (fact.Sequence <= 0
-                    || fact.Sequence <= sinkState.LastProjectedTypedFactSequence)
+                var fact = observations[i].Fact;
+                if (fact.Sequence <= 0)
                 {
                     continue;
                 }
@@ -86,7 +84,14 @@ namespace GAS.Runtime
                     sinkState.LastProjectedTypedFactSequence = fact.Sequence;
             }
 
-            sinkState.ProcessedTypedFactCount = facts.Length;
+            sinkState.ProcessedTypedFactCount = observations.Length;
+        }
+
+        private static int ClampCursor(int cursor, int length)
+        {
+            if (cursor < 0)
+                return 0;
+            return cursor > length ? length : cursor;
         }
 
         private static bool TryCreateTypedReplayEvent(

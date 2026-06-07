@@ -8,7 +8,8 @@ namespace GAS.Runtime
     /// This system does not consume or mutate gameplay state.
     /// </summary>
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(GASBoundaryProjectionSystemGroup), OrderFirst = true)]
+    [UpdateInGroup(typeof(GASBoundaryProjectionSystemGroup))]
+    [UpdateAfter(typeof(GameplayFactBoundaryProjectionSystem))]
     public partial struct PresentationOutboxProjectionSystem : ISystem
     {
         public void OnCreate(ref SystemState state)
@@ -38,14 +39,12 @@ namespace GAS.Runtime
             var projectionState = em.GetComponentData<PresentationOutboxProjectionStateComponent>(eventBus);
             ResetProcessedCountsIfFrameChanged(ref projectionState, currentFrame);
 
-            if (SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var streamEntity)
-                && em.Exists(streamEntity)
-                && em.HasBuffer<GameplayEventBuffer>(streamEntity))
+            if (em.HasBuffer<BoundaryObservationFactBuffer>(eventBus))
             {
-                ProjectTypedSimulationFacts(
+                ProjectBoundaryObservationFacts(
                     em,
                     eventBus,
-                    em.GetBuffer<GameplayEventBuffer>(streamEntity),
+                    em.GetBuffer<BoundaryObservationFactBuffer>(eventBus),
                     ref projectionState,
                     currentFrame);
             }
@@ -64,18 +63,18 @@ namespace GAS.Runtime
             projectionState.ProcessedTypedFactCount = 0;
         }
 
-        private static void ProjectTypedSimulationFacts(
+        private static void ProjectBoundaryObservationFacts(
             EntityManager em,
             Entity eventBus,
-            DynamicBuffer<GameplayEventBuffer> facts,
+            DynamicBuffer<BoundaryObservationFactBuffer> observations,
             ref PresentationOutboxProjectionStateComponent projectionState,
             int fallbackFrame)
         {
-            for (var i = 0; i < facts.Length; i++)
+            var start = ClampCursor(projectionState.ProcessedTypedFactCount, observations.Length);
+            for (var i = start; i < observations.Length; i++)
             {
-                var fact = facts[i];
-                if (fact.Sequence <= 0
-                    || fact.Sequence <= projectionState.LastProjectedTypedFactSequence)
+                var fact = observations[i].Fact;
+                if (fact.Sequence <= 0)
                 {
                     continue;
                 }
@@ -88,7 +87,14 @@ namespace GAS.Runtime
                     projectionState.LastProjectedTypedFactSequence = fact.Sequence;
             }
 
-            projectionState.ProcessedTypedFactCount = facts.Length;
+            projectionState.ProcessedTypedFactCount = observations.Length;
+        }
+
+        private static int ClampCursor(int cursor, int length)
+        {
+            if (cursor < 0)
+                return 0;
+            return cursor > length ? length : cursor;
         }
 
         private static bool TryCreateTypedPresentationEvent(

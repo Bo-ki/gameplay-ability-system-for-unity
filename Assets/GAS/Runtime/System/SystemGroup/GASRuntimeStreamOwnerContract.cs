@@ -34,6 +34,7 @@ namespace GAS.Runtime
         PerThreadNativeStream = 4,
         EcbAppendToBuffer = 5,
         SampledDebuggerBuffer = 6,
+        BoundaryObservationBuffer = 7,
     }
 
     public enum EGasRuntimeFrameStreamScaleStatus
@@ -405,14 +406,14 @@ namespace GAS.Runtime
                     internalBufferCapacity: 128),
                 Entry(
                     EGasRuntimeFrameStreamId.TypedSimulationFact,
-                    GASRuntimeLayoutComponentSlot.TypedSimulationFactBuffer,
+                    GASRuntimeLayoutComponentSlot.BoundaryObservationFactBuffer,
                     EGasRuntimeCoreFramePhase.FramePrepare,
-                    EGasRuntimeCoreFramePhase.TypedFactProjection,
+                    EGasRuntimeCoreFramePhase.ObservationProjection,
                     EGasRuntimeCoreFramePhase.ObservationProjection,
                     EGasRuntimeCoreFramePhase.TypedFactProjection,
                     EGasRuntimeFrameStreamAuthority.GameplayDeterministic,
-                    EGasRuntimeFrameStreamCarrier.SingletonDynamicBuffer,
-                    EGasRuntimeFrameStreamCarrier.PerThreadNativeStream,
+                    EGasRuntimeFrameStreamCarrier.OwnerLocalDynamicBuffer,
+                    EGasRuntimeFrameStreamCarrier.BoundaryObservationBuffer,
                     EGasRuntimeFrameStreamMergePolicy.StableSortByTargetThenSequence,
                     EGasRuntimeFrameStreamSortKey.TargetAscThenFactSequence,
                     internalBufferCapacity: 128),

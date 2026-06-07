@@ -303,7 +303,6 @@ namespace GAS.Runtime
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GEExecutionCalculationOutputModifierSystem))]
     [UpdateAfter(typeof(GASAttributeModifierDeltaApplySystem))]
-    [UpdateBefore(typeof(GameplayOwnerLocalFactFlushSystem))]
     [BurstCompile]
     public partial struct GameplayFactProjectionSystem : ISystem
     {
@@ -434,11 +433,10 @@ namespace GAS.Runtime
     }
 
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
-    [UpdateAfter(typeof(GASAttributeModifierDeltaApplySystem))]
-    [UpdateAfter(typeof(GameplayFactProjectionSystem))]
+    [UpdateInGroup(typeof(GASBoundaryProjectionSystemGroup), OrderFirst = true)]
+    [UpdateBefore(typeof(GameplayFactBoundaryProjectionSystem))]
     [BurstCompile]
-    public partial struct GameplayOwnerLocalFactFlushSystem : ISystem
+    public partial struct GameplayBoundaryFactExportSystem : ISystem
     {
         private EntityQuery _ownerFactQuery;
 
@@ -454,40 +452,45 @@ namespace GAS.Runtime
                 },
             });
             state.RequireForUpdate<GEEffectCommandStreamComponent>();
+            state.RequireForUpdate<GameplayEventBusComponent>();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             if (!SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var streamEntity)
-                || !EffectCommandSpecStream.HasRequiredBuffers(state.EntityManager, streamEntity))
+                || !EffectCommandSpecStream.HasRequiredBuffers(state.EntityManager, streamEntity)
+                || !SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var eventBusEntity))
             {
                 return;
             }
 
-            var records = new NativeList<OwnerLocalGameplayFactRecord>(1, Allocator.TempJob);
+            var records = new NativeList<BoundaryObservationFactRecord>(1, Allocator.TempJob);
             var collectHandle = new CollectOwnerLocalGameplayFactsJob
             {
                 EntityType = SystemAPI.GetEntityTypeHandle(),
                 OwnerFactType = SystemAPI.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>(isReadOnly: true),
                 Records = records,
             }.Schedule(_ownerFactQuery, state.Dependency);
-            var flushHandle = new FlushOwnerLocalGameplayFactsJob
+            var exportHandle = new ExportBoundaryObservationFactsJob
             {
                 StreamEntity = streamEntity,
+                EventBusEntity = eventBusEntity,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                StreamFactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
+                LegacyFactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: true),
+                BoundaryObservationLookup = SystemAPI.GetBufferLookup<BoundaryObservationFactBuffer>(isReadOnly: false),
                 Records = records,
             }.Schedule(collectHandle);
 
-            state.Dependency = records.Dispose(flushHandle);
+            state.Dependency = records.Dispose(exportHandle);
         }
 
-        private struct OwnerLocalGameplayFactRecord
+        private struct BoundaryObservationFactRecord
         {
             public Entity Owner;
             public int LocalIndex;
             public GameplayEventBuffer Fact;
+            public EBoundaryObservationFactSource Source;
         }
 
         [BurstCompile]
@@ -495,7 +498,7 @@ namespace GAS.Runtime
         {
             [ReadOnly] public EntityTypeHandle EntityType;
             [ReadOnly] public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactType;
-            public NativeList<OwnerLocalGameplayFactRecord> Records;
+            public NativeList<BoundaryObservationFactRecord> Records;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -512,11 +515,12 @@ namespace GAS.Runtime
                     var facts = ownerFacts[entityIndex];
                     for (var factIndex = 0; factIndex < facts.Length; factIndex++)
                     {
-                        Records.Add(new OwnerLocalGameplayFactRecord
+                        Records.Add(new BoundaryObservationFactRecord
                         {
                             Owner = owner,
                             LocalIndex = factIndex,
                             Fact = facts[factIndex].Fact,
+                            Source = EBoundaryObservationFactSource.OwnerLocalCore,
                         });
                     }
                 }
@@ -524,29 +528,56 @@ namespace GAS.Runtime
         }
 
         [BurstCompile]
-        private struct FlushOwnerLocalGameplayFactsJob : IJob
+        private struct ExportBoundaryObservationFactsJob : IJob
         {
             public Entity StreamEntity;
+            public Entity EventBusEntity;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<GameplayEventBuffer> StreamFactLookup;
-            public NativeList<OwnerLocalGameplayFactRecord> Records;
+            [ReadOnly] public BufferLookup<GameplayEventBuffer> LegacyFactLookup;
+            public BufferLookup<BoundaryObservationFactBuffer> BoundaryObservationLookup;
+            public NativeList<BoundaryObservationFactRecord> Records;
 
             public void Execute()
             {
-                if (Records.Length == 0
-                    || StreamEntity == Entity.Null
+                if (StreamEntity == Entity.Null
+                    || EventBusEntity == Entity.Null
                     || !StreamLookup.HasComponent(StreamEntity)
-                    || !StreamFactLookup.HasBuffer(StreamEntity))
+                    || !BoundaryObservationLookup.HasBuffer(EventBusEntity))
                 {
                     return;
                 }
 
-                Records.Sort(new OwnerLocalGameplayFactRecordComparer());
                 var stream = StreamLookup[StreamEntity];
-                var streamFacts = StreamFactLookup[StreamEntity];
+                if (LegacyFactLookup.HasBuffer(StreamEntity))
+                {
+                    var legacyFacts = LegacyFactLookup[StreamEntity];
+                    var legacyStart = ClampCursor(stream.EventBridgeFactCursor, legacyFacts.Length);
+                    for (var i = legacyStart; i < legacyFacts.Length; i++)
+                    {
+                        var fact = legacyFacts[i];
+                        Records.Add(new BoundaryObservationFactRecord
+                        {
+                            Owner = ResolveFactOwner(in fact),
+                            LocalIndex = i,
+                            Fact = fact,
+                            Source = EBoundaryObservationFactSource.LegacyStream,
+                        });
+                    }
+
+                    stream.EventBridgeFactCursor = legacyFacts.Length;
+                }
+
+                if (Records.Length == 0)
+                {
+                    StreamLookup[StreamEntity] = stream;
+                    return;
+                }
+
+                Records.Sort(new BoundaryObservationFactRecordComparer());
+                var boundaryFacts = BoundaryObservationLookup[EventBusEntity];
                 var ownerGroupCount = 0;
                 var maxOwnerRange = 0;
-                var flushCount = 0;
+                var ownerLocalFlushCount = 0;
                 var groupStart = 0;
                 while (groupStart < Records.Length)
                 {
@@ -558,34 +589,50 @@ namespace GAS.Runtime
                         groupEnd++;
                     }
 
-                    ownerGroupCount++;
-                    var ownerRange = groupEnd - groupStart;
-                    if (ownerRange > maxOwnerRange)
-                        maxOwnerRange = ownerRange;
+                    var ownerLocalRange = 0;
 
                     for (var i = groupStart; i < groupEnd; i++)
                     {
-                        streamFacts.Add(Records[i].Fact);
-                        flushCount++;
+                        boundaryFacts.Add(new BoundaryObservationFactBuffer
+                        {
+                            Fact = Records[i].Fact,
+                            Owner = Records[i].Owner,
+                            LocalIndex = Records[i].LocalIndex,
+                            Source = Records[i].Source,
+                        });
+                        if (Records[i].Source == EBoundaryObservationFactSource.OwnerLocalCore)
+                            ownerLocalRange++;
+                    }
+
+                    if (ownerLocalRange > 0)
+                    {
+                        ownerGroupCount++;
+                        ownerLocalFlushCount += ownerLocalRange;
+                        if (ownerLocalRange > maxOwnerRange)
+                            maxOwnerRange = ownerLocalRange;
                     }
 
                     groupStart = groupEnd;
                 }
 
-                stream.OwnerLocalFactCount += Records.Length;
+                stream.OwnerLocalFactCount += ownerLocalFlushCount;
                 stream.OwnerLocalFactOwnerGroupCount += ownerGroupCount;
                 if (maxOwnerRange > stream.OwnerLocalFactMaxOwnerRange)
                     stream.OwnerLocalFactMaxOwnerRange = maxOwnerRange;
-                stream.OwnerLocalFactFlushCount += flushCount;
+                stream.OwnerLocalFactFlushCount += ownerLocalFlushCount;
                 StreamLookup[StreamEntity] = stream;
             }
         }
 
-        private struct OwnerLocalGameplayFactRecordComparer : IComparer<OwnerLocalGameplayFactRecord>
+        private struct BoundaryObservationFactRecordComparer : IComparer<BoundaryObservationFactRecord>
         {
-            public int Compare(OwnerLocalGameplayFactRecord x, OwnerLocalGameplayFactRecord y)
+            public int Compare(BoundaryObservationFactRecord x, BoundaryObservationFactRecord y)
             {
                 var result = CompareEntity(x.Owner, y.Owner);
+                if (result != 0)
+                    return result;
+
+                result = x.Fact.Frame.CompareTo(y.Fact.Frame);
                 if (result != 0)
                     return result;
 
@@ -593,8 +640,21 @@ namespace GAS.Runtime
                 if (result != 0)
                     return result;
 
-                return x.LocalIndex.CompareTo(y.LocalIndex);
+                result = x.LocalIndex.CompareTo(y.LocalIndex);
+                if (result != 0)
+                    return result;
+
+                return x.Source.CompareTo(y.Source);
             }
+        }
+
+        private static Entity ResolveFactOwner(in GameplayEventBuffer fact)
+        {
+            if (fact.TargetAsc != Entity.Null)
+                return fact.TargetAsc;
+            if (fact.SourceAsc != Entity.Null)
+                return fact.SourceAsc;
+            return Entity.Null;
         }
 
         private static int CompareEntity(Entity left, Entity right)
@@ -614,25 +674,21 @@ namespace GAS.Runtime
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            state.RequireForUpdate<GEEffectCommandStreamComponent>();
             state.RequireForUpdate<GameplayEventBusComponent>();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            if (!SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var streamEntity)
-                || !SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var eventBusEntity))
+            if (!SystemAPI.TryGetSingletonEntity<GameplayEventBusComponent>(out var eventBusEntity))
             {
                 return;
             }
 
             state.Dependency = new GameplayFactBoundaryProjectionJob
             {
-                StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
-                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: true),
+                BoundaryObservationLookup = SystemAPI.GetBufferLookup<BoundaryObservationFactBuffer>(isReadOnly: true),
                 AttributeEventLookup = SystemAPI.GetBufferLookup<AttributeChangeEventBuffer>(isReadOnly: false),
                 CueRequestLookup = SystemAPI.GetBufferLookup<CueRequestBuffer>(isReadOnly: false),
                 TagChangeEventLookup = SystemAPI.GetBufferLookup<TagChangeEventBuffer>(isReadOnly: false),
@@ -642,35 +698,27 @@ namespace GAS.Runtime
         [BurstCompile]
         private struct GameplayFactBoundaryProjectionJob : IJob
         {
-            public Entity StreamEntity;
             public Entity EventBusEntity;
-            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            [ReadOnly] public BufferLookup<GameplayEventBuffer> FactLookup;
+            [ReadOnly] public BufferLookup<BoundaryObservationFactBuffer> BoundaryObservationLookup;
             public BufferLookup<AttributeChangeEventBuffer> AttributeEventLookup;
             public BufferLookup<CueRequestBuffer> CueRequestLookup;
             public BufferLookup<TagChangeEventBuffer> TagChangeEventLookup;
 
             public void Execute()
             {
-                if (StreamEntity == Entity.Null
-                    || EventBusEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !FactLookup.HasBuffer(StreamEntity))
+                if (EventBusEntity == Entity.Null
+                    || !BoundaryObservationLookup.HasBuffer(EventBusEntity))
                 {
                     return;
                 }
 
-                var stream = StreamLookup[StreamEntity];
-                var facts = FactLookup[StreamEntity];
-                var start = ClampCursor(stream.EventBridgeFactCursor, facts.Length);
+                var observations = BoundaryObservationLookup[EventBusEntity];
 
                 var hasAttributeEvents = AttributeEventLookup.HasBuffer(EventBusEntity);
                 var hasCueRequests = CueRequestLookup.HasBuffer(EventBusEntity);
                 var hasTagChanges = TagChangeEventLookup.HasBuffer(EventBusEntity);
                 if (!hasAttributeEvents && !hasCueRequests && !hasTagChanges)
                 {
-                    stream.EventBridgeFactCursor = facts.Length;
-                    StreamLookup[StreamEntity] = stream;
                     return;
                 }
 
@@ -684,9 +732,9 @@ namespace GAS.Runtime
                     ? TagChangeEventLookup[EventBusEntity]
                     : default;
 
-                for (var i = start; i < facts.Length; i++)
+                for (var i = 0; i < observations.Length; i++)
                 {
-                    var fact = facts[i];
+                    var fact = observations[i].Fact;
                     if (hasAttributeEvents
                         && TryCreateAttributeChangeEvent(in fact, out var attributeEvent))
                     {
@@ -707,9 +755,6 @@ namespace GAS.Runtime
                         tagChanges.Add(tagChange);
                     }
                 }
-
-                stream.EventBridgeFactCursor = facts.Length;
-                StreamLookup[StreamEntity] = stream;
             }
         }
 

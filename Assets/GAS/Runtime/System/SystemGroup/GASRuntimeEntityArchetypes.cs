@@ -137,6 +137,7 @@ namespace GAS.Runtime
                     ComponentType.ReadWrite<TagChangeEventBuffer>(),
                     ComponentType.ReadWrite<AbilityLifecycleRequestBuffer>(),
                     ComponentType.ReadWrite<AttributeOwnerMarkerRequestBuffer>(),
+                    ComponentType.ReadWrite<BoundaryObservationFactBuffer>(),
                     ComponentType.ReadWrite<AttributeChangeEventBuffer>(),
                     ComponentType.ReadWrite<CueRequestBuffer>(),
                     ComponentType.ReadWrite<PresentationOutboxOwnerBuffer>());
