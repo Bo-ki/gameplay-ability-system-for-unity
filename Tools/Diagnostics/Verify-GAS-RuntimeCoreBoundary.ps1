@@ -82,8 +82,20 @@ $autoChessDamagePath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Ecs\A
 
 Assert-FileContains `
     -Path $deltaApplyPath `
-    -Pattern "ApplyOwnerLocalPendingAttributeModifierDeltaJob" `
-    -Message "GASAttributeModifierDeltaApplySystem must use owner-local pending attribute delta apply as the primary path."
+    -Pattern "ApplyOwnerLocalPendingAttributeModifierDeltaChunkJob\s*:\s*IJobChunk" `
+    -Message "GASAttributeModifierDeltaApplySystem must use chunk-local pending attribute delta apply as the primary path."
+Assert-FileNotContains `
+    -Path $deltaApplyPath `
+    -Pattern "_ownerDeltaQuery\.ToEntityArray" `
+    -Message "Owner-local pending attribute delta apply must not materialize owner entities before applying."
+Assert-FileNotContains `
+    -Path $deltaApplyPath `
+    -Pattern "ApplyOwnerLocalPendingAttributeModifierDeltaJob\s*:\s*IJob" `
+    -Message "Owner-local pending attribute delta apply must not regress to serial BufferLookup owner apply."
+Assert-FileNotContains `
+    -Path $deltaApplyPath `
+    -Pattern "ApplyOwnerLocalPendingAttributeModifierDeltaChunkJob\s*:\s*IJobChunk[\s\S]*?estimatedRandomLookupCount\+\+[\s\S]*?ApplyStreamMigrationPendingAttributeModifierDeltaJob" `
+    -Message "Chunk-local pending attribute delta apply must not count owner chunk writes as random lookups."
 Assert-FileContains `
     -Path $deltaApplyPath `
     -Pattern "migrationCarrierCount:\s*0" `

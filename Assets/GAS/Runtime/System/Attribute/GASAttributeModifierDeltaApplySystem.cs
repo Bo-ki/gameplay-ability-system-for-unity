@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -25,7 +26,10 @@ namespace GAS.Runtime
                     ComponentType.ReadWrite<PendingAttributeModifierComponent>(),
                     ComponentType.ReadWrite<AttributeModifierBuffer>(),
                     ComponentType.ReadWrite<AttributeValueBuffer>(),
+                    ComponentType.ReadWrite<AttributeDirtyComponent>(),
+                    ComponentType.ReadOnly<ASCDestroyingComponent>(),
                 },
+                Options = EntityQueryOptions.IgnoreComponentEnabledState,
             });
             state.RequireForUpdate<GEEffectCommandStreamComponent>();
         }
@@ -33,20 +37,19 @@ namespace GAS.Runtime
         public void OnUpdate(ref SystemState state)
         {
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
-            var ownerEntities = _ownerDeltaQuery.ToEntityArray(Allocator.TempJob);
-            var ownerApplyHandle = new ApplyOwnerLocalPendingAttributeModifierDeltaJob
+            var ownerApplyHandle = new ApplyOwnerLocalPendingAttributeModifierDeltaChunkJob
             {
-                OwnerEntities = ownerEntities,
+                EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
+                PendingOwnerTypeHandle =
+                    SystemAPI.GetComponentTypeHandle<PendingAttributeModifierComponent>(isReadOnly: false),
+                DestroyingTypeHandle = SystemAPI.GetComponentTypeHandle<ASCDestroyingComponent>(isReadOnly: true),
+                DirtyTypeHandle = SystemAPI.GetComponentTypeHandle<AttributeDirtyComponent>(isReadOnly: false),
+                DeltaBufferTypeHandle = SystemAPI.GetBufferTypeHandle<AttributeModifierBuffer>(isReadOnly: false),
+                AttributeBufferTypeHandle = SystemAPI.GetBufferTypeHandle<AttributeValueBuffer>(isReadOnly: false),
                 StreamEntity = streamEntity,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(isReadOnly: false),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
-                AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: false),
-                PendingOwnerLookup = SystemAPI.GetComponentLookup<PendingAttributeModifierComponent>(isReadOnly: false),
-                DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
-                DirtyLookup = SystemAPI.GetComponentLookup<AttributeDirtyComponent>(isReadOnly: false),
-            }.Schedule(state.Dependency);
-            var ownerDisposeHandle = ownerEntities.Dispose(ownerApplyHandle);
+            }.Schedule(_ownerDeltaQuery, state.Dependency);
 
             var pendingDeltas = new NativeList<PendingDeltaApplyRecord>(64, state.WorldUpdateAllocator);
             state.Dependency = new ApplyStreamMigrationPendingAttributeModifierDeltaJob
@@ -59,7 +62,7 @@ namespace GAS.Runtime
                 DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
                 DirtyLookup = SystemAPI.GetComponentLookup<AttributeDirtyComponent>(isReadOnly: false),
                 PendingDeltas = pendingDeltas,
-            }.Schedule(ownerDisposeHandle);
+            }.Schedule(ownerApplyHandle);
         }
 
         private struct PendingDeltaApplyRecord
@@ -70,22 +73,25 @@ namespace GAS.Runtime
         }
 
         [BurstCompile]
-        private struct ApplyOwnerLocalPendingAttributeModifierDeltaJob : IJob
+        private struct ApplyOwnerLocalPendingAttributeModifierDeltaChunkJob : IJobChunk
         {
-            [ReadOnly] public NativeArray<Entity> OwnerEntities;
+            [ReadOnly] public EntityTypeHandle EntityTypeHandle;
+            public ComponentTypeHandle<PendingAttributeModifierComponent> PendingOwnerTypeHandle;
+            [ReadOnly] public ComponentTypeHandle<ASCDestroyingComponent> DestroyingTypeHandle;
+            public ComponentTypeHandle<AttributeDirtyComponent> DirtyTypeHandle;
+            public BufferTypeHandle<AttributeModifierBuffer> DeltaBufferTypeHandle;
+            public BufferTypeHandle<AttributeValueBuffer> AttributeBufferTypeHandle;
             public Entity StreamEntity;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<AttributeModifierBuffer> DeltaLookup;
             public BufferLookup<GameplayEventBuffer> FactLookup;
-            public BufferLookup<AttributeValueBuffer> AttributeLookup;
-            public ComponentLookup<PendingAttributeModifierComponent> PendingOwnerLookup;
-            [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
-            public ComponentLookup<AttributeDirtyComponent> DirtyLookup;
 
-            public void Execute()
+            public void Execute(
+                in ArchetypeChunk chunk,
+                int unfilteredChunkIndex,
+                bool useEnabledMask,
+                in v128 chunkEnabledMask)
             {
-                if (OwnerEntities.Length <= 0
-                    || StreamEntity == Entity.Null
+                if (StreamEntity == Entity.Null
                     || !StreamLookup.HasComponent(StreamEntity)
                     || !FactLookup.HasBuffer(StreamEntity))
                 {
@@ -97,34 +103,37 @@ namespace GAS.Runtime
                 var skippedCount = 0;
                 var targetGroupCount = 0;
                 var maxTargetRange = 0;
-                var estimatedRandomLookupCount = 0;
                 var factPatchCount = 0;
 
+                var entities = chunk.GetNativeArray(EntityTypeHandle);
+                var pendingOwners = chunk.GetNativeArray(ref PendingOwnerTypeHandle);
+                var pendingMask = chunk.GetEnabledMask(ref PendingOwnerTypeHandle);
+                var destroyingMask = chunk.GetEnabledMask(ref DestroyingTypeHandle);
+                var dirtyMask = chunk.GetEnabledMask(ref DirtyTypeHandle);
+                var deltaBuffers = chunk.GetBufferAccessor(ref DeltaBufferTypeHandle);
+                var attributeBuffers = chunk.GetBufferAccessor(ref AttributeBufferTypeHandle);
                 var stream = StreamLookup[StreamEntity];
                 var facts = FactLookup[StreamEntity];
-                for (var ownerIndex = 0; ownerIndex < OwnerEntities.Length; ownerIndex++)
+                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (enumerator.NextEntityIndex(out var entityIndex))
                 {
-                    var owner = OwnerEntities[ownerIndex];
-                    if (owner == Entity.Null
-                        || !DeltaLookup.HasBuffer(owner)
-                        || !PendingOwnerLookup.HasComponent(owner))
-                    {
+                    if (!pendingMask[entityIndex])
                         continue;
-                    }
 
-                    var deltas = DeltaLookup[owner];
+                    var owner = entities[entityIndex];
+                    var deltas = deltaBuffers[entityIndex];
                     var ownerPendingCount = CountPendingDeltas(deltas);
                     if (ownerPendingCount <= 0)
                     {
-                        ClearOwnerPending(owner, deltas);
+                        ClearOwnerPending(entityIndex, deltas, pendingOwners, pendingMask);
                         continue;
                     }
 
                     pendingCount += ownerPendingCount;
-                    if (IsDestroying(owner) || !AttributeLookup.HasBuffer(owner))
+                    if (destroyingMask[entityIndex])
                     {
                         skippedCount += ownerPendingCount;
-                        ClearOwnerPending(owner, deltas);
+                        ClearOwnerPending(entityIndex, deltas, pendingOwners, pendingMask);
                         continue;
                     }
 
@@ -132,7 +141,7 @@ namespace GAS.Runtime
                     if (ownerPendingCount > maxTargetRange)
                         maxTargetRange = ownerPendingCount;
 
-                    var attributes = AttributeLookup[owner];
+                    var attributes = attributeBuffers[entityIndex];
                     var groupApplied = false;
                     for (var deltaIndex = 0; deltaIndex < deltas.Length; deltaIndex++)
                     {
@@ -169,12 +178,9 @@ namespace GAS.Runtime
                     }
 
                     if (groupApplied)
-                    {
-                        MarkOwnerDirty(owner);
-                        estimatedRandomLookupCount++;
-                    }
+                        dirtyMask[entityIndex] = true;
 
-                    ClearOwnerPending(owner, deltas);
+                    ClearOwnerPending(entityIndex, deltas, pendingOwners, pendingMask);
                 }
 
                 if (pendingCount <= 0)
@@ -187,7 +193,7 @@ namespace GAS.Runtime
                     skippedCount,
                     targetGroupCount,
                     maxTargetRange,
-                    estimatedRandomLookupCount,
+                    estimatedRandomLookupCount: 0,
                     factPatchCount,
                     migrationCarrierCount: 0);
                 StreamLookup[StreamEntity] = stream;
@@ -205,23 +211,15 @@ namespace GAS.Runtime
                 return count;
             }
 
-            private void ClearOwnerPending(Entity owner, DynamicBuffer<AttributeModifierBuffer> deltas)
+            private void ClearOwnerPending(
+                int entityIndex,
+                DynamicBuffer<AttributeModifierBuffer> deltas,
+                NativeArray<PendingAttributeModifierComponent> pendingOwners,
+                EnabledMask pendingMask)
             {
                 deltas.Clear();
-                PendingOwnerLookup[owner] = default;
-                PendingOwnerLookup.SetComponentEnabled(owner, false);
-            }
-
-            private bool IsDestroying(Entity asc)
-            {
-                return DestroyingLookup.HasComponent(asc)
-                       && DestroyingLookup.IsComponentEnabled(asc);
-            }
-
-            private void MarkOwnerDirty(Entity asc)
-            {
-                if (DirtyLookup.HasComponent(asc))
-                    DirtyLookup.SetComponentEnabled(asc, true);
+                pendingOwners[entityIndex] = default;
+                pendingMask[entityIndex] = false;
             }
         }
 
