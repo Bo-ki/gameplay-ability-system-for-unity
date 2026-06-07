@@ -14,7 +14,7 @@
   - `Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs`
   - `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs`
   - `Tools/Diagnostics/Verify-GAS-RuntimeCoreBoundary.ps1`
-  - `00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-PreTickSourceAttributeSnapshot-Run3.log`
+  - `00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-TagRequirementQuery-Run5.log`
 第一 owner：00
 长期有效：待复核；generated active effect runtime 仍属于 R5/R3 联动迁移面
 需要反哺：R3 magnitude snapshot lane、R5 SourceGenerator pure glue 收权、R4 Debugger evidence gate
@@ -45,15 +45,15 @@
 7. CodeGen 模板和当前 generated 输出已同步 `ActiveEffectSlotSourceSnapshotLaneCounters`、`SnapshotLaneCounters` 传递、capacity 记录、hit/miss/fallback 记录，避免只修改 `.gen.cs` 后生成回流。
 8. `Verify-GAS-RuntimeCoreBoundary.ps1` 已加入 lane-specific counter 防回流门：要求 stream/debugger 输出字段、generated/template counter array、gather write evidence、apply hit/miss/fallback evidence 同时存在。
 
-### 验证补录：AutoChess Run3
+### 验证补录：AutoChess Run5
 
-`00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-PreTickSourceAttributeSnapshot-Run3.log` 显示本切片通过 AutoChess x50 headless validation：`AutoChessDemoValidationRunResult passed=True`、`thresholdsPassed=True`、`runtimeChainPassed=True`、`repeatRunPassed=True`、`blockingDebugErrors=0`。业务链路字段包括 `activeEffectSlots=100`、`periodTickDamageFacts=150`、`pendingAttributeAppliedDeltas=250`、`executionOutputs=344`、`cueRequests=1404`，performance pass summary 为 `performancePassObservationPollutionRisks=0`。
+`00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-TagRequirementQuery-Run5.log` 显示本切片通过 AutoChess x50 headless validation：`AutoChessDemoValidationRunResult passed=True`、`thresholdsPassed=True`、`runtimeChainPassed=True`、`repeatRunPassed=True`、`blockingDebugErrors=0`。业务链路字段包括 `activeEffectSlots=100`、`periodTickDamageFacts=150`、`pendingAttributeAppliedDeltas=250`、`executionOutputs=344`、`cueRequests=1404`，performance pass summary 为 `performancePassObservationPollutionRisks=0`。同轮日志未命中 `Exception`、`SnapshotLaneCounters`、`Use CollectionHelper` 或 `error CS`。
 
-本轮 Run1 曾暴露 `GEActiveEffectPreTickSourceAttributeSnapshotGatherJob` 调度后未先写回依赖就触发 archetype 结构性检查的问题；Run2 曾暴露 explicit remove 分支复用 tick job 时没有构造 `ActiveEffectSlotSourceAttributeSnapshots` NativeContainer 的问题。Run3 已不再出现 `previously scheduled job` 或 `has not been assigned or constructed` 异常。
+本轮早期运行曾暴露 `GEActiveEffectPreTickSourceAttributeSnapshotGatherJob` 调度后未先写回依赖就触发 archetype 结构性检查、以及 explicit remove 分支复用 tick job 时没有构造 `SnapshotLaneCounters` / `ActiveEffectSlotSourceAttributeSnapshots` NativeContainer 的问题。修复点已经回写 CodeGen 模板并重新生成；Run5 是最终干净证据，早期 Run 日志如果业务字段通过但仍含 DOTS safety 异常，不能作为本切片完成证据。
 
 ### 仍成立风险
 
-1. 该切片把 active effect slot tick 的 SourceAttribute live lookup 前移为 snapshot gather，并让 key / 容量口径对齐 owner-local slot 事实；Run3 已证明 x50 业务链路和 DOTS safety 回归通过，R4 已补 lane-specific hit / miss / fallback / capacity pressure / spill counters，但尚未新增非零 `activeEffectSlotSourceSnapshot*` 业务样本或规模 profile。
+1. 该切片把 active effect slot tick 的 SourceAttribute live lookup 前移为 snapshot gather，并让 key / 容量口径对齐 owner-local slot 事实；Run5 已证明 x50 业务链路和 DOTS safety 回归通过，R4 已补 lane-specific hit / miss / fallback / capacity pressure / spill counters，但尚未新增非零 `activeEffectSlotSourceSnapshot*` 业务样本或规模 profile。
 2. gather job 仍是 generated runtime artifact 中的 lifecycle / lookup owner，按 R5 口径只能作为迁移期 generated lane proof；release-ready 形态仍需要把 Runtime Core lane owner 与 generated pure glue 继续分离。
 3. execution calculation 和 managed resolver 的 capture miss live lookup 仍只是 evidence 显性化，尚未全部替换成 owner-local snapshot record。
 4. 本切片已有 Unity batchmode x50 运行证据，但尚未新增 x100 / x1000 / Profiler enabled 运行证据，也没有触发非零 active effect slot SourceAttribute counter，不能证明 DOTS 性能优秀。

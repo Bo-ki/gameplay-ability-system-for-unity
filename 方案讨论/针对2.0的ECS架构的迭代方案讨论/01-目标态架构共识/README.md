@@ -48,7 +48,7 @@
 | [13-EntityComponent物理布局Spec](13-EntityComponent物理布局Spec.md) | Entity/Component 物理布局、Archetype 审计、Buffer 容量策略 |
 | [14-DefinitionCodeGen目标链路Spec](14-DefinitionCodeGen目标链路Spec.md) | Definition CodeGen 到 Runtime catalog / lookup / pure glue 的目标链路 |
 | [15-SourceGenerator职责边界Spec](15-SourceGenerator职责边界Spec.md) | SourceGenerator 权限边界、允许/禁止生成物、官方规则论证 |
-| [16-纯ECS内核与边界重划分Spec](16-纯ECS内核与边界重划分Spec.md) / [16 子 Spec 索引](16-纯ECS内核与边界重划分/README.md) | 纯 ECS Runtime Core、OOP Shell、Runtime Boundary、Debugger evidence、SourceGenerator pure glue 的目标态总览、接口和验收门 |
+| [16-纯ECS内核与边界重划分Spec](16-纯ECS内核与边界重划分Spec.md) / [16 子 Spec 索引](16-纯ECS内核与边界重划分/README.md) | 纯 ECS Runtime Core、OOP Shell、Runtime Boundary、Debugger evidence、SourceGenerator pure glue、端到端消息流代码骨架的目标态总览、接口和验收门 |
 | [17-GAS业务链路破坏性重划分Spec](17-GAS业务链路破坏性重划分Spec.md) | GAS 业务链路破坏性收权、旧链路退出门槛、设计理由和目标态验收口径 |
 | [18-DOTS官方规范复核与性能红线Spec](18-DOTS官方规范复核与性能红线Spec.md) | 用 Unity DOTS 官方规则复核新划分设计，固化 Runtime Core API 选型、性能红线和验收门槛 |
 | [19-GAS业务编辑路径与配置链职责Spec](19-GAS业务编辑路径与配置链职责Spec.md) | 以真实业务场景定义更短 GAS 编辑路径，并划分 Luban、Editor、SourceGenerator 的配置链职责 |
@@ -74,14 +74,15 @@ Unity DOTS 官方依据不再维护在本目录内。所有 Runtime Core、Debug
 
 ## 整体重划分代码入口
 
-需要理解目标态 GAS 架构“应该如何重新划分、为什么这样划分更合理、完整代码骨架如何阅读”时，默认从 [16-01 目标分层、官方依据与不变量](16-纯ECS内核与边界重划分/16-01-目标分层官方依据与不变量Spec.md) 开始。该页给出 Shell capability、Boundary command、Core `IJobChunk`、`NativeStream` deterministic fan-in、Diagnostics evidence、GeneratedDefinitionGlue 和 StructuralCommit 的目标态完整代码骨架与代码级说明。
+需要理解目标态 GAS 架构“应该如何重新划分、为什么这样划分更合理、完整代码骨架如何阅读”时，默认先读 [16-06 端到端消息流代码骨架](16-纯ECS内核与边界重划分/16-06-端到端消息流代码骨架Spec.md)，再回到 [16-01 目标分层、官方依据与不变量](16-纯ECS内核与边界重划分/16-01-目标分层官方依据与不变量Spec.md) 及其 [子目录](16-纯ECS内核与边界重划分/16-01-目标分层官方依据与不变量/README.md) 拆局部约束。`16-06` 串起 Shell capability、Boundary command、Core `IJobChunk`、`NativeStream` deterministic fan-in、Definition pure glue、Diagnostics evidence 和 Derived export；`16-01A-D` 分别负责目标分层、Owner Map、消息流协议和最小完整代码骨架判定门。
 
 阅读顺序：
 
 1. 先读 `目标态模块 Owner Map`，确认哪些 Module 是目标态 owner。
 2. 再读 `目标态职责重划分验收表`，确认每个 owner 必须拥有和不得拥有的内容。
 3. 再读 `目标态消息流协议`，确认 Shell intent、Boundary command / snapshot、Core lane、Diagnostics evidence 和 Derived export 的消息边界。
-4. 最后读 `目标态最小完整代码骨架`、`代码解读` 和 `重新划分合理性的代码级说明`，确认接口为什么不泄露 ECS handle、query、ECB、NativeContainer owner 或 generated lifecycle。
+4. 再读 `16-01D` 的最小完整代码骨架判定门，确认接口为什么不能泄露 ECS handle、query、ECB、NativeContainer owner 或 generated lifecycle。
+5. 如果需要按完整消息流交还 owner / API / evidence 设计，读 `16-06` 的端到端代码骨架并逐段对照 Shell、Boundary、Core、Definition、Diagnostics 和 Derived export 的禁止方向；不要把 `16-06` 代码正文复制回 `16-01D`。
 
 ## 维护规则
 

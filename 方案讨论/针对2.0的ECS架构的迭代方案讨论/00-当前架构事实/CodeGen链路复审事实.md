@@ -33,6 +33,7 @@
 5. `GasCodeGenPipeline.s_corePhases` 已不再包含 `AutoChessDemoConfigPhase`；Demo 生成改由 `s_autoChessDemoPhases` standalone 写入 `Assets/AutoChessDemo/Generated`。
 6. `RuntimeLifecycleMigrationPhase` 显式承载 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs` 三个迁移期 lifecycle artifact，manifest 以 `ArtifactCategory=RuntimeLifecycleMigration` 分类；`RuntimeDefinitionGlue.gen.cs` 以 `ArtifactCategory=RuntimePureGlue` 分类。
 7. `GasCodeGenValidationReport.md` 当前不仅输出 forbidden dependency 和 naming debt 命中数，也输出 generated runtime boundary hits；其中 `GeneratedRuntimeSystemRegistrationHits = 0` 是 SourceGenerator 不自注册的正向事实。手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 当前对缺失 generated type 已 fail-fast 抛错，不再静默跳过；剩余证据缺口转为缺失 artifact / type mismatch / assembly unavailable 的负例验证、system 数量、phase budget 和 validation gate 对账。
+8. TagRequirement all-any-none 已进入 CodeGen 正向链路，并形成 generated catalog / pure evaluator 正向证据；`RuntimeEffectInstant.gen.cs` 仍归 `RuntimeLifecycleMigration`，不应写成 SourceGenerator lifecycle 收权完成。完整证据链、Run5 验证边界和重复维护裁决见 [架构重划分审查事实/08-TagRequirementQueryDefinitionGlue事实.md](架构重划分审查事实/08-TagRequirementQueryDefinitionGlue事实.md)。
 
 ## 当前 P0 / P1 违约事实
 

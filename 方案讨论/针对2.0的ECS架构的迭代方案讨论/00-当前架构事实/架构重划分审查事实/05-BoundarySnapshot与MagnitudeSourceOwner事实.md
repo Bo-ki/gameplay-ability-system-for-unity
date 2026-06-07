@@ -110,6 +110,12 @@
 3. generated active effect slot tick 的旧 `BuildMagnitudeContextFromSlot(...) -> TryReadAttributeValue(ref ActiveEffectOwnerResources, slot.SourceAsc, ...)` 跨 owner live lookup 已被 2026-06-08 追加切片替换为 `GEActiveEffectPreTickSourceAttributeSnapshotGatherJob` + `ActiveEffectSlotSourceAttributeSnapshotKey`。最新事实见 [06 ActiveEffectSlot Magnitude Snapshot](06-ActiveEffectSlotMagnitudeSnapshot事实.md)。剩余风险转为 generated lifecycle owner、capacity / spill evidence、非零业务覆盖和 execution calculation / handwritten resolver snapshot lane。
 4. `EffectMagnitudeResolver.EnqueueMagnitudeFact(...)` 仍通过 `EffectCommandSpecStream.TryGetSingleton(...)` 与 `BeginGameplayEventWriter(...)` 把 execution calculation missing fact 写入 singleton fact carrier。这是 telemetry / boundary observation 的迁移路径，不是 Core reaction fact 的 scale-ready owner-local fact lane。
 
+### 验证补录：TagRequirementQuery Run5
+
+`00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-TagRequirementQuery-Run5.log` 已补入 active effect slot pre-tick SourceAttribute snapshot gather、explicit remove lane counter、TagRequirement catalog/evaluator 和 instant GE requirement gate 修复后的 x50 validation 证据。关键字段为：`completed=True`、`passed=True`、`thresholdsPassed=True`、`runtimeChainPassed=True`、`repeatRunPassed=True`、`blockingDebugErrors=0`、`activeEffectSlots=100`、`periodTickDamageFacts=150`、`pendingAttributeAppliedDeltas=250`、`activeMutationEstimatedRandomLookups=0`、`pendingAttributeEstimatedRandomLookups=0`、`performancePassObservationPollutionRisks=0`、`summaryHash=0xB7198D87`，且日志未命中 `Exception`、`SnapshotLaneCounters`、`Use CollectionHelper` 或 `error CS`。
+
+该日志证明本轮 pre-tick snapshot gather、remove 路径 NativeContainer 构造和 TagRequirement query 贯通没有破坏 x50 业务链路，并清除了早期运行暴露的 Unity job safety 调度异常；但它仍显示 `profiler disabled; Entities profiler modules collect no data`，`magnitudeSource*` 字段仍为 0，因此不能写成 Profiler 性能闭环、x100/x1000 规模证据或真实 SourceAttribute / TargetAttribute / ExecutionCalculation 热点覆盖完成。
+
 ### DOTS 判定
 
 | 规则 | 本轮判定 |

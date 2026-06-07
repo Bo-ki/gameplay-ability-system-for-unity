@@ -87,6 +87,26 @@ commandWriter.Write(new AbilityActivationCommandRecord
 
 这段形态的关键不是具体类型名，而是职责方向：generated code 不查 entity、不建 query、不写 ECB、不拥有 writer 生命周期，只做纯解析。
 
+## TagRequirement / Query Evaluator 边界
+
+TagRequirement 是 SourceGenerator 与 Runtime Core 配合最典型的胶水场景。目标态允许 SourceGenerator 生成不可变 tag query 数据和 pure evaluator，但不允许生成任何读取 live ECS state 的 lifecycle owner。
+
+允许生成：
+
+1. tag taxonomy 展开的 immutable query mask，例如 all / any / none 三段 mask。
+2. Ability / GameplayEffect / removal / immunity requirement 在 catalog 中的 range、kind、failure code 和 validation metadata。
+3. Burst-friendly pure evaluator，输入只能是 immutable catalog definition、requirement range 和调用方传入的 owner-local tag snapshot / frame-local tag record。
+4. Editor / CI validation graph，用于证明 requirement 引用存在、taxonomy 展开一致、空 query 语义明确。
+
+禁止生成：
+
+1. 为了评估 requirement 而创建 `ISystem`、`OnUpdate`、query、ECB 或 NativeContainer owner。
+2. 在 generated lifecycle 内通过 `ComponentLookup` / `BufferLookup` 临时读取 source / target tag。
+3. 将 tag requirement evaluation 与 ability commit、instant GE spec build、active effect tick / removal lifecycle 绑定在同一个 generated system 中。
+4. 通过 managed tag tree、字符串 tag、JSON row、`Dictionary` 或 runtime registry 参与 hot path 判断。
+
+目标调用形态是：handwritten Runtime Core lane 先取得 owner-local tag snapshot 或 target-grouped tag record，再把 snapshot 传入 generated evaluator。SourceGenerator 的性能价值来自“配置分支被编译成纯函数”，不是替 Runtime Core 持有 query / lookup / lifecycle。
+
 ## Validation Gate
 
 Runtime-visible generated artifact 必须通过下列门禁：

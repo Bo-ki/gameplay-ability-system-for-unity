@@ -31,6 +31,7 @@
 6. validation report 已新增 generated lifecycle / structural / ownership / random lookup / managed config boundary 计数，并输出 `GeneratedRuntimeBoundaryGateMode: blocking-unclassified-lifecycle-migration`。
 7. `GeneratedRuntimeSystemRegistrationHits = 0` 只说明 SourceGenerator 当前没有输出自注册 helper；手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 仍通过 `Type.GetType(...)` 反射解析 generated systems，但解析失败时当前已抛 `InvalidOperationException`，不再静默跳过。该事实具备 fail-fast 正向证据，仍需补缺失 artifact / type mismatch / assembly unavailable 的负例验证、system 数量和 phase budget 证据。
 8. `GasCodeGen.manifest.json` 当前把 `RuntimeDefinitionGlue.gen.cs` 标为 `ArtifactCategory=RuntimePureGlue`，把 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs` 标为 `ArtifactCategory=RuntimeLifecycleMigration`；validation 的 `MigrationProofOnly` 分类必须依赖该 manifest contract，而不是文件名白名单。
+9. TagRequirement all-any-none query 已形成 generated catalog / pure evaluator 正向事实，但 target tag live lookup 仍存在于 generated lifecycle artifact；该专题事实的唯一正文见 [架构重划分审查事实/08-TagRequirementQueryDefinitionGlue事实.md](架构重划分审查事实/08-TagRequirementQueryDefinitionGlue事实.md)。本文件只保留 SourceGenerator 权限边界摘要。
 
 必须修正的是：生成器不应继续生成 Runtime Core lifecycle system、隐藏结构变化 owner 或大量 runtime random lookup 驱动逻辑；新增 boundary hit 不能长期只报告不阻断。SourceGenerator 当前已经不只是“配置到代码”的胶水，而是在部分路径上替 Runtime Core 拥有 gameplay 时序。
 

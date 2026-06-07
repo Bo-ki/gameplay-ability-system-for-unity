@@ -1,6 +1,6 @@
 # 纯 ECS 内核与边界重划分 Spec
 
-> Owner：`01-目标态架构共识` | 状态：目标态总览入口 | 最近拆分：2026-06-07
+> Owner：`01-目标态架构共识` | 状态：目标态总览入口 | 最近更新：2026-06-08
 
 本文件只保留纯 ECS 内核与边界重划分目标态的总览、阅读路径和跨文档索引。详细目标态正文已拆到 [16 纯 ECS 内核与边界重划分 Spec 索引](16-纯ECS内核与边界重划分/README.md)。拆分前全文快照已归档到 [_归档/2026-06-07-16-纯ECS内核与边界重划分Spec拆分前.md](_归档/2026-06-07-16-纯ECS内核与边界重划分Spec拆分前.md)，只用于历史追溯。
 
@@ -27,6 +27,7 @@
 | 3 | [16-03 Fan-in、Debugger Evidence 与 SourceGenerator Pure Glue](16-纯ECS内核与边界重划分/16-03-FanInDebuggerSourceGeneratorSpec.md) | 需要查看 deterministic merge、Debugger evidence projection 和 generated pure glue |
 | 4 | [16-04 Shell Capability Contract](16-纯ECS内核与边界重划分/16-04-ShellCapabilityContractSpec.md) | 需要审查 OOP Shell / Thin Adapter 的 capability 分级和 public seam |
 | 5 | [16-05 Snapshot、Identity、API Health 与验收](16-纯ECS内核与边界重划分/16-05-SnapshotIdentityApiHealthSpec.md) | 需要审查 snapshot、identity、report projection、API health owner model、验收和禁止方向 |
+| 6 | [16-06 端到端消息流代码骨架](16-纯ECS内核与边界重划分/16-06-端到端消息流代码骨架Spec.md) | 需要按完整消息流审查 Shell intent、Boundary command、Core lane、fan-in、Definition pure glue 和 Diagnostics evidence |
 
 ## 官方依据入口
 

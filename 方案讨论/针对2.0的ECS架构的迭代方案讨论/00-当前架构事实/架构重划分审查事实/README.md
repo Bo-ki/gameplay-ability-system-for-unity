@@ -15,8 +15,10 @@
 | 5 | [04-整体审查与Owner重划分事实](04-整体审查与Owner重划分事实.md) | 读取最新整体审查、Owner 错位和后续事实验证需求 |
 | 6 | [05-BoundarySnapshot与MagnitudeSourceOwner事实](05-BoundarySnapshot与MagnitudeSourceOwner事实.md) | 读取 Boundary snapshot、magnitude source owner 与验证补录 |
 | 7 | [06-ActiveEffectSlotMagnitudeSnapshot事实](06-ActiveEffectSlotMagnitudeSnapshot事实.md) | 读取 active effect slot tick 的 SourceAttribute snapshot lane 事实 |
+| 8 | [07-端到端重划分事实](07-端到端重划分事实.md) | 读取 Shell -> Boundary -> Core -> Debugger -> Definition 端到端重划分事实 |
+| 9 | [08-TagRequirementQueryDefinitionGlue事实](08-TagRequirementQueryDefinitionGlue事实.md) | 读取 Ability / GE tag requirement、RemoveGameplayEffect query、generated catalog / pure evaluator 和 Run5 证据边界 |
 
-整体架构续轮审查默认先消费 `00-总览与代码证据事实` 的保留面 / 退出面，再消费 `04-整体审查与Owner重划分事实` 的 owner map 现实错位。`05` / `06` 只在任务触达 Boundary snapshot、magnitude source 或 active effect slot tick 时作为专题事实输入。
+整体架构续轮审查默认先消费 `00-总览与代码证据事实` 的保留面 / 退出面，再消费 `04-整体审查与Owner重划分事实` 的 owner map 现实错位。需要按完整业务消息流审查 Shell、Boundary、Core、Debugger 和 Definition 的职责泄露时，再读 `07`。`05` / `06` 只在任务触达 Boundary snapshot、magnitude source 或 active effect slot tick 时作为专题事实输入。`08` 是 TagRequirement query 当前事实唯一正文，其他事实页只保留摘要入口。
 
 ## 写入规则
 

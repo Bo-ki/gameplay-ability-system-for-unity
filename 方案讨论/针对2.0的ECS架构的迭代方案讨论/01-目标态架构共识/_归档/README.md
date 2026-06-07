@@ -11,6 +11,7 @@
 | [2026-06-07-03-RuntimeCore管线Spec拆分前](2026-06-07-03-RuntimeCore管线Spec拆分前.md) | Runtime Core 管线总览和多主题正文已拆到 `../03-RuntimeCore管线/` | `../03-RuntimeCore管线Spec.md` |
 | [2026-06-08-03B-业务调用链与配置消费Spec拆分前](2026-06-08-03B-业务调用链与配置消费Spec拆分前.md) | 03B 业务调用链、Luban Runtime 消费链和 Generated Runtime Glue 接口正文已拆到 `../03-RuntimeCore管线/03B-业务调用链与配置消费/` | `../03-RuntimeCore管线/03B-业务调用链与配置消费Spec.md` |
 | [2026-06-08-03E-EffectFanIn-State-Attribute-FactSpec拆分前](2026-06-08-03E-EffectFanIn-State-Attribute-FactSpec拆分前.md) | 03E Effect Fan-In、State Evaluate、Attribute Reduce / Apply 和 Gameplay Fact 正文已拆到 `../03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact/` | `../03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-FactSpec.md` |
+| [2026-06-08-16-01-目标分层官方依据与不变量Spec拆分前](2026-06-08-16-01-目标分层官方依据与不变量Spec拆分前.md) | 16-01 目标分层、Owner Map、消息流协议和最小完整代码骨架正文已拆到 `../16-纯ECS内核与边界重划分/16-01-目标分层官方依据与不变量/` | `../16-纯ECS内核与边界重划分/16-01-目标分层官方依据与不变量Spec.md` |
 | [2026-06-07-10B-AutoChess完整业务案例设计Spec拆分前](2026-06-07-10B-AutoChess完整业务案例设计Spec拆分前.md) | AutoChess 完整业务案例根 Spec 已拆到 `../10B-AutoChess完整业务案例/` | `../10B-AutoChess完整业务案例设计Spec.md` |
 | [2026-06-07-10B-03-羁绊与Runtime基础设施Spec拆分前](2026-06-07-10B-03-羁绊与Runtime基础设施Spec拆分前.md) | 10B-03 同时承载羁绊业务机制和 Runtime 基础设施，已拆为 10B-03A / 10B-03B | `../10B-AutoChess完整业务案例/10B-03-羁绊与Runtime基础设施Spec.md` |
 | [2026-06-07-16-纯ECS内核与边界重划分Spec拆分前](2026-06-07-16-纯ECS内核与边界重划分Spec拆分前.md) | 纯 ECS 内核与边界重划分根 Spec 已拆到 `../16-纯ECS内核与边界重划分/` | `../16-纯ECS内核与边界重划分Spec.md` |

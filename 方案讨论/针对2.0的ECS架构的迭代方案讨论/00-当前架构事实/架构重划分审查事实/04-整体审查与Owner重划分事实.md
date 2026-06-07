@@ -14,11 +14,11 @@
 来源类型：整体架构审查 / codedb 截面 / DOTS 官方规则对照
 原始证据：
   - `codedb_status`: 428 files / scan ready
-  - `codedb_module_map path_prefix=Assets/GAS/Runtime`: Runtime 主社群 141 files / 1966 indexed symbols，Core、Definition、Debugger、Shell、generated runtime 仍聚在同一依赖社群
+  - `codedb_module_map path_prefix=Assets/GAS/Runtime`: Runtime 主社群 141 files / 1968 indexed symbols，Core、Definition、Debugger、Shell、generated runtime 仍聚在同一依赖社群
   - `codedb_deps GASRuntimeShell.cs imported_by`: AutoChess lifecycle / observation / runtime host、Editor GASWatcher、AbilitySystemBinding 共 5 个直接消费者
   - `codedb_outline GASRuntimeShell.cs`: 281 lines，包含 runtime world / entity manager、command port、read model capture、job drain、presentation bind、runtime singleton resolver
-  - `codedb_outline GEEffectCommandSpecStream.cs`: 1068 lines，集中 singleton carrier、frame-local counter、command/spec/delta/mutation/fact buffer 和 merge helper
-  - `codedb_outline GasRuntimeDebugger.cs`: 3962 lines，集中 diagnostic event、runtime counter、observation materialization、magnitude source evidence 和 derived export
+  - `codedb_outline GEEffectCommandSpecStream.cs`: 1118 lines，集中 singleton carrier、frame-local counter、command/spec/delta/mutation/fact buffer 和 merge helper
+  - `codedb_outline GasRuntimeDebugger.cs`: 4092 lines，集中 diagnostic event、runtime counter、observation materialization、magnitude source evidence 和 derived export
   - `codedb_deps GASSystemScheduleContract.cs imported_by`: GASManager、AutoChessRuntimeSystemBootstrap、FrameBudget / StreamOwner / EvidenceGate / Rebind contract 共 6 个直接消费者
   - `codedb_text_search Assets/GAS/Runtime/**/*.cs`: `CreateEntityQuery=0`、`SystemAPI.Query=0`、`state.Dependency.Complete=0`、`.Run(=0`、`CompleteAllTrackedJobs=1`、`ToEntityArray` 可执行运行调用 3 处
   - `codedb_text_search Assets/GAS/Generated/CodeGen/Runtime/**/*.cs`: generated runtime `: ISystem=7`、`OnUpdate(ref SystemState)=7`，并存在 `ComponentLookup` / `BufferLookup` / `EntityCommandBuffer`
@@ -97,7 +97,7 @@
 来源类型：整体架构审查 / codedb 截面 / DOTS 官方规则对照
 原始证据：
   - `codedb_status`: 428 files / scan ready
-  - `codedb_module_map`: `Assets/GAS/Runtime` 主要社群 141 files / 1966 indexed symbols
+  - `codedb_module_map`: `Assets/GAS/Runtime` 主要社群 141 files / 1968 indexed symbols
   - `Assets/GAS/Runtime/General/GASRuntimeShell.cs:11-279`
   - `Assets/GAS/Runtime/System/SystemGroup/GASSystemScheduleContract.cs:99-434`
   - `Assets/GAS/Runtime/Effect/Component/Dynamic/GEEffectCommandSpecStream.cs:483-698`

@@ -17,6 +17,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 7. 2026-06-08 Performance observation isolation 切片已把 AutoChess headless validation 拆成 performance pass、diagnostic pass 和 official diff pass：performance summary / hotspot summary 输出 `performancePassObservationPollutionRisks=0`，diagnostic Debugger summary 仍输出 `observationMaterializedQueries=12` 和 diagnostic 口径的 `performancePassObservationPollutionRisks=12`。
 8. 2026-06-08 Magnitude Source 切片已把 `EffectMagnitudeResolver` 与 `GEExecutionCalculationSystem` 的 current value lookup、snapshot hit/miss、capture miss live lookup、fallback value/fact、source/target attribute lookup、execution input lookup 写入 frame-local stream counter，并由 `GasRuntimeDebugger.RecordMagnitudeSourceEvidence(...)` 采样为 `MagnitudeSource` diagnostic event、`GasRuntimeMagnitudeSourceCounters` snapshot 和 `runtimeMagnitudeSource` text export；AutoChess validation report 代码路径已消费 `RuntimeDiagnostics.MagnitudeSourceCounters` 并输出 `magnitudeSourceCaptureMissLiveLookups` / `magnitudeSourceFallbackFacts` 等字段。`PassSplitMagnitudeSource-Run1` x50 日志证明 pass 隔离与导出链路未破坏业务链路，但不是 Profiler enabled、x100/x1000 规模或真实 magnitude 热点覆盖证明。
 9. 2026-06-08 `PassSplitMagnitudeSource-Run1` x50 日志显示 `AutoChessDemoValidationRunResult passed=True` / `thresholdsPassed=True` / `runtimeChainPassed=True` / `repeatRunPassed=True`，并导出 `runtimeCoreMagnitudeSource` 与 `runtimeMagnitudeSource`；当前 `magnitudeSource*` 字段全为 0，只能证明 evidence 链路贯通，不能证明真实 SourceAttribute / TargetAttribute / ExecutionCalculation 业务覆盖。
+10. 2026-06-08 `TagRequirementQuery-Run5` x50 日志显示 active effect slot pre-tick SourceAttribute snapshot gather / explicit remove lane counter 修复、TagRequirement catalog/evaluator 贯通和 instant GE requirement gate 修复后，AutoChess validation 仍满足 `passed=True` / `thresholdsPassed=True` / `runtimeChainPassed=True` / `repeatRunPassed=True` / `blockingDebugErrors=0`，且未命中 `Exception`、`SnapshotLaneCounters`、`Use CollectionHelper` 或 `error CS`。早期 Run 日志如果业务字段通过但仍含 Unity job safety 异常，不作为最终干净证据。Run5 仍显示 `profiler disabled; Entities profiler modules collect no data`，`magnitudeSource*` 字段仍为 0，因此只能作为本切片业务链路和 safety 回归证据，不能作为 Debugger / Profiler 性能闭环或真实 magnitude source 热点覆盖证明。
 
 ## 仍成立风险
 
@@ -41,6 +42,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 | performance observation isolation x50 | `00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-PerformanceObservationIsolation-Run1.log` |
 | magnitude source evidence | `Assets/GAS/Runtime/Effect/Component/Dynamic/GEEffectCommandSpecStream.cs`, `Assets/GAS/Runtime/System/Effect/EffectMagnitudeResolver.cs`, `Assets/GAS/Runtime/System/Effect/GEExecutionCalculationSystem.cs`, `Assets/GAS/Runtime/Debugger/GasRuntimeDebugger.cs`, `Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationReport.cs` |
 | pass split + magnitude source x50 | `00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-PassSplitMagnitudeSource-Run1.log` |
+| tag requirement / pre-tick snapshot x50 | `00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-TagRequirementQuery-Run5.log` |
 
 ## 退出条件
 

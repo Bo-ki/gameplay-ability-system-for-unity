@@ -24,7 +24,7 @@
 |---|---|
 | [Runtime主链事实](Runtime主链事实.md) | 当前 5 段 GAS 主链、generated runtime 接入、command/spec/delta/fact 链 |
 | [架构重划分审查事实](架构重划分审查事实.md) | 本轮纯 ECS Core / OOP Shell / Thin Adapter / Debugger / Luban SourceGenerator 重划分事实索引；正文已拆入同名子目录 |
-| [架构重划分审查事实子页](架构重划分审查事实/README.md) | 架构总览、API 健康、R1-R6 证据、Owner 重划分和 Boundary Snapshot / Magnitude Source 事实子页 |
+| [架构重划分审查事实子页](架构重划分审查事实/README.md) | 架构总览、API 健康、R1-R6 证据、Owner 重划分、Boundary Snapshot / Magnitude Source、ActiveEffectSlot snapshot、端到端消息流和 TagRequirement query 事实子页 |
 | [当前架构图](当前架构图.md) | 当前实际链路图、EffectCommand 链路、DOTS 对照热图 |
 | [模块索引](模块索引.md) | Runtime / Generated Runtime / AutoChessDemo / 配置生成当前索引 |
 | [AutoChessDemo事实](AutoChessDemo事实.md) | 当前业务 demo 分层、GAS bridge、demo ECS 扩展和风险 |
@@ -54,7 +54,7 @@
 7. AutoChessDemo 当前已恢复为业务分层 demo，不是“删除后待重构”状态。
 8. Luban/sourcegen 已不再强制依赖 Unity Editor UI 或 Unity batchmode：`Tools/CodeGen/Generate-GAS-SourceGen.bat` 与 `Tools/GasCodeGenCli` 可直接通过 dotnet 驱动 Luban JSON/C# export + GAS CodeGen；Unity batchmode 仅作为编译域、`BeanUpdater`、`AssetDatabase` 和 asmdef import 验证路径。
 9. AutoChess 已从手写最小 catalog 切到通用 generated catalog：`AutoChessBattleDefinitionCatalogBuilder` 安装 `GASGeneratedDefinitionCatalogBuilder.BuildCatalog()`；2026-06-07 Run3 归档验证显示 `completed=True`、`blockingDebugErrors=0`，证据见 `_归档/2026-06-07-AutoChessBattleValidation-ActiveMutationChunkApply-Run3.log`。
-10. `GASRuntimeShell` 当前仍是多能力 ECS 句柄口：同一 facade 暴露 World、`EntityManager`、command port、read model、job drain 和 runtime singleton；消费者包括 runtime binding、AutoChess adapter 和 Editor watcher。该事实归入 R1/R6 收权，不应写成目标态 Shell 设计。
+10. `GASRuntimeShell` 当前仍是多能力 ECS 句柄口：同一 facade 暴露 World、`EntityManager`、command port、read model、job drain 和 runtime singleton；消费者包括 runtime binding、AutoChess adapter 和 Editor watcher。端到端消息流事实见 [07-端到端重划分事实](架构重划分审查事实/07-端到端重划分事实.md)。该事实归入 R1/R6 收权，不应写成目标态 Shell 设计。
 11. `EffectRuntimeUtility` 当前是迁移期静态 helper，不是成熟 Runtime lane owner：`TryGetStaticDefinitionBlob`、`ApplyInstantEffect`、`ApplyInactiveDurationEffect`、`HasOngoingRequirements`、`TryMergeStackingApplication`、`HandleDurationExpired`、`ActivateDurationEffect`、`DeactivateOngoingEffect`、`ReactivateOngoingEffect`、`ShouldReject` 和无 ECB 版本 `FinalizeEffectDestroy` 仍为空/固定返回；已实现部分集中在 removal / cleanup、active modifier/tag 移除、typed removed event 写入和 store cleanup。这说明 active effect lifecycle 仍需回到明确 owner system / job / store，而不能把 helper 当目标态接口。
 
 ## 核心问题看板
@@ -95,7 +95,7 @@
 - generated `RuntimeEffectInstant.gen.cs` 当前输出 `using Unity.Burst`，`InstantSpecBuildJob` 与 `AttributeSetReduceApplyJob` 均为 `[BurstCompile] IJob`；`GasGlueCodeGenPhases` 模板也已同步，不能再把 instant spec/reduce 写作未 Burst 的主线程 proof。
 - generated `GASActiveEffectMutationApplySystem` 已调度 `GEActiveEffectMutationGatherJob : IJob` + `GEActiveEffectMutationChunkApplyJob : IJobChunk`；旧 public/static `TryApplyActiveMutation(EntityManager, ...)`、旧 `GEActiveEffectMutationApplyJob : IJob`、旧 random lookup 估算路径均已由 static gate 阻断。当前残留是 singleton command carrier、gather serial command scan、SourceAttribute 跨 owner magnitude snapshot 缺口与 capacity/ordering 证据不足；generated/runtime/demo gameplay event 已统一写入 `GameplayEventBuffer` typed fact，旧 `GameplayEventBusEventBuffer` 类型和承载已删除。
 - generated `AbilityCatalogCommitSystem` 已移除 per-frame `NativeList<GECommandSeedRecord>(Allocator.TempJob)` seed scratch；模板现在直接构造单条 `GECommandSeedRecord` 并追加 command。
-- generated instant GE spec build 已支持 cue-only instant GE：`CanBuildInstantSpec` 允许 `ModifierCount > 0 || GameplayCueCode > 0`。
+- generated instant GE spec build 已支持 cue-only instant GE：`CanBuildInstantSpec` 允许 `ModifierCount > 0 || GameplayCueCode > 0`；2026-06-08 追加后，instant GE 也会读取 target `TagMaskComponent` 并评估 generated `GASGeneratedRequirementEvaluator.EvaluateGameplayEffectRequirements(...)`，不再绕过 `ApplicationRequiredTags`。
 - `ASCDestroyingComponent` 当前按 enableable bit 判定销毁态；默认 disabled 的 ASC 不再因持有组件而被 generated spec/commit 路径误判为 destroying。
 - generated active lifecycle 虽已 scheduled job 化，且 explicit remove 的 `GERemoveCommandPendingComponent` 关闭已改为 chunk `EnabledMask`；ability cancel/destroy-on-cleanup 已进一步收口到 frame-local `AbilityLifecycleRequestBuffer`，由 `AbilityLifecycleRequestSystem` 在 ability chunk 内统一应用。ASC dirty / active modifier present 也已收口到 frame-local `AttributeOwnerMarkerRequestBuffer`，由 `AttributeOwnerMarkerRequestSystem` 在 ASC chunk 内统一应用。
 - `GEExecutionCalculationOutputModifierSystem` 的 output applied marker 已改为 effect-owned chunk applicator；ASC dirty 通过 `AttributeOwnerMarkerRequestBuffer` 归并，不再由 `AppliedLookup` / `AttributeDirtyLookup` 随机开 enableable。

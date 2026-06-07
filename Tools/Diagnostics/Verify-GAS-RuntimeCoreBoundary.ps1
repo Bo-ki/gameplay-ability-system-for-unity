@@ -87,6 +87,7 @@ $activeEffectStorePath = Join-Path $runtimePath "Effect\Component\Dynamic\Active
 $gasManagerPath = Join-Path $runtimePath "General\GASManager.cs"
 $debuggerPath = Join-Path $runtimePath "Debugger\GasRuntimeDebugger.cs"
 $generatedActiveEffectPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeActiveEffect.gen.cs"
+$generatedInstantEffectPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeEffectInstant.gen.cs"
 $codeGenTemplatePath = Join-Path $ProjectPath "Assets\GAS\Editor\CodeGen\Phases\GasGlueCodeGenPhases.cs"
 $autoChessDamagePath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Ecs\AutoChessExecuteDamageCalculationSystem.cs"
 $autoChessSessionPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\AutoChessBattleSession.cs"
@@ -249,6 +250,22 @@ Assert-FileContains `
     -Path $debuggerPath `
     -Pattern "activeEffectSlotSourceSnapshotCapacityPressure" `
     -Message "GasRuntimeDebugger text export must expose active effect slot source snapshot capacity pressure evidence."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "TagMaskLookup\s*=\s*SystemAPI\.GetComponentLookup<TagMaskComponent>\(isReadOnly:\s*true\)" `
+    -Message "Generated instant GE spec build must read target tag masks for GameplayEffect tag requirement evaluation."
+Assert-FileContains `
+    -Path $generatedInstantEffectPath `
+    -Pattern "GASGeneratedRequirementEvaluator\.EvaluateGameplayEffectRequirements\(ref catalog, in gameplayEffect, in targetTags, out _\)" `
+    -Message "Generated instant GE spec build must evaluate GameplayEffect tag requirements before creating specs."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "TagMaskLookup\s*=\s*SystemAPI\.GetComponentLookup<TagMaskComponent>\(isReadOnly:\s*true\)" `
+    -Message "CodeGen template must keep instant GE target tag mask lookup."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "GASGeneratedRequirementEvaluator\.EvaluateGameplayEffectRequirements\(ref catalog, in gameplayEffect, in targetTags, out _\)" `
+    -Message "CodeGen template must keep instant GE tag requirement evaluation."
 Assert-FileContains `
     -Path $debuggerPath `
     -Pattern "runtimeCoreMagnitudeSource" `
