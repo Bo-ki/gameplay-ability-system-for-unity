@@ -70,6 +70,7 @@ function Assert-FileNotContains {
 }
 
 $deltaApplyPath = Join-Path $runtimePath "System\Attribute\GASAttributeModifierDeltaApplySystem.cs"
+$ascCommandResolvePath = Join-Path $runtimePath "System\ASCCommandBufferResolveSystem.cs"
 $ascArchetypePath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeEntityArchetypes.cs"
 $ascFactoryPath = Join-Path $runtimePath "AbilitySystem\ASCEntityFactory.cs"
 $streamPath = Join-Path $runtimePath "Effect\Component\Dynamic\GEEffectCommandSpecStream.cs"
@@ -90,6 +91,9 @@ $scheduleContractPath = Join-Path $runtimePath "System\SystemGroup\GASSystemSche
 $streamOwnerContractPath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeStreamOwnerContract.cs"
 $queryLayoutPlanPath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeQueryLayoutPlan.cs"
 $globalTimerPath = Join-Path $runtimePath "System\Core\GASGlobalTimerSystem.cs"
+$ascCommandBufferResolvePath = Join-Path $runtimePath "System\ASCCommandBufferResolveSystem.cs"
+$abilityStateCleanupPath = Join-Path $runtimePath "System\Ability\AbilityStateCleanupSystem.cs"
+$attributeThresholdAbilityLifecycleRequestPath = Join-Path $runtimePath "System\Ability\AttributeThresholdAbilityLifecycleRequestSystem.cs"
 $activeEffectStorePath = Join-Path $runtimePath "Effect\Component\Dynamic\ActiveEffectStore.cs"
 $gasManagerPath = Join-Path $runtimePath "General\GASManager.cs"
 $debuggerPath = Join-Path $runtimePath "Debugger\GasRuntimeDebugger.cs"
@@ -183,6 +187,38 @@ Assert-FileContains `
     -Path $deltaApplyPath `
     -Pattern "AppendAttributeChangeFact\(ownerFacts" `
     -Message "Pending AttributeDelta apply must append attribute facts to the ASC owner-local fact buffer before export."
+Assert-FileContains `
+    -Path $ascCommandBufferResolvePath `
+    -Pattern "BufferTypeHandle<OwnerLocalGameplayFactBuffer>" `
+    -Message "ASC command resolve must write tag/attribute/ability request facts through the ASC owner-local fact buffer."
+Assert-FileNotContains `
+    -Path $ascCommandBufferResolvePath `
+    -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>|FactLookup\[StreamEntity\]\.Add" `
+    -Message "ASC command resolve must not append lifecycle/tag/attribute facts directly to the singleton fact stream."
+Assert-FileContains `
+    -Path $abilityStateCleanupPath `
+    -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>\(\)" `
+    -Message "Ability cleanup must acquire ASC owner-local fact buffers."
+Assert-FileContains `
+    -Path $abilityStateCleanupPath `
+    -Pattern "OwnerFactLookup\[owner\]\.Add\(new OwnerLocalGameplayFactBuffer" `
+    -Message "Ability cleanup lifecycle facts must append to the ASC owner-local fact buffer."
+Assert-FileNotContains `
+    -Path $abilityStateCleanupPath `
+    -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>|FactLookup\[StreamEntity\]\.Add" `
+    -Message "Ability cleanup must not append lifecycle facts directly to the singleton fact stream."
+Assert-FileContains `
+    -Path $attributeThresholdAbilityLifecycleRequestPath `
+    -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>\(\)" `
+    -Message "Attribute threshold lifecycle request must acquire ASC owner-local fact buffers."
+Assert-FileContains `
+    -Path $attributeThresholdAbilityLifecycleRequestPath `
+    -Pattern "OwnerFactLookup\[baseInfo\.Owner\]\.Add\(new OwnerLocalGameplayFactBuffer" `
+    -Message "Attribute threshold lifecycle request facts must append to the ASC owner-local fact buffer."
+Assert-FileNotContains `
+    -Path $attributeThresholdAbilityLifecycleRequestPath `
+    -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>|FactLookup\[StreamEntity\]\.Add" `
+    -Message "Attribute threshold lifecycle request must not append facts directly to the singleton fact stream."
 Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "GameplayOwnerLocalFactFramePrepareSystem" `
@@ -1323,6 +1359,54 @@ Assert-FileNotContains `
     -Path $codeGenTemplatePath `
     -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>\(\)" `
     -Message "CodeGen template must not regenerate singleton GameplayEventBuffer lookup for ability lifecycle facts."
+Assert-FileContains `
+    -Path $ascCommandResolvePath `
+    -Pattern "OwnerFactBufferTypeHandle\s*=\s*SystemAPI\.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>\(\)" `
+    -Message "ASC command resolve must acquire ASC owner-local gameplay fact buffers."
+Assert-FileContains `
+    -Path $ascCommandResolvePath `
+    -Pattern "ownerFacts\.Add\(new OwnerLocalGameplayFactBuffer" `
+    -Message "ASC command resolve lifecycle, tag, and attribute facts must append to the ASC owner-local fact buffer."
+Assert-FileNotContains `
+    -Path $ascCommandResolvePath `
+    -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>" `
+    -Message "ASC command resolve must not acquire singleton GameplayEventBuffer for core facts."
+Assert-FileNotContains `
+    -Path $ascCommandResolvePath `
+    -Pattern "FactLookup\[StreamEntity\]\.Add\(evt\)" `
+    -Message "ASC command resolve facts must not append directly to the singleton fact stream."
+Assert-FileContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>\(isReadOnly:\s*false\)" `
+    -Message "Active effect lifecycle owner systems must acquire ASC owner-local gameplay fact buffers."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;" `
+    -Message "Generated active effect runtime jobs must expose ASC owner-local gameplay fact lookup."
+Assert-FileContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "OwnerFactLookup\[owner\]\.Add\(new OwnerLocalGameplayFactBuffer" `
+    -Message "Generated active effect lifecycle facts must append to the ASC owner-local fact buffer."
+Assert-FileNotContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>\(isReadOnly:\s*false\)" `
+    -Message "Active effect lifecycle owner systems must not acquire singleton GameplayEventBuffer for core facts."
+Assert-FileNotContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "public BufferLookup<GameplayEventBuffer> FactLookup|FactLookup\[StreamEntity\]\.Add\(evt\)" `
+    -Message "Generated active effect lifecycle facts must not append directly to the singleton fact stream."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;" `
+    -Message "CodeGen template must regenerate active effect owner-local gameplay fact lookup fields."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "OwnerFactLookup\[owner\]\.Add\(new OwnerLocalGameplayFactBuffer" `
+    -Message "CodeGen template must regenerate active effect lifecycle owner-local fact append."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "public BufferLookup<GameplayEventBuffer> FactLookup|FactLookup\[StreamEntity\]\.Add\(evt\)" `
+    -Message "CodeGen template must not regenerate active effect singleton fact stream append."
 Assert-FileContains `
     -Path $streamPath `
     -Pattern "AppendOwnerLocalActiveMutationCommand\([\s\S]*?DynamicBuffer<ActiveEffectMutationCommandBuffer> ownerCommands[\s\S]*?DynamicBuffer<ActiveEffectMutationSetByCallerValueBuffer> ownerSetByCallerValues" `

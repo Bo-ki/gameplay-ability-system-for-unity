@@ -2579,7 +2579,8 @@ namespace __ROOT_NAMESPACE__
 
             private void EnqueueGameplayEvent(GameplayEventBuffer evt)
             {
-                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
+                var owner = evt.TargetAsc != Entity.Null ? evt.TargetAsc : evt.SourceAsc;
+                if (owner == Entity.Null || !OwnerFactLookup.HasBuffer(owner))
                     return;
 
                 evt.Frame = Frame;
@@ -2594,7 +2595,10 @@ namespace __ROOT_NAMESPACE__
                     evt.Sequence = 0;
                 }
 
-                FactLookup[StreamEntity].Add(evt);
+                OwnerFactLookup[owner].Add(new OwnerLocalGameplayFactBuffer
+                {
+                    Fact = evt,
+                });
             }
 
             private static int Allocate(ref int next)
@@ -3817,7 +3821,7 @@ namespace __ROOT_NAMESPACE__
                 AbilityGrantedLookup = SystemAPI.GetComponentLookup<AbilityGrantedByEffectComponent>(isReadOnly: true),
                 AbilityLifecycleRequestLookup =
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
+                OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
                 GrantedAbilityArchetype = grantedAbilityArchetype,
                 Catalog = catalogComponent.Catalog,
@@ -3940,7 +3944,7 @@ namespace __ROOT_NAMESPACE__
                     SystemAPI.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: false),
                 AbilityLifecycleRequestLookup =
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
+                OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
                 GrantedAbilityArchetype = grantedAbilityArchetype,
                 Catalog = catalogComponent.Catalog,
@@ -4033,7 +4037,7 @@ namespace __ROOT_NAMESPACE__
                 CommandSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
                 AbilityLifecycleRequestLookup =
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
+                OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
                 ActiveEffectSlotSourceAttributeSnapshots = emptyActiveEffectSlotSourceAttributeSnapshots,
                 SnapshotLaneCounters = activeEffectSlotSourceSnapshotLaneCounters,
@@ -4514,7 +4518,7 @@ namespace __ROOT_NAMESPACE__
             public ComponentLookup<AbilityStateComponent> AbilityStateLookup;
             [ReadOnly] public ComponentLookup<AbilityGrantedByEffectComponent> AbilityGrantedLookup;
             public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             public EntityCommandBuffer StructuralEcb;
             public EntityArchetype GrantedAbilityArchetype;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
@@ -5864,7 +5868,7 @@ namespace __ROOT_NAMESPACE__
             public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;
             public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;
             public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             public EntityCommandBuffer StructuralEcb;
             public EntityArchetype GrantedAbilityArchetype;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
@@ -6961,7 +6965,8 @@ namespace __ROOT_NAMESPACE__
 
             private void EnqueueGameplayEvent(GameplayEventBuffer evt)
             {
-                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
+                var owner = evt.TargetAsc != Entity.Null ? evt.TargetAsc : evt.SourceAsc;
+                if (owner == Entity.Null || !OwnerFactLookup.HasBuffer(owner))
                     return;
 
                 evt.Frame = Frame;
@@ -6976,7 +6981,10 @@ namespace __ROOT_NAMESPACE__
                     evt.Sequence = 0;
                 }
 
-                FactLookup[StreamEntity].Add(evt);
+                OwnerFactLookup[owner].Add(new OwnerLocalGameplayFactBuffer
+                {
+                    Fact = evt,
+                });
             }
 
             private void EnqueueTagChangedEvent(Entity owner, int tagIndex, bool added)

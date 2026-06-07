@@ -35,6 +35,7 @@
 | [2026-06-08-InstantSpecCarrierOwnerLocal](2026-06-08-InstantSpecCarrierOwnerLocal.md) | instant spec carrier 与 generated AttributeReduce / cue projection 退出 singleton GEEffectSpecBuffer，改为 ASC owner-local buffer 的事实归档 |
 | [2026-06-08-BoundaryObservationFactCarrier](2026-06-08-BoundaryObservationFactCarrier.md) | Boundary observation fact carrier 接管表现、回放、typed event bridge 和 Debugger 的 fact 读面 |
 | [2026-06-08-AbilityLifecycleFactOwnerLocal](2026-06-08-AbilityLifecycleFactOwnerLocal.md) | generated ability lifecycle fact 退出 singleton GameplayEventBuffer direct append，改写 ASC owner-local fact buffer 的事实归档 |
+| [2026-06-08-HandwrittenAbilityFactOwnerLocal](2026-06-08-HandwrittenAbilityFactOwnerLocal.md) | hand-written ASC / ability lifecycle fact producer 退出 singleton GameplayEventBuffer direct append，改写 ASC owner-local fact buffer 的事实归档 |
 | [2026-06-08-AttributeDeltaOwnerLocalFactProjection](2026-06-08-AttributeDeltaOwnerLocalFactProjection.md) | AttributeDelta fact 退出 EffectCommandSpecStream singleton delta carrier、改写 ASC owner-local fact 的切片记录 |
 | [2026-06-08-AutoChessRuntimeAccessCapability](2026-06-08-AutoChessRuntimeAccessCapability.md) | AutoChess adapter raw GASRuntimeShell ECS seam 集中到 AutoChessGasRuntimeAccess 的切片记录 |
 | [2026-06-08-架构重划分审查事实拆分前](2026-06-08-架构重划分审查事实拆分前.md) | `../架构重划分审查事实.md` 拆分前全文快照 |

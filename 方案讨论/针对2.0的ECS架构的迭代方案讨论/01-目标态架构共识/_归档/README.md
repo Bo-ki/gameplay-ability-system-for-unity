@@ -20,6 +20,7 @@
 | [2026-06-08-InstantSpecCarrierOwnerLocal](2026-06-08-InstantSpecCarrierOwnerLocal.md) | instant spec carrier、generated AttributeReduce 和 cue fact projection 退出 singleton spec stream | `../../00-当前架构事实/P0-致命缺陷.md` |
 | [2026-06-08-BoundaryObservationFactCarrier](2026-06-08-BoundaryObservationFactCarrier.md) | BoundaryObservationFact carrier 接管表现、回放、typed event bridge 和 Debugger 读面 | `../03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact/03E-04-GameplayFactSpec.md` |
 | [2026-06-08-AbilityLifecycleFactOwnerLocal](2026-06-08-AbilityLifecycleFactOwnerLocal.md) | generated ability lifecycle fact 退出 singleton fact direct append，改写 ASC owner-local fact lane | `../../00-当前架构事实/P0-致命缺陷.md` |
+| [2026-06-08-HandwrittenAbilityFactOwnerLocal](2026-06-08-HandwrittenAbilityFactOwnerLocal.md) | hand-written ASC / ability lifecycle fact producer 退出 singleton fact direct append，改写 ASC owner-local fact lane | `../03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact/03E-04-GameplayFactSpec.md` |
 | [2026-06-07-10B-AutoChess完整业务案例设计Spec拆分前](2026-06-07-10B-AutoChess完整业务案例设计Spec拆分前.md) | AutoChess 完整业务案例根 Spec 已拆到 `../10B-AutoChess完整业务案例/` | `../10B-AutoChess完整业务案例设计Spec.md` |
 | [2026-06-07-10B-03-羁绊与Runtime基础设施Spec拆分前](2026-06-07-10B-03-羁绊与Runtime基础设施Spec拆分前.md) | 10B-03 同时承载羁绊业务机制和 Runtime 基础设施，已拆为 10B-03A / 10B-03B | `../10B-AutoChess完整业务案例/10B-03-羁绊与Runtime基础设施Spec.md` |
 | [2026-06-07-16-纯ECS内核与边界重划分Spec拆分前](2026-06-07-16-纯ECS内核与边界重划分Spec拆分前.md) | 纯 ECS 内核与边界重划分根 Spec 已拆到 `../16-纯ECS内核与边界重划分/` | `../16-纯ECS内核与边界重划分Spec.md` |

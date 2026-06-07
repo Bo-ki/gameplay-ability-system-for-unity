@@ -483,7 +483,7 @@ namespace GAS.Runtime.Generated
             public ComponentLookup<AbilityStateComponent> AbilityStateLookup;
             [ReadOnly] public ComponentLookup<AbilityGrantedByEffectComponent> AbilityGrantedLookup;
             public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             public EntityCommandBuffer StructuralEcb;
             public EntityArchetype GrantedAbilityArchetype;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
@@ -1659,7 +1659,8 @@ namespace GAS.Runtime.Generated
 
             private void EnqueueGameplayEvent(GameplayEventBuffer evt)
             {
-                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
+                var owner = evt.TargetAsc != Entity.Null ? evt.TargetAsc : evt.SourceAsc;
+                if (owner == Entity.Null || !OwnerFactLookup.HasBuffer(owner))
                     return;
 
                 evt.Frame = Frame;
@@ -1674,7 +1675,10 @@ namespace GAS.Runtime.Generated
                     evt.Sequence = 0;
                 }
 
-                FactLookup[StreamEntity].Add(evt);
+                OwnerFactLookup[owner].Add(new OwnerLocalGameplayFactBuffer
+                {
+                    Fact = evt,
+                });
             }
 
             private void EnqueueTagChangedEvent(Entity owner, int tagIndex, bool added)
@@ -1829,7 +1833,7 @@ namespace GAS.Runtime.Generated
             public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;
             public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;
             public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             public EntityCommandBuffer StructuralEcb;
             public EntityArchetype GrantedAbilityArchetype;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
@@ -2926,7 +2930,8 @@ namespace GAS.Runtime.Generated
 
             private void EnqueueGameplayEvent(GameplayEventBuffer evt)
             {
-                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
+                var owner = evt.TargetAsc != Entity.Null ? evt.TargetAsc : evt.SourceAsc;
+                if (owner == Entity.Null || !OwnerFactLookup.HasBuffer(owner))
                     return;
 
                 evt.Frame = Frame;
@@ -2941,7 +2946,10 @@ namespace GAS.Runtime.Generated
                     evt.Sequence = 0;
                 }
 
-                FactLookup[StreamEntity].Add(evt);
+                OwnerFactLookup[owner].Add(new OwnerLocalGameplayFactBuffer
+                {
+                    Fact = evt,
+                });
             }
 
             private void EnqueueTagChangedEvent(Entity owner, int tagIndex, bool added)

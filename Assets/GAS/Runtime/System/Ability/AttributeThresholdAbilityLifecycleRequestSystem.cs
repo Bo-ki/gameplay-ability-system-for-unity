@@ -36,6 +36,9 @@ namespace GAS.Runtime
             var streamEntity = SystemAPI.TryGetSingletonEntity<GEEffectCommandStreamComponent>(out var resolvedStream)
                 ? resolvedStream
                 : Entity.Null;
+            var frame = SystemAPI.TryGetSingleton<GlobalTimer>(out var timer)
+                ? timer.Frame
+                : 0;
             var job = new AttributeThresholdAbilityLifecycleRequestJob
             {
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
@@ -46,9 +49,10 @@ namespace GAS.Runtime
                 AbilityStateLookup = SystemAPI.GetComponentLookup<AbilityStateComponent>(isReadOnly: true),
                 AbilityLifecycleRequestLookup = SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
+                OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(),
                 StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
+                Frame = frame,
             };
             state.Dependency = job.Schedule(_query, state.Dependency);
         }
@@ -67,9 +71,10 @@ namespace GAS.Runtime
             [ReadOnly] public ComponentLookup<AbilityStateComponent> AbilityStateLookup;
             public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             public Entity StreamEntity;
             public Entity EventBusEntity;
+            public int Frame;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -229,11 +234,15 @@ namespace GAS.Runtime
                 EGameplayEventType type,
                 EAbilityLifecycleReason reason)
             {
-                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
+                if (StreamEntity == Entity.Null
+                    || !StreamLookup.HasComponent(StreamEntity)
+                    || baseInfo.Owner == Entity.Null
+                    || !OwnerFactLookup.HasBuffer(baseInfo.Owner))
                     return;
 
                 var fact = new GameplayEventBuffer
                 {
+                    Frame = Frame,
                     EventType = type,
                     Domain = EGameplayFactDomain.Ability,
                     Category = EGameplayFactCategory.Request,
@@ -245,14 +254,13 @@ namespace GAS.Runtime
                     ReasonCode = (int)reason,
                     Value = baseInfo.Code,
                 };
-                if (StreamLookup.HasComponent(StreamEntity))
+                var stream = StreamLookup[StreamEntity];
+                fact.Sequence = Allocate(ref stream.NextFactSequence);
+                StreamLookup[StreamEntity] = stream;
+                OwnerFactLookup[baseInfo.Owner].Add(new OwnerLocalGameplayFactBuffer
                 {
-                    var stream = StreamLookup[StreamEntity];
-                    fact.Sequence = Allocate(ref stream.NextFactSequence);
-                    StreamLookup[StreamEntity] = stream;
-                }
-
-                FactLookup[StreamEntity].Add(fact);
+                    Fact = fact,
+                });
             }
 
             private static int Allocate(ref int next)

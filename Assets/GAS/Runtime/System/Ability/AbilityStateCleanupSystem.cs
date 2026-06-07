@@ -71,7 +71,7 @@ namespace GAS.Runtime
                 StreamEntity = streamEntity,
                 Frame = frame,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
+                OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(),
                 StructuralEcb = structuralEcb,
             }.Schedule(_cleanupQuery, state.Dependency);
         }
@@ -104,7 +104,7 @@ namespace GAS.Runtime
             public Entity StreamEntity;
             public int Frame;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             public EntityCommandBuffer.ParallelWriter StructuralEcb;
 
             public void Execute(
@@ -375,7 +375,10 @@ namespace GAS.Runtime
                 in AbilityStateComponent state,
                 in AbilityLifecycleCleanupRequest cleanupRequest)
             {
-                if (StreamEntity == Entity.Null || !FactLookup.HasBuffer(StreamEntity))
+                if (StreamEntity == Entity.Null
+                    || !StreamLookup.HasComponent(StreamEntity)
+                    || owner == Entity.Null
+                    || !OwnerFactLookup.HasBuffer(owner))
                     return;
 
                 var fact = new GameplayEventBuffer
@@ -395,14 +398,13 @@ namespace GAS.Runtime
                     ReasonCode = (int)cleanupRequest.Reason,
                     Value = cleanupRequest.SourceAbilityCode,
                 };
-                if (StreamLookup.HasComponent(StreamEntity))
+                var stream = StreamLookup[StreamEntity];
+                fact.Sequence = Allocate(ref stream.NextFactSequence);
+                StreamLookup[StreamEntity] = stream;
+                OwnerFactLookup[owner].Add(new OwnerLocalGameplayFactBuffer
                 {
-                    var stream = StreamLookup[StreamEntity];
-                    fact.Sequence = Allocate(ref stream.NextFactSequence);
-                    StreamLookup[StreamEntity] = stream;
-                }
-
-                FactLookup[StreamEntity].Add(fact);
+                    Fact = fact,
+                });
             }
 
             private static int Allocate(ref int next)
