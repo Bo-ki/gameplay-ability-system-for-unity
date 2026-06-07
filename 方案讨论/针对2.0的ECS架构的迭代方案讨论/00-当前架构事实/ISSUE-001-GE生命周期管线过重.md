@@ -6,7 +6,7 @@
 
 旧问题没有完全消失，但问题形态已经变化。当前 Runtime 不再只是旧 request entity lifecycle；代码已经形成 `GEEffectCommandBuffer -> GEEffectSpecBuffer -> AttributeModifierBuffer -> GameplayEventBuffer` 的迁移链，并且 generated active effect systems 已进入主链。
 
-剩余 P0 是：legacy fallback、active effect store、singleton stream owner、pending AttributeDelta apply 与 ExecutionCalculation/Attribute/Fact projection 之间仍未形成完整 deterministic、store-driven lifecycle。注意：active mutation 的旧主线程 `EntityManager` helper、serial apply job 与 random lookup 估算已退场；当前 generated mutation 风险转为 singleton command carrier、SourceAttribute snapshot lane 和 store/ordering 证据不足。
+剩余 P0 是：legacy fallback、active effect store、singleton stream owner，以及 ExecutionCalculation/Attribute/Fact projection 之间仍未形成完整 deterministic、store-driven lifecycle。注意：active mutation 的旧主线程 `EntityManager` helper、serial apply job 与 random lookup 估算已退场；pending AttributeDelta owner-local apply 也已进入 ASC chunk-local apply。当前风险转为 singleton command/stream carrier、SourceAttribute snapshot lane、stream migration fallback 和 store/ordering 证据不足。
 
 ## 官方文档推导
 
@@ -19,7 +19,7 @@
 | `systems-entityquery-create.md`：query 要由 system 拥有并明确 enabled-state 语义；同步 gather 只能作为有意选择 | 当前风险不是 `SystemAPI.Query` 数量，而是 active mutation / stream / fact projection 的 query 和 carrier 仍缺少容量、排序、依赖证据 |
 | `systems-entity-command-buffer-use.md`：job 内结构变化应记录到 ECB，集中 playback 降低 sync point | generated active mutation/remove 和 cleanup 已走 ECB gate 的方向正确，但 `GasRuntimeOfficialToolDiff` / Profiler 还没有证明所有结构变化来源与 phase |
 
-因此，本 issue 的当前核心不是“GE 管线还没 job 化”，而是：GE lifecycle 已进入 job 化迁移期，但数据承载仍浅，singleton stream 同时承担 command/spec/delta/fact/mutation，多处 target random lookup 没有 target-grouped merge 或 owner-local store 证明。
+因此，本 issue 的当前核心不是“GE 管线还没 job 化”，而是：GE lifecycle 已进入 job 化迁移期，但数据承载仍浅，singleton stream 同时承担 command/spec/delta/fact/mutation，target-grouped merge、owner-local store、capacity 和 ordering 证明仍不完整。
 
 ## 已缓解部分
 
