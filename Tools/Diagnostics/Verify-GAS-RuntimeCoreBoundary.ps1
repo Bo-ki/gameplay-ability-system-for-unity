@@ -92,6 +92,7 @@ $streamOwnerContractPath = Join-Path $runtimePath "System\SystemGroup\GASRuntime
 $queryLayoutPlanPath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeQueryLayoutPlan.cs"
 $globalTimerPath = Join-Path $runtimePath "System\Core\GASGlobalTimerSystem.cs"
 $ascCommandBufferResolvePath = Join-Path $runtimePath "System\ASCCommandBufferResolveSystem.cs"
+$abilityCommitSystemPath = Join-Path $runtimePath "System\Ability\AbilityCommitSystem.cs"
 $abilityStateCleanupPath = Join-Path $runtimePath "System\Ability\AbilityStateCleanupSystem.cs"
 $attributeThresholdAbilityLifecycleRequestPath = Join-Path $runtimePath "System\Ability\AttributeThresholdAbilityLifecycleRequestSystem.cs"
 $activeEffectStorePath = Join-Path $runtimePath "Effect\Component\Dynamic\ActiveEffectStore.cs"
@@ -1154,8 +1155,8 @@ Assert-FileContains `
     -Message "GasCodeGen validation report must classify RuntimeDefinitionGlue as RuntimePureGlue in the manifest table."
 Assert-FileContains `
     -Path $codeGenReportPath `
-    -Pattern '\|\s*`?RuntimeLifecycleMigration`?\s*\|\s*`?Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation\.gen\.cs`?\s*\|\s*`?Runtime`?\s*\|\s*`?True`?\s*\|\s*`?RuntimeLifecycleMigration`?\s*\|\s*`?True`?\s*\|' `
-    -Message "GasCodeGen validation report must classify RuntimeAbilityActivation as RuntimeLifecycleMigration in the manifest table."
+    -Pattern '\|\s*`?RuntimeLifecycleMigration`?\s*\|\s*`?Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation\.gen\.cs`?\s*\|\s*`?Runtime`?\s*\|\s*`?True`?\s*\|\s*`?RuntimePureGlue`?\s*\|\s*`?True`?\s*\|' `
+    -Message "GasCodeGen validation report must classify RuntimeAbilityActivation as RuntimePureGlue after the handwritten ability commit owner migration."
 Assert-FileContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationOwnerCommandCollectJob\s*:\s*IJobChunk" `
@@ -1402,76 +1403,84 @@ Assert-FileContains `
     -Message "CodeGen template must keep owner-local active mutation command finalization."
 Assert-FileContains `
     -Path $generatedAbilityActivationPath `
-    -Pattern "ActiveMutationCommandLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationCommandBuffer>\(isReadOnly:\s*false\)" `
-    -Message "Generated ability commit must acquire ASC owner-local active mutation command buffers."
-Assert-FileContains `
+    -Pattern "GASGeneratedAbilityActivationRuntimeMarker[\s\S]*?HandwrittenRuntimeOwner\s*=\s*true" `
+    -Message "Generated ability activation artifact must be a pure marker after handwritten AbilityCommitSystem takes lifecycle ownership."
+Assert-FileNotContains `
     -Path $generatedAbilityActivationPath `
+    -Pattern "AbilityCatalogCommitSystem|AbilityCatalogCommitJob|:\s*ISystem|SystemAPI\.GetComponentLookup|SystemAPI\.GetBufferLookup|OwnerFactLookup|ActiveMutationCommandLookup|CommandLookup" `
+    -Message "Generated ability activation artifact must not own lifecycle, query refresh, lookups, or owner-local command/fact writes."
+Assert-FileContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "GASGeneratedAbilityActivationRuntimeMarker" `
+    -Message "CodeGen must generate only the ability activation marker after handwritten AbilityCommitSystem takes lifecycle ownership."
+Assert-FileContains `
+    -Path $abilityCommitSystemPath `
+    -Pattern "public partial struct AbilityCommitSystem\s*:\s*ISystem" `
+    -Message "Handwritten AbilityCommitSystem must own ability commit lifecycle execution."
+Assert-FileContains `
+    -Path $abilityCommitSystemPath `
+    -Pattern "AbilityCatalogCommitJob\s*:\s*IJobChunk" `
+    -Message "Handwritten AbilityCommitSystem must keep ability commit execution chunk-job based."
+Assert-FileContains `
+    -Path $abilityCommitSystemPath `
+    -Pattern "Options\s*=\s*EntityQueryOptions\.IgnoreComponentEnabledState" `
+    -Message "Handwritten AbilityCommitSystem query must ignore enableable component state before applying the enabled mask."
+Assert-FileContains `
+    -Path $abilityCommitSystemPath `
+    -Pattern "if\s*\(!commitRequestMask\[entityIndex\]\)" `
+    -Message "Handwritten AbilityCommitSystem job must filter by enabled AbilityCommitRequestComponent mask."
+Assert-FileContains `
+    -Path $abilityCommitSystemPath `
+    -Pattern "ActiveMutationCommandLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationCommandBuffer>\(isReadOnly:\s*false\)" `
+    -Message "Handwritten AbilityCommitSystem must acquire ASC owner-local active mutation command buffers."
+Assert-FileContains `
+    -Path $abilityCommitSystemPath `
     -Pattern "ActiveMutationSetByCallerLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>\(isReadOnly:\s*false\)" `
-    -Message "Generated ability commit must acquire ASC owner-local active mutation payload buffers."
+    -Message "Handwritten AbilityCommitSystem must acquire ASC owner-local active mutation payload buffers."
 Assert-FileContains `
-    -Path $generatedAbilityActivationPath `
+    -Path $abilityCommitSystemPath `
     -Pattern "CommandLookup\s*=\s*SystemAPI\.GetBufferLookup<GEEffectCommandBuffer>\(\)" `
-    -Message "Generated ability commit must acquire ASC owner-local instant command buffers."
+    -Message "Handwritten AbilityCommitSystem must acquire ASC owner-local instant command buffers."
 Assert-FileContains `
-    -Path $generatedAbilityActivationPath `
+    -Path $abilityCommitSystemPath `
     -Pattern "if\s*\(resolved\.Kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?AppendActiveMutationCommand\(in resolved\);[\s\S]*?else[\s\S]*?AppendInstantCommand\(in resolved\);" `
-    -Message "Generated ability commit must route active and instant commands through owner-local ASC command buffers."
+    -Message "Handwritten AbilityCommitSystem must route active and instant commands through owner-local ASC command buffers."
 Assert-FileContains `
-    -Path $generatedAbilityActivationPath `
+    -Path $abilityCommitSystemPath `
     -Pattern "ActiveMutationCommandLookup\[targetAsc\]\.Add\(new ActiveEffectMutationCommandBuffer" `
-    -Message "Generated ability commit must append active mutation commands to the target ASC owner-local command buffer."
+    -Message "Handwritten AbilityCommitSystem must append active mutation commands to the target ASC owner-local command buffer."
 Assert-FileContains `
-    -Path $generatedAbilityActivationPath `
+    -Path $abilityCommitSystemPath `
     -Pattern "AppendInstantCommand[\s\S]*?CommandLookup\[targetAsc\]\.Add\(ownerCommand\)" `
-    -Message "Generated ability commit must append instant commands to the target ASC owner-local command buffer."
+    -Message "Handwritten AbilityCommitSystem must append instant commands to the target ASC owner-local command buffer."
 Assert-FileNotContains `
-    -Path $generatedAbilityActivationPath `
+    -Path $abilityCommitSystemPath `
     -Pattern "CommandLookup\[StreamEntity\]\.Add\(resolved\)" `
-    -Message "Generated ability commit must not append instant commands directly to the singleton command stream."
+    -Message "Handwritten AbilityCommitSystem must not append instant commands directly to the singleton command stream."
 Assert-FileContains `
-    -Path $generatedAbilityActivationPath `
+    -Path $abilityCommitSystemPath `
     -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>\(\)" `
-    -Message "Generated ability commit must acquire ASC owner-local gameplay fact buffers."
+    -Message "Handwritten AbilityCommitSystem must acquire ASC owner-local gameplay fact buffers."
 Assert-FileContains `
-    -Path $generatedAbilityActivationPath `
+    -Path $abilityCommitSystemPath `
     -Pattern "OwnerFactLookup\[owner\]\.Add\(new OwnerLocalGameplayFactBuffer" `
-    -Message "Generated ability lifecycle facts must append to the ASC owner-local fact buffer."
+    -Message "Handwritten AbilityCommitSystem lifecycle facts must append to the ASC owner-local fact buffer."
 Assert-FileNotContains `
-    -Path $generatedAbilityActivationPath `
+    -Path $abilityCommitSystemPath `
     -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>\(\)" `
-    -Message "Generated ability commit must not acquire singleton GameplayEventBuffer for lifecycle facts."
+    -Message "Handwritten AbilityCommitSystem must not acquire singleton GameplayEventBuffer for lifecycle facts."
 Assert-FileNotContains `
-    -Path $generatedAbilityActivationPath `
+    -Path $abilityCommitSystemPath `
     -Pattern "FactLookup\[StreamEntity\]\.Add\(evt\)" `
-    -Message "Generated ability lifecycle facts must not append directly to the singleton fact stream."
+    -Message "Handwritten AbilityCommitSystem lifecycle facts must not append directly to the singleton fact stream."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
-    -Pattern "ActiveMutationCommandLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationCommandBuffer>\(isReadOnly:\s*false\)" `
-    -Message "CodeGen template must acquire ASC owner-local active mutation command buffers for ability commit."
-Assert-FileContains `
-    -Path $codeGenTemplatePath `
-    -Pattern "if\s*\(resolved\.Kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?AppendActiveMutationCommand\(in resolved\);[\s\S]*?else[\s\S]*?AppendInstantCommand\(in resolved\);" `
-    -Message "CodeGen template must keep ability commit active and instant commands off the singleton command stream."
-Assert-FileContains `
-    -Path $codeGenTemplatePath `
-    -Pattern "AppendInstantCommand[\s\S]*?CommandLookup\[targetAsc\]\.Add\(ownerCommand\)" `
-    -Message "CodeGen template must regenerate ability commit instant owner-local command append."
+    -Path $scheduleContractPath `
+    -Pattern "GeneratedCommandResolveSystemTypeNames\s*=\s*[\s\S]*?Array\.Empty<string>\(\)" `
+    -Message "Runtime schedule contract must not register a generated ability commit command resolve system."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
-    -Pattern "private void AppendEffectCommand[\s\S]{0,1800}CommandLookup\[StreamEntity\]\.Add\(resolved\)" `
-    -Message "CodeGen template must not regenerate ability commit instant singleton command append."
-Assert-FileContains `
-    -Path $codeGenTemplatePath `
-    -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>\(\)" `
-    -Message "CodeGen template must acquire ASC owner-local gameplay fact buffers for ability lifecycle facts."
-Assert-FileContains `
-    -Path $codeGenTemplatePath `
-    -Pattern "OwnerFactLookup\[owner\]\.Add\(new OwnerLocalGameplayFactBuffer" `
-    -Message "CodeGen template must regenerate ability lifecycle owner-local fact append."
-Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
-    -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>\(\)" `
-    -Message "CodeGen template must not regenerate singleton GameplayEventBuffer lookup for ability lifecycle facts."
+    -Path $scheduleContractPath `
+    -Pattern "AbilityCatalogCommitSystem" `
+    -Message "Runtime schedule contract must not reference generated AbilityCatalogCommitSystem after handwritten ownership migration."
 Assert-FileContains `
     -Path $ascCommandResolvePath `
     -Pattern "OwnerFactBufferTypeHandle\s*=\s*SystemAPI\.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>\(\)" `

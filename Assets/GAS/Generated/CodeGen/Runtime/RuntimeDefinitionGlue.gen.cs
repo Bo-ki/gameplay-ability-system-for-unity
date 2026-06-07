@@ -137,8 +137,7 @@ namespace GAS.Runtime.Generated
                     || gameplayEffect.StackLimitCount > 0
                     || gameplayEffect.GrantedTagMaskIndex >= 0
                     || !gameplayEffect.RemoveGameplayEffectTagQuery.IsEmpty
-                    || gameplayEffect.GrantedAbilityCount > 0
-                    || gameplayEffect.ModifierCount == 0)
+                    || gameplayEffect.GrantedAbilityCount > 0)
                     flags |= GASGECommandSeedFlags.ActiveMutation;
             }
 

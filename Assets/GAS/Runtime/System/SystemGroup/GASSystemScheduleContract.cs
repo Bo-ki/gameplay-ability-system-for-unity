@@ -228,9 +228,7 @@ namespace GAS.Runtime
         };
 
         private static readonly string[] GeneratedCommandResolveSystemTypeNames =
-        {
-            "GAS.Runtime.Generated.AbilityCatalogCommitSystem, " + GeneratedRuntimeAssemblyName,
-        };
+            Array.Empty<string>();
 
         private static readonly Type[] CoreSimulationSystemTypes =
         {

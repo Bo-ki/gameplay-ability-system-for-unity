@@ -1908,8 +1908,7 @@ namespace GAS.Editor
             writer.WriteLine("|| gameplayEffect.StackLimitCount > 0");
             writer.WriteLine("|| gameplayEffect.GrantedTagMaskIndex >= 0");
             writer.WriteLine("|| !gameplayEffect.RemoveGameplayEffectTagQuery.IsEmpty");
-            writer.WriteLine("|| gameplayEffect.GrantedAbilityCount > 0");
-            writer.WriteLine("|| gameplayEffect.ModifierCount == 0)");
+            writer.WriteLine("|| gameplayEffect.GrantedAbilityCount > 0)");
             writer.Indent--;
             writer.Indent++;
             writer.WriteLine("flags |= GASGECommandSeedFlags.ActiveMutation;");
@@ -1945,8 +1944,19 @@ namespace GAS.Editor
 
         internal static void WriteRuntimeAbilityActivationSystem(GasCodeGenContext context, string path)
         {
-            var source = RuntimeAbilityActivationSystemTemplate.Replace("__ROOT_NAMESPACE__", context.RootNamespace);
-            File.WriteAllText(path, source);
+            using var writer = new IndentedWriter(new StreamWriter(path));
+            WriteHeader(writer);
+            writer.WriteLine($"namespace {context.RootNamespace}");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("public static class GASGeneratedAbilityActivationRuntimeMarker");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("public const bool HandwrittenRuntimeOwner = true;");
+            writer.Indent--;
+            writer.WriteLine("}");
+            writer.Indent--;
+            writer.WriteLine("}");
         }
 
         private const string RuntimeAbilityActivationSystemTemplate = @"///////////////////////////////////
@@ -7636,7 +7646,7 @@ namespace __ROOT_NAMESPACE__
             RuntimeDefinitionGluePhase.WriteRuntimeEffectInstantSystems(context, instantEffectPath);
             RuntimeDefinitionGluePhase.WriteRuntimeActiveEffectSystems(context, activeEffectPath);
 
-            AddRuntimeLifecycleMigrationManifest(manifest, PhaseName, systemPath);
+            AddRuntimePureGlueManifest(manifest, PhaseName, systemPath);
             AddRuntimeLifecycleMigrationManifest(manifest, PhaseName, instantEffectPath);
             AddRuntimeLifecycleMigrationManifest(manifest, PhaseName, activeEffectPath);
         }
@@ -8072,7 +8082,7 @@ namespace __ROOT_NAMESPACE__
             IReadOnlyList<AutoChessConfigBoundaryHit> autoChessBoundaryHits = hasAutoChessConfigPhase
                 ? CollectAutoChessConfigBoundaryHits(context, manifest)
                 : Array.Empty<AutoChessConfigBoundaryHit>();
-            var abilityCommitQueryHits = CollectGeneratedAbilityCommitQueryHits(context);
+            var abilityCommitQueryHits = CollectAbilityCommitQueryHits(context);
             var runtimeBoundaryHits = CollectGeneratedRuntimeBoundaryHits(context, manifest);
             var unclassifiedRuntimeBoundaryHits = runtimeBoundaryHits
                 .Where(hit => !IsGeneratedRuntimeBoundaryAllowedClassifiedHit(context, manifest, hit))
@@ -8094,7 +8104,7 @@ namespace __ROOT_NAMESPACE__
             writer.WriteLine($"GeneratedDuplicateMethodHits: `{duplicateMethodHits.Count}`");
             writer.WriteLine($"LubanNormalizedRowBoundaryHits: `{lubanBoundaryHits.Count}`");
             writer.WriteLine($"AutoChessConfigBoundaryHits: `{autoChessBoundaryHits.Count}`");
-            writer.WriteLine($"GeneratedAbilityCommitQueryHits: `{abilityCommitQueryHits.Count}`");
+            writer.WriteLine($"AbilityCommitQueryHits: `{abilityCommitQueryHits.Count}`");
             writer.WriteLine($"GeneratedRuntimeBoundaryHits: `{runtimeBoundaryHits.Count}`");
             writer.WriteLine($"GeneratedRuntimePureGlueArtifacts: `{CountManifestArtifactsByCategory(manifest, "RuntimePureGlue")}`");
             writer.WriteLine($"GeneratedRuntimeLifecycleMigrationArtifacts: `{CountManifestArtifactsByCategory(manifest, "RuntimeLifecycleMigration")}`");
@@ -8668,10 +8678,17 @@ namespace __ROOT_NAMESPACE__
                    && string.Equals(hit.Kind, "native-container-owner", StringComparison.Ordinal);
         }
 
-        private static IReadOnlyList<GeneratedBoundaryHit> CollectGeneratedAbilityCommitQueryHits(
+        private static IReadOnlyList<GeneratedBoundaryHit> CollectAbilityCommitQueryHits(
             GasCodeGenContext context)
         {
-            var path = Path.Combine(context.OutputDir, "Runtime", "RuntimeAbilityActivation.gen.cs");
+            var path = Path.Combine(
+                context.ProjectRoot,
+                "Assets",
+                "GAS",
+                "Runtime",
+                "System",
+                "Ability",
+                "AbilityCommitSystem.cs");
             var hits = new List<GeneratedBoundaryHit>();
             if (!File.Exists(path))
             {
@@ -8679,7 +8696,7 @@ namespace __ROOT_NAMESPACE__
                     "EN-03/ABILITY-COMMIT-01",
                     path,
                     0,
-                    "RuntimeAbilityActivation.gen.cs is missing"));
+                    "AbilityCommitSystem.cs is missing"));
                 return hits;
             }
 
@@ -8690,7 +8707,7 @@ namespace __ROOT_NAMESPACE__
                     "EN-03/ABILITY-COMMIT-01",
                     path,
                     0,
-                    "AbilityCatalogCommitSystem query must ignore enableable component state"));
+                    "AbilityCommitSystem query must ignore enableable component state"));
             }
 
             if (!Contains(lines, "if (!commitRequestMask[entityIndex])", out var maskLine))
@@ -8699,7 +8716,7 @@ namespace __ROOT_NAMESPACE__
                     "EN-03/ABILITY-COMMIT-01",
                     path,
                     optionsLine,
-                    "AbilityCatalogCommitJob must filter by enabled AbilityCommitRequestComponent mask"));
+                    "AbilityCommitSystem job must filter by enabled AbilityCommitRequestComponent mask"));
             }
 
             if (maskLine > 0 && Contains(lines, "var commitRequest = commitRequests[entityIndex];", out var requestLine)
