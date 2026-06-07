@@ -28,6 +28,12 @@ namespace GAS.Runtime
         SetActiveModifierPresent = 2,
     }
 
+    public struct PendingAttributeModifierComponent : IComponentData, IEnableableComponent
+    {
+        public int LastWriteFrame;
+        public int PendingCount;
+    }
+
     [InternalBufferCapacity(0)]
     public struct AttributeOwnerMarkerRequestBuffer : IBufferElementData
     {

@@ -1,44 +1,53 @@
-# Luban / SourceGenerator 链路复审与目标重划
+# SourceGenerator 链路复审事实
+
+> 归属：本文件只记录 Luban / SourceGenerator 当前链路事实、越权证据、静态门禁缺口，以及这些事实为什么按 Unity DOTS 官方规则构成架构风险。目标态设计见 `../01-目标态架构共识/14-DefinitionCodeGen目标链路Spec.md` 和 `../01-目标态架构共识/15-SourceGenerator职责边界Spec.md`；任务拆分不写在本文件内。
+
+## 2026-06-07 目录归位说明
+
+`01-目标态架构共识/` 只保留目标态 Spec，不再承载当前复审流水、当前文件清单、P0/P1 命中或下一轮计划。
+
+因此，原先混入目标态目录的 CodeGen / Luban-SourceGenerator 复审信息按以下方式归位：
+
+| 信息类型 | Owner | 说明 |
+|---|---|---|
+| 当前生成链路事实、generated artifact 清单、当前 P0/P1 违约 | 本文件与 `CodeGen链路复审事实.md` | 作为事实和诊断证据保留 |
+| 目标态 Definition CodeGen 数据流、允许/禁止 artifact、验收门槛 | `../01-目标态架构共识/14-DefinitionCodeGen目标链路Spec.md` | 作为框架设计 Spec |
+| SourceGenerator 权限边界、官方规则论证、generated glue 调用形态 | `../01-目标态架构共识/15-SourceGenerator职责边界Spec.md` | 作为框架设计 Spec |
+| 可执行整改切片、下一轮目标、CI gate 落地任务 | `../02-主线任务树/` 或当前进度目录 | 不在事实文档中展开 |
+
+本文件后续只允许补充“现实代码证据”和“事实判定”。如果需要写目标态分层、目标数据流、示例代码或最终不变量，应更新 `01` 下对应 Spec。
 
 ## 结论
 
-本轮复审结论是：当前链路已经走到了正确方向，但 SourceGenerator 的权限边界过大。
+当前链路已经走到了正确方向，且旧复审中的 Core / Demo phase 混入问题已经被第一刀缓解；但 SourceGenerator 的权限边界仍然过大，generated runtime boundary gate 目前只阻断未分类命中，已分类的 `MigrationProofOnly` 仍会继续生成。
 
-正确方向包括：Luban 输出保留在 Unity 编译域内，GAS generated Runtime 不直接引用 `cfg.*` / `SimpleJSON` / JSON reader，`GASDefinitionCatalogBlob`、sorted code lookup、`ref readonly` definition 访问已经出现。这说明链路不再只是 Excel 到 C# 的搬运。
+正确方向包括：
 
-必须修正的是：生成器不应继续生成 Runtime Core lifecycle system、system registration、隐藏结构变化或大量 runtime lookup 驱动逻辑。SourceGenerator 应服务 Runtime Core，而不是替 Runtime Core 拥有执行管线。
+1. Luban 输出保留在 Unity 编译域内。
+2. GAS generated Runtime 不直接引用 `cfg.*` / `SimpleJSON` / JSON reader。
+3. `GASDefinitionCatalogBlob`、sorted code lookup、`ref readonly` definition 访问已经出现。
+4. `RuntimeForbiddenDependencyHits = 0` 能证明 managed config 没有直接泄漏到 generated Runtime。
+5. `GasCodeGenPipeline.s_corePhases` 已不再包含 `AutoChessDemoConfigPhase`，Demo 产物改由 standalone phase 写入 `Assets/AutoChessDemo/Generated`。
+6. validation report 已新增 generated lifecycle / structural / ownership / random lookup / managed config boundary 计数，并输出 `GeneratedRuntimeBoundaryGateMode: blocking-unclassified-migration-proof`。
+7. `GeneratedRuntimeSystemRegistrationHits = 0` 只说明 SourceGenerator 当前没有输出自注册 helper；手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 仍通过 `Type.GetType(...)` 反射解析 generated systems，解析失败时 `continue` 静默跳过，不具备目标态 fail-fast 证据。
 
-目标态一句话：
+必须修正的是：生成器不应继续生成 Runtime Core lifecycle system、隐藏结构变化 owner 或大量 runtime random lookup 驱动逻辑；新增 boundary hit 不能长期只报告不阻断。SourceGenerator 当前已经不只是“配置到代码”的胶水，而是在部分路径上替 Runtime Core 拥有 gameplay 时序。
 
-```text
-Luban 提供配置事实；SourceGenerator 生成 definition / blob / lookup / pure glue；Baking 或 Bootstrap 安装 catalog；手写 Runtime Core System 拥有生命周期、查询、NativeContainer、ECB 和调度。
-```
+## 官方依据与判定标准
 
-## 官方依据与论证标准
-
-本重划不是“少生成代码更干净”的审美判断，而是由 Unity Entities 的运行时机制反推出来的边界调整。后续修改本链路时，必须先回答三件事：
+本复审不是“少生成代码更干净”的审美判断，而是由 Unity Entities 的运行时机制反推出来的边界判断。后续修改本链路时，必须先回答三件事：
 
 1. 该 artifact 属于配置事实、Baking / Bootstrap，还是每帧 Runtime lifecycle。
 2. 它是否拥有 query、dependency、NativeContainer、ECB 或结构变化。
 3. 它是否会进入 Runtime Core hot path，是否能被 Debugger / Profiler / Journaling 归因。
 
-官方依据矩阵：
-
-| 设计选择 | 官方 / 本地规则依据 | 为什么更优秀 | 为什么必须做 |
+| 当前事实判定 | 官方 / 本地规则依据 | 为什么是风险 | 为什么必须处理 |
 |---|---|---|---|
-| Runtime Core lifecycle 回到手写 `ISystem` | `SYS-01`、`SYS-02`、`SYS-03`、`PRF-07`；`01-Entities系统与World.md` 明确 SystemGroup 是 phase owner，system 数量和 lookup 刷新有固定成本 | lifecycle owner、query owner、dependency owner 都在业务 lane system 上，可被 Debugger 按 phase / lane 归因 | generated system 会把执行管线藏进模板，系统数量、UpdateOrder、lookup pressure 和 sync point 难以审计 |
-| SourceGenerator 只生成 pure glue / unmanaged record | `QRY-01`、`QRY-04`、`PRF-05`、`PRF-06`、`PRF-19`；`02-查询遍历与Job.md` 要求 hot path 默认 job 化，random lookup 要有 owner-local / chunk-local 论证 | generated code 成为确定的纯解析函数，Runtime System 可按数据局部性选择 `IJobChunk`、`NativeStream`、owner buffer | 如果 generated glue 自己拿 `ComponentLookup` / `BufferLookup`，模板就绕过了 API 选型表，proof-only random lookup 会被固化 |
-| 结构变化只属于 Runtime Core structural phase，不属于 generated glue | `SC-01`、`ECB-03`、`PRF-02`、`PRF-04`；`03-结构变化-ECB-Enableable.md` 要求结构变化集中到明确 playback phase | 所有 create / destroy / add / remove 都能由 Journaling / Profiler 对照 phase 归因，sync point 可控 | generated lifecycle system 若创建 ECB 或直接 `EntityManager` 写入，会制造隐藏结构变化 owner，破坏唯一 StructuralCommit gate |
-| Catalog 构建放 Baking / Bootstrap，Runtime hot path 只读 Blob | `BLOB-01`、`BLOB-02`、`BAKE-01`~`BAKE-03`、`CASE-07`、`CASE-24`；`08` 已要求 definition 进入 Blob / Baker / catalog | 静态 definition 变成 immutable `GASDefinitionCatalogBlob`，Runtime 只拿 index / `ref readonly`，Burst 可读且不反查托管表 | `BlobBuilder`、row adapter、dispose owner 如果留在 runtime-visible hot path，会让配置构建、生命周期释放和 gameplay tick 混在一起 |
-| 并行 fan-in 由 Runtime System 选择 `NativeStream` / owner-local range，不由 generated template 决定 | `BUF-02`、`NAT-03`、`20-GASRuntimeCore-API选型基线.md` 的 Ability command ingest / Effect fan-in / TypedFacts 选型 | 能根据 x50/x1000 证据调整承载：singleton proof、owner buffer、NativeStream merge、target grouped reduce 都有明确触发条件 | SourceGenerator 直接生成某种 fan-in store 会绕过 scale profile，尤其会把 singleton DynamicBuffer 或 random lookup 误升格为目标态 |
-| generated validation gate 检查“职责越界”，不只检查 forbidden dependency | `ODF-06`、`ODF-18`、`20-GASRuntimeCore-API选型基线.md` 要求每个 Runtime Core 任务交还 API 选型表 | 报告能说明为什么这个 artifact 可进入 Runtime，而不是只证明它没有 `cfg.*` 字符串 | 当前 `RuntimeForbiddenDependencyHits = 0` 仍可能伴随 generated `ISystem` / `EntityManager` / system registration，这是自检盲区 |
-
-因此，新架构更优秀的核心不是“生成少了”，而是：
-
-1. **事实源更稳定**：Luban row 只在配置边界，Runtime 只看 Blob / index / record。
-2. **性能证据更可归因**：query、lookup、NativeContainer、ECB、system count 都由手写 Runtime System 负责，Debugger 可以按 owner 统计。
-3. **API 选型更可迭代**：当 x1000 或 command count > 1000/frame 触发重选型时，改的是 Runtime lane 的 store / merge 策略，不是大模板全链重生成。
-4. **职责边界更硬**：SourceGenerator 不再通过 generated lifecycle 悄悄拥有 gameplay 时序。
+| generated Runtime lifecycle 不应作为目标态 | `SYS-01`、`SYS-03`、`PRF-07`；`System-World-SystemGroup/API与EX-GAS解读.md` 记录每个 system 都有 TypeHandle、Lookup、Dependency 成本 | lifecycle owner、query owner、dependency owner 被模板隐藏，Debugger 只能看到 generated system，难以归因到业务 lane | GAS 的热路径要按 phase / lane 优化，generated system 数量和 update order 不能绕过架构预算 |
+| generated glue 不应拥有 query / lookup refresh | `QRY-01`、`QRY-04`、`PRF-05`、`PRF-06`、`PRF-19` | `ComponentLookup` / `BufferLookup` random access 会被模板固化，x1000 规模时只能改大模板 | 高频 lookup 应由手写 Runtime System 按 owner-local / chunk-local / target-grouped merge 重新选型 |
+| generated glue 不应拥有 ECB / 结构变化 | `SC-01`、`ECB-03`、`PRF-02`、`PRF-04` | ECB owner 和 playback phase 隐藏后，StructuralCommit gate 失去唯一事实源 | 结构变化需要 Journaling / Profiler 能证明来源和相位，否则无法控制 sync point |
+| Catalog 构建应属于 Baking / Bootstrap / initialization owner | `BLOB-01`、`BLOB-02`、`BAKE-01`~`BAKE-03`、`CASE-07`、`CASE-24` | `BlobBuilder`、Dispose owner、row adapter 如果留在 runtime-visible 代码中，会把配置构建能力暴露给 gameplay 层 | Runtime Core hot path 应只读 `BlobAssetReference<GASDefinitionCatalogBlob>` 和 generated lookup |
+| validation gate 不能只查 forbidden dependency | `ODF-06`、`ODF-18`、`20-GASRuntimeCore-API选型基线.md` | `RuntimeForbiddenDependencyHits = 0` 仍可能同时存在 generated `ISystem`、`EntityManager`、system registration | Gate 必须证明职责边界，不只是证明没有 `cfg.*` 字符串 |
 
 ## 审查范围
 
@@ -53,11 +62,11 @@ Excel / Luban
   -> Runtime Core consumption
 ```
 
-不讨论 Editor UI 操作体验，不讨论 GAS Center 页面逻辑。`Assets/GAS/Editor/CodeGen/**` 属于生成链路实现，纳入审查。
+不讨论 Editor UI 操作体验，不讨论 GAS Center 页面逻辑。`Assets/GAS/Editor/CodeGen/**` 属于生成链路实现，纳入审查；`Assets/GAS/Generated/CodeGen/Runtime/**` 已被注册进主链时，按 Runtime Core 规则受审。
 
 ## 当前链路事实
 
-### 1. Luban process gate 已经接入主入口
+### 1. Luban process gate 已接入主入口
 
 `CodeGenerator.TryGenerateAllCode()` 当前先执行 `GasCodeGenProcessGate.RunDefault()`，再执行 `GasCodeGenPipeline.TryRunAll()`。
 
@@ -77,7 +86,7 @@ Assets/DataGenerated/Luban/CSharp
 Assets/DataGenerated/Luban/Json/GAS
 ```
 
-这符合 `08-Luban-SourceGenerator配置生成链路Spec.md` 的约束：Luban C# 是 Unity 编译域内的配置事实边界，编译错误是真实 gate failure，不应通过挪出 `Assets` 隐藏。
+这符合 `../01-目标态架构共识/08-Luban-SourceGenerator配置生成链路Spec.md` 的约束：Luban C# 是 Unity 编译域内的配置事实边界，编译错误是真实 gate failure，不应通过挪出 `Assets` 隐藏。
 
 ### 3. Normalized Rows 是 Editor-only 输入转换层
 
@@ -95,9 +104,9 @@ Assets/DataGenerated/Luban/Json/GAS
 - `TryGetGameplayEffectIndex()`
 - `GetAbility()` / `GetGameplayEffect()` 的 `ref readonly` 访问
 
-这是目标态的核心收益：Runtime Core 不再把 Luban row 当表 API，而是读取 immutable catalog。
+这是目标方向上的关键收益：Runtime Core 不再把 Luban row 当表 API，而是读取 immutable catalog。
 
-### 5. Validation report 只能证明局部边界
+### 5. Validation report 已扩展职责边界扫描，并阻断未分类命中
 
 `GasCodeGenValidationReport.md` 当前显示：
 
@@ -105,30 +114,48 @@ Assets/DataGenerated/Luban/Json/GAS
 RuntimeForbiddenDependencyHits: 0
 RuntimeGeneratedNamingDebtHits: 0
 GeneratedNamingDebtHits: 0
+GeneratedRuntimeBoundaryHits: 135
+GeneratedRuntimeLifecycleHits: 21
+GeneratedRuntimeSystemRegistrationHits: 0
+GeneratedRuntimeStructuralChangeHits: 8
+GeneratedRuntimeOwnershipHits: 2
+GeneratedRuntimeRandomWriteLookupHits: 104
+GeneratedRuntimeManagedConfigHits: 0
+GeneratedRuntimeBoundaryGateMode: blocking-unclassified-migration-proof
+GeneratedRuntimeUnclassifiedBoundaryHits: 0
+CurrentMode: blocking-unclassified-migration-proof
 ```
 
-这只能证明 generated Runtime 没有显式引用 `cfg.*` / JSON / managed row 等禁止依赖；不能证明 SourceGenerator 没有越权生成 Runtime lifecycle。
+这说明扫描能力已经从 forbidden dependency 扩展到 generated runtime 职责边界，且未分类 boundary hit 已会阻断生成。剩余风险是 lifecycle、structural owner、NativeContainer owner 和 random lookup owner 仍被分类为 `MigrationProofOnly` / `BootstrapDefinitionOwner` 后允许存在；R5 的任务不再是“从 0 做 blocking”，而是把这些分类迁移证明逐项迁出、阈值化或失败化。
+
+### 6. Core phase 与 Demo phase 已拆分，但默认 all 入口仍是复合消费链
+
+`GasCodeGenPipeline.s_corePhases` 当前只包含 Core phases：
+
+```csharp
+new AssemblyDefinitionPhase(),
+new DefinitionIndexPhase(),
+new BlobSchemaPhase(),
+new StaticLookupPhase(),
+new DefinitionCatalogPhase(),
+new RuntimeDefinitionGluePhase(),
+new BakerGluePhase(),
+new ComponentTypeSetPhase(),
+new QueryLayoutPhase(),
+new ValidationReportPhase(),
+```
+
+`AutoChessDemoConfigPhase` 已移动到 `s_autoChessDemoPhases`，并通过 `TryRunAutoChessDemo()` standalone 写入 `Assets/AutoChessDemo/Generated`。这是正向修复，后续任务不得继续把“Core phase 仍包含 Demo phase”当作当前 P0 执行。
+
+需要保留的事实边界是：`TryRunAll()` 仍然先 `TryRunCore()` 再 `TryRunAutoChessDemo()`，所以“生成 -> 消费 -> 归档”链路必须区分 Core validation report 与 Demo standalone manifest / scenario 产物，不能把 Demo 证据混写成 Runtime Core 完成证明。
 
 ## 主要架构问题
 
-### P0：Core pipeline 仍混入 Demo phase
+### 已缓解：Core pipeline 不再直接混入 Demo phase
 
-`GasCodeGenPipeline.s_corePhases` 当前仍包含：
+旧复审中的 `s_corePhases` 包含 `AutoChessDemoConfigPhase` 已不是当前事实。当前 Core phase set 已拆分，Demo 生成改为 standalone phase 和 standalone output root。
 
-```csharp
-new AutoChessDemoConfigPhase(),
-```
-
-这和 `14-CodeGen到Runtime新链路重构计划.md` 中“AutoChess 专用 phase 从 Core 收口范围移除”的结论不一致。
-
-问题不是 AutoChessDemo 本身不重要，而是默认 Core CodeGen 不应该被 Demo 配置污染。通用 GAS Core 的 input hash、manifest、validation report 应只反映 GAS definition 主链。Demo phase 应有独立入口，例如：
-
-```text
-GasCodeGenPipeline.RunCore()
-GasCodeGenPipeline.RunAutoChessDemo()
-```
-
-官方论证：`ODF-06` 要求每个 Runtime Core 任务进入 API selection checkpoint；Demo phase 混进 Core pipeline 后，Core input hash、manifest 和 validation report 同时承载框架 definition 与 Demo scenario，后续无法判断报告中的 query / buffer / lifecycle 债务属于通用 GAS 还是 AutoChess 业务。拆分入口能让 Core generated artifact 的层级、依赖和 API 选型独立审计。
+剩余约束不是继续拆 `s_corePhases`，而是保持 Core report / manifest 与 Demo generated manifest 的 owner 分离：Core validation report 只能证明 Runtime generated artifact；AutoChessDemo standalone 产物只能作为业务验收 / scenario evidence，不能消费为通用 Core 合规证明。
 
 ### P0：RuntimeDefinitionGluePhase 生成了 lifecycle system
 
@@ -139,67 +166,38 @@ Runtime/RuntimeDefinitionGlue.gen.cs
 Runtime/RuntimeAbilityActivation.gen.cs
 Runtime/RuntimeEffectInstant.gen.cs
 Runtime/RuntimeActiveEffect.gen.cs
-Runtime/RuntimeSystemRegistration.gen.cs
 ```
 
-其中后四类不再是 definition glue，而是 Runtime Core 执行管线。它们包含 `ISystem`、`OnUpdate()`、`state.EntityManager`、`ComponentLookup`、`BufferLookup`、`Schedule()`、system registration。
+其中后三类不再是 definition glue，而是 Runtime Core 执行管线。它们包含 `ISystem`、`OnUpdate()`、`ComponentLookup`、`BufferLookup`、`Schedule()`、ECB 和 structural owner。`RuntimeSystemRegistration.gen.cs` 当前已不在 output list，且 report 中 `GeneratedRuntimeSystemRegistrationHits = 0`，这是正向事实；但这只证明生成器没有自注册 helper，不能证明手写 schedule registry 达标。当前 `GASSystemScheduleContract.AddSystemsByTypeName()` 在 generated type 缺失时静默跳过，新增 registration helper 必须默认失败，手写 registry 也必须补缺失 artifact / type mismatch / assembly unavailable 的 fail-fast 或 validation gate。
 
-这违反 `08-Luban-SourceGenerator配置生成链路Spec.md` 的硬约束：
+官方判定：
 
-1. Glue 只生成静态纯函数和 unmanaged record。
-2. Glue 不隐藏结构变化。
-3. Glue 不调用 `EntityManager`。
-4. Glue 不创建或注册 lifecycle system。
-5. Glue 不拥有 `NativeContainer`、依赖链、dispose/rewind。
+1. `SYS-01` 要求权威 gameplay 计算落在 ECS System / Job 数据流，但 owner 必须可审计；generated glue 输出 `ISystem` 后，glue 就变成 lifecycle owner。
+2. `SYS-03` 认为 system 数量是成本源；当前 registration hit 为 0，但新增 generated registration 一旦回流，系统数量和 update order 仍会绕过 Runtime Core 架构预算。
+3. `QRY-01` / `QRY-04` 要求 hot path query 和 random lookup 有 job / owner-local / chunk-local 论证；模板生成 lookup 会绕过每条业务 lane 的 API 选型表。
+4. `SC-01` / `ECB-03` 要求结构变化集中在明确 playback phase；generated lifecycle system 如果创建 ECB 或直接写 `EntityManager`，会制造隐藏结构变化 owner。
 
-目标态必须把这些 generated lifecycle system 收回到手写 Runtime Core。
+### P0：Validation gate 仍允许已分类 generated lifecycle `MigrationProofOnly`
 
-官方论证：
-
-1. `01-Entities系统与World.md` 把 `ISystem` 定义为 Runtime Core 热路径首选，并要求 system 在 `OnCreate` / `OnUpdate` 中拥有 query、lookup、allocator 和 dependency。generated glue 如果输出 `ISystem`，就不再是 glue，而是 lifecycle owner。
-2. `02-查询遍历与Job.md` 说明 `SystemState.Dependency` 不会自动追踪 `NativeArray`、`NativeList`、`NativeStream` 这类 NativeContainer 之间的数据流，Fan-In / Target / Modifier record 管线必须由 owner system 明确串联 job handle。SourceGenerator 无法在模板层替每个业务 lane 证明 dependency ownership。
-3. `03-结构变化-ECB-Enableable.md` 要求 hot path 结构变化集中到明确 ECB playback phase。generated lifecycle system 如果创建 ECB、调度 playback 或直接写 `EntityManager`，会绕过 `GASStructuralCommitSystemGroup` 的唯一结构变化屏障。
-4. `13-DOTS编写规范与性能陷阱.md` 把 `EntityManager.CreateEntity/AddComponent/DestroyEntity`、主线程 `SystemAPI.Query`、高频 random lookup 都列为 hot path 风险。generated lifecycle 模板一旦包含这些 API，风险会被复制到所有 domain。
-
-### P0：Validation gate 没有阻断生成 lifecycle
-
-当前 hot path gate 会扫描一些字符串，例如 `SystemAPI.QueryBuilder()`、`CreateEntityQuery`、`.Run(`、`state.Dependency.Complete()` 等，但它没有把以下内容作为 SourceGenerator 职责越界处理：
+当前 validation report 已把以下内容作为 generated runtime boundary hits 记录：
 
 ```text
 : ISystem
 OnUpdate(ref SystemState state)
-world.CreateSystem(...)
-AddSystemToUpdateList(...)
 SystemAPI.GetComponentLookup(...)
 SystemAPI.GetBufferLookup(...)
 state.EntityManager
+EntityCommandBuffer
+NativeList<T>
 ```
 
-因此报告可以写 `RuntimeForbiddenDependencyHits = 0`，同时 generated Runtime 仍然生成实际 gameplay lifecycle。这是自检盲区。
-
-官方论证：`20-GASRuntimeCore-API选型基线.md` 明确禁止把 DynamicBuffer / ECB / Enableable 固化为唯一答案，并要求每个 Runtime Core 任务交还 API 选型表。validation gate 如果只查 `cfg.*` / JSON / managed row，就只能证明“没有托管配置泄漏”，不能证明“没有 lifecycle / query / structural owner 越权”。目标态 report 必须同时检查 dependency owner、query owner、NativeContainer owner 和 structural owner。
+`Generated Runtime Boundary Gate` 的 `CurrentMode` 当前是 `blocking-unclassified-migration-proof`，未分类命中会被阻断；但 `GeneratedRuntimeBoundaryHits = 135` 仍被分类为迁移证明或 bootstrap owner 后允许生成。因此报告可以写 `RuntimeForbiddenDependencyHits = 0`、`GeneratedRuntimeUnclassifiedBoundaryHits = 0`，同时 generated Runtime 仍然生成实际 gameplay lifecycle。这已经从“自检盲区 / 纯报告”升级为“已阻断未知回流，但仍保留已分类迁移证明”的门禁缺口。
 
 ### P1：Catalog builder 的层级边界偏软
 
 `GASGeneratedDefinitionCatalogBuilder.BuildCatalog()` 当前在 Runtime-visible generated 文件中调用 `BlobBuilder`。
 
-如果它只在 world/bootstrap 初始化期调用，符合 `BLOB-02` 的“初始化期可用”下限；但目标态上更应该把 builder 移到 Baking / Bootstrap artifact：
-
-```text
-Runtime visible:
-  GASDefinitionCatalogBlob
-  GASGeneratedDefinitionCatalogLookup
-  GASGeneratedRuntimeDefinitionResolver
-
-Baking / Bootstrap visible:
-  GASGeneratedDefinitionCatalogBuilder
-  GASDefinitionCatalogInstaller
-  Dispose owner contract
-```
-
-Runtime Core hot path 只应看到已经安装好的 `BlobAssetReference<GASDefinitionCatalogBlob>`。
-
-官方论证：`CASE-07`、`CASE-24`、`BLOB-01`、`BLOB-02` 把静态 definition 指向 Blob / Baker / AddBlobAsset / custom hash；`BlobBuilder` 应只在 Baking 或初始化期出现。catalog builder 可以是 Bootstrap 工具，但不能作为 Runtime Core 每帧可见能力。更优目标是 Runtime 只读 `GASDefinitionCatalogComponent.Catalog`，并由 validation evidence 输出 schema hash、content hash、revision 和 dispose owner。
+如果它只在 world/bootstrap 初始化期调用，符合 `BLOB-02` 的“初始化期可用”下限；但当前 runtime-visible 暴露方式仍然偏软。事实风险是：配置 materialization、Blob dispose owner、catalog install owner 与 gameplay runtime 可见 API 混在一起，后续 hot path 审查必须持续证明没有每帧构建和没有 owner 泄漏。
 
 ### P1：generated runtime hot path 仍有大量 random lookup
 
@@ -212,9 +210,7 @@ GetComponentLookup<T>()
 GetBufferLookup<T>()
 ```
 
-对照 `QRY-04`，高频路径中的跨 entity random lookup 需要重构为 owner-local、chunk-local 或 frame-local record merge。当前这些 generated system 即使可以作为 proof，也不能作为 scale-ready 目标态。
-
-官方论证：`QRY-04`、`PRF-06`、`PRF-19` 都把高频 `ComponentLookup` / `BufferLookup` random access 视为需要 owner-local / chunk-local 重构的风险；`20-GASRuntimeCore-API选型基线.md` 对 Ability command ingest、Effect fan-in、Execution calculation 都给出重新选型触发条件。generated runtime system 的 random lookup 如果留在 RuntimeVisible artifact 中，后续 x1000 gate 只能改模板，无法在业务 lane 层按证据替换为 chunk-local summary、target grouped reduce 或 `NativeStream` deterministic merge。
+这些 API 可以作为迁移期 proof 使用，但不能被写成 scale-ready store 终局。对照 `QRY-04`，高频路径中的跨 entity random lookup 需要重构为 owner-local、chunk-local 或 frame-local record merge，并给出 capacity / ordering / x50 / x1000 profile 证据。
 
 ### P1：SourceGenerator 生成内容太厚
 
@@ -224,384 +220,48 @@ GetBufferLookup<T>()
 2. 性能热点难以定位：Debugger 看见的是 generated system，不知道业务 owner 是谁。
 3. 每次调整 DOTS API 选型，都要改大模板，变成高风险全链重生成。
 
-这不是“模板大不好维护”的普通工程偏好，而是和 Unity DOTS 的调优方式冲突：DOTS 性能问题通常落在 query filter、chunk layout、lookup 刷新、NativeContainer 生命周期、ECB playback、enableable wait、buffer spill 上。这些都需要由具体 system owner 输出证据。模板越厚，实际 owner 越模糊，Profiler / Journaling / Debugger 越难把热点映射回业务 lane。
+这不是“模板大不好维护”的普通工程偏好，而是和 Unity DOTS 的调优方式冲突：DOTS 性能问题通常落在 query filter、chunk layout、lookup 刷新、NativeContainer 生命周期、ECB playback、enableable wait、buffer spill 上。这些都需要由具体 system owner 输出证据。
 
-## 新架构分层
+## 目标态内容归位
 
-### Layer 1：Luban Fact Layer
+本文件旧版本曾包含 `新架构分层`、`目标数据流`、`真实业务流`、`目标代码形态`、`重构路线`、`最终不变量` 等章节。这些内容不属于当前事实文档，已按下表归位：
 
-职责：
+| 旧章节类型 | 新 Owner | 保留方式 |
+|---|---|---|
+| Luban Fact / Definition CodeGen / Baking / Runtime Core 四层目标分工 | `../01-目标态架构共识/14-DefinitionCodeGen目标链路Spec.md`、`../01-目标态架构共识/15-SourceGenerator职责边界Spec.md` | 以目标态 Spec 表述 |
+| 目标数据流图、Generated Glue 调用形态、禁止生成项 | `../01-目标态架构共识/15-SourceGenerator职责边界Spec.md` | 以权限边界和验收门槛表述 |
+| AutoChess Ability 激活的理想业务链路 | `../01-目标态架构共识/10B-AutoChess完整业务案例设计Spec.md`、`../01-目标态架构共识/11-AutoChessDemo-Luban配置方案Spec.md` | 以业务案例 Spec 表述 |
+| P0/P1/P2 重构路线 | `../02-主线任务树/` 或 `../04-当前进度状态/` | 以任务和进度表述 |
+| 最终不变量 | `../01-目标态架构共识/90-目标态不变量.md` | 以全局不变量表述 |
 
-- Excel / schema / bean / enum 事实输入
-- Luban CLI 输出 JSON 与 C#
-- 保证配置事实在 Unity 编译域可见
+本文件只保留这些目标态设计对应的当前事实：哪些代码正在违反边界、为什么违反、证据在哪里。
 
-允许：
+## 当前事实对照快照
 
-```text
-cfg.*
-Luban.Runtime
-SimpleJSON
-JSON table
-managed row
-```
-
-禁止：
-
-```text
-Unity.Entities Runtime Core lifecycle
-GAS Runtime hot path lookup
-EntityManager
-runtime system registration
-```
-
-### Layer 2：Definition CodeGen Layer
-
-职责：
-
-- 读取 Luban JSON / generated row factory
-- 生成 `RowMetadata`
-- 生成 stable id、definition index、Blob schema、Catalog layout
-- 生成 `code -> index` lookup
-- 生成 pure Runtime definition glue
-- 生成 manifest / validation report
-
-允许输出 Runtime-visible：
-
-```text
-GASDefinitionCatalogBlob
-GASGeneratedDefinitionCatalogLookup
-GASGeneratedRuntimeDefinitionResolver
-GASGeneratedRequirementEvaluator
-GASGeneratedMagnitudeEvaluator
-GASGeneratedTargetRuleTable
-GASGeneratedDefinitionComponentTypeSets
-```
-
-禁止输出 Runtime-visible：
-
-```text
-ISystem
-ComponentSystemGroup
-system registration
-EntityManager write
-ECB playback
-NativeContainer owner
-Schedule / Run
-runtime query owner
-```
-
-### Layer 3：Baking / Bootstrap Layer
-
-职责：
-
-- 使用 `BlobBuilder` 构建 catalog
-- 安装 `GASDefinitionCatalogComponent`
-- 持有 `BlobAssetReference` dispose owner
-- 可生成 Baker glue、Authoring glue、catalog installer
-
-允许：
-
-```text
-BlobBuilder
-AddBlobAsset()
-Baker<TAuthoring>
-Bootstrap installer
-initialization-time BuildCatalog()
-Dispose owner
-```
-
-禁止：
-
-```text
-每帧 BuildCatalog()
-Runtime Core hot path 反查 row
-Baker 读取其他 Baker 输出
-把 diagnostics 当 gameplay 输入
-```
-
-### Layer 4：Runtime Core Layer
-
-职责：
-
-- 手写 `ISystem`
-- 拥有 `EntityQuery`
-- 拥有 `NativeStream` / `NativeList` / `DynamicBuffer` 使用策略
-- 拥有 ECB playback phase
-- 拥有 dependency / dispose / rewind
-- 调用 generated pure glue 生成 frame-local record
-
-允许调用：
-
-```text
-GASGeneratedDefinitionCatalogLookup.TryGetAbilityIndex()
-GASGeneratedDefinitionCatalogLookup.GetAbility()
-GASGeneratedRuntimeDefinitionResolver.TryBuildAbilityActivationPlan()
-GASGeneratedRuntimeDefinitionResolver.TryBuildGECommandSeed()
-GASGeneratedRuntimeDefinitionResolver.AppendModifierRecords()
-```
-
-禁止：
-
-```text
-cfg.*
-Luban row
-JSON reader
-managed registry hot path
-SourceGenerator generated lifecycle owner
-```
-
-## 目标数据流
-
-```mermaid
-flowchart LR
-    Excel["Excel / Bean Schema"] --> Luban["Luban CLI"]
-    Luban --> Json["Luban JSON"]
-    Luban --> CSharp["Luban C# in Unity compile domain"]
-    Json --> Normalize["Normalized Row Input"]
-    Normalize --> Context["GasCodeGenContext / RowMetadata"]
-    Context --> RuntimeArtifacts["Runtime Artifacts: ids / Blob schema / lookup / pure glue"]
-    Context --> BakingArtifacts["Baking Bootstrap Artifacts: BlobBuilder / Baker / Installer"]
-    Context --> Reports["Manifest / Validation / DOTS Gate"]
-    BakingArtifacts --> CatalogInstall["Install GASDefinitionCatalogComponent"]
-    RuntimeArtifacts --> RuntimeCore["Handwritten Runtime Core Systems"]
-    CatalogInstall --> RuntimeCore
-```
-
-## 真实业务流：AutoChess Ability 激活
-
-目标态业务链路应如下：
-
-```text
-AutoChess room config
-  -> Luban ability / GE / tag / cue rows
-  -> SourceGenerator builds GASDefinitionCatalogBlob layout
-  -> Bootstrap installs DefinitionCatalogSingleton
-  -> AutoChess OOP shell sends boundary command
-  -> handwritten AbilityCommandIngestSystem consumes command
-  -> generated resolver builds AbilityActivationPlanRecord
-  -> handwritten EffectFanInSystem writes GECommandSeedRecord / GEEffectCommandRecord
-  -> handwritten GE / Attribute systems apply result
-  -> Boundary projection emits logs / replay / debugger records
-```
-
-这里 SourceGenerator 不生成 AutoChess 战斗循环，不生成 Runtime lifecycle，不生成 presentation。它只把配置事实压缩成 Runtime Core 可读的不可变数据和纯解析函数。
-
-## 目标代码形态
-
-### Generated Runtime：只生成纯函数
-
-```csharp
-namespace GAS.Runtime.Generated
-{
-    public static class GASGeneratedRuntimeDefinitionResolver
-    {
-        public static bool TryBuildAbilityActivationPlan(
-            ref GASDefinitionCatalogBlob catalog,
-            int abilityCode,
-            in AbilityActivationInputRecord input,
-            out AbilityActivationPlanRecord plan)
-        {
-            plan = default;
-            if (!GASGeneratedDefinitionCatalogLookup.TryGetAbilityIndex(
-                    ref catalog,
-                    abilityCode,
-                    out var abilityIndex))
-            {
-                plan.FailureReasonCode = GASFailureReasonCodes.AbilityNotFound;
-                return false;
-            }
-
-            ref readonly var ability =
-                ref GASGeneratedDefinitionCatalogLookup.GetAbility(ref catalog, abilityIndex);
-
-            plan = AbilityActivationPlanRecord.FromDefinition(in input, abilityIndex, in ability);
-            return true;
-        }
-    }
-}
-```
-
-### Handwritten Runtime Core：拥有 lifecycle
-
-```csharp
-[BurstCompile]
-public partial struct AbilityCommandIngestSystem : ISystem
-{
-    private EntityQuery _query;
-
-    public void OnCreate(ref SystemState state)
-    {
-        _query = state.GetEntityQuery(AbilityCommandIngestQuery.Desc);
-        state.RequireForUpdate<GASDefinitionCatalogComponent>();
-    }
-
-    public void OnUpdate(ref SystemState state)
-    {
-        var catalogRef = SystemAPI.GetSingleton<GASDefinitionCatalogComponent>().Catalog;
-        if (!catalogRef.IsCreated)
-            return;
-
-        var job = new AbilityCommandIngestJob
-        {
-            Catalog = catalogRef,
-            // Runtime Core owns buffers, stream writers, ECB and dependencies.
-        };
-
-        state.Dependency = job.Schedule(_query, state.Dependency);
-    }
-}
-```
-
-### Bootstrap：拥有 catalog 构建与释放
-
-```csharp
-public sealed class GASDefinitionCatalogBootstrapOwner : IDisposable
-{
-    private BlobAssetReference<GASDefinitionCatalogBlob> _catalog;
-
-    public Entity Install(EntityManager entityManager)
-    {
-        _catalog = GASGeneratedDefinitionCatalogBuilder.BuildCatalog(Allocator.Persistent);
-        var entity = entityManager.CreateEntity(ComponentType.ReadWrite<GASDefinitionCatalogComponent>());
-        entityManager.SetComponentData(entity, new GASDefinitionCatalogComponent
-        {
-            Catalog = _catalog,
-            Revision = 1,
-        });
-
-        return entity;
-    }
-
-    public void Dispose()
-    {
-        if (_catalog.IsCreated)
-            _catalog.Dispose();
-    }
-}
-```
-
-后续更优目标是把 `GASGeneratedDefinitionCatalogBuilder` 移入 Baking / Bootstrap asmdef，Runtime asmdef 只保留 catalog type、lookup 和 pure glue。
-
-## DOTS 规则对照
-
-| 规则 | 目标态判定 | 当前链路状态 | 必须修正 |
+| 事实项 | 当前证据 | 官方规则 | 当前判定 |
 |---|---|---|---|
-| `BLOB-01` | 静态定义进入 immutable Blob，Runtime 只读 | 方向正确，Catalog 已出现 | 补 content hash / schema hash / dispose owner 审计 |
-| `BLOB-02` | `BlobBuilder` 只在 Baking 或初始化期 | 部分满足 | builder 不应作为 hot path 可见能力；移到 Baking / Bootstrap |
-| `BAKE-01` / `BAKE-02` | Baker 只添加、不读其他 Baker 输出、无状态 | Baker glue 方向可接受 | 继续阻断 Baker 读 Runtime state |
-| `BUR-01` | hot path job Burst 且无托管依赖 | pure glue 可满足；generated lifecycle 不应存在 | 手写 Runtime Core jobs 负责 Burst 证据 |
-| `BUR-02` | FunctionPointer 只用于批处理粒度 | 当前 magnitude evaluator 是 static switch | 后续 MMC 大批量再引入 batch FunctionPointer |
-| `QRY-01` | hot path 优先 job 化 | 当前 generated system 有 job，但职责 owner 错 | Runtime Core 手写 system 拥有 query |
-| `QRY-04` | 高频 random lookup 改 owner-local / chunk-local | 当前 generated runtime 大量 ComponentLookup / BufferLookup | 不允许 SourceGenerator 生成 random lookup hot path |
-| `BUF-02` | 单一全局 buffer 仅 proof / 低量 | 当前部分 stream / bus 仍 proof-only | Runtime Core 重新选型 NativeStream / owner-local range |
-| `NAT-03` | NativeStream fan-in 定义 merge 顺序和预算 | generated glue 不应拥有 NativeContainer | 手写 EffectFanInSystem 负责预算和确定性 merge |
-| `SC-01` / `ECB-03` | hot path 不直接结构变化；ECB playback 属于明确 phase | generated system 当前接触 ECB / EntityManager | SourceGenerator 不生成结构变化 owner |
-| `SYS-03` | 系统数量是成本源 | generated registration 一次加多个 system | Runtime Core 根据 lane 设计决定 system 数量 |
+| Core / Demo phase 已拆分 | `GasCodeGenPipeline.s_corePhases` 不含 `AutoChessDemoConfigPhase`，Demo 写入 standalone output root | `ODF-06`、`20-GASRuntimeCore-API选型基线.md` | 旧 P0 已缓解；继续保持 Core report 与 Demo evidence 分 owner |
+| RuntimeDefinitionGluePhase 过厚 | 同 phase 生成 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs` | `SYS-01`、`SYS-03`、`QRY-01` | SourceGenerator 越权生成 lifecycle |
+| generated runtime system registration 当前为 0 | report 输出 `GeneratedRuntimeSystemRegistrationHits: 0`，output list 不含 `RuntimeSystemRegistration.gen.cs`；手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 对缺失 generated type 当前静默跳过 | `SYS-01`、`SYS-03` | SourceGenerator 不自注册是正向事实；手写 registry 仍缺 fail-fast 证据，新增 registration helper 必须默认失败 |
+| generated runtime boundary gate 阻断未分类命中 | report 输出 `GeneratedRuntimeBoundaryHits: 135`、`GeneratedRuntimeBoundaryGateMode: blocking-unclassified-migration-proof`、`GeneratedRuntimeUnclassifiedBoundaryHits: 0` | `ODF-18`、`SYS-01`、`QRY-04`、`SC-01` | 未分类回流已被阻断；已分类 `MigrationProofOnly` 仍可生成 |
+| generated runtime 使用 random lookup | generated lifecycle 文件内使用 `ComponentLookup<T>` / `BufferLookup<T>` | `QRY-04`、`PRF-06`、`PRF-19` | 只能作为迁移期 proof，不是 scale-ready 终局 |
+| Catalog builder runtime-visible | `DefinitionCatalog.gen.cs` 暴露 `BuildCatalog()` / `BlobBuilder` | `BLOB-01`、`BLOB-02`、`BAKE-01` | 初始化可接受，但层级边界和 dispose owner 需继续证明 |
+| Forbidden dependency gate 通过 | `RuntimeForbiddenDependencyHits: 0` | `ODF-18` | 只证明 managed config 未泄漏，不能证明 lifecycle / query / ECB 合规 |
 
-## 新 validation gate
+## 后续事实约束
 
-当前 report 应增加硬规则。Runtime-visible generated 文件若命中以下内容，默认失败：
+以下不是本文件的任务计划，而是后续实现必须回填证据的事实约束：
 
-```text
-: ISystem
-OnCreate(ref SystemState
-OnUpdate(ref SystemState
-World world
-CreateSystem(
-AddSystemToUpdateList(
-state.EntityManager
-SystemAPI.GetComponentLookup
-SystemAPI.GetBufferLookup
-EntityCommandBuffer
-.Schedule(
-.Run(
-NativeList<
-NativeStream
-```
+1. Core generation 默认入口必须持续证明 Core phase set 不包含 `AutoChessDemoConfigPhase` 或任何 Demo 专用 phase；Demo standalone manifest 不能反哺为 Core validation evidence。
+2. Runtime-visible generated artifact 必须能归类为 definition、Blob、lookup、pure glue、validation、Baker glue 或 Bootstrap glue；否则必须标记为迁移期 proof 并绑定移除任务。
+3. validation report 已新增 generated lifecycle / ownership / random lookup / NativeContainer / structural change gate，并已进入 `blocking-unclassified-migration-proof`；后续必须把允许存在的 `MigrationProofOnly` 迁出 Runtime-visible lifecycle、收紧阈值或转为失败条件。
+4. `BlobBuilder` 与 catalog dispose owner 必须有 Baking / Bootstrap / initialization 证据；Runtime Core hot path 只能只读 catalog。
+5. generated `.gen.cs` 的修复必须落回 `GasGlueCodeGenPhases`、manifest、validation report、离线 sourcegen bat/CLI 或 Unity batchmode 生成链路；不能手改 generated output 当作架构修复。
 
-例外只能是：
+## 当前红线
 
-1. 文件被 manifest 标注为 `MigrationProofOnly`。
-2. 文件不在 `RuntimeVisible = true` 层。
-3. Spec 明确允许该 artifact 暂时存在，并且任务树中有移除计划。
-
-报告里应新增：
-
-```text
-GeneratedRuntimeLifecycleHits
-GeneratedRuntimeOwnershipHits
-GeneratedRuntimeRandomLookupHits
-GeneratedRuntimeNativeContainerOwnerHits
-GeneratedRuntimeStructuralChangeHits
-```
-
-这些指标比单纯 `RuntimeForbiddenDependencyHits` 更能证明 SourceGenerator 是否守住职责边界。
-
-## 允许保留的 generated Runtime artifact
-
-| Artifact | 是否允许 | 原因 |
-|---|---:|---|
-| `DefinitionIndex.gen.cs` | 是 | stable metadata / row-free |
-| `BlobSchemas.gen.cs` | 是 | Runtime 可见 definition struct |
-| `DefinitionCatalog.gen.cs` 的 lookup 部分 | 是 | code -> index / ref readonly 访问 |
-| `RuntimeDefinitionGlue.gen.cs` | 是 | pure definition -> record 解析 |
-| `ComponentTypeSets.gen.cs` | 有条件 | 只输出 `ComponentTypeSet` 常量，不隐藏结构变化 |
-| `StaticLookups.gen.cs` | 迁移期 | 有 NativeArray owner，目标态优先 Catalog Blob |
-| `RuntimeAbilityActivation.gen.cs` | 否 | lifecycle system |
-| `RuntimeEffectInstant.gen.cs` | 否 | lifecycle system |
-| `RuntimeActiveEffect.gen.cs` | 否 | lifecycle system |
-| `RuntimeSystemRegistration.gen.cs` | 否 | system ownership / registration |
-
-## 重构路线
-
-### P0：SourceGenerator 收权
-
-1. `GasCodeGenPipeline.RunCore()` 默认不包含 `AutoChessDemoConfigPhase`。
-2. `RuntimeDefinitionGluePhase` 只输出 pure glue 文件。
-3. 删除或迁移 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs`、`RuntimeSystemRegistration.gen.cs`。
-4. Validation report 增加 lifecycle / ownership hard gate。
-
-### P1：Catalog bootstrap 收口
-
-1. 将 `GASGeneratedDefinitionCatalogBuilder` 移到 Baking / Bootstrap 层。
-2. 明确 catalog singleton 安装 owner。
-3. 明确 runtime-created Blob 的 dispose owner。
-4. 补 schema hash / content hash / row count / source hash 进入 catalog。
-
-### P1：Runtime Core 手写消费链
-
-1. 手写 `AbilityCommandIngestSystem` 消费 catalog + generated resolver。
-2. 手写 `GASEffectFanInSystem` 消费 `GECommandSeedRecord`。
-3. 手写 `GEEffectSpecBuildSystem` / `GASAttributeSetReduceApplySystem` 只调用 generated magnitude / modifier glue。
-4. Runtime Core system 负责 query、NativeContainer、ECB、dependency、debugger markers。
-
-### P2：Scale-ready 数据形态
-
-1. 将 proof-only singleton buffer 迁为 owner-local range 或 `NativeStream` deterministic fan-in。
-2. 将高频 `ComponentLookup` / `BufferLookup` random access 改成 chunk-local / owner-local。
-3. 对 MMC / ExecutionCalculation 做 batch static switch 或 FunctionPointer batch 选型。
-4. Debugger report 输出 generated glue 调用次数、catalog lookup 次数、random lookup 次数和 buffer spill。
-
-## 最终不变量
-
-1. GAS Runtime Core 不引用 `cfg.*`、`XLuban`、`SimpleJSON`、JSON reader 或 managed row。
-2. SourceGenerator 不生成 `ISystem`、system registration、ECB playback、EntityManager write。
-3. SourceGenerator 不拥有 NativeContainer 生命周期。
-4. Runtime Core system 是 gameplay lifecycle owner。
-5. Generated Runtime glue 只把 immutable definition 转换为 frame-local record。
-6. Catalog 只读，world/bootstrap 完成后不可写。
-7. `BlobBuilder` 只在 Baking / Bootstrap / initialization 出现，不在 hot path 出现。
-8. Demo phase 不进入 Core pipeline 默认路径。
-9. Validation report 必须检查职责边界，而不只是检查 forbidden dependency。
-10. 每条 Ability / GE 业务链路必须能证明：
-
-```text
-AbilityCode
-  -> AbilityDefinitionIndex
-  -> ref readonly AbilityDefinitionBlob
-  -> GECommandSeedRecord
-  -> ResolvedModifierRecord
-```
-
-全程不反查 managed row、JSON、Dictionary 或 per-definition entity。
+1. 不再把“没有 `cfg.*` / JSON / managed row”写成 SourceGenerator 完全合规。
+2. 不再把 generated lifecycle system 写成目标态 Runtime Core。
+3. 不再把 `ComponentLookup` / `BufferLookup` job 化迁移写成最终性能优化完成。
+4. 不再把 AutoChessDemo catalog install 当作通用 Baking / Bootstrap contract 完成证明。
+5. 不再把目标态分层、目标数据流和示例代码放入本文件；这些内容归属 `01-目标态架构共识`。

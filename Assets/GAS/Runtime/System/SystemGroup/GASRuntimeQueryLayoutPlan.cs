@@ -17,7 +17,6 @@ namespace GAS.Runtime
         AttributeFactProjection = 10,
         TagMaskRuntime = 11,
         ObservationReplayAndOutbox = 12,
-        ManagedCuePresentation = 13,
         GameplayEffectCommandSpecStream = 14,
         ActiveEffectStore = 15,
     }
@@ -141,6 +140,7 @@ namespace GAS.Runtime
         ActiveEffectGlobalIndexStore = 46,
         ActiveEffectGlobalIndexBuffer = 47,
         ActiveEffectGlobalIndexStableRow = 48,
+        CuePresentationRequest = 49,
     }
 
     public readonly struct GASRuntimeQueryLayoutEntry
@@ -556,7 +556,8 @@ namespace GAS.Runtime
                     },
                     typeof(GEExecutionCalculationSystem),
                     typeof(GEExecutionCalculationExtensionSystemGroup),
-                    typeof(GEExecutionCalculationOutputModifierSystem)),
+                    typeof(GEExecutionCalculationOutputModifierSystem),
+                    typeof(GASAttributeModifierDeltaApplySystem)),
                 Entry(
                     GASRuntimeQueryLayoutEntryId.AttributeRecalculate,
                     GASRuntimeLayoutDomain.Attribute,
@@ -618,28 +619,6 @@ namespace GAS.Runtime
                     typeof(GameplayEventBusClearSystem),
                     typeof(PresentationOutboxProjectionSystem),
                     typeof(ReplayLogSystem)),
-                Entry(
-                    GASRuntimeQueryLayoutEntryId.ManagedCuePresentation,
-                    GASRuntimeLayoutDomain.GameplayCue,
-                    GASRuntimeEntityKind.ManagedPresentation,
-                    GASRuntimeLayoutCapability.QueryBased
-                    | GASRuntimeLayoutCapability.ManagedPresentationBoundary
-                    | GASRuntimeLayoutCapability.ObservationOnly
-                    | GASRuntimeLayoutCapability.RequiresMainThreadEntityManager,
-                    GASRuntimeLayoutBoundary.ManagedPresentationBoundary
-                    | GASRuntimeLayoutBoundary.ObservationReadBoundary,
-                    GASRuntimeLayoutDecision.ManagedPresentationBoundary,
-                    new[]
-                    {
-                        GASRuntimeLayoutComponentSlot.ManagedCueComponent,
-                        GASRuntimeLayoutComponentSlot.CueEnableableState,
-                    },
-                    Array.Empty<GASRuntimeLayoutComponentSlot>(),
-                    typeof(CueRequestBridgeSystem),
-                    typeof(CueStartSystem),
-                    typeof(CueTickSystem),
-                    typeof(CueEndSystem),
-                    typeof(CueDestroySystem)),
             });
         }
 

@@ -8,3 +8,15 @@ args = [
 ]
 cwd = 'E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity'
 startup_timeout_sec = 120
+
+[mcp_servers.codedb-mcp.tools.codedb_status]
+approval_mode = "approve"
+
+[mcp_servers.codedb-mcp.tools.codedb_glob]
+approval_mode = "approve"
+
+[mcp_servers.codedb-mcp.tools.codedb_projects]
+approval_mode = "approve"
+
+[mcp_servers.codedb-mcp.tools.codedb_read]
+approval_mode = "approve"

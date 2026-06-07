@@ -2,9 +2,9 @@
 
 ## 目的
 
-定义 Luban + SourceGenerator 在目标态 EX-GAS 2.0 中的权限边界。核心结论：SourceGenerator 负责把配置事实压缩成 Runtime Core 可消费的不可变数据和纯胶水；Runtime Core 的生命周期、调度、查询、NativeContainer、结构变化和性能归因必须由手写 ECS System 拥有。
+定义 Luban + SourceGenerator 在目标态 EX-GAS 2.0 中的权限边界。核心结论：SourceGenerator 负责把配置输入压缩成 Runtime Core 可消费的不可变数据和纯胶水；Runtime Core 的生命周期、调度、查询、NativeContainer、结构变化和性能归因必须由手写 ECS System 拥有。
 
-本文件是目标态 Spec，不记录当前实现生成了哪些文件、哪些 gate 已通过、哪些任务未完成。当前链路事实写入 `../00-当前架构事实/SourceGenerator链路复审事实.md`。
+本文件是目标态 Spec，不记录实现生成文件、gate 结果或任务状态。实现链路事实写入 `../00-当前架构事实/SourceGenerator链路复审事实.md`。
 
 ## 分层边界
 
@@ -16,11 +16,11 @@ flowchart TD
     Core --> Facts["Typed Facts / Boundary Outbox"]
 ```
 
-## 官方依据与论证标准
+## 官方依据与设计论证
 
 | 边界选择 | 官方规则依据 | 为什么更优秀 | 为什么有必要 |
 |---|---|---|---|
-| SourceGenerator 不生成 `ISystem` / `OnUpdate` | `SYS-01`、`SYS-02`、`SYS-03`、`PRF-07` | Runtime lifecycle owner 保持显式，System 数量、TypeHandle、Lookup、Dependency 成本可由架构统一预算 | generated system 会把调度决策分散到模板，后续业务无法判断是 gameplay 需要还是模板惯性 |
+| SourceGenerator 不生成 `ISystem` / `OnUpdate` | `SYS-01`、`SYS-02`、`SYS-03`、`PRF-07` | Runtime lifecycle owner 保持显式，System 数量、TypeHandle、Lookup、Dependency 成本可由架构统一预算 | generated system 会把调度决策分散到模板，业务实现无法判断是 gameplay 需要还是模板惯性 |
 | SourceGenerator 不拥有 query / lookup refresh | `QRY-01`、`QRY-02`、`QRY-04`、`PRF-33` | 每个 `ISystem` 在 `OnCreate` / `OnUpdate` 拥有自己的 query contract 和 handle refresh，Debugger 可归因 | 中央生成 query 或 hidden lookup 会绕开 query contract，并可能把 random access 固化进 hot path |
 | SourceGenerator 不拥有 ECB / 结构变化 | `SC-01`、`SC-03`、`ECB-01`、`ECB-03`、`PRF-04` | 所有结构变化进入 `GASStructuralCommitSystemGroup`，Profiler/Journaling 能定位来源和 playback phase | generated ECB owner 会让 structural change 的相位、sortKey 和 sync point 不可审查 |
 | SourceGenerator 不拥有 NativeContainer 生命周期 | `NAT-01`、`NAT-03`、`NAT-05`、`PRF-14`、`PRF-34` | allocator owner、dispose/rewind、merge 顺序由 Runtime System 明确记录，validation 可检查泄漏和预算 | generated Persistent/TempJob container owner 隐藏后，job dependency 和 dispose 责任无法被 ECS 安全系统完整追踪 |
@@ -49,6 +49,18 @@ flowchart TD
 | `ComponentLookup` / `BufferLookup` hot path 写入 | 高频 random lookup 需要任务级 API 选型和重选型触发条件 |
 | NativeContainer owner | allocator、dispose/rewind、dependency chain 应由 Runtime System 管理 |
 | 读取 Luban row / JSON / managed registry 的 Runtime path | 破坏 Burst/job 和配置不可变边界 |
+
+## Runtime Registration Owner Contract
+
+目标态中，Runtime Core schedule registry 是手写 ECS 架构 contract，而不是 SourceGenerator 输出。任何 generated glue 进入 Runtime tick 前，必须先由手写 Runtime Core 明确声明：
+
+1. 所属物理 `SystemGroup` 和 lane。
+2. 读写 component / buffer / blob / NativeContainer 集合。
+3. query ownership、dependency policy、allocator owner 和 structural mutation permission。
+4. frame budget、Debugger counter 和 validation gate。
+5. 缺失 generated artifact、类型不匹配或 assembly 不可用时的 fail-fast 规则。
+
+SourceGenerator 可以输出供 registry 校验的静态 metadata，但不能生成自注册 helper，不能把 generated artifact 静默挂入 update list，也不能把“类型存在”当成架构验收。系统数量、执行相位和 update order 属于 Runtime Core 预算；generated code 只能被手写 owner 调用或验证。
 
 ## Generated Glue 调用形态
 
@@ -94,4 +106,4 @@ Runtime-visible generated artifact 必须通过下列门禁：
 2. 任何需要 gameplay lifecycle 的新增功能先在 `03-RuntimeCore管线Spec.md` / `04` / `05` 中定义 lane owner，再由手写 ECS System 实现。
 3. 生成代码可被 Burst job 调用，不要求 Runtime job 反向依赖 managed object。
 4. 失败报告能说明“为什么越界”，而不是只输出裸命中数。
-5. 目标态文档只描述这些边界；当前命中、迁移状态和文件清单只进入 `00-当前架构事实/`。
+5. 目标态文档只描述这些边界；现实命中、迁移状态和文件清单只进入 `00-当前架构事实/`。

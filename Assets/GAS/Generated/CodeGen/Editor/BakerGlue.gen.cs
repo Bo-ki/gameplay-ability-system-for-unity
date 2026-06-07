@@ -43,6 +43,11 @@ namespace GAS.Runtime.Generated
                 row = new GAS.Editor.AbilityDefinitionRow { AbilityCode = 9103, Level = 1, TimelineId = 0, PrimaryGameplayEffectCode = 9207, SecondaryGameplayEffectCode = 0, ActivationOwnedTagCode = 0, CostGameplayEffectCode = 0, CooldownGameplayEffectCode = 0, CooldownFrames = 0, TargetRuleCode = 0 };
                 return true;
             }
+            if (abilityCode == 9104)
+            {
+                row = new GAS.Editor.AbilityDefinitionRow { AbilityCode = 9104, Level = 1, TimelineId = 0, PrimaryGameplayEffectCode = 9203, SecondaryGameplayEffectCode = 0, ActivationOwnedTagCode = 0, CostGameplayEffectCode = 0, CooldownGameplayEffectCode = 0, CooldownFrames = 0, TargetRuleCode = 0 };
+                return true;
+            }
             if (abilityCode == 10002)
             {
                 row = new GAS.Editor.AbilityDefinitionRow { AbilityCode = 10002, Level = 1, TimelineId = 0, PrimaryGameplayEffectCode = 1002, SecondaryGameplayEffectCode = 1001, ActivationOwnedTagCode = 0, CostGameplayEffectCode = 0, CooldownGameplayEffectCode = 0, CooldownFrames = 0, TargetRuleCode = 0 };
@@ -245,6 +250,16 @@ namespace GAS.Runtime.Generated
             if (gameplayEffectCode == 9202)
             {
                 row = new GAS.Editor.GameplayEffectDefinitionRow { GameplayEffectCode = 9202, Name = "AutoChessEnemyAttackDamage", ModifierAttributeSetCode = 9001, ModifierAttributeCode = 1, ModifierOperation = 3, ModifierMagnitude = 8f, ModifierMagnitudeSource = 0, ModifierMagnitudeKey = 0, ModifierAttributeSetCodes = new int[] { 9001 }, ModifierAttributeCodes = new int[] { 1 }, ModifierOperations = new int[] { 3 }, ModifierMagnitudes = new float[] { 8f }, ModifierMagnitudeSources = new int[] { 0 }, ModifierMagnitudeKeys = new int[] { 0 }, DurationFrames = 0, PeriodFrames = 0, PeriodGameplayEffectCode = 0, GrantedTagCode = 0, GameplayCueCode = 9301, DamageTypeCode = 0, ResistanceAttributeSetCode = 0, ResistanceAttributeCode = 0, ResistanceCap = 0f, RemoveGameplayEffectTagCode = 0, StackingCode = 0, StackLimitCount = 0, StackType = 0, EffectDurationRefreshPolicy = 0, EffectPeriodResetPolicy = 0, EffectExpirationPolicy = 0, DenyOverflowApplication = false, ClearStackOnOverflow = false, OverflowGameplayEffectCode = 0 };
+                return true;
+            }
+            if (gameplayEffectCode == 9203)
+            {
+                row = new GAS.Editor.GameplayEffectDefinitionRow { GameplayEffectCode = 9203, Name = "AutoChessPlayerPoison", ModifierAttributeSetCode = 0, ModifierAttributeCode = 0, ModifierOperation = 0, ModifierMagnitude = 0f, ModifierMagnitudeSource = 0, ModifierMagnitudeKey = 0, ModifierAttributeSetCodes = new int[] {  }, ModifierAttributeCodes = new int[] {  }, ModifierOperations = new int[] {  }, ModifierMagnitudes = new float[] {  }, ModifierMagnitudeSources = new int[] {  }, ModifierMagnitudeKeys = new int[] {  }, DurationFrames = 8, PeriodFrames = 2, PeriodGameplayEffectCode = 9204, GrantedTagCode = 0, GameplayCueCode = 9301, DamageTypeCode = 0, ResistanceAttributeSetCode = 0, ResistanceAttributeCode = 0, ResistanceCap = 0f, RemoveGameplayEffectTagCode = 0, StackingCode = 0, StackLimitCount = 3, StackType = 9203, EffectDurationRefreshPolicy = 1, EffectPeriodResetPolicy = 1, EffectExpirationPolicy = 0, DenyOverflowApplication = false, ClearStackOnOverflow = false, OverflowGameplayEffectCode = 0 };
+                return true;
+            }
+            if (gameplayEffectCode == 9204)
+            {
+                row = new GAS.Editor.GameplayEffectDefinitionRow { GameplayEffectCode = 9204, Name = "AutoChessPoisonTickDamage", ModifierAttributeSetCode = 9001, ModifierAttributeCode = 1, ModifierOperation = 3, ModifierMagnitude = 1f, ModifierMagnitudeSource = 0, ModifierMagnitudeKey = 0, ModifierAttributeSetCodes = new int[] { 9001 }, ModifierAttributeCodes = new int[] { 1 }, ModifierOperations = new int[] { 3 }, ModifierMagnitudes = new float[] { 1f }, ModifierMagnitudeSources = new int[] { 0 }, ModifierMagnitudeKeys = new int[] { 0 }, DurationFrames = 0, PeriodFrames = 0, PeriodGameplayEffectCode = 0, GrantedTagCode = 0, GameplayCueCode = 9301, DamageTypeCode = 0, ResistanceAttributeSetCode = 0, ResistanceAttributeCode = 0, ResistanceCap = 0f, RemoveGameplayEffectTagCode = 0, StackingCode = 0, StackLimitCount = 0, StackType = 0, EffectDurationRefreshPolicy = 0, EffectPeriodResetPolicy = 0, EffectExpirationPolicy = 0, DenyOverflowApplication = false, ClearStackOnOverflow = false, OverflowGameplayEffectCode = 0 };
                 return true;
             }
             if (gameplayEffectCode == 9207)

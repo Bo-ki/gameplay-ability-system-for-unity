@@ -25,15 +25,59 @@ namespace GAS.Editor
                     return 2;
 #endif
 
-                return GasCodeGenPipeline.TryRunAll(refreshAssetDatabase: false)
-                    ? 0
-                    : 3;
+                var mode = ResolveMode(args);
+                if (string.Equals(mode, "sourcegen-all", StringComparison.OrdinalIgnoreCase))
+                    return GasCodeGenPipeline.TryRunAll(refreshAssetDatabase: false) ? 0 : 3;
+
+                if (string.Equals(mode, "autochess", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(mode, "sourcegen-autochess", StringComparison.OrdinalIgnoreCase))
+                {
+                    return GasCodeGenPipeline.TryRunAutoChessDemo(refreshAssetDatabase: false) ? 0 : 3;
+                }
+
+                if (string.Equals(mode, "sourcegen", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(mode, "core", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(mode, "sourcegen-core", StringComparison.OrdinalIgnoreCase))
+                {
+                    return GasCodeGenPipeline.TryRunCore(refreshAssetDatabase: false) ? 0 : 3;
+                }
+
+                GasCodeGenEnvironment.LogError($"Unknown codegen mode: {mode}");
+                return 2;
             }
             catch (Exception ex)
             {
                 GasCodeGenEnvironment.LogException(ex);
                 return 1;
             }
+        }
+
+        private static string ResolveMode(string[] args)
+        {
+            var explicitMode = string.Empty;
+            if (args != null)
+            {
+                for (var i = 0; i < args.Length; i++)
+                {
+                    var arg = args[i];
+                    if (arg == "--mode" && i + 1 < args.Length)
+                    {
+                        explicitMode = args[i + 1];
+                        break;
+                    }
+
+                    const string prefix = "--mode=";
+                    if (arg != null && arg.StartsWith(prefix, StringComparison.Ordinal))
+                    {
+                        explicitMode = arg.Substring(prefix.Length);
+                        break;
+                    }
+                }
+            }
+
+            return string.IsNullOrWhiteSpace(explicitMode)
+                ? "sourcegen"
+                : explicitMode;
         }
     }
 #endif

@@ -1,7 +1,6 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Mathematics;
 using Unity.Jobs;
 using GAS.Runtime;
 
@@ -12,6 +11,7 @@ namespace GAS.AutoChessDemo
     public partial struct AutoChessExecuteDamageCalculationSystem : ISystem
     {
         private EntityQuery _driverQuery;
+        private EntityQuery _calculationQuery;
 
         public void OnCreate(ref SystemState state)
         {
@@ -22,10 +22,18 @@ namespace GAS.AutoChessDemo
                     ComponentType.ReadWrite<AutoChessBattleDriverComponent>(),
                 },
             });
+            _calculationQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<AutoChessExecuteDamageCalculationComponent>(),
+                },
+            });
 
             state.RequireForUpdate<GlobalTimer>();
             state.RequireForUpdate<GEEffectCommandStreamComponent>();
             state.RequireForUpdate(_driverQuery);
+            state.RequireForUpdate(_calculationQuery);
         }
 
         public void OnUpdate(ref SystemState state)
@@ -39,11 +47,13 @@ namespace GAS.AutoChessDemo
             if (driver.LastExecutionFrame == frame)
                 return;
 
+            var calculation = _calculationQuery.GetSingleton<AutoChessExecuteDamageCalculationComponent>();
             var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
             state.Dependency = new ExecuteDamageCalculationJob
             {
                 DriverEntity = driverEntity,
                 Driver = driver,
+                Calculation = calculation,
                 StreamEntity = streamEntity,
                 Frame = frame,
                 DriverLookup = SystemAPI.GetComponentLookup<AutoChessBattleDriverComponent>(),
@@ -51,9 +61,9 @@ namespace GAS.AutoChessDemo
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: true),
                 DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(),
                 FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
-                AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(),
+                AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true),
+                PendingOwnerLookup = SystemAPI.GetComponentLookup<PendingAttributeModifierComponent>(),
                 DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
-                ChangeEventPendingLookup = SystemAPI.GetComponentLookup<AttributeChangeEventPendingComponent>(),
             }.Schedule(state.Dependency);
         }
 
@@ -66,6 +76,7 @@ namespace GAS.AutoChessDemo
         {
             public Entity DriverEntity;
             public AutoChessBattleDriverComponent Driver;
+            public AutoChessExecuteDamageCalculationComponent Calculation;
             public Entity StreamEntity;
             public int Frame;
             public ComponentLookup<AutoChessBattleDriverComponent> DriverLookup;
@@ -73,28 +84,26 @@ namespace GAS.AutoChessDemo
             [ReadOnly] public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             public BufferLookup<AttributeModifierBuffer> DeltaLookup;
             public BufferLookup<GameplayEventBuffer> FactLookup;
-            public BufferLookup<AttributeValueBuffer> AttributeLookup;
+            [ReadOnly] public BufferLookup<AttributeValueBuffer> AttributeLookup;
+            public ComponentLookup<PendingAttributeModifierComponent> PendingOwnerLookup;
             [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
-            public ComponentLookup<AttributeChangeEventPendingComponent> ChangeEventPendingLookup;
 
             public void Execute()
             {
                 if (StreamEntity == Entity.Null
                     || !StreamLookup.HasComponent(StreamEntity)
                     || !CommandLookup.HasBuffer(StreamEntity)
-                    || !DeltaLookup.HasBuffer(StreamEntity)
                     || !FactLookup.HasBuffer(StreamEntity))
                     return;
 
                 var stream = StreamLookup[StreamEntity];
                 var commands = CommandLookup[StreamEntity];
-                var deltas = DeltaLookup[StreamEntity];
                 var facts = FactLookup[StreamEntity];
 
                 for (var i = 0; i < commands.Length; i++)
                 {
                     var command = commands[i];
-                    if (command.GameplayEffectCode != AutoChessBattleRules.GameplayEffectPlayerExecute
+                    if (command.GameplayEffectCode != Calculation.GameplayEffectCode
                         || command.TargetAsc == Entity.Null)
                     {
                         continue;
@@ -102,19 +111,27 @@ namespace GAS.AutoChessDemo
 
                     var targetAsc = command.TargetAsc;
                     if (!AttributeLookup.HasBuffer(targetAsc)
+                        || !DeltaLookup.HasBuffer(targetAsc)
+                        || !PendingOwnerLookup.HasComponent(targetAsc)
                         || IsDestroying(DestroyingLookup, targetAsc))
                     {
                         continue;
                     }
 
                     var attributes = AttributeLookup[targetAsc];
-                    if (!ApplyExecuteDamage(attributes, in command, out var oldValue, out var newValue, out var damage))
+                    if (!TryEvaluateExecuteDamage(
+                            attributes,
+                            in Calculation,
+                            out var damage))
+                    {
                         continue;
+                    }
 
                     var commandFrame = command.Frame != 0 ? command.Frame : Frame;
                     var deltaSequence = Allocate(ref stream.NextDeltaSequence);
                     var factSequence = Allocate(ref stream.NextFactSequence);
-                    deltas.Add(new AttributeModifierBuffer
+                    var targetDeltas = DeltaLookup[targetAsc];
+                    targetDeltas.Add(new AttributeModifierBuffer
                     {
                         Sequence = deltaSequence,
                         SourceCommandSequence = command.Sequence,
@@ -126,15 +143,19 @@ namespace GAS.AutoChessDemo
                         GameplayEffectCode = command.GameplayEffectCode,
                         ContextId = command.ContextId,
                         ParentContextId = command.ParentContextId,
-                        AttrSetCode = AutoChessBattleRules.AttributeSetCombat,
-                        AttributeCode = AutoChessBattleRules.AttributeHealth,
+                        AttrSetCode = Calculation.HealthAttrSetCode,
+                        AttributeCode = Calculation.HealthAttrCode,
                         Op = EModifierOp.Subtract,
                         ValueKind = AttributeDeltaValueKind.BaseValue,
                         Magnitude = damage,
-                        OldValue = oldValue,
-                        NewValue = newValue,
+                        Flags = AttributeModifierBufferFlags.RequiresCoreApply,
                     });
-                    MarkOwnerChangeEventPending(targetAsc);
+                    PendingOwnerLookup[targetAsc] = new PendingAttributeModifierComponent
+                    {
+                        LastWriteFrame = commandFrame,
+                        PendingCount = targetDeltas.Length,
+                    };
+                    PendingOwnerLookup.SetComponentEnabled(targetAsc, true);
 
                     facts.Add(new GameplayEventBuffer
                     {
@@ -153,13 +174,11 @@ namespace GAS.AutoChessDemo
                         GameplayEffectCode = command.GameplayEffectCode,
                         ContextId = command.ContextId,
                         ParentContextId = command.ParentContextId,
-                        EventCode = AutoChessBattleRules.ExecutionCalculationExecuteDamage,
-                        AttrSetCode = AutoChessBattleRules.AttributeSetCombat,
-                        AttributeCode = AutoChessBattleRules.AttributeHealth,
-                        ReasonCode = AutoChessBattleRules.ExecutionCalculationExecuteDamageOutput,
+                        EventCode = Calculation.CalculationCode,
+                        AttrSetCode = Calculation.HealthAttrSetCode,
+                        AttributeCode = Calculation.HealthAttrCode,
+                        ReasonCode = Calculation.OutputKey,
                         Value = damage,
-                        OldValue = oldValue,
-                        NewValue = newValue,
                     });
 
                 }
@@ -168,12 +187,6 @@ namespace GAS.AutoChessDemo
 
                 Driver.LastExecutionFrame = Frame;
                 DriverLookup[DriverEntity] = Driver;
-            }
-
-            private void MarkOwnerChangeEventPending(Entity asc)
-            {
-                if (ChangeEventPendingLookup.HasComponent(asc))
-                    ChangeEventPendingLookup.SetComponentEnabled(asc, true);
             }
         }
 
@@ -192,57 +205,35 @@ namespace GAS.AutoChessDemo
             return destroyingLookup.HasComponent(asc)
                    && destroyingLookup.IsComponentEnabled(asc);
         }
-        private static bool ApplyExecuteDamage(
+        private static bool TryEvaluateExecuteDamage(
             DynamicBuffer<AttributeValueBuffer> attributes,
-            in GEEffectCommandBuffer command,
-            out float oldValue,
-            out float newValue,
+            in AutoChessExecuteDamageCalculationComponent calculation,
             out float damage)
         {
-            oldValue = 0f;
-            newValue = 0f;
             damage = 0f;
 
             var attrIndex = IndexOfAttribute(
                 attributes,
-                AutoChessBattleRules.AttributeSetCombat,
-                AutoChessBattleRules.AttributeHealth);
+                calculation.HealthAttrSetCode,
+                calculation.HealthAttrCode);
             if (attrIndex < 0)
                 return false;
 
             var attribute = attributes[attrIndex];
-            oldValue = attribute.BaseValue;
-            var oldCurrentValue = attribute.CurrentValue;
-            if (oldValue <= 0f)
-                return false;
-
-            var maxValue = attribute.IsClampMax ? attribute.MaxValue : oldValue;
-            var missingHealth = math.max(0f, maxValue - oldValue);
-            damage = math.clamp(
-                10f + missingHealth * 0.5f,
-                10f,
-                36f);
-            newValue = oldValue - damage;
-
-            attribute.CurrentValue = newValue;
-            Clamp(ref attribute);
-            newValue = attribute.CurrentValue;
-            attribute.BaseValue = newValue;
-            attribute.CurrentValue = newValue;
-            if (newValue == oldValue)
+            if (!AutoChessGeneratedExecutionEvaluator.TryEvaluateExecuteDamage(
+                    attribute.BaseValue,
+                    attribute.MaxValue,
+                    attribute.IsClampMax,
+                    calculation.BaseDamage,
+                    calculation.MissingHealthCoefficient,
+                    calculation.MinDamage,
+                    calculation.MaxDamage,
+                    out var output))
             {
-                attributes[attrIndex] = attribute;
                 return false;
             }
 
-            attribute.Dirty = false;
-            if (oldCurrentValue != attribute.CurrentValue)
-            {
-                attribute.PreviousCurrentValue = oldCurrentValue;
-                attribute.CurrentValueChangePending = true;
-            }
-
-            attributes[attrIndex] = attribute;
+            damage = output.Damage;
             return true;
         }
 
@@ -260,14 +251,5 @@ namespace GAS.AutoChessDemo
 
             return -1;
         }
-
-        private static void Clamp(ref AttributeValueBuffer attribute)
-        {
-            if (attribute.IsClampMin)
-                attribute.CurrentValue = math.max(attribute.CurrentValue, attribute.MinValue);
-            if (attribute.IsClampMax)
-                attribute.CurrentValue = math.min(attribute.CurrentValue, attribute.MaxValue);
-        }
-
     }
 }

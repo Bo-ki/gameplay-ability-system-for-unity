@@ -1,5 +1,5 @@
 using System;
-using Unity.Entities;
+using GAS.Runtime;
 
 namespace GAS.AutoChessDemo
 {
@@ -8,7 +8,7 @@ namespace GAS.AutoChessDemo
         public readonly AutoChessGameRoomDefinition Room;
         private readonly AutoChessBattleUnitRuntime[] _units;
 
-        public Entity DriverEntity { get; private set; }
+        public AutoChessGasBattleDriverHandle DriverHandle { get; private set; }
 
         public AutoChessBattleSession(AutoChessGameRoomDefinition room)
         {
@@ -28,13 +28,7 @@ namespace GAS.AutoChessDemo
                 _units[i] = _units[i].WithGasHandle(handle);
             }
 
-            DriverEntity = AutoChessGasCoreBridge.CreateBattleDriver();
-        }
-
-        public void CacheGrantedAbilityEntities()
-        {
-            for (var i = 0; i < _units.Length; i++)
-                AutoChessGasCoreBridge.CacheGrantedAbilityEntities(_units[i].GasHandle);
+            DriverHandle = AutoChessGasCoreBridge.CreateBattleDriver();
         }
 
         public bool TryResolveWinner(out AutoChessTeam winner)
@@ -90,7 +84,7 @@ namespace GAS.AutoChessDemo
 
         public AutoChessBattleDriverComponent GetDriverStats()
         {
-            return AutoChessGasCoreBridge.GetBattleDriverStats(DriverEntity);
+            return AutoChessGasCoreBridge.GetBattleDriverStats(DriverHandle);
         }
 
         public AutoChessBattleUnitResult[] CreateUnitResults()
@@ -116,18 +110,20 @@ namespace GAS.AutoChessDemo
             return units;
         }
 
-        public AutoChessBattleRuntimeUnitIndex[] CreateRuntimeUnitIndex()
+        public AutoChessBattleReportFact[] CreateReportFacts(
+            in GasStructuredLogExportSnapshot structuredLog)
         {
-            var units = new AutoChessBattleRuntimeUnitIndex[_units.Length];
+            var handles = new AutoChessGasBattleUnitHandle[_units.Length];
             for (var i = 0; i < _units.Length; i++)
-                units[i] = new AutoChessBattleRuntimeUnitIndex(i, _units[i].GasHandle.AscEntity);
-            return units;
+                handles[i] = _units[i].GasHandle;
+
+            return AutoChessGasCoreBridge.CreateReportFacts(structuredLog, handles);
         }
 
         public void Close()
         {
-            AutoChessGasCoreBridge.DestroyBattleDriver(DriverEntity);
-            DriverEntity = Entity.Null;
+            AutoChessGasCoreBridge.CloseBattleDriver(DriverHandle);
+            DriverHandle = default;
 
             for (var i = 0; i < _units.Length; i++)
             {
@@ -171,19 +167,19 @@ namespace GAS.AutoChessDemo
 
             public AutoChessBattleUnitRuntime WithGasHandle(AutoChessGasBattleUnitHandle gasHandle)
             {
-                var alive = gasHandle.AscEntity != Entity.Null;
+                var alive = gasHandle.IsValid;
                 return new AutoChessBattleUnitRuntime(Definition, gasHandle, Health, Energy, alive);
             }
 
             public AutoChessBattleUnitRuntime Refresh()
             {
-                var health = AutoChessGasCoreBridge.ReadCombatAttribute(
-                    GasHandle.AscEntity,
-                    AutoChessBattleRules.AttributeHealth);
-                var energy = AutoChessGasCoreBridge.ReadCombatAttribute(
-                    GasHandle.AscEntity,
-                    AutoChessBattleRules.AttributeEnergy);
-                return new AutoChessBattleUnitRuntime(Definition, GasHandle, health, energy, health > 0f);
+                var attributes = AutoChessGasCoreBridge.ReadCombatAttributes(GasHandle);
+                return new AutoChessBattleUnitRuntime(
+                    Definition,
+                    GasHandle,
+                    attributes.Health,
+                    attributes.Energy,
+                    attributes.Alive);
             }
         }
     }

@@ -104,9 +104,7 @@ namespace GAS.Runtime
         {
             if (cueEntity != Entity.Null
                 && entityManager.Exists(cueEntity)
-                && entityManager.HasComponent<CuePlayingTag>(cueEntity)
-                && entityManager.HasComponent<CuePlayableTag>(cueEntity)
-                && entityManager.IsComponentEnabled<CuePlayingTag>(cueEntity))
+                && entityManager.HasComponent<CuePlayableTag>(cueEntity))
             {
                 entityManager.SetComponentEnabled<CuePlayableTag>(cueEntity,false);
             }
@@ -116,6 +114,8 @@ namespace GAS.Runtime
         {
             if (cueEntity != Entity.Null
                 && entityManager.Exists(cueEntity)
+                && entityManager.HasComponent<CueRuntimeActiveTag>(cueEntity)
+                && entityManager.IsComponentEnabled<CueRuntimeActiveTag>(cueEntity)
                 && entityManager.HasComponent<CuePlayingTag>(cueEntity)
                 && entityManager.HasComponent<CuePlayableTag>(cueEntity)
                 && !entityManager.IsComponentEnabled<CuePlayingTag>(cueEntity))
@@ -124,19 +124,22 @@ namespace GAS.Runtime
             }
         }
 
-        public static CueManagedInstanceComponent InitInstantCueFromGameplayEffect(CueManagedInstanceComponent cue,Entity cueEntity,Entity ge)
+        public static CueManagedInstanceComponent InitInstantCueFromGameplayEffect(
+            EntityManager entityManager,
+            CueManagedInstanceComponent cue,
+            Entity cueEntity,
+            Entity ge)
         {
+            cue.Cue.SetRuntime(entityManager, cueEntity);
             cue.Cue.SetSourceEntity(ge,CueSourceType.GameplayEffect);
-            cue.Cue.SetCueEntity(cueEntity);
-            return cue;
-        }
-
-        public static CueManagedInstanceComponent CopyCueComponent(CueManagedInstanceComponent cue)
-        {
-            return new CueManagedInstanceComponent()
+            if (entityManager.HasComponent<CuePresentationRequestComponent>(cueEntity))
             {
-                Cue = cue.Cue
-            };
+                var request = entityManager.GetComponentData<CuePresentationRequestComponent>(cueEntity);
+                request.SourceEntity = ge;
+                request.SourceType = CueSourceType.GameplayEffect;
+                entityManager.SetComponentData(cueEntity, request);
+            }
+            return cue;
         }
 
         #region 通用型工具接口
@@ -158,7 +161,10 @@ namespace GAS.Runtime
                 || targetAsc == Entity.Null
                 || !entityManager.Exists(cueEntity)
                 || !entityManager.Exists(targetAsc)
-                || !entityManager.HasComponent<CueManagedInstanceComponent>(cueEntity))
+                || !entityManager.HasComponent<CueRuntimeActiveTag>(cueEntity)
+                || !entityManager.IsComponentEnabled<CueRuntimeActiveTag>(cueEntity)
+                || !entityManager.HasComponent<CueManagedInstanceComponent>(cueEntity)
+                || !entityManager.HasComponent<CuePresentationRequestComponent>(cueEntity))
             {
                 return;
             }
@@ -185,13 +191,23 @@ namespace GAS.Runtime
                     return;
                 }
             }
-            // 2.重置Cue逻辑单元
+            // 2.写入 Cue 表现层请求；旧 managed Cue adapter 只有在显式接入时才会消费。
             var cueLogic = entityManager.GetComponentData<CueManagedInstanceComponent>(cueEntity);
-            cueLogic.Cue.Reset();
-            cueLogic.Cue.SetSourceEntity(sourceEntity, sourceType);
-            cueLogic.Cue.AddToTargetAsc(targetAsc);
+            if (cueLogic.Cue == null)
+                return;
+
+            var request = entityManager.GetComponentData<CuePresentationRequestComponent>(cueEntity);
+            request.ResetRequested = 1;
+            request.SourceEntity = sourceEntity;
+            request.SourceType = sourceType;
+            request.SourceUpdateRequested = 1;
+            request.TargetAsc = targetAsc;
+            request.AddTargetRequested = 1;
+            entityManager.SetComponentData(cueEntity, request);
+
             // 3.激活CuePlaying
-            cueLogic.Cue.Play(true);
+            entityManager.SetComponentEnabled<CuePlayingTag>(cueEntity, false);
+            entityManager.SetComponentEnabled<CuePlayableTag>(cueEntity, true);
         }
         #endregion
     }

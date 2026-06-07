@@ -15,7 +15,7 @@ namespace GAS.Runtime
         None = 0,
         RuntimeCoreInstantSpecEvaluation = 1,
         RuntimeCoreActiveEffectStore = 2,
-        AutoChessFullChainValidation = 3,
+        RuntimeBoundaryFullChainValidation = 3,
     }
 
     [Flags]
@@ -30,7 +30,7 @@ namespace GAS.Runtime
         DebuggerEvidenceGate = 1 << 5,
         ApiSelectionTable = 1 << 6,
         OfficialDocCoverage = 1 << 7,
-        NoAutoChessBusinessChange = 1 << 8,
+        NoRuntimeBoundaryBusinessChange = 1 << 8,
     }
 
     [Flags]
@@ -65,8 +65,8 @@ namespace GAS.Runtime
         ReuseDebuggerEvidenceGate = 1 << 5,
         RequireApiSelectionTable = 1 << 6,
         RequireOfficialDocCoverage = 1 << 7,
-        NoAutoChessBusinessChange = 1 << 8,
-        PreferRuntimeCoreBeforeAutoChessValidation = 1 << 9,
+        NoRuntimeBoundaryBusinessChange = 1 << 8,
+        PreferRuntimeCoreBeforeBoundaryValidation = 1 << 9,
     }
 
     public readonly struct GASRuntimeFrameBackboneRebindEntry
@@ -182,7 +182,7 @@ namespace GAS.Runtime
         public GASRuntimeFrameBackboneRebindPlan(
             IEnumerable<GASRuntimeFrameBackboneRebindEntry> entries,
             GASRuntimeFrameBackboneNextTaskId recommendedNextTask,
-            bool autoChessValidationAllowed,
+            bool boundaryValidationAllowed,
             bool am2bBackboneEvidenceComplete,
             int phaseCount,
             int frameBudgetEntryCount,
@@ -196,7 +196,7 @@ namespace GAS.Runtime
                 : new List<GASRuntimeFrameBackboneRebindEntry>(
                     entries ?? Array.Empty<GASRuntimeFrameBackboneRebindEntry>()).ToArray();
             RecommendedNextTask = recommendedNextTask;
-            AutoChessValidationAllowed = autoChessValidationAllowed;
+            BoundaryValidationAllowed = boundaryValidationAllowed;
             AM2BBackboneEvidenceComplete = am2bBackboneEvidenceComplete;
             PhaseCount = phaseCount;
             FrameBudgetEntryCount = frameBudgetEntryCount;
@@ -213,7 +213,7 @@ namespace GAS.Runtime
 
         public GASRuntimeFrameBackboneNextTaskId RecommendedNextTask { get; }
 
-        public bool AutoChessValidationAllowed { get; }
+        public bool BoundaryValidationAllowed { get; }
 
         public bool AM2BBackboneEvidenceComplete { get; }
 
@@ -300,7 +300,7 @@ namespace GAS.Runtime
                     CreateActiveEffectStoreEntry(),
                 },
                 GASRuntimeFrameBackboneNextTaskId.RuntimeCoreInstantSpecEvaluation,
-                autoChessValidationAllowed: false,
+                boundaryValidationAllowed: false,
                 evidenceComplete,
                 phases.Count,
                 frameBudget.EntryCount,
@@ -345,8 +345,8 @@ namespace GAS.Runtime
                 | GASRuntimeFrameBackboneRebindPolicy.ReuseDebuggerEvidenceGate
                 | GASRuntimeFrameBackboneRebindPolicy.RequireApiSelectionTable
                 | GASRuntimeFrameBackboneRebindPolicy.RequireOfficialDocCoverage
-                | GASRuntimeFrameBackboneRebindPolicy.NoAutoChessBusinessChange
-                | GASRuntimeFrameBackboneRebindPolicy.PreferRuntimeCoreBeforeAutoChessValidation);
+                | GASRuntimeFrameBackboneRebindPolicy.NoRuntimeBoundaryBusinessChange
+                | GASRuntimeFrameBackboneRebindPolicy.PreferRuntimeCoreBeforeBoundaryValidation);
         }
 
         private static GASRuntimeFrameBackboneRebindEntry CreateActiveEffectStoreEntry()
@@ -383,8 +383,8 @@ namespace GAS.Runtime
                 | GASRuntimeFrameBackboneRebindPolicy.ReuseDebuggerEvidenceGate
                 | GASRuntimeFrameBackboneRebindPolicy.RequireApiSelectionTable
                 | GASRuntimeFrameBackboneRebindPolicy.RequireOfficialDocCoverage
-                | GASRuntimeFrameBackboneRebindPolicy.NoAutoChessBusinessChange
-                | GASRuntimeFrameBackboneRebindPolicy.PreferRuntimeCoreBeforeAutoChessValidation);
+                | GASRuntimeFrameBackboneRebindPolicy.NoRuntimeBoundaryBusinessChange
+                | GASRuntimeFrameBackboneRebindPolicy.PreferRuntimeCoreBeforeBoundaryValidation);
         }
 
         private static GASRuntimeFrameBackboneRequiredEvidence RequiredAM2BEvidence()
@@ -397,7 +397,7 @@ namespace GAS.Runtime
                    | GASRuntimeFrameBackboneRequiredEvidence.DebuggerEvidenceGate
                    | GASRuntimeFrameBackboneRequiredEvidence.ApiSelectionTable
                    | GASRuntimeFrameBackboneRequiredEvidence.OfficialDocCoverage
-                   | GASRuntimeFrameBackboneRequiredEvidence.NoAutoChessBusinessChange;
+                   | GASRuntimeFrameBackboneRequiredEvidence.NoRuntimeBoundaryBusinessChange;
         }
 
         private static int CountDeterministicMergePolicies(GASRuntimeFrameStreamOwnerPlan streams)

@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Unity.Entities;
 using UnityEngine;
@@ -8,27 +7,21 @@ namespace GAS.Runtime
     public abstract class TargetCatcherBase
     {
         public Entity Owner;
+        protected EntityManager EntityManager { get; private set; }
 
-        public virtual void Init(Entity owner)
+        public virtual void Init(EntityManager entityManager, Entity owner)
         {
+            EntityManager = entityManager;
             Owner = owner;
         }
 
-        [Obsolete("请使用CatchTargetsNonAlloc方法来避免产生垃圾收集（GC）。")]
-        public List<Entity> CatchTargets(Entity mainTarget)
-        {
-            var result = new List<Entity>();
-            CatchTargetsNonAlloc(mainTarget, result);
-            return result;
-        }
-
-        public void CatchTargetsNonAllocSafe(Entity mainTarget, ref List<Entity> results)
+        public void CollectTargetsNonAlloc(Entity mainTarget, List<Entity> results)
         {
             results.Clear();
-            CatchTargetsNonAlloc(mainTarget, results);
+            CollectTargetsNonAllocCore(mainTarget, results);
         }
 
-        protected abstract void CatchTargetsNonAlloc(Entity mainTarget, List<Entity> results);
+        protected abstract void CollectTargetsNonAllocCore(Entity mainTarget, List<Entity> results);
 
         public virtual void InitParameters(XParam parameter) { }
 

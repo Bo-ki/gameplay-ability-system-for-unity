@@ -1,6 +1,6 @@
 {
   "OutputRoot": "Assets/GAS/Generated/CodeGen",
-  "InputHash": "c189c1233efed059a50c04b5cc91c1d56de27fd79cf2edcaab713ec7708aa159",
+  "InputHash": "c2f4bf1737cd689d5a3e4a17f81df2cb407e677bff1e628fd178d9f5b45c158f",
   "Entries": [
     {
       "PhaseName": "LubanNormalizedRows",
@@ -115,14 +115,6 @@
       "VersionControlled": true
     },
     {
-      "PhaseName": "RuntimeDefinitionGlue",
-      "FileName": "RuntimeSystemRegistration.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeSystemRegistration.gen.cs",
-      "Layer": "Runtime",
-      "RuntimeVisible": true,
-      "VersionControlled": true
-    },
-    {
       "PhaseName": "BakerGlue",
       "FileName": "DefinitionComponents.gen.cs",
       "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/DefinitionComponents.gen.cs",
@@ -152,14 +144,6 @@
       "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/QueryLayouts.gen.cs",
       "Layer": "Editor/CI",
       "RuntimeVisible": false,
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "AutoChessDemoConfig",
-      "FileName": "AutoChessGeneratedConfig.gen.cs",
-      "ProjectRelativePath": "Assets/AutoChessDemo/Generated/AutoChessGeneratedConfig.gen.cs",
-      "Layer": "Runtime",
-      "RuntimeVisible": true,
       "VersionControlled": true
     },
     {

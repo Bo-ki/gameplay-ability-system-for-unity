@@ -98,9 +98,7 @@ namespace GAS.Runtime
 
     public static class GASSystemScheduleContract
     {
-        private const string GeneratedRuntimeRegistrationTypeName =
-            "GAS.Runtime.Generated.GASGeneratedRuntimeSystemRegistration, com.exhard.exgas.generated.runtime";
-        private const string GeneratedRuntimeRegistrationMethodName = "Register";
+        private const string GeneratedRuntimeAssemblyName = "com.exhard.exgas.generated.runtime";
 
         private static readonly GASRuntimeCoreFramePhaseContract[] RuntimeCoreFramePhaseContracts =
         {
@@ -170,6 +168,10 @@ namespace GAS.Runtime
                 EGasRuntimeCoreFramePhase.FramePrepare,
                 typeof(GASFramePrepareSystemGroup)),
             new(
+                typeof(GASAttributeModifierDeltaApplySystem),
+                EGasRuntimeCoreFramePhase.DeltaApply,
+                typeof(GASCoreSimulationSystemGroup)),
+            new(
                 typeof(GameplayFactProjectionSystem),
                 EGasRuntimeCoreFramePhase.TypedFactProjection,
                 typeof(GASCoreSimulationSystemGroup)),
@@ -206,11 +208,17 @@ namespace GAS.Runtime
             typeof(AbilityCommitSystem),
         };
 
+        private static readonly string[] GeneratedCommandResolveSystemTypeNames =
+        {
+            "GAS.Runtime.Generated.AbilityCatalogCommitSystem, " + GeneratedRuntimeAssemblyName,
+        };
+
         private static readonly Type[] CoreSimulationSystemTypes =
         {
             typeof(GEExecutionCalculationSystem),
             typeof(GEExecutionCalculationExtensionSystemGroup),
             typeof(GEExecutionCalculationOutputModifierSystem),
+            typeof(GASAttributeModifierDeltaApplySystem),
             typeof(AttributeOwnerMarkerRequestSystem),
             typeof(AttributeRecalculateSystem),
             typeof(GameplayTagChangeProcessSystem),
@@ -219,6 +227,16 @@ namespace GAS.Runtime
             typeof(AbilityLifecycleRequestSystem),
             typeof(AbilityStateCleanupSystem),
             typeof(GameplayFactProjectionSystem),
+        };
+
+        private static readonly string[] GeneratedCoreSimulationSystemTypeNames =
+        {
+            "GAS.Runtime.Generated.GEEffectCommandCatalogNormalizeSystem, " + GeneratedRuntimeAssemblyName,
+            "GAS.Runtime.Generated.GEEffectSpecBuildSystem, " + GeneratedRuntimeAssemblyName,
+            "GAS.Runtime.Generated.GASActiveEffectMutationApplySystem, " + GeneratedRuntimeAssemblyName,
+            "GAS.Runtime.Generated.GASAttributeSetReduceApplySystem, " + GeneratedRuntimeAssemblyName,
+            "GAS.Runtime.Generated.GASActiveEffectPreTickSystem, " + GeneratedRuntimeAssemblyName,
+            "GAS.Runtime.Generated.GASActiveEffectRemoveSystem, " + GeneratedRuntimeAssemblyName,
         };
 
         private static readonly Type[] StructuralCommitSystemTypes =
@@ -233,11 +251,6 @@ namespace GAS.Runtime
             typeof(PresentationOutboxProjectionSystem),
             typeof(ReplayLogSystem),
             typeof(DiagnosticsSnapshotSystem),
-            typeof(CueRequestBridgeSystem),
-            typeof(CueStartSystem),
-            typeof(CueTickSystem),
-            typeof(CueEndSystem),
-            typeof(CueDestroySystem),
             typeof(ASCDestroyFinalizeSystem),
         };
 
@@ -315,7 +328,7 @@ namespace GAS.Runtime
             AddSystems(world, groups.FramePrepare, FramePrepareSystemTypes);
             AddSystems(world, groups.CommandResolve, CommandResolveSystemTypes);
             AddCoreSimulationSystems(world, groups);
-            TryRegisterGeneratedRuntimeSystems(world, groups);
+            AddGeneratedRuntimeSystems(world, groups);
             groups.StructuralCommit.AddSystemToUpdateList(groups.BeginStructuralCommitECB);
             groups.StructuralCommit.AddSystemToUpdateList(groups.EndStructuralCommitECB);
             AddSystems(world, groups.BoundaryProjection, BoundaryProjectionSystemTypes);
@@ -358,20 +371,25 @@ namespace GAS.Runtime
             }
         }
 
-        private static bool TryRegisterGeneratedRuntimeSystems(World world, GASSystemGroups groups)
+        private static void AddGeneratedRuntimeSystems(World world, GASSystemGroups groups)
         {
-            var registrationType = Type.GetType(GeneratedRuntimeRegistrationTypeName);
-            if (registrationType == null)
-                return false;
+            AddSystemsByTypeName(world, groups.CommandResolve, GeneratedCommandResolveSystemTypeNames);
+            AddSystemsByTypeName(world, groups.CoreSimulation, GeneratedCoreSimulationSystemTypeNames);
+        }
 
-            var method = registrationType.GetMethod(
-                GeneratedRuntimeRegistrationMethodName,
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-            if (method == null)
-                return false;
+        private static void AddSystemsByTypeName(
+            World world,
+            ComponentSystemGroup group,
+            IReadOnlyList<string> systemTypeNames)
+        {
+            for (var i = 0; i < systemTypeNames.Count; i++)
+            {
+                var systemType = Type.GetType(systemTypeNames[i]);
+                if (systemType == null)
+                    continue;
 
-            method.Invoke(null, new object[] { world, groups });
-            return true;
+                group.AddSystemToUpdateList(world.CreateSystem(systemType));
+            }
         }
     }
 

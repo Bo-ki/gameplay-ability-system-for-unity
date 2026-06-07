@@ -8,7 +8,7 @@
 
 ## 已缓解部分
 
-1. `RuntimeSystemRegistration.gen.cs` 注册 7 个 generated systems。
+1. `GASSystemScheduleContract` 通过手写 generated type-name 列表注册 7 个 generated systems；`RuntimeSystemRegistration.gen.cs` 当前已退场。
 2. `GASDefinitionCatalogBlob` 被 generated runtime 读取。
 3. Ability catalog commit、GE command normalize、spec build、attribute reduce、active effect mutation/tick/remove 都已进入执行链。
 4. `GasGlueCodeGenPhases.WriteRuntimeAbilityActivationSystem()` 已同步到当前 owner-local commit marker 形态，不再生成 `NativeStream + state.Dependency.Complete() + Allocator.Temp ECB.Playback` 的旧 ability commit 模板。
@@ -37,7 +37,7 @@
 
 | 事实 | 文件 |
 |---|---|
-| generated registration | `RuntimeSystemRegistration.gen.cs` |
+| generated registration | `GASSystemScheduleContract.cs:207-235`、`:323-328`、`:371-374` |
 | catalog lookup | `DefinitionCatalog.gen.cs` |
 | runtime glue | `RuntimeDefinitionGlue.gen.cs` |
 | ability activation uses chunk enabled mask | `RuntimeAbilityActivation.gen.cs:55-58`, `:83-85`, `:115-117`, `:136-138` |

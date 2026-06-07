@@ -12,7 +12,6 @@ namespace GAS.Runtime
         RuntimeDebuggerCurrentFrame = 4,
         RuntimeDebuggerEntityCounterQueries = 5,
         RuntimeDebuggerActiveEffectStoreCounters = 6,
-        RuntimeDebuggerPresentationFallback = 7,
         PresentationOutboxProjectionCurrentFrame = 8,
         DebugReplayLogProjectionCurrentFrame = 9,
         AttributeRecalculateModifierLookup = 10,
@@ -312,24 +311,6 @@ namespace GAS.Runtime
                     EGasRuntimeFrameBudgetEntryId.RuntimeDebuggerActiveEffectStoreCounters,
                     EGasRuntimeCoreFramePhase.ObservationProjection,
                     GASRuntimeQueryLayoutEntryId.ActiveEffectStore,
-                    queryBudget: 1,
-                    filteredQueryBudget: 0,
-                    unfilteredQueryBudget: 1,
-                    lookupUpdateBudget: 0,
-                    randomLookupBudget: 0,
-                    syncQueryBudget: 1,
-                    EGasRuntimeFrameAllocatorOwner.TempMainThreadScratch,
-                    EGasRuntimeFrameDependencyBudget.DebuggerObservationOnly,
-                    EGasRuntimeFrameBudgetRisk.QueryContract
-                    | EGasRuntimeFrameBudgetRisk.SyncQuery
-                    | EGasRuntimeFrameBudgetRisk.ToEntityArrayTemp
-                    | EGasRuntimeFrameBudgetRisk.MainThreadOnly
-                    | EGasRuntimeFrameBudgetRisk.DebuggerObservation
-                    | EGasRuntimeFrameBudgetRisk.DependencyWaitRisk),
-                Entry(
-                    EGasRuntimeFrameBudgetEntryId.RuntimeDebuggerPresentationFallback,
-                    EGasRuntimeCoreFramePhase.ObservationProjection,
-                    GASRuntimeQueryLayoutEntryId.ManagedCuePresentation,
                     queryBudget: 1,
                     filteredQueryBudget: 0,
                     unfilteredQueryBudget: 1,

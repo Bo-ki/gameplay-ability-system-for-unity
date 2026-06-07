@@ -83,6 +83,7 @@ namespace GAS.Runtime
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GEExecutionCalculationOutputModifierSystem))]
+    [UpdateAfter(typeof(GASAttributeModifierDeltaApplySystem))]
     [BurstCompile]
     public partial struct GameplayFactProjectionSystem : ISystem
     {
@@ -140,6 +141,9 @@ namespace GAS.Runtime
                 for (var i = deltaStart; i < deltas.Length; i++)
                 {
                     var delta = deltas[i];
+                    if (!AttributeModifierBufferFlags.ShouldProjectFact(delta.Flags))
+                        continue;
+
                     var fact = new GameplayEventBuffer
                     {
                         Sequence = Allocate(ref stream.NextFactSequence),
@@ -216,7 +220,6 @@ namespace GAS.Runtime
     [UpdateInGroup(typeof(GASBoundaryProjectionSystemGroup), OrderFirst = true)]
     [UpdateBefore(typeof(PresentationOutboxProjectionSystem))]
     [UpdateBefore(typeof(ReplayLogSystem))]
-    [UpdateBefore(typeof(CueRequestBridgeSystem))]
     [BurstCompile]
     public partial struct GameplayFactBoundaryProjectionSystem : ISystem
     {

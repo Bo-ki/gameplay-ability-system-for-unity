@@ -5,41 +5,42 @@ using UnityEngine;
 
 namespace GAS.Runtime
 {
-    public sealed class CatchAreaBox3D : TargetCatcherBase<XParamCatchAreaBox3D>  
-    {  
-        private static readonly Collider[] Colliders = new Collider[64];  
-  
-        protected override void CatchTargetsNonAlloc(Entity mainTarget, List<Entity> results)  
-        {  
-            int count;  
-            if (Parameter.isWorldSpace)  
-            {  
-                count = Physics.OverlapBoxNonAlloc(  
-                    Parameter.offset,  
-                    Parameter.size * 0.5f,  
-                    Colliders,  
-                    Quaternion.Euler(Parameter.rotation),  
-                    Parameter.layer.value);  
-            }  
-            else  
-            {  
-                var mainGameObject = EntityHelper.GetGameObjectFromEntity(mainTarget);
+    public sealed class CatchAreaBox3D : TargetCatcherBase<XParamCatchAreaBox3D>
+    {
+        private static readonly Collider[] Colliders = new Collider[64];
+
+        protected override void CollectTargetsNonAllocCore(Entity mainTarget, List<Entity> results)
+        {
+            int count;
+            if (Parameter.isWorldSpace)
+            {
+                count = Physics.OverlapBoxNonAlloc(
+                    Parameter.offset,
+                    Parameter.size * 0.5f,
+                    Colliders,
+                    Quaternion.Euler(Parameter.rotation),
+                    Parameter.layer.value);
+            }
+            else
+            {
+                var mainGameObject = PresentationEntityBindingRegistry.GetGameObjectFromEntity(EntityManager, mainTarget);
                 if (mainGameObject == null) return;
 
-                var mainTransform = mainGameObject.transform;  
-                count = Physics.OverlapBoxNonAlloc(  
-                    mainTransform.TransformPoint(Parameter.offset),  
-                    Parameter.size * 0.5f,  
-                    Colliders,  
-                    Quaternion.Euler(mainTransform.TransformDirection(Parameter.rotation)),  
-                    Parameter.layer.value);  
-            }  
-  
-            for (var i = 0; i < count; ++i)  
-            {  
-                var mono = Colliders[i].GetComponent<AbilitySystemBinding>();  
-                if (mono != null)  results.Add(mono.Entity);  
-            }  
+                var mainTransform = mainGameObject.transform;
+                count = Physics.OverlapBoxNonAlloc(
+                    mainTransform.TransformPoint(Parameter.offset),
+                    Parameter.size * 0.5f,
+                    Colliders,
+                    Quaternion.Euler(mainTransform.TransformDirection(Parameter.rotation)),
+                    Parameter.layer.value);
+            }
+
+            for (var i = 0; i < count; ++i)
+            {
+                var mono = Colliders[i].GetComponent<AbilitySystemBinding>();
+                if (mono != null && mono.TryResolveRuntimeEntityForBoundary(out var target))
+                    results.Add(target);
+            }
         }
 
         public override void OnEditorPreview(GameObject obj)
@@ -72,40 +73,40 @@ namespace GAS.Runtime
     {
         [BeanField(nameof(SetIsWorldSpace),Order = 1)]
         public bool isWorldSpace;
-        
+
         [BeanField(nameof(SetOffset),Order = 2)]
         public Vector3 offset;
-        
+
         [BeanField(nameof(SetSize),Order = 3)]
         public Vector3 size;
-        
+
         [BeanField(nameof(SetRotation),Order = 4)]
         public Vector3 rotation;
-        
+
         [BeanField(nameof(SetLayer), LubanType = "int",Order = 5)]
         public LayerMask layer;
-        
-        
+
+
         public void SetIsWorldSpace(bool isWorld)
         {
             isWorldSpace = isWorld;
         }
-        
+
         public void SetOffset(Vector3 offset)
         {
             this.offset = offset;
         }
-        
+
         public void SetSize(Vector3 size)
         {
             this.size = size;
         }
-        
+
         public void SetRotation(Vector3 rotation)
         {
             this.rotation = rotation;
         }
-        
+
         public void SetLayer(int layer)
         {
             this.layer.value = layer;
@@ -118,17 +119,17 @@ namespace GAS.Runtime
             {
                 var strData = paramData[0] as string;
                 if (string.IsNullOrEmpty(strData)) return;
-                
+
                 if (!bool.TryParse(strData, out isWorldSpace))
                     isWorldSpace = false;
             }
-            
-            // offset 
+
+            // offset
             if (paramData.Count > 1)
             {
                 var strData = paramData[1] as string;
                 if (string.IsNullOrEmpty(strData)) return;
-                
+
                 var data = strData.Split(',');
                 if (data.Length == 3)
                 {
@@ -140,13 +141,13 @@ namespace GAS.Runtime
                     }
                 }
             }
-            
+
             // size
             if (paramData.Count > 2)
             {
                 var strData = paramData[2] as string;
                 if (string.IsNullOrEmpty(strData)) return;
-                
+
                 var data = strData.Split(',');
                 if (data.Length == 3)
                 {
@@ -158,7 +159,7 @@ namespace GAS.Runtime
                     }
                 }
             }
-            
+
             // rotation
             if (paramData.Count > 3)
             {

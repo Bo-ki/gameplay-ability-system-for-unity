@@ -10,6 +10,14 @@
 
 **物理布局是架构的"硬件层"—— 概念流再正确，Entity/Component 布局错误也会导致 archetype 爆炸和 chunk 碎片化。**
 
+## 官方依据与设计论证
+
+Entity / Component 布局必须先回答数据性质和生命周期。`SEL-01` 要求 Gameplay / Transient / Telemetry / Presentation 分别选型，`PRF-01` 禁止瞬时状态默认实体化，`PRF-03` 禁止高频 tag/status 通过 tag component add/remove 表达，`CONTENT-01` / `PRF-11` 要求静态定义优先 BlobAsset 而不是 prefab 或 runtime entity。由此得到目标态核心布局：稳定 ASC / Ability / Catalog / Request 实体承载跨帧权威，frame-local command / target / modifier / fact 使用 record / stream / owner-local range。
+
+容量、chunk 和 archetype 是架构约束，不是调优阶段细节。`BUF-01` / `PRF-10` 要求 DynamicBuffer 声明 InternalBufferCapacity、spill 监控和 externalized ratio；`PRF-12` 要求 SharedComponent 只在低频分组三条件满足时使用；`PRF-24` 要求批量创建时预创建 Archetype；`PRF-26` 要求读写数据分离以避免响应式系统误触发；`PRF-33` 要求 query 被 `SystemState` 安全追踪。这些规则共同排除了 per-hit entity、per-status archetype churn、无容量预算的全局 buffer 和无法归因的 managed registry。
+
+并行 fan-in 与状态跳过策略也必须落到物理布局：`NAT-03` 支持 `NativeStream` deterministic merge，`FSM-02` / `FSM-05` 支持轻状态 enum / bit field，Chunk Component / Enableable 只能作为有证据的 skip cache。目标态因此把“少量稳定 archetype + 明确 buffer 容量 + frame-local scratch owner”作为验收标准。
+
 ## Entity 清单与 Component 布局
 
 ### Entity 1: FrameArenaSingleton（帧基础设施）
@@ -79,7 +87,7 @@
 |---|---|
 | 数量 | 非 Entity；由 owner `ISystem` 每帧创建 NativeContainer |
 | 生命周期 | frame-local，随 `World.UpdateAllocator` / `Allocator.TempJob` rewind 或 dispose |
-| 状态 | **目标态默认**；AM2-AM3 的 `GEStreamOwnerSingleton` 只允许作为 proof-only 兼容落点 |
+| 目标定位 | **目标态默认**；`GEStreamOwnerSingleton` 只允许作为非目标态 proof 兼容承载 |
 
 **目标物理承载：**
 
@@ -92,15 +100,15 @@
 | Core fact range | `NativeStream` / per-owner fact buffer | `GASGameplayFactSystem` | write → reaction consume / boundary projection | Core reaction 与 Boundary observation 分流 |
 
 **关键约束：**
-- Frame fan-in scratch 不以 singleton entity 的大 `DynamicBuffer` 作为目标态；`GEStreamOwnerComponent`、`GEEffectCommandBuffer(256)`、`AttributeModifierBuffer(512)` 等只保留迁移期 proof 解释。
+- Frame fan-in scratch 不以 singleton entity 的大 `DynamicBuffer` 作为目标态；`GEStreamOwnerComponent`、`GEEffectCommandBuffer(256)`、`AttributeModifierBuffer(512)` 等只保留为非目标态 proof 解释。
 - 所有 NativeContainer 必须声明 allocator owner、dispose/rewind 位置、merge 顺序和 Debugger counters（`NAT-01` `NAT-03` `NAT-05`）。
 - 写回 ASC 的 owner-local buffer 必须小容量、compact、可清空；禁止把 proof 阶段的大容量全局 buffer 原样复制到每个 ASC。
 
-**Scale 路径（更新）：**
+**Scale 路径：**
 ```
-AM2-AM3: 全局 stream owner（当前 proof-only）
+非目标态兼容承载：全局 stream owner（proof-only）
      ↓ 当 global buffer pressure 超过阈值 / 需要 ScheduleParallel
-AM4+: `NativeStream` producer + deterministic merge
+Scale-ready 目标：`NativeStream` producer + deterministic merge
      - 多 producer job 写 per-thread / per-chunk stream（CASE-12）
      - merge 阶段按 TargetSortKey / Sequence 排序（MAT-05 NAT-03）
      - 只把合并后的 compact command range 写入 ASC 上的小容量 owner-local buffer
@@ -108,7 +116,7 @@ AM4+: `NativeStream` producer + deterministic merge
      - 禁止把 proof 阶段 256/512 大容量 buffer 原样搬到每个 ASC
 ```
 
-**AM4 的并行收益：**
+**NativeStream 的并行收益：**
 - 全局 singleton → 必须串行写或产生写竞争 → `ScheduleParallel` 收益被 fan-in 吃掉
 - `NativeStream` → producer 真正并行，merge 成本可观测、可排序、可替换
 - Compact owner-local range → 消费端按 target 局部读取，避免全局 scan；同时避免每个 ASC 携带大 inline buffer
@@ -161,7 +169,7 @@ public struct ActiveGameplayEffectBuffer : IBufferElementData
 
 **属性布局为何改为 AttributeSet family：**
 
-本轮直接对照 `Library/PackageCache/com.unity.entities@e90944159b94/Documentation~/systems-data-granularity.md` 原文后，目标态不再把“每种属性一个 `IComponentData`”作为默认答案。官方原文的关键约束是双向的：细粒度 component 有利于 query 和 cache，但过度 component 粒度会增加 entity query、archetype 和内部流程开销；同时 read-only 和 read-write 数据应分离，否则读写访问会把整个 chunk 标记为 changed。
+依据 `Library/PackageCache/com.unity.entities@e90944159b94/Documentation~/systems-data-granularity.md`，目标态不把“每种属性一个 `IComponentData`”作为默认答案。官方原文的关键约束是双向的：细粒度 component 有利于 query 和 cache，但过度 component 粒度会增加 entity query、archetype 和内部流程开销；同时 read-only 和 read-write 数据应分离，否则读写访问会把整个 chunk 标记为 changed。
 
 真实 GAS Runtime 的属性热路径不是 OOP 的 `UAttributeSet` 对象树，也不是“一个属性一个系统”。一次攻击/治疗/护盾/吸血通常同时需要 Health、Shield、Attack、Defense、MagicPower、TagStatus、Source/Target 上下文；把这些字段拆成几十个 component type 会带来：
 
@@ -327,7 +335,7 @@ public struct AbilitySlotBuffer : IBufferElementData
 | 目标 M（x1） | ~1-10 |
 | 目标 M（x50） | ~10-100 |
 | 生命周期 | 本帧：`GASCommandResolveSystemGroup` 的 Boundary lane 消费 → `GASStructuralCommitSystemGroup` 销毁 |
-| 创建方式 | Boundary CommandGateway ECB |
+| 创建方式 | Boundary CommandPort ECB |
 | 销毁方式 | Structural Commit ECB |
 
 **Component 布局（Ability 激活 request archetype）：**
@@ -338,7 +346,7 @@ public struct AbilitySlotBuffer : IBufferElementData
 | `AbilityCommandComponent` | `IComponentData` | Ingest 后的归一化命令：source、ability、primary GE、level、target params、status |
 | `TargetDataBuffer` | `IBufferElementData` | Target Resolve 写入的 invocation-local 目标解析结果 |
 
-**迁移期残留：**
+**非目标态兼容项：**
 
 | Request 类型 | Component | 说明 |
 |---|---|---|
@@ -392,9 +400,9 @@ public struct AbilitySlotBuffer : IBufferElementData
 
 ---
 
-## ASC Entity 批量创建策略（`P1-14`）
+## ASC Entity 批量创建策略（`PRF-24`）
 
-> **`P1-14`**：禁止逐 Component 构建 Entity Archetype。使用 `EntityManager.CreateEntity()` 后逐次 `AddComponent<T>()` 会在每次调用时创建中间 archetype，这些中间 archetype 在应用剩余生命周期内持续存在并增加所有 `EntityQuery` 的计算开销。
+> **`PRF-24`**：禁止逐 Component 构建 Entity Archetype。使用 `EntityManager.CreateEntity()` 后逐次 `AddComponent<T>()` 会在每次调用时创建中间 archetype，这些中间 archetype 在应用剩余生命周期内持续存在并增加所有 `EntityQuery` 的计算开销。
 
 **正确做法 —— 预建 Archetype 批量创建：**
 
@@ -433,7 +441,7 @@ EntityManager.CreateEntity(ascArchetype, entities);
 
 ## Archetype 审计目标
 
-| 指标 | 目标值 | 告警阈值 | 当前 ISSUE |
+| 指标 | 目标值 | 告警阈值 | 关联风险 |
 |---|---|---|---|
 | Runtime Core archetype 总数 | < 10 | > 20 | ISSUE-001/004 |
 | 仅含 1 个 entity 的 archetype | 0（除 singleton） | > 3 | `performance-chunk-allocations.html`: "100K entity with unique archetypes = >1.5 GB" |
@@ -462,18 +470,18 @@ EntityManager.CreateEntity(ascArchetype, entities);
 | `AbilityActivationRequestComponent` | Request Entity | ~40 bytes | source ASC, ability entity, explicit target, input sequence, request frame, target mode |
 | `AbilityCommandComponent` | Request Entity | ~56 bytes | normalized activation command, primary GE, level, target params, status |
 | `GEEffectOwnerComponent` | Active Effect Query Entity (可选) | ~8 bytes | owning ASC ref |
-| `GEStreamOwnerComponent`（迁移期） | `GEStreamOwnerSingleton`（proof-only） | ~16 bytes | version, sequence；scale-ready 不作为默认 owner |
+| `GEStreamOwnerComponent`（非目标态 proof） | `GEStreamOwnerSingleton`（proof-only） | ~16 bytes | version, sequence；scale-ready 不作为默认 owner |
 
 ### IBufferElementData
 
 | Buffer Element | 挂载 Entity | InternalBufferCapacity | 每元素大小 |
 |---|---|---|---|
-| `GEEffectCommandBuffer` | ASC Entity compact range / `GEStreamOwnerSingleton`（迁移期） | 4-16（目标）/ 256（proof-only） | ~32 bytes |
-| `GESetByCallerValueBuffer` | command range owner / `GEStreamOwnerSingleton`（迁移期） | 8-32（目标）/ 256（proof-only） | ~16 bytes |
-| `GEEffectSpecBuffer` | frame scratch / `GEStreamOwnerSingleton`（迁移期） | 目标态优先 NativeContainer / 256（proof-only） | ~48 bytes |
-| `AttributeModifierBuffer` | target grouped range / `GEStreamOwnerSingleton`（迁移期） | 8-32（目标）/ 512（proof-only） | ~24 bytes |
-| `ActiveEffectMutationBuffer` | ASC Entity / frame scratch / `GEStreamOwnerSingleton`（迁移期） | 4-16（目标）/ 128（proof-only） | ~32 bytes |
-| `GameplayEventBuffer` | per-owner fact/outbox / `GEStreamOwnerSingleton`（迁移期） | 8-32（目标）/ 256（proof-only） | ~32 bytes |
+| `GEEffectCommandBuffer` | ASC Entity compact range / `GEStreamOwnerSingleton`（非目标态 proof） | 4-16（目标）/ 256（proof-only） | ~32 bytes |
+| `GESetByCallerValueBuffer` | command range owner / `GEStreamOwnerSingleton`（非目标态 proof） | 8-32（目标）/ 256（proof-only） | ~16 bytes |
+| `GEEffectSpecBuffer` | frame scratch / `GEStreamOwnerSingleton`（非目标态 proof） | 目标态优先 NativeContainer / 256（proof-only） | ~48 bytes |
+| `AttributeModifierBuffer` | target grouped range / `GEStreamOwnerSingleton`（非目标态 proof） | 8-32（目标）/ 512（proof-only） | ~24 bytes |
+| `ActiveEffectMutationBuffer` | ASC Entity / frame scratch / `GEStreamOwnerSingleton`（非目标态 proof） | 4-16（目标）/ 128（proof-only） | ~32 bytes |
+| `GameplayEventBuffer` | per-owner fact/outbox / `GEStreamOwnerSingleton`（非目标态 proof） | 8-32（目标）/ 256（proof-only） | ~32 bytes |
 | `AbilitySlotBuffer` | ASC Entity | 8 | ~16 bytes |
 | `PresentationEventBuffer` | ASC Entity | 4 | ~32 bytes |
 | `ActiveGameplayEffectBuffer` | ASC Entity | 8 | ~64 bytes |
@@ -488,7 +496,7 @@ EntityManager.CreateEntity(ascArchetype, entities);
 | `AbilityExecutableTag`（可选） | Ability Entity | 仅当 profiler 证明大量不可执行 ability 需要 query skip 时启用 | `GASCoreSimulationSystemGroup` State lane |
 | `PeriodDueTag`（可选） | ASC Entity | 仅当 profiler 证明大量 idle slot 需要 enableable skip 时启用 | `GASCoreSimulationSystemGroup` State lane |
 
-> **注：** Per-slot active/inhibited 标记通过 `ActiveGameplayEffectBuffer.Flags` 的 bit 表示，不使用独立的 enableable component。这样可以避免每个 slot 一个 component type 的 archetype 爆炸。Chunk 级跳过通过 `ChunkComponent` 实现。原 `CEffectSlotActive` 已废弃移除。
+> **注：** Per-slot active/inhibited 标记通过 `ActiveGameplayEffectBuffer.Flags` 的 bit 表示，不使用独立的 enableable component。这样可以避免每个 slot 一个 component type 的 archetype 爆炸。Chunk 级跳过通过 `ChunkComponent` 实现。目标态禁止为单个 effect slot 定义独立 enableable component。
 
 ### ChunkComponent
 

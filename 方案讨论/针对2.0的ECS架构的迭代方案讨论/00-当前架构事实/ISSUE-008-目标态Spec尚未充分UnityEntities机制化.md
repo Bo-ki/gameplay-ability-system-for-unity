@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-当前代码已经吸收了一部分 Entities 机制：FixedStep group、ComponentSystemGroup、ECB System singleton、BlobAssetReference、`SystemAPI.QueryBuilder`、scheduled `IJob` / `IJobChunk`、EntitiesJournaling、以及不依赖 Unity Editor UI 的 sourcegen 驱动。但目标态仍需要继续把官方规则转成可执行的 query/job/baking/blob/structural evidence。
+当前代码已经吸收了一部分 Entities 机制：FixedStep group、ComponentSystemGroup、ECB System singleton、BlobAssetReference、`state.GetEntityQuery(EntityQueryDesc)`、scheduled `IJob` / `IJobChunk`、EntitiesJournaling、以及不依赖 Unity Editor UI 的 sourcegen 驱动。但目标态仍需要继续把官方规则转成可执行的 query/job/baking/blob/structural evidence。
 
 当前缺口不是“有没有引用官方术语”，而是官方机制还没有全部变成可验证的 runtime gate。文档、Contract 和模板只能定义约束；只有注册进当前 group 的 system、生成模板输出、Unity 编译域、Journaling/Profiler/Debugger evidence 和业务 runner hash 才能证明机制化完成。
 
@@ -17,21 +17,21 @@
 | `iterating-data-ijobchunk.md` | 多条 owner applicator 已用 `IJobChunk` + `ChunkEntityEnumerator` / `EnabledMask` | 所有 `IJobChunk` 需要有 query ownership、enabled-mask 语义和 dependency 证据；不能只凭类型名认定合规 |
 | `components-buffer-jobs.md` | `BufferLookup` 已把部分主线程 helper 迁到 job 内 | 需要把“随机访问工具”与“目标态 store”区分开，尤其是 active mutation、cleanup、fact bridge 的多 target 写入 |
 | `systems-entity-command-buffer-use.md` | Begin/End GAS ECB gate 已存在，部分 generated/remove/cleanup 写入 ECB | 需要用 Journaling/Profiler 证明 playback phase、数量、来源和是否存在绕过 gate 的 direct structural write |
-| `systems-entityquery-create.md` | stored query / `QueryBuilder` 已用于部分系统，`SystemAPI.Query` 热路径已收窄 | 需要把 boundary managed query、debug gather、low-frequency init 和 Core hot path query 分开计数和预算 |
+| `systems-entityquery-create.md` | Runtime stored query 已统一使用 `state.GetEntityQuery(EntityQueryDesc)`，`SystemAPI.Query` 热路径已清零 | 需要把 Boundary managed query、Debugger gather、singleton fallback 和 Core hot path query 分开计数和预算 |
 
 ## 已机制化部分
 
 1. `FixedStepSimulationSystemGroup` 下 5 段 GAS group。
 2. `Begin/EndGASStructuralCommitECBSystem` 作为 structural commit gate。
 3. `GASDefinitionCatalogBlob` 作为 runtime catalog。
-4. `SystemAPI.QueryBuilder()` 用于部分 query 预创建。
+4. Runtime stored query 使用 `state.GetEntityQuery(EntityQueryDesc)`，旧 `SystemAPI.QueryBuilder().Build()` 长期 query owner 口径已退场。
 5. `GasRuntimeOfficialToolDiff` 使用 `EntitiesJournaling`。
 6. `Tools/CodeGen/Generate-GAS-SourceGen.bat` / `Tools/GasCodeGenCli` 可离线驱动 Luban + GAS CodeGen，不再强制依赖 Unity Editor UI。
 7. `GasCodeGenValidationReport.md` 已有 generated hot path static gate，当前 `GeneratedHotPathRegressionHits: 0`。
 
 ## 仍不足部分
 
-1. `SystemAPI.Query` 主线程 foreach 在 `Assets/GAS` 当前只剩 Cue managed boundary；后续不足不是数量，而是必须防止它重新进入 Core hot path。
+1. `SystemAPI.Query` 主线程 foreach 在 `Assets/GAS/Runtime` 与 generated runtime 当前 0 命中；后续不足不是数量，而是必须防止它重新进入 Core hot path，并继续把 Cue managed stored query、Debugger gather、GlobalTimer / ActiveEffectStore singleton fallback 分 owner 计数。
 2. `Complete()` 已清零，并已进入 generated hot path gate；仍需作为 codegen/static validation 防回流项，而不是当前 runtime 事实。
 3. 实际 runtime authoring/Baker / `BlobAssetStore` 还没有落到当前业务验收链。
 4. NativeStream / deterministic merge 已在 OutputModifier 局部落地，但 singleton stream owner 与 generated active mutation serial job 的容量、ordering、budget 证据仍不足。

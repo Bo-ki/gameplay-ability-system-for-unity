@@ -1,23 +1,25 @@
 # ISSUE-006 AutoChessDemo 边界混入 Runtime Core
 
-> 最近复核：2026-06-06 | 状态：Mitigated | 严重度：P1
+> 最近复核：2026-06-07 | 状态：Mitigated | 严重度：P1
 
 ## 当前结论
 
-旧问题已明显缓解。AutoChessDemo 当前位于 `Assets/AutoChessDemo`，业务层、GAS adapter、Demo ECS 扩展、Presentation 已拆开；Runtime Core 不再承载旧 Headless 业务系统。
+旧问题已明显缓解。AutoChessDemo 当前位于 `Assets/AutoChessDemo`，业务层、Battle Flow、Battle Report、GAS adapter、Demo ECS 扩展、Presentation 已拆开；Runtime Core 不再承载旧 Headless 业务系统。
 
-当前剩余风险不是“Demo 混入 Runtime Core”，而是 `AutoChessGasCoreBridge` 内部仍直接触碰 `GASManager.EntityManager`，需要继续收口为明确 adapter/command owner。
+当前剩余风险不是“Demo 混入 Runtime Core”，而是 `Integration/GasCore` 虽已把业务入口收敛到 `AutoChessBattleRuntime` Flow 入口和 `AutoChessGasCoreBridge` Session facade，但真实 direct EM / raw identity matcher 能力仍分布在 `AutoChessGasRuntimeHost`、`AutoChessGasCatalogSession`、`AutoChessGasObservationGateway`、`AutoChessGasBattleEntityLifecycle`、`AutoChessGasRuntimeTicker`、`AutoChessGasBattleReportFactProjector` 和 `AutoChessGasCoreContracts`；bootstrap、catalog、unit attach、driver lifecycle、observation、diagnostics、tick group、job drain 和 report projection raw key 仍通过 internal Shell capability 或 `ASCHandle` matcher 取得 live ECS 句柄，需要继续收口为明确 adapter/command/snapshot/diagnostics/report-key owner。
 
 ## 已缓解部分
 
-1. `GameRoom` / `Battle` / `Integration/GasCore` / `AutoRunner` / `Presentation` 分层成立。
+1. `GameRoom` / `Battle` / `Battle/Flow` / `Battle/Report` / `Integration/GasCore` / `AutoRunner` / `Presentation` 分层成立。
 2. Demo ECS systems 通过 `AutoChessRuntimeSystemBootstrap` 插入当前 GAS groups。
-3. Presentation 只消费 battle log，不回读 ECS World。
-4. Runtime Core 未引用 AutoChess 业务类型。
+3. batchmode 与 scene stepped 模式复用 `AutoChessBattleFlow`，`AutoChessBattleManager` 不再重复维护 tick 收口细节。
+4. Battle Report 只消费 Runtime structured log / Core facts，不补写伤害或死亡结果。
+5. Presentation 只消费 battle log，不回读 ECS World。
+6. Runtime Core 未引用 AutoChess 业务类型。
 
 ## 仍成立风险
 
-1. `AutoChessGasCoreBridge` 直接创建/销毁 battle driver、ASC、ability、active effect。
+1. `AutoChessGasBattleEntityLifecycle` 仍直接创建 battle driver、写 driver destroy request marker、给 ASC 附加 demo component，并维护 battle unit key -> `ASCHandle` registry；`DestroyBattleUnit()` 当前已走 ASC destroy command request，旧 direct ability/effect cleanup 口径已过期。
 2. Demo catalog 已由代码安装通用 generated blob，但安装 owner 仍是 demo adapter；unit/scenario/scale/validation expectation 还不是配置驱动链。
 3. Demo ECS systems 主体已迁到 scheduled job，但仍是 demo extension；不能把它当作 Runtime Core 通用高规模证明。
 
@@ -26,7 +28,15 @@
 | 事实 | 文件 |
 |---|---|
 | demo README 边界 | `Assets/AutoChessDemo/README.md` |
-| bridge | `AutoChessGasCoreBridge.cs` |
+| bridge facade | `AutoChessGasCoreBridge.cs` |
+| flow runtime entry | `AutoChessBattleRuntime.cs` |
+| runtime host / catalog | `AutoChessGasRuntimeHost.cs`、`AutoChessGasCatalogSession.cs` |
+| battle entity lifecycle | `AutoChessGasBattleEntityLifecycle.cs` |
+| runtime ticker | `AutoChessGasRuntimeTicker.cs` |
+| observation gateway | `AutoChessGasObservationGateway.cs` |
+| report fact projector / contracts | `AutoChessGasBattleReportFactProjector.cs`、`AutoChessGasCoreContracts.cs` |
+| battle flow | `AutoChessBattleFlow.cs` |
+| battle report | `AutoChessBattleReportBuilder.cs` |
 | system bootstrap | `AutoChessRuntimeSystemBootstrap.cs` |
 | command drive | `AutoChessBattleCommandDriveSystem.cs` |
 | execution extension | `AutoChessExecuteDamageCalculationSystem.cs` |
@@ -35,5 +45,5 @@
 ## 退出条件
 
 1. bridge 内结构变化分类清晰：初始化、session lifecycle、hot path。
-2. battle unit create/destroy 进入 request/command owner 或明确 session-owned lifecycle。
+2. battle unit create / destroy request、driver lifecycle、battle unit registry / raw ASC identity matcher 分别进入 request/command/snapshot owner，或明确 session-owned lifecycle 与 migration key。
 3. Demo 系统的 query/dependency/ordering 有独立审查。

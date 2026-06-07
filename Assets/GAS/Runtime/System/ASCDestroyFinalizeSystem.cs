@@ -8,7 +8,7 @@ namespace GAS.Runtime
 {
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASBoundaryProjectionSystemGroup))]
-    [UpdateAfter(typeof(CueDestroySystem))]
+    [UpdateAfter(typeof(DiagnosticsSnapshotSystem))]
     public partial struct ASCDestroyFinalizeSystem : ISystem
     {
         private EntityQuery _ascQuery;

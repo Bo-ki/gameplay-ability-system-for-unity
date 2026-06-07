@@ -37,7 +37,11 @@ namespace GAS.AutoChessDemo
         public bool HasResult { get; private set; }
         public AutoChessBattleResult LastResult { get; private set; }
         public AutoChessBattleResult LastDiagnosticResult { get; private set; }
+        public AutoChessPresentationSnapshot LastPresentation { get; private set; }
+        public AutoChessValidationEvidence LastValidationEvidence { get; private set; }
 
+        private IAutoChessPresentationOutboxBridge presentationOutboxBridge =
+            AutoChessLogPresentationOutboxBridge.Instance;
         private Vector2 logScrollPosition;
         private string logScreenStatus = "等待 AutoChess Demo 启动";
         private string[] logScreenLines = Array.Empty<string>();
@@ -77,7 +81,7 @@ namespace GAS.AutoChessDemo
                 SetLogScreenStatus("正在创建对局房间...");
                 yield return null;
 
-                RunWarmupPass();
+                AutoChessBattleValidationRun.RunWarmupPass(CreateWarmupOptions());
                 SetLogScreenStatus("预热完成，正在运行正式战斗...");
                 for (var i = 0; i < profilerPreRunFrames; i++)
                     yield return null;
@@ -98,17 +102,8 @@ namespace GAS.AutoChessDemo
                     : default;
 
                 var performanceResult = default(AutoChessBattleResult);
-                yield return AutoChessBattleManager.RunDefaultStepped(
-                    new AutoChessBattleOptions(
-                        maxTicks,
-                        postVictoryFlushTicks,
-                        scenarioScale,
-                        captureOfficialToolDiff: false,
-                        debuggerEnabled: false,
-                        captureSystemTimings: false,
-                        captureBufferPressure: false,
-                        healthMultiplier: scenarioHealthMultiplier,
-                        minimumBattleSeconds: minimumProfileSeconds),
+                yield return AutoChessBattleValidationRun.RunScenarioStepped(
+                    CreatePerformanceOptions(),
                     profileHooks,
                     result => performanceResult = result);
 
@@ -122,18 +117,34 @@ namespace GAS.AutoChessDemo
                     profilerSummary = SaveProfilerCapture();
                 }
 
-                var diagnosticResult = RunDiagnosticPass(performanceResult);
+                var replayOptions = CreateReplayOptions();
+                var diagnosticResult = AutoChessBattleValidationRun.RunDiagnosticPass(
+                    performanceResult,
+                    replayOptions);
                 LastResult = captureOfficialToolDiff
-                    ? RunOfficialDiffPass(performanceResult)
+                    ? AutoChessBattleValidationRun.RunOfficialDiffPass(
+                        performanceResult,
+                        replayOptions)
                     : performanceResult;
                 LastDiagnosticResult = diagnosticResult;
+                var validationRun = AutoChessBattleValidationRun.CreateRunResult(
+                    AutoChessGeneratedConfig.ValidationScenario,
+                    LastResult,
+                    LastDiagnosticResult,
+                    default,
+                    false,
+                    captureOfficialToolDiff,
+                    presentationOutboxBridge,
+                    logScreenMaxLines);
+                LastPresentation = validationRun.Presentation;
+                LastValidationEvidence = validationRun.Evidence;
                 HasResult = true;
-                UpdateLogScreen(LastResult);
+                UpdateLogScreen(LastPresentation);
 
-                ValidateResult(LastResult, LastDiagnosticResult, captureOfficialToolDiff);
-                LogResult(LastResult, LastDiagnosticResult, profilerSummary);
+                ValidateResult(validationRun);
+                LogResult(validationRun, profilerSummary);
                 if (exportLogs)
-                    ExportResult(LastResult, LastDiagnosticResult, profilerSummary);
+                    ExportResult(validationRun, profilerSummary);
             }
             finally
             {
@@ -148,138 +159,148 @@ namespace GAS.AutoChessDemo
             yield break;
         }
 
-        private void RunWarmupPass()
+        private AutoChessBattleOptions CreateWarmupOptions()
         {
-            try
-            {
-                AutoChessBattleManager.RunDefault(
-                    new AutoChessBattleOptions(
-                        WarmupMaxTicks,
-                        postVictoryFlushTicks,
-                        scenarioScale,
-                        captureOfficialToolDiff: false,
-                        debuggerEnabled: false,
-                        captureSystemTimings: false,
-                        captureBufferPressure: false,
-                        healthMultiplier: 1f));
-            }
-            finally
-            {
-                AutoChessBattleManager.ShutdownRuntime();
-            }
+            return new AutoChessBattleOptions(
+                WarmupMaxTicks,
+                postVictoryFlushTicks,
+                scenarioScale,
+                captureOfficialToolDiff: false,
+                debuggerEnabled: false,
+                captureSystemTimings: false,
+                captureBufferPressure: false,
+                healthMultiplier: 1f);
         }
 
-        private AutoChessBattleResult RunDiagnosticPass(
-            in AutoChessBattleResult performanceResult)
+        private AutoChessBattleOptions CreatePerformanceOptions()
         {
-            AutoChessBattleManager.ShutdownRuntime();
-            var replayTicks = Mathf.Max(1, performanceResult.BattleTicks);
-            var diagnosticResult = AutoChessBattleManager.RunDefault(
-                new AutoChessBattleOptions(
-                    replayTicks,
-                    postVictoryFlushTicks,
-                    scenarioScale,
-                    captureOfficialToolDiff: false,
-                    debuggerEnabled: true,
-                    captureSystemTimings: true,
-                    captureBufferPressure: true,
-                    healthMultiplier: scenarioHealthMultiplier));
-            AutoChessRuntimeRunner.ValidateOfficialDiffRun(performanceResult, diagnosticResult);
-            return diagnosticResult;
+            return new AutoChessBattleOptions(
+                maxTicks,
+                postVictoryFlushTicks,
+                scenarioScale,
+                captureOfficialToolDiff: false,
+                debuggerEnabled: false,
+                captureSystemTimings: false,
+                captureBufferPressure: false,
+                healthMultiplier: scenarioHealthMultiplier,
+                minimumBattleSeconds: minimumProfileSeconds);
         }
 
-        private AutoChessBattleResult RunOfficialDiffPass(
-            in AutoChessBattleResult performanceResult)
+        private AutoChessBattleOptions CreateReplayOptions()
         {
-            AutoChessBattleManager.ShutdownRuntime();
-            var replayTicks = Mathf.Max(1, performanceResult.BattleTicks);
-            var officialDiffResult = AutoChessBattleManager.RunDefault(
-                new AutoChessBattleOptions(
-                    replayTicks,
-                    postVictoryFlushTicks,
-                    scenarioScale,
-                    captureOfficialToolDiff: true,
-                    debuggerEnabled: false,
-                    captureSystemTimings: false,
-                    captureBufferPressure: false,
-                    healthMultiplier: scenarioHealthMultiplier));
-            AutoChessRuntimeRunner.ValidateOfficialDiffRun(performanceResult, officialDiffResult);
-            return performanceResult.WithOfficialToolDiff(officialDiffResult.OfficialToolDiff);
+            return new AutoChessBattleOptions(
+                maxTicks,
+                postVictoryFlushTicks,
+                scenarioScale,
+                captureOfficialToolDiff: false,
+                debuggerEnabled: true,
+                captureSystemTimings: true,
+                captureBufferPressure: true,
+                healthMultiplier: scenarioHealthMultiplier);
         }
 
-        private static void ValidateResult(
-            in AutoChessBattleResult result,
-            in AutoChessBattleResult diagnosticResult,
-            bool requireOfficialToolDiff)
+        private static void ValidateResult(in AutoChessValidationRunResult runResult)
         {
-            if (result.Completed
-                && result.DriverIssuedCommands > 0
-                && result.EventCounts.AttributeChanges > 0
-                && result.EventCounts.ExecutionCalculationOutputUpdated > 0
-                && result.EventCounts.CueRequests > 0
-                && diagnosticResult.RuntimeDiagnostics.EventCount > 0
-                && !AutoChessRuntimeRunner.HasBlockingDiagnosticErrors(diagnosticResult.RuntimeDiagnostics)
-                && (!requireOfficialToolDiff || result.OfficialToolDiff.JournalingCaptured))
+            if (runResult.Passed)
             {
                 return;
             }
 
             throw new InvalidOperationException(
                 "AutoChessBattle PlayMode validation failed: "
-                + AutoChessRuntimeRunner.CreateSummary(result));
+                + AutoChessBattleValidationReport.CreateRunResultSummary(runResult)
+                + " | "
+                + AutoChessBattleValidationReport.CreateSummary(runResult.Evidence));
         }
 
         private static void LogResult(
-            in AutoChessBattleResult result,
-            in AutoChessBattleResult diagnosticResult,
+            in AutoChessValidationRunResult runResult,
             string profilerSummary)
         {
+            var result = runResult.PerformanceResult;
+            var diagnosticResult = runResult.DiagnosticResult;
+            var diagnosticWithOfficialDiff = diagnosticResult.WithOfficialToolDiff(result.OfficialToolDiff);
             Debug.Log("AutoChessDemoPlayModeRunnerPerformance: "
-                      + AutoChessRuntimeRunner.CreateSummary(result));
-            Debug.Log("AutoChessDemoBattleLog:\n" + result.BattleLog.ToText());
+                      + AutoChessBattleValidationReport.CreateSummary(runResult.Evidence));
+            Debug.Log("AutoChessDemoPlayModeValidationRunResult: "
+                      + AutoChessBattleValidationReport.CreateRunResultSummary(runResult));
+            Debug.Log("AutoChessDemoBattlePresentation: markers="
+                      + runResult.Presentation.RuntimeMarkerCount
+                      + ", displayedLines="
+                      + runResult.Presentation.DisplayLineCount
+                      + ", droppedLines="
+                      + runResult.Presentation.DroppedLineCount
+                      + ", disabledReason="
+                      + runResult.Presentation.DisabledReason);
+            Debug.Log("AutoChessDemoBattleLog:\n" + runResult.Presentation.ToText());
             Debug.Log("AutoChessDemoPlayModeTiming: "
-                      + AutoChessRuntimeRunner.CreateTimingSummary(result));
+                      + AutoChessBattleValidationReport.CreateTimingSummary(result, runResult.Evidence));
             Debug.Log("AutoChessDemoPlayModeDebugger: "
-                      + AutoChessRuntimeRunner.CreateDebuggerSummary(diagnosticResult));
+                      + AutoChessBattleValidationReport.CreateDebuggerSummary(diagnosticResult));
             Debug.Log("AutoChessDemoPlayModeOfficialToolDiff: "
-                      + AutoChessRuntimeRunner.CreateOfficialToolDiffSummary(result));
+                      + AutoChessBattleValidationReport.CreateOfficialToolDiffSummary(
+                          result,
+                          runResult.Evidence));
             Debug.Log("AutoChessDemoPlayModeProfiler: " + profilerSummary);
             Debug.Log("AutoChessDemoPlayModeDiagnosticRunner: "
-                      + AutoChessRuntimeRunner.CreateSummary(diagnosticResult));
-            var diagnosticWithOfficialDiff = diagnosticResult.WithOfficialToolDiff(result.OfficialToolDiff);
+                      + AutoChessBattleValidationReport.CreateSummary(
+                          AutoChessBattleValidationReport.CreateEvidence(
+                              AutoChessGeneratedConfig.ValidationScenario,
+                              diagnosticWithOfficialDiff,
+                              runResult.Presentation,
+                              runResult.RequireOfficialToolDiff)));
             Debug.Log("AutoChessDemoPlayModeDataFlow:\n"
-                      + AutoChessRuntimeRunner.CreateDataFlowDiagram(diagnosticWithOfficialDiff));
+                      + AutoChessBattleValidationReport.CreateDataFlowDiagram(diagnosticWithOfficialDiff));
             Debug.Log("AutoChessDemoPlayModeSequence:\n"
-                      + AutoChessRuntimeRunner.CreateSequenceDiagram(diagnosticWithOfficialDiff));
+                      + AutoChessBattleValidationReport.CreateSequenceDiagram(diagnosticWithOfficialDiff));
         }
 
         private void ExportResult(
-            in AutoChessBattleResult result,
-            in AutoChessBattleResult diagnosticResult,
+            in AutoChessValidationRunResult runResult,
             string profilerSummary)
         {
             if (string.IsNullOrWhiteSpace(exportDirectory))
                 return;
 
             Directory.CreateDirectory(exportDirectory);
+            var result = runResult.PerformanceResult;
+            var diagnosticResult = runResult.DiagnosticResult;
+            var diagnosticWithOfficialDiff = diagnosticResult.WithOfficialToolDiff(result.OfficialToolDiff);
             var builder = new StringBuilder(1024);
             builder.AppendLine("AutoChessDemoPlayModeRunnerPerformance: "
-                               + AutoChessRuntimeRunner.CreateSummary(result));
+                               + AutoChessBattleValidationReport.CreateSummary(runResult.Evidence));
+            builder.AppendLine("AutoChessDemoPlayModeValidationRunResult: "
+                               + AutoChessBattleValidationReport.CreateRunResultSummary(runResult));
             builder.AppendLine("AutoChessDemoPlayModeTiming: "
-                               + AutoChessRuntimeRunner.CreateTimingSummary(result));
+                               + AutoChessBattleValidationReport.CreateTimingSummary(result, runResult.Evidence));
             builder.AppendLine("AutoChessDemoPlayModeDebugger: "
-                               + AutoChessRuntimeRunner.CreateDebuggerSummary(diagnosticResult));
+                               + AutoChessBattleValidationReport.CreateDebuggerSummary(diagnosticResult));
             builder.AppendLine("AutoChessDemoPlayModeOfficialToolDiff: "
-                               + AutoChessRuntimeRunner.CreateOfficialToolDiffSummary(result));
+                               + AutoChessBattleValidationReport.CreateOfficialToolDiffSummary(
+                                   result,
+                                   runResult.Evidence));
+            builder.AppendLine("AutoChessDemoBattlePresentation: markers="
+                               + runResult.Presentation.RuntimeMarkerCount
+                               + ", displayedLines="
+                               + runResult.Presentation.DisplayLineCount
+                               + ", droppedLines="
+                               + runResult.Presentation.DroppedLineCount
+                               + ", disabledReason="
+                               + runResult.Presentation.DisabledReason);
             builder.AppendLine("AutoChessDemoPlayModeProfiler: " + profilerSummary);
             builder.AppendLine("AutoChessDemoPlayModeDiagnosticRunner: "
-                               + AutoChessRuntimeRunner.CreateSummary(diagnosticResult));
+                               + AutoChessBattleValidationReport.CreateSummary(
+                                   AutoChessBattleValidationReport.CreateEvidence(
+                                       AutoChessGeneratedConfig.ValidationScenario,
+                                       diagnosticWithOfficialDiff,
+                                       runResult.Presentation,
+                                       runResult.RequireOfficialToolDiff)));
             File.WriteAllText(
                 Path.Combine(exportDirectory, "AutoChessPlayModeProfileSummary.txt"),
                 builder.ToString());
             File.WriteAllText(
                 Path.Combine(exportDirectory, "AutoChessBattleLog.txt"),
-                result.BattleLog.ToText());
+                runResult.Presentation.ToText());
         }
 
         private void OnGUI()
@@ -311,19 +332,13 @@ namespace GAS.AutoChessDemo
             logScreenStatus = status ?? string.Empty;
         }
 
-        private void UpdateLogScreen(in AutoChessBattleResult result)
+        private void UpdateLogScreen(in AutoChessPresentationSnapshot presentation)
         {
-            logScreenStatus = "房间 " + result.RoomId
-                              + " | 胜者 " + result.Winner
-                              + " | 帧 " + result.BattleTicks
-                              + " | 命令 " + result.DriverIssuedCommands;
-
-            var sourceLines = result.BattleLog.Lines ?? Array.Empty<AutoChessBattleLogLine>();
-            var maxLines = Mathf.Max(1, logScreenMaxLines);
-            var start = Mathf.Max(0, sourceLines.Length - maxLines);
-            logScreenLines = new string[sourceLines.Length - start];
-            for (var i = start; i < sourceLines.Length; i++)
-                logScreenLines[i - start] = sourceLines[i].ToString();
+            logScreenStatus = presentation.Status;
+            var sourceLines = presentation.Lines ?? Array.Empty<AutoChessBattleLogLine>();
+            logScreenLines = new string[sourceLines.Length];
+            for (var i = 0; i < sourceLines.Length; i++)
+                logScreenLines[i] = sourceLines[i].ToString();
             logScrollPosition = Vector2.zero;
         }
 

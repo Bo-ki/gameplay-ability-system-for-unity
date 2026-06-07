@@ -94,6 +94,21 @@ namespace GAS.Runtime
         public int RuntimeCoreActiveEffectGlobalIndexMaxBucketLength;
         public int RuntimeCoreActiveEffectGlobalIndexStableRowCount;
         public int RuntimeCoreActiveEffectGlobalIndexStaleStableRowCount;
+        public int RuntimeCoreActiveMutationCommandCount;
+        public int RuntimeCoreActiveMutationOwnerGroupCount;
+        public int RuntimeCoreActiveMutationMaxOwnerRange;
+        public int RuntimeCoreActiveMutationSortMoveCount;
+        public int RuntimeCoreActiveMutationEstimatedRandomLookupCount;
+        public int RuntimeCoreActiveMutationOwnerResourceLookupCount;
+        public int RuntimeCoreActiveMutationMigrationCarrierCount;
+        public int RuntimeCorePendingAttributeDeltaCount;
+        public int RuntimeCorePendingAttributeAppliedDeltaCount;
+        public int RuntimeCorePendingAttributeSkippedDeltaCount;
+        public int RuntimeCorePendingAttributeTargetGroupCount;
+        public int RuntimeCorePendingAttributeMaxTargetRange;
+        public int RuntimeCorePendingAttributeEstimatedRandomLookupCount;
+        public int RuntimeCorePendingAttributeFactPatchCount;
+        public int RuntimeCorePendingAttributeMigrationCarrierCount;
         public int RuntimeCoreQueryBudget;
         public int RuntimeCoreFilteredQueryBudget;
         public int RuntimeCoreUnfilteredQueryBudget;
@@ -190,6 +205,21 @@ namespace GAS.Runtime
         public int ActiveEffectGlobalIndexMaxBucketLength;
         public int ActiveEffectGlobalIndexStableRowCount;
         public int ActiveEffectGlobalIndexStaleStableRowCount;
+        public int ActiveMutationCommandCount;
+        public int ActiveMutationOwnerGroupCount;
+        public int ActiveMutationMaxOwnerRange;
+        public int ActiveMutationSortMoveCount;
+        public int ActiveMutationEstimatedRandomLookupCount;
+        public int ActiveMutationOwnerResourceLookupCount;
+        public int ActiveMutationMigrationCarrierCount;
+        public int PendingAttributeDeltaCount;
+        public int PendingAttributeAppliedDeltaCount;
+        public int PendingAttributeSkippedDeltaCount;
+        public int PendingAttributeTargetGroupCount;
+        public int PendingAttributeMaxTargetRange;
+        public int PendingAttributeEstimatedRandomLookupCount;
+        public int PendingAttributeFactPatchCount;
+        public int PendingAttributeMigrationCarrierCount;
         public int QueryBudget;
         public int FilteredQueryBudget;
         public int UnfilteredQueryBudget;
@@ -308,6 +338,21 @@ namespace GAS.Runtime
         public readonly int ActiveEffectGlobalIndexMaxBucketLength;
         public readonly int ActiveEffectGlobalIndexStableRowCount;
         public readonly int ActiveEffectGlobalIndexStaleStableRowCount;
+        public readonly int ActiveMutationCommandCount;
+        public readonly int ActiveMutationOwnerGroupCount;
+        public readonly int ActiveMutationMaxOwnerRange;
+        public readonly int ActiveMutationSortMoveCount;
+        public readonly int ActiveMutationEstimatedRandomLookupCount;
+        public readonly int ActiveMutationOwnerResourceLookupCount;
+        public readonly int ActiveMutationMigrationCarrierCount;
+        public readonly int PendingAttributeDeltaCount;
+        public readonly int PendingAttributeAppliedDeltaCount;
+        public readonly int PendingAttributeSkippedDeltaCount;
+        public readonly int PendingAttributeTargetGroupCount;
+        public readonly int PendingAttributeMaxTargetRange;
+        public readonly int PendingAttributeEstimatedRandomLookupCount;
+        public readonly int PendingAttributeFactPatchCount;
+        public readonly int PendingAttributeMigrationCarrierCount;
         public readonly int QueryBudget;
         public readonly int FilteredQueryBudget;
         public readonly int UnfilteredQueryBudget;
@@ -363,6 +408,21 @@ namespace GAS.Runtime
             int activeEffectGlobalIndexMaxBucketLength = 0,
             int activeEffectGlobalIndexStableRowCount = 0,
             int activeEffectGlobalIndexStaleStableRowCount = 0,
+            int activeMutationCommandCount = 0,
+            int activeMutationOwnerGroupCount = 0,
+            int activeMutationMaxOwnerRange = 0,
+            int activeMutationSortMoveCount = 0,
+            int activeMutationEstimatedRandomLookupCount = 0,
+            int activeMutationOwnerResourceLookupCount = 0,
+            int activeMutationMigrationCarrierCount = 0,
+            int pendingAttributeDeltaCount = 0,
+            int pendingAttributeAppliedDeltaCount = 0,
+            int pendingAttributeSkippedDeltaCount = 0,
+            int pendingAttributeTargetGroupCount = 0,
+            int pendingAttributeMaxTargetRange = 0,
+            int pendingAttributeEstimatedRandomLookupCount = 0,
+            int pendingAttributeFactPatchCount = 0,
+            int pendingAttributeMigrationCarrierCount = 0,
             int queryBudget = 0,
             int filteredQueryBudget = 0,
             int unfilteredQueryBudget = 0,
@@ -417,6 +477,21 @@ namespace GAS.Runtime
             ActiveEffectGlobalIndexMaxBucketLength = activeEffectGlobalIndexMaxBucketLength;
             ActiveEffectGlobalIndexStableRowCount = activeEffectGlobalIndexStableRowCount;
             ActiveEffectGlobalIndexStaleStableRowCount = activeEffectGlobalIndexStaleStableRowCount;
+            ActiveMutationCommandCount = activeMutationCommandCount;
+            ActiveMutationOwnerGroupCount = activeMutationOwnerGroupCount;
+            ActiveMutationMaxOwnerRange = activeMutationMaxOwnerRange;
+            ActiveMutationSortMoveCount = activeMutationSortMoveCount;
+            ActiveMutationEstimatedRandomLookupCount = activeMutationEstimatedRandomLookupCount;
+            ActiveMutationOwnerResourceLookupCount = activeMutationOwnerResourceLookupCount;
+            ActiveMutationMigrationCarrierCount = activeMutationMigrationCarrierCount;
+            PendingAttributeDeltaCount = pendingAttributeDeltaCount;
+            PendingAttributeAppliedDeltaCount = pendingAttributeAppliedDeltaCount;
+            PendingAttributeSkippedDeltaCount = pendingAttributeSkippedDeltaCount;
+            PendingAttributeTargetGroupCount = pendingAttributeTargetGroupCount;
+            PendingAttributeMaxTargetRange = pendingAttributeMaxTargetRange;
+            PendingAttributeEstimatedRandomLookupCount = pendingAttributeEstimatedRandomLookupCount;
+            PendingAttributeFactPatchCount = pendingAttributeFactPatchCount;
+            PendingAttributeMigrationCarrierCount = pendingAttributeMigrationCarrierCount;
             QueryBudget = queryBudget;
             FilteredQueryBudget = filteredQueryBudget;
             UnfilteredQueryBudget = unfilteredQueryBudget;
@@ -742,6 +817,9 @@ namespace GAS.Runtime
         private const int DefaultSlowSystemMicroseconds = 100;
         private const int DefaultBufferPressureWarningPermille = 700;
         private const int DefaultBufferPressureErrorPermille = 900;
+        private static EntityManager _cachedDebuggerEntityManager;
+        private static Entity _cachedDebuggerEntity;
+        private static bool _hasCachedDebugger;
 
         public static Entity CreateSingleton(EntityManager em)
         {
@@ -749,7 +827,81 @@ namespace GAS.Runtime
             em.SetComponentData(entity, CreateDefaultState());
             em.GetBuffer<GASRuntimeDiagnosticEventBuffer>(entity).EnsureCapacity(DefaultDiagnosticCapacity);
             em.SetName(entity, "GasRuntimeDebugger");
+            RegisterKnownSingleton(em, entity);
             return entity;
+        }
+
+        public static void RegisterKnownSingleton(EntityManager em, Entity debuggerEntity)
+        {
+            if (!IsValidDebugger(em, debuggerEntity))
+                return;
+
+            _cachedDebuggerEntityManager = em;
+            _cachedDebuggerEntity = debuggerEntity;
+            _hasCachedDebugger = true;
+        }
+
+        public static void ResetKnownSingleton(EntityManager em)
+        {
+            if (_hasCachedDebugger && _cachedDebuggerEntityManager.Equals(em))
+            {
+                _hasCachedDebugger = false;
+                _cachedDebuggerEntity = Entity.Null;
+                _cachedDebuggerEntityManager = default;
+            }
+        }
+
+        public static bool TryGetSingleton(EntityManager em, out Entity debuggerEntity)
+        {
+            if (TryResolveCachedSingleton(em, out debuggerEntity))
+                return true;
+
+            return TryResolveSingletonByQuery(em, out debuggerEntity);
+        }
+
+        private static bool TryResolveCachedSingleton(EntityManager em, out Entity debuggerEntity)
+        {
+            if (!_hasCachedDebugger || !_cachedDebuggerEntityManager.Equals(em))
+            {
+                debuggerEntity = Entity.Null;
+                return false;
+            }
+
+            if (IsValidDebugger(em, _cachedDebuggerEntity))
+            {
+                debuggerEntity = _cachedDebuggerEntity;
+                return true;
+            }
+
+            _hasCachedDebugger = false;
+            _cachedDebuggerEntity = Entity.Null;
+            debuggerEntity = Entity.Null;
+            return false;
+        }
+
+        private static bool TryResolveSingletonByQuery(EntityManager em, out Entity debuggerEntity)
+        {
+            debuggerEntity = Entity.Null;
+            if (em.World == null || !em.World.IsCreated)
+                return false;
+
+            using var query = em.CreateEntityQuery(ComponentType.ReadOnly<GASRuntimeDebuggerComponent>());
+            using var entities = query.ToEntityArray(Allocator.Temp);
+            if (entities.Length != 1 || !IsValidDebugger(em, entities[0]))
+                return false;
+
+            debuggerEntity = entities[0];
+            RegisterKnownSingleton(em, debuggerEntity);
+            return true;
+        }
+
+        private static bool IsValidDebugger(EntityManager em, Entity debuggerEntity)
+        {
+            return debuggerEntity != Entity.Null
+                   && em.World != null
+                   && em.World.IsCreated
+                   && em.Exists(debuggerEntity)
+                   && em.HasComponent<GASRuntimeDebuggerComponent>(debuggerEntity);
         }
 
         public static GASRuntimeDebuggerComponent CreateDefaultState()
@@ -819,6 +971,21 @@ namespace GAS.Runtime
             state.RuntimeCoreActiveEffectGlobalIndexMaxBucketLength = 0;
             state.RuntimeCoreActiveEffectGlobalIndexStableRowCount = 0;
             state.RuntimeCoreActiveEffectGlobalIndexStaleStableRowCount = 0;
+            state.RuntimeCoreActiveMutationCommandCount = 0;
+            state.RuntimeCoreActiveMutationOwnerGroupCount = 0;
+            state.RuntimeCoreActiveMutationMaxOwnerRange = 0;
+            state.RuntimeCoreActiveMutationSortMoveCount = 0;
+            state.RuntimeCoreActiveMutationEstimatedRandomLookupCount = 0;
+            state.RuntimeCoreActiveMutationOwnerResourceLookupCount = 0;
+            state.RuntimeCoreActiveMutationMigrationCarrierCount = 0;
+            state.RuntimeCorePendingAttributeDeltaCount = 0;
+            state.RuntimeCorePendingAttributeAppliedDeltaCount = 0;
+            state.RuntimeCorePendingAttributeSkippedDeltaCount = 0;
+            state.RuntimeCorePendingAttributeTargetGroupCount = 0;
+            state.RuntimeCorePendingAttributeMaxTargetRange = 0;
+            state.RuntimeCorePendingAttributeEstimatedRandomLookupCount = 0;
+            state.RuntimeCorePendingAttributeFactPatchCount = 0;
+            state.RuntimeCorePendingAttributeMigrationCarrierCount = 0;
             state.RuntimeCoreQueryBudget = 0;
             state.RuntimeCoreFilteredQueryBudget = 0;
             state.RuntimeCoreUnfilteredQueryBudget = 0;
@@ -1012,6 +1179,21 @@ namespace GAS.Runtime
                 counters.ActiveEffectGlobalIndexMaxBucketLength,
                 counters.ActiveEffectGlobalIndexStableRowCount,
                 counters.ActiveEffectGlobalIndexStaleStableRowCount,
+                counters.ActiveMutationCommandCount,
+                counters.ActiveMutationOwnerGroupCount,
+                counters.ActiveMutationMaxOwnerRange,
+                counters.ActiveMutationSortMoveCount,
+                counters.ActiveMutationEstimatedRandomLookupCount,
+                counters.ActiveMutationOwnerResourceLookupCount,
+                counters.ActiveMutationMigrationCarrierCount,
+                counters.PendingAttributeDeltaCount,
+                counters.PendingAttributeAppliedDeltaCount,
+                counters.PendingAttributeSkippedDeltaCount,
+                counters.PendingAttributeTargetGroupCount,
+                counters.PendingAttributeMaxTargetRange,
+                counters.PendingAttributeEstimatedRandomLookupCount,
+                counters.PendingAttributeFactPatchCount,
+                counters.PendingAttributeMigrationCarrierCount,
                 counters.QueryBudget,
                 counters.FilteredQueryBudget,
                 counters.UnfilteredQueryBudget,
@@ -1059,7 +1241,22 @@ namespace GAS.Runtime
                 out var effectCommandCount,
                 out var instantSpecCount,
                 out var attributeDeltaCount,
-                out var typedFactCount);
+                out var typedFactCount,
+                out var activeMutationCommandCount,
+                out var activeMutationOwnerGroupCount,
+                out var activeMutationMaxOwnerRange,
+                out var activeMutationSortMoveCount,
+                out var activeMutationEstimatedRandomLookupCount,
+                out var activeMutationOwnerResourceLookupCount,
+                out var activeMutationMigrationCarrierCount,
+                out var pendingAttributeDeltaCount,
+                out var pendingAttributeAppliedDeltaCount,
+                out var pendingAttributeSkippedDeltaCount,
+                out var pendingAttributeTargetGroupCount,
+                out var pendingAttributeMaxTargetRange,
+                out var pendingAttributeEstimatedRandomLookupCount,
+                out var pendingAttributeFactPatchCount,
+                out var pendingAttributeMigrationCarrierCount);
             var currentFrame = ResolveCurrentFrame(em);
             ReadActiveEffectGlobalIndexCounters(
                 em,
@@ -1094,7 +1291,7 @@ namespace GAS.Runtime
             var activeEffectChunkSkipNoopSlotCount = 0;
             var activeEffectChunkSkipOwnerCount = activeEffectStoreOwnerCount;
 
-            if (activeEffectEntityCount > 0 || activeEffectGlobalIndexCount > 0)
+            if (activeEffectStoreOwnerCount > 0)
             {
                 ReadActiveEffectStoreCounters(
                     em,
@@ -1181,6 +1378,21 @@ namespace GAS.Runtime
                 activeEffectGlobalIndexMaxBucketLength,
                 activeEffectGlobalIndexStableRowCount,
                 activeEffectGlobalIndexStaleStableRowCount,
+                activeMutationCommandCount,
+                activeMutationOwnerGroupCount,
+                activeMutationMaxOwnerRange,
+                activeMutationSortMoveCount,
+                activeMutationEstimatedRandomLookupCount,
+                activeMutationOwnerResourceLookupCount,
+                activeMutationMigrationCarrierCount,
+                pendingAttributeDeltaCount,
+                pendingAttributeAppliedDeltaCount,
+                pendingAttributeSkippedDeltaCount,
+                pendingAttributeTargetGroupCount,
+                pendingAttributeMaxTargetRange,
+                pendingAttributeEstimatedRandomLookupCount,
+                pendingAttributeFactPatchCount,
+                pendingAttributeMigrationCarrierCount,
                 frameBudget.TotalQueryBudget,
                 frameBudget.TotalFilteredQueryBudget,
                 frameBudget.TotalUnfilteredQueryBudget,
@@ -1222,12 +1434,12 @@ namespace GAS.Runtime
             EGasRuntimeDiagnosticModule module,
             int playbackCount = 1)
         {
-            if (!GASManager.IsInitialized || !GASManager.EntityManager.Equals(em))
+            if (!TryGetSingleton(em, out var debuggerEntity))
                 return;
 
             RecordRuntimeCoreEcbPlayback(
                 em,
-                GASManager.EntityRuntimeDebugger,
+                debuggerEntity,
                 frame,
                 module,
                 playbackCount);
@@ -1434,6 +1646,21 @@ namespace GAS.Runtime
             int activeEffectGlobalIndexMaxBucketLength = 0,
             int activeEffectGlobalIndexStableRowCount = 0,
             int activeEffectGlobalIndexStaleStableRowCount = 0,
+            int activeMutationCommandCount = 0,
+            int activeMutationOwnerGroupCount = 0,
+            int activeMutationMaxOwnerRange = 0,
+            int activeMutationSortMoveCount = 0,
+            int activeMutationEstimatedRandomLookupCount = 0,
+            int activeMutationOwnerResourceLookupCount = 0,
+            int activeMutationMigrationCarrierCount = 0,
+            int pendingAttributeDeltaCount = 0,
+            int pendingAttributeAppliedDeltaCount = 0,
+            int pendingAttributeSkippedDeltaCount = 0,
+            int pendingAttributeTargetGroupCount = 0,
+            int pendingAttributeMaxTargetRange = 0,
+            int pendingAttributeEstimatedRandomLookupCount = 0,
+            int pendingAttributeFactPatchCount = 0,
+            int pendingAttributeMigrationCarrierCount = 0,
             int queryBudget = 0,
             int filteredQueryBudget = 0,
             int unfilteredQueryBudget = 0,
@@ -1496,6 +1723,23 @@ namespace GAS.Runtime
             state.RuntimeCoreActiveEffectGlobalIndexMaxBucketLength = activeEffectGlobalIndexMaxBucketLength;
             state.RuntimeCoreActiveEffectGlobalIndexStableRowCount = activeEffectGlobalIndexStableRowCount;
             state.RuntimeCoreActiveEffectGlobalIndexStaleStableRowCount = activeEffectGlobalIndexStaleStableRowCount;
+            state.RuntimeCoreActiveMutationCommandCount += activeMutationCommandCount;
+            state.RuntimeCoreActiveMutationOwnerGroupCount += activeMutationOwnerGroupCount;
+            if (activeMutationMaxOwnerRange > state.RuntimeCoreActiveMutationMaxOwnerRange)
+                state.RuntimeCoreActiveMutationMaxOwnerRange = activeMutationMaxOwnerRange;
+            state.RuntimeCoreActiveMutationSortMoveCount += activeMutationSortMoveCount;
+            state.RuntimeCoreActiveMutationEstimatedRandomLookupCount += activeMutationEstimatedRandomLookupCount;
+            state.RuntimeCoreActiveMutationOwnerResourceLookupCount += activeMutationOwnerResourceLookupCount;
+            state.RuntimeCoreActiveMutationMigrationCarrierCount += activeMutationMigrationCarrierCount;
+            state.RuntimeCorePendingAttributeDeltaCount += pendingAttributeDeltaCount;
+            state.RuntimeCorePendingAttributeAppliedDeltaCount += pendingAttributeAppliedDeltaCount;
+            state.RuntimeCorePendingAttributeSkippedDeltaCount += pendingAttributeSkippedDeltaCount;
+            state.RuntimeCorePendingAttributeTargetGroupCount += pendingAttributeTargetGroupCount;
+            if (pendingAttributeMaxTargetRange > state.RuntimeCorePendingAttributeMaxTargetRange)
+                state.RuntimeCorePendingAttributeMaxTargetRange = pendingAttributeMaxTargetRange;
+            state.RuntimeCorePendingAttributeEstimatedRandomLookupCount += pendingAttributeEstimatedRandomLookupCount;
+            state.RuntimeCorePendingAttributeFactPatchCount += pendingAttributeFactPatchCount;
+            state.RuntimeCorePendingAttributeMigrationCarrierCount += pendingAttributeMigrationCarrierCount;
             state.RuntimeCoreQueryBudget = queryBudget;
             state.RuntimeCoreFilteredQueryBudget = filteredQueryBudget;
             state.RuntimeCoreUnfilteredQueryBudget = unfilteredQueryBudget;
@@ -1561,6 +1805,21 @@ namespace GAS.Runtime
                     ActiveEffectGlobalIndexMaxBucketLength = activeEffectGlobalIndexMaxBucketLength,
                     ActiveEffectGlobalIndexStableRowCount = activeEffectGlobalIndexStableRowCount,
                     ActiveEffectGlobalIndexStaleStableRowCount = activeEffectGlobalIndexStaleStableRowCount,
+                    ActiveMutationCommandCount = activeMutationCommandCount,
+                    ActiveMutationOwnerGroupCount = activeMutationOwnerGroupCount,
+                    ActiveMutationMaxOwnerRange = activeMutationMaxOwnerRange,
+                    ActiveMutationSortMoveCount = activeMutationSortMoveCount,
+                    ActiveMutationEstimatedRandomLookupCount = activeMutationEstimatedRandomLookupCount,
+                    ActiveMutationOwnerResourceLookupCount = activeMutationOwnerResourceLookupCount,
+                    ActiveMutationMigrationCarrierCount = activeMutationMigrationCarrierCount,
+                    PendingAttributeDeltaCount = pendingAttributeDeltaCount,
+                    PendingAttributeAppliedDeltaCount = pendingAttributeAppliedDeltaCount,
+                    PendingAttributeSkippedDeltaCount = pendingAttributeSkippedDeltaCount,
+                    PendingAttributeTargetGroupCount = pendingAttributeTargetGroupCount,
+                    PendingAttributeMaxTargetRange = pendingAttributeMaxTargetRange,
+                    PendingAttributeEstimatedRandomLookupCount = pendingAttributeEstimatedRandomLookupCount,
+                    PendingAttributeFactPatchCount = pendingAttributeFactPatchCount,
+                    PendingAttributeMigrationCarrierCount = pendingAttributeMigrationCarrierCount,
                     QueryBudget = queryBudget,
                     FilteredQueryBudget = filteredQueryBudget,
                     UnfilteredQueryBudget = unfilteredQueryBudget,
@@ -1777,6 +2036,21 @@ namespace GAS.Runtime
                     state.RuntimeCoreActiveEffectGlobalIndexMaxBucketLength,
                     state.RuntimeCoreActiveEffectGlobalIndexStableRowCount,
                     state.RuntimeCoreActiveEffectGlobalIndexStaleStableRowCount,
+                    state.RuntimeCoreActiveMutationCommandCount,
+                    state.RuntimeCoreActiveMutationOwnerGroupCount,
+                    state.RuntimeCoreActiveMutationMaxOwnerRange,
+                    state.RuntimeCoreActiveMutationSortMoveCount,
+                    state.RuntimeCoreActiveMutationEstimatedRandomLookupCount,
+                    state.RuntimeCoreActiveMutationOwnerResourceLookupCount,
+                    state.RuntimeCoreActiveMutationMigrationCarrierCount,
+                    state.RuntimeCorePendingAttributeDeltaCount,
+                    state.RuntimeCorePendingAttributeAppliedDeltaCount,
+                    state.RuntimeCorePendingAttributeSkippedDeltaCount,
+                    state.RuntimeCorePendingAttributeTargetGroupCount,
+                    state.RuntimeCorePendingAttributeMaxTargetRange,
+                    state.RuntimeCorePendingAttributeEstimatedRandomLookupCount,
+                    state.RuntimeCorePendingAttributeFactPatchCount,
+                    state.RuntimeCorePendingAttributeMigrationCarrierCount,
                     state.RuntimeCoreQueryBudget,
                     state.RuntimeCoreFilteredQueryBudget,
                     state.RuntimeCoreUnfilteredQueryBudget,
@@ -1861,12 +2135,42 @@ namespace GAS.Runtime
             out int effectCommandCount,
             out int instantSpecCount,
             out int attributeDeltaCount,
-            out int typedFactCount)
+            out int typedFactCount,
+            out int activeMutationCommandCount,
+            out int activeMutationOwnerGroupCount,
+            out int activeMutationMaxOwnerRange,
+            out int activeMutationSortMoveCount,
+            out int activeMutationEstimatedRandomLookupCount,
+            out int activeMutationOwnerResourceLookupCount,
+            out int activeMutationMigrationCarrierCount,
+            out int pendingAttributeDeltaCount,
+            out int pendingAttributeAppliedDeltaCount,
+            out int pendingAttributeSkippedDeltaCount,
+            out int pendingAttributeTargetGroupCount,
+            out int pendingAttributeMaxTargetRange,
+            out int pendingAttributeEstimatedRandomLookupCount,
+            out int pendingAttributeFactPatchCount,
+            out int pendingAttributeMigrationCarrierCount)
         {
             effectCommandCount = 0;
             instantSpecCount = 0;
             attributeDeltaCount = 0;
             typedFactCount = 0;
+            activeMutationCommandCount = 0;
+            activeMutationOwnerGroupCount = 0;
+            activeMutationMaxOwnerRange = 0;
+            activeMutationSortMoveCount = 0;
+            activeMutationEstimatedRandomLookupCount = 0;
+            activeMutationOwnerResourceLookupCount = 0;
+            activeMutationMigrationCarrierCount = 0;
+            pendingAttributeDeltaCount = 0;
+            pendingAttributeAppliedDeltaCount = 0;
+            pendingAttributeSkippedDeltaCount = 0;
+            pendingAttributeTargetGroupCount = 0;
+            pendingAttributeMaxTargetRange = 0;
+            pendingAttributeEstimatedRandomLookupCount = 0;
+            pendingAttributeFactPatchCount = 0;
+            pendingAttributeMigrationCarrierCount = 0;
 
             if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity))
                 return;
@@ -1875,6 +2179,25 @@ namespace GAS.Runtime
             instantSpecCount = GetBufferLength<GEEffectSpecBuffer>(em, streamEntity);
             attributeDeltaCount = GetBufferLength<AttributeModifierBuffer>(em, streamEntity);
             typedFactCount = GetBufferLength<GameplayEventBuffer>(em, streamEntity);
+            if (!em.HasComponent<GEEffectCommandStreamComponent>(streamEntity))
+                return;
+
+            var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
+            activeMutationCommandCount = stream.ActiveMutationCommandCount;
+            activeMutationOwnerGroupCount = stream.ActiveMutationOwnerGroupCount;
+            activeMutationMaxOwnerRange = stream.ActiveMutationMaxOwnerRange;
+            activeMutationSortMoveCount = stream.ActiveMutationSortMoveCount;
+            activeMutationEstimatedRandomLookupCount = stream.ActiveMutationEstimatedRandomLookupCount;
+            activeMutationOwnerResourceLookupCount = stream.ActiveMutationOwnerResourceLookupCount;
+            activeMutationMigrationCarrierCount = stream.ActiveMutationMigrationCarrierCount;
+            pendingAttributeDeltaCount = stream.PendingAttributeDeltaCount;
+            pendingAttributeAppliedDeltaCount = stream.PendingAttributeAppliedDeltaCount;
+            pendingAttributeSkippedDeltaCount = stream.PendingAttributeSkippedDeltaCount;
+            pendingAttributeTargetGroupCount = stream.PendingAttributeTargetGroupCount;
+            pendingAttributeMaxTargetRange = stream.PendingAttributeMaxTargetRange;
+            pendingAttributeEstimatedRandomLookupCount = stream.PendingAttributeEstimatedRandomLookupCount;
+            pendingAttributeFactPatchCount = stream.PendingAttributeFactPatchCount;
+            pendingAttributeMigrationCarrierCount = stream.PendingAttributeMigrationCarrierCount;
         }
 
         private static int CountTypedDamageFacts(EntityManager em)
@@ -2458,6 +2781,36 @@ namespace GAS.Runtime
                 .Append(evt.ActiveEffectGlobalIndexStableRowCount)
                 .Append("|activeEffectGlobalIndexStaleStableRows=")
                 .Append(evt.ActiveEffectGlobalIndexStaleStableRowCount)
+                .Append("|activeMutationCommands=")
+                .Append(evt.ActiveMutationCommandCount)
+                .Append("|activeMutationOwnerGroups=")
+                .Append(evt.ActiveMutationOwnerGroupCount)
+                .Append("|activeMutationMaxOwnerRange=")
+                .Append(evt.ActiveMutationMaxOwnerRange)
+                .Append("|activeMutationSortMoves=")
+                .Append(evt.ActiveMutationSortMoveCount)
+                .Append("|activeMutationEstimatedRandomLookups=")
+                .Append(evt.ActiveMutationEstimatedRandomLookupCount)
+                .Append("|activeMutationOwnerResourceLookups=")
+                .Append(evt.ActiveMutationOwnerResourceLookupCount)
+                .Append("|activeMutationMigrationCarriers=")
+                .Append(evt.ActiveMutationMigrationCarrierCount)
+                .Append("|pendingAttributeDeltas=")
+                .Append(evt.PendingAttributeDeltaCount)
+                .Append("|pendingAttributeAppliedDeltas=")
+                .Append(evt.PendingAttributeAppliedDeltaCount)
+                .Append("|pendingAttributeSkippedDeltas=")
+                .Append(evt.PendingAttributeSkippedDeltaCount)
+                .Append("|pendingAttributeTargetGroups=")
+                .Append(evt.PendingAttributeTargetGroupCount)
+                .Append("|pendingAttributeMaxTargetRange=")
+                .Append(evt.PendingAttributeMaxTargetRange)
+                .Append("|pendingAttributeEstimatedRandomLookups=")
+                .Append(evt.PendingAttributeEstimatedRandomLookupCount)
+                .Append("|pendingAttributeFactPatches=")
+                .Append(evt.PendingAttributeFactPatchCount)
+                .Append("|pendingAttributeMigrationCarriers=")
+                .Append(evt.PendingAttributeMigrationCarrierCount)
                 .Append("|queryBudget=")
                 .Append(evt.QueryBudget)
                     .Append("|filteredQueryBudget=")
@@ -2660,6 +3013,38 @@ namespace GAS.Runtime
                 .Append(counters.ActiveEffectGlobalIndexStableRowCount)
                 .Append("|globalIndexStaleStableRows=")
                 .Append(counters.ActiveEffectGlobalIndexStaleStableRowCount)
+                .AppendLine();
+            builder.Append("runtimeCoreActiveMutation|commands=")
+                .Append(counters.ActiveMutationCommandCount)
+                .Append("|ownerGroups=")
+                .Append(counters.ActiveMutationOwnerGroupCount)
+                .Append("|maxOwnerRange=")
+                .Append(counters.ActiveMutationMaxOwnerRange)
+                .Append("|sortMoves=")
+                .Append(counters.ActiveMutationSortMoveCount)
+                .Append("|estimatedRandomLookups=")
+                .Append(counters.ActiveMutationEstimatedRandomLookupCount)
+                .Append("|ownerResourceLookups=")
+                .Append(counters.ActiveMutationOwnerResourceLookupCount)
+                .Append("|migrationCarriers=")
+                .Append(counters.ActiveMutationMigrationCarrierCount)
+                .AppendLine();
+            builder.Append("runtimeCorePendingAttributeDelta|pending=")
+                .Append(counters.PendingAttributeDeltaCount)
+                .Append("|applied=")
+                .Append(counters.PendingAttributeAppliedDeltaCount)
+                .Append("|skipped=")
+                .Append(counters.PendingAttributeSkippedDeltaCount)
+                .Append("|targetGroups=")
+                .Append(counters.PendingAttributeTargetGroupCount)
+                .Append("|maxTargetRange=")
+                .Append(counters.PendingAttributeMaxTargetRange)
+                .Append("|estimatedRandomLookups=")
+                .Append(counters.PendingAttributeEstimatedRandomLookupCount)
+                .Append("|factPatches=")
+                .Append(counters.PendingAttributeFactPatchCount)
+                .Append("|migrationCarriers=")
+                .Append(counters.PendingAttributeMigrationCarrierCount)
                 .AppendLine();
             builder.Append("runtimeCoreFrameBudget|queryBudget=")
                 .Append(counters.QueryBudget)

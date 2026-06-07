@@ -29,7 +29,7 @@ flowchart LR
 | 层级 | 当前文件/符号 | 当前状态 | 不能推出 |
 |---|---|---|---|
 | runtime-active catalog blob | `GASDefinitionCatalogComponent`、`GASDefinitionCatalogBlob`、`DefinitionCatalog.gen.cs`、`RuntimeDefinitionGlue.gen.cs` | 已进入 generated runtime 执行链 | 不能证明 runtime authoring/Baker 目标态完成 |
-| generated runtime systems | `AbilityCatalogCommitSystem`、`GEEffectCommandCatalogNormalizeSystem`、`GEEffectSpecBuildSystem`、`GASAttributeSetReduceApplySystem`、active effect systems | 已由 generated registration 挂入 CommandResolve/CoreSimulation；ability commit 已用 chunk `EnabledMask`，instant spec/reduce 与 active mutation 已是 `[BurstCompile] IJob`，ability seed scratch 已退场 | 不能跳过 DOTS 热路径审查；已修复链路仍需 static validation 防回流 |
+| generated runtime systems | `AbilityCatalogCommitSystem`、`GEEffectCommandCatalogNormalizeSystem`、`GEEffectSpecBuildSystem`、`GASAttributeSetReduceApplySystem`、active effect systems | 已由 `GASSystemScheduleContract` 的 generated type-name 列表挂入 CommandResolve/CoreSimulation；ability commit 已用 chunk `EnabledMask`，instant spec/reduce 与 active mutation 已是 `[BurstCompile] IJob`，ability seed scratch 已退场 | 不能跳过 DOTS 热路径审查；已修复链路仍需 static validation 防回流 |
 | managed diagnostics/table | `GASDefinitionTable`、`GASDefinitionGeneratedAdapter`、`ConfigRegistryDiagnostics` | 初始化、诊断、过渡层仍有效 | 不能写成 job/chunk hot path owner |
 | contract-only bake plan | `GASGeneratedDefinitionBakingPlan`、`BakeContract`、`BakePipeline`、`RuntimeIntegrationPlan` | 只表达目标约束和 materialization 计划 | 不能作为 Unity `Baker<T>` 已落地证据 |
 | editor template-only Baker | `GasGlueCodeGenPhases.cs` 模板字符串 | Editor CodeGen 可生成 Baker 文本 | 当前 Runtime/AutoChess 代码树没有实际生成物 |
@@ -88,7 +88,7 @@ flowchart LR
 | generated lookup 提供 ability / GE index 和 definition 读取 | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionCatalog.gen.cs:27-72` | runtime-active |
 | generated runtime glue 读取 catalog | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeDefinitionGlue.gen.cs:16-32`、`:72-80`、`:127-131` | runtime-active |
 | generated systems require catalog | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs:26-32`、`RuntimeActiveEffect.gen.cs:22-27`、`RuntimeEffectInstant.gen.cs:20-25` | runtime-active |
-| generated systems 真实注册进 GAS groups | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeSystemRegistration.gen.cs:15-21`、`Assets/GAS/Runtime/System/SystemGroup/GASSystemScheduleContract.cs:309-317` | runtime-active |
+| generated systems 真实注册进 GAS groups | `Assets/GAS/Runtime/System/SystemGroup/GASSystemScheduleContract.cs:207-235`、`:323-328`、`:371-374`；`RuntimeSystemRegistration.gen.cs` 当前不在 output list | runtime-active |
 | sourcegen CLI / bat 驱动已落地 | `Tools/GasCodeGenCli/Program.cs`、`Tools/CodeGen/Generate-GAS-SourceGen.bat`、`Tools/CodeGen/README.md` | tooling-active |
 | generated hot path validation report | `Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md`、`Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs:6238-6278` | tooling-active |
 | sourcegen asmdef assembly 归一化 | `Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs`、`Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef` | tooling-active |
@@ -119,7 +119,7 @@ flowchart LR
 | `Tools/CodeGen/Generate-GAS-SourceGen.bat` | 离线快速生成驱动 | 不启动 Unity；适合 Luban/sourcegen/template/runtime 迭代和静态门禁 |
 | `Tools/CodeGen/Generate-GAS-CodeGen.bat` | Unity batchmode 验证驱动 | 不需要 Editor UI；验证 Unity 编译域、asmdef import、`BeanUpdater` 和 `AssetDatabase` 刷新 |
 | `Tools/GasCodeGenCli/GasCodeGenCli.csproj` / `Program.cs` | dotnet-hosted CodeGen CLI | 默认 sourcegen，可切换 unity mode；项目文件必须作为工具链产物被跟踪 |
-| `Assets/AutoChessDemo/Battle/Ecs/AutoChessBattleDefinitionCatalogBuilder.cs` | AutoChess generated catalog 安装器 | 低频初始化路径，含 `ToEntityArray` singleton 查找；catalog 内容来自 generated builder |
+| `Assets/AutoChessDemo/Battle/Ecs/AutoChessBattleDefinitionCatalogBuilder.cs` | AutoChess generated catalog 安装器 | 低频初始化路径，缓存 catalog entity，缓存失效时直接 `CreateEntity`；catalog 内容来自 generated builder |
 
 ## 已失效的旧事实
 
@@ -154,7 +154,7 @@ BakePlan / BakeContract / BakePipeline / RuntimeIntegrationPlan 目前是 contra
 
 `AutoChessBattleDefinitionCatalogBuilder` 当前不再手写 `GASDefinitionCatalogBlob` 内容，而是安装 `GASGeneratedDefinitionCatalogBuilder.BuildCatalog()`。这说明 Luban Excel/JSON -> normalized DefinitionRow -> GasCodeGenPipeline -> generated catalog -> Runtime Core/AutoChess 的主链已经贯通。
 
-它的限制也同样明确：`GameRoom` 的单位阵容、Ability code 选择、ScaleProfile、ValidationExpectation 仍是代码/runner 输入；`ResolveCatalogEntity()` / `ResolveExistingCatalogEntity()` 仍通过临时 query + `ToEntityArray()` 查 singleton。因此本轮只能关闭“AutoChess catalog 仍手写”的旧诊断，不能宣称 Spec 11 的 unit/scenario/scale/validation 配置链全部完成。
+它的限制也同样明确：`GameRoom` 的单位阵容、Ability code 选择、ScaleProfile、ValidationExpectation 仍是代码/runner 输入；`ResolveCatalogEntity()` 仍在缓存失效时直接 `CreateEntity(ComponentType.ReadWrite<GASDefinitionCatalogComponent>())`，catalog install / dispose owner 仍需 evidence。因此本轮只能关闭“AutoChess catalog 仍手写”和“AutoChess catalog 仍临时 query singleton”的旧诊断，不能宣称 Spec 11 的 unit/scenario/scale/validation 配置链全部完成。
 
 ### DEF-05：generated runtime 必须纳入同等审查
 

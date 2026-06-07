@@ -4,6 +4,14 @@
 
 定义从 Excel / Luban 到 Definition & Generation Layer、Generated artifact、Bake plan、Runtime Definition Catalog / static lookup 的完整链路。
 
+## 官方依据与设计论证
+
+配置生成链路的目标是把外部配置压缩成 Runtime Core 可 Burst 消费的不可变数据。`CASE-07` 支持 Baker + Blob 的 definition 承载，`BLOB-02` 要求 `BlobBuilder` 只在 Baking 或初始化期使用，`CONTENT-01` / `PRF-11` 要求静态定义优先 BlobAsset 而不是 prefab 或 runtime entity，`BUR-01` 要求 hot path system / job 无托管依赖。因此 Luban row、JSON、managed registry、`Dictionary` 和 ScriptableObject hot lookup 都不能进入 Runtime Core。
+
+SourceGenerator 必须收权而不是扩权。`SYS-01` 要求 gameplay 权威计算留在 ECS System / Job，`SYS-02` 要求 SystemGroup 拥有 phase，`QRY-04` / `PRF-33` 要求 lookup / query owner 可审查，`SC-01` / `ECB-03` 要求结构变化 phase 明确。因此 generated artifact 只能是 id、Blob schema / builder、static lookup、pure evaluator、Baker / Bootstrap glue 和 validation report；不能生成 Runtime lifecycle system、system registration、hidden query、hidden ECB 或 NativeContainer owner。
+
+这比保守的“只生成配置类”更有必要：GAS 的 Ability / GE / Requirement / Magnitude / TargetRule 有大量重复 glue，手写容易漂移，托管 delegate 又会破坏 Burst。生成 pure glue 可以降低重复并保留 Runtime System 的 query、allocator、dependency 和 profiler 归因。
+
 ## 数据流图
 
 ```mermaid
@@ -116,12 +124,12 @@ sequenceDiagram
 1. Luban 和 SourceGenerator 只生成 Definition & Generation Layer 输入和 static lookup glue。
 2. Generated adapter 不持有 `Entity`、`BlobAssetReference`、Editor、spec/context/runtime state。
 3. Bake plan / contract / pipeline 不生成 gameplay lifecycle。
-4. Runtime integration plan 只描述落点和 deferred boundary。
+4. Runtime integration plan 只描述目标承载和 deferred boundary。
 5. 生成链路必须是“输入收集 -> Row metadata 规范化 -> Phase 输出 -> manifest / validation report”的显式管道；不得让多个生成器各自重复扫描程序集、重复推断命名和重复写出 header。
 6. Runtime Core 可消费的 static lookup 必须是 Burst 可读的 unmanaged / blob lookup，或带明确 allocator owner / dispose 责任的 Native container；托管数组、`Dictionary`、`Func<>` 只允许留在 Editor / CI / Baking 边界。
 7. Ability / GE / Modifier / TagRequirement 的 Blob builder 必须从 Luban row、generated definition 或 Baker 输入直接构建，不从 prototype entity、runtime component 或 active effect state 反推静态定义。
-8. Baker glue 必须生成真正的 `Baker<TAuthoring>` 或显式标注的 Baking System plan；静态方法 + `EntityCommandBuffer` 只能作为迁移期工具，不是目标态 Baker 契约。
-9. Luban 生成的 C# 必须留在 Unity 编译域内（默认 `Assets/DataGenerated/Luban/CSharp`），因为它是配置事实、row / table API 和后续 baking/source generation 的输入边界。`cfg.*`、`Luban.Runtime`、`SimpleJSON` 的编译错误是表源链路失败，不允许通过挪出 `Assets` 隐藏。
+8. Baker glue 必须生成真正的 `Baker<TAuthoring>` 或显式标注的 Baking System plan；静态方法 + `EntityCommandBuffer` 只能作为非目标态兼容工具，不是目标态 Baker 契约。
+9. Luban 生成的 C# 必须留在 Unity 编译域内（默认 `Assets/DataGenerated/Luban/CSharp`），因为它是配置事实、row / table API 和 baking/source generation 的输入边界。`cfg.*`、`Luban.Runtime`、`SimpleJSON` 的编译错误是表源链路失败，不允许通过挪出 `Assets` 隐藏。
 10. GAS Runtime package contract 中不得出现 `cfg.*`、`XLuban`、`SimpleJSON` 或 Luban managed row 直接引用；这些类型只能存在于 Luban compile boundary、Definition / Baking / Editor 侧，SourceGenerator 必须把它们转换成 Runtime Core 可消费的 id、`GASDefinitionCatalogBlob` / Blob、unmanaged lookup 和 component type set。
 11. Runtime Core lookup 必须是 O(1) 或 O(log n) 且可报告数据规模；`GASDefinitionTable` 这类线性扫描表不得进入 hot path。
 12. Runtime Core 不直接消费 Luban row、row factory、JSON reader 或 managed registry；唯一合法入口是 generated stable id、`GASDefinitionCatalogBlob`、`GASGeneratedDefinitionLookup`、`BlobAssetReference<T>` 和 generated static switch。
@@ -140,7 +148,7 @@ sequenceDiagram
 
 ### Luban Unity 编译边界
 
-Luban C# 输出不是临时脚本缓存，也不是应当绕开 Unity 编译的外部产物。当前目标态固定为：
+Luban C# 输出不是临时脚本缓存，也不是应当绕开 Unity 编译的外部产物。目标态固定为：
 
 1. `TableClassCodeOutpuPath` 默认指向 `Assets/DataGenerated/Luban/CSharp`，由 Unity 正常编译 `cfg.*` 表行、bean、多态配置和 `Tables` API。
 2. `Assets/Plugins/LubanRuntime/Luban.Runtime.dll` 与 `Assets/Plugins/LubanRuntime/SimpleJSON.dll` 是该编译边界的显式依赖；缺失时应让生成/编译失败。
@@ -194,7 +202,7 @@ Excel / Luban row
 1. Glue 只生成静态纯函数和 unmanaged record；不得生成 `AbilityLifecycleSystem`、`ActiveEffectLifecycleSystem` 等 Runtime lifecycle。
 2. Glue 不隐藏结构变化：不能调用 `EntityManager`、不能创建 ECB、不能在内部 `Schedule()` job。
 3. Glue 不拥有 `NativeArray` / `NativeList` / `NativeHashMap`；NativeContainer 的 owner、依赖链、dispose/rewind 由调用 System 显式管理。
-4. Glue 不把 `NativeContainer` 塞进 `IComponentData`；若迁移期有 singleton container，job 只能在主线程提取 container 后直接对 container 调度，不对 singleton component 本身调度 `IJobChunk` / `IJobEntity`。
+4. Glue 不把 `NativeContainer` 塞进 `IComponentData`；若存在非目标态 singleton container，job 只能在主线程提取 container 后直接对 container 调度，不对 singleton component 本身调度 `IJobChunk` / `IJobEntity`。
 5. Glue 不按值返回含 `BlobArray` / `BlobString` / `BlobPtr` 的 Blob 元素；所有变长 definition 使用 root array + `Start/Count` range + `ref readonly`。
 6. Glue 不保存 per-frame state，不缓存上次 plan，不维护可变静态 registry；同一帧的 command / target / modifier 都是 owner system 的 frame-local record。
 7. Glue 不引用 `cfg.*`、`XLuban`、`SimpleJSON`、managed Luban row、JSON table reader 或 Editor-only assembly。
@@ -211,7 +219,7 @@ SourceGenerator 的价值是批量生成 DOTS 友好的不可变数据、静态�
 | `SYS-01` | 权威 gameplay 计算必须由 ECS System / Job 数据流承载 | lifecycle owner 必须在手写 Runtime Core System 中可审查、可 profile、可调度 |
 | `SYS-03` | system 数量是固定成本源 | 生成器不能按表或按字段批量制造 system；system 数量必须由 Runtime lane 的物理数据流决定 |
 | `QRY-01` | hot path 优先 `IJobEntity` / `IJobChunk` + Burst，`SystemAPI.Query` 只限小规模 / debug / proof | generated artifact 不能把主线程遍历包装成“自动生成所以可接受” |
-| `QRY-04` | 高频 `ComponentLookup` / `BufferLookup` random lookup 要重构为 owner-local / chunk-local | generated runtime lookup system 只能是迁移期 proof，目标态由手写 lane system 拥有 query 和 locality |
+| `QRY-04` | 高频 `ComponentLookup` / `BufferLookup` random lookup 要重构为 owner-local / chunk-local | generated runtime lookup system 只能是 proof-only 示例，目标态由手写 lane system 拥有 query 和 locality |
 | `SC-01` / `ECB-03` | hot path 禁止直接结构变化；ECB playback 必须属于明确 SystemGroup phase | SourceGenerator 不能隐藏 `EntityManager` write、ECB 创建或 playback phase 选择 |
 | `NAT-03` | NativeStream fan-in 必须定义 deterministic merge 顺序和内存预算 | 生成器可以输出 record schema / sort key hint，不能拥有 NativeStream 生命周期和 merge phase |
 | `BUR-01` | hot path system / job 必须 Burst 且无托管依赖 | generated pure glue 易于进入 Burst；generated lifecycle 一旦碰 query、ECB、托管依赖就难以证明 AOT / Burst 质量 |
@@ -228,7 +236,7 @@ SourceGenerator 的价值是批量生成 DOTS 友好的不可变数据、静态�
 4. `GasCodeGenManifest` 记录所有生成文件、输入 hash、Phase 名称和输出路径，用于清理孤儿 `.g.cs`、检查路径逃逸和支撑 CI diff。
 5. `GasCodeGenSettings` 或等价配置承载项目名前缀、generated namespace、输出目录、manifest 策略和是否写入版本控制；禁止在生成器中硬编码 `HeadlessAutoChess` 之类项目前缀。
 
-“SourceGenerator”在本 Spec 中指确定性源码生成子系统。Roslyn `IIncrementalGenerator` 是更长期的理想形态；若当前阶段仍通过 Unity Editor menu / offline tool 触发，也必须满足同一套输入、manifest、Phase、层级归属和 Runtime 依赖隔离契约。
+“SourceGenerator”在本 Spec 中指确定性源码生成子系统。Roslyn `IIncrementalGenerator` 是更长期的理想形态；若暂时仍通过 Unity Editor menu / offline tool 触发，也必须满足同一套输入、manifest、Phase、层级归属和 Runtime 依赖隔离契约。
 
 推荐 Phase 切分：
 
@@ -247,7 +255,7 @@ SourceGenerator 的价值是批量生成 DOTS 友好的不可变数据、静态�
 
 ## Unity Entities 校准
 
-Definition & Generation Layer 的目标落点必须区分：
+Definition & Generation Layer 的目标承载必须区分：
 
 | 产物 | Unity 承载 | 进入 runtime hot path |
 |---|---|---|
@@ -258,11 +266,11 @@ Definition & Generation Layer 的目标落点必须区分：
 | runtime integration plan | validation metadata | 不参与 gameplay 计算 |
 | Editor / CI diagnostics | Editor / test assembly | 不进入 Runtime Core |
 
-SourceGenerator 可以生成 Blob builder、lookup、Generated Runtime Glue、validation 和 Baker glue，但不能生成 ActiveEffect lifecycle system 或直接写 `EntityManager` 的 runtime 执行逻辑。若当前实现已经生成 `ISystem`、system registration、`OnUpdate`、`ComponentLookup` / `BufferLookup` hot path 或 ECB owner，必须按 `15-Luban-SourceGenerator链路复审与目标重划.md` 归类为职责越界，而不是用 `RuntimeForbiddenDependencyHits = 0` 判定完成。
+SourceGenerator 可以生成 Blob builder、lookup、Generated Runtime Glue、validation 和 Baker glue，但不能生成 ActiveEffect lifecycle system 或直接写 `EntityManager` 的 runtime 执行逻辑。Runtime-visible generated artifact 若包含 `ISystem`、system registration、`OnUpdate`、`ComponentLookup` / `BufferLookup` hot path 或 ECB owner，必须按 `15-SourceGenerator职责边界Spec.md` 归类为职责越界，而不是用 `RuntimeForbiddenDependencyHits = 0` 判定完成。
 
 ## DOTS API 选型修正
 
-配置生成链不只是把 Excel 行转为 C# 常量。目标态需要把生成产物落到 Unity 官方推荐的 authoring / baking / runtime 数据边界：
+配置生成链不只是把 Excel 行转为 C# 常量。目标态需要把生成产物归入 Unity 官方推荐的 authoring / baking / runtime 数据边界：
 
 | 场景 | 推荐承载 | 适用规则 | 约束 |
 |---|---|---|---|
@@ -358,7 +366,7 @@ generated asmdef 也属于 SourceGenerator 输出，不手写维护依赖漂移�
 
 ## 验收
 
-### Core CodeGen 当前验收
+### Core CodeGen 目标验收
 
 1. `GasCodeGenPipeline.RunAll()` 默认只运行通用 Core phases，不运行 AutoChess 专用 phase。
 2. 真实 Luban process gate 通过后才导出 artifact。
@@ -370,14 +378,14 @@ generated asmdef 也属于 SourceGenerator 输出，不手写维护依赖漂移�
 8. Core generated 命名必须对齐 `12-命名规范Spec.md`：Blob 根类型使用 `{Domain}DefinitionBlob`，lookup 使用 `{Domain}DefinitionLookup`，lookup builder 使用 `GASGeneratedDefinitionLookupBuilder`，框架产物使用 `GASGenerated*` 前缀，通用 component 使用 `GASGeneratedDefinitionBlobComponent<T>` / `GASDefinitionCodeComponent`。
 9. 生成报告必须输出 `BAKE-*`、`BLOB-*`、`QRY-*`、`JOB-*`、`SC-*`、`BUR-*`、`PRF-*`、`ODF-*` 规则对照：采用、拒绝、暂缓理由必须明确。
 10. Baker 生成物必须能映射到 `Baker<TAuthoring>`、`DependsOn()`、`AddBlobAsset()` / custom hash、Baking System dependency report 中的至少一种官方 baking 模式。
-11. Static lookup 必须是 O(1) 或 O(log n) 的 unmanaged / Blob lookup 形态；线性 `GASDefinitionTable` 只能作为 Editor/CI 或迁移期 fallback。
+11. Static lookup 必须是 O(1) 或 O(log n) 的 unmanaged / Blob lookup 形态；线性 `GASDefinitionTable` 只能作为 Editor/CI 或非目标态 fallback。
 12. 至少一条 Runtime 消费链必须证明：`AbilityCode -> AbilityDefinitionIndex -> ref readonly AbilityDefinitionBlob -> GameplayEffectDefinitionIndex -> ref readonly GameplayEffectDefinitionBlob -> modifier/evaluator static switch` 全程无 managed row / JSON / `Dictionary`。
 13. 至少一条 Runtime glue 消费链必须证明：`AbilityDefinitionIndex -> AbilityActivationPlanRecord -> GECommandSeedRecord -> ResolvedModifierRecord` 全程由 generated static pure functions + frame-local NativeContainer record 承载，不生成 lifecycle system、不隐藏结构变化。
 14. Runtime-visible generated hard gate 必须扫描并默认阻断以下 token：`: ISystem`、`OnUpdate(ref SystemState`、`CreateSystem(`、`AddSystemToUpdateList(`、`state.EntityManager`、`EntityManager.Create`、`EntityManager.Destroy`、`EntityManager.AddComponent`、`EntityManager.RemoveComponent`、`SystemAPI.Query`、`SystemAPI.GetComponentLookup`、`SystemAPI.GetBufferLookup`、`ComponentLookup<`、`BufferLookup<`、`EntityCommandBuffer`、`NativeList<`、`NativeStream`。
 15. 上述 token 只有在 artifact 明确标记 `MigrationProofOnly`、validation report 写出 DOTS 规则违约原因、任务树包含移除计划时才允许临时存在；不得被计入目标态完成度。
 16. `GASGeneratedDefinitionCatalogBuilder.BuildCatalog()` 或等价 `BlobBuilder` 入口必须归属 Baking / Bootstrap / initialization owner；Runtime Core hot path 只读 catalog，不调用 builder。
-17. `RuntimeSystemRegistration.gen.cs`、`RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs` 这类 generated lifecycle 文件在目标态验收中默认失败；迁移期保留时必须进入 P0 收权清单。
-18. Runtime-visible generated artifact 必须输出职责边界 gate：`GeneratedRuntimeLifecycleHits`、`GeneratedRuntimeOwnershipHits`、`GeneratedRuntimeRandomLookupHits`、`GeneratedRuntimeNativeContainerOwnerHits`、`GeneratedRuntimeStructuralChangeHits`。这些指标为 0 或被明确标记为 `MigrationProofOnly` 前，不得宣称 CodeGen 到 Runtime 链路完成。
+17. system registration、ability activation、instant effect、active effect runtime 这类 generated lifecycle artifact 在目标态验收中默认失败；若短期以 proof-only 形式保留，必须进入 P0 收权清单。
+18. Runtime-visible generated artifact 必须输出职责边界 gate：`GeneratedRuntimeLifecycleHits`、`GeneratedRuntimeSystemRegistrationHits`、`GeneratedRuntimeStructuralChangeHits`、`GeneratedRuntimeOwnershipHits`、`GeneratedRuntimeRandomWriteLookupHits`、`GeneratedRuntimeManagedConfigHits`。这些指标为 0 或被明确标记为 `MigrationProofOnly` 前，不得宣称 CodeGen 到 Runtime 链路完成。
 
 ### AutoChess 业务链路后置验收
 
@@ -390,8 +398,8 @@ generated asmdef 也属于 SourceGenerator 输出，不手写维护依赖漂移�
 
 ## 历史方案定位
 
-1. 当前 Luban 只生成 Tag 常量和表访问 API、GE 仍运行时动态组装的问题信号来自 `../历史方案参考/方案14.md:88-94`。
-2. Luban + SourceGenerator 胶水代码生成和 GEFactory 示例来自 `../历史方案参考/方案14.md:525-624`，当前只吸收 definition/static lookup 思路。
+1. Luban 只生成 Tag 常量和表访问 API、GE 仍运行时动态组装的问题信号来自 `../历史方案参考/方案14.md:88-94`。
+2. Luban + SourceGenerator 胶水代码生成和 GEFactory 示例来自 `../历史方案参考/方案14.md:525-624`，本路线只吸收 definition/static lookup 思路。
 3. 自走棋 Luban 配置和 generated 代码示例来自 `../历史方案参考/方案14.md:1138-1269`。
 4. 方案15 中 Layer 4 数据配置层与 SourceGenerator 组件/注册胶水来自 `../历史方案参考/方案15.md:94-189`。
 5. SourceGenerator 生成查找索引和系统注册价值来自 `../历史方案参考/方案15.md:817-960`、`../历史方案参考/方案15.md:1289-1299`。

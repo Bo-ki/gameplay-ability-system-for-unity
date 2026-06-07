@@ -1,7 +1,13 @@
 {
   "executionCalculations": {
     "executeDamage": 9401,
-    "executeDamageOutput": 9402
+    "executeDamageOutput": 9402,
+    "executeDamageFormula": {
+      "baseDamage": 16.0,
+      "missingHealthCoefficient": 0.5,
+      "minDamage": 12.0,
+      "maxDamage": 42.0
+    }
   },
   "tags": {
     "attackCooldown": 1
@@ -16,7 +22,14 @@
     "minDriverIssuedCommands": 1,
     "minAttributeChanges": 1,
     "minExecutionOutputs": 1,
-    "minCueRequests": "Auto"
+    "minCueRequests": "Auto",
+    "minActiveEffectSlots": 1,
+    "minPeriodTickDamageFacts": 1,
+    "minActiveMutationCommands": 1,
+    "minActiveMutationOwnerGroups": 1,
+    "maxActiveMutationEstimatedRandomLookups": 0,
+    "maxActiveMutationOwnerResourceLookups": 0,
+    "maxActiveMutationMigrationCarriers": 0
   },
   "units": [
     {
@@ -29,6 +42,9 @@
       "energy": 8.0,
       "primaryAbility": "AbilityPlayerAttack",
       "finisherAbility": "AbilityPlayerExecute",
+      "activeAbility": "AbilityPlayerPoison",
+      "activeCastInterval": 3,
+      "activeCastFrameOffset": 0,
       "finisherHealthThreshold": 44.0,
       "primaryTargetPolicy": "AutoChessTargetPolicy.Frontline",
       "finisherTargetPolicy": "AutoChessTargetPolicy.LowestHealth"
@@ -43,6 +59,9 @@
       "energy": 8.0,
       "primaryAbility": "AbilityPlayerAttack",
       "finisherAbility": "AbilityPlayerExecute",
+      "activeAbility": "AbilityPlayerPoison",
+      "activeCastInterval": 3,
+      "activeCastFrameOffset": 1,
       "finisherHealthThreshold": 44.0,
       "primaryTargetPolicy": "AutoChessTargetPolicy.LowestHealth",
       "finisherTargetPolicy": "AutoChessTargetPolicy.LowestHealth"
@@ -57,6 +76,9 @@
       "energy": 8.0,
       "primaryAbility": "AbilityEnemyAttack",
       "finisherAbility": "None",
+      "activeAbility": "None",
+      "activeCastInterval": 0,
+      "activeCastFrameOffset": 0,
       "finisherHealthThreshold": 0.0,
       "primaryTargetPolicy": "AutoChessTargetPolicy.Frontline",
       "finisherTargetPolicy": "AutoChessTargetPolicy.Frontline"
@@ -71,6 +93,9 @@
       "energy": 8.0,
       "primaryAbility": "AbilityEnemyAttack",
       "finisherAbility": "None",
+      "activeAbility": "None",
+      "activeCastInterval": 0,
+      "activeCastFrameOffset": 0,
       "finisherHealthThreshold": 0.0,
       "primaryTargetPolicy": "AutoChessTargetPolicy.Frontline",
       "finisherTargetPolicy": "AutoChessTargetPolicy.Frontline"

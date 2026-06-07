@@ -4,30 +4,86 @@ namespace GAS.Runtime
 {
     public readonly struct ASCReadModel
     {
-        private readonly Entity _entity;
+        private readonly ASCHandle _handle;
+        private readonly bool _isReadable;
+        private readonly bool _hasLevel;
+        private readonly int _level;
+        private readonly bool _hasTagMask;
+        private readonly TagMaskComponent _tagMask;
+        private readonly AttributeValueBuffer[] _attributes;
+        private readonly GasPresentationEventView[] _presentationEvents;
 
-        public ASCReadModel(Entity entity)
+        internal ASCReadModel(EntityManager entityManager, Entity entity)
         {
-            _entity = entity;
+            _handle = new ASCHandle(entity);
+            _isReadable = CanCapture(entityManager, entity);
+            _hasLevel = false;
+            _level = 0;
+            _hasTagMask = false;
+            _tagMask = default;
+            _attributes = null;
+            _presentationEvents = null;
+
+            if (!_isReadable)
+                return;
+
+            if (entityManager.HasComponent<ASCIdentityComponent>(entity))
+            {
+                _hasLevel = true;
+                _level = entityManager.GetComponentData<ASCIdentityComponent>(entity).Level;
+            }
+
+            if (entityManager.HasComponent<TagMaskComponent>(entity))
+            {
+                _hasTagMask = true;
+                _tagMask = entityManager.GetComponentData<TagMaskComponent>(entity);
+            }
+
+            if (entityManager.HasBuffer<AttributeValueBuffer>(entity))
+            {
+                var attributes = entityManager.GetBuffer<AttributeValueBuffer>(entity);
+                _attributes = new AttributeValueBuffer[attributes.Length];
+                for (var i = 0; i < attributes.Length; i++)
+                    _attributes[i] = attributes[i];
+            }
+
+            if (entityManager.HasBuffer<PresentationEventBuffer>(entity))
+            {
+                var events = entityManager.GetBuffer<PresentationEventBuffer>(entity);
+                _presentationEvents = new GasPresentationEventView[events.Length];
+                for (var i = 0; i < events.Length; i++)
+                {
+                    _presentationEvents[i] = new GasPresentationEventView
+                    {
+                        Event = events[i],
+                    };
+                }
+            }
         }
+
+        internal ASCReadModel(EntityManager entityManager, ASCHandle handle)
+            : this(entityManager, handle.RuntimeEntity)
+        {
+        }
+
+        public ASCHandle Handle => _handle;
+
+        public bool IsReadable => _isReadable;
 
         public int GetLevel()
         {
-            var em = GASManager.EntityManager;
-            if (!em.Exists(_entity) || !em.HasComponent<ASCIdentityComponent>(_entity))
-                return 0;
-            return em.GetComponentData<ASCIdentityComponent>(_entity).Level;
+            return _hasLevel ? _level : 0;
         }
 
         public bool TryGetLevel(out int level)
         {
-            var em = GASManager.EntityManager;
-            if (!em.Exists(_entity) || !em.HasComponent<ASCIdentityComponent>(_entity))
+            if (!_hasLevel)
             {
                 level = 0;
                 return false;
             }
-            level = em.GetComponentData<ASCIdentityComponent>(_entity).Level;
+
+            level = _level;
             return true;
         }
 
@@ -40,13 +96,13 @@ namespace GAS.Runtime
 
         public bool TryGetTagMask(out TagMaskComponent mask)
         {
-            var em = GASManager.EntityManager;
-            if (!em.Exists(_entity) || !em.HasComponent<TagMaskComponent>(_entity))
+            if (!_hasTagMask)
             {
                 mask = default;
                 return false;
             }
-            mask = em.GetComponentData<TagMaskComponent>(_entity);
+
+            mask = _tagMask;
             return true;
         }
 
@@ -63,25 +119,55 @@ namespace GAS.Runtime
 
         public bool TryGetAttributeCurrentValue(int attrSetCode, int attrCode, out float value)
         {
-            var em = GASManager.EntityManager;
-            if (!em.Exists(_entity) || !em.HasBuffer<AttributeValueBuffer>(_entity))
+            if (_attributes == null)
             {
                 value = 0f;
                 return false;
             }
 
-            var attributes = em.GetBuffer<AttributeValueBuffer>(_entity);
-            for (var i = 0; i < attributes.Length; i++)
+            for (var i = 0; i < _attributes.Length; i++)
             {
-                if (attributes[i].AttrSetCode == attrSetCode && attributes[i].Code == attrCode)
+                if (_attributes[i].AttrSetCode == attrSetCode && _attributes[i].Code == attrCode)
                 {
-                    value = attributes[i].CurrentValue;
+                    value = _attributes[i].CurrentValue;
                     return true;
                 }
             }
 
             value = 0f;
             return false;
+        }
+
+        public int PresentationEventCount
+        {
+            get
+            {
+                return _presentationEvents?.Length ?? 0;
+            }
+        }
+
+        public int CopyPresentationEvents(GasPresentationEventView[] output)
+        {
+            if (output == null
+                || output.Length == 0
+                || _presentationEvents == null)
+            {
+                return 0;
+            }
+
+            var count = _presentationEvents.Length < output.Length ? _presentationEvents.Length : output.Length;
+            for (var i = 0; i < count; i++)
+                output[i] = _presentationEvents[i];
+
+            return count;
+        }
+
+        private static bool CanCapture(EntityManager entityManager, Entity entity)
+        {
+            return entityManager.World != null
+                   && entityManager.World.IsCreated
+                   && entity != Entity.Null
+                   && entityManager.Exists(entity);
         }
     }
 }

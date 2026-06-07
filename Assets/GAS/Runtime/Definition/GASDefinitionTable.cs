@@ -136,7 +136,6 @@ namespace GAS.Runtime
         public readonly int ModifierCount;
         public readonly int GrantedAbilityCount;
         public readonly int CueTriggerCount;
-        public readonly bool HasManagedCueTriggers;
 
         public GameplayEffectDefinitionSummary(
             int gameplayEffectCode,
@@ -162,8 +161,7 @@ namespace GAS.Runtime
             TagRequirementMask immunityTags,
             int modifierCount,
             int grantedAbilityCount,
-            int cueTriggerCount,
-            bool hasManagedCueTriggers)
+            int cueTriggerCount)
         {
             GameplayEffectCode = gameplayEffectCode;
             HasDuration = hasDuration;
@@ -189,7 +187,6 @@ namespace GAS.Runtime
             ModifierCount = modifierCount;
             GrantedAbilityCount = grantedAbilityCount;
             CueTriggerCount = cueTriggerCount;
-            HasManagedCueTriggers = hasManagedCueTriggers;
         }
     }
 
@@ -267,22 +264,19 @@ namespace GAS.Runtime
         public readonly TagRequirementMask ImmunityTags;
         public readonly bool HasRequiredTags;
         public readonly bool HasImmunityTags;
-        public readonly bool UsesManagedPresentationFactory;
 
         public GameplayCueDefinitionSummary(
             int cueCode,
             TagRequirementMask requiredTags,
             TagRequirementMask immunityTags,
             bool hasRequiredTags,
-            bool hasImmunityTags,
-            bool usesManagedPresentationFactory)
+            bool hasImmunityTags)
         {
             CueCode = cueCode;
             RequiredTags = requiredTags;
             ImmunityTags = immunityTags;
             HasRequiredTags = hasRequiredTags;
             HasImmunityTags = hasImmunityTags;
-            UsesManagedPresentationFactory = usesManagedPresentationFactory;
         }
     }
 
@@ -561,7 +555,6 @@ namespace GAS.Runtime
             var modifierCount = 0;
             var grantedAbilityCount = 0;
             var cueTriggerCount = 0;
-            var hasManagedCueTriggers = false;
 
             var configs = config?.ComponentConfigs ?? Array.Empty<GameplayEffectComponentConfig>();
             for (var i = 0; i < configs.Length; i++)
@@ -658,10 +651,9 @@ namespace GAS.Runtime
                     case ConfGrantedAbilityConfig grantedAbilities:
                         grantedAbilityCount += grantedAbilities.GrantedAbilities?.Length ?? 0;
                         break;
-                    case ConfCueBase cueConfig:
-                        var count = cueConfig.cues?.Length ?? 0;
-                        cueTriggerCount += count;
-                        hasManagedCueTriggers |= count > 0;
+                    case ConfGameplayEffectCueRequestOnApply cueRequest:
+                        if (cueRequest.CueCode > 0)
+                            cueTriggerCount++;
                         break;
                 }
             }
@@ -690,8 +682,7 @@ namespace GAS.Runtime
                 immunityTags,
                 modifierCount,
                 grantedAbilityCount,
-                cueTriggerCount,
-                hasManagedCueTriggers);
+                cueTriggerCount);
         }
 
         public static GameplayEffectDefinitionSummary FromGameplayEffectStaticDefinition(
@@ -731,8 +722,7 @@ namespace GAS.Runtime
                 definition.ImmunityTags,
                 definition.Modifiers.Length,
                 definition.GrantedAbilities.Length,
-                0,
-                false);
+                definition.HasCueRequestOnApply && definition.CueRequestOnApplyCode > 0 ? 1 : 0);
         }
 
         public static AttributeSetDefinitionSummary FromAttributeSetConfig(AttrSetConfig config)
@@ -792,8 +782,7 @@ namespace GAS.Runtime
                 requiredTags,
                 immunityTags,
                 HasAnyRequirement(config?.RequiredAllTags, config?.RequiredAnyTags, config?.RequiredNoneTags),
-                HasAnyRequirement(config?.ImmunityAllTags, config?.ImmunityAnyTags, config?.ImmunityNoneTags),
-                config?.CueType != null || config?.Param != null);
+                HasAnyRequirement(config?.ImmunityAllTags, config?.ImmunityAnyTags, config?.ImmunityNoneTags));
         }
 
         public static GASDefinitionTable BuildFromRegistries(

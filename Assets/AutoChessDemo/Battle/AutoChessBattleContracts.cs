@@ -127,6 +127,8 @@ namespace GAS.AutoChessDemo
         public readonly int GameplayEffectRemoved;
         public readonly int ExecutionCalculationOutputUpdated;
         public readonly int AttributeChanges;
+        public readonly int PeriodTickDamageFacts;
+        public readonly float PeriodTickDamageTotal;
         public readonly int TagChanges;
         public readonly int CueRequests;
 
@@ -139,6 +141,8 @@ namespace GAS.AutoChessDemo
             int gameplayEffectRemoved,
             int executionCalculationOutputUpdated,
             int attributeChanges,
+            int periodTickDamageFacts,
+            float periodTickDamageTotal,
             int tagChanges,
             int cueRequests)
         {
@@ -150,6 +154,8 @@ namespace GAS.AutoChessDemo
             GameplayEffectRemoved = gameplayEffectRemoved;
             ExecutionCalculationOutputUpdated = executionCalculationOutputUpdated;
             AttributeChanges = attributeChanges;
+            PeriodTickDamageFacts = periodTickDamageFacts;
+            PeriodTickDamageTotal = periodTickDamageTotal;
             TagChanges = tagChanges;
             CueRequests = cueRequests;
         }
@@ -160,6 +166,47 @@ namespace GAS.AutoChessDemo
         SkillResolved = 0,
         DamageApplied = 1,
         UnitDied = 2,
+    }
+
+    internal enum AutoChessBattleReportFactKind : byte
+    {
+        SkillResolved = 0,
+        CombatHealthReduced = 1,
+    }
+
+    internal readonly struct AutoChessBattleReportFact
+    {
+        public readonly int Frame;
+        public readonly AutoChessBattleReportFactKind Kind;
+        public readonly int SourceUnitIndex;
+        public readonly int TargetUnitIndex;
+        public readonly int AbilityCode;
+        public readonly int GameplayEffectCode;
+        public readonly float Value;
+        public readonly float OldValue;
+        public readonly float NewValue;
+
+        public AutoChessBattleReportFact(
+            int frame,
+            AutoChessBattleReportFactKind kind,
+            int sourceUnitIndex,
+            int targetUnitIndex,
+            int abilityCode,
+            int gameplayEffectCode,
+            float value,
+            float oldValue,
+            float newValue)
+        {
+            Frame = frame;
+            Kind = kind;
+            SourceUnitIndex = sourceUnitIndex;
+            TargetUnitIndex = targetUnitIndex;
+            AbilityCode = abilityCode;
+            GameplayEffectCode = gameplayEffectCode;
+            Value = value;
+            OldValue = oldValue;
+            NewValue = newValue;
+        }
     }
 
     public readonly struct AutoChessBattleReportUnit
@@ -272,25 +319,244 @@ namespace GAS.AutoChessDemo
         public AutoChessBattleSystemTiming CoreSimulation;
         public AutoChessBattleSystemTiming StructuralCommit;
         public AutoChessBattleSystemTiming BoundaryProjection;
+        public AutoChessBattleSystemTiming DependencyDrain;
+        public AutoChessBattleSystemTiming CoreRuntime;
+        public AutoChessBattleSystemTiming Boundary;
+        public AutoChessBattleSystemTiming Runner;
+        public AutoChessBattleSystemTiming Debugger;
+        public AutoChessBattleSystemTiming Physics;
+        public AutoChessBattleSystemTiming Render;
 
         public void Add(
             long framePrepareTicks,
             long commandResolveTicks,
             long coreSimulationTicks,
             long structuralCommitTicks,
-            long boundaryProjectionTicks)
+            long boundaryProjectionTicks,
+            long dependencyDrainTicks)
         {
             var totalTicks = framePrepareTicks
                              + commandResolveTicks
                              + coreSimulationTicks
                              + structuralCommitTicks
-                             + boundaryProjectionTicks;
+                             + boundaryProjectionTicks
+                             + dependencyDrainTicks;
             TickTotal.Add(totalTicks);
             FramePrepare.Add(framePrepareTicks);
             CommandResolve.Add(commandResolveTicks);
             CoreSimulation.Add(coreSimulationTicks);
             StructuralCommit.Add(structuralCommitTicks);
             BoundaryProjection.Add(boundaryProjectionTicks);
+            DependencyDrain.Add(dependencyDrainTicks);
+            CoreRuntime.Add(
+                framePrepareTicks
+                + commandResolveTicks
+                + coreSimulationTicks
+                + structuralCommitTicks);
+            Boundary.Add(boundaryProjectionTicks);
+            Runner.Add(dependencyDrainTicks);
+        }
+
+        public void AddDebuggerExport(long debuggerTicks)
+        {
+            Debugger.Add(debuggerTicks);
+        }
+    }
+
+    public readonly struct AutoChessValidationEvidence
+    {
+        public readonly bool Completed;
+        public readonly AutoChessTeam Winner;
+        public readonly AutoChessTeam ExpectedWinner;
+        public readonly int ScenarioScale;
+        public readonly int UnitCount;
+        public readonly int BattleTicks;
+        public readonly int TotalTicks;
+        public readonly int WarmupDroppedTicks;
+        public readonly int MeasuredTicks;
+        public readonly int CommandCount;
+        public readonly int AttributeChangeCount;
+        public readonly int PeriodTickDamageFactCount;
+        public readonly float PeriodTickDamageTotal;
+        public readonly int ExecutionOutputCount;
+        public readonly int CueRequestCount;
+        public readonly int RuntimeEventCount;
+        public readonly int DebugWarningCount;
+        public readonly int DebugErrorCount;
+        public readonly int BlockingDebugErrorCount;
+        public readonly int CoreRequestCount;
+        public readonly int CoreFactCount;
+        public readonly int CoreDeltaCount;
+        public readonly int CoreCueCount;
+        public readonly int PresentationMarkerCount;
+        public readonly int PresentationSourceLineCount;
+        public readonly int PresentationDisplayLineCount;
+        public readonly int PresentationDroppedLineCount;
+        public readonly int PeakEventBusLength;
+        public readonly int ReplayLag;
+        public readonly int ProcessWarmupRuns;
+        public readonly int ProofOnlyApiMask;
+        public readonly int ReselectTriggerMask;
+        public readonly int ActiveEffectSlotCount;
+        public readonly int ActiveEffectSlotActiveCount;
+        public readonly int ActiveEffectChunkSkipDuePeriodSlotCount;
+        public readonly int ActiveMutationCommandCount;
+        public readonly int ActiveMutationOwnerGroupCount;
+        public readonly int ActiveMutationMaxOwnerRange;
+        public readonly int ActiveMutationSortMoveCount;
+        public readonly int ActiveMutationEstimatedRandomLookupCount;
+        public readonly int ActiveMutationOwnerResourceLookupCount;
+        public readonly int ActiveMutationMigrationCarrierCount;
+        public readonly int PendingAttributeDeltaCount;
+        public readonly int PendingAttributeAppliedDeltaCount;
+        public readonly int PendingAttributeSkippedDeltaCount;
+        public readonly int PendingAttributeTargetGroupCount;
+        public readonly int PendingAttributeMaxTargetRange;
+        public readonly int PendingAttributeEstimatedRandomLookupCount;
+        public readonly int PendingAttributeFactPatchCount;
+        public readonly int PendingAttributeMigrationCarrierCount;
+        public readonly double TotalElapsedMilliseconds;
+        public readonly double AverageTickMilliseconds;
+        public readonly uint FactsHash;
+        public readonly uint SummaryHash;
+        public readonly bool EcsRuntimeTickOnly;
+        public readonly bool OfficialDiffSeparatePass;
+        public readonly bool JournalingAvailable;
+        public readonly bool JournalingCaptured;
+        public readonly bool ProfilerAvailable;
+        public readonly string ProfilerCaptureState;
+        public readonly string PhysicsDisabledReason;
+        public readonly string RenderDisabledReason;
+        public readonly string PresentationDisabledReason;
+
+        public AutoChessValidationEvidence(
+            bool completed,
+            AutoChessTeam winner,
+            AutoChessTeam expectedWinner,
+            int scenarioScale,
+            int unitCount,
+            int battleTicks,
+            int totalTicks,
+            int warmupDroppedTicks,
+            int measuredTicks,
+            int commandCount,
+            int attributeChangeCount,
+            int periodTickDamageFactCount,
+            float periodTickDamageTotal,
+            int executionOutputCount,
+            int cueRequestCount,
+            int runtimeEventCount,
+            int debugWarningCount,
+            int debugErrorCount,
+            int blockingDebugErrorCount,
+            int coreRequestCount,
+            int coreFactCount,
+            int coreDeltaCount,
+            int coreCueCount,
+            int presentationMarkerCount,
+            int presentationSourceLineCount,
+            int presentationDisplayLineCount,
+            int presentationDroppedLineCount,
+            int peakEventBusLength,
+            int replayLag,
+            int processWarmupRuns,
+            int proofOnlyApiMask,
+            int reselectTriggerMask,
+            int activeEffectSlotCount,
+            int activeEffectSlotActiveCount,
+            int activeEffectChunkSkipDuePeriodSlotCount,
+            int activeMutationCommandCount,
+            int activeMutationOwnerGroupCount,
+            int activeMutationMaxOwnerRange,
+            int activeMutationSortMoveCount,
+            int activeMutationEstimatedRandomLookupCount,
+            int activeMutationOwnerResourceLookupCount,
+            int activeMutationMigrationCarrierCount,
+            int pendingAttributeDeltaCount,
+            int pendingAttributeAppliedDeltaCount,
+            int pendingAttributeSkippedDeltaCount,
+            int pendingAttributeTargetGroupCount,
+            int pendingAttributeMaxTargetRange,
+            int pendingAttributeEstimatedRandomLookupCount,
+            int pendingAttributeFactPatchCount,
+            int pendingAttributeMigrationCarrierCount,
+            double totalElapsedMilliseconds,
+            double averageTickMilliseconds,
+            uint factsHash,
+            uint summaryHash,
+            bool ecsRuntimeTickOnly,
+            bool officialDiffSeparatePass,
+            bool journalingAvailable,
+            bool journalingCaptured,
+            bool profilerAvailable,
+            string profilerCaptureState,
+            string physicsDisabledReason,
+            string renderDisabledReason,
+            string presentationDisabledReason)
+        {
+            Completed = completed;
+            Winner = winner;
+            ExpectedWinner = expectedWinner;
+            ScenarioScale = scenarioScale;
+            UnitCount = unitCount;
+            BattleTicks = battleTicks;
+            TotalTicks = totalTicks;
+            WarmupDroppedTicks = warmupDroppedTicks;
+            MeasuredTicks = measuredTicks;
+            CommandCount = commandCount;
+            AttributeChangeCount = attributeChangeCount;
+            PeriodTickDamageFactCount = periodTickDamageFactCount;
+            PeriodTickDamageTotal = periodTickDamageTotal;
+            ExecutionOutputCount = executionOutputCount;
+            CueRequestCount = cueRequestCount;
+            RuntimeEventCount = runtimeEventCount;
+            DebugWarningCount = debugWarningCount;
+            DebugErrorCount = debugErrorCount;
+            BlockingDebugErrorCount = blockingDebugErrorCount;
+            CoreRequestCount = coreRequestCount;
+            CoreFactCount = coreFactCount;
+            CoreDeltaCount = coreDeltaCount;
+            CoreCueCount = coreCueCount;
+            PresentationMarkerCount = presentationMarkerCount;
+            PresentationSourceLineCount = presentationSourceLineCount;
+            PresentationDisplayLineCount = presentationDisplayLineCount;
+            PresentationDroppedLineCount = presentationDroppedLineCount;
+            PeakEventBusLength = peakEventBusLength;
+            ReplayLag = replayLag;
+            ProcessWarmupRuns = processWarmupRuns;
+            ProofOnlyApiMask = proofOnlyApiMask;
+            ReselectTriggerMask = reselectTriggerMask;
+            ActiveEffectSlotCount = activeEffectSlotCount;
+            ActiveEffectSlotActiveCount = activeEffectSlotActiveCount;
+            ActiveEffectChunkSkipDuePeriodSlotCount = activeEffectChunkSkipDuePeriodSlotCount;
+            ActiveMutationCommandCount = activeMutationCommandCount;
+            ActiveMutationOwnerGroupCount = activeMutationOwnerGroupCount;
+            ActiveMutationMaxOwnerRange = activeMutationMaxOwnerRange;
+            ActiveMutationSortMoveCount = activeMutationSortMoveCount;
+            ActiveMutationEstimatedRandomLookupCount = activeMutationEstimatedRandomLookupCount;
+            ActiveMutationOwnerResourceLookupCount = activeMutationOwnerResourceLookupCount;
+            ActiveMutationMigrationCarrierCount = activeMutationMigrationCarrierCount;
+            PendingAttributeDeltaCount = pendingAttributeDeltaCount;
+            PendingAttributeAppliedDeltaCount = pendingAttributeAppliedDeltaCount;
+            PendingAttributeSkippedDeltaCount = pendingAttributeSkippedDeltaCount;
+            PendingAttributeTargetGroupCount = pendingAttributeTargetGroupCount;
+            PendingAttributeMaxTargetRange = pendingAttributeMaxTargetRange;
+            PendingAttributeEstimatedRandomLookupCount = pendingAttributeEstimatedRandomLookupCount;
+            PendingAttributeFactPatchCount = pendingAttributeFactPatchCount;
+            PendingAttributeMigrationCarrierCount = pendingAttributeMigrationCarrierCount;
+            TotalElapsedMilliseconds = totalElapsedMilliseconds;
+            AverageTickMilliseconds = averageTickMilliseconds;
+            FactsHash = factsHash;
+            SummaryHash = summaryHash;
+            EcsRuntimeTickOnly = ecsRuntimeTickOnly;
+            OfficialDiffSeparatePass = officialDiffSeparatePass;
+            JournalingAvailable = journalingAvailable;
+            JournalingCaptured = journalingCaptured;
+            ProfilerAvailable = profilerAvailable;
+            ProfilerCaptureState = profilerCaptureState ?? string.Empty;
+            PhysicsDisabledReason = physicsDisabledReason ?? string.Empty;
+            RenderDisabledReason = renderDisabledReason ?? string.Empty;
+            PresentationDisabledReason = presentationDisabledReason ?? string.Empty;
         }
     }
 

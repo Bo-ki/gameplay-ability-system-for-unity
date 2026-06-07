@@ -242,8 +242,15 @@ namespace GAS.Editor
             if (_ascNameLabel == null)
                 return;
 
-            _ascNameLabel.text =
-                $"<b><color=yellow>{(_entityWatching == Entity.Null ? "NULL" : EntityHelper.GetEntityName(_entityWatching))}</color></b>";
+            var entityName = "NULL";
+            if (_entityWatching != Entity.Null)
+            {
+                entityName = GASRuntimeShell.TryGetRuntimeEntityManager(out var entityManager) && entityManager.Exists(_entityWatching)
+                    ? PresentationEntityBindingRegistry.GetEntityName(entityManager, _entityWatching)
+                    : "INVALID";
+            }
+
+            _ascNameLabel.text = $"<b><color=yellow>{entityName}</color></b>";
         }
 
         private static void FillFoldout(Foldout foldout, List<string> lines)
@@ -275,7 +282,8 @@ namespace GAS.Editor
         {
             return Application.isPlaying
                    && _entityWatching != Entity.Null
-                   && GASManager.EntityManager.Exists(_entityWatching);
+                   && GASRuntimeShell.TryGetRuntimeEntityManager(out var entityManager)
+                   && entityManager.Exists(_entityWatching);
         }
 
         private void OnWatchEntityChanged()
@@ -320,9 +328,13 @@ namespace GAS.Editor
         private static void RefreshAscEntitiesCache()
         {
             _cachedAscEntities.Clear();
-            var ascEntities = EntityQueryHelper.GetAllEntitiesWithComponent<ASCIdentityComponent>();
+            if (!GASRuntimeShell.TryGetRuntimeWorld(out var world))
+                return;
+
+            var entityManager = world.EntityManager;
+            var ascEntities = EntityQueryHelper.GetAllEntitiesWithComponent<ASCIdentityComponent>(world);
             foreach (var ascEntity in ascEntities)
-                _cachedAscEntities.Add((GASManager.EntityManager.GetName(ascEntity), ascEntity));
+                _cachedAscEntities.Add((PresentationEntityBindingRegistry.GetEntityName(entityManager, ascEntity), ascEntity));
         }
 
         private static string GetAbilityNameByCode(int code)
@@ -381,19 +393,26 @@ namespace GAS.Editor
 
         private void RefreshGlobalInfo()
         {
-            var em = GASManager.EntityManager;
-            var gt = em.GetComponentData<GlobalTimer>(GASManager.EntityGlobalTimer);
+            if (!GASRuntimeShell.TryGetGlobalTimer(out var em, out var globalTimer))
+            {
+                _globalInfoText = "<color=#888>Runtime 未初始化</color>";
+                return;
+            }
+
+            var gt = em.GetComponentData<GlobalTimer>(globalTimer);
             var lvl = em.HasComponent<ASCIdentityComponent>(_entityWatching)
                 ? em.GetComponentData<ASCIdentityComponent>(_entityWatching).Level
                 : 0;
             _globalInfoText =
-                $"<b>Frame</b>:{gt.Frame}  <b>Turn</b>:{gt.Turn}  <b>ASC Lv</b>:{lvl}  <b>Entity</b>:{EntityHelper.GetEntityName(_entityWatching)}";
+                $"<b>Frame</b>:{gt.Frame}  <b>Turn</b>:{gt.Turn}  <b>ASC Lv</b>:{lvl}  <b>Entity</b>:{PresentationEntityBindingRegistry.GetEntityName(em, _entityWatching)}";
         }
 
         private void RefreshAttributes()
         {
             _ascAttributes.Clear();
-            var em = GASManager.EntityManager;
+            if (!GASRuntimeShell.TryGetRuntimeEntityManager(out var em))
+                return;
+
             if (!em.HasBuffer<AttributeValueBuffer>(_entityWatching))
             {
                 _ascAttributes.Add("<color=#888>无</color>");
@@ -414,7 +433,9 @@ namespace GAS.Editor
         private void RefreshTags()
         {
             _ascTags.Clear();
-            var em = GASManager.EntityManager;
+            if (!GASRuntimeShell.TryGetRuntimeEntityManager(out var em))
+                return;
+
             var fixedMask = em.HasComponent<TagFixedMaskComponent>(_entityWatching)
                 ? em.GetComponentData<TagFixedMaskComponent>(_entityWatching).Mask
                 : default;
@@ -432,7 +453,7 @@ namespace GAS.Editor
             foreach (var t in tmpBuf)
             {
                 var n = GetDenseTagName(t.TagIndex);
-                var src = EntityHelper.GetEntityName(t.Source);
+                var src = PresentationEntityBindingRegistry.GetEntityName(em, t.Source);
                 if (n != null) _ascTags.Add($"  {n} <color=#888>← {src}</color>");
             }
         }
@@ -469,7 +490,9 @@ namespace GAS.Editor
         private void RefreshAbilities()
         {
             _ascAbilities.Clear();
-            var em = GASManager.EntityManager;
+            if (!GASRuntimeShell.TryGetRuntimeEntityManager(out var em))
+                return;
+
             var buf = em.GetBuffer<AbilitySlotBuffer>(_entityWatching);
             if (buf.Length == 0)
             {
@@ -483,7 +506,7 @@ namespace GAS.Editor
                 if (!em.Exists(ent) || !em.HasComponent<AbilityStateComponent>(ent)) continue;
                 var info = em.GetComponentData<AbilityStateComponent>(ent);
                 var aName = GetAbilityNameByCode(info.Code);
-                var eName = EntityHelper.GetEntityName(ent);
+                var eName = PresentationEntityBindingRegistry.GetEntityName(em, ent);
                 var phase = em.HasComponent<AbilityStateComponent>(ent)
                     ? em.GetComponentData<AbilityStateComponent>(ent).Phase
                     : EAbilityPhase.Ready;
@@ -525,8 +548,10 @@ namespace GAS.Editor
         private void RefreshGameplayEffects()
         {
             _ascGameplayEffects.Clear();
-            var em = GASManager.EntityManager;
-            var gt = em.GetComponentData<GlobalTimer>(GASManager.EntityGlobalTimer);
+            if (!GASRuntimeShell.TryGetGlobalTimer(out var em, out var globalTimer))
+                return;
+
+            var gt = em.GetComponentData<GlobalTimer>(globalTimer);
             var geBuf = em.GetBuffer<LegacyGameplayEffectEntityBuffer>(_entityWatching);
 
             if (geBuf.Length == 0)
@@ -547,7 +572,7 @@ namespace GAS.Editor
                 }
 
                 var context = em.GetComponentData<GEContextComponent>(geEntity);
-                var source = EntityHelper.GetEntityName(context.SourceAsc);
+                var source = PresentationEntityBindingRegistry.GetEntityName(em, context.SourceAsc);
                 var level = em.HasComponent<GEEffectSpecComponent>(geEntity)
                     ? em.GetComponentData<GEEffectSpecComponent>(geEntity).Level
                     : 0;

@@ -8,7 +8,7 @@ namespace GAS.Runtime
     /// </summary>
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASBoundaryProjectionSystemGroup))]
-    [UpdateBefore(typeof(CueStartSystem))]
+    [UpdateBefore(typeof(CueManagedLifecycleSystem))]
     public partial struct CueRequestBridgeSystem : ISystem
     {
         public void OnCreate(ref SystemState state)
@@ -29,19 +29,17 @@ namespace GAS.Runtime
             if (requests.Length == 0)
                 return;
 
-            var ecb = SystemAPI.GetSingleton<EndGASStructuralCommitECBSystem.Singleton>()
-                .CreateCommandBuffer(state.WorldUnmanaged);
             var snapshot = new NativeArray<CueRequestBuffer>(requests.Length, Allocator.Temp);
             for (var i = 0; i < requests.Length; i++)
                 snapshot[i] = requests[i];
 
             for (var i = 0; i < snapshot.Length; i++)
-                Consume(em, ref ecb, snapshot[i]);
+                Consume(em, snapshot[i]);
 
             snapshot.Dispose();
         }
 
-        private static void Consume(EntityManager em, ref EntityCommandBuffer ecb, in CueRequestBuffer request)
+        private static void Consume(EntityManager em, in CueRequestBuffer request)
         {
             if (request.CueEntity == Entity.Null || !em.Exists(request.CueEntity))
                 return;
@@ -66,7 +64,7 @@ namespace GAS.Runtime
                     StopCue(em, request.CueEntity);
                     break;
                 case EGameplayCueEvent.Kill:
-                    KillCue(em, ref ecb, request.CueEntity);
+                    KillCue(em, request.CueEntity);
                     break;
             }
         }
@@ -97,18 +95,21 @@ namespace GAS.Runtime
 
         private static void StopCue(EntityManager em, Entity cueEntity)
         {
-            if (!em.HasComponent<CueManagedInstanceComponent>(cueEntity))
-                return;
-
-            em.GetComponentData<CueManagedInstanceComponent>(cueEntity).Cue.Stop();
+            CueHelper.StopCue(cueEntity, em);
         }
 
-        private static void KillCue(EntityManager em, ref EntityCommandBuffer ecb, Entity cueEntity)
+        private static void KillCue(EntityManager em, Entity cueEntity)
         {
-            if (em.HasComponent<CueKillRequestTag>(cueEntity))
-                em.SetComponentEnabled<CueKillRequestTag>(cueEntity, true);
-            else
-                ecb.DestroyEntity(cueEntity);
+            if (!em.HasComponent<CueKillRequestTag>(cueEntity))
+                return;
+
+            if (em.HasComponent<CueRuntimeActiveTag>(cueEntity)
+                && !em.IsComponentEnabled<CueRuntimeActiveTag>(cueEntity))
+            {
+                return;
+            }
+
+            em.SetComponentEnabled<CueKillRequestTag>(cueEntity, true);
         }
 
         public void OnDestroy(ref SystemState state)

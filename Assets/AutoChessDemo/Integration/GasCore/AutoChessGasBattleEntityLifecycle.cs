@@ -1,0 +1,251 @@
+using System;
+using System.Collections.Generic;
+using GAS.Runtime;
+using Unity.Entities;
+
+namespace GAS.AutoChessDemo
+{
+    internal static class AutoChessGasBattleEntityLifecycle
+    {
+        private static int _nextBattleUnitKey;
+        private static readonly Dictionary<AutoChessBattleUnitKey, ASCHandle> BattleUnitRegistry =
+            new Dictionary<AutoChessBattleUnitKey, ASCHandle>();
+
+        public static AutoChessGasBattleUnitHandle CreateBattleUnit(AutoChessUnitDefinition definition)
+        {
+            if (!TryCreateBattleUnitCommandPort(definition, out var commandPort))
+                return default;
+
+            commandPort.RequestInitialize(
+                Array.Empty<int>(),
+                new[]
+                {
+                    new AttrSetConfig(
+                        AutoChessBattleRules.AttributeSetCombat,
+                        new[]
+                        {
+                            new AttributeBaseSetting(
+                                AutoChessBattleRules.AttributeHealth,
+                                definition.Health,
+                                true,
+                                true,
+                                0f,
+                                definition.Health),
+                            new AttributeBaseSetting(
+                                AutoChessBattleRules.AttributeEnergy,
+                                definition.Energy,
+                                true,
+                                true,
+                                0f,
+                                definition.Energy),
+                        }),
+                },
+                definition.CreateAbilityCodes(),
+                1);
+
+            return RegisterBattleUnit(commandPort.Handle);
+        }
+
+        public static AutoChessGasBattleDriverHandle CreateBattleDriver()
+        {
+            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
+                return default;
+
+            var driver = AutoChessBattleDriverRuntimeStore.ResetAndEnable(entityManager);
+            return new AutoChessGasBattleDriverHandle(driver);
+        }
+
+        public static AutoChessBattleReportFact[] CreateReportFacts(
+            in GasStructuredLogExportSnapshot structuredLog,
+            AutoChessGasBattleUnitHandle[] handles)
+        {
+            return AutoChessGasBattleReportFactProjector.Project(
+                structuredLog,
+                CreateRuntimeUnitResolver(handles));
+        }
+
+        private static AutoChessRuntimeUnitResolver CreateRuntimeUnitResolver(
+            AutoChessGasBattleUnitHandle[] handles)
+        {
+            if (handles == null || handles.Length == 0)
+                return new AutoChessRuntimeUnitResolver(Array.Empty<AutoChessRuntimeUnitLink>());
+
+            var links = new AutoChessRuntimeUnitLink[handles.Length];
+            for (var i = 0; i < handles.Length; i++)
+            {
+                TryResolveAscHandle(handles[i], out var ascHandle);
+                links[i] = new AutoChessRuntimeUnitLink(i, ascHandle);
+            }
+
+            return new AutoChessRuntimeUnitResolver(links);
+        }
+
+        public static AutoChessBattleDriverComponent GetBattleDriverStats(
+            AutoChessGasBattleDriverHandle driverHandle)
+        {
+            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager)
+                || !driverHandle.TryGetEntityForAdapter(out var driverEntity))
+            {
+                return default;
+            }
+
+            return AutoChessBattleDriverRuntimeStore.Read(entityManager, driverEntity);
+        }
+
+        public static void CloseBattleDriver(AutoChessGasBattleDriverHandle driverHandle)
+        {
+            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager)
+                || !driverHandle.TryGetEntityForAdapter(out var driverEntity))
+            {
+                return;
+            }
+
+            AutoChessBattleDriverRuntimeStore.Disable(entityManager, driverEntity);
+        }
+
+        public static void DestroyBattleUnit(AutoChessGasBattleUnitHandle handle)
+        {
+            if (TryResolveAscHandle(handle, out var ascHandle)
+                && GASRuntimeShell.TryCreateASCCommandPort(ascHandle, out var commandPort))
+            {
+                commandPort.RequestDestroy();
+            }
+
+            UnregisterBattleUnit(handle);
+        }
+
+        public static AutoChessCombatAttributeSnapshot ReadCombatAttributes(
+            AutoChessGasBattleUnitHandle handle)
+        {
+            if (!TryResolveAscHandle(handle, out var ascHandle)
+                || !GASRuntimeShell.TryCaptureASCReadModel(ascHandle, out var readModel))
+            {
+                return default;
+            }
+
+            var health = readModel.GetAttributeValue(
+                AutoChessBattleRules.AttributeSetCombat,
+                AutoChessBattleRules.AttributeHealth);
+            var energy = readModel.GetAttributeValue(
+                AutoChessBattleRules.AttributeSetCombat,
+                AutoChessBattleRules.AttributeEnergy);
+            return new AutoChessCombatAttributeSnapshot(health, energy);
+        }
+
+        public static void ResetRuntimeCache()
+        {
+            BattleUnitRegistry.Clear();
+        }
+
+        private static AutoChessGasBattleUnitHandle RegisterBattleUnit(ASCHandle ascHandle)
+        {
+            if (!ascHandle.IsValid)
+                return default;
+
+            var key = AutoChessBattleUnitKey.Create(++_nextBattleUnitKey);
+            BattleUnitRegistry[key] = ascHandle;
+            return new AutoChessGasBattleUnitHandle(key);
+        }
+
+        private static void UnregisterBattleUnit(AutoChessGasBattleUnitHandle handle)
+        {
+            if (!handle.IsValid)
+                return;
+
+            BattleUnitRegistry.Remove(handle.Key);
+        }
+
+        private static bool TryResolveAscHandle(
+            AutoChessGasBattleUnitHandle handle,
+            out ASCHandle ascHandle)
+        {
+            ascHandle = default;
+            return handle.IsValid
+                   && BattleUnitRegistry.TryGetValue(handle.Key, out ascHandle)
+                   && ascHandle.IsValid;
+        }
+
+        private static bool TryCreateBattleUnitCommandPort(
+            AutoChessUnitDefinition definition,
+            out ASCCommandPort commandPort)
+        {
+            commandPort = default;
+            if (!GASRuntimeShell.TryCreateASCCommandPort(
+                    ComponentType.ReadWrite<AutoChessBattleUnitComponent>(),
+                    out commandPort))
+            {
+                return false;
+            }
+
+            return commandPort.TrySetComponentData(CreateBattleUnitComponent(definition));
+        }
+
+        private static AutoChessBattleUnitComponent CreateBattleUnitComponent(
+            AutoChessUnitDefinition definition)
+        {
+            return new AutoChessBattleUnitComponent
+            {
+                BattleGroup = definition.BattleGroup,
+                Team = definition.Team,
+                Slot = definition.Slot,
+                PrimaryAbilityCode = definition.PrimaryAbilityCode,
+                FinisherAbilityCode = definition.FinisherAbilityCode,
+                ActiveAbilityCode = definition.ActiveAbilityCode,
+                ActiveCastInterval = definition.ActiveCastInterval,
+                ActiveCastFrameOffset = definition.ActiveCastFrameOffset,
+                HealthAttrSetCode = AutoChessBattleRules.AttributeSetCombat,
+                HealthAttrCode = AutoChessBattleRules.AttributeHealth,
+                EnergyAttrSetCode = AutoChessBattleRules.AttributeSetCombat,
+                EnergyAttrCode = AutoChessBattleRules.AttributeEnergy,
+                CooldownTagIndex = AutoChessBattleRules.TagAttackCooldown,
+                FinisherHealthThreshold = definition.FinisherHealthThreshold,
+                PrimaryTargetPolicy = definition.PrimaryTargetPolicy,
+                FinisherTargetPolicy = definition.FinisherTargetPolicy,
+            };
+        }
+
+    }
+
+    internal readonly struct AutoChessRuntimeUnitResolver
+    {
+        private readonly AutoChessRuntimeUnitLink[] _links;
+
+        public AutoChessRuntimeUnitResolver(AutoChessRuntimeUnitLink[] links)
+        {
+            _links = links ?? Array.Empty<AutoChessRuntimeUnitLink>();
+        }
+
+        public int ResolveUnitIndex(Entity ascEntity)
+        {
+            if (ascEntity == Entity.Null || _links == null)
+                return -1;
+
+            for (var i = 0; i < _links.Length; i++)
+            {
+                var link = _links[i];
+                if (link.Matches(ascEntity))
+                    return link.UnitIndex;
+            }
+
+            return -1;
+        }
+    }
+
+    internal readonly struct AutoChessRuntimeUnitLink
+    {
+        private readonly ASCHandle _ascHandle;
+
+        public readonly int UnitIndex;
+
+        public AutoChessRuntimeUnitLink(int unitIndex, ASCHandle ascHandle)
+        {
+            UnitIndex = unitIndex;
+            _ascHandle = ascHandle;
+        }
+
+        public bool Matches(Entity ascEntity)
+        {
+            return _ascHandle.MatchesRuntimeEntity(ascEntity);
+        }
+    }
+}

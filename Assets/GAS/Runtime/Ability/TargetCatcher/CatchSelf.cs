@@ -5,7 +5,7 @@ namespace GAS.Runtime
 {
     public sealed class CatchSelf : TargetCatcherBase<XParamNone>
     {
-        protected override void CatchTargetsNonAlloc(Entity mainTarget, List<Entity> results)
+        protected override void CollectTargetsNonAllocCore(Entity mainTarget, List<Entity> results)
         {
             results.Add(Owner);
         }

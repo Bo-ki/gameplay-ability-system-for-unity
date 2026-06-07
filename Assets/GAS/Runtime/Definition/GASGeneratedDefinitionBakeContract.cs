@@ -348,7 +348,7 @@ namespace GAS.Runtime
                         | GASGeneratedDefinitionArchetypeSlot.TagRequirementData
                         | GASGeneratedDefinitionArchetypeSlot.DefinitionReferenceEdges
                         | GASGeneratedDefinitionArchetypeSlot.StaticDefinitionBlobReferenceSlot;
-                    if (entry.HasDeferredBoundary(GASGeneratedDefinitionBakingBoundary.ManagedPresentation))
+                    if (entry.HasCapability(GASGeneratedDefinitionBakingCapability.PresentationCueKey))
                         slots |= GASGeneratedDefinitionArchetypeSlot.PresentationCueKey;
                     break;
                 case GASDefinitionKind.AttributeSet:
@@ -364,8 +364,9 @@ namespace GAS.Runtime
                     break;
                 case GASDefinitionKind.GameplayCue:
                     slots |=
-                        GASGeneratedDefinitionArchetypeSlot.TagRequirementData
-                        | GASGeneratedDefinitionArchetypeSlot.PresentationCueKey;
+                        GASGeneratedDefinitionArchetypeSlot.TagRequirementData;
+                    if (entry.HasCapability(GASGeneratedDefinitionBakingCapability.PresentationCueKey))
+                        slots |= GASGeneratedDefinitionArchetypeSlot.PresentationCueKey;
                     break;
             }
 

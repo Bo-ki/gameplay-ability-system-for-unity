@@ -540,6 +540,23 @@ namespace GAS.Runtime
             return ClearDefinitionCaches(before, clearedDiagnosticsCount);
         }
 
+        public static GameplayEffectDefinitionCacheReloadResult ReloadDefinitionCaches(
+            EntityManager entityManager,
+            bool clearGameplayEffectDiagnostics = false)
+        {
+            var before = CreateDefinitionCacheState();
+            var clearedDiagnosticsCount = 0;
+
+            if (clearGameplayEffectDiagnostics)
+            {
+                var diagnosticCountBefore = ConfigRegistryDiagnostics.Count;
+                ConfigRegistryDiagnostics.ClearForConfigKind(ConfigRegistryConfigKind.GameplayEffect);
+                clearedDiagnosticsCount = diagnosticCountBefore - ConfigRegistryDiagnostics.Count;
+            }
+
+            return ClearDefinitionCaches(before, clearedDiagnosticsCount, entityManager);
+        }
+
         internal static Entity CreateRuntimeEffectInstance(
             EntityManager entityManager,
             int gameplayEffectCode,
@@ -598,23 +615,6 @@ namespace GAS.Runtime
             PrototypeByCode[gameplayEffectCode] = prototype;
             CacheStaticDefinitionBlob(entityManager, gameplayEffectCode, prototype);
             return true;
-        }
-
-        internal static bool TryGetCachedPrototype(int gameplayEffectCode, out Entity prototype)
-        {
-            if (!PrototypeByCode.TryGetValue(gameplayEffectCode, out prototype))
-                return false;
-
-            if (!GASManager.IsInitialized)
-                return prototype != Entity.Null;
-
-            if (prototype != Entity.Null && GASManager.EntityManager.Exists(prototype))
-                return true;
-
-            PrototypeByCode.Remove(gameplayEffectCode);
-            RemoveCachedStaticDefinitionBlob(gameplayEffectCode);
-            prototype = Entity.Null;
-            return false;
         }
 
         internal static int CachedPrototypeCount => PrototypeByCode.Count;
@@ -693,14 +693,49 @@ namespace GAS.Runtime
             return ReloadDefinitionCaches();
         }
 
+        internal static GameplayEffectDefinitionCacheReloadResult ClearPrototypeCache(
+            EntityManager entityManager)
+        {
+            return ReloadDefinitionCaches(entityManager);
+        }
+
         private static GameplayEffectDefinitionCacheReloadResult ClearDefinitionCaches(
             GameplayEffectDefinitionCacheState before,
             int clearedGameplayEffectDiagnosticCount)
         {
+            return ClearDefinitionCaches(
+                before,
+                clearedGameplayEffectDiagnosticCount,
+                default,
+                false);
+        }
+
+        private static GameplayEffectDefinitionCacheReloadResult ClearDefinitionCaches(
+            GameplayEffectDefinitionCacheState before,
+            int clearedGameplayEffectDiagnosticCount,
+            EntityManager entityManager)
+        {
+            return ClearDefinitionCaches(
+                before,
+                clearedGameplayEffectDiagnosticCount,
+                entityManager,
+                true);
+        }
+
+        private static GameplayEffectDefinitionCacheReloadResult ClearDefinitionCaches(
+            GameplayEffectDefinitionCacheState before,
+            int clearedGameplayEffectDiagnosticCount,
+            EntityManager entityManager,
+            bool hasEntityManager)
+        {
             var removedStaticDefinitionBlobEntryCount = StaticDefinitionBlobByCode.Count;
             var disposedStaticDefinitionBlobCount = DisposeCachedStaticDefinitionBlobs();
             var removedPrototypeEntryCount = PrototypeByCode.Count;
-            var destroyedPrototypeEntityCount = DestroyCachedPrototypeEntities();
+            var usedEntityManagerForPrototypeDisposal =
+                hasEntityManager && CanUseEntityManager(entityManager);
+            var destroyedPrototypeEntityCount = usedEntityManagerForPrototypeDisposal
+                ? DestroyCachedPrototypeEntities(entityManager)
+                : 0;
 
             PrototypeByCode.Clear();
             _definitionCacheGeneration++;
@@ -708,7 +743,7 @@ namespace GAS.Runtime
             return new GameplayEffectDefinitionCacheReloadResult(
                 before,
                 CreateDefinitionCacheState(),
-                GASManager.IsInitialized,
+                usedEntityManagerForPrototypeDisposal,
                 removedPrototypeEntryCount,
                 destroyedPrototypeEntityCount,
                 removedStaticDefinitionBlobEntryCount,
@@ -716,13 +751,9 @@ namespace GAS.Runtime
                 clearedGameplayEffectDiagnosticCount);
         }
 
-        private static int DestroyCachedPrototypeEntities()
+        private static int DestroyCachedPrototypeEntities(EntityManager entityManager)
         {
-            if (!GASManager.IsInitialized)
-                return 0;
-
             var destroyedPrototypeEntityCount = 0;
-            var entityManager = GASManager.EntityManager;
             foreach (var prototype in PrototypeByCode.Values)
             {
                 if (prototype != Entity.Null && entityManager.Exists(prototype))
@@ -733,6 +764,11 @@ namespace GAS.Runtime
             }
 
             return destroyedPrototypeEntityCount;
+        }
+
+        private static bool CanUseEntityManager(EntityManager entityManager)
+        {
+            return entityManager.World != null && entityManager.World.IsCreated;
         }
 
         private static void CacheStaticDefinitionBlob(

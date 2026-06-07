@@ -12,8 +12,7 @@ namespace GAS.Runtime
             ETargetDataKind targetDataKind)
         {
             return TryAppendSimpleInstantCommand(em, request, targetAsc, targetDataKind, null)
-                   && EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity)
-                ? streamEntity
+                ? ResolveAcceptedOwner(in request, targetAsc)
                 : Entity.Null;
         }
 
@@ -30,8 +29,7 @@ namespace GAS.Runtime
                 : null;
 
             return TryAppendSimpleInstantCommand(em, request, targetAsc, targetDataKind, setByCallerValues)
-                   && EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity)
-                ? streamEntity
+                ? ResolveAcceptedOwner(in request, targetAsc)
                 : Entity.Null;
         }
 
@@ -42,8 +40,7 @@ namespace GAS.Runtime
             ETargetDataKind targetDataKind)
         {
             return TryAppendSimpleInstantCommands(em, request, targetAscs, targetDataKind, null)
-                   && EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity)
-                ? streamEntity
+                ? ResolveAcceptedOwner(in request, targetAscs[0])
                 : Entity.Null;
         }
 
@@ -203,6 +200,11 @@ namespace GAS.Runtime
             return request.SourceAbility != Entity.Null
                 ? GEEffectCommandSource.Ability
                 : GEEffectCommandSource.RuntimeBoundary;
+        }
+
+        private static Entity ResolveAcceptedOwner(in GEApplyRequestComponent request, Entity fallbackTarget)
+        {
+            return request.SourceAsc != Entity.Null ? request.SourceAsc : fallbackTarget;
         }
 
     }

@@ -2,9 +2,9 @@
 
 ## 目的
 
-把 EX-GAS 2.0 的目标态主架构从旧“五平面”口径重构为四层工程架构，并给后续 Runtime Core、配置生成链、Debugger、AutoChess 验收 Demo 和任务树拆分提供统一边界。
+把 EX-GAS 2.0 的目标态主架构从旧“五平面”口径重构为四层工程架构，并给 Runtime Core、配置生成链、Debugger、AutoChess 验收 Demo 和任务树拆分提供统一边界。
 
-旧五平面只能作为历史解释词汇，不再作为主 Spec。后续设计、任务领取和代码命名都应优先使用本文件的四层名称。
+旧五平面只能作为历史解释词汇，不再作为主 Spec。所有设计、任务领取和代码命名都应优先使用本文件的四层名称。
 
 ## 四层命名
 
@@ -33,7 +33,7 @@
 flowchart TB
     Definition["Layer 4: Definition & Generation\nLuban / SourceGenerator / Static Lookup / Bake Plan"]
     Core["Layer 3: GAS Runtime Core\nASC / Ability / Effect / Attribute / Tag / GameplayFact"]
-    Boundary["Layer 2: Runtime Boundary\nCommandGateway / ReadModel / PresentationOutboxBridge / DiagnosticsSink"]
+    Boundary["Layer 2: Runtime Boundary\nCommandPort / ReadModel / PresentationOutboxBridge / DiagnosticsSink"]
     Shell["Layer 1: Application Shell\nUI / AI / Input / Network / Demo Runner / Editor Debug Window"]
 
     Definition -->|"immutable definitions"| Core
@@ -52,6 +52,15 @@ flowchart TB
 3. Layer 3 结构变化集中到 `GASStructuralCommitSystemGroup`，不在 Target Resolve / Effect Fan-In / State Evaluate / Attribute Apply / Gameplay Fact kernel 直接 create / destroy entity。
 4. Layer 4 的 generated artifact 优先落为 Blob、Baker output、static lookup 和 validation graph。
 5. Layer 2 / Layer 1 可以有 managed bridge，但不能把 managed bridge 写回 Runtime Core 热路径。
+
+## 官方依据与设计论证
+
+| 分层选择 | 官方规则依据 | 为什么更优秀 | 为什么有必要 |
+|---|---|---|---|
+| Layer 3 只承载 GAS Runtime Core，且以 SystemGroup / `ISystem` / Job 表达物理执行域 | `SYS-01`、`SYS-02`、`SYS-03`、`PRF-07` | 把 runtime ownership、update order、依赖链和 sync point 暴露给 Entities 调度系统 | 如果把 OOP manager 或 adapter 作为中间层，Profiler 只能看到托管调用，无法定位真正的 ECS hot path |
+| Layer 2 只做 command port、read model、outbox、diagnostics/replay sink | `SYS-05`、`DBG-01`、`SEL-01`、`ODF-07` | 外部业务可以用 OOP API，但 gameplay 写入仍收敛为 command data，观察结果仍来自 typed facts | UI、AI、网络、Debugger、Replay 生命周期不同；混成一个 adapter 会让业务逻辑、日志、缓存和写 Core 互相污染 |
+| Layer 4 只生成 immutable definition、Blob、lookup、pure glue 和 validation artifact | `BAKE-01`、`BLOB-01`、`BLOB-02`、`CASE-07`、`BUR-01` | 配置链把 Luban row 压缩成 Burst-friendly 的只读输入，Runtime lane 不反查 managed row / JSON / Dictionary | GAS 配置量大且公式/条件多；若 Runtime 每帧查托管表，会直接违背 hot path job 化和 unmanaged 数据约束 |
+| Layer 1 只能通过 Boundary 接入 Runtime，并消费 read model / marker / diagnostics snapshot | `SYS-05`、`ODF-18`、`CASE-17` | Demo、无头 runner、Editor 工具和真实产品可共用同一运行时证据模型 | 真实资源、窗口、场景和无头 CI 的生命周期不同；允许 Layer 1 直连 `EntityManager` 会让验收路径和产品路径分裂 |
 
 ## Layer 4: Definition & Generation Layer
 
@@ -91,7 +100,7 @@ flowchart TB
 
 ### 职责
 
-1. `CommandGateway`：把应用壳层意图转换为 request entity、command buffer 或等价 command data。
+1. `CommandPort`：把应用壳层意图转换为 request entity、command buffer 或等价 command data；公开方法必须使用 `Request*` 命名，避免伪装成立即执行的 OOP 对象操作。
 2. `ReadModel`：提供只读镜像，不暴露 `EntityManager`、`EntityQuery`、runtime buffer 可写句柄。
 3. `PresentationOutboxBridge`：消费 Core facts，输出 UI/Cue/VFX/SFX/log marker；无头 Demo 也必须走同一 outbox 语义。
 4. `DiagnosticsSink` / `ReplaySink`：导出结构化日志、timing、buffer pressure、fact count、scale profile，不参与 gameplay routing。
@@ -135,7 +144,7 @@ flowchart TB
 
 1. 文档验收：目标态 Spec 和任务树不再以“五平面”作为主架构入口；引用旧术语时必须标注为旧口径。
 2. Runtime 验收：Core hot path 不依赖 Editor / GameObject / Odin / managed gameplay object；system tick 目标保持 `0.0X - 0.X ms` 级别。
-3. 边界验收：CommandGateway 只写命令，ReadModel 只读，PresentationOutboxBridge / Diagnostics / Replay 不反向写 simulation。
+3. 边界验收：CommandPort 只写命令，ReadModel 只读，PresentationOutboxBridge / Diagnostics / Replay 不反向写 simulation。
 4. 配置验收：Luban + SourceGenerator 只输出 Definition & Generation Layer artifact，不生成 runtime lifecycle。
 5. Demo 验收：AutoChessDemo 位于 Runtime Core 外部的 Application Shell Layer，走真实业务流程，同时支持无头自动结算和十万级以上压力测试预演。
 6. Adapter 验收：AutoChess Battle Runtime Adapter 对外 interface 不得暴露 GAS implementation 细节；direct `EntityManager` 使用面必须集中、分类、可审计，并且不能进入 `coreTickMs`。

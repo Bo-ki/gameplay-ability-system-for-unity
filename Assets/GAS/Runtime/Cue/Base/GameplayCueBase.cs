@@ -9,8 +9,8 @@ namespace GAS.Runtime
         protected Entity _sourceEntity;
         protected CueSourceType _sourceType;
         protected Entity _targetAscEntity;
-        protected static EntityManager EntityManager => GASManager.EntityManager;
-        protected GameObject TargetGameObject => EntityHelper.GetGameObjectFromEntity(_targetAscEntity);
+        protected EntityManager EntityManager { get; private set; }
+        protected GameObject TargetGameObject => PresentationEntityBindingRegistry.GetGameObjectFromEntity(EntityManager, _targetAscEntity);
 
         public abstract void InitParameters(XParam xParam);
 
@@ -18,9 +18,10 @@ namespace GAS.Runtime
         {
         }
 
-        public void SetCueEntity(Entity e)
+        public void SetRuntime(EntityManager entityManager, Entity cueEntity)
         {
-            _cueEntity = e;
+            EntityManager = entityManager;
+            _cueEntity = cueEntity;
         }
 
         public void SetSourceEntity(Entity e, CueSourceType sourceType)
@@ -33,21 +34,21 @@ namespace GAS.Runtime
         /// 添加Cue到目标ASC
         /// </summary>
         /// <param name="e"></param>
-        public void AddToTargetAsc(Entity e)
+        internal void ApplyAddToTargetAsc(Entity e, float time)
         {
             if (e != Entity.Null)
             {
                 _targetAscEntity = e;
-                OnAdd(Time.time);
+                OnAdd(time);
             }
         }
 
         /// <summary>
         /// cue从目标ASC移除
         /// </summary>
-        public void RemoveFromTargetAsc()
+        internal void ApplyRemoveFromTargetAsc(float time)
         {
-            OnRemove(Time.time);
+            OnRemove(time);
             _targetAscEntity = Entity.Null;
         }
 
@@ -66,15 +67,17 @@ namespace GAS.Runtime
         /// <param name="replay"> 是否从头播放 </param>
         public void Play(bool replay = false)
         {
-            if (CanPlay())
+            if (!CanPlay())
+                return;
+
+            if (replay && TryGetPresentationRequest(out var request))
             {
-                SetCueState<CuePlayableTag>(true);
-                if (replay)
-                {
-                    Reset();
-                    SetCueState<CuePlayingTag>(false);
-                }
+                request.ResetRequested = 1;
+                SetPresentationRequest(request);
+                SetCueState<CuePlayingTag>(false);
             }
+
+            SetCueState<CuePlayableTag>(true);
         }
 
         /// <summary>
@@ -96,32 +99,76 @@ namespace GAS.Runtime
         public void RemoveSelf()
         {
             StopImmediate();
-            RemoveFromTargetAsc();
+            if (!TryGetPresentationRequest(out var request))
+                return;
+
+            request.RemoveTargetRequested = 1;
+            SetPresentationRequest(request);
         }
+
+        internal bool CanPlayRuntime() => CanPlay();
 
         public Entity GetSourceEffectEntity()
         {
             if (_sourceType != CueSourceType.GameplayEffect) return Entity.Null;
-            if (_sourceEntity == Entity.Null || !EntityManager.Exists(_sourceEntity)) return Entity.Null;
+            if (_sourceEntity == Entity.Null || !HasRuntimeContext() || !EntityManager.Exists(_sourceEntity)) return Entity.Null;
             return _sourceEntity;
         }
 
         public Entity GetSourceAbilityEntity()
         {
             if (_sourceType != CueSourceType.GameplayAbility) return Entity.Null;
-            if (_sourceEntity == Entity.Null || !EntityManager.Exists(_sourceEntity)) return Entity.Null;
+            if (_sourceEntity == Entity.Null || !HasRuntimeContext() || !EntityManager.Exists(_sourceEntity)) return Entity.Null;
             return _sourceEntity;
         }
 
         private void SetCueState<T>(bool enabled)
             where T : unmanaged, IComponentData, IEnableableComponent
         {
+            if (!HasRuntimeContext())
+                return;
+
             if (_cueEntity != Entity.Null
                 && EntityManager.Exists(_cueEntity)
+                && EntityManager.HasComponent<CueRuntimeActiveTag>(_cueEntity)
+                && EntityManager.IsComponentEnabled<CueRuntimeActiveTag>(_cueEntity)
                 && EntityManager.HasComponent<T>(_cueEntity))
             {
                 EntityManager.SetComponentEnabled<T>(_cueEntity, enabled);
             }
+        }
+
+        private bool TryGetPresentationRequest(out CuePresentationRequestComponent request)
+        {
+            request = default;
+            if (!HasRuntimeContext()
+                || _cueEntity == Entity.Null
+                || !EntityManager.Exists(_cueEntity)
+                || !EntityManager.HasComponent<CuePresentationRequestComponent>(_cueEntity))
+            {
+                return false;
+            }
+
+            request = EntityManager.GetComponentData<CuePresentationRequestComponent>(_cueEntity);
+            return true;
+        }
+
+        private void SetPresentationRequest(in CuePresentationRequestComponent request)
+        {
+            if (!HasRuntimeContext()
+                || _cueEntity == Entity.Null
+                || !EntityManager.Exists(_cueEntity)
+                || !EntityManager.HasComponent<CuePresentationRequestComponent>(_cueEntity))
+            {
+                return;
+            }
+
+            EntityManager.SetComponentData(_cueEntity, request);
+        }
+
+        private bool HasRuntimeContext()
+        {
+            return EntityManager.World != null && EntityManager.World.IsCreated;
         }
 
         #region system function

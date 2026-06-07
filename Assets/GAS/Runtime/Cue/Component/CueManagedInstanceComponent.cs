@@ -8,24 +8,25 @@ namespace GAS.Runtime
     public class CueManagedInstanceComponent : IComponentData
     {
         public GameplayCueBase Cue;
-        
+
         public CueManagedInstanceComponent()
         {
         }
-        
-        public CueManagedInstanceComponent(GameplayCueBase cue)
+
+        public CueManagedInstanceComponent(EntityManager entityManager, Entity cueEntity, GameplayCueBase cue)
         {
             Cue = cue;
+            Cue?.SetRuntime(entityManager, cueEntity);
         }
     }
-    
+
     [Serializable]
     public struct CueSetting
     {
-        [SerializeField] 
+        [SerializeField]
         public List<int> requiredTags;
 
-        [SerializeField] 
+        [SerializeField]
         public List<int> immunityTags;
 
     }

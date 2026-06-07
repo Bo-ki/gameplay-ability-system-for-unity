@@ -35,6 +35,24 @@ namespace GAS.Runtime
         BaseValue = 1,
     }
 
+    public static class AttributeModifierBufferFlags
+    {
+        public const int RequiresCoreApply = 1 << 0;
+        public const int AppliedByCore = 1 << 1;
+
+        public static bool RequiresApply(int flags)
+        {
+            return (flags & RequiresCoreApply) != 0
+                   && (flags & AppliedByCore) == 0;
+        }
+
+        public static bool ShouldProjectFact(int flags)
+        {
+            return (flags & RequiresCoreApply) == 0
+                   || (flags & AppliedByCore) != 0;
+        }
+    }
+
     public struct GEEffectCommandStreamComponent : IComponentData
     {
         public int Version;
@@ -50,6 +68,21 @@ namespace GAS.Runtime
         public int FactProjectionDeltaCursor;
         public int EventBridgeFactCursor;
         public int CueProjectionSpecCursor;
+        public int ActiveMutationCommandCount;
+        public int ActiveMutationOwnerGroupCount;
+        public int ActiveMutationMaxOwnerRange;
+        public int ActiveMutationSortMoveCount;
+        public int ActiveMutationEstimatedRandomLookupCount;
+        public int ActiveMutationOwnerResourceLookupCount;
+        public int ActiveMutationMigrationCarrierCount;
+        public int PendingAttributeDeltaCount;
+        public int PendingAttributeAppliedDeltaCount;
+        public int PendingAttributeSkippedDeltaCount;
+        public int PendingAttributeTargetGroupCount;
+        public int PendingAttributeMaxTargetRange;
+        public int PendingAttributeEstimatedRandomLookupCount;
+        public int PendingAttributeFactPatchCount;
+        public int PendingAttributeMigrationCarrierCount;
     }
 
     [InternalBufferCapacity(0)]
@@ -437,6 +470,16 @@ namespace GAS.Runtime
             _hasCachedStreamOwner = true;
         }
 
+        public static void ResetKnownSingleton(EntityManager em)
+        {
+            if (_hasCachedStreamOwner && _cachedEntityManager.Equals(em))
+            {
+                _cachedEntityManager = default;
+                _cachedStreamEntity = Entity.Null;
+                _hasCachedStreamOwner = false;
+            }
+        }
+
         public static bool HasRequiredBuffers(EntityManager em, Entity streamEntity)
         {
             if (streamEntity == Entity.Null || !em.Exists(streamEntity))
@@ -460,9 +503,6 @@ namespace GAS.Runtime
         private static bool TryResolveKnownSingleton(EntityManager em, out Entity streamEntity)
         {
             if (TryResolveCachedSingleton(em, out streamEntity))
-                return true;
-
-            if (TryResolveGasManagerSingleton(em, out streamEntity))
                 return true;
 
             streamEntity = Entity.Null;
@@ -489,28 +529,11 @@ namespace GAS.Runtime
             return false;
         }
 
-        private static bool TryResolveGasManagerSingleton(EntityManager em, out Entity streamEntity)
-        {
-            if (!GASManager.IsInitialized || !GASManager.EntityManager.Equals(em))
-            {
-                streamEntity = Entity.Null;
-                return false;
-            }
-
-            streamEntity = GASManager.EntityEffectCommandSpecStream;
-            if (!IsValidStreamOwner(em, streamEntity))
-            {
-                streamEntity = Entity.Null;
-                return false;
-            }
-
-            RegisterKnownSingleton(em, streamEntity);
-            return true;
-        }
-
         private static bool IsValidStreamOwner(EntityManager em, Entity streamEntity)
         {
             return streamEntity != Entity.Null
+                   && em.World != null
+                   && em.World.IsCreated
                    && em.Exists(streamEntity)
                    && em.HasComponent<GEEffectCommandStreamComponent>(streamEntity);
         }
@@ -690,6 +713,7 @@ namespace GAS.Runtime
             stream.FactProjectionDeltaCursor = 0;
             stream.EventBridgeFactCursor = 0;
             stream.CueProjectionSpecCursor = 0;
+            ResetFrameLocalCounters(ref stream);
             em.SetComponentData(streamEntity, stream);
         }
 
@@ -725,6 +749,7 @@ namespace GAS.Runtime
             stream.FactProjectionDeltaCursor = 0;
             stream.EventBridgeFactCursor = 0;
             stream.CueProjectionSpecCursor = 0;
+            ResetFrameLocalCounters(ref stream);
             em.SetComponentData(streamEntity, stream);
         }
 
@@ -760,6 +785,26 @@ namespace GAS.Runtime
             stream.FactProjectionDeltaCursor = 0;
             stream.EventBridgeFactCursor = 0;
             stream.CueProjectionSpecCursor = 0;
+            ResetFrameLocalCounters(ref stream);
+        }
+
+        private static void ResetFrameLocalCounters(ref GEEffectCommandStreamComponent stream)
+        {
+            stream.ActiveMutationCommandCount = 0;
+            stream.ActiveMutationOwnerGroupCount = 0;
+            stream.ActiveMutationMaxOwnerRange = 0;
+            stream.ActiveMutationSortMoveCount = 0;
+            stream.ActiveMutationEstimatedRandomLookupCount = 0;
+            stream.ActiveMutationOwnerResourceLookupCount = 0;
+            stream.ActiveMutationMigrationCarrierCount = 0;
+            stream.PendingAttributeDeltaCount = 0;
+            stream.PendingAttributeAppliedDeltaCount = 0;
+            stream.PendingAttributeSkippedDeltaCount = 0;
+            stream.PendingAttributeTargetGroupCount = 0;
+            stream.PendingAttributeMaxTargetRange = 0;
+            stream.PendingAttributeEstimatedRandomLookupCount = 0;
+            stream.PendingAttributeFactPatchCount = 0;
+            stream.PendingAttributeMigrationCarrierCount = 0;
         }
 
         public static GEEffectCommandBuffer ToCommand(

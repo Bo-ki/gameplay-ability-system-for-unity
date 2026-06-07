@@ -8,35 +8,82 @@ namespace GAS.Runtime
     /// </summary>
     public class AbilitySystemBinding : MonoBehaviour
     {
-        private ASCCommandGateway _abilitySystem;
+        private ASCCommandPort _commands;
+        private bool _isPresentationBound;
 
         private void Awake()
         {
-            _abilitySystem = ASCCommandGateway.Create();
+            TryInitializeRuntimePort();
         }
 
         private void OnDestroy()
         {
-            _abilitySystem.Dispose();
+            UnbindPresentation();
+            if (_commands.IsValid)
+                _commands.RequestDestroy();
         }
 
         private void OnEnable()
         {
-            EntityHelper.BindGameObjectToEntity(_abilitySystem.Entity, gameObject);
+            if (TryInitializeRuntimePort())
+                BindPresentation();
         }
 
         private void OnDisable()
         {
-            EntityHelper.UnbindGameObjectToEntity(_abilitySystem.Entity);
+            UnbindPresentation();
         }
 
         public void Init(AbilitySystemConfig config)
         {
-            _abilitySystem.Init(config);
+            if (!TryInitializeRuntimePort())
+                return;
+
+            BindPresentation();
+            _commands.RequestInitialize(config);
         }
 
-        public ASCCommandGateway CommandGateway => _abilitySystem;
+        public ASCCommandPort Commands => _commands;
 
-        public Entity Entity => _abilitySystem.Entity;
+        public ASCReadModel ReadModel => CaptureReadModel();
+
+        public ASCReadModel CaptureReadModel()
+        {
+            return _commands.IsValid
+                ? GASRuntimeShell.CaptureASCReadModel(_commands.Handle)
+                : default;
+        }
+
+        public ASCHandle Handle => _commands.Handle;
+
+        internal bool TryResolveRuntimeEntityForBoundary(out Entity entity)
+        {
+            return Handle.TryResolveRuntimeEntity(out entity);
+        }
+
+        private bool TryInitializeRuntimePort()
+        {
+            if (_commands.IsValid)
+                return true;
+
+            return GASRuntimeShell.TryCreateASCCommandPort(out _commands);
+        }
+
+        private void BindPresentation()
+        {
+            if (_isPresentationBound || !_commands.IsValid)
+                return;
+
+            _isPresentationBound = GASRuntimeShell.TryBindPresentation(_commands.Handle, gameObject);
+        }
+
+        private void UnbindPresentation()
+        {
+            if (!_isPresentationBound)
+                return;
+
+            GASRuntimeShell.TryUnbindPresentation(_commands.Handle);
+            _isPresentationBound = false;
+        }
     }
 }

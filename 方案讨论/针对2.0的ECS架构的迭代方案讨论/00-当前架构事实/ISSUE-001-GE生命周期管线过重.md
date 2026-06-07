@@ -35,14 +35,14 @@
 2. generated active effect pre-tick 已从 scan + `Complete()` 迁出；generated mutation/remove 已迁入 scheduled job，当前风险转为 mutation singleton serial job、lookup random access 和 store capacity/ordering 证据。
 3. command/spec/delta/fact 仍集中在 singleton stream owner DynamicBuffer。
 4. period/overflow/granted cleanup 等复杂 active lifecycle 需要继续核对是否完全脱离 legacy runtime GE entity。
-5. `ASCCommandGateway` 的 transient request entity 链路已退场；剩余风险是 bridge/helper 继续绕过 owner-local command sink 或直接触碰 `EntityManager`。
+5. `ASCCommandPort` 的 transient request entity 链路已退场；剩余风险是 bridge/helper 继续绕过 owner-local command sink 或直接触碰 `EntityManager`。
 6. `GameplayEventBuffer` typed fact 已替代 legacy `GameplayEventBusEventBuffer`；当前事实源分裂风险转移为剩余 Attribute/Cue/Tag/Damage 边界缓冲是否继续绕开 typed fact。
 
 ## 代码证据
 
 | 事实 | 文件 |
 |---|---|
-| generated runtime 注册 | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeSystemRegistration.gen.cs` |
+| generated runtime 注册 | `Assets/GAS/Runtime/System/SystemGroup/GASSystemScheduleContract.cs:207-235`、`:323-328`、`:371-374` |
 | spec build / delta apply | `RuntimeEffectInstant.gen.cs` |
 | active effect mutation/tick/remove | `RuntimeActiveEffect.gen.cs` |
 | handwritten execution calculation | `GEExecutionCalculationSystem.cs`, `GEExecutionCalculationOutputModifierSystem.cs` |

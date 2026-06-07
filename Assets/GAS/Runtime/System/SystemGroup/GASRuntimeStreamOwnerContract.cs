@@ -91,6 +91,8 @@ namespace GAS.Runtime
         NativeStreamCandidate = 1 << 6,
         PerOwnerBufferCandidate = 1 << 7,
         ProofOrMigrationMarker = 1 << 8,
+        OwnerRangeCounters = 1 << 9,
+        RandomLookupCounters = 1 << 10,
     }
 
     public readonly struct GASRuntimeFrameStreamOwnerEntry
@@ -414,6 +416,12 @@ namespace GAS.Runtime
                 evidence |= EGasRuntimeFrameStreamEvidence.NativeStreamCandidate;
             if (targetCarrier == EGasRuntimeFrameStreamCarrier.OwnerLocalDynamicBuffer)
                 evidence |= EGasRuntimeFrameStreamEvidence.PerOwnerBufferCandidate;
+            if (streamId == EGasRuntimeFrameStreamId.ActiveEffectMutation
+                || streamId == EGasRuntimeFrameStreamId.AttributeDelta)
+            {
+                evidence |= EGasRuntimeFrameStreamEvidence.OwnerRangeCounters
+                            | EGasRuntimeFrameStreamEvidence.RandomLookupCounters;
+            }
 
             return new GASRuntimeFrameStreamOwnerEntry(
                 streamId,

@@ -2,9 +2,9 @@ using Unity.Entities;
 
 namespace GAS.Runtime
 {
-    public static class AbilityRuntimeActions
+    internal static class AbilityRuntimeActions
     {
-        public static Entity RequestCostGameplayEffect(Entity ability, EntityManager entityManager)
+        internal static Entity RequestCostGameplayEffect(Entity ability, EntityManager entityManager)
         {
             if (!TryGetBaseInfo(entityManager, ability, out var baseInfo)
                 || !entityManager.HasComponent<AbilityCostComponent>(ability)
@@ -20,7 +20,7 @@ namespace GAS.Runtime
                 durationFrameOverride: 0);
         }
 
-        public static Entity RequestCooldownGameplayEffect(Entity ability, EntityManager entityManager)
+        internal static Entity RequestCooldownGameplayEffect(Entity ability, EntityManager entityManager)
         {
             if (!TryGetBaseInfo(entityManager, ability, out var baseInfo)
                 || !entityManager.HasComponent<AbilityCooldownComponent>(ability)
@@ -36,14 +36,14 @@ namespace GAS.Runtime
                 cooldown.Cooldown);
         }
 
-        public static void RemoveActivationOwnedTags(Entity ability, EntityManager entityManager)
+        internal static void RemoveActivationOwnedTags(Entity ability, EntityManager entityManager)
         {
             if (!entityManager.HasComponent<AbilityStateComponent>(ability)) return;
             var owner = entityManager.GetComponentData<AbilityStateComponent>(ability).Owner;
             RemoveTagsFromSource(owner, ability, entityManager);
         }
 
-        public static bool RequestAbilityEnd(
+        internal static bool RequestAbilityEnd(
             Entity ability,
             EntityManager entityManager,
             EAbilityLifecycleReason reason,
@@ -76,7 +76,7 @@ namespace GAS.Runtime
             return true;
         }
 
-        public static bool RequestAbilityCancel(
+        internal static bool RequestAbilityCancel(
             Entity ability,
             EntityManager entityManager,
             EAbilityLifecycleReason reason,
@@ -109,7 +109,7 @@ namespace GAS.Runtime
             return true;
         }
 
-        public static bool RequestAbilityCancel(
+        internal static bool RequestAbilityCancel(
             Entity ability,
             EntityManager entityManager,
             ref EntityCommandBuffer ecb,
@@ -152,7 +152,7 @@ namespace GAS.Runtime
             return true;
         }
 
-        public static void EnableDestroyOnCleanup(
+        internal static void EnableDestroyOnCleanup(
             Entity ability,
             EntityManager entityManager,
             ref EntityCommandBuffer ecb)
@@ -170,28 +170,28 @@ namespace GAS.Runtime
             return;
         }
 
-        public static bool IsDestroyOnCleanupEnabled(Entity ability, EntityManager entityManager)
+        internal static bool IsDestroyOnCleanupEnabled(Entity ability, EntityManager entityManager)
         {
             return entityManager.Exists(ability)
                    && entityManager.HasComponent<AbilityDestroyOnCleanupComponent>(ability)
                    && entityManager.IsComponentEnabled<AbilityDestroyOnCleanupComponent>(ability);
         }
 
-        public static bool IsCancelRequested(Entity ability, EntityManager entityManager)
+        internal static bool IsCancelRequested(Entity ability, EntityManager entityManager)
         {
             return entityManager.Exists(ability)
                    && entityManager.HasComponent<AbilityCancelRequestComponent>(ability)
                    && entityManager.IsComponentEnabled<AbilityCancelRequestComponent>(ability);
         }
 
-        public static bool IsEndRequested(Entity ability, EntityManager entityManager)
+        internal static bool IsEndRequested(Entity ability, EntityManager entityManager)
         {
             return entityManager.Exists(ability)
                    && entityManager.HasComponent<AbilityEndRequestComponent>(ability)
                    && entityManager.IsComponentEnabled<AbilityEndRequestComponent>(ability);
         }
 
-        public static void DisableLifecycleRequestMarkers(Entity ability, EntityManager entityManager)
+        internal static void DisableLifecycleRequestMarkers(Entity ability, EntityManager entityManager)
         {
             if (!entityManager.Exists(ability))
                 return;
@@ -213,7 +213,7 @@ namespace GAS.Runtime
                 entityManager.SetComponentEnabled<AbilityDestroyOnCleanupComponent>(ability, false);
         }
 
-        public static void RemoveTagsFromSource(Entity owner, Entity source, EntityManager entityManager)
+        internal static void RemoveTagsFromSource(Entity owner, Entity source, EntityManager entityManager)
         {
             if (!entityManager.HasComponent<TagMaskComponent>(owner) || !entityManager.HasBuffer<TagTemporarySourceBuffer>(owner))
                 return;

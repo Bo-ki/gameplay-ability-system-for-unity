@@ -4,9 +4,17 @@
 
 Runtime Core Debugger 用于回答“GAS 语义上发生了什么、哪些 Core 计数异常、哪些数据可以和 Unity 官方工具对齐”。在四层架构中，它的 Runtime 采样、snapshot、official tool diff 和 replay/export API 归属 **Layer 2 Runtime Boundary Layer** 的 `DiagnosticsSink` / `ReplaySink`，不是 simulation input，也不是 Unity Profiler 的替代品。
 
-Editor Debugger Window 归属 **Layer 1 Application Shell Layer** 的 Editor Extension；无头 runner、AIBridge CLI 驱动和实机 Editor profile runner 也归属 Layer 1。二者必须消费同一套 Layer 2 `RuntimeDiagnosticsSnapshot` / official diff API，不能把窗口实现放入 Demo，也不能让 Demo 私有化 Debugger 数据链。
+Editor Debugger Window 归属 **Layer 1 Application Shell Layer** 的 Editor Extension；无头 runner、外部 profiler driver 和实机 Editor profile runner 也归属 Layer 1。二者必须消费同一套 Layer 2 `RuntimeDiagnosticsSnapshot` / official diff API，不能把窗口实现放入 Demo，也不能让 Demo 私有化 Debugger 数据链。
 
-性能判断采用 **官方工具优先**：能用 Unity Profiler、Entities Profiler Modules、Entities Journaling、ProfilerRecorder / ProfilerDriver 和 AIBridge 真实 Editor / Player Runtime Bridge 获取的数据，不在项目内重复造完整 profiler。项目内 Debugger 只保留 GAS 语义 counter、thin snapshot、official tool diff 标记、无头可调用导出和必要的 runtime safety gate。
+性能判断采用 **官方工具优先**：能用 Unity Profiler、Entities Profiler Modules、Entities Journaling、ProfilerRecorder / ProfilerDriver 和外部 Editor / Player Runtime Bridge 获取的数据，不在项目内重复造完整 profiler。项目内 Debugger 只保留 GAS 语义 counter、thin snapshot、official tool diff 标记、无头可调用导出和必要的 runtime safety gate。
+
+## 官方依据与设计论证
+
+Debugger 的职责是生成可复核证据，不是成为 Runtime Core 控制层。`SYS-05` 要求 Debugger / Demo / Presentation 只能通过 Boundary 观察 Core，`DBG-01` 要求诊断输出能和官方工具对齐。因此本 Spec 把 Debugger 归入 Layer 2 DiagnosticsSink / ReplaySink：Core 只产出 counters、typed facts 和 marker，Layer 1 的 Editor window、headless runner 或 profiler driver 只消费同一份 snapshot / official diff。
+
+这些证据必须覆盖 DOTS 性能风险，而不是只打印业务日志。`PRF-04` / `ECB-03` 对应 structural playback 与 sync point 归因，`PRF-10` / `BUF-01` 对应 DynamicBuffer spill 与容量压力，`NAT-03` 对应 `NativeStream` block / merge cost，`PRF-08` / `CASE-35` 对应 deterministic key，`PRF-33` 对应 query owner 可追踪性。没有这些字段，Debugger 不能回答“哪个 System / lane 造成热点”，也不能证明新架构比 OOP 中间层或全局总线更适合优化。
+
+无头 AutoChess 验收还必须遵守 `CASE-17` 的多 World / bootstrap 口径：Profiler、Journaling、fixed-step policy、warmup / measurement / cleanup 信息要进入同构 evidence model。这样 CLI、Editor 和 Player 采样可以互相对照，而不是各自输出一套不可比较的日志。
 
 ## 数据流图
 
@@ -15,7 +23,7 @@ flowchart TD
     Core["Layer 3 Runtime Core\nfacts / counters / markers"] --> Sink["Layer 2 DiagnosticsSink\nRuntime Debugger + ReplaySink"]
     Sink --> Snapshot["RuntimeDiagnosticsSnapshot"]
     Sink --> Official["OfficialToolDiff\nEntities Journaling / Profiler category state"]
-    Sink --> Bridge["AIBridge / Unity Editor\nProfilerDriver / Profiler Window"]
+    Sink --> Bridge["External tool driver / Unity Editor\nProfilerDriver / Profiler Window"]
     Snapshot --> Headless["Layer 1 Headless Runner\nbatchmode summary"]
     Snapshot --> Editor["Layer 1 Editor Debug Window\nEditor extension"]
     Official --> Headless
@@ -69,14 +77,14 @@ sequenceDiagram
     participant Boundary as Layer 2 DiagnosticsSink
     participant Runtime as Layer 3 Runtime Core
     participant Unity as Unity Profiler / Journaling
-    participant AIBridge as AIBridge CLI
+    participant Tool as External Profiler Driver
 
     Shell->>Runtime: Tick Runtime through normal SystemGroup chain
     Runtime->>Boundary: Emit request/spec/delta/fact counters
     Runtime->>Boundary: Emit ECB / entity lifecycle / buffer pressure / cursor lag
     Boundary->>Unity: Enable/Read Entities Journaling when available
-    Shell->>AIBridge: Drive real Editor / Player profile when official profiler evidence is needed
-    AIBridge->>Unity: Open Profiler / capture ProfilerDriver data
+    Shell->>Tool: Drive real Editor / Player profile when official profiler evidence is needed
+    Tool->>Unity: Open Profiler / capture ProfilerDriver data
     Boundary-->>Shell: RuntimeDiagnosticsSnapshot + OfficialToolDiff
     Shell->>Shell: Editor window render or headless validation summary
 ```
@@ -88,7 +96,7 @@ sequenceDiagram
 3. **Layer 1 Editor Extension**：实现 Debugger Window、图表、筛选、导出按钮；窗口不得直接写 Runtime Core component / buffer。
 4. **Layer 1 Headless Runner**：复用 Layer 2 API 输出 batchmode log、Mermaid 数据流图、时序图和 CI gate；它不是 Debugger 数据源。
 5. **AutoChessDemo**：作为 Layer 1 业务验收 Demo，只消费 DiagnosticsSink，不拥有 Runtime Debugger 模块。
-6. **Validation Evidence**：Headless runner、scene runner、AIBridge profile runner 必须把 DiagnosticsSink、OfficialToolDiff、Runtime timing 和业务结果合并成同一个 evidence model；字符串 summary、Mermaid 图和日志文件只是该 model 的导出格式，不是事实源。
+6. **Validation Evidence**：Headless runner、scene runner、profile runner 必须把 DiagnosticsSink、OfficialToolDiff、Runtime timing 和业务结果合并成同一个 evidence model；字符串 summary、Mermaid 图和日志文件只是该 model 的导出格式，不是机器依据。
 
 ## 必备 counters
 
@@ -114,19 +122,19 @@ Runtime Core Debugger 是项目内证据源，但必须能与 Unity 官方工具
 
 | Unity 证据 | 项目内对应 |
 |---|---|
-| Profiler system markers | Unity Profiler / AIBridge-triggered `.data` capture 为主，`SystemTimingCounter` / group timing 只作无头兜底 |
+| Profiler system markers | Unity Profiler / external tool-triggered `.data` capture 为主，`SystemTimingCounter` / group timing 只作无头兜底 |
 | Entities Structural Changes | entity create/destroy/add/remove / ECB playback counters |
 | Entities Journaling | structural event timeline / owner system |
 | GC Alloc | `gcAllocBytesPerTick` |
 | sync point | `syncPointCount` / `GASStructuralCommitSystemGroup` playback |
 | query match | matched chunks / matched entities |
 
-Debugger 不直接替代 Unity Profiler；它负责把 GAS 语义计数与 Unity ECS 机制计数绑定起来。实机 Editor / Player 调试默认通过 AIBridge 驱动 Unity 官方 Profiler 工具链，而不是在 GAS Runtime 内重复实现 profiler UI、timeline 或采样存储。
+Debugger 不直接替代 Unity Profiler；它负责把 GAS 语义计数与 Unity ECS 机制计数绑定起来。实机 Editor / Player 调试默认通过外部 profiler driver 驱动 Unity 官方 Profiler 工具链，而不是在 GAS Runtime 内重复实现 profiler UI、timeline 或采样存储。
 
-本轮 PackageCache 官方文档交叉检查后的硬约束：
+PackageCache 官方文档交叉检查后的硬约束：
 
-1. Entities Journaling 可通过 `Unity.Entities.EntitiesJournaling` API 程序化读取，因此是当前无头链路的最小官方差分来源。
-2. Unity Profiler / Entities Profiler Modules 是官方性能证据源；batchmode 未启用 module 时只能输出 disabled reason，真实 Editor / Player 则通过 AIBridge 调用 Profiler Window / `ProfilerDriver` 保存官方 `.data` capture。
+1. Entities Journaling 可通过 `Unity.Entities.EntitiesJournaling` API 程序化读取，因此是无头验证链路的最小官方差分来源。
+2. Unity Profiler / Entities Profiler Modules 是官方性能证据源；batchmode 未启用 module 时只能输出 disabled reason，真实 Editor / Player 则通过外部 profiler driver 调用 Profiler Window / `ProfilerDriver` 保存官方 `.data` capture。
 3. Runtime Debugger 是项目自诊断，不能替代 Profiler / Entities Journaling / Burst Inspector；结论必须保留两套证据的差异。凡是官方工具能直接给出的数据，不在项目内重复造轮子。
 4. Entities Journaling 会分配自己的记录内存；Layer 2 无头 official diff 若在 batchmode 中临时开启 Journaling，结束时必须恢复状态并清理本次采样产生的官方工具持久状态，避免污染 Runtime Core leak 验证。
 
@@ -164,14 +172,14 @@ Runtime Core Debugger 必须能解释 API 选型是否健康，而不只是记�
 
 ## AutoChess Validation Evidence Model
 
-AutoChessDemo 是 Runtime Core、Debugger、Luban/SourceGenerator 和官方工具证据的交叉验收点。后续不再允许 headless runner、scene runner、Profiler pass、official diff pass 各自拼接不同字段。它们必须共享一个 `AutoChessValidationEvidence` 或等价结构，至少包含：
+AutoChessDemo 是 Runtime Core、Debugger、Luban/SourceGenerator 和官方工具证据的交叉验收点。目标态不允许 headless runner、scene runner、Profiler pass、official diff pass 各自拼接不同字段。它们必须共享一个 `AutoChessValidationEvidence` 或等价结构，至少包含：
 
 | 字段族 | 必填字段 | 目的 |
 |---|---|---|
 | battle result | completed、winner、expectedWinner、battleTicks、totalTicks、units、scale、summaryHash、factsHash | 验证业务闭环和确定性 |
 | core counters | commandCount、specCount、deltaCount、factCount、cueCount、presentationCount | 验证 GAS 语义链 |
 | timing split | coreTickMs、observationTickMs、presentationTickMs、debuggerTickMs、exportMs、bootstrapMs | 防止把 Boundary / export / Editor 成本混入 Core |
-| API health | proofOnlyApi、scaleReadyApi、reselectTrigger、globalBufferPressure、randomLookupCount、lookupUpdateCount、nativeStreamMergeMs、deterministicOrderPolicy | 证明当前承载不是盲目固化 proof API |
+| API health | proofOnlyApi、scaleReadyApi、reselectTrigger、globalBufferPressure、randomLookupCount、lookupUpdateCount、nativeStreamMergeMs、deterministicOrderPolicy | 证明 proof 承载没有被盲目固化为目标态 |
 | official evidence | journalingAvailable、journalingCaptured、profilerAvailable、profilerCaptureState、packageCachePath、packageVersion、manifestLockSkew | 与 Unity 官方工具和本地 PackageCache 对齐 |
 | world policy | worldTimePolicy、fixedStepRate、fixedStepCount、editorFrameDeltaUsed、warmupDroppedTicks、measurementTicks | 固定步和 performance measurement 口径 |
 | boundary profiles | physicsDisabledReason / physics metrics、entitiesGraphicsDisabledReason / render metrics、managedBoundaryPolicy、prefabLoadResultState | 确认无头没有删除表现/资源链路 |
@@ -189,7 +197,7 @@ Validation evidence 的生成规则：
 
 Debugger 的自动验收形态必须吸收官方 PerformanceTests 的写法：固定实体规模、warmup、measurement、allocator cleanup 和按 SampleGroup / TopN 输出，而不是单一平均值。参考 `UnityDOTS官方文档参考/主题/12-官方案例模式.md` 的 `CASE-12`。
 
-Runtime summary 需要额外输出 `casePattern` / `caseViolation` 字段，用来标记当前 hot path 是否符合官方案例模式：
+Runtime summary 需要额外输出 `casePattern` / `caseViolation` 字段，用来标记被采样 hot path 是否符合官方案例模式：
 
 | CASE | Debugger 需要证明 |
 |---|---|
@@ -203,12 +211,12 @@ Runtime summary 需要额外输出 `casePattern` / `caseViolation` 字段，用�
 
 ## 官方文档覆盖对齐
 
-Debugger 必须先对齐 `UnityDOTS官方文档参考/README.md`，再吸收 `UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md` 的 `ODF-*` 规则。Runtime summary 需要额外输出 `officialDocTopic` / `odfRule` / `unityToolEvidence` 或等价字段，用来标记当前热点是否已经具备官方文档证据闭环：
+Debugger 必须先对齐 `UnityDOTS官方文档参考/README.md`，再吸收 `UnityDOTS官方文档参考/主题/21-官方文档覆盖与流程闭环.md` 的 `ODF-*` 规则。Runtime summary 需要额外输出 `officialDocTopic` / `odfRule` / `unityToolEvidence` 或等价字段，用来标记被分析热点是否已经具备官方文档证据闭环：
 
 | ODF / 主题 | Debugger 需要证明 |
 |---|---|
-| `ODF-01` 官方文档包 | 当前任务是否读取官方文档参考体系主题入口，并引用 `UnityDOTS官方文档参考/主题/*` 中相关文件 |
-| `ODF-06` API 选型覆盖 | 当前 proof API 是否存在重新选型触发条件 |
+| `ODF-01` 官方文档包 | 该任务是否读取官方文档参考体系主题入口，并引用 `UnityDOTS官方文档参考/主题/*` 中相关文件 |
+| `ODF-06` API 选型覆盖 | proof API 是否存在重新选型触发条件 |
 | `ODF-07` 官方工具证据 | 项目 counter 是否能映射到 Systems window、Query window、Profiler、Journaling 或 Binary debugging |
 | Sync point / direct reference | 是否存在结构变化后继续读写 buffer / lookup / handle 的风险 |
 | System / job 固定开销 | system count、job count、lookup update count、schedule overhead 是否异常 |
@@ -242,105 +250,57 @@ Debugger 必须先对齐 `UnityDOTS官方文档参考/README.md`，再吸收 `Un
 | 物理输入错帧或过慢 | Unity Physics pipeline / singleton / event 文档 | 对照 physics step、query broadphase、Simulation event window、event dropped / converted count |
 | 渲染成本混入 Core tick | Entities Graphics performance / Frame Debugger / Profiler | 对照 draw command、instances per draw、BRG markers、presentation marker cost 和 render cost |
 
-## 历史 PlayMode 实机证据
+## Validation Evidence 目标模型
 
-2026-05-29 使用 AIBridge 1.4.1 驱动真实 Unity Editor PlayMode，加载当时仍带旧命名的 `Assets/AutoChessDemo/Presentation/Scenes/HeadlessAutoChessDemo.unity`，由历史 `HeadlessAutoChessDemoSceneRunner` 在 MonoBehaviour Coroutine 内控制 Unity Profiler 采集窗口并跑通 x50。该段只保留 warmup-dropped + 30 秒 Runtime-only PlayMode、official diff 和 Profiler `.data` capture 的历史证据口径，不再作为当前 AutoChessDemo 命名、目录或 runner 事实。当前事实以 `AutoChessLogDemo.unity` / `AutoChessDemoSceneRunner` / `AutoChessRuntimeRunner` 以及 `GameRoom -> Battle -> Integration/GasCore -> Battle/Ecs -> Observation/Result -> Presentation` 链路为准。
+目标态 Debugger 不沉淀某次 PlayMode 样本，而定义统一 evidence model。Headless runner、scene runner、Profiler pass、official diff pass、外部工具驱动的真实 Editor / Player 工具链都必须导出同构结构：
 
-性能 pass 关闭 Runtime Debugger 和 presentation raw fact 投影，只保留 replay / required facts；Diagnostic pass 再打开完整 Layer 2 观测链，用来输出数据流图、时序图和 Runtime Debugger counters。这是 Debugger 和 Unity 官方工具的差分边界，避免把 Layer 2 presentation / debugger 成本混入 Runtime Core 性能判断。
+| 证据区 | 必填字段 |
+|---|---|
+| Run identity | scenario code、scale profile、package version、world time policy、fixed-step count、warmup / measured tick window |
+| Business result | completed、winner、battleTicks、commands、attributeChanges、executionOutputs、cueRequests、factsHash、summaryHash |
+| Functional diagnostics | debugEvents、debugWarnings、debugErrors、blockingDebugErrors、slowTimingWarnings、proofOnlyApiWarnings |
+| Timing split | `GASTickTotal`、5 个 GAS physical group、Demo extension、BoundaryProjection、Presentation / Replay |
+| Official diff | Profiler capture state、Entities Journaling availability / cap、structural create/destroy/add/remove、enableable toggle、RW lookup / buffer access TopN |
+| Artifact metadata | profiler `.data` saved、profileEditor flag、capture frame window、binary log size、ignored output path、analysis report path |
 
-```text
-completed=True, winner=Player, scale=50, units=200,
-battleTicks=4130, totalTicks=4131, warmupDroppedTicks=3, measuredTicks=4128,
-commands=478300, finishers=244800, attributeChanges=478250,
-executionOutputs=244750, cueRequests=233500,
-debugEvents=0, debugWarnings=0, debugErrors=0, blockingDebugErrors=0,
-coreRequests=0, coreFacts=0, coreDeltas=0, coreCues=0,
-peakEventBus=0, replayLag=0, journalingRecords=524288,
-processWarmupRuns=1, totalElapsedMs=30004.994,
-factsHash=0xEBE6E5B3, summaryHash=0x94F5D7CC, avgTickMs=1.561
-```
+性能 pass 和 Diagnostic pass 必须分离：性能 pass 关闭 Runtime Debugger raw trace 和 presentation raw fact 投影，只保留 replay / required facts；Diagnostic pass 再打开完整 Layer 2 观测链，用来输出数据流图、时序图和 Runtime Debugger counters。该分离是 Debugger 和 Unity 官方工具的差分边界，避免把 Layer 2 presentation / debugger 成本混入 Runtime Core 性能判断。
 
-Timing snapshot：
+解释规则：
 
-```text
-ecsRuntimeTickOnly=true
-GASTickTotal(samples=4128, avgMs=1.548, maxMs=34.517)
-GASFramePrepareSystemGroup(samples=4128, avgMs=0.042, maxMs=0.262)
-GASCommandResolveSystemGroup(samples=4128, avgMs=0.612, maxMs=2.056)
-GASCoreSimulationSystemGroup(samples=4128, avgMs=0.747, maxMs=2.202)
-GASStructuralCommitSystemGroup(samples=4128, avgMs=0.020, maxMs=0.169)
-GASBoundaryProjectionSystemGroup(samples=4128, avgMs=0.128, maxMs=32.746)
-```
+1. `blockingDebugErrors=0` 是功能 gate；slow timing / TopN 只能进入 Warning 或性能归因，不能污染功能错误计数。
+2. x50 / x100 / x1000 代表多组独立业务战斗并行跑在同一个 ECS World，用数量模拟真实游戏规模；目标驱动必须避免 Demo 层 O(n^2) 全局搜敌污染 Runtime Core 判断。
+3. 低 tick、0-1 frame Profiler、system 外 `EntityManager` 观测污染不符合 DOTS 性能判断要求；稳定曲线必须包含 warmup-dropped + 足够 measurement window。
+4. Entities Journaling 到达记录上限时只用于 TopN 热点方向，不能把绝对值当完整总量。
+5. PlayMode / Player capture 必须使用 Runtime-only 模式；若 `profileEditor=True`，`.data` 会混入 Editor / package 样本，不能用于 Runtime Core 归因。
+6. Debugger 不扩展成项目自研 Profiler UI。Layer 2 保留无头 snapshot 和 official diff；Layer 1 工具链负责可视化、timeline、TopN、Profiler capture 和实机工具差分。
 
-Official tool diff：
+## Profile Summary 结构化分析机制
 
-```text
-journalingAvailable=True, journalingCaptured=True, journalingWorldRecords=524288,
-runtimeStructuralApprox=0, journalingStructural=0, deltaStructural=0,
-runtimeCreates=0, journalingCreates=0, deltaCreates=0,
-runtimeDestroys=0, journalingDestroys=0, deltaDestroys=0,
-journalingAddComponents=0, journalingRemoveComponents=0,
-journalingEnableComponents=80400, journalingDisableComponents=40305,
-journalingSetComponentData=0, journalingSetBuffer=0,
-journalingGetComponentDataRW=210478, journalingGetBufferRW=193105,
-profilerAvailable=True, profilerEnabled=False,
-structuralProfilerCategoryEnabled=True, memoryProfilerCategoryEnabled=True,
-profilerCaptureState=profiler disabled; Entities profiler modules collect no data
-```
-
-Unity Profiler `.data` capture：
-
-```text
-Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data
-saved=True, driverSaved=True, binaryLogBytes=44620948,
-firstFrameIndex=3616, lastFrameIndex=4127,
-profileEditor=False, profilingEnabled=False
-```
-
-解释：
-
-1. `blockingDebugErrors=0` 表示功能 gate 没有非 timing 类诊断错误；`debugErrors=0` 表示慢 timing 事件已经从错误语义中拆出。`SystemTiming` / `TickSummary` 最高只产生 Warning，用 slow timing / TopN 解释性能，不污染功能错误计数。
-2. x50 历史证据代表 50 组独立 2v2 并行跑在同一个 ECS World，用数量模拟真实游戏规模；当时的 battle driver / AI 已按 BattleGroup 缓存目标，避免 Demo O(n^2) 全局搜敌污染 Runtime Core 判断。当前文档不再使用 `AutoBattle` 作为业务域命名。
-3. 旧 7 tick 数据不符合 DOTS 性能判断要求，根因是采样过短、Profiler 只有 0-1 frame、以及 `RefreshUnits` 在 system 外用 `EntityManager.GetBuffer` 污染 `NoExecutingSystem`。当时胜负判断已改为 battle driver 在 ECS 内写 alive counters，30 秒窗口提供稳定曲线；当前 runner 必须通过统一 battle run loop 产出同构 validation evidence。
-4. AIBridge 1.4.1 当时已接入项目并通过真实 Unity Editor PlayMode 跑通：`compile unity` 成功、Error 日志 0、`Window/Analysis/Profiler` 可由 CLI 打开，历史 scene runner 通过 Runtime-only binary log 保存官方 capture 到 `Temp/AutoChessDemo-PlayMode-X50-RuntimeProfile.data`。该文件位于 ignored `Temp/`，作为本机历史证据，不纳入版本控制。
-5. 当前 official diff 的 create/destroy/add/remove 结构变化为 0；enable / disable component 是 enableable toggle，不再归入 structural change。`journalingWorldRecords=524288` 已到 Entities Journaling 记录上限，因此只用于 TopN 热点方向，不把绝对值当完整总量。
-6. PlayMode capture 必须使用 Runtime-only 模式；若 `profileEditor=True`，`.data` 会混入 Editor / package 样本并导致文件膨胀，不能用于 Runtime Core 归因。
-7. 后续 Debugger 不再扩展成自研 profiler UI。Layer 2 保留无头 snapshot 和 official diff；Layer 1 Editor Extension / AIBridge / Unity Profiler 负责可视化、timeline、TopN、Profiler capture 和实机工具差分。
-8. 当前剩余性能热点是真实 Runtime/Core 设计问题：generated catalog commit、ability command resolve、ability cleanup、attribute recalculation、stream prepare 和 replay/fact projection 仍有主线程随机访问、enableable 写入与短系统拆分成本；这些应通过 dirty attribute set、chunk-local batch、generated lookup cache 和 command fan-in 架构迭代解决，而不是增加项目自研 profiler。
-
-## Profile Summary 读取分析机制
-
-原始 PlayMode summary / official diff / Debugger 文本不再直接人工阅读。当前统一使用：
-
-```powershell
-.\Tools\Diagnostics\Analyze-AutoChessProfile.ps1 -PrintMarkdown
-```
-
-脚本输入默认是 `TestResults/AutoChess/T6-CHESS-AF-SceneRuntime/AutoChessPlayModeProfileSummary.txt`，输出 ignored 产物 `TestResults/AutoChess/Analysis/AutoChessProfileAnalysis.json` 和 `.md`。它必须完成以下结构化归因：
+原始 PlayMode summary / official diff / Debugger 文本不得作为唯一机器依据。目标态必须提供结构化分析入口，至少完成以下归因：
 
 1. 解析 performance、timing、Debugger、Diagnostic pass、official tool diff、Profiler capture 六类行。
 2. 输出 `CommandResolve / CoreSimulation / StructuralCommit / BoundaryProjection` cost split。
 3. 把 `GetComponentDataRW`、`GetBufferRW`、`EnableComponent`、`DisableComponent` 折算为每 measured tick 预算。
 4. 解析 Journaling `recordTopN / systemTopN / componentTopN`，把热点落到具体 system 与 component。
 5. 计算 Debugger drop rate、Journaling cap、ProfilerDriver frame window，避免把采样工具自身限制误判为 Runtime Core 事实。
-6. 输出 `证据 -> 推断 -> 架构失误 -> 下一步 probe`，供 spec 与后续重构直接引用。
+6. 输出 `证据 -> 推断 -> 架构失误 -> probe recommendation`，供事实目录与任务树引用。
 
-本轮脚本反推的架构失误：
+结构化分析必须能识别以下架构信号：
 
-1. **随机 lookup 仍是 Runtime Core 形状问题**：x50 为 `GetComponentDataRW=51.0/tick`、`GetBufferRW=46.8/tick`，TopN 集中在 `AbilityCatalogCommitSystem`、`AttributeRecalculateSystem`、`AbilityStateCleanupSystem`。这与 Entities 官方 `systems-systemapi.md` 对 lookup access / sync 的说明、`systems-optimizing.md` 对 lookup 更新和 system 固定开销的说明一致：当前不是缺 profiler，而是 ability commit / cleanup / attribute store 这些模块的 interface 太浅，调用者仍要理解并支付低层 ECS lookup。
-2. **Enableable 被正确用于避免 structural change，但被错误用成高频生命周期协议**：当前 create/destroy/add/remove 为 0，enableable toggle 为 `29.2/tick`。官方 `structural-changes-enableable-components.md` 明确 enableable 不产生 structural change，但也会影响访问对应 archetype 的 job / system；`components-enableable-use.md` 也要求 random-access enable/disable 避免和其他 job 竞态。当前问题不是“改回 Add/Remove”，而是减少 per-command `AbilityCommitRequestComponent` / `AbilityEndRequestComponent` flip，改为 owner-local command state 或 chunk batch。
-3. **架构优化优先级曾过度盯 structural change**：CommandResolve + CoreSimulation 占 `87.8%`，StructuralCommit 只有 `1.3%`。后续 gate 应优先看 RW lookup budget、dirty-set 大小、command fan-in 成本和 system count，而不是只看 ECB / structural count。
-4. **Attribute store 缺少 dirty owner / dirty attribute set**：`AttributeValueBuffer` 是最大 component RW 热点（`95,150` 次，`23.0/tick`）。这说明 AttributeRecalculate 仍接近“广义 owner buffer 重读写”，没有把 attribute delta 压成最小 dirty 集合。
-5. **诊断层原先偏 raw event log，不适合 x50 常态**：Debugger `events=4096`、`dropped=18262`，drop rate `81.7%`；Journaling 达到 `524,288` 上限。Layer 2 Debugger 必须默认输出聚合 counters / TopN / official diff，raw trace 只能短窗口 opt-in。
-6. **ProfilerDriver metadata 不能单独代表 30 秒全量曲线**：本轮 `firstFrameIndex=3616,lastFrameIndex=4127` 只有 512 frame window；30 秒证据以 `UnityEngine.Profiling.Profiler` binary log 文件存在和大小为主，ProfilerDriver save 只是补充。
+1. **随机 lookup 是否仍是 Runtime Core 形状问题**：RW lookup / buffer access TopN 指向 ability commit、cleanup、attribute store 时，优先怀疑 owner-local / chunk-local seam 不够深，而不是缺少 profiler。
+2. **Enableable 是否被误用成高频生命周期协议**：enable / disable 能避免 structural change，但仍可能引入 query wait、random access 和短系统成本；高频生命周期应优先 owner-local state 或 chunk batch。
+3. **优化优先级不能只盯 structural change**：当 CommandResolve / CoreSimulation 占比远高于 StructuralCommit 时，gate 应优先看 RW lookup budget、dirty-set 大小、command fan-in 成本和 system count。
+4. **Attribute store 是否缺少 dirty owner / dirty attribute set**：Attribute component / buffer 成为最大 RW 热点时，目标不是增加日志，而是把 attribute delta 压成最小 dirty 集合。
+5. **Debugger raw trace 是否超出常态预算**：raw event trace 只能短窗口 opt-in；常态输出应是聚合 counters、TopN、official diff 和 drop rate。
+6. **ProfilerDriver metadata 不能单独代表全量曲线**：长窗口证据以 Unity Profiler binary log 与结构化 summary 为主，ProfilerDriver frame window 只是补充 metadata。
 
-## AM-1 baseline 采样口径
+## Baseline 采样契约
 
 1. `runtimeCoreCounters` 输出累计 request/spec/delta/fact/cue/presentation、entityCreates、entityDestroys、ecbPlaybacks。
 2. `runtimeCoreCountersPeak` 输出 activeEffectEntities、applyRequestEntities、eventBusBufferLength、presentationCursorLag、replayCursorLag。
-3. AM-2 开始接入 EffectCommand / Spec/Delta/Fact 语义链 / AttributeDelta 权威 stream 计数；在 simple instant evaluation 迁移完成前，旧 EventBus 和 GE runtime entity 采样仍作为迁移期近似量级。
+3. EffectCommand / Spec / Delta / Fact 语义链和 AttributeDelta 权威 stream 必须有正式计数；任何 legacy EventBus 或 GE runtime entity 采样只能标注为 approximation，不得作为目标态权威量级。
 4. ECB playback baseline 可以先覆盖主要工具路径；最终验收需要能按 system / phase 定位结构变化预算。
-5. AM-5 owner-local ActiveEffectStore baseline 输出 `runtimeCoreActiveEffectStore`，字段包括 owners、slots、capacity、pendingApply、active、inhibited、pendingRemove、legacyBacked、externalizedOwners；compact / cleanup / chunk skip 在对应 store 层实现后继续扩展。
+5. owner-local ActiveEffectStore baseline 输出 `runtimeCoreActiveEffectStore`，字段包括 owners、slots、capacity、pendingApply、active、inhibited、pendingRemove、legacyBacked、externalizedOwners；compact / cleanup / chunk skip 必须在对应 store 层扩展。
 
 ## 禁止方向
 
@@ -360,8 +320,8 @@ profileEditor=False, profilingEnabled=False
 3. system timing 报告必须标注是否污染 `ecsRuntimeTickOnly`。
 4. Runtime Core Debugger counters 能与 Unity Profiler / Entities Journaling 的结构变化证据对照。
 5. Debugger summary 必须输出 `SEL-*` API 选型健康指标：global buffer pressure、NativeStream merge、per-chunk skip、structural query batch、singleton dependency warning。
-6. Debugger summary 必须能标记 proof-only API，并输出重新选型触发条件；否则 AM2/AM3 的临时承载容易被误判为最终目标态。
-7. Debugger summary 必须输出 `ODF-*` 官方文档覆盖检查结果，并能说明哪些官方工具或文档机制可验证当前热点。
+6. Debugger summary 必须能标记 proof-only API，并输出重新选型触发条件；否则兼容承载容易被误判为最终目标态。
+7. Debugger summary 必须输出 `ODF-*` 官方文档覆盖检查结果，并能说明哪些官方工具或文档机制可验证被分析热点。
 8. 涉及 Physics / Graphics 的验证必须输出 `PHY-*` / `GFX-*` 相关 counters；未启用时必须输出 disabled reason，避免把无头缺省误判为链路缺失。
 
 ## 历史方案定位

@@ -5,6 +5,7 @@ namespace GAS.Runtime
     public static class ASCEntityFactory
     {
         private const int AttributeCapacity = 32;
+        private const int PendingAttributeModifierCapacity = 8;
         private const int ActiveModifierCapacity = 32;
         private const int AscCommandCapacity = 8;
         private const int AbilityCommandCapacity = 8;
@@ -16,11 +17,23 @@ namespace GAS.Runtime
         private const int ActiveEffectSlotInitialCapacity = ActiveEffectStore.InlineSlotCapacity;
         private const int ActiveEffectSetByCallerInitialCapacity = ActiveEffectStore.InlineSetByCallerCapacity;
         private const int ActiveEffectCleanupRecordInitialCapacity = ActiveEffectStore.InlineCleanupRecordCapacity;
+        private const int ActiveEffectMutationInitialCapacity = 4;
         private const int PresentationEventCapacity = 16;
 
         public static Entity Create(EntityManager entityManager)
         {
             var asc = entityManager.CreateEntity(GASRuntimeEntityArchetypes.ASC(entityManager));
+            entityManager.SetName(asc, "ASC");
+            InitializeCoreComponents(entityManager, asc);
+            return asc;
+        }
+
+        internal static Entity Create(EntityManager entityManager, EntityArchetype archetype)
+        {
+            if (!archetype.Valid)
+                return Entity.Null;
+
+            var asc = entityManager.CreateEntity(archetype);
             entityManager.SetName(asc, "ASC");
             InitializeCoreComponents(entityManager, asc);
             return asc;
@@ -42,8 +55,10 @@ namespace GAS.Runtime
             entityManager.SetComponentEnabled<AttributeDirtyComponent>(asc, false);
             entityManager.SetComponentEnabled<AttributeChangeEventPendingComponent>(asc, false);
             entityManager.SetComponentEnabled<AttributeActiveModifierPresentComponent>(asc, false);
+            entityManager.SetComponentEnabled<PendingAttributeModifierComponent>(asc, false);
             entityManager.SetComponentData(asc, ActiveEffectStore.CreateDefault());
             entityManager.GetBuffer<AttributeValueBuffer>(asc).EnsureCapacity(AttributeCapacity);
+            entityManager.GetBuffer<AttributeModifierBuffer>(asc).EnsureCapacity(PendingAttributeModifierCapacity);
             entityManager.GetBuffer<AttributeActiveModifierBuffer>(asc).EnsureCapacity(ActiveModifierCapacity);
             entityManager.GetBuffer<ASCCommandBuffer>(asc).EnsureCapacity(AscCommandCapacity);
             entityManager.GetBuffer<AbilityCommandBuffer>(asc).EnsureCapacity(AbilityCommandCapacity);
@@ -56,6 +71,7 @@ namespace GAS.Runtime
             entityManager.GetBuffer<ActiveGameplayEffectBuffer>(asc).EnsureCapacity(ActiveEffectSlotInitialCapacity);
             entityManager.GetBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(asc).EnsureCapacity(ActiveEffectSetByCallerInitialCapacity);
             entityManager.GetBuffer<ActiveGameplayEffectCleanupRecordBuffer>(asc).EnsureCapacity(ActiveEffectCleanupRecordInitialCapacity);
+            entityManager.GetBuffer<ActiveEffectMutationBuffer>(asc).EnsureCapacity(ActiveEffectMutationInitialCapacity);
             entityManager.GetBuffer<PresentationEventBuffer>(asc).EnsureCapacity(PresentationEventCapacity);
         }
 
@@ -67,8 +83,10 @@ namespace GAS.Runtime
             commandBuffer.SetComponentEnabled<AttributeDirtyComponent>(asc, false);
             commandBuffer.SetComponentEnabled<AttributeChangeEventPendingComponent>(asc, false);
             commandBuffer.SetComponentEnabled<AttributeActiveModifierPresentComponent>(asc, false);
+            commandBuffer.SetComponentEnabled<PendingAttributeModifierComponent>(asc, false);
             commandBuffer.SetComponent(asc, ActiveEffectStore.CreateDefault());
             commandBuffer.SetBuffer<AttributeValueBuffer>(asc).EnsureCapacity(AttributeCapacity);
+            commandBuffer.SetBuffer<AttributeModifierBuffer>(asc).EnsureCapacity(PendingAttributeModifierCapacity);
             commandBuffer.SetBuffer<AttributeActiveModifierBuffer>(asc).EnsureCapacity(ActiveModifierCapacity);
             commandBuffer.SetBuffer<ASCCommandBuffer>(asc).EnsureCapacity(AscCommandCapacity);
             commandBuffer.SetBuffer<AbilityCommandBuffer>(asc).EnsureCapacity(AbilityCommandCapacity);
@@ -81,6 +99,7 @@ namespace GAS.Runtime
             commandBuffer.SetBuffer<ActiveGameplayEffectBuffer>(asc).EnsureCapacity(ActiveEffectSlotInitialCapacity);
             commandBuffer.SetBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(asc).EnsureCapacity(ActiveEffectSetByCallerInitialCapacity);
             commandBuffer.SetBuffer<ActiveGameplayEffectCleanupRecordBuffer>(asc).EnsureCapacity(ActiveEffectCleanupRecordInitialCapacity);
+            commandBuffer.SetBuffer<ActiveEffectMutationBuffer>(asc).EnsureCapacity(ActiveEffectMutationInitialCapacity);
             commandBuffer.SetBuffer<PresentationEventBuffer>(asc).EnsureCapacity(PresentationEventCapacity);
         }
 
@@ -95,9 +114,11 @@ namespace GAS.Runtime
                 && entityManager.HasComponent<AttributeDirtyComponent>(asc)
                 && entityManager.HasComponent<AttributeChangeEventPendingComponent>(asc)
                 && entityManager.HasComponent<AttributeActiveModifierPresentComponent>(asc)
+                && entityManager.HasComponent<PendingAttributeModifierComponent>(asc)
                 && entityManager.HasComponent<TagMaskComponent>(asc)
                 && entityManager.HasComponent<TagFixedMaskComponent>(asc)
                 && entityManager.HasBuffer<AttributeValueBuffer>(asc)
+                && entityManager.HasBuffer<AttributeModifierBuffer>(asc)
                 && entityManager.HasBuffer<AttributeActiveModifierBuffer>(asc)
                 && entityManager.HasBuffer<ASCCommandBuffer>(asc)
                 && entityManager.HasBuffer<AbilityCommandBuffer>(asc)
@@ -111,6 +132,7 @@ namespace GAS.Runtime
                 && entityManager.HasBuffer<ActiveGameplayEffectBuffer>(asc)
                 && entityManager.HasBuffer<ActiveGameplayEffectSetByCallerValueBuffer>(asc)
                 && entityManager.HasBuffer<ActiveGameplayEffectCleanupRecordBuffer>(asc)
+                && entityManager.HasBuffer<ActiveEffectMutationBuffer>(asc)
                 && entityManager.HasBuffer<PresentationEventBuffer>(asc);
         }
 

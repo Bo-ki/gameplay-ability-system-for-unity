@@ -4,6 +4,8 @@ namespace GAS.Runtime
 {
     public static class GASRuntimeEntityArchetypes
     {
+        private const int AscCoreComponentTypeCount = 27;
+
         private static bool _hasCachedWorld;
         private static EntityManager _cachedEntityManager;
 
@@ -33,35 +35,18 @@ namespace GAS.Runtime
         {
             ResetIfWorldChanged(em);
             if (!_asc.Valid)
-            {
-                _asc = em.CreateArchetype(
-                    ComponentType.ReadWrite<ASCIdentityComponent>(),
-                    ComponentType.ReadWrite<ASCCommandPendingComponent>(),
-                    ComponentType.ReadWrite<GERemoveCommandPendingComponent>(),
-                    ComponentType.ReadWrite<ASCDestroyingComponent>(),
-                    ComponentType.ReadWrite<TagMaskComponent>(),
-                    ComponentType.ReadWrite<TagFixedMaskComponent>(),
-                    ComponentType.ReadWrite<AttributeDirtyComponent>(),
-                    ComponentType.ReadWrite<AttributeChangeEventPendingComponent>(),
-                    ComponentType.ReadWrite<AttributeActiveModifierPresentComponent>(),
-                    ComponentType.ReadWrite<AttributeValueBuffer>(),
-                    ComponentType.ReadWrite<AttributeActiveModifierBuffer>(),
-                    ComponentType.ReadWrite<ASCCommandBuffer>(),
-                    ComponentType.ReadWrite<AbilityCommandBuffer>(),
-                    ComponentType.ReadWrite<ASCDestroyCommandBuffer>(),
-                    ComponentType.ReadWrite<GERemoveCommandBuffer>(),
-                    ComponentType.ReadWrite<AbilitySlotBuffer>(),
-                    ComponentType.ReadWrite<TagFixedSourceBuffer>(),
-                    ComponentType.ReadWrite<TagTemporarySourceBuffer>(),
-                    ComponentType.ReadWrite<LegacyGameplayEffectEntityBuffer>(),
-                    ComponentType.ReadWrite<ASCActiveEffectsComponent>(),
-                    ComponentType.ReadWrite<ActiveGameplayEffectBuffer>(),
-                    ComponentType.ReadWrite<ActiveGameplayEffectSetByCallerValueBuffer>(),
-                    ComponentType.ReadWrite<ActiveGameplayEffectCleanupRecordBuffer>(),
-                    ComponentType.ReadWrite<PresentationEventBuffer>());
-            }
+                _asc = em.CreateArchetype(CreateASCComponentTypes());
 
             return _asc;
+        }
+
+        public static EntityArchetype ASC(EntityManager em, params ComponentType[] extensionComponents)
+        {
+            ResetIfWorldChanged(em);
+            if (extensionComponents == null || extensionComponents.Length == 0)
+                return ASC(em);
+
+            return em.CreateArchetype(CreateASCComponentTypes(extensionComponents));
         }
 
         public static EntityArchetype Ability(EntityManager em)
@@ -341,6 +326,8 @@ namespace GAS.Runtime
             {
                 _cueRuntime = em.CreateArchetype(
                     ComponentType.ReadWrite<CueManagedInstanceComponent>(),
+                    ComponentType.ReadWrite<CuePresentationRequestComponent>(),
+                    ComponentType.ReadWrite<CueRuntimeActiveTag>(),
                     ComponentType.ReadWrite<CuePlayableTag>(),
                     ComponentType.ReadWrite<CuePlayingTag>(),
                     ComponentType.ReadWrite<CueKillRequestTag>(),
@@ -410,11 +397,27 @@ namespace GAS.Runtime
 
         public static void InitializeCueEntity(EntityManager em, Entity cue)
         {
+            em.SetComponentEnabled<CueRuntimeActiveTag>(cue, true);
             em.SetComponentEnabled<CuePlayableTag>(cue, false);
             em.SetComponentEnabled<CuePlayingTag>(cue, false);
             em.SetComponentEnabled<CueKillRequestTag>(cue, false);
             em.SetComponentEnabled<CueImmunityTagsComponent>(cue, false);
             em.SetComponentEnabled<CueRequiredTagsComponent>(cue, false);
+            em.SetComponentData(cue, default(CuePresentationRequestComponent));
+        }
+
+        public static void DeactivateCueEntity(EntityManager em, Entity cue)
+        {
+            if (cue == Entity.Null || !em.Exists(cue))
+                return;
+
+            em.SetComponentEnabled<CueRuntimeActiveTag>(cue, false);
+            em.SetComponentEnabled<CuePlayableTag>(cue, false);
+            em.SetComponentEnabled<CuePlayingTag>(cue, false);
+            em.SetComponentEnabled<CueKillRequestTag>(cue, false);
+            em.SetComponentEnabled<CueImmunityTagsComponent>(cue, false);
+            em.SetComponentEnabled<CueRequiredTagsComponent>(cue, false);
+            em.SetComponentData(cue, default(CuePresentationRequestComponent));
         }
 
         private static void ResetGameplayEffectRuntimeState(EntityManager em, Entity entity)
@@ -457,6 +460,48 @@ namespace GAS.Runtime
             _gameplayEffectRuntime = default;
             _gameplayEffectPrototype = default;
             _cueRuntime = default;
+        }
+
+        private static ComponentType[] CreateASCComponentTypes(params ComponentType[] extensionComponents)
+        {
+            var extensionCount = extensionComponents?.Length ?? 0;
+            var componentTypes = new ComponentType[AscCoreComponentTypeCount + extensionCount];
+            WriteASCComponentTypes(componentTypes);
+            for (var i = 0; i < extensionCount; i++)
+                componentTypes[AscCoreComponentTypeCount + i] = extensionComponents[i];
+            return componentTypes;
+        }
+
+        private static void WriteASCComponentTypes(ComponentType[] componentTypes)
+        {
+            var index = 0;
+            componentTypes[index++] = ComponentType.ReadWrite<ASCIdentityComponent>();
+            componentTypes[index++] = ComponentType.ReadWrite<ASCCommandPendingComponent>();
+            componentTypes[index++] = ComponentType.ReadWrite<GERemoveCommandPendingComponent>();
+            componentTypes[index++] = ComponentType.ReadWrite<ASCDestroyingComponent>();
+            componentTypes[index++] = ComponentType.ReadWrite<TagMaskComponent>();
+            componentTypes[index++] = ComponentType.ReadWrite<TagFixedMaskComponent>();
+            componentTypes[index++] = ComponentType.ReadWrite<AttributeDirtyComponent>();
+            componentTypes[index++] = ComponentType.ReadWrite<AttributeChangeEventPendingComponent>();
+            componentTypes[index++] = ComponentType.ReadWrite<AttributeActiveModifierPresentComponent>();
+            componentTypes[index++] = ComponentType.ReadWrite<PendingAttributeModifierComponent>();
+            componentTypes[index++] = ComponentType.ReadWrite<AttributeValueBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<AttributeModifierBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<AttributeActiveModifierBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<ASCCommandBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<AbilityCommandBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<ASCDestroyCommandBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<GERemoveCommandBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<AbilitySlotBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<TagFixedSourceBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<TagTemporarySourceBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<LegacyGameplayEffectEntityBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<ASCActiveEffectsComponent>();
+            componentTypes[index++] = ComponentType.ReadWrite<ActiveGameplayEffectBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<ActiveGameplayEffectSetByCallerValueBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<ActiveGameplayEffectCleanupRecordBuffer>();
+            componentTypes[index++] = ComponentType.ReadWrite<ActiveEffectMutationBuffer>();
+            componentTypes[index] = ComponentType.ReadWrite<PresentationEventBuffer>();
         }
     }
 }

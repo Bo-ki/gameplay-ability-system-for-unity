@@ -9,7 +9,6 @@ namespace GAS.Runtime
     /// </summary>
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASBoundaryProjectionSystemGroup), OrderFirst = true)]
-    [UpdateBefore(typeof(CueRequestBridgeSystem))]
     public partial struct PresentationOutboxProjectionSystem : ISystem
     {
         public void OnCreate(ref SystemState state)
@@ -198,7 +197,7 @@ namespace GAS.Runtime
                 return true;
             }
 
-            if (!IsPresentationMarker(fact.EventType)
+            if (!GameplayFactClassifier.IsPresentationMarker(fact.EventType)
                 && fact.Domain != EGameplayFactDomain.Unknown)
             {
                 presentationEvent = new PresentationEventBuffer
@@ -226,16 +225,6 @@ namespace GAS.Runtime
         private static int ResolveGameplayEventCode(in GameplayEventBuffer fact)
         {
             return fact.EventCode != 0 ? fact.EventCode : fact.GameplayEffectCode;
-        }
-
-        private static bool IsPresentationMarker(EGameplayEventType type)
-        {
-            return type == EGameplayEventType.AutoChessPresentationUiMarker
-                   || type == EGameplayEventType.AutoChessPresentationVfxMarker
-                   || type == EGameplayEventType.AutoChessPresentationSfxMarker
-                   || type == EGameplayEventType.AutoChessPresentationFloatingTextMarker
-                   || type == EGameplayEventType.AutoChessPresentationCueMarker
-                   || type == EGameplayEventType.AutoChessPresentationSettlementMarker;
         }
 
         private static void AppendToRelevantAsc(

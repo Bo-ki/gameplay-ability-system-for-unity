@@ -10,6 +10,7 @@ namespace GAS.Runtime
         GeneratedCarrier = 1 << 0,
         BakerInput = 1 << 1,
         StaticDefinitionBlob = 1 << 2,
+        PresentationCueKey = 1 << 3,
     }
 
     [Flags]
@@ -232,16 +233,18 @@ namespace GAS.Runtime
                 var deferredBoundaries =
                     GASGeneratedDefinitionBakingBoundary.RuntimeLifecycle
                     | GASGeneratedDefinitionBakingBoundary.GameplayEffectCacheLifecycleOwner;
-                if (gameplayEffect.HasManagedCueTriggers)
-                    deferredBoundaries |= GASGeneratedDefinitionBakingBoundary.ManagedPresentation;
+                var capabilities =
+                    GASGeneratedDefinitionBakingCapability.GeneratedCarrier
+                    | GASGeneratedDefinitionBakingCapability.BakerInput
+                    | GASGeneratedDefinitionBakingCapability.StaticDefinitionBlob;
+                if (gameplayEffect.CueTriggerCount > 0)
+                    capabilities |= GASGeneratedDefinitionBakingCapability.PresentationCueKey;
 
                 planDeferredBoundaries |= deferredBoundaries;
                 entries.Add(new GASGeneratedDefinitionBakingEntry(
                     GASDefinitionKind.GameplayEffect,
                     gameplayEffect.GameplayEffectCode,
-                    GASGeneratedDefinitionBakingCapability.GeneratedCarrier
-                    | GASGeneratedDefinitionBakingCapability.BakerInput
-                    | GASGeneratedDefinitionBakingCapability.StaticDefinitionBlob,
+                    capabilities,
                     deferredBoundaries,
                     gameplayEffect.PeriodEffectCount
                     + gameplayEffect.OverflowEffectCount
@@ -306,16 +309,15 @@ namespace GAS.Runtime
             for (var i = 0; i < gameplayCues.Count; i++)
             {
                 var cue = gameplayCues[i];
-                var deferredBoundaries = cue.UsesManagedPresentationFactory
-                    ? GASGeneratedDefinitionBakingBoundary.ManagedPresentation
-                    : GASGeneratedDefinitionBakingBoundary.None;
+                var deferredBoundaries = GASGeneratedDefinitionBakingBoundary.None;
 
                 planDeferredBoundaries |= deferredBoundaries;
                 entries.Add(new GASGeneratedDefinitionBakingEntry(
                     GASDefinitionKind.GameplayCue,
                     cue.CueCode,
                     GASGeneratedDefinitionBakingCapability.GeneratedCarrier
-                    | GASGeneratedDefinitionBakingCapability.BakerInput,
+                    | GASGeneratedDefinitionBakingCapability.BakerInput
+                    | GASGeneratedDefinitionBakingCapability.PresentationCueKey,
                     deferredBoundaries,
                     0));
             }

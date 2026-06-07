@@ -16,7 +16,6 @@ namespace GAS.Runtime
         AttributeDirtyRecalculate = 9,
         TagMaskDirtySync = 10,
         ObservationProjectionBoundary = 11,
-        ManagedCuePresentationBoundary = 12,
     }
 
     [Flags]
@@ -642,26 +641,6 @@ namespace GAS.Runtime
                 GASRuntimeLayoutComponentSlot.GameplayEventBus,
                 GASRuntimeLayoutComponentSlot.PresentationOutbox,
                 GASRuntimeLayoutComponentSlot.DebugReplayLog);
-
-            AddIfLayoutEntryExists(
-                entries,
-                layoutPlan,
-                GASRuntimeStructuralChangeEntryId.ManagedCuePresentationBoundary,
-                GASRuntimeQueryLayoutEntryId.ManagedCuePresentation,
-                GASRuntimeStructuralOperation.DestroyEntity
-                | GASRuntimeStructuralOperation.SetComponentEnabled
-                | GASRuntimeStructuralOperation.ManagedComponentWrite,
-                GASRuntimeStructuralMigrationStep.ManagedBoundaryOnly
-                | GASRuntimeStructuralMigrationStep.KeepMainThread,
-                GASRuntimeStructuralEligibility.RequiresManagedBoundary
-                | GASRuntimeStructuralEligibility.KeepMainThread
-                | GASRuntimeStructuralEligibility.NoSimulationStructuralMigration,
-                GASRuntimeStructuralBoundary.ManagedPresentation
-                | GASRuntimeStructuralBoundary.ObservationProjectionOnly,
-                GASRuntimeDirtyPipelineSignal.None,
-                GASRuntimeEnableableScope.ManagedPresentationState,
-                GASRuntimeLayoutComponentSlot.ManagedCueComponent,
-                GASRuntimeLayoutComponentSlot.CueEnableableState);
 
             return new GASRuntimeStructuralChangePlan(entries);
         }

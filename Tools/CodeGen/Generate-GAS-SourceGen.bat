@@ -36,5 +36,5 @@ if not "%LUBAN_EXIT%"=="0" (
     exit /b %LUBAN_EXIT%
 )
 
-dotnet run --project "%PROJECT_ROOT%\Tools\GasCodeGenCli\GasCodeGenCli.csproj" -- --projectRoot "%PROJECT_ROOT%" --mode sourcegen
+dotnet run --project "%PROJECT_ROOT%\Tools\GasCodeGenCli\GasCodeGenCli.csproj" -- --projectRoot "%PROJECT_ROOT%" --mode sourcegen-all
 exit /b %ERRORLEVEL%

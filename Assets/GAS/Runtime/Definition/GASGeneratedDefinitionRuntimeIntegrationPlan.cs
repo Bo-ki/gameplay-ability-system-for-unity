@@ -468,7 +468,7 @@ namespace GAS.Runtime
                 case GASDefinitionKind.GameplayTag:
                     return GASRuntimeQueryLayoutEntryId.TagMaskRuntime;
                 case GASDefinitionKind.GameplayCue:
-                    return GASRuntimeQueryLayoutEntryId.ManagedCuePresentation;
+                    return GASRuntimeQueryLayoutEntryId.ObservationReplayAndOutbox;
                 default:
                     return GASRuntimeQueryLayoutEntryId.None;
             }

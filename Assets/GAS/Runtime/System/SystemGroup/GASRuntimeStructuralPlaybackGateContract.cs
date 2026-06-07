@@ -377,8 +377,6 @@ namespace GAS.Runtime
                     EGasRuntimeCoreFramePhase.DeltaApply,
                 GASRuntimeStructuralChangeEntryId.ObservationProjectionBoundary =>
                     EGasRuntimeCoreFramePhase.ObservationProjection,
-                GASRuntimeStructuralChangeEntryId.ManagedCuePresentationBoundary =>
-                    EGasRuntimeCoreFramePhase.ObservationProjection,
                 GASRuntimeStructuralChangeEntryId.ExecutionCalculationOutputMutation =>
                     EGasRuntimeCoreFramePhase.SpecEvaluation,
                 GASRuntimeStructuralChangeEntryId.GameplayEffectApplyRequestConsumption =>

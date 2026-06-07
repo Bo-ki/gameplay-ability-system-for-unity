@@ -14,8 +14,8 @@ namespace GAS.Runtime
         private const int DebugReplayEventCapacity = 8192;
         private const int PresentationOutboxOwnerCapacity = 512;
 
-        public static World ExWorld { get; private set; }
-        public static EntityManager EntityManager { get; private set; }
+        internal static World ExWorld { get; private set; }
+        internal static EntityManager EntityManager { get; private set; }
 
         public static TurnController TurnController { get; private set; }
 
@@ -25,11 +25,11 @@ namespace GAS.Runtime
 
         private static bool _attachedToPlayerLoop;
 
-        public static Entity EntityGlobalTimer { get; private set; }
+        internal static Entity EntityGlobalTimer { get; private set; }
 
-        public static Entity EntityEffectCommandSpecStream { get; private set; }
+        internal static Entity EntityEffectCommandSpecStream { get; private set; }
 
-        public static Entity EntityActiveEffectGlobalIndex { get; private set; }
+        internal static Entity EntityActiveEffectGlobalIndex { get; private set; }
 
         public static GlobalTimer GetGlobalTimer()
         {
@@ -57,6 +57,7 @@ namespace GAS.Runtime
             CreateSystems(attachToPlayerLoop);
             EntityGlobalTimer = ExWorld.EntityManager.CreateEntity(GASRuntimeEntityArchetypes.GlobalTimer(EntityManager));
             ExWorld.EntityManager.SetName(EntityGlobalTimer, "GAS_GlobalTimer");
+            GASRuntimeFrameContext.RegisterKnownGlobalTimer(EntityManager, EntityGlobalTimer);
             EntityEffectCommandSpecStream = EffectCommandSpecStream.EnsureSingleton(EntityManager);
             EntityActiveEffectGlobalIndex = ActiveEffectStore.EnsureGlobalIndexStore(EntityManager);
             CreateEventBusSingleton();
@@ -84,6 +85,11 @@ namespace GAS.Runtime
 
             if (ExWorld != null && ExWorld.IsCreated)
             {
+                GASRuntimeFrameContext.ResetKnownGlobalTimer(EntityManager);
+                GasRuntimeDebugger.ResetKnownSingleton(EntityManager);
+                EffectCommandSpecStream.ResetKnownSingleton(EntityManager);
+                GameplayEffectConfigRegistry.ReloadDefinitionCaches(EntityManager);
+                PresentationEntityBindingRegistry.ClearGameObjectBinding();
                 if (_attachedToPlayerLoop)
                     ScriptBehaviourUpdateOrder.RemoveWorldFromCurrentPlayerLoop(ExWorld);
                 ExWorld.Dispose();
@@ -123,11 +129,11 @@ namespace GAS.Runtime
             }
         }
 
-        public static Entity EntityEventBus { get; private set; }
+        internal static Entity EntityEventBus { get; private set; }
 
-        public static Entity EntityEventLogSink { get; private set; }
+        internal static Entity EntityEventLogSink { get; private set; }
 
-        public static Entity EntityRuntimeDebugger { get; private set; }
+        internal static Entity EntityRuntimeDebugger { get; private set; }
 
         private static void CreateEventBusSingleton()
         {

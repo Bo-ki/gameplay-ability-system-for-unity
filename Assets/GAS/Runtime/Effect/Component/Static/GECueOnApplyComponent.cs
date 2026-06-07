@@ -1,23 +1,16 @@
-using Unity.Collections;
 using Unity.Entities;
 
 namespace GAS.Runtime
 {
     public struct GECueOnApplyComponent : IComponentData, IEnableableComponent
     {
-        public NativeArray<Entity> cues;
     }
 
     public sealed class ConfCueOnApply : ConfCueBase
     {
         public override void LoadToGameplayEffectEntity(EntityManager entityManager, Entity ge)
         {
-            var entities = CreateCueEntityArray(entityManager, ge);
-            entityManager.SetComponentData(ge, new GECueOnApplyComponent
-            {
-                cues = entities
-            });
-            entityManager.SetComponentEnabled<GECueOnApplyComponent>(ge, true);
+            MarkLegacyCueComponent<GECueOnApplyComponent>(entityManager, ge);
         }
     }
 

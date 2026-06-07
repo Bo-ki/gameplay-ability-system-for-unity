@@ -1,6 +1,6 @@
 # ISSUE-010 代码执行范式未切换到 DOTS
 
-> 最近复核：2026-06-06 | 状态：Active | 严重度：P1
+> 最近复核：2026-06-07 | 状态：Active | 严重度：P1
 
 ## 当前结论
 
@@ -10,7 +10,7 @@
 
 - Runtime + generated runtime 当前有 33 个 `ISystem`。
 - Runtime 当前未检出 `SystemBase` 主链类型；旧 `GASManagerInputSystem` 已删除。
-- `SystemAPI.Query<...>` 使用多行正则复核后，在 `Assets/GAS` 当前只命中 Cue start/tick/end/destroy managed boundary；ASC command resolve、generated ability commit、generated active remove、ability cleanup、attribute recalc fallback、AutoChess command drive 等旧主线程 foreach 均已退场。
+- `SystemAPI.Query<...>` / `SystemAPI.Query(...)` 在 `Assets/GAS/Runtime` 与 generated runtime 当前 0 命中；Cue managed lifecycle 当前是 stored query + `ToEntityArray` 的 Boundary managed path。ASC command resolve、generated ability commit、generated active remove、ability cleanup、attribute recalc fallback、AutoChess command drive 等旧主线程 foreach 均已退场。
 - `state.Dependency.Complete()` 当前 `Assets/GAS/**/*.cs` 扫描为 0；`ASCDestroyFinalizeSystem`、ExecutionCalculation、generated active effect pre-tick 的同步等待已退场。
 - `CalculateChunkCount()` 已从 Core stream/job 前置计数中退场，相关 NativeStream for-each count 改用 `CalculateChunkCountWithoutFiltering()`，避免 enableable/filter 同步并匹配 `IJobChunk` 的 unfiltered chunk index。
 - `GEEffectCommandSpecStreamFramePrepareSystem` 和 `GameplayFactProjectionSystem` 已从主线程 `EntityManager.GetBuffer` 路径迁到 scheduled `IJob`；`GameplayFactProjectionSystem` 只写 typed fact，Attribute/Cue/Tag 边界投影由 BoundaryProjection 内的 `GameplayFactBoundaryProjectionSystem` 承担。旧 `GameplayFactEventBridgeSystem` 与 `GEInstantEffectCueRequestProjectionSystem` 已删除。
@@ -25,7 +25,7 @@
 - cross-entity ability lifecycle marker 写入已收口：ASC command、attribute threshold、generated active effect granted-ability cleanup 均写入 `AbilityLifecycleRequestBuffer`，由 `AbilityLifecycleRequestSystem` 在 ability chunk 内统一应用 cancel/end/destroy-on-cleanup marker。
 - cross-entity attribute owner marker 写入已收口：generated active effect 与 execution output modifier 均写入 `AttributeOwnerMarkerRequestBuffer`，由 `AttributeOwnerMarkerRequestSystem` 在 ASC chunk 内统一应用 dirty / active-modifier-present marker。
 - execution output applied marker 已收口：`GEExecutionCalculationOutputModifierSystem` 用 effect-owned `IJobChunk` + chunk `EnabledMask` 写 `GEExecutionCalculationOutputModifierAppliedComponent`，不再 random-access toggle arbitrary effect entity。
-- `ToEntityArray()` 当前主要在 Debugger observation 和 AutoChess catalog 初始化。
+- `ToEntityArray()` 当前精确命中 5 处：Debugger observation 3 处、Cue managed boundary 1 处、`GASGlobalTimerSystem` current-frame singleton fallback 1 处；`ActiveEffectStore` global index fallback 当前通过 `CreateEntityQuery + CalculateEntityCount + GetSingletonEntity` 实现，不再是 `ToEntityArray` 命中。AutoChess catalog 初始化旧 `ToEntityArray` 事实已过期。
 
 ## 仍成立风险
 

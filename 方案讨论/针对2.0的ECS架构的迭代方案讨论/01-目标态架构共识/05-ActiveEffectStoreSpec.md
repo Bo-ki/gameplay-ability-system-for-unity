@@ -25,6 +25,15 @@ stateDiagram-v2
 3. Granted tag / ability 必须有明确 owner 和 cleanup path。
 4. StackCount 影响 magnitude 时，必须通过 spec/active mutation 同步。
 
+## 官方依据与设计论证
+
+| 目标态选择 | 官方规则依据 | 为什么更优秀 | 为什么有必要 |
+|---|---|---|---|
+| Active effect 默认先进入 ASC owner-local slot，而不是每个 effect 默认实体化 | `BUF-01`、`PRF-10`、`QRY-04`、`SC-01` | owner-local buffer / slot 让 duration、stack、period tick 可按 ASC 分组处理，减少跨 entity random lookup | 大量 buff/debuff 若默认独立 entity，会增加 query 数、archetype 数和 cleanup 结构变化 |
+| Inhibited / PendingRemove / PeriodDue 等轻量状态默认 enum / bit flags | `FSM-02`、`FSM-05`、`PRF-03`、`EN-01` | 状态切换不触发 archetype 迁移，多个轻量状态可在同一 job 中分支处理 | 高频状态如果通过 tag component add/remove 表达，会造成结构变化热点和 archetype 爆炸 |
+| Period / Overflow 只派生 EffectCommand，Attribute 写入仍归 Attribute Reduce/Apply | `SC-01`、`CASE-12`、`NAT-03`、`PRF-26` | store lane 只负责生命周期推进，数值修改继续走 target-grouped reduce/apply，可保持写集合清晰 | Period effect 若直接写 Attribute，会绕开 modifier merge、dirty mask 和 Debugger 归因 |
+| Granted tag / ability cleanup 进入 Structural Commit 或 CleanupStore | `ECB-03`、`SC-03`、`PRF-04`、`SYS-05` | grant/remove/destroy 的结构变化集中 playback，Profiler/Journaling 能定位来源 | owner 死亡、effect remove 和 ability revoke 需要 deterministic cleanup；散落在 tick job 中会形成隐式 sync point |
+
 ## Unity Entities 存储校准
 
 ActiveEffectStore 的目标不是“把每个 active effect 都实体化”，而是用 Unity Entities 机制表达跨帧状态：
@@ -78,7 +87,7 @@ ActiveEffectStore 不再讨论“buffer 还是 entity”二选一，而是拆成
 
 ## ActiveEffectStore API 选型矩阵
 
-ActiveEffectStore 不能预设为“每个 active effect 一个 entity”或“全部塞进 ASC buffer”。AM5 每个小闭环前都必须按状态类型选型：
+ActiveEffectStore 不能预设为“每个 active effect 一个 entity”或“全部塞进 ASC buffer”。任一 ActiveEffect 小闭环前都必须按状态类型选型：
 
 | 候选承载 | 适用 | 风险 | 验收指标 |
 |---|---|---|---|
@@ -97,38 +106,38 @@ ActiveEffectStore 不能预设为“每个 active effect 一个 entity”或“�
 **适用场景 —— ASC Entity 销毁时的级联清理：**
 - 当 ASC Entity 被销毁时，其所有 Ability Entity 也应当被销毁
 - 使用 `LinkedEntityGroup` 后，`GASStructuralCommitSystemGroup` 中通过 ECB / bulk destroy 销毁 `ascEntity` 时可自动级联销毁所有 Ability Entity
-- 替代当前需要 `SAscDestroyRequest` System 手动查找并销毁的 O(N_abilities_global) 操作
+- 替代全局扫描并手动查找子 Ability Entity 的 O(N_abilities_global) 清理路径
 
 **不适用场景：**
 - 需要按特定顺序逐 Ability Entity 执行清理逻辑（如先 revoke 后 destroy）
 - `PRF-31`：Child Buffer 迭代顺序不保证确定，不应依赖 sibling index 做排序
 
-**当前状态**：Spec 已在 "不进入 Core hot path 决策" 中提及 `LinkedEntityGroup`。目标态建议在 ASC Entity 创建时将 Ability Entity 加入 `LinkedEntityGroup`，销毁时利用级联机制减少手动清理代码。此选项应在 `GASStructuralCommitSystemGroup` 中实现，不影响 hot path 性能。
+目标态建议在 ASC Entity 创建时将 Ability Entity 加入 `LinkedEntityGroup`，销毁时利用级联机制减少手动清理代码。此选项应在 `GASStructuralCommitSystemGroup` 中实现，不影响 hot path 性能。
 
-AM5 验收必须能证明：普通 tick、period due、inhibit 切换不触发 archetype churn；grant/remove/cleanup 进入 `GASStructuralCommitSystemGroup`；Debugger 能解释 slot pressure、optional enableable state、cleanup 和 chunk skip。
+ActiveEffectStore 验收必须能证明：普通 tick、period due、inhibit 切换不触发 archetype churn；grant/remove/cleanup 进入 `GASStructuralCommitSystemGroup`；Debugger 能解释 slot pressure、optional enableable state、cleanup 和 chunk skip。
 
-## AM5 第一落点约束
+## OwnerLocalStore Baseline 约束
 
-当前允许的第一落点是 `OwnerLocalStore`：ASC owner 持有 `ASCActiveEffectsComponent` 和 `ActiveGameplayEffectBuffer`，用 slot 镜像 duration active effect 的跨帧状态。该落点是 migration proof，不是完整目标态终局。
+目标态默认 baseline 是 `OwnerLocalStore`：ASC owner 持有 `ASCActiveEffectsComponent` 和 `ActiveGameplayEffectBuffer`，用 slot 承载 duration active effect 的跨帧状态。它是 baseline，不是唯一终局；当 slot pressure、跨 owner query 或 chunk skip 证据触发时，必须重新评估 `GlobalIndexedStore`、Cleanup Component 或 ChunkSkipIndex。
 
 约束：
 
 1. Store 创建只发生在 ASC factory / bootstrap 等低频结构阶段；helper 在 hot path 发现缺少 store 时必须返回失败，不允许隐式 add component / add buffer。
 2. Slot 可以记录 `Active / Inhibited / PendingRemove` 等 enum state、duration、remaining、period cursor、stack count、source / target / context 和 legacy entity 引用。
-3. `LegacyEntityBacked` flag 表示该 slot 仍由旧 runtime GE entity 生命周期驱动；它不是 active effect entity lifecycle 已迁移完成的证明。
+3. slot 可以保留外部 lifecycle reference 字段用于 proof 或互操作，但该字段不得成为目标态 active effect lifecycle 的权威。
 4. Slot buffer 不能把逻辑上限直接等同为 chunk 内联容量；heavy slot element 应使用小 `InternalBufferCapacity`，逻辑上限通过 store helper / validation gate 控制。
-5. `BGameplayEffect`、runtime GE entity、granted tag / ability cleanup path 在第一落点仍可保留；period due / overflow simple instant 派生命令已进入 EffectCommand proof 主链，后续应继续迁移复杂 active child GE、granted cleanup 和 store-driven lifecycle。
-6. Debugger 必须输出 slot pressure、state distribution、legacy-backed count 和 DynamicBuffer externalized owner count，避免把 slot mirror 误判为 scale-ready store；compact count、cleanup retained count 和 chunk skip count 随后续 store lifecycle / cleanup / chunk index 引入后补齐。
+5. period due / overflow simple instant 派生命令必须进入 EffectCommand 主链；复杂 child GE 需要明确是否仍属于 active store lifecycle 或 structural request。
+6. Debugger 必须输出 slot pressure、state distribution、externalized owner count、compact count、cleanup retained count 和 chunk skip count，避免把 slot mirror 误判为 scale-ready store。
 
-## AM5 Period / Overflow 派生输出落点
+## Period / Overflow 派生输出约束
 
-当前 period / overflow 的 simple instant child GE 已作为 ActiveEffectStore 的派生输出 proof：
+period / overflow 的 simple instant child GE 必须作为 ActiveEffectStore 的派生输出进入 EffectCommand 主链：
 
-1. period due 时，旧 duration runtime GE 仍负责到期判断，但 simple instant child GE 不再默认创建 request/runtime child entity，而是写入 `GEEffectCommandBuffer(Source=Period)`。
-2. stack overflow 派生 simple instant child GE 同样写入 `GEEffectCommandBuffer(Source=Overflow)`；复杂 child GE 保持旧 request fallback。
-3. 派生命令复制 child GE runtime buffer 上的 SetByCaller values，保持 command/spec/delta/fact 的 magnitude 输入连续性。
-4. `GEPeriodStateComponent.StartTime` 与 owner-local `ActiveGameplayEffectBuffer.LastPeriodFrame` 必须同步刷新；store cursor 是后续 store-driven lifecycle 和 Debugger 证据的一部分。
-5. 该落点仍是 `OwnerLocalStore + singleton command stream` proof，不是完整 scale-ready store；granted cleanup、slot compact、chunk skip、复杂 child GE 和真实 parallel fan-in 仍是后续 AM5 / AM3 缺口。
+1. period due 时，simple instant child GE 不默认创建 request/runtime child entity，而是写入 `EffectCommand(Source=Period)`。
+2. stack overflow 派生 simple instant child GE 同样写入 `EffectCommand(Source=Overflow)`；复杂 child GE 必须明确 fallback 条件和重选型触发。
+3. 派生命令复制 child GE 的 SetByCaller values，保持 command/spec/delta/fact 的 magnitude 输入连续性。
+4. `GEPeriodStateComponent.StartTime` 与 owner-local `ActiveGameplayEffectBuffer.LastPeriodFrame` 必须同步刷新；store cursor 是 store-driven lifecycle 和 Debugger 证据的一部分。
+5. 若派生命令仍落在 singleton command stream，validation evidence 必须标记 proof-only、规模上限、重选型触发条件和移除任务。
 
 ## 禁止方向
 

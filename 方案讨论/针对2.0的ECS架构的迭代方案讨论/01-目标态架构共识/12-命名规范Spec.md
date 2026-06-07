@@ -4,6 +4,12 @@
 
 建立 EX-GAS 2.0 的职责命名规范，避免类名、文件名、任务名继续使用”Facade / Adapter / Helper / Manager / EventBus / Scenario”等模糊词承载多重职责。命名必须让 Agent 在领取任务时直接判断对象所属层级、GAS 概念归属、DOTS 承载机制和读写方向。
 
+## 官方依据与设计论证
+
+命名规范不是审美规则，而是 DOTS owner / lifecycle / write-set 的可审查入口。`SYS-01` 要求 gameplay 权威在 ECS System / Job 数据流，`SYS-02` 要求 SystemGroup 是 phase owner，`QRY-02` 要求 query contract 明确，`SC-01` / `ECB-03` 要求 structural mutation 与 playback owner 明确。因此类型名必须显式表达层级、GAS 概念、DOTS 承载和读写方向，避免 `Manager`、`Helper`、`Adapter`、`EventBus` 这类名称隐藏真实 owner。
+
+后缀约束直接对应官方 API 风险：`BUF-01` 要求 Buffer 有容量策略，`NAT-03` 要求 `NativeStream` / NativeContainer fan-in 有 owner 和 merge policy，`PRF-07` 要求避免无必要 system 拆分，`FSM-05` 支持多个 boolean 状态合并为 bit field / enum。命名如果不能区分 `Component`、`Buffer`、`Record`、`Tag`、`ChunkComponent`、`System`、`SystemGroup`、`Sink`、`Bridge`，任务拆分时就无法提前发现职责越界。
+
 ## 核心原则
 
 1. **GAS 概念作前缀，DOTS 机制作后缀**。名称从两端标注：前缀告诉读者”这是什么 GAS 概念”，后缀告诉读者”用什么 DOTS 机制承载”。
@@ -51,21 +57,21 @@
 
 ### IComponentData（`[GAS前缀][职责]Component`）
 
-| 目标命名 | 旧命名 | GAS 概念 | 挂载 Entity | 职责 |
+| 目标命名 | 非目标态命名样例 | GAS 概念 | 挂载 Entity | 职责 |
 |---|---|---|---|---|
 | `ASCIdentityComponent` | `CAscOwner` | ASC | ASC Entity | 标记”此 Entity 是 GAS 权威中枢” |
 | `CombatAttributeCurrentSetComponent` / `CombatAttributeBaseSetComponent`（属性集家族） | `CAttribute` / `HealthAttribute` 等 | Attribute | ASC Entity | 默认按热路径和变更频率生成 AttributeSet component family；不再默认每种属性一个 component type |
 | `AttributeDirtyMaskComponent` | （新增） | Attribute | ASC Entity | 标记本帧哪些 AttributeCode 发生变化，用于 fact/projection 精确过滤 |
 | `TagMaskComponent` | `CTagMask` | Tag | ASC Entity | 运行时 granted tag 的 dense bitmask |
 | `ASCActiveEffectsComponent` | `CActiveEffectStore` | ASC | ASC Entity | active effect store 的版本标记和统计 |
-| `AbilityStateComponent` | `CAbilityRuntimeState` | Ability | Ability Entity | ability code、当前状态、激活帧 |
+| `AbilityStateComponent` | `CAbilityRuntimeState` | Ability | Ability Entity | ability code、运行状态、激活帧 |
 | `AbilityActivationRequestComponent` | `AbilityCommandRequest` | Ability | Request Entity | Boundary 输入意图：source、ability、显式目标、input sequence、target mode |
 | `AbilityCommandComponent` | （新增） | Ability | Request Entity | Ingest 后的归一化激活命令：primary GE、level、target params、status |
 | `GEContextComponent` | （新增） | EffectContext | Request/Spec | GE 施加时的完整上下文（Source/Instigator/AbilityRef/OptionalObject） |
 | `GASDefinitionCatalogComponent` | （新增） | Definition | DefinitionCatalogSingleton | 只读 Definition Catalog Blob 入口；world/bootstrap 后不可写 |
 | `FrameArenaStateComponent` | `CFrameArenaState` | GAS | FrameArenaSingleton | frame index、allocator budget、lookup refresh counters；禁止承载 query registry |
 | `FrameArenaOwnerComponent` | `CFrameArenaOwner` | GAS | FrameArenaSingleton | 标记此 Entity 是 Frame Prepare owner |
-| `GEStreamOwnerComponent` | `CEffectCommandStreamOwner` | GE | `GEStreamOwnerSingleton`（迁移期） | proof-only stream 元数据（version/sequence）；scale-ready 不作为默认 owner |
+| `GEStreamOwnerComponent` | `CEffectCommandStreamOwner` | GE | `GEStreamOwnerSingleton`（非目标态 proof） | proof-only stream 元数据（version/sequence）；scale-ready 不作为默认 owner |
 | `EffectFanInScratchComponent` | （新增） | GAS | System-associated / Scratch Owner（可选） | fan-in scratch 的 owner 与预算标记；不得作为 query registry |
 
 **Attribute 命名规则（PackageCache 原文交叉审查后更新）：**
@@ -77,15 +83,15 @@
 
 ### IBufferElementData（`[GAS前缀][职责]Buffer`）
 
-| 目标命名 | 旧命名 | GAS 概念 | 帧内/跨帧 | 职责 |
+| 目标命名 | 非目标态命名样例 | GAS 概念 | 帧内/跨帧 | 职责 |
 |---|---|---|---|---|
-| `GEEffectCommandBuffer` | `BEffectCommand` | GE | 帧内 | 本帧施加意图；目标态是 compact owner-local range 或迁移期 proof buffer，不代表全局总线 |
+| `GEEffectCommandBuffer` | `BEffectCommand` | GE | 帧内 | 本帧施加意图；目标态是 compact owner-local range 或 proof-only buffer，不代表全局总线 |
 | `GESetByCallerValueBuffer` | `BEffectCommandSetByCallerValue` | GE | 帧内 | SetByCaller magnitude range；必须随 command/spec range 传递 |
-| `GEEffectSpecBuffer` | `BInstantEffectSpec` | GE | 帧内 | 迁移期 instant spec buffer；目标态可由 `NativeStream` / NativeList record 承载 |
+| `GEEffectSpecBuffer` | `BInstantEffectSpec` | GE | 帧内 | 非目标态 instant spec buffer；目标态可由 `NativeStream` / NativeList record 承载 |
 | `AttributeModifierBuffer` | `BAttributeDelta` | Attribute | 帧内 | 已解析的属性修改器结果；目标态按 target grouped range apply |
 | `ActiveGameplayEffectBuffer` | `BActiveEffectSlot` | GE | **跨帧** | 目标 ASC 上的 active effect（等效 `FActiveGameplayEffect`） |
 | `ActiveEffectMutationBuffer` | `BActiveEffectMutation` | GE | 帧内 | duration/stack/period 状态变更 |
-| `GameplayEventBuffer` | `BTypedSimulationFact` | GameplayFact | 帧内 | Core fact / Boundary observation 的迁移期承载 |
+| `GameplayEventBuffer` | `BTypedSimulationFact` | GameplayFact | 帧内 | Core fact / Boundary observation 的非目标态承载 |
 | `PresentationEventBuffer` | `BPresentationEvent` | GAS | 帧内 | Boundary 表现层事件（UI/Cue/VFX/SFX 消费） |
 | `TargetDataBuffer` | `BTargetDataResult` | Target | 帧内 | Request/Command Entity 上的目标解析结果列表 |
 
@@ -99,7 +105,7 @@
 
 ### IEnableableComponent（`[GAS前缀][职责]Tag`）
 
-| 目标命名 | 旧命名 | GAS 概念 | Toggle 频率 | 职责 |
+| 目标命名 | 非目标态命名样例 | GAS 概念 | Toggle 频率 | 职责 |
 |---|---|---|---|---|
 | `AbilityExecutableTag`（可选） | `CAbilityActive` | Ability | 仅 profiler 证明大量不可执行 ability 需要 skip 时 | ability 可执行 query skip cache；grant/revoke 默认不使用 enableable |
 | `PeriodDueTag`（可选） | `CPeriodDue` | GE | 仅 profiler 证明大量 idle 可跳过时 | period tick chunk/entity skip cache；默认用 slot flag |
@@ -112,27 +118,27 @@
 
 ### IChunkComponent
 
-| 目标命名 | 旧命名 | 职责 |
+| 目标命名 | 非目标态命名样例 | 职责 |
 |---|---|---|
 | `AllIdleChunkComponent` | `ChunkAllIdle` | chunk 内所有 ASC 的所有 effect slot 都是 idle |
 | `NoActiveEffectsChunkComponent` | `ChunkNoActiveEffects` | chunk 内所有 ASC 都没有 active effect |
 
 ### ISystem（`[GAS前缀][职责]System`）
 
-| 目标命名 | 旧命名 | Physical Group / Lane |
+| 目标命名 | 非目标态命名样例 | Physical Group / Lane |
 |---|---|---|
 | `GASFrameArenaSetupSystem` | `SFrameArenaSetup` | FramePrepare / FramePrepare |
 | `AbilityCommandIngestSystem` | —（新增） | CommandResolve / BoundaryCommandIngest |
 | `AbilityTargetResolveSystem` | —（新增） | CommandResolve / TargetResolve |
 | `GASEffectFanInSystem` | —（新增） | CoreSimulation / EffectFanIn |
-| `GEEffectSpecBuildSystem` | `SInstantEffectSpecBuild` | CoreSimulation / EffectFanIn（迁移期可独立 system，不独立 group） |
+| `GEEffectSpecBuildSystem` | `SInstantEffectSpecBuild` | CoreSimulation / EffectFanIn（proof-only 兼容时可独立 system，不独立 group） |
 | `GASActiveEffectPreTickSystem`（或 `GASEffectFanInSystem` 内 producer job） | `SEffectTick`（period/expire seed 部分） | CoreSimulation / StateEvaluate.PreTick |
 | `GASActiveEffectPostApplySystem` | `SEffectTick`（slot mutation 部分） | CoreSimulation / StateEvaluate.PostApply |
 | `AbilityStateEvaluateSystem` | `SAbilityTick` | CoreSimulation / StateEvaluate |
 | `ChunkComponentMaintainSystem` | `SChunkComponentMaintain` | CoreSimulation / StateEvaluate |
-| `GASAttributeSetReduceApplySystem` | `SAttributeDeltaApply` / 旧 Health-only apply sample | CoreSimulation / AttributeReduceApply |
+| `GASAttributeSetReduceApplySystem` | `SAttributeDeltaApply` / Health-only apply sample（非目标态） | CoreSimulation / AttributeReduceApply |
 | `GameplayReactionSystem` | —（新增） | CoreSimulation / GameplayFact |
-| `GameplayFactProjectionSystem` | `STypedSimulationFactProjection` / `GameplayEventProjectionSystem` | CoreSimulation / GameplayFact（迁移期命名收敛） |
+| `GameplayFactProjectionSystem` | `STypedSimulationFactProjection` / `GameplayEventProjectionSystem` | CoreSimulation / GameplayFact（proof-only 命名兼容） |
 | `GASAbilityDestroyCommitSystem` | —（新增） | StructuralCommit / StructuralCommit |
 | `PresentationOutboxSystem` | `SPresentationOutboxProjection` | BoundaryProjection / BoundaryProjection |
 | `ReplayLogSystem` | `SDebugReplayLogProjection` | BoundaryProjection / BoundaryProjection |
@@ -142,7 +148,7 @@
 
 SystemGroup 命名统一使用 `GAS` 大写前缀，但只表达 DOTS 物理执行域，不表达每个业务 kernel。`SYS-03` / `PRF-07` 要求避免把每个职责都拆成独立 group。
 
-| 目标命名 | 旧命名 |
+| 目标命名 | 非目标态命名样例 |
 |---|---|
 | `GASFramePrepareSystemGroup` | `GasRuntimeFramePrepareSystemGroup` |
 | `GASCommandResolveSystemGroup` | `GasCommandIngestSystemGroup` / `GASTargetResolveSystemGroup`（合并） |
@@ -152,7 +158,7 @@ SystemGroup 命名统一使用 `GAS` 大写前缀，但只表达 DOTS 物理执�
 
 ### BlobAsset Definition（`[GAS前缀]DefinitionBlob`）
 
-| 目标命名 | 旧命名 | 职责 |
+| 目标命名 | 非目标态命名样例 | 职责 |
 |---|---|---|
 | `GASDefinitionCatalogBlob` | （新增） | Definition Catalog 根 Blob；聚合 Ability / GE / Tag / Attribute 等只读定义、排序 code、schema/content hash |
 | `GameplayEffectDefinitionBlob` | `GameplayEffectDefinition` | GE 静态定义（Duration/Period/Stack/Modifier/Tag/Cue 配置） |
@@ -161,7 +167,7 @@ SystemGroup 命名统一使用 `GAS` 大写前缀，但只表达 DOTS 物理执�
 
 ### Singleton Entity 命名
 
-| 目标命名 | 旧命名 | 理由 |
+| 目标命名 | 非目标态命名样例 | 理由 |
 |---|---|---|
 | `FrameArenaSingleton` | `FrameArenaSingleton`（不变） | 全局唯一，跨帧持久 |
 | `DefinitionCatalogSingleton` | （新增） | 每个 World / battle config set 一个，只持有 `GASDefinitionCatalogComponent`；不是 registry manager |
@@ -172,8 +178,8 @@ SystemGroup 命名统一使用 `GAS` 大写前缀，但只表达 DOTS 物理执�
 | 层级 | 推荐命名 | 禁止误用 |
 |---|---|---|
 | Application Shell Layer | `*Shell`、`*Presenter`、`*Controller`、`*Runner`、`*SceneInstaller`、`*ResourceBinding` | 不使用 `*System` 表示 OOP 业务对象，不暴露 `EntityManager` |
-| Runtime Boundary Layer | `*CommandGateway`、`*ReadModel`、`*OutboxBridge`、`*DiagnosticsSink`、`*ReplaySink`、`*BoundarySystem` | 不用泛化 `*Adapter` 承载业务计算、缓存、日志和事件分发 |
-| GAS Runtime Core Layer | 见上：`[GAS前缀][职责][DOTS后缀]` | 不使用 `Manager`、`Facade`、泛化 `Helper`、真实 UI/VFX/SFX 资源名；不使用旧 `C*`/`B*`/`S*` 单字母前缀 |
+| Runtime Boundary Layer | `*CommandPort`、`*ReadModel`、`*OutboxBridge`、`*DiagnosticsSink`、`*ReplaySink`、`*BoundarySystem` | 不用泛化 `*Adapter` 承载业务计算、缓存、日志和事件分发 |
+| GAS Runtime Core Layer | 见上：`[GAS前缀][职责][DOTS后缀]` | 不使用 `Manager`、`Facade`、泛化 `Helper`、真实 UI/VFX/SFX 资源名；不使用 `C*`/`B*`/`S*` 单字母前缀 |
 | Definition & Generation Layer | `*Definition`、`*Registry`、`*Lookup`、`*BakePlan`、`*ValidationReport`、`*GeneratedIds` | 不使用 `Runtime` 命名承载生成产物，不生成 `*LifecycleSystem` |
 
 ## Definition & Generation Layer 生成产物命名
@@ -209,23 +215,23 @@ Luban / SourceGenerator 生成的 Runtime-visible 类型也必须遵守职责命
 3. `GasGeneratedDefinitionIndex`：框架缩写大小写不一致，新生成类型统一使用 `GAS`。
 4. `BlobDefinitionLookupBuilder`：机制前置且缺少 `GASGenerated` 框架归属；应改为 `GASGeneratedDefinitionLookupBuilder`。
 
-## 旧 C/B/S 前缀的迁移
+## 非目标态 C/B/S 前缀拒绝规则
 
-旧惯例 `C*` = IComponentData、`B*` = IBufferElementData、`S*` = ISystem 自本 Spec v2 起废弃。迁移规则：
+`C*` = IComponentData、`B*` = IBufferElementData、`S*` = ISystem 是非目标态缩写样例。目标态命名拒绝规则：
 
 - `C*` → `[GAS前缀][职责]Component`（IComponentData）或 `[GAS前缀][职责]Tag`（IEnableableComponent）
 - `B*` → `[GAS前缀][职责]Buffer`（IBufferElementData）
 - `S*` → `[GAS前缀][职责]System`（ISystem）
-- 旧命名的 `C`/`B`/`S` 前缀不再出现在新代码中
+- 非目标态 `C`/`B`/`S` 前缀不再出现在新代码中
 
-已有代码中的旧命名在重构窗口内逐步迁移，Spec 文档即刻起使用新命名。
+目标态文档只使用新命名；`C` / `B` / `S` 前缀只作为禁止样本，不作为目标命名。
 
 ## 后缀职责字典
 
 | 后缀 | 允许职责 | 禁止职责 | 示例 |
 |---|---|---|---|
-| `Facade` | 面向应用壳层的窄 API 聚合，只做语义便捷入口 | 不持有权威状态，不做 gameplay 计算，不混合 read/write/cache/log | `AbilitySystemFacade` 后续应收缩为壳层 API 或拆成 `GASCommandGateway` + `GASReadModel` |
-| `Gateway` | 跨层写入入口，把外部意图转换为 command/request | 不读事实、不分发表现、不缓存业务状态 | `GASCommandGateway` |
+| `Facade` | 面向应用壳层的窄 API 聚合，只做语义便捷入口 | 不持有权威状态，不做 gameplay 计算，不混合 read/write/cache/log | 若出现 `AbilitySystemFacade`，必须收缩为壳层 API 或拆成 `GASCommandPort` + `GASReadModel` |
+| `Port` | 跨层写入入口，把外部意图转换为 command/request；公开方法用 `Request*` 表达异步命令写入 | 不读事实、不分发表现、不缓存业务状态，不用 `Dispose` / `Init` / `SetLevel` 伪装同步对象操作 | `GASCommandPort` |
 | `ReadModel` | 面向外层的只读镜像 | 不写 ECS，不返回可写 buffer，不暴露 `EntityManager` | `GASUnitReadModel` |
 | `Bridge` | 跨技术边界执行副作用，如 ECS facts 到 UI/Cue/VFX/SFX marker | 不计算 gameplay 结果 | `GameplayCueOutboxBridge` |
 | `Sink` | 只写外部导出目标，如日志、Replay、诊断文件 | 不作为 Runtime Core 输入 | `RuntimeDiagnosticsSink` |
@@ -283,7 +289,7 @@ Luban / SourceGenerator 生成的 Runtime-visible 类型也必须遵守职责命
 | 规则 | 说明 |
 |---|---|
 | 后缀 `Singleton` | 全局唯一的 entity 使用 `*Singleton` 后缀：`FrameArenaSingleton` |
-| 后缀 `Owner` | 仅迁移期 proof-only 的 frame-local stream singleton 使用 `*Owner` 后缀；新 scale-ready 设计优先 owner system + NativeContainer |
+| 后缀 `Owner` | 仅 proof-only 的 frame-local stream singleton 使用 `*Owner` 后缀；新 scale-ready 设计优先 owner system + NativeContainer |
 | Definition Catalog | `DefinitionCatalogSingleton` 只持有只读 `GASDefinitionCatalogComponent`，不是 service locator；Runtime system 通过 `RequireForUpdate` 和只读 `GetSingleton` 获取 BlobRef |
 | 区分标准 | `Singleton` = 跨帧持久且全局唯一；`Owner` = 持有可变 buffer 的帧级单例，不得升级为 manager/service locator |
 
@@ -293,7 +299,7 @@ Luban / SourceGenerator 生成的 Runtime-visible 类型也必须遵守职责命
 
 默认禁止。只有管理 Unity 资源生命周期、Editor window 生命周期或进程级服务生命周期时才允许使用。Runtime Core 内不得出现 `Manager` 作为业务权威对象。
 
-当前 `GASManager` 更接近 `GASRuntimeWorldHost` / `GASRuntimeBootstrap` / `GASRuntimeServiceLocator` 的混合职责；后续需要按职责拆分，而不是继续扩大 `Manager`。
+`GASManager` 这类名称容易混合 world host、runtime bootstrap、service locator 和 entity manager facade；目标态应按职责拆成 `GASRuntimeWorldHost`、`GASRuntimeBootstrap`、`GASRuntimeServiceLocator` 等明确 owner，而不是继续扩大 `Manager`。
 
 ### `Helper`
 
@@ -301,16 +307,16 @@ Luban / SourceGenerator 生成的 Runtime-visible 类型也必须遵守职责命
 
 示例重命名方向：
 
-| 当前命名 | 问题 | 目标命名方向 |
+| 风险命名 | 问题 | 目标命名方向 |
 |---|---|---|
 | `EventBusHelper` | 同时表达 metadata、sequence、append、batch capability，`Helper` 掩盖写入方向 | `GameplayFactStreamWriter` / `GameplayFactAppendService` |
 | `AttributeHelper` | 包含属性查找、重算、modifier 应用，容易进入 Core 热路径 | `AttributeValueResolver` + `AttributeDeltaProjector` |
 | `CueHelper` | 真实职责是 Cue 类型注册、实例创建和 presentation bridge 执行细节 | `GameplayCueFactory` + `GameplayCueOutboxBridge` |
-| `EntityHelper` | 当前主要是 GameObject presentation binding 和调试取名 | `PresentationEntityBindingRegistry` |
+| `EntityHelper` | 名称无法说明是 GameObject presentation binding、调试取名还是 ECS entity 操作 | `PresentationEntityBindingRegistry` |
 
 ### `Adapter`
 
-只允许表示协议或数据形态转换。不得同时负责 command 写入、结果分发、read model、debug log 和业务计算。历史方案中的 `Thin Adapter` 在本路线中统一收敛为 `Runtime Boundary Layer`，具体类型优先使用 `Gateway / ReadModel / Bridge / Sink`。
+只允许表示协议或数据形态转换。不得同时负责 command 写入、结果分发、read model、debug log 和业务计算。`Thin Adapter` 这类泛化概念在目标态统一收敛为 `Runtime Boundary Layer`，具体类型优先使用 `Gateway / ReadModel / Bridge / Sink`。
 
 ### `EventBus`
 
@@ -334,25 +340,25 @@ Luban / SourceGenerator 生成的 Runtime-visible 类型也必须遵守职责命
 4. Editor Debugger Window 属于 **Layer 1 Editor Extension**，命名应带 `EditorWindow` / `EditorView` / `EditorPresenter` 等后缀，并只读消费 Layer 2 snapshot / export API。
 5. 无头 runner 属于 Layer 1 业务验收入口，允许输出 Debugger summary、耗时、数据流图和时序图；它不是 Debugger 数据源。
 
-## 当前命名问题样本
+## 禁止命名样本
 
-1. `AbilitySystemFacade` 位于 `Assets/GAS/Runtime/AbilitySystem/AbilitySystemFacade.cs:7-27`，同时暴露 Entity、GameObject 和 Observation，后续应拆成应用壳层 API、CommandGateway 和 ReadModel。
-2. `EventBusHelper` 位于 `Assets/GAS/Runtime/Event/EventBusHelper.cs:7-45`，实际职责是 fact append / sequence / batch capability，不应继续以 Helper 掩盖边界写入语义。
-3. `GASManager` 位于 `Assets/GAS/Runtime/General/GASManager.cs:6-36`，承担 world host、entity manager、global singleton、bootstrap 多种职责，命名过宽。
-4. 旧 `HeadlessAutoChessScenario` 已从 `Assets/GAS/Runtime/Demo/AutoChess` 迁出；当前 `Assets/AutoChessDemo` 类型必须保持 `GAS.AutoChessDemo` 命名空间，并按真实业务 owner 拆分为 `AutoChessGameRoomDefinition`、`AutoChessBattleManager`、`AutoChessBattleSession`、`AutoChessRuntimeRunner`、`AutoChessRuntimeSystemBootstrap`、`AutoChessBattleCommandDriveSystem`、`AutoChessBattleDefinitionCatalogBuilder`、`AutoChessDemoSceneRunner` 等可定位职责。禁止把新链路重新命名为 `AutoBattle*` 或 `HeadlessAutoChess*`。
+1. `AbilitySystemFacade` 这类名称同时暴露 Entity、GameObject 和 Observation 时，必须拆成应用壳层 API、CommandPort 和 ReadModel。
+2. `EventBusHelper` 这类名称若实际职责是 fact append / sequence / batch capability，必须改成表达写入方向的 stream writer / append service。
+3. `GASManager` 这类名称若承担 world host、entity manager、global singleton、bootstrap 多种职责，必须拆成明确 owner。
+4. `HeadlessAutoChess*`、`AutoBattle*` 不作为目标命名；`Assets/AutoChessDemo` 类型必须保持 `GAS.AutoChessDemo` 命名空间，并按 GameRoom definition、battle flow、runtime host、catalog session、command drive system、validation runner、presentation bridge 等真实业务 owner 命名，不列项目类清单作为目标态完成证明。
 5. 历史方案中 `ShadowMark` “实为 Debuff 却放 Buff 命名空间”是配置命名与职责不符的典型反例：`../历史方案参考/方案14.md:1251-1258`。
 
 ## 任务命名规范
 
-任务名采用“主线名 - 支线名 - 任务名”的中文职责拼接，不使用抽象代号作为主名称。代号只允许作为附加追踪字段。
+任务标题采用“领域 - 边界 - 目标”的中文职责拼接，不使用抽象代号作为主名称。代号只允许作为外部任务系统的追踪字段，不进入目标态架构概念。
 
 示例：
 
-| 旧风格 | 新风格 |
+| 禁止风格 | 目标风格 |
 |---|---|
-| `T6-REAL-B-DemoMigration` | `Runtime验收Demo - AutoChessDemo架构迁移 - Runtime目录迁出` |
-| `T4-Debugger-AM1` | `Observation与Debugger - RuntimeCore诊断基线 - SystemTiming与BufferPressure采样` |
-| `T1-RuntimeCore-AM0` | `GAS Runtime Core - 结构变化边界 - 禁止跨结构变化持有DynamicBuffer` |
+| 抽象任务号作为标题 | `Runtime 验收 Demo - AutoChessDemo 边界 - Demo 不进入 Runtime Core` |
+| 路线代号作为标题 | `Observation 与 Debugger - Runtime Core 诊断基线 - SystemTiming 与 BufferPressure 采样` |
+| 能力阶段编号作为标题 | `GAS Runtime Core - 结构变化边界 - 禁止跨结构变化持有 DynamicBuffer` |
 
 ## 验收方式
 

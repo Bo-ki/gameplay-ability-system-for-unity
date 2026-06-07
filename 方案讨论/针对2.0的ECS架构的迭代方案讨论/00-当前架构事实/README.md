@@ -1,23 +1,41 @@
 # 00 当前架构事实
 
-> 上次更新：2026-06-06 | 审查范围：`Assets/GAS/Runtime` + `Assets/GAS/Generated/CodeGen/Runtime` + `Assets/AutoChessDemo`
+> 上次更新：2026-06-07 | 审查范围：`Assets/GAS/Runtime` + `Assets/GAS/Generated/CodeGen/Runtime` + `Assets/AutoChessDemo`
 
 本目录维护当前版本的架构事实、核心问题诊断和合规审查。当前事实以现实代码为第一性参考；旧路线文档、旧目标态文档和旧 issue 结论只能作为历史背景。
+
+## 00 / 01 目录边界
+
+`00-当前架构事实/` 是当前事实 owner，回答“现在真实代码是什么、证据在哪里、按官方 DOTS 规则判定有什么问题”。这里可以记录缺陷、`MigrationProofOnly` 实现证据、违约证据、历史计划与现实偏差，也可以引用目标态 Spec 作为判定标准；但不能把理想架构方案写成新的框架设计 Spec。
+
+`01-目标态架构共识/` 是目标态 Spec owner，回答“理想的 GAS 架构应该如何设计、为什么更优秀、为什么必须这样做、如何验收”。那里不记录当前生成了哪些文件、哪些 gate 已通过、当前 P0/P1 命中、下一轮计划或复审流水。
+
+归位规则：
+
+1. 当前代码事实、缺陷诊断、generated artifact 清单、`MigrationProofOnly` 实现证据、validation report 命中数写入本目录。
+2. 目标态分层、数据流、禁止方向、API 选型和验收门槛写入 `../01-目标态架构共识/`。
+3. 可执行任务、下一轮目标、拆分切片写入 `../02-主线任务树/` 或当前进度目录；本目录只保留这些任务背后的事实约束。
+4. 文件标题或正文出现 `计划`、`复审`、`当前状态`、`事实`、`落点`、`进度` 时，默认归属本目录或任务/进度目录，不归属 `01`。
+5. 已从 `01` 清理出的 CodeGen / Luban-SourceGenerator 复审内容，当前事实归入 [CodeGen链路复审事实](CodeGen链路复审事实.md) 和 [SourceGenerator链路复审事实](SourceGenerator链路复审事实.md)；纯目标态设计归入 `../01-目标态架构共识/14-DefinitionCodeGen目标链路Spec.md` 与 `../01-目标态架构共识/15-SourceGenerator职责边界Spec.md`。
 
 ## 文件索引
 
 | 文件 | 内容 |
 |---|---|
 | [Runtime主链事实](Runtime主链事实.md) | 当前 5 段 GAS 主链、generated runtime 接入、command/spec/delta/fact 链 |
+| [架构重划分审查事实](架构重划分审查事实.md) | 本轮纯 ECS Core / OOP Shell / Thin Adapter / Debugger / Luban SourceGenerator 重划分对应的当前代码事实、证据矩阵和 DOTS 判定 |
 | [当前架构图](当前架构图.md) | 当前实际链路图、EffectCommand 链路、DOTS 对照热图 |
 | [模块索引](模块索引.md) | Runtime / Generated Runtime / AutoChessDemo / 配置生成当前索引 |
 | [AutoChessDemo事实](AutoChessDemo事实.md) | 当前业务 demo 分层、GAS bridge、demo ECS 扩展和风险 |
 | [Definition配置事实](Definition配置事实.md) | runtime catalog blob、managed table、generated glue、sourcegen/batchmode 驱动、baking contract 当前状态 |
-| [下一轮GAS架构瘦身计划](下一轮GAS架构瘦身计划.md) | 本轮瘦身执行记录与下一步破坏性清理计划：旧事实源已删除，后续聚焦 generated active mutation、global facade 和结构变化证据 |
+| [Authoring编辑链事实](Authoring编辑链事实.md) | 当前 GAS Center / Excel / Luban / CodeGen 编辑链路、业务编辑摩擦和不能推出的结论 |
+| [CodeGen链路复审事实](CodeGen链路复审事实.md) | CodeGen 到 Runtime 的当前链路事实、历史计划与现实偏差、违约点和后续验收约束 |
+| [SourceGenerator链路复审事实](SourceGenerator链路复审事实.md) | Luban / SourceGenerator 当前链路事实、生成器越权证据、静态门禁缺口和目标态内容归位关系 |
+| [架构瘦身事实约束](架构瘦身事实约束.md) | GAS 架构瘦身后续任务背后的当前事实、官方规则约束和禁止回流口径；当前默认执行入口见 `../02-主线任务树/GAS架构重划分主线任务.md` 的 R2/R3/R4/R6/R7，旧瘦身任务文件仅作兼容和补充切片 |
 | [P0-致命缺陷](P0-致命缺陷.md) | 当前最高风险：`Complete()` 防回流、generated active mutation serial job/store 残留、singleton stream、结构变化证据闭环 |
 | [P1-高风险缺陷](P1-高风险缺陷.md) | 物理/逻辑 phase 并存、EventBus 迁移、managed registry、AutoChess bridge |
 | [P2-改进建议](P2-改进建议.md) | 文档口径、证据拆分、旧文件名清理、contract/proof 标注 |
-| ISSUE-001~011 | 当前核心问题按现实代码重审后的单项诊断 |
+| ISSUE-001~013 | 当前核心问题按现实代码重审后的单项诊断 |
 
 ## 当前核心事实
 
@@ -29,37 +47,40 @@
    - `GASStructuralCommitSystemGroup`
    - `GASBoundaryProjectionSystemGroup`
 3. `GEExecutionCalculationExtensionSystemGroup` 是 CoreSimulation 内扩展插槽。
-4. `RuntimeSystemRegistration.gen.cs` 已把 7 个 generated systems 注册进主链，generated runtime 是当前执行事实的一部分。
+4. generated runtime 不再通过 `RuntimeSystemRegistration.gen.cs` 生成注册 helper；当前由 `GASSystemScheduleContract` 的 generated type-name 列表把 1 个 CommandResolve system 与 6 个 CoreSimulation systems 注册进主链，generated runtime 仍是当前执行事实的一部分。
 5. `GASDefinitionCatalogBlob` 已被 generated runtime 读取；旧 managed config/prototype path 不能再代表 hot path。
-6. `ToEntityArray` 主要留在 Debugger observation 和 AutoChess catalog 低频安装路径；`SystemAPI.Query<...>` 在 `Assets/GAS` 当前只剩 Cue managed boundary。当前热路径风险重点已收窄到 generated active mutation 的 singleton serial `IJob`、Buffer/ComponentLookup random access、singleton stream owner、剩余 global facade 使用面分类和容量/ordering 证据。
+6. `ToEntityArray` 当前精确命中 5 处：Debugger observation 3 处、Cue managed boundary 1 处、`GASGlobalTimerSystem` current-frame singleton fallback 1 处；`ActiveEffectStore` 当前是 `CreateEntityQuery + CalculateEntityCount + GetSingletonEntity` 的 global index fallback，不再是 `ToEntityArray` 命中。AutoChess catalog builder 旧 `ToEntityArray` 事实已过期。当前热路径风险重点已收窄到 generated active mutation 的 singleton serial `IJob`、helper Buffer/ComponentLookup random access、singleton stream owner、`GASRuntimeShell` public `EntityManager` 面、剩余 singleton fallback owner 化和容量/ordering 证据；active mutation 逐 command store/slot/snapshot lookup 已收束为 owner range 入口。
 7. AutoChessDemo 当前已恢复为业务分层 demo，不是“删除后待重构”状态。
 8. Luban/sourcegen 已不再强制依赖 Unity Editor UI 或 Unity batchmode：`Tools/CodeGen/Generate-GAS-SourceGen.bat` 与 `Tools/GasCodeGenCli` 可直接通过 dotnet 驱动 Luban JSON/C# export + GAS CodeGen；Unity batchmode 仅作为编译域、`BeanUpdater`、`AssetDatabase` 和 asmdef import 验证路径。
 9. AutoChess 已从手写最小 catalog 切到通用 generated catalog：`AutoChessBattleDefinitionCatalogBuilder` 安装 `GASGeneratedDefinitionCatalogBuilder.BuildCatalog()`，最新 runner 验证 `completed=True`、`blockingDebugErrors=0`。
+10. `GASRuntimeShell` 当前仍是多能力 ECS 句柄口：同一 facade 暴露 World、`EntityManager`、command port、read model、job drain 和 runtime singleton；消费者包括 runtime binding、AutoChess adapter 和 Editor watcher。该事实归入 R1/R6 收权，不应写成目标态 Shell 设计。
 
 ## 核心问题看板
 
-| ID | 当前问题 | 状态 | 严重度 |
-|---|---|---|---|
-| ISSUE-001 | GE 生命周期从 request/entity pipeline 迁入 command/spec/active store，但 legacy fallback 和 generated proof 仍未闭合 | Active | P0 |
-| ISSUE-002 | Observation 已进入 BoundaryProjection；gameplay event 已统一为 `GameplayEventBuffer` typed fact，Attribute/Cue/Tag 边界缓冲已由 BoundaryProjection 派生，Damage/EventBus helper 兼容写入口已删除，Presentation/Replay 只读 typed fact | Mitigated | P1 |
-| ISSUE-003 | Debugger/Official diff 已有工具，但证据还需区分 Core 与 Boundary 成本 | Active | P1 |
-| ISSUE-004 | StructuralCommit gate 已真实存在；boundary request entity 已退场，但 direct-EM 分类和证据闭环仍需收口 | Active | P0 |
-| ISSUE-005 | Generated 链路已反哺 Runtime Core；ability commit、instant spec/reduce、active mutation job 化和 static hot path gate 已同步模板，剩余风险集中在 active mutation store 选型、random lookup 与证据闭环 | Mitigated | P1 |
-| ISSUE-006 | AutoChessDemo 已移出 Runtime Core；当前风险转为 bridge 直接 `EntityManager` | Mitigated | P1 |
-| ISSUE-007 | 文档口径仍需持续防止旧事实回流 | Active | P2 |
-| ISSUE-008 | DOTS 官方机制已部分进入规则，但 contract 与 runtime proof 需继续拆分 | Active | P1 |
-| ISSUE-009 | 5 段主链已存在；frame/query/stream owner 仍未完全目标态化 | Active | P1 |
-| ISSUE-010 | 执行范式旧风险已收窄；ASC dirty/present、execution output applied 已收口到 owner chunk applicator；当前主要是 generated active mutation singleton serial job、singleton stream 与 boundary managed query 风险 | Active | P1 |
-| ISSUE-011 | 临时 query 泛滥旧口径已缓解；当前 API 承载风险集中在 singleton owner、global facade 和 generated active mutation random lookup store | Active | P1 |
+| ID | 当前问题 | 状态 | 严重度 | 当前主线入口 |
+|---|---|---|---|---|
+| ISSUE-001 | GE 生命周期从 request/entity pipeline 迁入 command/spec/active store，但 legacy fallback 和 generated proof 仍未闭合 | Active | P0 | R2 / R7 |
+| ISSUE-002 | Observation 已进入 BoundaryProjection；gameplay event 已统一为 `GameplayEventBuffer` typed fact，Attribute/Cue/Tag 边界缓冲已由 BoundaryProjection 派生，Damage/EventBus helper 兼容写入口已删除，Presentation/Replay 只读 typed fact | Mitigated | P1 | R3 防回流 / R4 evidence |
+| ISSUE-003 | Debugger/Official diff 已有工具，但证据还需区分 Core 与 Boundary 成本 | Active | P1 | R4 / R8 |
+| ISSUE-004 | StructuralCommit gate 已真实存在；boundary request entity 已退场，但 direct-EM 分类和证据闭环仍需收口 | Active | P0 | R4 / R6 |
+| ISSUE-005 | Generated 链路已反哺 Runtime Core；ability commit、instant spec/reduce、active mutation job 化和 static hot path gate 已同步模板，剩余风险集中在 active mutation store 选型、random lookup 与证据闭环 | Mitigated | P1 | R2 / R5 |
+| ISSUE-006 | AutoChessDemo 已移出 Runtime Core；当前风险转为 bridge 直接 `EntityManager` | Mitigated | P1 | R6 |
+| ISSUE-007 | 文档口径仍需持续防止旧事实回流 | Active | P2 | R0 |
+| ISSUE-008 | DOTS 官方机制已部分进入规则，但 contract 与 runtime proof 需继续拆分 | Active | P1 | R0 / R4 / R5 |
+| ISSUE-009 | 5 段主链已存在；frame/query/stream owner 仍未完全目标态化 | Active | P1 | R2 / R3 / R4 |
+| ISSUE-010 | 执行范式旧风险已收窄；ASC dirty/present、execution output applied 已收口到 owner chunk applicator；当前主要是 generated active mutation singleton serial job、singleton stream 与 boundary managed query 风险 | Active | P1 | R2 / R3 / R7 |
+| ISSUE-011 | 临时 query 泛滥旧口径已缓解；当前 API 承载风险集中在 singleton owner、`GASRuntimeShell` 多能力 facade、global facade 和 generated active mutation random lookup store | Active | P1 | R1 / R2 / R3 / R6 |
+| ISSUE-012 | 策划配置能力缺失：默认编辑对象仍是技术表行和协议字段，缺少业务能力包、影响分析、保存前配置图校验、Runtime trace preview 和发布校验快照 | Active | P1 | R5 / Authoring 配置链 / Spec 19 |
+| ISSUE-013 | 新增能力业务推进链路过长：策划和程序无法区分配置型能力、胶水扩展型能力与 Runtime 语义型能力，纯配置变化也容易被迫进入程序排错 | Active | P1 | R5 / Authoring 配置链 / Spec 22 |
 
-## 下一轮清理主线
+## 后续清理事实约束
 
-本轮复查后，下一轮不再围绕“兼容旧链路”做小步迁移，而是按删除旧事实源的方式推进：
+本轮复查后，后续任务不再围绕“兼容旧链路”做小步迁移，而是按删除旧事实源和证据闭环的方式推进；默认领取入口是 `../02-主线任务树/GAS架构重划分主线任务.md`，旧 `GAS架构瘦身后续任务.md` 只作为已完成瘦身切口的兼容参考：
 
 1. **已完成：删除 Damage/Attribute/Cue/Tag helper 兼容写入口**：`DamageEventBuffer`、`EventBusHelper.EnqueueDamageEvent`、`EventBusHelper.EnqueueAttributeChangeEvent`、`EventBusHelper.EnqueueCueRequest`、`EventBusHelper.EnqueueTagChangeEvent` 已退场；Damage 进入 `GameplayEventBuffer` typed fact，Attribute/Cue/Tag 只能由 `GameplayFactBoundaryProjectionSystem` 派生。
 2. **已完成：收缩 Presentation/Replay 输入**：`PresentationOutboxProjectionSystem` 与 `ReplayLogSystem` 不再双读 Attribute/Cue/Tag/Damage 边界缓冲，只从 `GameplayEventBuffer` typed fact 投影。
-3. **继续：generated active mutation 模板瘦身**：不手改 `.gen.cs`，只改 `GasGlueCodeGenPhases` 模板和 validation gate。目标是把 active mutation 从单 stream owner serial loop + random lookup，拆成 owner-grouped apply / deterministic merge / capacity proof。
-4. **继续：global facade 分层**：`GASManager.EntityManager` 只允许 bootstrap、authoring/prototype、Boundary facade、Debugger 和 demo adapter 使用；Runtime Core hot path、runtime helper、config component 和 generated template 禁止通过全局 facade 写 ECS。当前 `AbilityRuntimeActions` / `AttributeHelper` 无参全局 overload、`GameplayEffectComponentConfig` / `AbilityComponentConfig` protected static facade 已删除。
+3. **已完成：generated active mutation 模板瘦身切口**：不把 `.gen.cs` 当唯一事实源，模板 `GasGlueCodeGenPhases` 与当前 generated 输出同步。active mutation 已从直接 serial stream loop 推进为 frame-local command list、owner/sequence/context 排序、owner range applicator 和 runtime counters。它仍不是 owner-local store 终局，后续按新任务继续拆 store。
+4. **已完成：global facade Runtime helper 收缩切口**：`GASManager.EntityManager` 只允许 bootstrap、authoring/prototype、Boundary facade、Debugger、demo adapter 和 store guard 使用；Runtime Core helper、config component 和 generated template 禁止通过全局 facade 写 ECS。当前 `EffectCommandSpecStream` fallback、`PresentationEntityBindingRegistry`、`GameplayCueUnit`、`GameplayCueBase` 的内部全局读取已删除，GameObject binding 已按 `World.SequenceNumber + Entity` 做 world-aware key。
 5. **继续：结构变化证据闭环**：用 `GasRuntimeOfficialToolDiff`、Profiler/Debugger counters 和 AutoChess 规模门拆分 Core/Boundary/Demo/Observation 成本。
 
 ## 关键数据点
@@ -69,7 +90,7 @@
 - `ASCCommandBufferResolveSystem` 已拆成先标记 destroying、再解析命令的两段 scheduled job；`ASCCommandPendingComponent`、`ASCDestroyingComponent`、`AttributeDirtyComponent` 的 ASC current-entity 开关已用 chunk `EnabledMask` 处理，避免同 job 内按 chunk 顺序判断 target 可用性。
 - generated `AbilityCatalogCommitJob` 已从 `ComponentLookup<AbilityCommitRequestComponent>.SetComponentEnabled` 随机开关改为 `ComponentTypeHandle<AbilityCommitRequestComponent>` + `chunk.GetEnabledMask(ref ...)`；auto-end 写 `AbilityEndRequestComponent` 也已改为 current ability chunk `EnabledMask`，符合 `EN-03` / `CASE-20` / `PRF-22` 的批量 enableable 口径。
 - generated `RuntimeEffectInstant.gen.cs` 当前输出 `using Unity.Burst`，`InstantSpecBuildJob` 与 `AttributeSetReduceApplyJob` 均为 `[BurstCompile] IJob`；`GasGlueCodeGenPhases` 模板也已同步，不能再把 instant spec/reduce 写作未 Burst 的主线程 proof。
-- generated `GASActiveEffectMutationApplySystem` 已调度 `GASGeneratedActiveEffectRuntime.GEActiveEffectMutationApplyJob : IJob`；旧 public/static `TryApplyActiveMutation(EntityManager, ...)` 路径已退场。当前残留是单 stream owner 的 serial job、lookup random access 与 capacity/ordering 证据不足；generated/runtime/demo gameplay event 已统一写入 `GameplayEventBuffer` typed fact，旧 `GameplayEventBusEventBuffer` 类型和承载已删除。
+- generated `GASActiveEffectMutationApplySystem` 已调度 `GASGeneratedActiveEffectRuntime.GEActiveEffectMutationApplyJob : IJob`；旧 public/static `TryApplyActiveMutation(EntityManager, ...)` 路径已退场，当前 generated 输出中的 `TryApplyActiveMutation(` 回流点也已清零。当前残留是单 stream owner 的 serial job、helper lookup random access 与 capacity/ordering 证据不足；generated/runtime/demo gameplay event 已统一写入 `GameplayEventBuffer` typed fact，旧 `GameplayEventBusEventBuffer` 类型和承载已删除。
 - generated `AbilityCatalogCommitSystem` 已移除 per-frame `NativeList<GECommandSeedRecord>(Allocator.TempJob)` seed scratch；模板现在直接构造单条 `GECommandSeedRecord` 并追加 command。
 - generated instant GE spec build 已支持 cue-only instant GE：`CanBuildInstantSpec` 允许 `ModifierCount > 0 || GameplayCueCode > 0`。
 - `ASCDestroyingComponent` 当前按 enableable bit 判定销毁态；默认 disabled 的 ASC 不再因持有组件而被 generated spec/commit 路径误判为 destroying。
@@ -79,11 +100,11 @@
 - `AbilityLifecycleRequestSystem`、`AbilityStateCleanupSystem` 和 `AttributeOwnerMarkerRequestSystem` 已把 ability / attribute owner marker 的 enableable 写入收口到 owner chunk `EnabledMask`；cleanup 仍通过 lookup 访问 owner/effect store、临时 tag 和 EventBus，不能写成完整 owner-local 归并终局。
 - `GEEffectCommandSpecStreamFramePrepareSystem` 已从主线程 `EntityManager.GetBuffer` 清理/compact 改为 scheduled `IJob`，复用 `EffectCommandSpecStream.PrepareFrameLocalData(ref stream, buffers...)` 的 buffer-only 路径。
 - `GameplayFactProjectionSystem` 已从主线程 `EntityManager.GetBuffer` + legacy EventBus writer 改为 scheduled `IJob`，并进一步瘦身为只写 `GameplayEventBuffer` typed fact；Attribute/Cue/Tag 边界缓冲派生已移到 `GASBoundaryProjectionSystemGroup` 内的 `GameplayFactBoundaryProjectionSystem`。旧 `GameplayFactEventBridgeSystem`、`GEInstantEffectCueRequestProjectionSystem`、Damage/EventBus helper 兼容写入口已直接退场。
-- `GasCodeGenValidationReport.md` 已加入 generated runtime hot path 静态门禁；当前 `GeneratedHotPathRegressionHits: 0`，会扫描并报告 `Complete()`、`.Run()`、legacy EventBus writer、旧 active mutation helper、ability seed scratch、generated/template `GASManager.EntityManager` 等回流项。
+- `GasCodeGenValidationReport.md` 已加入 generated runtime hot path 静态门禁；当前 `GeneratedHotPathRegressionHits: 0`，会扫描并报告 `Complete()`、`.Run()`、legacy EventBus writer、旧 active mutation helper、active mutation 逐 command owner lookup、ability seed scratch、generated/template `GASManager.EntityManager` 等回流项。
 - `Tools/CodeGen/Generate-GAS-SourceGen.bat` 是不启动 Unity 的快速生成驱动；`Tools/CodeGen/Generate-GAS-CodeGen.bat` 是 Unity batchmode 验证驱动，不需要打开 Editor UI。
 - AutoChess command drive 与 execute calculation 已改为 scheduled job；x50 batchmode 验证通过，`debugErrors=0`、`blockingDebugErrors=0`。
 - 最新 AutoChess runtime runner 验证：`completed=True, winner=Player, battleTicks=9, commands=700, attributeChanges=650, executionOutputs=250, cueRequests=700, debugErrors=0, blockingDebugErrors=0, coreRequests=2100, coreFacts=5300, coreDeltas=1300, coreCues=700`；该轮使用 generated catalog 安装路径。同轮诊断仍暴露 `syncQueryBudget=14`、`dependencyWaitRisks=5`、`requiredStructuralPlaybacks=5`、`recordedStructuralPlaybacks=0`，说明结构变化证据闭环仍未完成。
-- `ToEntityArray()` 当前命中主要在 `GasRuntimeDebugger` 和 `AutoChessBattleDefinitionCatalogBuilder`。
+- `ToEntityArray()` 当前命中为 `GasRuntimeDebugger.cs:814/2014/2212`、`CueManagedLifecycleSystem.cs:39`、`GASGlobalTimerSystem.cs:109`；其中 Debugger / Cue 为 observation / managed boundary，GlobalTimer 为仍需 owner 化或 cache miss 计数证明的 singleton fallback。`ActiveEffectStore.cs:1374-1382` 当前通过 `CreateEntityQuery + CalculateEntityCount + GetSingletonEntity` 做 global index fallback，同样需要 owner 注册、capacity 和 cache miss 证据，但不能再归入 `ToEntityArray` 命中。
 - AutoChessDemo 当前 2 个 demo ECS systems 插入 current GAS groups：command drive 和 execute calculation extension。
 
 ## 事实审计快照
@@ -92,7 +113,7 @@
 |---|---|---|---|
 | 5 段 GAS physical group | runtime-active | `GASSystemScheduleContract.cs`, `GASGroups.cs`, `GASManager.cs` | 可作为当前主链事实 |
 | 8 个 logical phase contract | contract-only / mapping aid | `GASSystemScheduleContract.RuntimeCoreFramePhases` | 不能写成 8 个 physical group 已落地 |
-| 7 个 generated runtime systems | runtime-active | `RuntimeSystemRegistration.gen.cs` | 必须纳入 Runtime 审查范围 |
+| 7 个 generated runtime systems | runtime-active | `GASSystemScheduleContract.cs` 的 `GeneratedCommandResolveSystemTypeNames` / `GeneratedCoreSimulationSystemTypeNames` 与 `AddGeneratedRuntimeSystems(...)` | 必须纳入 Runtime 审查范围；`RuntimeSystemRegistration.gen.cs` 当前已退场 |
 | `GASDefinitionCatalogBlob` | runtime-active data source | `GASDefinitionCatalogRuntimeTypes.cs`, `DefinitionCatalog.gen.cs` | 可作为 generated runtime catalog 事实 |
 | `GASGeneratedDefinitionBake*` 计划链 | contract-only | `Assets/GAS/Runtime/Definition` | 不能当作实际 runtime authoring/Baker 目标态完成证明 |
 | GAS sourcegen CLI / bat 驱动 | tooling-active | `Tools/CodeGen`, `Tools/GasCodeGenCli` | 可证明生成链可脱离 Unity Editor UI；不能替代 Unity 编译域/AssetDatabase 验证 |
@@ -107,6 +128,8 @@
 3. `Generated` 代码只要被注册进主链，就按 Runtime Core 规则审查。
 4. AutoChessDemo 的 demo-only bridge、catalog、log scene 不能当作通用 Runtime Core 实现。
 5. Observation / Debugger / Official diff 的同步成本不能混入 CoreSimulation 热路径结论。
+6. 本目录可以引用目标态 Spec 做判定，但不能把目标态架构正文复制成事实；若需要补充目标态设计，更新 `../01-目标态架构共识/`。
+7. 从 `01` 迁出的 `计划` / `复审` 类内容必须拆分：当前证据留在本目录，执行项去任务树，纯设计去目标态 Spec。
 
 ## 官方规则校验口径
 
@@ -145,10 +168,10 @@
 当下最需要治理的是：
 
 1. ASC command resolve、generated ability commit、generated normalize/spec-build/reduce、active mutation/pre-tick/remove、ability lifecycle/cleanup 和 fact projection 已进入 scheduled job 形态；current-entity enableable 清理已大幅转向 chunk `EnabledMask`。
-2. 剩余最重风险集中在 generated `GASActiveEffectMutationApplySystem` 的 singleton serial job、Buffer/ComponentLookup random access、serial owner-local store 写入和 capacity/ordering 证据不足；runtime/generated/demo gameplay event 写入已切到 typed fact，legacy gameplay EventBus buffer、Damage 边界缓冲和 EventBus gameplay enqueue helper 已删除；ASC dirty/present 与 execution output applied 已按 owner chunk applicator 收口，后续不应继续作为未修事实记录。
+2. 剩余最重风险集中在 generated `GASActiveEffectMutationApplySystem` 的 singleton serial job、helper Buffer/ComponentLookup random access、owner-local store 未终局和 capacity/ordering 证据不足；runtime/generated/demo gameplay event 写入已切到 typed fact，legacy gameplay EventBus buffer、Damage 边界缓冲和 EventBus gameplay enqueue helper 已删除；ASC dirty/present 与 execution output applied 已按 owner chunk applicator 收口，active mutation store/slot/snapshot 已按 owner range 收束，后续不应继续作为未修事实记录。
 3. singleton DynamicBuffer stream 是 proof carrier，不是 scale-ready 终局。
 4. StructuralCommit gate 需要 Journaling/Profiler 证明来源和相位。
-5. AutoChess bridge 需要把直接 `EntityManager` 操作从业务 adapter 中继续收口。
+5. AutoChess bridge 需要把直接 `EntityManager` 操作从业务 adapter 中继续收口；`DestroyBattleUnit()` 当前已走 ASC destroy command request，旧 direct ability/effect cleanup 口径不再作为当前事实。
 6. Boundary request entity 链路已退场，但 owner-local command buffer / pending marker 必须作为唯一入口防回流。
 
 后续审查的红线也相应调整：

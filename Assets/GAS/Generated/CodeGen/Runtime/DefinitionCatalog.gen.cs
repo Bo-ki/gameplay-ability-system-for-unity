@@ -12,9 +12,9 @@ namespace GAS.Runtime.Generated
     public static class GASGeneratedDefinitionCatalogInfo
     {
         public const int SchemaVersion = 1;
-        public const int AbilityCount = 8;
-        public const int GameplayEffectCount = 15;
-        public const int ModifierCount = 10;
+        public const int AbilityCount = 9;
+        public const int GameplayEffectCount = 17;
+        public const int ModifierCount = 11;
         public const int TagMaskCount = 7;
     }
 
@@ -84,17 +84,18 @@ namespace GAS.Runtime.Generated
             ref var root = ref builder.ConstructRoot<GASDefinitionCatalogBlob>();
             root.SchemaVersion = 1;
 
-            var abilityCodes = builder.Allocate(ref root.AbilityCodes, 8);
+            var abilityCodes = builder.Allocate(ref root.AbilityCodes, 9);
             abilityCodes[0] = 1003;
             abilityCodes[1] = 1005;
             abilityCodes[2] = 5000;
             abilityCodes[3] = 9101;
             abilityCodes[4] = 9102;
             abilityCodes[5] = 9103;
-            abilityCodes[6] = 10002;
-            abilityCodes[7] = 20001;
+            abilityCodes[6] = 9104;
+            abilityCodes[7] = 10002;
+            abilityCodes[8] = 20001;
 
-            var abilities = builder.Allocate(ref root.Abilities, 8);
+            var abilities = builder.Allocate(ref root.Abilities, 9);
             abilities[0] = new GASCatalogAbilityDefinitionBlob
             {
                 AbilityCode = 1003,
@@ -193,6 +194,22 @@ namespace GAS.Runtime.Generated
             };
             abilities[6] = new GASCatalogAbilityDefinitionBlob
             {
+                AbilityCode = 9104,
+                Level = 1,
+                PrimaryGameplayEffectCode = 9203,
+                SecondaryGameplayEffectCode = 0,
+                CostGameplayEffectCode = 0,
+                CooldownGameplayEffectCode = 0,
+                CooldownFrames = 0,
+                ActivationOwnedTagMaskIndex = -1,
+                RequirementStart = 0,
+                RequirementCount = 0,
+                TargetRuleCode = 0,
+                TargetRuleParam0 = 0,
+                TargetRuleParam1 = 0,
+            };
+            abilities[7] = new GASCatalogAbilityDefinitionBlob
+            {
                 AbilityCode = 10002,
                 Level = 1,
                 PrimaryGameplayEffectCode = 1002,
@@ -207,7 +224,7 @@ namespace GAS.Runtime.Generated
                 TargetRuleParam0 = 0,
                 TargetRuleParam1 = 0,
             };
-            abilities[7] = new GASCatalogAbilityDefinitionBlob
+            abilities[8] = new GASCatalogAbilityDefinitionBlob
             {
                 AbilityCode = 20001,
                 Level = 1,
@@ -224,7 +241,7 @@ namespace GAS.Runtime.Generated
                 TargetRuleParam1 = 0,
             };
 
-            var gameplayEffectCodes = builder.Allocate(ref root.GameplayEffectCodes, 15);
+            var gameplayEffectCodes = builder.Allocate(ref root.GameplayEffectCodes, 17);
             gameplayEffectCodes[0] = 1001;
             gameplayEffectCodes[1] = 1002;
             gameplayEffectCodes[2] = 1003;
@@ -239,9 +256,11 @@ namespace GAS.Runtime.Generated
             gameplayEffectCodes[11] = 9001;
             gameplayEffectCodes[12] = 9201;
             gameplayEffectCodes[13] = 9202;
-            gameplayEffectCodes[14] = 9207;
+            gameplayEffectCodes[14] = 9203;
+            gameplayEffectCodes[15] = 9204;
+            gameplayEffectCodes[16] = 9207;
 
-            var gameplayEffects = builder.Allocate(ref root.GameplayEffects, 15);
+            var gameplayEffects = builder.Allocate(ref root.GameplayEffects, 17);
             gameplayEffects[0] = new GASCatalogGameplayEffectDefinitionBlob
             {
                 GameplayEffectCode = 1001,
@@ -650,6 +669,64 @@ namespace GAS.Runtime.Generated
             };
             gameplayEffects[14] = new GASCatalogGameplayEffectDefinitionBlob
             {
+                GameplayEffectCode = 9203,
+                DurationFrames = 8,
+                PeriodFrames = 2,
+                PeriodGameplayEffectCode = 9204,
+                GrantedTagMaskIndex = -1,
+                RemoveGameplayEffectTagMaskIndex = -1,
+                GameplayCueCode = 9301,
+                DamageTypeCode = 0,
+                ResistanceAttributeSetCode = 0,
+                ResistanceAttributeCode = 0,
+                ResistanceCap = 0f,
+                StackingCode = 0,
+                StackLimitCount = 3,
+                StackType = 9203,
+                EffectDurationRefreshPolicy = 1,
+                EffectPeriodResetPolicy = 1,
+                EffectExpirationPolicy = 0,
+                DenyOverflowApplication = (byte)0,
+                ClearStackOnOverflow = (byte)0,
+                OverflowGameplayEffectCode = 0,
+                ModifierStart = 10,
+                ModifierCount = 0,
+                RequirementStart = 0,
+                RequirementCount = 0,
+                GrantedAbilityStart = 0,
+                GrantedAbilityCount = 0,
+            };
+            gameplayEffects[15] = new GASCatalogGameplayEffectDefinitionBlob
+            {
+                GameplayEffectCode = 9204,
+                DurationFrames = 0,
+                PeriodFrames = 0,
+                PeriodGameplayEffectCode = 0,
+                GrantedTagMaskIndex = -1,
+                RemoveGameplayEffectTagMaskIndex = -1,
+                GameplayCueCode = 9301,
+                DamageTypeCode = 0,
+                ResistanceAttributeSetCode = 0,
+                ResistanceAttributeCode = 0,
+                ResistanceCap = 0f,
+                StackingCode = 0,
+                StackLimitCount = 0,
+                StackType = 0,
+                EffectDurationRefreshPolicy = 0,
+                EffectPeriodResetPolicy = 0,
+                EffectExpirationPolicy = 0,
+                DenyOverflowApplication = (byte)0,
+                ClearStackOnOverflow = (byte)0,
+                OverflowGameplayEffectCode = 0,
+                ModifierStart = 10,
+                ModifierCount = 1,
+                RequirementStart = 0,
+                RequirementCount = 0,
+                GrantedAbilityStart = 0,
+                GrantedAbilityCount = 0,
+            };
+            gameplayEffects[16] = new GASCatalogGameplayEffectDefinitionBlob
+            {
                 GameplayEffectCode = 9207,
                 DurationFrames = -1,
                 PeriodFrames = 0,
@@ -670,7 +747,7 @@ namespace GAS.Runtime.Generated
                 DenyOverflowApplication = (byte)0,
                 ClearStackOnOverflow = (byte)0,
                 OverflowGameplayEffectCode = 0,
-                ModifierStart = 10,
+                ModifierStart = 11,
                 ModifierCount = 0,
                 RequirementStart = 0,
                 RequirementCount = 0,
@@ -678,7 +755,7 @@ namespace GAS.Runtime.Generated
                 GrantedAbilityCount = 0,
             };
 
-            var modifiers = builder.Allocate(ref root.Modifiers, 10);
+            var modifiers = builder.Allocate(ref root.Modifiers, 11);
             modifiers[0] = new GASCatalogModifierDefinitionBlob
             {
                 GameplayEffectCode = 1002,
@@ -855,6 +932,24 @@ namespace GAS.Runtime.Generated
                 CaptureAttributeCode = 1,
                 CaptureTiming = (EAttributeCaptureTiming)0,
                 FallbackMagnitude = 8f,
+                Coefficient = 1f,
+                PreAdd = 0f,
+                PostAdd = 0f,
+            };
+            modifiers[10] = new GASCatalogModifierDefinitionBlob
+            {
+                GameplayEffectCode = 9204,
+                ModifierIndex = 0,
+                AttributeSetCode = 9001,
+                AttributeCode = 1,
+                Operation = (EModifierOp)3,
+                BaseMagnitude = 1f,
+                MagnitudeSource = (EMagnitudeSource)0,
+                MagnitudeKey = 0,
+                CaptureAttributeSetCode = 9001,
+                CaptureAttributeCode = 1,
+                CaptureTiming = (EAttributeCaptureTiming)0,
+                FallbackMagnitude = 1f,
                 Coefficient = 1f,
                 PreAdd = 0f,
                 PostAdd = 0f,

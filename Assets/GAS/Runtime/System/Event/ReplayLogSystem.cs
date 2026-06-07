@@ -9,7 +9,6 @@ namespace GAS.Runtime
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASBoundaryProjectionSystemGroup), OrderFirst = true)]
     [UpdateAfter(typeof(PresentationOutboxProjectionSystem))]
-    [UpdateBefore(typeof(CueRequestBridgeSystem))]
     public partial struct ReplayLogSystem : ISystem
     {
         public void OnCreate(ref SystemState state)
@@ -196,7 +195,7 @@ namespace GAS.Runtime
                 return true;
             }
 
-            if (!IsPresentationMarker(fact.EventType)
+            if (!GameplayFactClassifier.IsPresentationMarker(fact.EventType)
                 && fact.Domain != EGameplayFactDomain.Unknown)
             {
                 replayEvent = new ReplayLogEventBuffer
@@ -224,16 +223,6 @@ namespace GAS.Runtime
         private static int ResolveGameplayEventCode(in GameplayEventBuffer fact)
         {
             return fact.EventCode != 0 ? fact.EventCode : fact.GameplayEffectCode;
-        }
-
-        private static bool IsPresentationMarker(EGameplayEventType type)
-        {
-            return type == EGameplayEventType.AutoChessPresentationUiMarker
-                   || type == EGameplayEventType.AutoChessPresentationVfxMarker
-                   || type == EGameplayEventType.AutoChessPresentationSfxMarker
-                   || type == EGameplayEventType.AutoChessPresentationFloatingTextMarker
-                   || type == EGameplayEventType.AutoChessPresentationCueMarker
-                   || type == EGameplayEventType.AutoChessPresentationSettlementMarker;
         }
 
         private static ReplayLogEventBuffer CreateLogEvent(

@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using Unity.Entities;
-using UnityEngine;
 
 namespace GAS.Runtime
 {
@@ -17,20 +16,21 @@ namespace GAS.Runtime
 
         public bool IsValid => IsValidAsc(_ownerAsc) && !ASCEntityFactory.IsDestroying(_entityManager, _ownerAsc);
 
-        public Entity AppendDestroy()
+        public bool AppendDestroy()
         {
             if (!IsValid || !TryGetBuffer(out DynamicBuffer<ASCDestroyCommandBuffer> commands))
-                return Entity.Null;
+                return false;
 
             commands.Add(new ASCDestroyCommandBuffer
             {
                 Requested = 1,
             });
+            MarkAscDestroying();
             MarkAscCommandPending();
-            return _ownerAsc;
+            return true;
         }
 
-        public Entity AppendInit(
+        public bool AppendInit(
             IEnumerable<int> baseTags,
             IEnumerable<AttrSetConfig> attrSets,
             IEnumerable<int> baseAbilityCodes,
@@ -40,7 +40,7 @@ namespace GAS.Runtime
                 || !TryGetBuffer(out DynamicBuffer<ASCCommandBuffer> ascCommands)
                 || !TryGetBuffer(out DynamicBuffer<AbilityCommandBuffer> abilityCommands))
             {
-                return Entity.Null;
+                return false;
             }
 
             ascCommands.Add(new ASCCommandBuffer
@@ -54,19 +54,19 @@ namespace GAS.Runtime
 
             AppendInitTags(ascCommands, baseTags);
             AppendInitAttributes(ascCommands, attrSets);
-            AppendInitAbilities(abilityCommands, baseAbilityCodes);
+            AppendInitAbilities(abilityCommands, baseAbilityCodes, _ownerAsc);
             MarkAscCommandPending();
-            return _ownerAsc;
+            return true;
         }
 
-        public Entity AppendGameplayEffectApply(
+        public bool AppendGameplayEffectApply(
             int gameplayEffectCode,
             Entity targetAsc,
             int level,
             IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues)
         {
             if (!IsValid || !IsValidAsc(targetAsc))
-                return Entity.Null;
+                return false;
 
             var accepted = GameplayEffectRequestWriter.TryAppendSimpleInstantCommand(
                 _entityManager,
@@ -84,38 +84,36 @@ namespace GAS.Runtime
                 setByCallerValues,
                 GEEffectCommandSource.RuntimeBoundary);
 
-            return accepted && EffectCommandSpecStream.TryGetSingleton(_entityManager, out var streamEntity)
-                ? streamEntity
-                : Entity.Null;
+            return accepted;
         }
 
-        public Entity AppendGameplayEffectRemove(int gameplayEffectCode)
+        public bool AppendGameplayEffectRemove(int gameplayEffectCode)
         {
             if (!IsValid || !TryGetBuffer(out DynamicBuffer<GERemoveCommandBuffer> commands))
-                return Entity.Null;
+                return false;
 
             commands.Add(new GERemoveCommandBuffer
             {
                 GameplayEffectCode = gameplayEffectCode,
             });
             MarkGameplayEffectRemovePending();
-            return _ownerAsc;
+            return true;
         }
 
-        public Entity AppendAscCommand(in ASCCommand command)
+        public bool AppendAscCommand(in ASCCommand command)
         {
             if (!IsValid || !TryGetBuffer(out DynamicBuffer<ASCCommandBuffer> commands))
-                return Entity.Null;
+                return false;
 
             commands.Add(new ASCCommandBuffer
             {
                 Command = command,
             });
             MarkAscCommandPending();
-            return _ownerAsc;
+            return true;
         }
 
-        public Entity AppendAbilityCommand(
+        public bool AppendAbilityCommand(
             int abilityCode,
             Entity targetAsc,
             EAbilityCommandType commandType)
@@ -124,7 +122,7 @@ namespace GAS.Runtime
                 || targetAsc != Entity.Null && !IsValidAsc(targetAsc)
                 || !TryGetBuffer(out DynamicBuffer<AbilityCommandBuffer> commands))
             {
-                return Entity.Null;
+                return false;
             }
 
             commands.Add(new AbilityCommandBuffer
@@ -138,41 +136,7 @@ namespace GAS.Runtime
                 },
             });
             MarkAscCommandPending();
-            return _ownerAsc;
-        }
-
-        public int PresentationEventCount
-        {
-            get
-            {
-                if (!IsValidAsc(_ownerAsc) || !_entityManager.HasBuffer<PresentationEventBuffer>(_ownerAsc))
-                    return 0;
-
-                return _entityManager.GetBuffer<PresentationEventBuffer>(_ownerAsc).Length;
-            }
-        }
-
-        public int CopyPresentationEvents(GasPresentationEventView[] output)
-        {
-            if (output == null
-                || output.Length == 0
-                || !IsValidAsc(_ownerAsc)
-                || !_entityManager.HasBuffer<PresentationEventBuffer>(_ownerAsc))
-            {
-                return 0;
-            }
-
-            var events = _entityManager.GetBuffer<PresentationEventBuffer>(_ownerAsc);
-            var count = events.Length < output.Length ? events.Length : output.Length;
-            for (var i = 0; i < count; i++)
-            {
-                output[i] = new GasPresentationEventView
-                {
-                    Event = events[i],
-                };
-            }
-
-            return count;
+            return true;
         }
 
         private bool TryGetBuffer<T>(out DynamicBuffer<T> buffer)
@@ -197,6 +161,12 @@ namespace GAS.Runtime
         {
             if (_entityManager.HasComponent<ASCCommandPendingComponent>(_ownerAsc))
                 _entityManager.SetComponentEnabled<ASCCommandPendingComponent>(_ownerAsc, true);
+        }
+
+        private void MarkAscDestroying()
+        {
+            if (_entityManager.HasComponent<ASCDestroyingComponent>(_ownerAsc))
+                _entityManager.SetComponentEnabled<ASCDestroyingComponent>(_ownerAsc, true);
         }
 
         private void MarkGameplayEffectRemovePending()
@@ -254,9 +224,10 @@ namespace GAS.Runtime
             }
         }
 
-        private void AppendInitAbilities(
+        private static void AppendInitAbilities(
             DynamicBuffer<AbilityCommandBuffer> commands,
-            IEnumerable<int> baseAbilityCodes)
+            IEnumerable<int> baseAbilityCodes,
+            Entity ownerAsc)
         {
             if (baseAbilityCodes == null)
                 return;
@@ -267,7 +238,7 @@ namespace GAS.Runtime
                 {
                     Command = new AbilityCommand
                     {
-                        Owner = _ownerAsc,
+                        Owner = ownerAsc,
                         AbilityCode = abilityCode,
                         CommandType = EAbilityCommandType.Grant,
                     },
@@ -295,138 +266,115 @@ namespace GAS.Runtime
         }
     }
 
-    public readonly struct ASCCommandGateway
+    public readonly struct ASCCommandPort
     {
-        public readonly Entity Entity;
+        private readonly EntityManager _entityManager;
+        private readonly Entity _entity;
 
-        private static EntityManager EntityManager => GASManager.EntityManager;
-        private static bool IsRuntimeReady => GASManager.ExWorld != null
-                                             && GASManager.ExWorld.IsCreated
-                                             && GASManager.IsInitialized;
-
-        public ASCCommandGateway(Entity entity)
+        internal ASCCommandPort(EntityManager entityManager, Entity entity)
         {
-            Entity = entity;
+            _entityManager = entityManager;
+            _entity = entity;
         }
 
-        public bool IsValid => IsRuntimeReady
-                               && Entity != Entity.Null
-                               && EntityManager.Exists(Entity);
+        public bool IsValid => IsRuntimeReady(_entityManager)
+                               && _entity != Entity.Null
+                               && _entityManager.Exists(_entity);
 
-        public GameObject GameObject => IsValid ? EntityHelper.GetGameObjectFromEntity(Entity) : null;
+        public ASCHandle Handle => new ASCHandle(_entity);
 
-        public ASCReadModel ReadModel => new ASCReadModel(Entity);
+        internal Entity RuntimeEntity => _entity;
 
-        private ASCBoundaryCommandWriter CommandWriter => new ASCBoundaryCommandWriter(EntityManager, Entity);
+        private ASCBoundaryCommandWriter CommandWriter => new ASCBoundaryCommandWriter(_entityManager, _entity);
 
         #region Factory
 
-        public static ASCCommandGateway Create()
+        public static ASCCommandPort Create(EntityManager entityManager)
         {
-            return new ASCCommandGateway(ASCEntityFactory.Create(EntityManager));
+            if (!IsRuntimeReady(entityManager))
+                return default;
+
+            return new ASCCommandPort(entityManager, ASCEntityFactory.Create(entityManager));
         }
 
-        public Entity Dispose()
+        public static ASCCommandPort Create(EntityManager entityManager, EntityArchetype ascArchetype)
         {
-            return IsValid ? CommandWriter.AppendDestroy() : Entity.Null;
+            if (!IsRuntimeReady(entityManager) || !ascArchetype.Valid)
+                return default;
+
+            var asc = ASCEntityFactory.Create(entityManager, ascArchetype);
+            return asc == Entity.Null
+                ? default
+                : new ASCCommandPort(entityManager, asc);
         }
 
-        public Entity Init(AbilitySystemConfig config)
+        public bool RequestDestroy()
         {
-            return Init(config.BaseTags, config.AttrSets, config.BaseAbilityCodes, config.Level);
+            return IsValid && CommandWriter.AppendDestroy();
         }
 
-        public Entity Init(IEnumerable<int> baseTags, IEnumerable<AttrSetConfig> attrSets,
+        public bool RequestInitialize(AbilitySystemConfig config)
+        {
+            return RequestInitialize(config.BaseTags, config.AttrSets, config.BaseAbilityCodes, config.Level);
+        }
+
+        public bool RequestInitialize(IEnumerable<int> baseTags, IEnumerable<AttrSetConfig> attrSets,
             IEnumerable<int> baseAbilityCodes, int level = 1)
         {
-            return IsValid
-                ? CommandWriter.AppendInit(baseTags, attrSets, baseAbilityCodes, level)
-                : Entity.Null;
+            return IsValid && CommandWriter.AppendInit(baseTags, attrSets, baseAbilityCodes, level);
         }
 
         #endregion
 
         #region GameplayEffect
 
-        public Entity RequestGameplayEffectTo(int gameplayEffectCode, ASCCommandGateway target, int level = 0)
+        public bool RequestGameplayEffectTo(int gameplayEffectCode, ASCHandle targetAsc, int level = 0)
         {
-            return ApplyGameplayEffectToTarget(gameplayEffectCode, target.Entity, level, null);
+            return ApplyGameplayEffectToTarget(gameplayEffectCode, targetAsc.RuntimeEntity, level, null);
         }
 
-        public Entity RequestGameplayEffectTo(
+        public bool RequestGameplayEffectTo(
             int gameplayEffectCode,
-            ASCCommandGateway target,
+            ASCHandle targetAsc,
             IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues,
             int level = 0)
         {
-            return ApplyGameplayEffectToTarget(gameplayEffectCode, target.Entity, level, setByCallerValues);
+            return ApplyGameplayEffectToTarget(gameplayEffectCode, targetAsc.RuntimeEntity, level, setByCallerValues);
         }
 
-        public Entity RequestGameplayEffectToSelf(int gameplayEffectCode, int level = 0)
+        public bool RequestRemoveGameplayEffects(int gameplayEffectCode)
         {
-            return ApplyGameplayEffectToTarget(gameplayEffectCode, Entity, level, null);
+            return AppendGameplayEffectRemoveCommand(gameplayEffectCode);
         }
 
-        public Entity RequestGameplayEffectToSelf(
-            int gameplayEffectCode,
-            IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues,
-            int level = 0)
+        public bool RequestClearGameplayEffects()
         {
-            return ApplyGameplayEffectToTarget(gameplayEffectCode, Entity, level, setByCallerValues);
-        }
-
-        public Entity RemoveGameplayEffect(Entity gameplayEffect)
-        {
-            if (!IsValid || gameplayEffect == Entity.Null || !EntityManager.Exists(gameplayEffect))
-                return Entity.Null;
-
-            if (EntityManager.HasComponent<GEEffectSpecComponent>(gameplayEffect))
-            {
-                var spec = EntityManager.GetComponentData<GEEffectSpecComponent>(gameplayEffect);
-                return RequestRemoveGameplayEffects(spec.GameplayEffectCode);
-            }
-
-            if (EntityManager.HasComponent<GEPrototypeComponent>(gameplayEffect))
-            {
-                var prototype = EntityManager.GetComponentData<GEPrototypeComponent>(gameplayEffect);
-                if (prototype.GameplayEffectCode > 0)
-                    return RequestRemoveGameplayEffects(prototype.GameplayEffectCode);
-            }
-
-            return Entity.Null;
-        }
-
-        public Entity RemoveGameplayEffects(int gameplayEffectCode)
-        {
-            return RequestRemoveGameplayEffects(gameplayEffectCode);
-        }
-
-        public Entity ClearGameplayEffects()
-        {
-            return RequestRemoveGameplayEffects(0);
+            return AppendGameplayEffectRemoveCommand(0);
         }
 
         #endregion
 
-        private Entity ApplyGameplayEffectToTarget(
+        private bool ApplyGameplayEffectToTarget(
             int gameplayEffectCode,
             Entity target,
             int level,
             IReadOnlyList<GESetByCallerRequestValueBuffer> setByCallerValues)
         {
-            return IsValid
-                ? CommandWriter.AppendGameplayEffectApply(gameplayEffectCode, target, level, setByCallerValues)
-                : Entity.Null;
+            return IsValid && CommandWriter.AppendGameplayEffectApply(
+                gameplayEffectCode,
+                target,
+                level,
+                setByCallerValues);
         }
 
-        private Entity RequestRemoveGameplayEffects(int gameplayEffectCode)
+        private bool AppendGameplayEffectRemoveCommand(int gameplayEffectCode)
         {
-            return IsValid ? CommandWriter.AppendGameplayEffectRemove(gameplayEffectCode) : Entity.Null;
+            return IsValid && CommandWriter.AppendGameplayEffectRemove(gameplayEffectCode);
         }
 
         #region BasicData
 
-        public Entity SetLevel(int level)
+        public bool RequestSetLevel(int level)
         {
             return AppendAscCommand(new ASCCommand
             {
@@ -435,142 +383,62 @@ namespace GAS.Runtime
             });
         }
 
-        public int GetLevel()
-        {
-            return ReadModel.GetLevel();
-        }
-
-        public bool TryGetLevel(out int level)
-        {
-            return ReadModel.TryGetLevel(out level);
-        }
-
-        #endregion
-
-        #region Tag
-
-        public bool HasTag(int tag)
-        {
-            return ReadModel.HasTag(tag);
-        }
-
-        public bool TryGetTagMask(out TagMaskComponent mask)
-        {
-            return ReadModel.TryGetTagMask(out mask);
-        }
-
-        #endregion
-
-        #region Attribute
-
-        public float GetAttributeValue(int attrSetCode, int attrCode)
-        {
-            return ReadModel.GetAttributeValue(attrSetCode, attrCode);
-        }
-
-        public bool TryGetAttributeValue(int attrSetCode, int attrCode, out float value)
-        {
-            return ReadModel.TryGetAttributeValue(attrSetCode, attrCode, out value);
-        }
-
         #endregion
 
         #region Ability
 
-        public Entity TryActivateAbility(int abilityCode)
+        public bool RequestActivateAbility(int abilityCode, ASCHandle target)
         {
-            return TryActivateAbility(abilityCode, Entity.Null);
+            return AppendAbilityCommand(abilityCode, target.RuntimeEntity, EAbilityCommandType.Activate);
         }
 
-        public Entity TryActivateAbility(int abilityCode, ASCCommandGateway target)
-        {
-            return TryActivateAbility(abilityCode, target.Entity);
-        }
-
-        public Entity TryActivateAbility(int abilityCode, Entity target)
-        {
-            return AppendAbilityCommand(abilityCode, target, EAbilityCommandType.Activate);
-        }
-
-        public Entity CancelAbility(int abilityCode)
+        public bool RequestCancelAbility(int abilityCode)
         {
             return AppendAbilityCommand(abilityCode, Entity.Null, EAbilityCommandType.Cancel);
         }
 
-        private Entity AppendAbilityCommand(
+        private bool AppendAbilityCommand(
             int abilityCode,
             Entity target,
             EAbilityCommandType commandType)
         {
-            return IsValid
-                ? CommandWriter.AppendAbilityCommand(abilityCode, target, commandType)
-                : Entity.Null;
+            return IsValid && CommandWriter.AppendAbilityCommand(abilityCode, target, commandType);
         }
 
         #endregion
 
         #region Internal
 
-        private Entity AppendAscCommand(ASCCommand command)
+        private bool AppendAscCommand(ASCCommand command)
         {
-            return IsValid ? CommandWriter.AppendAscCommand(in command) : Entity.Null;
+            return IsValid && CommandWriter.AppendAscCommand(in command);
         }
 
         #endregion
 
-        public Entity TryEndAbility(int abilityCode)
+        public bool RequestEndAbility(int abilityCode)
         {
             return AppendAbilityCommand(abilityCode, Entity.Null, EAbilityCommandType.End);
         }
 
-        public Entity TryCancelAbility(int abilityCode)
-        {
-            return CancelAbility(abilityCode);
-        }
-
-        public Entity RemoveAbility(int abilityCode)
+        public bool RequestRemoveAbility(int abilityCode)
         {
             return AppendAbilityCommand(abilityCode, Entity.Null, EAbilityCommandType.Remove);
         }
 
-        public bool TryGetAttributeCurrentValue(int attrSetCode, int attrCode, out float value)
+        internal bool TrySetComponentData<T>(T component)
+            where T : unmanaged, IComponentData
         {
-            return ReadModel.TryGetAttributeCurrentValue(attrSetCode, attrCode, out value);
+            if (!IsValid || !_entityManager.HasComponent<T>(_entity))
+                return false;
+
+            _entityManager.SetComponentData(_entity, component);
+            return true;
         }
 
-        public float GetAttrCurrentValue(int attrSetCode, int attrCode)
+        private static bool IsRuntimeReady(EntityManager entityManager)
         {
-            return TryGetAttributeCurrentValue(attrSetCode, attrCode, out var value) ? value : 0f;
-        }
-
-        public bool TryGetAttributeBaseValue(int attrSetCode, int attrCode, out float value)
-        {
-            return ReadModel.TryGetAttributeValue(attrSetCode, attrCode, out value);
-        }
-
-        public float GetAttrBaseValue(int attrSetCode, int attrCode)
-        {
-            return TryGetAttributeBaseValue(attrSetCode, attrCode, out var value) ? value : 0f;
-        }
-
-        public int PresentationEventCount
-        {
-            get
-            {
-                return IsValid ? CommandWriter.PresentationEventCount : 0;
-            }
-        }
-
-        public int PeekPresentationEvents(GasPresentationEventView[] output)
-        {
-            if (output == null
-                || output.Length == 0
-                || !IsValid)
-            {
-                return 0;
-            }
-
-            return CommandWriter.CopyPresentationEvents(output);
+            return entityManager.World != null && entityManager.World.IsCreated;
         }
 
     }

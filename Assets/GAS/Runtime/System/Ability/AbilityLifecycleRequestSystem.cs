@@ -20,7 +20,6 @@ namespace GAS.Runtime
     {
         private EntityQuery _query;
 
-        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             _query = state.GetEntityQuery(new EntityQueryDesc
@@ -77,7 +76,6 @@ namespace GAS.Runtime
             state.Dependency = requestRecords.Dispose(state.Dependency);
         }
 
-        [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
         }

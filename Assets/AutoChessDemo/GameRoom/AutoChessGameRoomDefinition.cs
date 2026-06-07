@@ -12,10 +12,13 @@ namespace GAS.AutoChessDemo
         public const int AbilityPlayerAttack = AutoChessGeneratedConfig.AbilityPlayerAttack;
         public const int AbilityEnemyAttack = AutoChessGeneratedConfig.AbilityEnemyAttack;
         public const int AbilityPlayerExecute = AutoChessGeneratedConfig.AbilityPlayerExecute;
+        public const int AbilityPlayerPoison = AutoChessGeneratedConfig.AbilityPlayerPoison;
 
         public const int GameplayEffectPlayerAttackDamage = AutoChessGeneratedConfig.GameplayEffectPlayerAttackDamage;
         public const int GameplayEffectEnemyAttackDamage = AutoChessGeneratedConfig.GameplayEffectEnemyAttackDamage;
         public const int GameplayEffectPlayerExecute = AutoChessGeneratedConfig.GameplayEffectPlayerExecute;
+        public const int GameplayEffectPlayerPoison = AutoChessGeneratedConfig.GameplayEffectPlayerPoison;
+        public const int GameplayEffectPoisonTickDamage = AutoChessGeneratedConfig.GameplayEffectPoisonTickDamage;
 
         public const int ExecutionCalculationExecuteDamage = AutoChessGeneratedConfig.ExecutionCalculationExecuteDamage;
         public const int ExecutionCalculationExecuteDamageOutput = AutoChessGeneratedConfig.ExecutionCalculationExecuteDamageOutput;
@@ -40,6 +43,7 @@ namespace GAS.AutoChessDemo
                 AbilityPlayerAttack => "破阵斩",
                 AbilityEnemyAttack => "蛮力打击",
                 AbilityPlayerExecute => "斩杀追击",
+                AbilityPlayerPoison => "毒刃",
                 _ => "未知技能",
             };
         }
@@ -51,6 +55,8 @@ namespace GAS.AutoChessDemo
                 GameplayEffectPlayerAttackDamage => "破阵斩伤害",
                 GameplayEffectEnemyAttackDamage => "蛮力打击伤害",
                 GameplayEffectPlayerExecute => "斩杀追击伤害",
+                GameplayEffectPlayerPoison => "毒刃中毒",
+                GameplayEffectPoisonTickDamage => "毒刃跳伤",
                 _ => "未知效果",
             };
         }
@@ -62,6 +68,8 @@ namespace GAS.AutoChessDemo
                 GameplayEffectPlayerAttackDamage => GetAbilityName(AbilityPlayerAttack),
                 GameplayEffectEnemyAttackDamage => GetAbilityName(AbilityEnemyAttack),
                 GameplayEffectPlayerExecute => GetAbilityName(AbilityPlayerExecute),
+                GameplayEffectPlayerPoison => GetAbilityName(AbilityPlayerPoison),
+                GameplayEffectPoisonTickDamage => GetAbilityName(AbilityPlayerPoison),
                 _ => GetGameplayEffectName(gameplayEffectCode),
             };
         }
@@ -98,6 +106,9 @@ namespace GAS.AutoChessDemo
         public readonly float Energy;
         public readonly int PrimaryAbilityCode;
         public readonly int FinisherAbilityCode;
+        public readonly int ActiveAbilityCode;
+        public readonly int ActiveCastInterval;
+        public readonly int ActiveCastFrameOffset;
         public readonly float FinisherHealthThreshold;
         public readonly AutoChessTargetPolicy PrimaryTargetPolicy;
         public readonly AutoChessTargetPolicy FinisherTargetPolicy;
@@ -113,6 +124,9 @@ namespace GAS.AutoChessDemo
             float energy,
             int primaryAbilityCode,
             int finisherAbilityCode,
+            int activeAbilityCode,
+            int activeCastInterval,
+            int activeCastFrameOffset,
             float finisherHealthThreshold,
             AutoChessTargetPolicy primaryTargetPolicy,
             AutoChessTargetPolicy finisherTargetPolicy)
@@ -127,6 +141,9 @@ namespace GAS.AutoChessDemo
             Energy = energy;
             PrimaryAbilityCode = primaryAbilityCode;
             FinisherAbilityCode = finisherAbilityCode;
+            ActiveAbilityCode = activeAbilityCode;
+            ActiveCastInterval = activeCastInterval;
+            ActiveCastFrameOffset = activeCastFrameOffset;
             FinisherHealthThreshold = finisherHealthThreshold;
             PrimaryTargetPolicy = primaryTargetPolicy;
             FinisherTargetPolicy = finisherTargetPolicy;
@@ -148,6 +165,9 @@ namespace GAS.AutoChessDemo
                 Energy,
                 PrimaryAbilityCode,
                 FinisherAbilityCode,
+                ActiveAbilityCode,
+                ActiveCastInterval,
+                ActiveCastFrameOffset,
                 FinisherHealthThreshold,
                 PrimaryTargetPolicy,
                 FinisherTargetPolicy);
@@ -155,9 +175,50 @@ namespace GAS.AutoChessDemo
 
         public int[] CreateAbilityCodes()
         {
-            return FinisherAbilityCode > 0
-                ? new[] { PrimaryAbilityCode, FinisherAbilityCode }
-                : new[] { PrimaryAbilityCode };
+            var count = 0;
+            var first = 0;
+            var second = 0;
+            var third = 0;
+            AppendAbilityCode(PrimaryAbilityCode, ref count, ref first, ref second, ref third);
+            AppendAbilityCode(FinisherAbilityCode, ref count, ref first, ref second, ref third);
+            AppendAbilityCode(ActiveAbilityCode, ref count, ref first, ref second, ref third);
+
+            var result = new int[count];
+            if (count > 0)
+                result[0] = first;
+            if (count > 1)
+                result[1] = second;
+            if (count > 2)
+                result[2] = third;
+
+            return result;
+        }
+
+        private static void AppendAbilityCode(
+            int abilityCode,
+            ref int count,
+            ref int first,
+            ref int second,
+            ref int third)
+        {
+            if (abilityCode <= 0
+                || abilityCode == first
+                || abilityCode == second
+                || abilityCode == third)
+            {
+                return;
+            }
+
+            if (count == 0)
+                first = abilityCode;
+            else if (count == 1)
+                second = abilityCode;
+            else if (count == 2)
+                third = abilityCode;
+            else
+                return;
+
+            count++;
         }
     }
 
@@ -237,25 +298,28 @@ namespace GAS.AutoChessDemo
 
         private static AutoChessUnitDefinition[] CreateBaseUnits(float healthMultiplier)
         {
-            var rows = AutoChessGeneratedConfig.CreateBaseUnitRows();
-            var units = new AutoChessUnitDefinition[rows.Length];
-            for (var i = 0; i < rows.Length; i++)
+            var count = AutoChessGeneratedConfig.BaseUnitSpawnPlanCount;
+            var units = new AutoChessUnitDefinition[count];
+            for (var i = 0; i < count; i++)
             {
-                var row = rows[i];
+                var plan = AutoChessGeneratedConfig.GetBaseUnitSpawnPlan(i);
                 units[i] = new AutoChessUnitDefinition(
-                    row.Id,
-                    row.DisplayName,
-                    row.ArchetypeName,
+                    plan.Id,
+                    plan.DisplayName,
+                    plan.ArchetypeName,
                     0,
-                    row.Team,
-                    row.Slot,
-                    row.Health * healthMultiplier,
-                    row.Energy,
-                    row.PrimaryAbilityCode,
-                    row.FinisherAbilityCode,
-                    row.FinisherHealthThreshold * healthMultiplier,
-                    row.PrimaryTargetPolicy,
-                    row.FinisherTargetPolicy);
+                    plan.Team,
+                    plan.Slot,
+                    plan.Health * healthMultiplier,
+                    plan.Energy,
+                    plan.PrimaryAbilityCode,
+                    plan.FinisherAbilityCode,
+                    plan.ActiveAbilityCode,
+                    plan.ActiveCastInterval,
+                    plan.ActiveCastFrameOffset,
+                    plan.FinisherHealthThreshold * healthMultiplier,
+                    plan.PrimaryTargetPolicy,
+                    plan.FinisherTargetPolicy);
             }
 
             return units;

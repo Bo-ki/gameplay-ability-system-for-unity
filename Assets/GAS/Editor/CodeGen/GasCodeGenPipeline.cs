@@ -18,8 +18,12 @@ namespace GAS.Editor
             new BakerGluePhase(),
             new ComponentTypeSetPhase(),
             new QueryLayoutPhase(),
-            new AutoChessDemoConfigPhase(),
             new ValidationReportPhase(),
+        };
+
+        private static readonly IGasCodeGenPhase[] s_autoChessDemoPhases =
+        {
+            new AutoChessDemoConfigPhase(),
         };
 
         public static void RunAll()
@@ -34,7 +38,26 @@ namespace GAS.Editor
 
         public static bool TryRunAll(bool refreshAssetDatabase)
         {
+            var coreSuccess = TryRunCore(refreshAssetDatabase: false);
+            var demoSuccess = coreSuccess && TryRunAutoChessDemo(refreshAssetDatabase: false);
+
+            if (refreshAssetDatabase)
+                GasCodeGenEnvironment.RefreshAssetDatabase();
+
+            return coreSuccess && demoSuccess;
+        }
+
+        public static bool TryRunCore(bool refreshAssetDatabase)
+        {
             return Run(s_corePhases, refreshAssetDatabase);
+        }
+
+        public static bool TryRunAutoChessDemo(bool refreshAssetDatabase)
+        {
+            return RunStandalone(
+                s_autoChessDemoPhases,
+                Path.Combine(GasCodeGenEnvironment.ProjectRoot, "Assets", "AutoChessDemo", "Generated"),
+                refreshAssetDatabase);
         }
 
         internal static bool Run(IEnumerable<IGasCodeGenPhase> phases, bool refreshAssetDatabase = true)
@@ -91,6 +114,49 @@ namespace GAS.Editor
                 GasCodeGenEnvironment.Log($"[GasCodeGenPipeline] 全部完成。Rows={context.Rows.Count}, Phases={phaseList.Count}, OrphansDeleted={context.OrphansDeleted}");
                 return true;
             }
+        }
+
+        private static bool RunStandalone(
+            IEnumerable<IGasCodeGenPhase> phases,
+            string manifestOutputRoot,
+            bool refreshAssetDatabase)
+        {
+            var phaseList = phases as IReadOnlyList<IGasCodeGenPhase> ?? phases.ToArray();
+            var context = GasCodeGenContext.Create(true);
+            var manifest = new GasCodeGenManifest(context.ProjectRoot, manifestOutputRoot, context.InputHash);
+            var errors = new List<string>();
+            var executedCount = 0;
+
+            foreach (var phase in phaseList)
+            {
+                try
+                {
+                    phase.Execute(context, manifest);
+                    executedCount++;
+                    GasCodeGenEnvironment.Log($"[GasCodeGenPipeline] {phase.PhaseName} 完成: {string.Join(", ", phase.OutputFileNames)}");
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"{phase.PhaseName}: {ex.Message}");
+                    GasCodeGenEnvironment.LogException(ex);
+                }
+            }
+
+            if (errors.Count == 0)
+                context.OrphansDeleted = manifest.DeleteOrphanedFiles();
+
+            manifest.Save();
+            if (refreshAssetDatabase)
+                GasCodeGenEnvironment.RefreshAssetDatabase();
+
+            if (errors.Count > 0)
+            {
+                GasCodeGenEnvironment.LogError($"[GasCodeGenPipeline] {errors.Count} 个独立 Phase 失败:\n{string.Join("\n", errors)}");
+                return false;
+            }
+
+            GasCodeGenEnvironment.Log($"[GasCodeGenPipeline] 独立 Phase 完成。Phases={executedCount}, OrphansDeleted={context.OrphansDeleted}");
+            return true;
         }
 
         private static GasCodeGenSettings CreateSettings()

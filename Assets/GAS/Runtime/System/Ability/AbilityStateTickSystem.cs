@@ -14,7 +14,6 @@ namespace GAS.Runtime
     {
         private EntityQuery _activeQuery;
 
-        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             _activeQuery = state.GetEntityQuery(new EntityQueryDesc
@@ -36,7 +35,6 @@ namespace GAS.Runtime
             }.ScheduleParallel(_activeQuery, state.Dependency);
         }
 
-        [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
         }

@@ -21,13 +21,28 @@ namespace GasCodeGenCliHost
                     return RunUnityBatchmode(projectRoot, args);
 
                 GasCodeGenEnvironment.UseOfflineProjectRoot(projectRoot);
-                Console.WriteLine("Mode:    sourcegen");
+                Console.WriteLine($"Mode:    {mode}");
                 Console.WriteLine($"Project: {projectRoot}");
                 Console.WriteLine("Input:   Luban JSON tables");
 
-                return GasCodeGenPipeline.TryRunAll(refreshAssetDatabase: false)
-                    ? 0
-                    : 3;
+                if (string.Equals(mode, "sourcegen-all", StringComparison.OrdinalIgnoreCase))
+                    return GasCodeGenPipeline.TryRunAll(refreshAssetDatabase: false) ? 0 : 3;
+
+                if (string.Equals(mode, "autochess", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(mode, "sourcegen-autochess", StringComparison.OrdinalIgnoreCase))
+                {
+                    return GasCodeGenPipeline.TryRunAutoChessDemo(refreshAssetDatabase: false) ? 0 : 3;
+                }
+
+                if (string.Equals(mode, "sourcegen", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(mode, "core", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(mode, "sourcegen-core", StringComparison.OrdinalIgnoreCase))
+                {
+                    return GasCodeGenPipeline.TryRunCore(refreshAssetDatabase: false) ? 0 : 3;
+                }
+
+                Console.Error.WriteLine($"Unknown mode: {mode}");
+                return 2;
             }
             catch (Exception ex)
             {

@@ -18,12 +18,16 @@ namespace GAS.Editor
         public int AbilityPlayerAttack { get; private set; }
         public int AbilityEnemyAttack { get; private set; }
         public int AbilityPlayerExecute { get; private set; }
+        public int AbilityPlayerPoison { get; private set; }
         public int GameplayEffectPlayerAttackDamage { get; private set; }
         public int GameplayEffectEnemyAttackDamage { get; private set; }
         public int GameplayEffectPlayerExecute { get; private set; }
+        public int GameplayEffectPlayerPoison { get; private set; }
+        public int GameplayEffectPoisonTickDamage { get; private set; }
         public int ExecutionCalculationExecuteDamage { get; private set; }
         public int ExecutionCalculationExecuteDamageOutput { get; private set; }
         public int TagAttackCooldown { get; private set; }
+        public AutoChessDemoExecuteDamageCalculationModel ExecuteDamageCalculation { get; private set; }
         public AutoChessDemoScenarioModel ValidationScenario { get; private set; }
         public IReadOnlyList<AutoChessDemoUnitModel> BaseUnits { get; private set; }
 
@@ -38,10 +42,18 @@ namespace GAS.Editor
             var playerAttack = RequiredEffect(gameplayEffects, "AutoChessPlayerAttackDamage");
             var enemyAttack = RequiredEffect(gameplayEffects, "AutoChessEnemyAttackDamage");
             var playerExecute = RequiredEffect(gameplayEffects, "AutoChessPlayerExecute");
+            var playerPoison = RequiredEffect(gameplayEffects, "AutoChessPlayerPoison");
+            var poisonTick = RequiredEffect(gameplayEffects, "AutoChessPoisonTickDamage");
             var combatSet = playerAttack.ModifierAttributeSetCode;
             var health = playerAttack.ModifierAttributeCode;
             if (combatSet <= 0 || health <= 0)
                 throw new InvalidOperationException("[AutoChessDemoConfig] AutoChess player attack GE must resolve combat health modifier from Luban rows.");
+
+            if (poisonTick.ModifierAttributeSetCode != combatSet
+                || poisonTick.ModifierAttributeCode != health)
+            {
+                throw new InvalidOperationException("[AutoChessDemoConfig] AutoChess poison tick GE must resolve combat health modifier from Luban rows.");
+            }
 
             var energy = attributes
                 .Where(row => row.AttributeSetCode == combatSet && row.AttributeCode != health)
@@ -59,14 +71,18 @@ namespace GAS.Editor
                 GameplayEffectPlayerAttackDamage = playerAttack.GameplayEffectCode,
                 GameplayEffectEnemyAttackDamage = enemyAttack.GameplayEffectCode,
                 GameplayEffectPlayerExecute = playerExecute.GameplayEffectCode,
+                GameplayEffectPlayerPoison = playerPoison.GameplayEffectCode,
+                GameplayEffectPoisonTickDamage = poisonTick.GameplayEffectCode,
                 AbilityPlayerAttack = RequiredAbility(abilities, playerAttack.GameplayEffectCode),
                 AbilityEnemyAttack = RequiredAbility(abilities, enemyAttack.GameplayEffectCode),
                 AbilityPlayerExecute = RequiredAbility(abilities, playerExecute.GameplayEffectCode),
+                AbilityPlayerPoison = RequiredAbility(abilities, playerPoison.GameplayEffectCode),
                 ExecutionCalculationExecuteDamage = autoChessSource.ExecutionCalculationExecuteDamage,
                 ExecutionCalculationExecuteDamageOutput = autoChessSource.ExecutionCalculationExecuteDamageOutput,
                 TagAttackCooldown = autoChessSource.TagAttackCooldown,
             };
 
+            model.ExecuteDamageCalculation = autoChessSource.CreateExecuteDamageCalculation(model);
             model.ValidationScenario = autoChessSource.CreateScenario(
                 playerAttack.GameplayCueCode > 0
                 || enemyAttack.GameplayCueCode > 0
@@ -111,6 +127,48 @@ namespace GAS.Editor
         public int MinAttributeChanges;
         public int MinExecutionOutputs;
         public int MinCueRequests;
+        public int MinActiveEffectSlots;
+        public int MinPeriodTickDamageFacts;
+        public int MinActiveMutationCommands;
+        public int MinActiveMutationOwnerGroups;
+        public int MaxActiveMutationEstimatedRandomLookups;
+        public int MaxActiveMutationOwnerResourceLookups;
+        public int MaxActiveMutationMigrationCarriers;
+    }
+
+    internal readonly struct AutoChessDemoExecuteDamageCalculationModel
+    {
+        public readonly int GameplayEffectCode;
+        public readonly int CalculationCode;
+        public readonly int OutputKey;
+        public readonly int HealthAttrSetCode;
+        public readonly int HealthAttrCode;
+        public readonly float BaseDamage;
+        public readonly float MissingHealthCoefficient;
+        public readonly float MinDamage;
+        public readonly float MaxDamage;
+
+        public AutoChessDemoExecuteDamageCalculationModel(
+            int gameplayEffectCode,
+            int calculationCode,
+            int outputKey,
+            int healthAttrSetCode,
+            int healthAttrCode,
+            float baseDamage,
+            float missingHealthCoefficient,
+            float minDamage,
+            float maxDamage)
+        {
+            GameplayEffectCode = gameplayEffectCode;
+            CalculationCode = calculationCode;
+            OutputKey = outputKey;
+            HealthAttrSetCode = healthAttrSetCode;
+            HealthAttrCode = healthAttrCode;
+            BaseDamage = baseDamage;
+            MissingHealthCoefficient = missingHealthCoefficient;
+            MinDamage = minDamage;
+            MaxDamage = maxDamage;
+        }
     }
 
     internal readonly struct AutoChessDemoUnitModel
@@ -124,6 +182,9 @@ namespace GAS.Editor
         public readonly float Energy;
         public readonly int PrimaryAbilityCode;
         public readonly int FinisherAbilityCode;
+        public readonly int ActiveAbilityCode;
+        public readonly int ActiveCastInterval;
+        public readonly int ActiveCastFrameOffset;
         public readonly float FinisherHealthThreshold;
         public readonly string PrimaryTargetPolicy;
         public readonly string FinisherTargetPolicy;
@@ -138,6 +199,9 @@ namespace GAS.Editor
             float energy,
             int primaryAbilityCode,
             int finisherAbilityCode,
+            int activeAbilityCode,
+            int activeCastInterval,
+            int activeCastFrameOffset,
             float finisherHealthThreshold,
             string primaryTargetPolicy,
             string finisherTargetPolicy)
@@ -151,6 +215,9 @@ namespace GAS.Editor
             Energy = energy;
             PrimaryAbilityCode = primaryAbilityCode;
             FinisherAbilityCode = finisherAbilityCode;
+            ActiveAbilityCode = activeAbilityCode;
+            ActiveCastInterval = activeCastInterval;
+            ActiveCastFrameOffset = activeCastFrameOffset;
             FinisherHealthThreshold = finisherHealthThreshold;
             PrimaryTargetPolicy = primaryTargetPolicy;
             FinisherTargetPolicy = finisherTargetPolicy;
@@ -353,6 +420,37 @@ namespace GAS.Editor
             return new AutoChessSourceGenConfig(root);
         }
 
+        public AutoChessDemoExecuteDamageCalculationModel CreateExecuteDamageCalculation(
+            AutoChessDemoConfigModel model)
+        {
+            var formula = RequiredObject("executionCalculations.executeDamageFormula");
+            var baseDamage = RequiredFloat(formula, "baseDamage");
+            var missingHealthCoefficient = RequiredFloat(formula, "missingHealthCoefficient");
+            var minDamage = RequiredFloat(formula, "minDamage");
+            var maxDamage = RequiredFloat(formula, "maxDamage");
+            if (model.GameplayEffectPlayerExecute <= 0
+                || model.AttributeSetCombat <= 0
+                || model.AttributeHealth <= 0
+                || baseDamage <= 0f
+                || missingHealthCoefficient < 0f
+                || minDamage < 0f
+                || maxDamage < minDamage)
+            {
+                throw new InvalidDataException("[AutoChessSourceGenConfig] execute damage formula is invalid.");
+            }
+
+            return new AutoChessDemoExecuteDamageCalculationModel(
+                model.GameplayEffectPlayerExecute,
+                ExecutionCalculationExecuteDamage,
+                ExecutionCalculationExecuteDamageOutput,
+                model.AttributeSetCombat,
+                model.AttributeHealth,
+                baseDamage,
+                missingHealthCoefficient,
+                minDamage,
+                maxDamage);
+        }
+
         public AutoChessDemoScenarioModel CreateScenario(bool hasGameplayCue)
         {
             var scenario = RequiredObject("validationScenario");
@@ -368,6 +466,13 @@ namespace GAS.Editor
                 MinAttributeChanges = RequiredInt(scenario, "minAttributeChanges"),
                 MinExecutionOutputs = RequiredInt(scenario, "minExecutionOutputs"),
                 MinCueRequests = ReadCueRequestExpectation(scenario, hasGameplayCue),
+                MinActiveEffectSlots = RequiredInt(scenario, "minActiveEffectSlots"),
+                MinPeriodTickDamageFacts = RequiredInt(scenario, "minPeriodTickDamageFacts"),
+                MinActiveMutationCommands = RequiredInt(scenario, "minActiveMutationCommands"),
+                MinActiveMutationOwnerGroups = RequiredInt(scenario, "minActiveMutationOwnerGroups"),
+                MaxActiveMutationEstimatedRandomLookups = RequiredInt(scenario, "maxActiveMutationEstimatedRandomLookups"),
+                MaxActiveMutationOwnerResourceLookups = RequiredInt(scenario, "maxActiveMutationOwnerResourceLookups"),
+                MaxActiveMutationMigrationCarriers = RequiredInt(scenario, "maxActiveMutationMigrationCarriers"),
             };
         }
 
@@ -389,6 +494,9 @@ namespace GAS.Editor
                     RequiredFloat(row, "energy"),
                     ResolveAbility(model, RequiredString(row, "primaryAbility")),
                     ResolveAbility(model, RequiredString(row, "finisherAbility")),
+                    ResolveAbility(model, RequiredString(row, "activeAbility")),
+                    RequiredInt(row, "activeCastInterval"),
+                    RequiredInt(row, "activeCastFrameOffset"),
                     RequiredFloat(row, "finisherHealthThreshold"),
                     RequiredString(row, "primaryTargetPolicy"),
                     RequiredString(row, "finisherTargetPolicy")))
@@ -403,6 +511,7 @@ namespace GAS.Editor
                 "AbilityPlayerAttack" => model.AbilityPlayerAttack,
                 "AbilityEnemyAttack" => model.AbilityEnemyAttack,
                 "AbilityPlayerExecute" => model.AbilityPlayerExecute,
+                "AbilityPlayerPoison" => model.AbilityPlayerPoison,
                 _ => throw new InvalidDataException($"[AutoChessSourceGenConfig] unknown ability reference: {key}"),
             };
         }

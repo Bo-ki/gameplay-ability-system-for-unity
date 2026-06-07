@@ -11,7 +11,7 @@ namespace GAS.Runtime
                 $"[{time}]SourceType:{_sourceType.ToString()}, Entity:{_sourceEntity} ,Msg:{Parameter.Value}");
 
             StopImmediate();
-            RemoveFromTargetAsc();
+            RemoveSelf();
         }
 
         public void SetMessage(string message)

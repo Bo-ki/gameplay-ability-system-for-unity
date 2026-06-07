@@ -1,110 +1,114 @@
-# CodeGen 到 Runtime 新链路重构计划
+# CodeGen 链路复审事实
 
-## 目标
+> 归属：本文件只记录 CodeGen 到 Runtime 的当前事实、历史计划与现实偏差、P0/P1 违约证据，以及按 Unity DOTS 官方规则得出的事实判断。纯目标态链路见 `../01-目标态架构共识/14-DefinitionCodeGen目标链路Spec.md` 和 `../01-目标态架构共识/15-SourceGenerator职责边界Spec.md`；可执行拆分写入任务树，不写在本文件内。
 
-以 `08-Luban-SourceGenerator配置生成链路Spec.md` 为准，直接用 `GasCodeGenPipeline + Context + RowMetadata + Phase + Manifest` 替换旧的分散生成器链路。当前阶段不维护旧链路兼容，不新增 wrapper，不让 Runtime Core 反查 Luban managed row、JSON、ScriptableObject 或 Editor registry。
+## 2026-06-07 目录归位说明
 
-## 主链路
+旧的 `01-目标态架构共识/14-CodeGen到Runtime新链路重构计划.md` 混合了承诺链路、当前违约、下一轮目标和验收点，不适合继续作为目标态 Spec。当前归位规则如下：
 
-1. `BeanUpdater` 只负责确保 Luban / bean 输入存在。
-2. `GasCodeGenContext` 单次扫描 `*DefinitionRow`，生成统一 `RowMetadata`、输入 hash、输出根目录和命名空间。
-3. `IGasCodeGenPhase` 只消费 context，不自行扫描程序集，不自行推断全局命名。
-4. `GasCodeGenManifest` 记录输入 hash、输出文件、层级、runtime 可见性、版本控制归属，并清理 orphan artifact。
-5. Runtime Core 只消费 generated id、Blob schema、`GASDefinitionCatalogBlob`、unmanaged / generated code->index lookup、Runtime definition glue、component type set、query layout 和 static switch。
+| 信息类型 | Owner | 说明 |
+|---|---|---|
+| 当前 CodeGen pipeline 事实、generated artifact 清单、违约点 | 本文件 | 作为事实和诊断证据保留 |
+| Definition CodeGen 目标数据流、允许/禁止 artifact、Runtime 消费契约 | `../01-目标态架构共识/14-DefinitionCodeGen目标链路Spec.md` | 作为框架设计 Spec |
+| SourceGenerator 权限边界、generated lifecycle 禁止项、validation gate 目标值 | `../01-目标态架构共识/15-SourceGenerator职责边界Spec.md` | 作为框架设计 Spec |
+| Core pipeline 默认化、validation gate 扩展、catalog bootstrap 收口等执行项 | `../02-主线任务树/` 或当前进度目录 | 作为任务，不在事实文档展开 |
 
-## 2026-05-27 实现审查结论
+## 审查边界
 
-本轮审查以 `08-Luban-SourceGenerator配置生成链路Spec.md`、`90-目标态不变量.md`、`13-EntityComponent物理布局Spec.md` 和 DOTS 规则索引为准，结论是当前计划必须从 AutoChess 业务闭环退回到通用 Luban / SourceGenerator 核心生成链路。
+本文件以 `../01-目标态架构共识/08-Luban-SourceGenerator配置生成链路Spec.md`、`../01-目标态架构共识/14-DefinitionCodeGen目标链路Spec.md`、`../01-目标态架构共识/15-SourceGenerator职责边界Spec.md` 和 `../../UnityDOTS官方文档参考/主题/90-规则编号索引.md` 作为判定标准，审查当前生成链路是否满足：
 
-本文件中出现的 `HeadlessAutoChess` 只表示 2026-05-27 审查时的历史旧口径或禁止回流命名，不表示当前 AutoChessDemo 的业务域名称。当前 AutoChessDemo 的 unit / scenario / scale / validation 配置链应由 `11-AutoChessDemo-Luban配置方案Spec.md` 约束，并作为 Demo 专用链路接回通用 Core generated catalog，而不是重新污染 `GasCodeGenPipeline.RunAll()`。
+1. Core pipeline 不被 Demo phase 污染。
+2. Runtime-visible generated artifact 不引用 managed row、JSON、`cfg.*` 或 Editor registry。
+3. SourceGenerator 不生成 Runtime Core lifecycle、system registration、hidden query、hidden ECB、NativeContainer owner。
+4. Runtime Core 只消费 generated id、Blob schema、`GASDefinitionCatalogBlob`、lookup、pure Runtime definition glue 和 validation artifact。
 
-> 2026-06-06 复审更新：本文件的“Core generated 主链收口”已被 `15-Luban-SourceGenerator链路复审与目标重划.md` 进一步收窄。`RuntimeDefinitionGluePhase` 不能再以“待补 generated runtime system”的方式推进；它只能输出 pure glue / unmanaged record。已经生成的 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs`、`RuntimeSystemRegistration.gen.cs` 属于职责越界或迁移期 proof，不是目标态完成物。
+本文件中的“必须”“不得”“后续约束”都是从当前事实导出的整改约束，不表示目标态设计正文已经在本文件内成立。
 
-### 重定位前偏差
+## 当前正向事实
 
-1. `GasCodeGenPipeline.RunAll()` 仍默认执行 `AutoChessAttributeComponentPhase`（目标态应迁为 AttributeSet family phase）、`AutoChessTagMaskPhase`、`AutoChessUnitConfigPhase`、`AutoChessMmcEvaluatorPhase`、`AutoChessScenarioBuildPlanPhase`。这违反 `08` 的通用 `Context -> RowMetadata -> Phase -> Manifest` 主链定位，也把 demo 旧架构混进了核心生成链。
-2. `RowMetadataFactory` 仍在代码里硬编码 `HeadlessAutoChess` 前缀。根据 `08` 的 `GasCodeGenSettings` 要求，项目名前缀只能来自配置，不能存在于生成器实现。
-3. `ValidationReportPhase` 的报告内容仍以 AutoChess runtime artifact 为中心，无法作为 Core CodeGen 的验收报告。
-4. Runtime 侧已出现若干 proof-only 实现，例如主线程遍历、`ToEntityArray` 和直接 `EntityManager` 写入路径。根据 `QRY-01`、`JOB-01`、`PRF-05`、`SC-01`、`PRF-02`，这些不能扩展为目标态 hot path；当前轮只允许保留为迁移期证据，不继续围绕 AutoChess 补业务。
-5. AutoChessDemo 中的 generated row adapter、scenario driver、runtime projection 仍混有旧结构。它们不是当前轮验收对象，继续补这些文件会稀释 Luban / SourceGenerator 主链收敛。
-6. 按 `12-命名规范Spec.md` 审查，当前生成模板会产出 `BlobAbilityDefinition`、`GasGeneratedDefinitionIndex`、`GeneratedDefinitionBlobComponent<T>`、`DefinitionCodeComponent` 等命名，未遵循 `GAS` 框架前缀、`*DefinitionBlob` Blob 根类型后缀和 `[GAS前缀][职责][DOTS后缀]` 规则。
+1. `GenerateAllCode()` 已接入 `BeanUpdater + GasCodeGenPipeline`，并通过 process gate 统一驱动 Luban JSON/C# export 与 GAS CodeGen。
+2. Luban C# 保留在 Unity 编译域，generated Runtime 不反向依赖 `cfg.*` / `Luban.Runtime` / `SimpleJSON`。
+3. `DefinitionCatalog.gen.cs` 已生成 `GASDefinitionCatalogBlob`、sorted code lookup、`TryGetAbilityIndex()` / `TryGetGameplayEffectIndex()` 和 `ref readonly` definition 访问。
+4. `RuntimeDefinitionGlue.gen.cs` 中的 `GASGeneratedRuntimeDefinitionResolver`、Requirement / Magnitude evaluator、record glue 是正向资产：它们把 definition index/range 转成 frame-local record，不需要 managed row、JSON 或 `Dictionary`。
+5. `GasCodeGenPipeline.s_corePhases` 已不再包含 `AutoChessDemoConfigPhase`；Demo 生成改由 `s_autoChessDemoPhases` standalone 写入 `Assets/AutoChessDemo/Generated`。
+6. `GasCodeGenValidationReport.md` 当前不仅输出 forbidden dependency 和 naming debt 命中数，也输出 generated runtime boundary hits；其中 `GeneratedRuntimeSystemRegistrationHits = 0` 是 SourceGenerator 不自注册的正向事实，但手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 当前对缺失 generated type 仍是静默跳过。
 
-### 重新定位
+## 当前 P0 / P1 违约事实
 
-当前两到三轮目标只验收 **通用 CodeGen Core**：
+### 已缓解：Core pipeline 不再直接包含 Demo phase
 
-1. `GenerateAllCode()` 默认只运行 `BeanUpdater + CoreGasCodeGenPipeline`。
-2. Core phase 固定为：`AssemblyDefinition`、`DefinitionIndex`、`BlobSchema`、`StaticLookup`、`RuntimeDefinitionGlue`、`BakerGlue`、`ComponentTypeSet`、`QueryLayout`、`ValidationReport`。
-3. AutoChess 专用 phase 当前轮直接后置，不保留在 Core pipeline 中；后续若重启 Demo 生成链路，必须另起 Demo 专用入口且不得污染 `RunAll()`。
-4. Core generated 输出根目录固定收敛到 `Assets/GAS/Generated/CodeGen`；AutoChessDemo 不再作为默认 glue 输出位置。
-5. `RowMetadataFactory` 的项目名前缀剥离、生成 namespace、输出目录必须由 `GasCodeGenSettings` 或 `GASSettingAsset` 承载。
-6. Runtime-visible generated artifact 不得出现 `DefinitionRow`、row factory、`IReadOnlyList<*DefinitionRow>`、`cfg.*`、`XLuban`、`SimpleJSON`、`JsonReader` 或 managed row snapshot。
-7. Editor / Baking 侧允许 row-based builder，但必须处于 `#if UNITY_EDITOR`、Baker glue 或 Baking artifact 层，且 manifest 标记为非 runtime-visible。
-8. Validation report 必须输出 DOTS 规则对照、manifest layer 表、runtime forbidden dependency scan、naming debt scan、Baker/Blob/lookup 边界，不输出 AutoChess 业务完成度。
-9. 新增 generated Runtime Core 类型必须遵守 `12`：Blob 根类型使用 `{Domain}DefinitionBlob`，静态 lookup 使用 `{Domain}DefinitionLookup`，通用 generated component 使用 `GASGeneratedDefinitionBlobComponent<T>` 与 `GASDefinitionCodeComponent`，Runtime glue 使用 `GASGeneratedRuntimeDefinitionResolver` / `GASGeneratedRequirementEvaluator` / `GASGeneratedMagnitudeEvaluator` / `GASGeneratedTargetRuleTable`，框架产物统一使用 `GASGenerated*` 前缀。
+旧复审中的 `s_corePhases` 包含 `AutoChessDemoConfigPhase` 已不是当前事实。当前 Core phase set 只包含 Core phases，Demo phase 改为 standalone phase 和 standalone output root。
 
-## 破坏性替换切片
+剩余约束是消费链路要分 owner：`TryRunAll()` 仍然先跑 Core 再跑 AutoChessDemo standalone，所以 Core validation report 只消费为 Runtime Core 生成链证据；AutoChessDemo generated manifest / scenario artifact 只能消费为业务验收或 Demo 证据。
 
-| 顺序 | 切片 | 验收 |
-| --- | --- | --- |
-| 1 | Core pipeline 默认化 | `生成所有` 只运行 core phases；AutoChess phase 从默认主链移出 |
-| 2 | Output root / asmdef 收敛 | 默认输出到 `Assets/GAS/Generated/CodeGen`，并由 generated runtime/editor asmdef 分层；Runtime asmdef 不引用 row source，Editor asmdef 自动引用实际 row source assembly |
-| 3 | Settings 去硬编码 | generated namespace、输出根目录、row prefix strip 来自配置；生成器代码中不出现项目名前缀 |
-| 4 | Naming gate | Core generated names 满足 `12`：`GAS*` 框架前缀、`*DefinitionBlob`、`*Lookup`、`*Component`、`*BakePlan` |
-| 5 | DefinitionIndex | 生成 row-free unmanaged metadata index，Runtime 可按 `GASDefinitionKind` 查询定义规模和 schema hash |
-| 6 | Runtime / Baking 分层 | manifest 区分 Runtime、Baking、Editor/CI；runtime-visible 文件无 managed row / JSON / cfg 引用 |
-| 7 | Blob / Static lookup | runtime 默认生成 `GASDefinitionCatalogBlob` + code->index lookup；迁移期 per-domain lookup 可持有 `NativeArray<int>` 与 `NativeArray<BlobAssetReference<T>>`，row-based builder 只在 Editor / Baking |
-| 8 | Runtime definition glue | 生成 `AbilityDefinitionIndex -> AbilityActivationPlanRecord -> GECommandSeedRecord -> ResolvedModifierRecord` 的静态纯函数链；不生成 lifecycle system、不隐藏 ECB/query |
-| 9 | Baker glue | 生成 stateless `Baker<TAuthoring>`，调用 `AddBlobAsset()`，只添加 component，不读取其他 Baker 输出 |
-| 10 | Report gate | `GasCodeGenValidationReport.md` 输出 DOTS 规则、命名规则、layer、manifest、forbidden dependency、naming debt 和 orphan 清理证据 |
+### P0：RuntimeDefinitionGluePhase 生成 lifecycle artifact
 
-## 2026-06-06 复审后的当前推进状态
+`RuntimeDefinitionGluePhase` 当前除了 pure glue，还生成：
 
-本轮状态必须按真实代码重新锚定，而不是沿用“接近收口”的旧口径。
+```text
+Runtime/RuntimeAbilityActivation.gen.cs
+Runtime/RuntimeEffectInstant.gen.cs
+Runtime/RuntimeActiveEffect.gen.cs
+```
 
-已经具备且应保留的基础：
+这些 generated 文件包含 `ISystem`、`OnUpdate(ref SystemState)`、`SystemAPI.GetComponentLookup`、`SystemAPI.GetBufferLookup`、`EntityCommandBuffer`、structural owner 和大量 random lookup。`RuntimeSystemRegistration.gen.cs` 当前已不在 output list，且 report 中 `GeneratedRuntimeSystemRegistrationHits = 0`；这不等于主链注册已合规，因为手写 registry 当前 `Type.GetType(...) == null` 时 `continue`，缺失 generated artifact / type / assembly 不会 fail-fast。新增 registration helper 仍必须按目标态禁止项处理，手写 registry 也必须补验证门。
 
-- 主入口 `GenerateAllCode()` 已接入 `BeanUpdater + GasCodeGenPipeline`，Luban process gate、manifest、validation report、generated asmdef 分层的方向仍然正确。
-- `DefinitionCatalog.gen.cs` 已出现 `GASDefinitionCatalogBlob`、sorted code lookup、`ref readonly` definition 访问和 `GASGeneratedDefinitionCatalogLookup`。这符合 `BLOB-01`：静态定义进入 immutable Blob，Runtime 只读。
-- `RuntimeDefinitionGlue.gen.cs` 中的 `GASGeneratedRuntimeDefinitionResolver`、Requirement / Magnitude evaluator、record glue 是目标态资产；它们把 definition index/range 转成 frame-local record，不需要 managed row / JSON / `Dictionary`。
-- Luban C# 保留在 Unity 编译域、generated runtime 不反向依赖 `cfg.*` / `Luban.Runtime` / `SimpleJSON` 的边界仍应保留。这能让配置事实错误在真实编译链路暴露。
+判定依据：
 
-当前 P0 违约：
+1. `SYS-01`：权威 gameplay 计算必须落在 ECS System / Job 数据流，但生命周期 owner 应由 Runtime Core 架构显式拥有。
+2. `SYS-03`：system 数量是成本源；当前 registration hit 为 0，但新增 generated registration 一旦回流，仍不能绕过 system budget。
+3. `QRY-01` / `QRY-04`：hot path query 与高频 random lookup 必须有 owner-local / chunk-local 选型论证。
+4. `SC-01` / `ECB-03`：结构变化必须归属明确 phase，不能由 generated glue 隐藏 owner。
+5. `BUR-01`：hot path system/job 必须 Burst 且无托管依赖，generated output 与模板同等受审。
 
-- `GasCodeGenPipeline.s_corePhases` 当前仍包含 `AutoChessDemoConfigPhase`。所以“`RunAll()` 已默认只执行 core phases；AutoChess 专用 phase 已移除”不成立。
-- `RuntimeDefinitionGluePhase` 已实现，但实现过厚：它除了生成 pure glue，还生成 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs`、`RuntimeSystemRegistration.gen.cs`。
-- 上述 generated lifecycle 文件包含 `: ISystem`、`OnUpdate(ref SystemState)`、`state.EntityManager`、`SystemAPI.GetComponentLookup`、`SystemAPI.GetBufferLookup`、`EntityCommandBuffer`、`world.CreateSystem()`、`AddSystemToUpdateList()`。对照 `SYS-01`、`SYS-03`、`QRY-01`、`QRY-04`、`SC-01`、`ECB-03`、`BUR-01`，它们只能作为迁移期 proof，不能作为目标态 Runtime Core。
-- `GASGeneratedDefinitionCatalogBuilder.BuildCatalog()` 在 Runtime-visible generated 文件中调用 `BlobBuilder`。对照 `BLOB-02`，它必须归属 Baking / Bootstrap / initialization owner；Runtime Core hot path 只能只读 catalog。
-- `RuntimeForbiddenDependencyHits = 0`、`RuntimeGeneratedNamingDebtHits = 0` 只证明没有 managed config 泄露和命名债，不能证明 generated lifecycle、hidden query、hidden ECB、random lookup、NativeContainer owner 合规。
+### P1：Catalog builder runtime-visible
 
-剩余 Core 缺口：
+`GASGeneratedDefinitionCatalogBuilder.BuildCatalog()` 当前在 Runtime-visible generated 文件中调用 `BlobBuilder`。如果只在 bootstrap / initialization 调用，它符合 `BLOB-02` 下限；但当前层级边界仍偏软，因为 runtime-visible API 暴露了 catalog materialization 和 dispose owner 责任。
 
-- `GasCodeGenPipeline.RunAll()` 必须去 Demo 污染：默认 phase 不得包含 `AutoChessDemoConfigPhase` 或任何 Demo 专用 phase。
-- `RuntimeDefinitionGluePhase` 必须收权：只允许生成 `GASGeneratedRuntimeDefinitionResolver`、`GASGeneratedRequirementEvaluator`、`GASGeneratedMagnitudeEvaluator`、`GASGeneratedTargetRuleTable` 这类 pure glue / unmanaged record。
-- `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs`、`RuntimeSystemRegistration.gen.cs` 必须删除、迁移到手写 Runtime Core System，或临时标记 `MigrationProofOnly` 并绑定移除任务。
-- `BuildCatalog()` / `BlobBuilder` 必须迁入 Baking / Bootstrap / initialization owner，并明确 `BlobAssetReference` dispose owner。
-- Validation report 必须新增 generated lifecycle / ownership gate：`GeneratedRuntimeLifecycleHits = 0`、`GeneratedRuntimeOwnershipHits = 0`、`GeneratedRuntimeRandomLookupHits = 0`、`GeneratedRuntimeNativeContainerOwnerHits = 0`、`GeneratedRuntimeStructuralChangeHits = 0`，或把命中 artifact 标为 `MigrationProofOnly` 并绑定移除任务。
-- Player/AOT / Burst Inspector 证据仍是后续 CI artifact，不作为当前 Editor Core 编译完成条件；但 `BUR-01` 必须进入设计验收，不得等到性能测试阶段才补。
+判定依据：`BLOB-01` / `BLOB-02` / `BAKE-01` 要求静态 definition 进入 immutable Blob，`BlobBuilder` 只在 Baking 或初始化期使用。Runtime Core hot path 只能只读 catalog。
 
-## 下一轮目标
+### P0：Validation report 已进入 blocking-unclassified gate，但仍允许 `MigrationProofOnly`
 
-1. 重新运行完整 `GenerateAllCode()`，以 Unity batchmode 证明 `BeanUpdater -> Luban CLI -> GasCodeGenPipeline -> Unity compile` 主链闭环。
-2. 保持集中静态审查：扫描 `Assets/GAS/Runtime` 和 generated runtime 目录，确认 forbidden dependency、generated naming debt 和 generated lifecycle / ownership hits 均为 0；扫描全 generated artifact，确认旧命名债为 0。
-3. 若完整链路通过，下一步转入手写 GAS Runtime System 消费 generated `GASDefinitionCatalogBlob` / lookup / pure Runtime definition glue，而不是继续补 AutoChessDemo 旧业务链路或 generated lifecycle system。
+`RuntimeForbiddenDependencyHits = 0`、`RuntimeGeneratedNamingDebtHits = 0` 只能证明没有 managed config 泄漏和命名债。当前 report 已经能输出 generated runtime boundary 分类，并且 `GeneratedRuntimeBoundaryGateMode` / `CurrentMode` 已是 `blocking-unclassified-migration-proof`。这说明未分类 boundary hit 会被阻断；但 `GeneratedRuntimeBoundaryHits = 135` 仍以 `MigrationProofOnly` / `BootstrapDefinitionOwner` 等分类留在生成产物中，所以它不是 SourceGenerator 完成证明。
 
-## 本轮验收点
+当前必须消费为剩余风险的字段是：
 
-- `GasCodeGenPipeline.RunAll()` 的默认 phase 数不再包含任何 `AutoChess*Phase`。
-- `DefinitionIndex.gen.cs` 进入 manifest，标记为 `RuntimeVisible = true`。
-- `RowMetadataFactory` 源码不再出现 `HeadlessAutoChess`。
-- `GasCodeGenValidationReport.md` 不再输出 AutoChess 业务完成度，改为输出 `BAKE-*`、`BLOB-*`、`QRY-*`、`JOB-*`、`SC-*`、`BUR-*`、`PRF-*`、`ODF-*` 采用/拒绝/暂缓理由。
-- `GasCodeGenValidationReport.md` 新增 `GeneratedRuntimeLifecycleHits`、`GeneratedRuntimeOwnershipHits`、`GeneratedRuntimeRandomLookupHits`、`GeneratedRuntimeNativeContainerOwnerHits`、`GeneratedRuntimeStructuralChangeHits`，用于阻断 generated lifecycle / hidden query / hidden ECB 回流。
-- `GasCodeGenValidationReport.md` 输出 `RuntimeGeneratedNamingDebtHits`，用于阻断 `Blob*Definition`、`GasGenerated*` 等旧命名回流。
-- 新生成的 Blob 根类型形如 `AbilityDefinitionBlob` / `GameplayEffectDefinitionBlob`，不再使用 `BlobAbilityDefinition`。
-- 新生成的通用框架类型使用 `GASGeneratedDefinitionIndex`、`GASGeneratedDefinitionBlobComponent<T>`、`GASDefinitionCodeComponent`、`GASGeneratedDefinitionBakePlan`。
-- Editor/Baking lookup builder 使用 `GASGeneratedDefinitionLookupBuilder`，不得回流 `BlobDefinitionLookupBuilder`。
-- Luban C# 输出保留在 `Assets/DataGenerated/Luban/CSharp` 并由 Unity 编译；GAS generated Runtime 不引用 `cfg.*` / `Luban.Runtime` / `SimpleJSON`。
-- Runtime-visible generated 文件不得引入 `DefinitionRow`、row factory、`cfg.*`、`XLuban`、`SimpleJSON`、`JsonReader`。
-- AutoChessDemo 旧业务链路不纳入本轮提交范围；当前 Core 收口不得新增或补全 AutoChessDemo generated glue、scenario driver、runtime projection。
-- Runtime 消费链新增验收：至少一条 Ability / GE 链路必须证明 Core 只读 Catalog Blob，且不在 activation / fan-in / magnitude hot path 反查 per-definition entity、managed row、JSON 或 `Dictionary`。
-- Runtime glue 新增验收：至少一条 Ability / GE 链路必须证明 generated static glue 只输出 frame-local record，不拥有 NativeContainer、不调度 job、不执行结构变化。
+```text
+GeneratedRuntimeLifecycleHits
+GeneratedRuntimeSystemRegistrationHits
+GeneratedRuntimeOwnershipHits
+GeneratedRuntimeStructuralChangeHits
+GeneratedRuntimeRandomWriteLookupHits
+GeneratedRuntimeManagedConfigHits
+```
+
+## 当前事实对照快照
+
+| 事实项 | 当前证据 | 官方规则 | 判定 |
+|---|---|---|---|
+| Core / Demo phase 已拆分 | `GasCodeGenPipeline.cs` 中 `s_corePhases` 不含 `AutoChessDemoConfigPhase`；Demo standalone 写入 `Assets/AutoChessDemo/Generated` | `ODF-06` | 旧 P0 已缓解；消费链仍需分 owner |
+| RuntimeDefinitionGluePhase 过厚 | `GasGlueCodeGenPhases.cs` 写出 runtime activation / instant / active lifecycle artifact | `SYS-01`、`SYS-03` | SourceGenerator 越权生成 lifecycle |
+| generated runtime registration 当前为 0 | validation report 输出 `GeneratedRuntimeSystemRegistrationHits: 0`；手写 registry 对缺失 generated type 当前静默跳过 | `SYS-03` | SourceGenerator 不自注册是正向事实；主链注册 fail-fast 尚未达标，新增 registration 默认失败 |
+| generated runtime boundary gate 已阻断未分类命中 | validation report 输出 `GeneratedRuntimeBoundaryHits: 135`、`GeneratedRuntimeBoundaryGateMode: blocking-unclassified-migration-proof`、`GeneratedRuntimeUnclassifiedBoundaryHits: 0` | `ODF-18`、`SYS-01`、`QRY-04` | 未分类回流已进入 blocking；已分类 `MigrationProofOnly` 仍需 R2/R3/R5 退出 |
+| generated runtime random lookup | generated lifecycle 文件使用 `ComponentLookup<T>` / `BufferLookup<T>` | `QRY-04` | 迁移期 proof，非 scale-ready 终局 |
+| catalog blob 已出现 | `DefinitionCatalog.gen.cs` 有 sorted lookup / `ref readonly` access | `BLOB-01` | 正向事实 |
+| `BlobBuilder` runtime-visible | `DefinitionCatalog.gen.cs` 暴露 `BuildCatalog()` | `BLOB-02`、`BAKE-01` | 初始化可接受，层级 owner 需收口 |
+| forbidden dependency gate 通过 | report 输出 forbidden dependency hit 为 0 | `ODF-18` | 只能证明局部边界 |
+
+## 后续事实约束
+
+以下不是本文件的任务计划，而是后续实现必须回填证据的事实约束：
+
+1. `GasCodeGenPipeline.RunAll()` 或默认 Core 入口必须持续证明 Core phase set 不包含 `AutoChessDemoConfigPhase` 或任何 Demo 专用 phase；Demo standalone evidence 不能混写为 Core validation evidence。
+2. `RuntimeDefinitionGluePhase` 必须能证明只输出 pure glue / unmanaged record；任何 generated lifecycle artifact 必须迁出 Runtime-visible 层，或标记为迁移期 proof 并绑定移除任务。
+3. `BuildCatalog()` / `BlobBuilder` 必须有 Baking / Bootstrap / initialization owner 和 dispose owner 证据。
+4. Validation report 已新增 generated lifecycle / ownership / random lookup / NativeContainer / structural change gate，并已进入 `blocking-unclassified-migration-proof`；后续必须把已分类 `MigrationProofOnly` 逐项迁出、阈值化或失败化，不能只停留在“允许的 `MigrationProofOnly`”。
+5. Runtime 消费链必须证明至少一条 Ability / GE 链路只读 `GASDefinitionCatalogBlob` / lookup / pure glue，不反查 per-definition entity、managed row、JSON 或 `Dictionary`。
+
+## 当前红线
+
+1. 不再把“generated code 已存在”写成架构完成；generated code 进入主链后必须按 Runtime Core 规则审查。
+2. 不再把 `RuntimeForbiddenDependencyHits = 0` 写成 SourceGenerator 完全合规。
+3. 不再把 generated lifecycle system 当作目标态 Runtime Core。
+4. 不再把 AutoChessDemo phase、scenario、validation artifact 混入 Core CodeGen 默认路径。
+5. 不手改 `.gen.cs` 修复架构问题；修复必须落回 codegen phase、manifest、validation report、离线 sourcegen bat/CLI 或 Unity batchmode 生成链路。
