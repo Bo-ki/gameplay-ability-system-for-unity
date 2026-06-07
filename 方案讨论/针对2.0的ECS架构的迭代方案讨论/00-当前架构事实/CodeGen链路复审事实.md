@@ -31,7 +31,7 @@
 3. `DefinitionCatalog.gen.cs` 已生成 `GASDefinitionCatalogBlob`、sorted code lookup、`TryGetAbilityIndex()` / `TryGetGameplayEffectIndex()` 和 `ref readonly` definition 访问。
 4. `RuntimeDefinitionGluePhase` 当前只输出 `RuntimeDefinitionGlue.gen.cs`，其中 `GASGeneratedRuntimeDefinitionResolver`、Requirement / Magnitude evaluator、record glue 是正向资产：它们把 definition index/range 转成 frame-local record，不需要 managed row、JSON 或 `Dictionary`。
 5. `GasCodeGenPipeline.s_corePhases` 已不再包含 `AutoChessDemoConfigPhase`；Demo 生成改由 `s_autoChessDemoPhases` standalone 写入 `Assets/AutoChessDemo/Generated`。
-6. `RuntimeLifecycleMigrationPhase` 显式承载 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs` 三个迁移期 lifecycle artifact，manifest 以 `ArtifactCategory=RuntimeLifecycleMigration` 分类；`RuntimeDefinitionGlue.gen.cs` 以 `ArtifactCategory=RuntimePureGlue` 分类。
+6. `RuntimeLifecycleMigrationPhase` 当前只承载 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs` 三个迁移期 lifecycle artifact，manifest 以 `ArtifactCategory=RuntimeLifecycleMigration` 分类；`RuntimeDefinitionGlue.gen.cs` 以 `ArtifactCategory=RuntimePureGlue` 分类。`ActiveEffectLifecycleOwnerSystems.cs` 已退出 SourceGenerator 输出和 manifest，但仍位于 generated runtime 物理 asmdef 内作为手写 companion owner，以避免 Runtime asmdef 反向依赖 generated helper。
 7. `GasCodeGenValidationReport.md` 当前不仅输出 forbidden dependency 和 naming debt 命中数，也输出 generated runtime boundary hits；其中 `GeneratedRuntimeSystemRegistrationHits = 0` 是 SourceGenerator 不自注册的正向事实。手写 `GASSystemScheduleContract.AddSystemsByTypeName()` 当前对缺失 generated type 已 fail-fast 抛错，不再静默跳过；剩余证据缺口转为缺失 artifact / type mismatch / assembly unavailable 的负例验证、system 数量、phase budget 和 validation gate 对账。
 8. TagRequirement all-any-none 已进入 CodeGen 正向链路，并形成 generated catalog / pure evaluator 正向证据；`RuntimeEffectInstant.gen.cs` 仍归 `RuntimeLifecycleMigration`，不应写成 SourceGenerator lifecycle 收权完成。完整证据链、Run5 验证边界和重复维护裁决见 [架构重划分审查事实/08-TagRequirementQueryDefinitionGlue事实.md](架构重划分审查事实/08-TagRequirementQueryDefinitionGlue事实.md)。
 
@@ -59,7 +59,7 @@ Runtime/RuntimeEffectInstant.gen.cs
 Runtime/RuntimeActiveEffect.gen.cs
 ```
 
-这些 generated 文件仍包含 `ISystem`、`OnUpdate(ref SystemState)`、`SystemAPI.GetComponentLookup`、`SystemAPI.GetBufferLookup`、`EntityCommandBuffer`、structural owner 和大量 random lookup。差异在于：它们不再挂在 pure glue phase 下，只有 manifest 明确分类为 `RuntimeLifecycleMigration` 的 artifact 才能被 validation report 判为 `MigrationProofOnly`。`RuntimeSystemRegistration.gen.cs` 当前已不在 output list，且 report 中 `GeneratedRuntimeSystemRegistrationHits = 0`；手写 registry 当前已把缺失 generated type 从 silent skip 改为 fail-fast。这个修复只关闭“phase ownership 混杂”和“缺失 type 静默漏注册”风险，不等于主链注册整体合规；新增 registration helper 仍必须按目标态禁止项处理，手写 registry 还必须补负例验证、system 数量、phase budget 和 generated assembly 可用性证据。
+这些 generated 文件仍包含 `ISystem`、`OnUpdate(ref SystemState)`、`SystemAPI.GetComponentLookup`、`SystemAPI.GetBufferLookup`、`EntityCommandBuffer`、structural owner 和 random lookup，属于未完成的 `MigrationProofOnly` 面。当前 `ActiveEffectLifecycleOwnerSystems.cs` 已不再由 `RuntimeLifecycleMigrationPhase` 写出，也不再进入 manifest / validation report 的 generated runtime boundary hit 统计；它只是留在同一 generated runtime 物理 asmdef 内的手写 owner companion，用来复用 generated helper/job 且避免 Runtime asmdef 与 generated runtime asmdef 出现循环引用。这个修复关闭 active-effect lifecycle owner 由 SourceGenerator 再生成的风险，但不等于 active-effect owner 已到最终目标态：其物理 asmdef、query / ECB / NativeContainer owner 和 system budget 仍需后续迁出或重构。`RuntimeSystemRegistration.gen.cs` 当前已不在 output list，且 report 中 `GeneratedRuntimeSystemRegistrationHits = 0`；手写 registry 当前已把缺失 generated type 从 silent skip 改为 fail-fast。手写 registry 还必须补负例验证、system 数量、phase budget 和 generated assembly 可用性证据。
 
 判定依据：
 
@@ -77,7 +77,7 @@ Runtime/RuntimeActiveEffect.gen.cs
 
 ### P0：Validation report 已进入 blocking-unclassified gate，但仍允许 `MigrationProofOnly`
 
-`RuntimeForbiddenDependencyHits = 0`、`RuntimeGeneratedNamingDebtHits = 0` 只能证明没有 managed config 泄漏和命名债。当前 report 已经能输出 generated runtime boundary 分类，并且 `GeneratedRuntimeBoundaryGateMode` / `CurrentMode` 已是 `blocking-unclassified-lifecycle-migration`。这说明未分类 boundary hit 会被阻断；但 `GeneratedRuntimeBoundaryHits = 121` 仍以 `MigrationProofOnly` / `BootstrapDefinitionOwner` 等分类留在生成产物中，所以它不是 SourceGenerator 完成证明。
+`RuntimeForbiddenDependencyHits = 0`、`RuntimeGeneratedNamingDebtHits = 0` 只能证明没有 managed config 泄漏和命名债。当前 report 已经能输出 generated runtime boundary 分类，并且 `GeneratedRuntimeBoundaryGateMode` / `CurrentMode` 已是 `blocking-unclassified-lifecycle-migration`。这说明未分类 boundary hit 会被阻断；但 `GeneratedRuntimeBoundaryHits = 63` 仍以 `MigrationProofOnly` / `BootstrapDefinitionOwner` 等分类留在生成产物中，所以它不是 SourceGenerator 完成证明。
 
 当前必须消费为剩余风险的字段是：
 
@@ -96,9 +96,9 @@ GeneratedRuntimeManagedConfigHits
 |---|---|---|---|
 | Core / Demo phase 已拆分 | `GasCodeGenPipeline.cs` 中 `s_corePhases` 不含 `AutoChessDemoConfigPhase`；Demo standalone 写入 `Assets/AutoChessDemo/Generated` | `ODF-06` | 旧 P0 已缓解；消费链仍需分 owner |
 | RuntimeDefinitionGluePhase 只输出 pure glue | `RuntimeDefinitionGluePhase` 输出 `RuntimeDefinitionGlue.gen.cs`，manifest 分类为 `RuntimePureGlue` | `BUR-01`、`ODF-18` | pure glue phase ownership 已收窄 |
-| RuntimeLifecycleMigrationPhase 仍输出 lifecycle artifact | `RuntimeLifecycleMigrationPhase` 写出 runtime activation / instant / active lifecycle artifact，manifest 分类为 `RuntimeLifecycleMigration` | `SYS-01`、`SYS-03` | 迁移期 proof，仍需 R2/R3/R5/R7 退出或手写 owner 接管 |
+| RuntimeLifecycleMigrationPhase 仍输出 lifecycle artifact | `RuntimeLifecycleMigrationPhase` 写出 runtime activation / instant / active helper 三个 generated lifecycle artifact，manifest 分类为 `RuntimeLifecycleMigration`；`ActiveEffectLifecycleOwnerSystems.cs` 已退出 SourceGenerator 输出和 manifest，但仍在 generated runtime 物理 asmdef 内作为手写 companion owner | `SYS-01`、`SYS-03` | 迁移期 proof 已缩小；active-effect lifecycle owner 不再由 SourceGenerator 生成，但仍需处理物理 asmdef、query / ECB / NativeContainer owner 和 system budget |
 | generated runtime registration 当前为 0 | validation report 输出 `GeneratedRuntimeSystemRegistrationHits: 0`；手写 registry 对缺失 generated type 当前 fail-fast 抛错 | `SYS-03` | SourceGenerator 不自注册是正向事实；缺失 type 静默漏注册风险已缓解，但主链注册仍需 system 数量、phase budget、type mismatch / assembly unavailable 负例验证；新增 registration 默认失败 |
-| generated runtime boundary gate 已阻断未分类命中 | validation report 输出 `GeneratedRuntimeBoundaryHits: 121`、`GeneratedRuntimePureGlueArtifacts: 1`、`GeneratedRuntimeLifecycleMigrationArtifacts: 3`、`GeneratedRuntimeBoundaryGateMode: blocking-unclassified-lifecycle-migration`、`GeneratedRuntimeUnclassifiedBoundaryHits: 0` | `ODF-18`、`SYS-01`、`QRY-04` | 未分类回流已进入 blocking；只有 manifest 标成 `RuntimeLifecycleMigration` 的 artifact 可保留 `MigrationProofOnly` |
+| generated runtime boundary gate 已阻断未分类命中 | validation report 输出 `GeneratedRuntimeBoundaryHits: 63`、`GeneratedRuntimePureGlueArtifacts: 1`、`GeneratedRuntimeLifecycleMigrationArtifacts: 3`、`GeneratedRuntimeLifecycleHits: 9`、`GeneratedRuntimeStructuralChangeHits: 5`、`GeneratedRuntimeOwnershipHits: 1`、`GeneratedRuntimeRandomWriteLookupHits: 48`、`GeneratedRuntimeBoundaryGateMode: blocking-unclassified-lifecycle-migration`、`GeneratedRuntimeUnclassifiedBoundaryHits: 0` | `ODF-18`、`SYS-01`、`QRY-04` | active-effect lifecycle owner 退出 generated boundary 扫描后命中面下降；未分类回流仍 blocking，剩余 manifest `RuntimeLifecycleMigration` artifact 仍需继续迁出或转 blocking |
 | generated runtime random lookup | generated lifecycle 文件使用 `ComponentLookup<T>` / `BufferLookup<T>` | `QRY-04` | 迁移期 proof，非 scale-ready 终局 |
 | catalog blob 已出现 | `DefinitionCatalog.gen.cs` 有 sorted lookup / `ref readonly` access | `BLOB-01` | 正向事实 |
 | `BlobBuilder` runtime-visible | `DefinitionCatalog.gen.cs` 暴露 `BuildCatalog()` | `BLOB-02`、`BAKE-01` | 初始化可接受，层级 owner 需收口 |

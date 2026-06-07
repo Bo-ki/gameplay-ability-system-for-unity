@@ -87,8 +87,11 @@ $activeEffectStorePath = Join-Path $runtimePath "Effect\Component\Dynamic\Active
 $gasManagerPath = Join-Path $runtimePath "General\GASManager.cs"
 $debuggerPath = Join-Path $runtimePath "Debugger\GasRuntimeDebugger.cs"
 $generatedActiveEffectPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeActiveEffect.gen.cs"
+$activeEffectLifecycleOwnerPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\ActiveEffectLifecycleOwnerSystems.cs"
 $generatedInstantEffectPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeEffectInstant.gen.cs"
 $codeGenTemplatePath = Join-Path $ProjectPath "Assets\GAS\Editor\CodeGen\Phases\GasGlueCodeGenPhases.cs"
+$codeGenManifestPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\GasCodeGen.manifest.json"
+$codeGenReportPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\GasCodeGenValidationReport.md"
 $autoChessDamagePath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Ecs\AutoChessExecuteDamageCalculationSystem.cs"
 $autoChessSessionPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\AutoChessBattleSession.cs"
 $autoChessResultBuilderPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\AutoChessBattleResultBuilder.cs"
@@ -443,6 +446,34 @@ Assert-FileContains `
     -Pattern "RuntimeCoreActiveMutationCommandCount \+= activeMutationCommandCount" `
     -Message "GasRuntimeDebugger snapshot counters must accumulate active mutation frame-local evidence."
 Assert-FileContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "GEEffectCommandCatalogNormalizeSystem\s*:\s*ISystem[\s\S]*?GASActiveEffectMutationApplySystem\s*:\s*ISystem" `
+    -Message "Active effect lifecycle systems must live in the dedicated owner artifact, not RuntimeActiveEffect.gen.cs."
+Assert-FileContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "GEEffectCommandCatalogNormalizeSystem\s*:\s*ISystem[\s\S]*?GASActiveEffectRemoveSystem\s*:\s*ISystem" `
+    -Message "Dedicated active effect lifecycle owner file must carry normalize/apply/pre-tick/remove system wrappers."
+Assert-FileNotContains `
+    -Path $generatedActiveEffectPath `
+    -Pattern "(GEEffectCommandCatalogNormalizeSystem|GASActiveEffectMutationApplySystem|GASActiveEffectPreTickSystem|GASActiveEffectRemoveSystem)\s*:\s*ISystem" `
+    -Message "RuntimeActiveEffect.gen.cs must not regenerate active-effect lifecycle ISystem wrappers."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "Runtime/ActiveEffectLifecycleOwnerSystems\.cs" `
+    -Message "RuntimeLifecycleMigrationPhase must not output the handwritten active-effect lifecycle owner artifact."
+Assert-FileNotContains `
+    -Path $codeGenTemplatePath `
+    -Pattern "WriteRuntimeActiveEffectLifecycleOwnerSystems" `
+    -Message "CodeGen must not retain a writer that regenerates the active-effect lifecycle owner artifact."
+Assert-FileNotContains `
+    -Path $codeGenManifestPath `
+    -Pattern "ActiveEffectLifecycleOwnerSystems\.cs" `
+    -Message "GasCodeGen manifest must not classify the handwritten active-effect lifecycle owner as generated output."
+Assert-FileNotContains `
+    -Path $codeGenReportPath `
+    -Pattern "ActiveEffectLifecycleOwnerSystems\.cs" `
+    -Message "GasCodeGen validation report must not count the handwritten active-effect lifecycle owner as generated runtime boundary debt."
+Assert-FileContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GEActiveEffectMutationGatherJob" `
     -Message "Generated active effect runtime must gather active mutation commands before chunk-local apply."
@@ -479,9 +510,9 @@ Assert-FileContains `
     -Pattern "GEActiveEffectPreTickSourceAttributeSnapshotGatherJob" `
     -Message "Generated active effect pre-tick must gather SourceAttribute snapshots before slot rebuild."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectLifecycleOwnerPath `
     -Pattern "ActiveEffectSlotSourceAttributeSnapshots\s*=\s*activeEffectSlotSourceAttributeSnapshots\.AsParallelWriter" `
-    -Message "Generated active effect pre-tick snapshot gather must write SourceAttribute snapshots through a parallel writer."
+    -Message "Dedicated active effect pre-tick owner must write SourceAttribute snapshots through a parallel writer."
 Assert-FileContains `
     -Path $generatedActiveEffectPath `
     -Pattern "ActiveEffectSlotSourceAttributeSnapshotKey\s*:\s*IEquatable<ActiveEffectSlotSourceAttributeSnapshotKey>" `
@@ -507,9 +538,9 @@ Assert-FileContains `
     -Pattern "ActiveEffectSlotSourceSnapshotLaneCounters" `
     -Message "Generated active effect pre-tick must expose lane-specific SourceAttribute snapshot counters."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectLifecycleOwnerPath `
     -Pattern "SnapshotLaneCounters\s*=\s*activeEffectSlotSourceSnapshotLaneCounters" `
-    -Message "Generated active effect pre-tick must pass SourceAttribute snapshot lane counters through gather and apply jobs."
+    -Message "Dedicated active effect pre-tick owner must pass SourceAttribute snapshot lane counters through gather and apply jobs."
 Assert-FileContains `
     -Path $generatedActiveEffectPath `
     -Pattern "RecordSnapshotWrite\(\s*ActiveEffectSlotSourceAttributeSnapshots\.TryAdd\(snapshotKey,\s*sourceValue\)\)" `
@@ -527,9 +558,9 @@ Assert-FileContains `
     -Pattern "snapshotLaneCounters\.FallbackValueCount\+\+" `
     -Message "Generated active effect pre-tick apply must record source snapshot fallback evidence."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectLifecycleOwnerPath `
     -Pattern "SetActiveEffectSlotSourceSnapshotCapacity" `
-    -Message "Generated active effect pre-tick must record SourceAttribute snapshot capacity evidence."
+    -Message "Dedicated active effect pre-tick owner must record SourceAttribute snapshot capacity evidence."
 Assert-FileContains `
     -Path $generatedActiveEffectPath `
     -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(ownerResources\.Owner,\s*slot\.Sequence,\s*modifierIndex\)" `

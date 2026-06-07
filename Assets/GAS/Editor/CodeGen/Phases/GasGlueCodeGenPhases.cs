@@ -2566,8 +2566,6 @@ namespace __ROOT_NAMESPACE__
         private static void WriteGeneratedInstantSpecBuildSystem(IndentedWriter writer)
         {
             writer.WriteLine("[UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]");
-            writer.WriteLine("[UpdateAfter(typeof(GEEffectCommandCatalogNormalizeSystem))]");
-            writer.WriteLine("[UpdateBefore(typeof(GASActiveEffectMutationApplySystem))]");
             writer.WriteLine("public partial struct GEEffectSpecBuildSystem : ISystem");
             writer.WriteLine("{");
             writer.Indent++;
@@ -2772,7 +2770,6 @@ namespace __ROOT_NAMESPACE__
         private static void WriteGeneratedAttributeDeltaApplySystem(IndentedWriter writer)
         {
             writer.WriteLine("[UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]");
-            writer.WriteLine("[UpdateAfter(typeof(GASActiveEffectMutationApplySystem))]");
             writer.WriteLine("[UpdateAfter(typeof(GEExecutionCalculationOutputModifierSystem))]");
             writer.WriteLine("[UpdateBefore(typeof(GASAttributeModifierDeltaApplySystem))]");
             writer.WriteLine("[UpdateBefore(typeof(GameplayFactProjectionSystem))]");
@@ -3127,10 +3124,23 @@ namespace __ROOT_NAMESPACE__
 
         internal static void WriteRuntimeActiveEffectSystems(GasCodeGenContext context, string path)
         {
+            var template = RuntimeActiveEffectSystemsTemplate.Replace("__ROOT_NAMESPACE__", context.RootNamespace);
+            var namespaceStart = template.IndexOf("namespace ", StringComparison.Ordinal);
+            var namespaceBodyStart = namespaceStart >= 0
+                ? template.IndexOf('{', namespaceStart)
+                : -1;
+            var runtimeHelperStart = template.IndexOf(RuntimeActiveEffectHelperMarker, StringComparison.Ordinal);
+            if (namespaceBodyStart < 0 || runtimeHelperStart < 0)
+                throw new InvalidOperationException("Runtime active effect generated helper marker is missing.");
+
             File.WriteAllText(
                 path,
-                RuntimeActiveEffectSystemsTemplate.Replace("__ROOT_NAMESPACE__", context.RootNamespace));
+                template.Substring(0, namespaceBodyStart + 1)
+                + Environment.NewLine
+                + template.Substring(runtimeHelperStart));
         }
+
+        private const string RuntimeActiveEffectHelperMarker = "    public static class GASGeneratedActiveEffectRuntime";
 
         private const string RuntimeActiveEffectSystemsTemplate = @"///////////////////////////////////
 //// This is a generated file. ////
@@ -3547,7 +3557,7 @@ namespace __ROOT_NAMESPACE__
         }
     }
 
-    internal static class GASGeneratedActiveEffectRuntime
+    public static class GASGeneratedActiveEffectRuntime
     {
         public struct ActiveMutationCommandRange
         {
@@ -7365,7 +7375,7 @@ namespace __ROOT_NAMESPACE__
                 ? CollectAutoChessConfigBoundaryHits(context, manifest)
                 : Array.Empty<AutoChessConfigBoundaryHit>();
             var abilityCommitQueryHits = CollectGeneratedAbilityCommitQueryHits(context);
-            var runtimeBoundaryHits = CollectGeneratedRuntimeBoundaryHits(context);
+            var runtimeBoundaryHits = CollectGeneratedRuntimeBoundaryHits(context, manifest);
             var unclassifiedRuntimeBoundaryHits = runtimeBoundaryHits
                 .Where(hit => !IsGeneratedRuntimeBoundaryAllowedClassifiedHit(context, manifest, hit))
                 .ToArray();
@@ -7771,15 +7781,25 @@ namespace __ROOT_NAMESPACE__
         }
 
         private static IReadOnlyList<GeneratedHotPathRegressionHit> CollectGeneratedRuntimeBoundaryHits(
-            GasCodeGenContext context)
+            GasCodeGenContext context,
+            GasCodeGenManifest manifest)
         {
-            var runtimeRoot = Path.Combine(context.OutputDir, "Runtime");
             var hits = new List<GeneratedHotPathRegressionHit>();
-            if (!Directory.Exists(runtimeRoot))
-                return hits;
-
-            foreach (var path in Directory.GetFiles(runtimeRoot, "*.cs", SearchOption.AllDirectories))
+            foreach (var entry in manifest.Entries)
             {
+                if (!entry.RuntimeVisible
+                    || !string.Equals(entry.Layer, "Runtime", StringComparison.Ordinal)
+                    || !entry.ProjectRelativePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var path = Path.Combine(
+                    context.ProjectRoot,
+                    entry.ProjectRelativePath.Replace('/', Path.DirectorySeparatorChar));
+                if (!File.Exists(path))
+                    continue;
+
                 var lineNumber = 0;
                 foreach (var line in File.ReadLines(path))
                 {

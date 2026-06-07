@@ -49,6 +49,20 @@
 | `GeneratedDefinitionGlue` | code -> index -> immutable definition -> pure record | Blob schema、static lookup、unmanaged resolver、validation artifact | `ISystem`、`OnUpdate`、ECB、query、NativeContainer owner |
 | `PresentationBridge` | presentation outbox / cue marker / replay marker | Boundary fact projection、resource binding key、headless marker | Core gameplay write、resource dependency inside Core |
 
+### Runtime lifecycle owner 判定
+
+目标态中，Ability、GameplayEffect、ActiveEffect、Attribute、Tag、Cue 和 GameplayFact 的 lifecycle owner 必须是手写 ECS Core lane 或明确 store owner，不得由 OOP Shell、SourceGenerator、Debugger、Presentation 或 static helper 代管。
+
+| Lifecycle domain | 目标 owner | 允许的 generated 输入 | 禁止形态 |
+|---|---|---|---|
+| Ability activation / commit / cancel / end | `AbilityLifecycleLane` + owner-local ability slot / request buffer | ability plan record、cost / cooldown GE code、target rule lookup、pure requirement evaluator | generated `ISystem`、OOP action object、Shell 同步结算、Debugger 反写 |
+| Instant GE spec / delta / fact | `EffectSpecLane` + `AttributeDeltaLane` + `GameplayFactLane` | GE seed、modifier record、magnitude evaluator、tag requirement evaluator | runtime GE entity churn、singleton stream 终局、generated delta apply lifecycle |
+| ActiveEffect period / stack / duration / grant cleanup | `ActiveEffectStore` + `ActiveEffectLifecycleLane` | active slot seed、stack policy、duration policy、generated pure magnitude glue | static helper lifecycle、generated `OnUpdate`、global index 驱动状态 |
+| Tag / requirement / immunity | `TagStateLane` + owner-local tag snapshot / query evaluator | immutable tag taxonomy、requirement range、pure all/any/none evaluator | managed tag registry、runtime string query、per-definition entity query |
+| Cue / Presentation | `PresentationBridge` + Boundary outbox | cue code、cue parameters、presentation binding metadata | Core 直接加载资源、Cue managed lifecycle 写 gameplay state |
+
+该判定的核心不是“生成物是否能编译”，而是 lifecycle 的 query、lookup refresh、dependency、allocator、carrier、structural policy 和 evidence counter 是否归属于手写 Core owner。若 generated artifact 只输出 pure record / lookup / evaluator，它属于 `GeneratedDefinitionGlue`；若它拥有 `OnUpdate`、query、ECB 或 NativeContainer lifecycle，则目标态失败。
+
 ### Owner Map 不变量
 
 1. `RuntimeSession` 可以拥有 ECS runtime implementation，但 public seam 只能输出 session id、tick result、timing split 和 evidence。

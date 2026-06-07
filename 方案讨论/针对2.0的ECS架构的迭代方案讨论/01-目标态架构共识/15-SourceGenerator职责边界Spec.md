@@ -62,6 +62,15 @@ flowchart TD
 
 SourceGenerator 可以输出供 registry 校验的静态 metadata，但不能生成自注册 helper，不能把 generated artifact 静默挂入 update list，也不能把“类型存在”当成架构验收。系统数量、执行相位和 update order 属于 Runtime Core 预算；generated code 只能被手写 owner 调用或验证。
 
+## Lifecycle Relocation 不变量
+
+目标态禁止把 generated lifecycle owner 通过“拆到另一个 generated 文件、generated assembly、migration category 或 helper wrapper”伪装成职责收权。判定 owner 的依据是数据流职责，而不是文件名或目录：
+
+1. 只要 generated runtime-visible artifact 拥有 `ISystem` / `OnUpdate`、query / lookup refresh、ECB、NativeContainer allocator、structural mutation 或 gameplay lifecycle 调度，它仍是 generated lifecycle owner。
+2. 这类 artifact 即使被 validation report 分类为 migration、proof、owner wrapper 或 generated owner lane，也只能作为 `MigrationProofOnly`；release-ready mode 必须归零，或由手写 Runtime Core lane 明确接管。
+3. 合格的 SourceGenerator pure glue 只能被手写 System / Job 调用，并且输入来自 immutable catalog、owner-local data、frame-local record 或明确的 snapshot record；它不解析 live ECS identity，不持有 writer 生命周期，不创建结构变化。
+4. 验收时必须同时检查 generated helper 文件和任何 generated lifecycle owner 文件；不能只扫描 pure glue 文件或只看 artifact 分类。
+
 ## Generated Glue 调用形态
 
 目标调用形态必须是“Runtime System 拥有数据流，generated glue 只填 record”：

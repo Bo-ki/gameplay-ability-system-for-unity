@@ -12,8 +12,6 @@ using Unity.Jobs;
 namespace GAS.Runtime.Generated
 {
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
-    [UpdateAfter(typeof(GEEffectCommandCatalogNormalizeSystem))]
-    [UpdateBefore(typeof(GASActiveEffectMutationApplySystem))]
     public partial struct GEEffectSpecBuildSystem : ISystem
     {
         public void OnCreate(ref SystemState state)
@@ -219,7 +217,6 @@ namespace GAS.Runtime.Generated
     }
 
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
-    [UpdateAfter(typeof(GASActiveEffectMutationApplySystem))]
     [UpdateAfter(typeof(GEExecutionCalculationOutputModifierSystem))]
     [UpdateBefore(typeof(GASAttributeModifierDeltaApplySystem))]
     [UpdateBefore(typeof(GameplayFactProjectionSystem))]

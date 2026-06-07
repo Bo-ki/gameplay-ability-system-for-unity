@@ -35,6 +35,7 @@
 2. `GASManagerInputSystem : SystemBase`、`GEEffectCommandIngestSystem`、`AttributeChangeEventProjectionSystem` 均已删除；当前 Runtime 主链不再保留这些未注册残留类型。
 3. 旧 `GameplayFactEventBridgeSystem` 与 `GEInstantEffectCueRequestProjectionSystem` 已删除，不再作为未注册残留系统保留；当前 Attribute/Cue/Tag 派生职责由 `GameplayFactBoundaryProjectionSystem` 承担。
 4. `AbilityCommitSystem` 是 CommandResolve 组内的真实 fence。跨组 `[UpdateBefore(typeof(GEEffectCommandIngestSystem))]` 已从 `ASCCommandBufferResolveSystem`、`AbilityCommitSystem`、generated `AbilityCatalogCommitSystem` 及 codegen 模板移除；CommandResolve -> CoreSimulation 的先后由 physical group 顺序保证，避免 Entities 忽略无效跨组排序属性。
+5. active effect lifecycle system 当前仍注册在 generated runtime assembly：`GEEffectCommandCatalogNormalizeSystem`、`GASActiveEffectMutationApplySystem`、`GASActiveEffectPreTickSystem`、`GASActiveEffectRemoveSystem` 的源码已从 `RuntimeActiveEffect.gen.cs` 拆到 `Assets/GAS/Generated/CodeGen/Runtime/ActiveEffectLifecycleOwnerSystems.cs`；`RuntimeActiveEffect.gen.cs` 当前主要承载 generated helper / job。该拆分让 active-effect lifecycle owner 退出 SourceGenerator 输出、manifest 和 generated boundary report，但它仍是 generated runtime 物理 asmdef 内的手写 companion owner，不是手写 Runtime Core owner 接管。
 
 ### 2.1 证据等级矩阵
 
@@ -76,7 +77,7 @@
 ### 4. ActiveEffectStore 当前状态
 
 1. `ActiveEffectStore` 已有 `ASCActiveEffectsComponent`、`ActiveGameplayEffectBuffer`、global index owner/bucket/row 等数据结构。
-2. generated `GASActiveEffectMutationApplySystem`、`GASActiveEffectPreTickSystem`、`GASActiveEffectRemoveSystem` 已挂入 CoreSimulation。
+2. generated `GASActiveEffectMutationApplySystem`、`GASActiveEffectPreTickSystem`、`GASActiveEffectRemoveSystem` 已挂入 CoreSimulation；当前 lifecycle system 源码在 `ActiveEffectLifecycleOwnerSystems.cs`，helper/job 源码在 `RuntimeActiveEffect.gen.cs`。
 3. `GASActiveEffectPreTickSystem` 当前已不再 `SystemAPI.Query` 预扫，也不再 `NativeStream scan -> state.Dependency.Complete() -> 主线程 ApplyActiveEffectTickRecord`；旧 scan/apply helper 已从 generated 输出和模板中删除。它调度 `GEActiveEffectPreTickJob`，在 job 内处理 period command、duration expire、modifier/tag/ability cleanup、mutation/event 输出。
 4. `GASActiveEffectRemoveSystem` 当前也复用 scheduled `GEActiveEffectPreTickJob` 的 explicit remove 分支消费 ASC owner-local `GERemoveCommandBuffer`，不再使用 `SystemAPI.Query` 主线程 foreach / `EventBusHelper` / `EntityManager` remove helper。
 5. 当前 ActiveEffectStore 仍是 owner-local store + generated/runtime 混合迁移期实现，不是完全 store-driven lifecycle 终局。
@@ -181,7 +182,7 @@
 | World/bootstrap singleton 初始化 | `GASManager.cs:57/133/149`, `GEEffectCommandSpecStream.cs:356` | init-only，可保留但不能混入 hot path |
 | Boundary command port owner 创建 | `ASCCommandPort.Create(EntityManager)` -> `ASCEntityFactory.Create(EntityManager)` | 低频 owner 创建入口，不计作 request entity churn |
 | System 内 ECB 创建/销毁 | `ASCCommandBufferResolveSystem.cs`, `AbilityStateCleanupSystem.cs`, `RuntimeActiveEffect.gen.cs` | 结构变化方向正确，仍需 Journaling 相位证据 |
-| Demo adapter 直接创建/写 ECS / report key projection | `AutoChessBattleRuntime.cs`, `AutoChessGasCoreBridge.cs`, `AutoChessGasBattleEntityLifecycle.cs`, `AutoChessGasRuntimeHost.cs`, `AutoChessGasCatalogSession.cs`, `AutoChessGasRuntimeTicker.cs`, `AutoChessGasBattleReportFactProjector.cs`, `AutoChessGasBattleUnitSnapshotProjector.cs`, `AutoChessGasCoreContracts.cs`, `AutoChessBattleDefinitionCatalogBuilder.cs` | Demo 集中接缝，unit/driver lifecycle、job drain、driver adapter raw entity、registry command compatibility 需迁入 request/commit/snapshot/diagnostics owner；report projector 与 unit result snapshot 已走 stable report key / structured log coverage，generated catalog 安装属初始化路径 |
+| Demo adapter 直接创建/写 ECS / report key projection | `AutoChessBattleRuntime.cs`, `AutoChessGasCoreBridge.cs`, `AutoChessGasBattleEntityLifecycle.cs`, `AutoChessGasRuntimeHost.cs`, `AutoChessGasCatalogSession.cs`, `AutoChessGasRuntimeTicker.cs`, `AutoChessGasBattleReportFactProjector.cs`, `AutoChessGasBattleUnitSnapshotProjector.cs`, `AutoChessGasCoreContracts.cs`, `AutoChessBattleDefinitionCatalogBuilder.cs` | Demo 集中接缝，unit/driver lifecycle、job drain、driver runtime store 内部 `_driverEntity` owner、registry command compatibility 需迁入 request/commit/snapshot/diagnostics owner；report projector 与 unit result snapshot 已走 stable report key / structured log coverage，generated catalog 安装属初始化路径 |
 | Managed cue/presentation | `GameplayCueUnit.cs:113`, `ConfCueBase.cs:21`, `CueRequestBridgeSystem.cs:44-103`, `CueManagedLifecycleSystem.cs:34-51` | Boundary managed path |
 | Config/prototype cache | `GameplayEffectEntityFactory.cs:11/24`, `GameplayEffectConfigRegistry.cs:688/730` | 初始化/prototype path |
 | ActiveEffect store owner/bucket | `ActiveEffectStore.cs:344/1495` | Core store owner 初始化或扩容，需 capacity/phase 证据 |

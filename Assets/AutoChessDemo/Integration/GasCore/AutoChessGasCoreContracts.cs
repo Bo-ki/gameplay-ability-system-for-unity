@@ -1,6 +1,5 @@
 using System;
 using GAS.Runtime;
-using Unity.Entities;
 
 namespace GAS.AutoChessDemo
 {
@@ -59,20 +58,20 @@ namespace GAS.AutoChessDemo
 
     internal readonly struct AutoChessGasBattleDriverHandle
     {
-        private readonly Entity _driverEntity;
+        private readonly int _driverId;
+        private readonly int _version;
 
-        public AutoChessGasBattleDriverHandle(Entity driverEntity)
+        internal AutoChessGasBattleDriverHandle(int driverId, int version)
         {
-            _driverEntity = driverEntity;
+            _driverId = driverId;
+            _version = version;
         }
 
-        public bool IsValid => _driverEntity != Entity.Null;
+        public bool IsValid => _driverId > 0 && _version > 0;
 
-        public bool TryGetEntityForAdapter(out Entity driverEntity)
-        {
-            driverEntity = _driverEntity;
-            return driverEntity != Entity.Null;
-        }
+        internal int DriverId => _driverId;
+
+        internal int Version => _version;
     }
 
     internal readonly struct AutoChessCombatAttributeSnapshot

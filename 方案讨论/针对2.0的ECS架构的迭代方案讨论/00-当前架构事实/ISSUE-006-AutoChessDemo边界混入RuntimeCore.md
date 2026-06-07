@@ -6,7 +6,7 @@
 
 旧问题已明显缓解。AutoChessDemo 当前位于 `Assets/AutoChessDemo`，业务层、Battle Flow、Battle Report、GAS adapter、Demo ECS 扩展、Presentation 已拆开；Runtime Core 不再承载旧 Headless 业务系统。
 
-当前剩余风险不是“Demo 混入 Runtime Core”，而是 `Integration/GasCore` 虽已把业务入口收敛到 `AutoChessBattleRuntime` Flow 入口和 `AutoChessGasCoreBridge` Session facade，但真实 direct EM / raw identity 能力仍分布在 `AutoChessGasRuntimeHost`、`AutoChessGasCatalogSession`、`AutoChessGasObservationGateway`、`AutoChessGasBattleEntityLifecycle`、`AutoChessGasRuntimeTicker` 和 `AutoChessGasCoreContracts`；bootstrap、catalog、unit attach、driver lifecycle、observation、diagnostics、tick group、job drain、driver adapter raw entity、registry command compatibility 仍通过 internal Shell capability 或内部 `ASCHandle` 取得 live ECS 句柄。`AutoChessGasBattleReportFactProjector` 与 unit result snapshot 当前已消费 structured log 的 `SourceReportKey` / `TargetReportKey`，不再是 raw ASC matcher / live ASC read 风险；后续应把 report key coverage、driver raw entity、lifecycle registry 和 snapshot owner 分别收口。
+当前剩余风险不是“Demo 混入 Runtime Core”，而是 `Integration/GasCore` 虽已把业务入口收敛到 `AutoChessBattleRuntime` Flow 入口和 `AutoChessGasCoreBridge` Session facade，但真实 direct EM / raw identity 能力仍分布在 `AutoChessGasRuntimeHost`、`AutoChessGasCatalogSession`、`AutoChessGasObservationGateway`、`AutoChessGasBattleEntityLifecycle`、`AutoChessGasRuntimeTicker` 和 `AutoChessGasCoreContracts`；bootstrap、catalog、unit attach、driver lifecycle、observation、diagnostics、tick group、job drain、driver runtime store 内部 `_driverEntity` owner、registry command compatibility 仍通过 internal Shell capability 或内部 `ASCHandle` 取得 live ECS 句柄。`AutoChessGasBattleReportFactProjector` 与 unit result snapshot 当前已消费 structured log 的 `SourceReportKey` / `TargetReportKey`，driver public handle 也已收缩为 opaque `driverId/version`，不再是 raw ASC matcher / live ASC read / public raw driver handle 风险；后续应把 report key coverage、internal `_driverEntity` owner、lifecycle registry 和 snapshot owner 分别收口。
 
 ## 已缓解部分
 
@@ -45,5 +45,5 @@
 ## 退出条件
 
 1. bridge 内结构变化分类清晰：初始化、session lifecycle、hot path。
-2. battle unit create / destroy request、driver lifecycle、battle unit registry / internal `ASCHandle` command compatibility、structured snapshot projection 和 driver adapter raw entity 分别进入 request/command/snapshot/diagnostics owner，report projection 继续以 stable report key coverage 验收。
+2. battle unit create / destroy request、driver lifecycle、battle unit registry / internal `ASCHandle` command compatibility、structured snapshot projection 和 driver runtime store 内部 `_driverEntity` owner 分别进入 request/command/snapshot/diagnostics owner，report projection 继续以 stable report key coverage 验收。
 3. Demo 系统的 query/dependency/ordering 有独立审查。

@@ -13,7 +13,7 @@
 ```markdown
 来源类型：整体架构审查 / codedb 截面 / DOTS 官方规则对照
 原始证据：
-  - `codedb_status`: 428 files / scan ready
+  - `codedb_status`: 429 files / 429 outlines / 767 chunks / graph 443 nodes / 1766 edges / 32 communities / scan ready
   - `codedb_module_map path_prefix=Assets/GAS/Runtime`: Runtime 主社群 141 files / 1968 indexed symbols，Core、Definition、Debugger、Shell、generated runtime 仍聚在同一依赖社群
   - `codedb_deps GASRuntimeShell.cs imported_by`: AutoChess lifecycle / observation / runtime host、Editor GASWatcher、AbilitySystemBinding 共 5 个直接消费者
   - `codedb_outline GASRuntimeShell.cs`: 281 lines，包含 runtime world / entity manager、command port、read model capture、job drain、presentation bind、runtime singleton resolver
@@ -28,7 +28,35 @@
 需要反哺：01 owner map / target invariant，02 R 任务领取前截面，04 最近验证摘要
 ```
 
-续轮校准：当前 codedb 状态为 428 files / scan ready。`GASRuntimeShell.cs` 仍有 5 个直接消费者：AutoChess lifecycle、observation、runtime host、Editor `GASWatcher` 和 `AbilitySystemBinding`。本次数字校准只更新事实截面，不改变“多能力 Shell facade、generated lifecycle、singleton carrier 和 Debugger / Cue observation cost 仍需 owner 分类”的判定。
+续轮校准：当前 codedb 状态为 429 files / 429 outlines / 767 chunks / scan ready。`GASRuntimeShell.cs` 仍有 5 个直接消费者：AutoChess lifecycle、observation、runtime host、Editor `GASWatcher` 和 `AbilitySystemBinding`。本次数字校准只更新事实截面，不改变“多能力 Shell facade、generated lifecycle、singleton carrier 和 Debugger / Cue observation cost 仍需 owner 分类”的判定。
+
+### 2026-06-08 续轮整体架构审查补充
+
+本轮继续以 codedb 当前索引和生成报告复核整体架构。新增或修正的事实是：active effect lifecycle owner 已拆到 generated runtime 物理 asmdef 下的 `ActiveEffectLifecycleOwnerSystems.cs`，并已退出 SourceGenerator 输出、manifest 和 generated boundary report；`RuntimeActiveEffect.gen.cs` 当前更多承载 generated active effect helper / job / store 逻辑。这个 companion owner 仍不是目标态纯 glue，因为它仍拥有 query、ECB、NativeContainer 和 lookup refresh。
+
+| 审查面 | 当前证据 | 事实判定 |
+|---|---|---|
+| codedb 截面 | `codedb_status` 为 429 files / 429 outlines / 767 chunks / graph 443 nodes / 1766 edges / 32 communities | 当前索引已覆盖新增 `ActiveEffectLifecycleOwnerSystems.cs`；旧 428 files 截面不再代表本轮最新事实 |
+| Shell consumers | `codedb_deps GASRuntimeShell.cs imported_by` 仍为 AutoChess lifecycle / observation / runtime host、Editor `GASWatcher`、`AbilitySystemBinding` 共 5 个 | Shell 仍是多 capability implementation facade；外部业务虽多经 wrapper 进入，但 adapter / editor 仍共享同一 ECS handle 解析面 |
+| Command resolve | `ASCCommandBufferResolveSystem.cs` 为 924 行，单个 `ASCCommandBufferResolveJob` 同时处理 ASC command、Ability grant / activate / remove、Tag diff、Attribute base value、lifecycle request 和 fact | DOTS API 形态正向；但 lane interface 仍过宽，调用方和审查者仍需理解多类 gameplay 语义如何在同一 job 内交织 |
+| Generated lifecycle | generated runtime 物理 asmdef `: ISystem` 与 `OnUpdate(ref SystemState)` 各 7 个，分布在 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`ActiveEffectLifecycleOwnerSystems.cs`；`RuntimeActiveEffect.gen.cs` 当前含 generated helper / job / lookup / ECB / NativeContainer owner | `ActiveEffectLifecycleOwnerSystems.cs` 已退出 SourceGenerator 输出，但仍是 generated runtime 物理 asmdef 内的手写 companion owner；剩余 manifest lifecycle artifact 仍为 `MigrationProofOnly` |
+| CodeGen gate | `GasCodeGenValidationReport.md` 显示 `GeneratedRuntimePureGlueArtifacts=1`、`GeneratedRuntimeLifecycleMigrationArtifacts=3`、`GeneratedRuntimeBoundaryHits=63`、`GeneratedRuntimeLifecycleHits=9`、`GeneratedRuntimeStructuralChangeHits=5`、`GeneratedRuntimeOwnershipHits=1`、`GeneratedRuntimeRandomWriteLookupHits=48`、`GeneratedRuntimeSystemRegistrationHits=0` | gate 已能分类并阻断 unclassified lifecycle migration；但分类命中不是目标态完成证明，release-ready SourceGenerator mode 仍应让 lifecycle / ownership hit 归零或由手写 Core owner 接管 |
+| DOTS 官方对照 | 本轮直接对照 `SYS-01`、`QRY-01`、`NAT-03`、`DBG-05` 和 `20-GASRuntimeCore-API选型基线.md` | OOP Shell 不能成为 gameplay 中间层；`NativeStream` 只有定义 deterministic merge、allocator owner、segment / memory budget 后才是目标 carrier；Debugger 成本必须分 cost domain |
+
+本轮整体判断：当前架构不是“未 ECS 化”，而是“已有 ECS backbone、但 owner 深度不足”。正确重新划分不应新增一个更厚的 OOP manager，也不应让 SourceGenerator 继续生成 runtime lifecycle owner；应把 runtime session、command write、snapshot read、diagnostics、runner sync、definition lifetime、core lane、fan-in store、active effect store 和 structural commit 分别收权。
+
+### 2026-06-08 二次校准：代码级 owner 深度事实
+
+本次继续用 codedb 对关键文件做局部读取和调用方复核。新增事实只写入本文件，不进入目标态 Spec。
+
+| 审查对象 | 本次代码证据 | 当前事实判定 |
+|---|---|---|
+| `GASRuntimeShell` | `GASRuntimeShell.cs:49-147` 同时创建 command port、capture read model、drain runtime jobs；`:150-233` 又处理 presentation bind 和 GlobalTimer / EventBus / EventLogSink / RuntimeDebugger singleton resolver；`codedb_callers` 显示 AutoChess lifecycle / observation / runtime host、Editor `GASWatcher`、`AbilitySystemBinding` 仍直接消费 | 它是多 capability ECS handle facade，不是目标态 Application Shell；后续必须把 command、snapshot、diagnostics、runner sync、definition lifetime 和 presentation capability 拆成可独立授权 / 计时 / 验收的 owner |
+| `ASCCommandBufferResolveSystem` | `OnCreate` query 一次性要求 ASC identity、tag mask、command buffer、ability command、destroy command、attribute value、ability slot、fixed / temp tag source；`ASCCommandBufferResolveJob` 同时处理 destroy、ASC command、ability command、attribute dirty、tag mask、lifecycle request 和 GameplayEvent fact | API 形态已进入 stored query + `IJobChunk`，但 lane interface 仍宽；不能因为 job 化就写成 command resolve owner 已深模块化 |
+| `GEEffectCommandSpecStream` | 静态 `_cachedEntityManager` / `_cachedStreamEntity`、`CommandWriter` / `GameplayEventWriter` 持有 `EntityManager` 和 singleton buffers，`HasRequiredBuffers` 要求 command / set-by-caller / spec / modifier / mutation / fact 同挂一个 stream owner | fallback query 删除是正向事实；但它仍是多语义 singleton carrier，按 `BUF-02` / `SEL-02` 只能是迁移证明，不是目标态 fan-in store |
+| `ActiveEffectLifecycleOwnerSystems.cs` | 4 个手写 companion `ISystem` 位于 `GAS.Runtime.Generated` namespace：catalog normalize、active mutation apply、pre-tick、remove；`OnUpdate` 中仍创建 query、ECB、`NativeParallelHashMap`、`NativeArray` 并刷新多个 lookup | 它不再由 SourceGenerator 输出，也不进入 manifest / generated boundary report；但物理 asmdef、namespace 和 owner 职责仍与 generated helper/job 绑定，不能算 ActiveEffect lifecycle release-ready |
+| `RuntimeActiveEffect.gen.cs` | generated helper/job 仍包含 source attribute snapshot gather、pre-tick job、mutation gather/apply helper、magnitude counter、cleanup / granted ability / tag / event helper | 它是 pure glue 之外的 runtime helper/job 迁移面；只要 helper 仍拥有 lookup / ECB / NativeContainer / lifecycle 行为，R5/R7 必须按 `MigrationProofOnly` 审查 |
+| API health | Runtime `SystemAPI.Query=0`、`EntityManager.CreateEntityQuery=0`、`state.Dependency.Complete=0`、`.Run(` 静态命中 0；`ToEntityArray` 可执行运行调用仍集中在 Debugger observation 两处和 Cue managed boundary 一处；`new EntityQueryDesc` Runtime 命中 19 处，分布在 13 个文件 | 当前已经不是主线程 foreach 旧形态，但 query owner、materialization owner 和 stored query cost 仍要分 Core / Boundary / Diagnostics；不能把静态 0 命中写成 DOTS 性能优秀 |
 
 ### 当前职责重新划分事实
 
@@ -38,10 +66,10 @@
 | Schedule backbone | `GASSystemScheduleContract` 固定 5 段 physical group；handwritten systems 与 7 个 generated runtime systems 统一注册；missing generated type 当前 fail-fast | Backbone 方向正确，generated runtime 已是当前执行事实 | 目标态 SourceGenerator 不应生成 lifecycle system；generated systems 必须退出或由手写 lane owner 接管 |
 | Shell capability | `GASRuntimeShell` 同时解析 World、`EntityManager`、command port、read model、singleton、presentation binding 和 job drain；直接消费者含 AutoChess host / lifecycle / observation、Editor watcher、AbilitySystemBinding | 外部 public 面已有收窄，但 assembly 内仍是多能力 ECS 句柄 facade | 必须拆成 bootstrap、command write、snapshot read、diagnostics/export、definition/catalog、runner sync 六类 capability，并分别计时 / 授权 / 验收 |
 | Core stream / fan-in | `EffectCommandSpecStream` 当前只走 cached registered owner，不再 fallback query；但 command/spec/set-by-caller/delta/mutation/fact 多数仍共用 singleton DynamicBuffer carrier，`MergeParallelCommandFanIn` 仍用 managed `List` + `EntityManager` 写回 | fallback query 风险已退场，carrier 仍是 `MigrationProofOnly` | 按 `SEL-01/02`、`BUF-02`、`NAT-03`，不同数据性质要拆为 `NativeStream` deterministic merge、owner-local range 或 bounded buffer |
-| Generated runtime | generated catalog lookup / Blob builder 是正向定义链；`RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs` 同时包含 7 个 generated `ISystem` 和 lookup / ECB owner | Generated 链路已经反哺 Runtime，但仍越过了目标态 pure glue 边界 | SourceGenerator 目标只生成 immutable catalog、static lookup、pure record、validation / Editor binding；不能继续拥有 query、ECB、NativeContainer 或 lifecycle |
+| Generated runtime | generated catalog lookup / Blob builder 是正向定义链；manifest lifecycle artifact 当前为 `RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs`、`RuntimeActiveEffect.gen.cs`，`ActiveEffectLifecycleOwnerSystems.cs` 是同物理 asmdef 内的手写 companion owner | Generated 链路已经反哺 Runtime，但仍越过了目标态 pure glue 边界；active-effect owner 退出 SourceGenerator 输出只是收窄，不改变剩余 `MigrationProofOnly` 判定 | SourceGenerator 目标只生成 immutable catalog、static lookup、pure record、validation / Editor binding；不能继续拥有 query、ECB、NativeContainer 或 lifecycle |
 | Debugger / Observation | `GasRuntimeDebugger` singleton lookup 已是 registered/cache owner；`ToEntityArray` 运行调用集中在 Debugger observation 两处与 Cue managed boundary 一处；`ExportToText` 是 derived export；observation materialization 已进入 snapshot 和 AutoChess evidence。2026-06-08 最新 x50 已拆 performance / diagnostic pass：performance summary 为 `performancePassObservationPollutionRisks=0`，diagnostic Debugger 仍显示 `observationMaterializedQueries=12` | Debugger 可作为 evidence owner；observation materialization 成本已能独立归因，performance pass 污染风险已隔离，但 Profiler enabled 与规模性能闭环未完成 | 按 `DBG-01..05`，contract counter、runtime counter、official capture、validation evidence、derived export 必须分层；不能用字符串日志或 disabled profiler 状态证明 Core 性能 |
 | Cue / Presentation | `CueManagedLifecycleSystem` 位于 `GASBoundaryProjectionSystemGroup`，使用 UnityEngine `Time.time` 和 `ToEntityArray` 处理 managed cue lifecycle | 这是 Boundary / Presentation 成本，不是 Runtime Core hot path | 目标态允许 managed boundary，但必须从 CoreSimulation timing 与 DOTS hot path 结论中拆出 |
-| AutoChess adapter | `AutoChessGasRuntimeHost` 通过 Shell 初始化 runtime / catalog / tick group；`AutoChessGasObservationGateway` 直接 reset singleton、创建 diagnostics snapshot；`AutoChessGasBattleEntityLifecycle` 用 registry 保存 `ASCHandle` 并创建 driver / unit | AutoChess 是业务验收 Shell，当前 Thin Adapter 未完成；其 direct ECS 句柄仍是内部实现事实 | 目标态 Battle Runtime Adapter 只暴露业务动作、opaque handle、snapshot 和 evidence；driver raw entity、singleton reset、job drain 必须被 capability 分类并从 Core 性能结论中排除 |
+| AutoChess adapter | `AutoChessGasRuntimeHost` 通过 Shell 初始化 runtime / catalog / tick group；`AutoChessGasObservationGateway` 直接 reset singleton、创建 diagnostics snapshot；`AutoChessGasBattleEntityLifecycle` 用 registry 保存 `ASCHandle` 并创建 driver / unit，driver public handle 已为 opaque id/version | AutoChess 是业务验收 Shell，当前 Thin Adapter 未完成；其 direct ECS 句柄仍是内部实现事实 | 目标态 Battle Runtime Adapter 只暴露业务动作、opaque handle、snapshot 和 evidence；driver runtime store 内部 `_driverEntity`、singleton reset、job drain 必须被 capability 分类并从 Core 性能结论中排除 |
 
 ### 官方规则判定
 

@@ -51,8 +51,7 @@ namespace GAS.AutoChessDemo
             if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
                 return default;
 
-            var driver = AutoChessBattleDriverRuntimeStore.ResetAndEnable(entityManager);
-            return new AutoChessGasBattleDriverHandle(driver);
+            return AutoChessBattleDriverRuntimeStore.ResetAndEnable(entityManager);
         }
 
         public static AutoChessBattleReportFact[] CreateReportFacts(
@@ -82,24 +81,18 @@ namespace GAS.AutoChessDemo
         public static AutoChessBattleDriverComponent GetBattleDriverStats(
             AutoChessGasBattleDriverHandle driverHandle)
         {
-            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager)
-                || !driverHandle.TryGetEntityForAdapter(out var driverEntity))
-            {
+            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
                 return default;
-            }
 
-            return AutoChessBattleDriverRuntimeStore.Read(entityManager, driverEntity);
+            return AutoChessBattleDriverRuntimeStore.Read(entityManager, driverHandle);
         }
 
         public static void CloseBattleDriver(AutoChessGasBattleDriverHandle driverHandle)
         {
-            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager)
-                || !driverHandle.TryGetEntityForAdapter(out var driverEntity))
-            {
+            if (!GASRuntimeShell.TryResolveRuntimeEntityManager(out var entityManager))
                 return;
-            }
 
-            AutoChessBattleDriverRuntimeStore.Disable(entityManager, driverEntity);
+            AutoChessBattleDriverRuntimeStore.Disable(entityManager, driverHandle);
         }
 
         public static void DestroyBattleUnit(AutoChessGasBattleUnitHandle handle)

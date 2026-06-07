@@ -29,6 +29,7 @@
 | Command record | Shell intent 被压成 owner-local ECS record，再由 Core lane 批处理 | Shell 直接调用 damage、cooldown、stack、period、requirement 或 execution calculation |
 | Fan-in | 多 producer 写入 transient carrier，随后 deterministic merge，并暴露 segment、capacity、spill、merge cost 或 battle hash evidence | 用 singleton `DynamicBuffer` 或 worker 写入顺序当作 scale-ready 证明 |
 | ActiveEffect / Attribute / Fact owner | 跨帧 state、slot、period、stack、delta、fact 和 cleanup intent 均有明确 owner | lifecycle 散落在 helper、generated `OnUpdate`、command stream 或 Debugger export |
+| Runtime lifecycle owner | Ability、GameplayEffect、ActiveEffect、Attribute、Tag、Cue 的生命周期由手写 ECS lane / store owner 承担；SourceGenerator 只提供 pure record / lookup / evaluator | generated artifact 拥有 lifecycle `ISystem`、`OnUpdate`、query、ECB、NativeContainer allocator 或 hidden dependency |
 | StructuralCommit | create / destroy / add / remove 只能消费 structural intent，并在明确 ECB playback phase 发生 | Core simulation lane、Shell 或 generated glue 直接执行结构变化 |
 | Diagnostics evidence | Debugger 输出机器可读 counter / fact / official capture state；日志、Mermaid、战报和 UI 只能派生 | 字符串日志、summary hash、Mermaid 图或 disabled profiler reason 单独证明性能 |
 | Definition & Generation | SourceGenerator 只生成 immutable Blob lookup、static index、pure evaluator、validation metadata | SourceGenerator 生成 runtime lifecycle owner、query、ECB、NativeContainer owner 或 hidden scheduler |

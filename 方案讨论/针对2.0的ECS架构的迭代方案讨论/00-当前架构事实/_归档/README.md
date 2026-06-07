@@ -21,4 +21,5 @@
 | [2026-06-08-AutoChessBattleValidation-PassSplitMagnitudeSource-Run1](2026-06-08-AutoChessBattleValidation-PassSplitMagnitudeSource-Run1.log) | performance / diagnostic / official diff pass 拆分与 Magnitude Source evidence 贯通后的 AutoChess x50 原始日志 |
 | [2026-06-08-AutoChessBattleValidation-PreTickSourceAttributeSnapshot-Run3](2026-06-08-AutoChessBattleValidation-PreTickSourceAttributeSnapshot-Run3.log) | active effect slot pre-tick SourceAttribute snapshot gather 修复后的 AutoChess x50 原始日志 |
 | [2026-06-08-AutoChessBattleValidation-TagRequirementQuery-Run5](2026-06-08-AutoChessBattleValidation-TagRequirementQuery-Run5.log) | TagRequirement all-any-none catalog / runtime evaluator / instant GE gate 贯通后的 AutoChess x50 原始日志 |
+| [2026-06-08-AutoChessBattleValidation-OpaqueDriverHandle-Run7](2026-06-08-AutoChessBattleValidation-OpaqueDriverHandle-Run7.log) | AutoChess driver public raw Entity handle 退出后的 AutoChess x50 原始日志 |
 | [2026-06-08-架构重划分审查事实拆分前](2026-06-08-架构重划分审查事实拆分前.md) | `../架构重划分审查事实.md` 拆分前全文快照 |

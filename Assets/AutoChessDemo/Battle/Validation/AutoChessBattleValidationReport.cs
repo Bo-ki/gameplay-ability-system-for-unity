@@ -408,6 +408,8 @@ namespace GAS.AutoChessDemo
                    + "unitCreateOwner=RuntimeShell.ASCCommandCapability, "
                    + "unitDestroyOwner=ASCCommandPort.RequestDestroy, "
                    + "driverLifecycleOwner=AutoChessBattleDriverRuntimeStore, "
+                   + "driverHandle=OpaqueDriverIdVersion, "
+                   + "driverAdapterRawEntity=false, "
                    + "catalogOwner=AutoChessGasCatalogSession, "
                    + "snapshotOwner=AutoChessGasBattleUnitSnapshotProjector.StructuredLog, "
                    + "observationOwner=AutoChessGasObservationGateway, "

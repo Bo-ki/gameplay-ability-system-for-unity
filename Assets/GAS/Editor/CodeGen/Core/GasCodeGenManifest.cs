@@ -91,6 +91,9 @@ namespace GAS.Editor
                 if (!oldPath.StartsWith(_outputRoot, StringComparison.OrdinalIgnoreCase))
                     continue;
 
+                if (!CanDeleteOrphanedGeneratedFile(oldPath))
+                    continue;
+
                 if (!File.Exists(oldPath))
                     continue;
 
@@ -102,6 +105,15 @@ namespace GAS.Editor
             }
 
             return deleted;
+        }
+
+        private static bool CanDeleteOrphanedGeneratedFile(string path)
+        {
+            var fileName = Path.GetFileName(path);
+            return fileName.EndsWith(".gen.cs", StringComparison.OrdinalIgnoreCase)
+                   || fileName.Equals("GasCodeGenValidationReport.md", StringComparison.OrdinalIgnoreCase)
+                   || (fileName.StartsWith("com.exhard.exgas.generated.", StringComparison.OrdinalIgnoreCase)
+                       && fileName.EndsWith(".asmdef", StringComparison.OrdinalIgnoreCase));
         }
 
         public void Save()
