@@ -62,8 +62,6 @@ namespace GAS.Runtime
         public int NextDeltaSequence;
         public int NextFactSequence;
         public int LastClearedFrame;
-        public int FactProjectionDeltaCursor;
-        public int EventBridgeFactCursor;
         public int ActiveMutationCommandCount;
         public int ActiveMutationOwnerGroupCount;
         public int ActiveMutationMaxOwnerRange;
@@ -675,8 +673,7 @@ namespace GAS.Runtime
                 return false;
 
             return em.HasBuffer<GEEffectCommandBuffer>(streamEntity)
-                   && em.HasBuffer<GESetByCallerValueBuffer>(streamEntity)
-                   && em.HasBuffer<GameplayEventBuffer>(streamEntity);
+                   && em.HasBuffer<GESetByCallerValueBuffer>(streamEntity);
         }
 
         public static void EnsureBuffers(EntityManager em, Entity streamEntity)
@@ -828,12 +825,9 @@ namespace GAS.Runtime
                 return;
             em.GetBuffer<GEEffectCommandBuffer>(streamEntity).Clear();
             em.GetBuffer<GESetByCallerValueBuffer>(streamEntity).Clear();
-            em.GetBuffer<GameplayEventBuffer>(streamEntity).Clear();
 
             var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
             stream.LastClearedFrame = frame;
-            stream.FactProjectionDeltaCursor = 0;
-            stream.EventBridgeFactCursor = 0;
             ResetFrameLocalCounters(ref stream);
             em.SetComponentData(streamEntity, stream);
         }
@@ -854,11 +848,7 @@ namespace GAS.Runtime
             commands.Clear();
             setByCallerValues.Clear();
 
-            em.GetBuffer<GameplayEventBuffer>(streamEntity).Clear();
-
             stream.LastClearedFrame = frame;
-            stream.FactProjectionDeltaCursor = 0;
-            stream.EventBridgeFactCursor = 0;
             ResetFrameLocalCounters(ref stream);
             em.SetComponentData(streamEntity, stream);
         }
@@ -867,7 +857,6 @@ namespace GAS.Runtime
             ref GEEffectCommandStreamComponent stream,
             DynamicBuffer<GEEffectCommandBuffer> commands,
             DynamicBuffer<GESetByCallerValueBuffer> setByCallerValues,
-            DynamicBuffer<GameplayEventBuffer> facts,
             int frame)
         {
             if (stream.LastClearedFrame == frame)
@@ -876,11 +865,7 @@ namespace GAS.Runtime
             commands.Clear();
             setByCallerValues.Clear();
 
-            facts.Clear();
-
             stream.LastClearedFrame = frame;
-            stream.FactProjectionDeltaCursor = 0;
-            stream.EventBridgeFactCursor = 0;
             ResetFrameLocalCounters(ref stream);
         }
 

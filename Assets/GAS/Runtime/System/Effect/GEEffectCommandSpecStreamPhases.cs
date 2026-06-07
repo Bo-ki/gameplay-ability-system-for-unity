@@ -33,7 +33,6 @@ namespace GAS.Runtime
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
                 SetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
             }.Schedule(state.Dependency);
         }
 
@@ -45,15 +44,13 @@ namespace GAS.Runtime
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
 
             public void Execute()
             {
                 if (StreamEntity == Entity.Null
                     || !StreamLookup.HasComponent(StreamEntity)
                     || !CommandLookup.HasBuffer(StreamEntity)
-                    || !SetByCallerLookup.HasBuffer(StreamEntity)
-                    || !FactLookup.HasBuffer(StreamEntity))
+                    || !SetByCallerLookup.HasBuffer(StreamEntity))
                 {
                     return;
                 }
@@ -63,7 +60,6 @@ namespace GAS.Runtime
                     ref stream,
                     CommandLookup[StreamEntity],
                     SetByCallerLookup[StreamEntity],
-                    FactLookup[StreamEntity],
                     Frame);
                 StreamLookup[StreamEntity] = stream;
             }
@@ -477,7 +473,6 @@ namespace GAS.Runtime
                 StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                LegacyFactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: true),
                 BoundaryObservationLookup = SystemAPI.GetBufferLookup<BoundaryObservationFactBuffer>(isReadOnly: false),
                 Records = records,
             }.Schedule(collectHandle);
@@ -533,7 +528,6 @@ namespace GAS.Runtime
             public Entity StreamEntity;
             public Entity EventBusEntity;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            [ReadOnly] public BufferLookup<GameplayEventBuffer> LegacyFactLookup;
             public BufferLookup<BoundaryObservationFactBuffer> BoundaryObservationLookup;
             public NativeList<BoundaryObservationFactRecord> Records;
 
@@ -548,25 +542,6 @@ namespace GAS.Runtime
                 }
 
                 var stream = StreamLookup[StreamEntity];
-                if (LegacyFactLookup.HasBuffer(StreamEntity))
-                {
-                    var legacyFacts = LegacyFactLookup[StreamEntity];
-                    var legacyStart = ClampCursor(stream.EventBridgeFactCursor, legacyFacts.Length);
-                    for (var i = legacyStart; i < legacyFacts.Length; i++)
-                    {
-                        var fact = legacyFacts[i];
-                        Records.Add(new BoundaryObservationFactRecord
-                        {
-                            Owner = ResolveFactOwner(in fact),
-                            LocalIndex = i,
-                            Fact = fact,
-                            Source = EBoundaryObservationFactSource.LegacyStream,
-                        });
-                    }
-
-                    stream.EventBridgeFactCursor = legacyFacts.Length;
-                }
-
                 if (Records.Length == 0)
                 {
                     StreamLookup[StreamEntity] = stream;
@@ -646,15 +621,6 @@ namespace GAS.Runtime
 
                 return x.Source.CompareTo(y.Source);
             }
-        }
-
-        private static Entity ResolveFactOwner(in GameplayEventBuffer fact)
-        {
-            if (fact.TargetAsc != Entity.Null)
-                return fact.TargetAsc;
-            if (fact.SourceAsc != Entity.Null)
-                return fact.SourceAsc;
-            return Entity.Null;
         }
 
         private static int CompareEntity(Entity left, Entity right)

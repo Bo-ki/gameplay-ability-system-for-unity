@@ -197,16 +197,28 @@ Assert-FileNotContains `
     -Message "Pending AttributeDelta apply must not read or patch linked execution facts through the singleton fact stream."
 Assert-FileContains `
     -Path $autoChessDamagePath `
-    -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>\(\)" `
-    -Message "AutoChess damage execution must acquire target ASC owner-local fact buffers."
+    -Pattern "ExecuteDamageCalculationChunkJob\s*:\s*IJobChunk" `
+    -Message "AutoChess damage execution must process owner-local ASC command buffers through a chunk-local job."
 Assert-FileContains `
     -Path $autoChessDamagePath `
-    -Pattern "if\s*\(OwnerFactLookup\.HasBuffer\(targetAsc\)\)" `
+    -Pattern "CommandTypeHandle\s*=\s*SystemAPI\.GetBufferTypeHandle<GEEffectCommandBuffer>\(isReadOnly:\s*true\)" `
+    -Message "AutoChess damage execution must acquire owner-local GEEffectCommandBuffer through a chunk-local buffer handle."
+Assert-FileContains `
+    -Path $autoChessDamagePath `
+    -Pattern "var targetAsc = ResolveTargetAsc\(in command,\s*owner\)" `
+    -Message "AutoChess damage execution must resolve command targets against the current ASC owner."
+Assert-FileContains `
+    -Path $autoChessDamagePath `
+    -Pattern "if\s*\(!hasOwnerFactBuffer\)[\s\S]*?continue;" `
     -Message "AutoChess damage execution must guard owner-local fact writes without blocking pending delta writes."
 Assert-FileContains `
     -Path $autoChessDamagePath `
-    -Pattern "OwnerFactLookup\[targetAsc\]\.Add\(new OwnerLocalGameplayFactBuffer" `
+    -Pattern "targetFacts\.Add\(new OwnerLocalGameplayFactBuffer" `
     -Message "AutoChess damage execution facts must append through owner-local facts so linked delta patching can update them."
+Assert-FileNotContains `
+    -Path $autoChessDamagePath `
+    -Pattern "CommandLookup\s*=\s*SystemAPI\.GetBufferLookup<GEEffectCommandBuffer>|public BufferLookup<GEEffectCommandBuffer> CommandLookup|CommandLookup\[StreamEntity\]|var commands = CommandLookup\[StreamEntity\]" `
+    -Message "AutoChess damage execution must not read execution commands from the singleton GEEffectCommandBuffer stream."
 Assert-FileNotContains `
     -Path $autoChessDamagePath `
     -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>|public BufferLookup<GameplayEventBuffer> FactLookup|FactLookup\[StreamEntity\]|var facts = FactLookup\[StreamEntity\]|facts\.Add\(new GameplayEventBuffer" `
@@ -271,10 +283,10 @@ Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "BoundaryObservationLookup\s*=\s*SystemAPI\.GetBufferLookup<BoundaryObservationFactBuffer>\(isReadOnly:\s*false\)" `
     -Message "Boundary fact export must write BoundaryObservationFactBuffer."
-Assert-FileContains `
+Assert-FileNotContains `
     -Path $streamPhasePath `
-    -Pattern "LegacyFactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>\(isReadOnly:\s*true\)" `
-    -Message "Boundary fact export must treat legacy stream facts as read-only migration input."
+    -Pattern "LegacyFactLookup|SystemAPI\.GetBufferLookup<GameplayEventBuffer>|EBoundaryObservationFactSource\.LegacyStream" `
+    -Message "Boundary fact export must not read legacy singleton GameplayEventBuffer stream facts."
 Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "BoundaryObservationLookup\s*=\s*SystemAPI\.GetBufferLookup<BoundaryObservationFactBuffer>\(isReadOnly:\s*true\)" `
@@ -604,9 +616,17 @@ Assert-FileNotContains `
     -Pattern "ComponentType\.ReadWrite<ActiveEffectMutationBuffer>\(\),\s*[\r\n\s]*ComponentType\.ReadWrite<GameplayEventBuffer>\(\)" `
     -Message "EffectCommandStream archetype must not keep ActiveEffectMutationBuffer beside the singleton GameplayEventBuffer stream."
 Assert-FileNotContains `
+    -Path $ascArchetypePath `
+    -Pattern "EffectCommandStream\(EntityManager em\)[\s\S]*ComponentType\.ReadWrite<GameplayEventBuffer>\(\)" `
+    -Message "EffectCommandStream archetype must not own singleton GameplayEventBuffer after owner-local fact migration."
+Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "HasRequiredBuffers[\s\S]*ActiveEffectMutationBuffer" `
     -Message "EffectCommandSpecStream required stream buffers must not include ActiveEffectMutationBuffer."
+Assert-FileNotContains `
+    -Path $streamPath `
+    -Pattern "HasRequiredBuffers[\s\S]*HasBuffer<GameplayEventBuffer>|GetBuffer<GameplayEventBuffer>\(streamEntity\)|DynamicBuffer<GameplayEventBuffer> facts|FactProjectionDeltaCursor|EventBridgeFactCursor" `
+    -Message "EffectCommandSpecStream must not require or clear singleton GameplayEventBuffer after owner-local fact migration."
 Assert-FileContains `
     -Path $ascArchetypePath `
     -Pattern "ComponentType\.ReadWrite<ActiveEffectMutationBuffer>\(\)" `
@@ -1779,8 +1799,8 @@ Assert-FileNotContains `
     -Message "AutoChess generated catalog installer must not be a public API seam."
 Assert-FileContains `
     -Path $autoChessDamagePath `
-    -Pattern "PendingOwnerLookup\.SetComponentEnabled\(targetAsc,\s*true\)" `
-    -Message "AutoChess execution calculation must publish pending attribute deltas to the target ASC owner-local lane."
+    -Pattern "pendingMask\[entityIndex\]\s*=\s*true" `
+    -Message "AutoChess execution calculation must publish pending attribute deltas through the target ASC owner-local enable mask."
 Assert-FileNotContains `
     -Path $autoChessDamagePath `
     -Pattern "DeltaLookup\[StreamEntity\]" `

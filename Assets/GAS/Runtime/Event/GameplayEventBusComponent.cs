@@ -16,8 +16,7 @@ namespace GAS.Runtime
 
     public enum EBoundaryObservationFactSource : byte
     {
-        LegacyStream = 0,
-        OwnerLocalCore = 1,
+        OwnerLocalCore = 0,
     }
 
     /// <summary>
