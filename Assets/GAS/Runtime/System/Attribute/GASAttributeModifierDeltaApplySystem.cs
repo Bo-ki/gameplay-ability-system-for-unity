@@ -49,7 +49,6 @@ namespace GAS.Runtime
                     SystemAPI.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
                 StreamEntity = streamEntity,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
             }.Schedule(_ownerDeltaQuery, state.Dependency);
         }
 
@@ -65,7 +64,6 @@ namespace GAS.Runtime
             public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactBufferTypeHandle;
             public Entity StreamEntity;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -74,8 +72,7 @@ namespace GAS.Runtime
                 in v128 chunkEnabledMask)
             {
                 if (StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !FactLookup.HasBuffer(StreamEntity))
+                    || !StreamLookup.HasComponent(StreamEntity))
                 {
                     return;
                 }
@@ -96,7 +93,6 @@ namespace GAS.Runtime
                 var attributeBuffers = chunk.GetBufferAccessor(ref AttributeBufferTypeHandle);
                 var ownerFactBuffers = chunk.GetBufferAccessor(ref OwnerFactBufferTypeHandle);
                 var stream = StreamLookup[StreamEntity];
-                var streamFacts = FactLookup[StreamEntity];
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
@@ -157,7 +153,7 @@ namespace GAS.Runtime
                         deltas[deltaIndex] = delta;
                         appliedCount++;
                         groupApplied = true;
-                        factPatchCount += UpdateLinkedExecutionFact(streamFacts, delta.Sequence, oldValue, newValue);
+                        factPatchCount += UpdateLinkedExecutionFact(ownerFacts, delta.Sequence, oldValue, newValue);
                         AppendAttributeChangeFact(ownerFacts, ref stream, in delta, oldValue, newValue);
                     }
 
@@ -259,7 +255,7 @@ namespace GAS.Runtime
         }
 
         private static int UpdateLinkedExecutionFact(
-            DynamicBuffer<GameplayEventBuffer> facts,
+            DynamicBuffer<OwnerLocalGameplayFactBuffer> facts,
             int deltaSequence,
             float oldValue,
             float newValue)
@@ -267,7 +263,8 @@ namespace GAS.Runtime
             var patchCount = 0;
             for (var i = 0; i < facts.Length; i++)
             {
-                var fact = facts[i];
+                var ownerFact = facts[i];
+                var fact = ownerFact.Fact;
                 if (fact.SourceDeltaSequence != deltaSequence
                     || fact.EventType != EGameplayEventType.ExecutionCalculationOutputUpdated)
                 {
@@ -277,7 +274,8 @@ namespace GAS.Runtime
                 fact.Value = oldValue - newValue;
                 fact.OldValue = oldValue;
                 fact.NewValue = newValue;
-                facts[i] = fact;
+                ownerFact.Fact = fact;
+                facts[i] = ownerFact;
                 patchCount++;
             }
 

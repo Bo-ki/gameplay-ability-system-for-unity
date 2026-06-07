@@ -72,7 +72,7 @@ namespace GAS.Runtime
                 PendingFacts = pendingFacts,
                 MagnitudeSourceChunkCounters = magnitudeSourceChunkCounters,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(isReadOnly: false),
+                OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
                 StreamEntity = streamEntity,
             }.Schedule(calculationHandle);
             state.Dependency = factStream.Dispose(state.Dependency);
@@ -492,14 +492,13 @@ namespace GAS.Runtime
             public NativeList<PendingExecutionOutputFactRecord> PendingFacts;
             [ReadOnly] public NativeArray<ExecutionMagnitudeSourceChunkCounters> MagnitudeSourceChunkCounters;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             public Entity StreamEntity;
 
             public void Execute()
             {
                 if (StreamEntity == Entity.Null
-                    || !StreamLookup.HasComponent(StreamEntity)
-                    || !FactLookup.HasBuffer(StreamEntity))
+                    || !StreamLookup.HasComponent(StreamEntity))
                 {
                     return;
                 }
@@ -517,30 +516,45 @@ namespace GAS.Runtime
                 }
 
                 PendingFacts.Sort(new PendingExecutionOutputFactRecordComparer());
-                var facts = FactLookup[StreamEntity];
                 for (var i = 0; i < PendingFacts.Length; i++)
                 {
                     var record = PendingFacts[i];
-                    facts.Add(new GameplayEventBuffer
+                    var owner = ResolveFactOwner(in record);
+                    if (owner == Entity.Null || !OwnerFactLookup.HasBuffer(owner))
+                        continue;
+
+                    OwnerFactLookup[owner].Add(new OwnerLocalGameplayFactBuffer
                     {
-                        Sequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextFactSequence),
-                        Frame = record.Frame,
-                        EventType = EGameplayEventType.ExecutionCalculationOutputUpdated,
-                        Domain = EGameplayFactDomain.ExecutionCalculation,
-                        Category = EGameplayFactCategory.StateChange,
-                        Severity = EGameplayFactSeverity.Info,
-                        SourceAsc = record.SourceAsc,
-                        TargetAsc = record.TargetAsc,
-                        SourceAbility = record.SourceAbility,
-                        SourceEffect = record.SourceEffect,
-                        ContextId = record.ContextId,
-                        ParentContextId = record.ParentContextId,
-                        EventCode = record.EventCode,
-                        Value = record.Value,
+                        Fact = new GameplayEventBuffer
+                        {
+                            Sequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextFactSequence),
+                            Frame = record.Frame,
+                            EventType = EGameplayEventType.ExecutionCalculationOutputUpdated,
+                            Domain = EGameplayFactDomain.ExecutionCalculation,
+                            Category = EGameplayFactCategory.StateChange,
+                            Severity = EGameplayFactSeverity.Info,
+                            SourceAsc = record.SourceAsc,
+                            TargetAsc = record.TargetAsc,
+                            SourceAbility = record.SourceAbility,
+                            SourceEffect = record.SourceEffect,
+                            ContextId = record.ContextId,
+                            ParentContextId = record.ParentContextId,
+                            EventCode = record.EventCode,
+                            Value = record.Value,
+                        },
                     });
                 }
 
                 StreamLookup[StreamEntity] = stream;
+            }
+
+            private static Entity ResolveFactOwner(in PendingExecutionOutputFactRecord record)
+            {
+                if (record.TargetAsc != Entity.Null)
+                    return record.TargetAsc;
+                if (record.SourceAsc != Entity.Null)
+                    return record.SourceAsc;
+                return Entity.Null;
             }
         }
 

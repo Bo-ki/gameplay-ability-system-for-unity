@@ -188,6 +188,26 @@ Assert-FileContains `
     -Pattern "AppendAttributeChangeFact\(ownerFacts" `
     -Message "Pending AttributeDelta apply must append attribute facts to the ASC owner-local fact buffer before export."
 Assert-FileContains `
+    -Path $deltaApplyPath `
+    -Pattern "UpdateLinkedExecutionFact\(ownerFacts" `
+    -Message "Pending AttributeDelta apply must patch linked execution facts through the ASC owner-local fact buffer."
+Assert-FileNotContains `
+    -Path $deltaApplyPath `
+    -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>|public BufferLookup<GameplayEventBuffer> FactLookup|FactLookup\[StreamEntity\]" `
+    -Message "Pending AttributeDelta apply must not read or patch linked execution facts through the singleton fact stream."
+Assert-FileContains `
+    -Path $autoChessDamagePath `
+    -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>\(\)" `
+    -Message "AutoChess damage execution must acquire target ASC owner-local fact buffers."
+Assert-FileContains `
+    -Path $autoChessDamagePath `
+    -Pattern "OwnerFactLookup\[targetAsc\]\.Add\(new OwnerLocalGameplayFactBuffer" `
+    -Message "AutoChess damage execution facts must append through owner-local facts so linked delta patching can update them."
+Assert-FileNotContains `
+    -Path $autoChessDamagePath `
+    -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>|public BufferLookup<GameplayEventBuffer> FactLookup|FactLookup\[StreamEntity\]|var facts = FactLookup\[StreamEntity\]|facts\.Add\(new GameplayEventBuffer" `
+    -Message "AutoChess damage execution must not append execution facts directly to the singleton fact stream."
+Assert-FileContains `
     -Path $ascCommandBufferResolvePath `
     -Pattern "BufferTypeHandle<OwnerLocalGameplayFactBuffer>" `
     -Message "ASC command resolve must write tag/attribute/ability request facts through the ASC owner-local fact buffer."
@@ -973,12 +993,24 @@ Assert-FileContains `
     -Message "GEExecutionCalculationSystem must merge execution output facts through a deterministic merge job."
 Assert-FileContains `
     -Path $executionCalculationSystemPath `
+    -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>\(isReadOnly:\s*false\)" `
+    -Message "GEExecutionCalculationSystem merge job must acquire ASC owner-local fact buffers."
+Assert-FileContains `
+    -Path $executionCalculationSystemPath `
     -Pattern "PendingFacts\.Sort\(new PendingExecutionOutputFactRecordComparer\(\)\)" `
-    -Message "GEExecutionCalculationSystem execution output facts must be stable-sorted before entering the typed fact buffer."
+    -Message "GEExecutionCalculationSystem execution output facts must be stable-sorted before entering owner-local fact buffers."
+Assert-FileContains `
+    -Path $executionCalculationSystemPath `
+    -Pattern "OwnerFactLookup\[owner\]\.Add\(new OwnerLocalGameplayFactBuffer" `
+    -Message "GEExecutionCalculationSystem execution output facts must append to ASC owner-local fact buffers."
 Assert-FileContains `
     -Path $executionCalculationSystemPath `
     -Pattern "EffectCommandSpecStreamPhaseUtility\.Allocate\(ref stream\.NextFactSequence\)" `
     -Message "GEExecutionCalculationSystem merge job must allocate deterministic fact sequences."
+Assert-FileNotContains `
+    -Path $executionCalculationSystemPath `
+    -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>|public BufferLookup<GameplayEventBuffer> FactLookup|FactLookup\[StreamEntity\]|facts\.Add\(new GameplayEventBuffer" `
+    -Message "GEExecutionCalculationSystem must not merge execution output facts into the singleton fact stream."
 Assert-FileContains `
     -Path $executionCalculationSystemPath `
     -Pattern "ExecutionMagnitudeSourceChunkCounters" `

@@ -60,7 +60,7 @@ namespace GAS.AutoChessDemo
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: true),
                 DeltaLookup = SystemAPI.GetBufferLookup<AttributeModifierBuffer>(),
-                FactLookup = SystemAPI.GetBufferLookup<GameplayEventBuffer>(),
+                OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(),
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true),
                 PendingOwnerLookup = SystemAPI.GetComponentLookup<PendingAttributeModifierComponent>(),
                 DestroyingLookup = SystemAPI.GetComponentLookup<ASCDestroyingComponent>(isReadOnly: true),
@@ -83,7 +83,7 @@ namespace GAS.AutoChessDemo
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             [ReadOnly] public BufferLookup<GEEffectCommandBuffer> CommandLookup;
             public BufferLookup<AttributeModifierBuffer> DeltaLookup;
-            public BufferLookup<GameplayEventBuffer> FactLookup;
+            public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             [ReadOnly] public BufferLookup<AttributeValueBuffer> AttributeLookup;
             public ComponentLookup<PendingAttributeModifierComponent> PendingOwnerLookup;
             [ReadOnly] public ComponentLookup<ASCDestroyingComponent> DestroyingLookup;
@@ -92,13 +92,11 @@ namespace GAS.AutoChessDemo
             {
                 if (StreamEntity == Entity.Null
                     || !StreamLookup.HasComponent(StreamEntity)
-                    || !CommandLookup.HasBuffer(StreamEntity)
-                    || !FactLookup.HasBuffer(StreamEntity))
+                    || !CommandLookup.HasBuffer(StreamEntity))
                     return;
 
                 var stream = StreamLookup[StreamEntity];
                 var commands = CommandLookup[StreamEntity];
-                var facts = FactLookup[StreamEntity];
 
                 for (var i = 0; i < commands.Length; i++)
                 {
@@ -112,6 +110,7 @@ namespace GAS.AutoChessDemo
                     var targetAsc = command.TargetAsc;
                     if (!AttributeLookup.HasBuffer(targetAsc)
                         || !DeltaLookup.HasBuffer(targetAsc)
+                        || !OwnerFactLookup.HasBuffer(targetAsc)
                         || !PendingOwnerLookup.HasComponent(targetAsc)
                         || IsDestroying(DestroyingLookup, targetAsc))
                     {
@@ -157,28 +156,31 @@ namespace GAS.AutoChessDemo
                     };
                     PendingOwnerLookup.SetComponentEnabled(targetAsc, true);
 
-                    facts.Add(new GameplayEventBuffer
+                    OwnerFactLookup[targetAsc].Add(new OwnerLocalGameplayFactBuffer
                     {
-                        Sequence = factSequence,
-                        SourceCommandSequence = command.Sequence,
-                        SourceDeltaSequence = deltaSequence,
-                        Frame = commandFrame,
-                        EventType = EGameplayEventType.ExecutionCalculationOutputUpdated,
-                        Domain = EGameplayFactDomain.ExecutionCalculation,
-                        Category = EGameplayFactCategory.StateChange,
-                        Severity = EGameplayFactSeverity.Info,
-                        SourceAsc = command.SourceAsc,
-                        TargetAsc = targetAsc,
-                        SourceAbility = command.SourceAbility,
-                        SourceEffect = command.SourceEffect,
-                        GameplayEffectCode = command.GameplayEffectCode,
-                        ContextId = command.ContextId,
-                        ParentContextId = command.ParentContextId,
-                        EventCode = Calculation.CalculationCode,
-                        AttrSetCode = Calculation.HealthAttrSetCode,
-                        AttributeCode = Calculation.HealthAttrCode,
-                        ReasonCode = Calculation.OutputKey,
-                        Value = damage,
+                        Fact = new GameplayEventBuffer
+                        {
+                            Sequence = factSequence,
+                            SourceCommandSequence = command.Sequence,
+                            SourceDeltaSequence = deltaSequence,
+                            Frame = commandFrame,
+                            EventType = EGameplayEventType.ExecutionCalculationOutputUpdated,
+                            Domain = EGameplayFactDomain.ExecutionCalculation,
+                            Category = EGameplayFactCategory.StateChange,
+                            Severity = EGameplayFactSeverity.Info,
+                            SourceAsc = command.SourceAsc,
+                            TargetAsc = targetAsc,
+                            SourceAbility = command.SourceAbility,
+                            SourceEffect = command.SourceEffect,
+                            GameplayEffectCode = command.GameplayEffectCode,
+                            ContextId = command.ContextId,
+                            ParentContextId = command.ParentContextId,
+                            EventCode = Calculation.CalculationCode,
+                            AttrSetCode = Calculation.HealthAttrSetCode,
+                            AttributeCode = Calculation.HealthAttrCode,
+                            ReasonCode = Calculation.OutputKey,
+                            Value = damage,
+                        },
                     });
 
                 }
