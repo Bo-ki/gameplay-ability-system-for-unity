@@ -133,21 +133,36 @@ namespace GAS.AutoChessDemo
             RunProcessWarmupBattles(scenario);
             var repeatRunEvidence = RunRepeatRunCleanupProbe(scenario);
 
-            var result = RunGeneratedScenario(
+            var performanceResult = RunGeneratedScenario(
                 scenario,
-                captureOfficialToolDiff: false);
+                captureOfficialToolDiff: false,
+                debuggerEnabled: false,
+                captureSystemTimings: false,
+                captureBufferPressure: false);
+            AutoChessBattleManager.ShutdownRuntime();
+
+            var diagnosticResult = RunGeneratedScenario(
+                scenario,
+                captureOfficialToolDiff: false,
+                debuggerEnabled: true,
+                captureSystemTimings: true,
+                captureBufferPressure: true);
+            ValidateOfficialDiffRun(performanceResult, diagnosticResult);
             AutoChessBattleManager.ShutdownRuntime();
 
             var officialDiffResult = RunGeneratedScenario(
                 scenario,
-                captureOfficialToolDiff: true);
-            ValidateOfficialDiffRun(result, officialDiffResult);
-            result = result.WithOfficialToolDiff(officialDiffResult.OfficialToolDiff);
+                captureOfficialToolDiff: true,
+                debuggerEnabled: false,
+                captureSystemTimings: false,
+                captureBufferPressure: false);
+            ValidateOfficialDiffRun(performanceResult, officialDiffResult);
+            performanceResult = performanceResult.WithOfficialToolDiff(officialDiffResult.OfficialToolDiff);
 
             return CreateRunResult(
                 scenario,
-                result,
-                result,
+                performanceResult,
+                diagnosticResult,
                 repeatRunEvidence,
                 true,
                 true,
@@ -161,7 +176,10 @@ namespace GAS.AutoChessDemo
             {
                 RunWarmupPass(CreateGeneratedScenarioOptions(
                     scenario,
-                    captureOfficialToolDiff: false));
+                    captureOfficialToolDiff: false,
+                    debuggerEnabled: false,
+                    captureSystemTimings: false,
+                    captureBufferPressure: false));
             }
         }
 
@@ -244,11 +262,17 @@ namespace GAS.AutoChessDemo
 
         public static AutoChessBattleResult RunGeneratedScenario(
             AutoChessGeneratedScenarioProfile scenario,
-            bool captureOfficialToolDiff)
+            bool captureOfficialToolDiff,
+            bool debuggerEnabled = true,
+            bool captureSystemTimings = true,
+            bool captureBufferPressure = true)
         {
             return AutoChessBattleManager.RunDefault(CreateGeneratedScenarioOptions(
                 scenario,
-                captureOfficialToolDiff));
+                captureOfficialToolDiff,
+                debuggerEnabled,
+                captureSystemTimings,
+                captureBufferPressure));
         }
 
         public static IEnumerator RunScenarioStepped(
@@ -313,6 +337,7 @@ namespace GAS.AutoChessDemo
             var evidence = AutoChessBattleValidationReport.CreateEvidence(
                 scenario,
                 performanceResult,
+                diagnosticResult,
                 presentation,
                 officialDiffSeparatePass: requireOfficialToolDiff);
             return new AutoChessValidationRunResult(
@@ -322,7 +347,7 @@ namespace GAS.AutoChessDemo
                 hasRepeatRunEvidence,
                 presentation,
                 evidence,
-                HasGeneratedScenarioThresholds(performanceResult, scenario),
+                HasGeneratedScenarioThresholds(performanceResult, diagnosticResult, scenario),
                 HasRequiredRuntimeChain(
                     performanceResult,
                     diagnosticResult,
@@ -382,19 +407,28 @@ namespace GAS.AutoChessDemo
             in AutoChessBattleResult result,
             AutoChessGeneratedScenarioProfile scenario)
         {
+            return HasGeneratedScenarioThresholds(result, result, scenario);
+        }
+
+        public static bool HasGeneratedScenarioThresholds(
+            in AutoChessBattleResult result,
+            in AutoChessBattleResult diagnosticResult,
+            AutoChessGeneratedScenarioProfile scenario)
+        {
+            var counters = diagnosticResult.RuntimeDiagnostics.CoreCounters;
             return result.Completed
                    && result.Winner == scenario.ExpectedWinner
                    && result.DriverIssuedCommands >= scenario.MinDriverIssuedCommands
                    && result.EventCounts.AttributeChanges >= scenario.MinAttributeChanges
                    && result.EventCounts.ExecutionCalculationOutputUpdated >= scenario.MinExecutionOutputs
                    && result.EventCounts.CueRequests >= scenario.MinCueRequests
-                   && result.RuntimeDiagnostics.CoreCounters.ActiveEffectSlotCount >= scenario.MinActiveEffectSlots
+                   && counters.ActiveEffectSlotCount >= scenario.MinActiveEffectSlots
                    && result.EventCounts.PeriodTickDamageFacts >= scenario.MinPeriodTickDamageFacts
-                   && result.RuntimeDiagnostics.CoreCounters.ActiveMutationCommandCount >= scenario.MinActiveMutationCommands
-                   && result.RuntimeDiagnostics.CoreCounters.ActiveMutationOwnerGroupCount >= scenario.MinActiveMutationOwnerGroups
-                   && result.RuntimeDiagnostics.CoreCounters.ActiveMutationEstimatedRandomLookupCount <= scenario.MaxActiveMutationEstimatedRandomLookups
-                   && result.RuntimeDiagnostics.CoreCounters.ActiveMutationOwnerResourceLookupCount <= scenario.MaxActiveMutationOwnerResourceLookups
-                   && result.RuntimeDiagnostics.CoreCounters.ActiveMutationMigrationCarrierCount <= scenario.MaxActiveMutationMigrationCarriers;
+                   && counters.ActiveMutationCommandCount >= scenario.MinActiveMutationCommands
+                   && counters.ActiveMutationOwnerGroupCount >= scenario.MinActiveMutationOwnerGroups
+                   && counters.ActiveMutationEstimatedRandomLookupCount <= scenario.MaxActiveMutationEstimatedRandomLookups
+                   && counters.ActiveMutationOwnerResourceLookupCount <= scenario.MaxActiveMutationOwnerResourceLookups
+                   && counters.ActiveMutationMigrationCarrierCount <= scenario.MaxActiveMutationMigrationCarriers;
         }
 
         public static bool HasRequiredRuntimeChain(
@@ -478,13 +512,19 @@ namespace GAS.AutoChessDemo
 
         private static AutoChessBattleOptions CreateGeneratedScenarioOptions(
             AutoChessGeneratedScenarioProfile scenario,
-            bool captureOfficialToolDiff)
+            bool captureOfficialToolDiff,
+            bool debuggerEnabled = true,
+            bool captureSystemTimings = true,
+            bool captureBufferPressure = true)
         {
             return new AutoChessBattleOptions(
                 scenario.MaxTicks,
                 scenario.PostVictoryFlushTicks,
                 scenario.Scale,
                 captureOfficialToolDiff,
+                debuggerEnabled,
+                captureSystemTimings,
+                captureBufferPressure,
                 healthMultiplier: scenario.HealthMultiplier);
         }
 

@@ -422,6 +422,15 @@ namespace GAS.AutoChessDemo
         public readonly int ObservationMaterializedEntityCount;
         public readonly int ObservationMaterializationElapsedMicroseconds;
         public readonly int ObservationPerformancePollutionRiskCount;
+        public readonly int MagnitudeSourceCurrentValueLookupCount;
+        public readonly int MagnitudeSourceCapturedValueHitCount;
+        public readonly int MagnitudeSourceCaptureMissCount;
+        public readonly int MagnitudeSourceCaptureMissLiveLookupCount;
+        public readonly int MagnitudeSourceFallbackValueCount;
+        public readonly int MagnitudeSourceFallbackFactCount;
+        public readonly int MagnitudeSourceSourceAttributeLookupCount;
+        public readonly int MagnitudeSourceTargetAttributeLookupCount;
+        public readonly int MagnitudeSourceExecutionInputLookupCount;
         public readonly double TotalElapsedMilliseconds;
         public readonly double AverageTickMilliseconds;
         public readonly uint FactsHash;
@@ -494,6 +503,15 @@ namespace GAS.AutoChessDemo
             int observationMaterializedEntityCount,
             int observationMaterializationElapsedMicroseconds,
             int observationPerformancePollutionRiskCount,
+            int magnitudeSourceCurrentValueLookupCount,
+            int magnitudeSourceCapturedValueHitCount,
+            int magnitudeSourceCaptureMissCount,
+            int magnitudeSourceCaptureMissLiveLookupCount,
+            int magnitudeSourceFallbackValueCount,
+            int magnitudeSourceFallbackFactCount,
+            int magnitudeSourceSourceAttributeLookupCount,
+            int magnitudeSourceTargetAttributeLookupCount,
+            int magnitudeSourceExecutionInputLookupCount,
             double totalElapsedMilliseconds,
             double averageTickMilliseconds,
             uint factsHash,
@@ -565,6 +583,15 @@ namespace GAS.AutoChessDemo
             ObservationMaterializedEntityCount = observationMaterializedEntityCount;
             ObservationMaterializationElapsedMicroseconds = observationMaterializationElapsedMicroseconds;
             ObservationPerformancePollutionRiskCount = observationPerformancePollutionRiskCount;
+            MagnitudeSourceCurrentValueLookupCount = magnitudeSourceCurrentValueLookupCount;
+            MagnitudeSourceCapturedValueHitCount = magnitudeSourceCapturedValueHitCount;
+            MagnitudeSourceCaptureMissCount = magnitudeSourceCaptureMissCount;
+            MagnitudeSourceCaptureMissLiveLookupCount = magnitudeSourceCaptureMissLiveLookupCount;
+            MagnitudeSourceFallbackValueCount = magnitudeSourceFallbackValueCount;
+            MagnitudeSourceFallbackFactCount = magnitudeSourceFallbackFactCount;
+            MagnitudeSourceSourceAttributeLookupCount = magnitudeSourceSourceAttributeLookupCount;
+            MagnitudeSourceTargetAttributeLookupCount = magnitudeSourceTargetAttributeLookupCount;
+            MagnitudeSourceExecutionInputLookupCount = magnitudeSourceExecutionInputLookupCount;
             TotalElapsedMilliseconds = totalElapsedMilliseconds;
             AverageTickMilliseconds = averageTickMilliseconds;
             FactsHash = factsHash;

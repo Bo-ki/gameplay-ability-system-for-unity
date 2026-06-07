@@ -83,6 +83,15 @@ namespace GAS.Runtime
         public int PendingAttributeEstimatedRandomLookupCount;
         public int PendingAttributeFactPatchCount;
         public int PendingAttributeMigrationCarrierCount;
+        public int MagnitudeSourceCurrentValueLookupCount;
+        public int MagnitudeSourceCapturedValueHitCount;
+        public int MagnitudeSourceCaptureMissCount;
+        public int MagnitudeSourceCaptureMissLiveLookupCount;
+        public int MagnitudeSourceFallbackValueCount;
+        public int MagnitudeSourceFallbackFactCount;
+        public int MagnitudeSourceSourceAttributeLookupCount;
+        public int MagnitudeSourceTargetAttributeLookupCount;
+        public int MagnitudeSourceExecutionInputLookupCount;
     }
 
     [InternalBufferCapacity(0)]
@@ -396,6 +405,8 @@ namespace GAS.Runtime
             }
 
             public bool IsCreated => _isCreated;
+
+            public Entity StreamEntity => _streamEntity;
 
             public int CurrentFrame => _currentFrame;
 
@@ -749,6 +760,73 @@ namespace GAS.Runtime
             stream.PendingAttributeEstimatedRandomLookupCount = 0;
             stream.PendingAttributeFactPatchCount = 0;
             stream.PendingAttributeMigrationCarrierCount = 0;
+            stream.MagnitudeSourceCurrentValueLookupCount = 0;
+            stream.MagnitudeSourceCapturedValueHitCount = 0;
+            stream.MagnitudeSourceCaptureMissCount = 0;
+            stream.MagnitudeSourceCaptureMissLiveLookupCount = 0;
+            stream.MagnitudeSourceFallbackValueCount = 0;
+            stream.MagnitudeSourceFallbackFactCount = 0;
+            stream.MagnitudeSourceSourceAttributeLookupCount = 0;
+            stream.MagnitudeSourceTargetAttributeLookupCount = 0;
+            stream.MagnitudeSourceExecutionInputLookupCount = 0;
+        }
+
+        public static void AddMagnitudeSourceCounters(
+            EntityManager em,
+            Entity streamEntity,
+            int currentValueLookups,
+            int capturedValueHits,
+            int captureMisses,
+            int captureMissLiveLookups,
+            int fallbackValues,
+            int fallbackFacts,
+            int sourceAttributeLookups,
+            int targetAttributeLookups,
+            int executionInputLookups)
+        {
+            if (streamEntity == Entity.Null
+                || !em.Exists(streamEntity)
+                || !em.HasComponent<GEEffectCommandStreamComponent>(streamEntity))
+            {
+                return;
+            }
+
+            var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
+            AddMagnitudeSourceCounters(
+                ref stream,
+                currentValueLookups,
+                capturedValueHits,
+                captureMisses,
+                captureMissLiveLookups,
+                fallbackValues,
+                fallbackFacts,
+                sourceAttributeLookups,
+                targetAttributeLookups,
+                executionInputLookups);
+            em.SetComponentData(streamEntity, stream);
+        }
+
+        public static void AddMagnitudeSourceCounters(
+            ref GEEffectCommandStreamComponent stream,
+            int currentValueLookups,
+            int capturedValueHits,
+            int captureMisses,
+            int captureMissLiveLookups,
+            int fallbackValues,
+            int fallbackFacts,
+            int sourceAttributeLookups,
+            int targetAttributeLookups,
+            int executionInputLookups)
+        {
+            stream.MagnitudeSourceCurrentValueLookupCount += currentValueLookups;
+            stream.MagnitudeSourceCapturedValueHitCount += capturedValueHits;
+            stream.MagnitudeSourceCaptureMissCount += captureMisses;
+            stream.MagnitudeSourceCaptureMissLiveLookupCount += captureMissLiveLookups;
+            stream.MagnitudeSourceFallbackValueCount += fallbackValues;
+            stream.MagnitudeSourceFallbackFactCount += fallbackFacts;
+            stream.MagnitudeSourceSourceAttributeLookupCount += sourceAttributeLookups;
+            stream.MagnitudeSourceTargetAttributeLookupCount += targetAttributeLookups;
+            stream.MagnitudeSourceExecutionInputLookupCount += executionInputLookups;
         }
 
         public static GEEffectCommandBuffer ToCommand(

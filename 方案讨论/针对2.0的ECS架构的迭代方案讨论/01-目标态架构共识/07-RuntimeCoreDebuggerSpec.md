@@ -192,6 +192,7 @@ AutoChessDemo 是 Runtime Core、Debugger、Luban/SourceGenerator 和官方工�
 | core counters | commandCount、specCount、deltaCount、factCount、cueCount、presentationCount | 验证 GAS 语义链 |
 | timing split | coreTickMs、observationTickMs、presentationTickMs、debuggerTickMs、exportMs、bootstrapMs | 防止把 Boundary / export / Editor 成本混入 Core |
 | API health | proofOnlyApi、scaleReadyApi、reselectTrigger、globalBufferPressure、randomLookupCount、lookupUpdateCount、nativeStreamMergeMs、deterministicOrderPolicy | 证明 proof 承载没有被盲目固化为目标态 |
+| magnitude source | currentValueLookups、capturedValueHits、captureMisses、captureMissLiveLookups、fallbackValues、fallbackFacts、sourceAttributeLookups、targetAttributeLookups、executionInputLookups | 证明 SourceAttribute / TargetAttribute / ExecutionCalculation 的 live lookup、fallback 和 snapshot miss 可以被机器归因 |
 | official evidence | journalingAvailable、journalingCaptured、profilerAvailable、profilerCaptureState、packageCachePath、packageVersion、manifestLockSkew | 与 Unity 官方工具和本地 PackageCache 对齐 |
 | world policy | worldTimePolicy、fixedStepRate、fixedStepCount、editorFrameDeltaUsed、warmupDroppedTicks、measurementTicks | 固定步和 performance measurement 口径 |
 | boundary profiles | physicsDisabledReason / physics metrics、entitiesGraphicsDisabledReason / render metrics、managedBoundaryPolicy、prefabLoadResultState | 确认无头没有删除表现/资源链路 |
@@ -204,6 +205,9 @@ Validation evidence 的生成规则：
 3. Official diff pass 可以与 performance pass 分离，但 evidence 必须记录这是 separate pass，并对比 command / fact / cue 关键计数是否一致。
 4. Debugger snapshot 可缺省关闭以避免污染 performance pass；此时 evidence 必须标记 `debuggerEnabled=false`，并由 diagnostic pass 补足 counters。
 5. Mermaid 数据流图、时序图、中文战斗日志从 evidence 和 structured log 派生，不反向参与 validation。
+6. Performance pass、diagnostic pass 和 official diff pass 必须各自声明采样开关：Debugger、system timing、buffer pressure、Journaling / Profiler capture、raw export 和 derived diagram 都不能隐式开启。
+7. Magnitude source 字段必须出现在 validation evidence 的机器结构中；如果只出现在 Debugger 文本、中文 summary 或 Mermaid 注释中，视为未接入验收模型。
+8. Diagnostic pass 可以承担 observation materialization 和 Debugger 采样成本，但这些成本必须带 `overheadOwner` / timing domain；performance pass 只能消费对账后的业务计数和必要 lightweight facts。
 
 ## 官方案例对齐
 
@@ -273,6 +277,7 @@ Debugger 必须先对齐 `UnityDOTS官方文档参考/README.md`，再吸收 `Un
 | Functional diagnostics | debugEvents、debugWarnings、debugErrors、blockingDebugErrors、slowTimingWarnings、proofOnlyApiWarnings |
 | Timing split | `GASTickTotal`、5 个 GAS physical group、Demo extension、BoundaryProjection、Presentation / Replay |
 | Official diff | Profiler capture state、Entities Journaling availability / cap、structural create/destroy/add/remove、enableable toggle、RW lookup / buffer access TopN |
+| Magnitude source | current value lookup、captured value hit、capture miss、capture miss live lookup、fallback value/fact、source / target attribute lookup、execution input lookup |
 | Artifact metadata | profiler `.data` saved、profileEditor flag、capture frame window、binary log size、ignored output path、analysis report path |
 
 性能 pass 和 Diagnostic pass 必须分离：性能 pass 关闭 Runtime Debugger raw trace 和 presentation raw fact 投影，只保留 replay / required facts；Diagnostic pass 再打开完整 Layer 2 观测链，用来输出数据流图、时序图和 Runtime Debugger counters。该分离是 Debugger 和 Unity 官方工具的差分边界，避免把 Layer 2 presentation / debugger 成本混入 Runtime Core 性能判断。

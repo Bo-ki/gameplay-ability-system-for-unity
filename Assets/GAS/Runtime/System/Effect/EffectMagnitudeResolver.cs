@@ -324,7 +324,15 @@ namespace GAS.Runtime
             float fallbackMagnitude)
         {
             if (captureTiming == EAttributeCaptureTiming.CurrentValue)
-                return ReadAttributeValue(em, asc, attrSetCode, attributeCode, fallbackMagnitude);
+            {
+                return ResolveCurrentAttributeValue(
+                    em,
+                    source,
+                    asc,
+                    attrSetCode,
+                    attributeCode,
+                    fallbackMagnitude);
+            }
 
             if (TryGetCapturedAttributeValue(
                     em,
@@ -335,10 +343,27 @@ namespace GAS.Runtime
                     attributeCode,
                     out var capturedValue))
             {
+                RecordMagnitudeSourceAttributeResolution(
+                    em,
+                    source,
+                    currentValueLookup: 0,
+                    capturedValueHit: 1,
+                    captureMiss: 0,
+                    captureMissLiveLookup: 0,
+                    fallbackValue: 0);
                 return capturedValue;
             }
 
-            var value = ReadAttributeValue(em, asc, attrSetCode, attributeCode, fallbackMagnitude);
+            var hasLiveValue = TryReadAttributeValue(em, asc, attrSetCode, attributeCode, out var liveValue);
+            var value = hasLiveValue ? liveValue : fallbackMagnitude;
+            RecordMagnitudeSourceAttributeResolution(
+                em,
+                source,
+                currentValueLookup: 0,
+                capturedValueHit: 0,
+                captureMiss: 1,
+                captureMissLiveLookup: 1,
+                fallbackValue: hasLiveValue ? 0 : 1);
             StoreCapturedAttributeValue(em, ge, modifierIndex, source, attrSetCode, attributeCode, value);
             return value;
         }
@@ -356,7 +381,15 @@ namespace GAS.Runtime
             float fallbackMagnitude)
         {
             if (captureTiming == EAttributeCaptureTiming.CurrentValue)
-                return ReadAttributeValue(em, asc, attrSetCode, attributeCode, fallbackMagnitude);
+            {
+                return ResolveCurrentAttributeValue(
+                    em,
+                    source,
+                    asc,
+                    attrSetCode,
+                    attributeCode,
+                    fallbackMagnitude);
+            }
 
             if (TryGetCapturedAttributeValue(
                     em,
@@ -367,12 +400,49 @@ namespace GAS.Runtime
                     attributeCode,
                     out var capturedValue))
             {
+                RecordMagnitudeSourceAttributeResolution(
+                    em,
+                    source,
+                    currentValueLookup: 0,
+                    capturedValueHit: 1,
+                    captureMiss: 0,
+                    captureMissLiveLookup: 0,
+                    fallbackValue: 0);
                 return capturedValue;
             }
 
-            var value = ReadAttributeValue(em, asc, attrSetCode, attributeCode, fallbackMagnitude);
+            var hasLiveValue = TryReadAttributeValue(em, asc, attrSetCode, attributeCode, out var liveValue);
+            var value = hasLiveValue ? liveValue : fallbackMagnitude;
+            RecordMagnitudeSourceAttributeResolution(
+                em,
+                source,
+                currentValueLookup: 0,
+                capturedValueHit: 0,
+                captureMiss: 1,
+                captureMissLiveLookup: 1,
+                fallbackValue: hasLiveValue ? 0 : 1);
             StoreCapturedAttributeValue(em, ref ecb, ge, modifierIndex, source, attrSetCode, attributeCode, value);
             return value;
+        }
+
+        private static float ResolveCurrentAttributeValue(
+            EntityManager em,
+            EMagnitudeSource source,
+            Entity asc,
+            int attrSetCode,
+            int attributeCode,
+            float fallbackMagnitude)
+        {
+            var hasLiveValue = TryReadAttributeValue(em, asc, attrSetCode, attributeCode, out var liveValue);
+            RecordMagnitudeSourceAttributeResolution(
+                em,
+                source,
+                currentValueLookup: 1,
+                capturedValueHit: 0,
+                captureMiss: 0,
+                captureMissLiveLookup: 0,
+                fallbackValue: hasLiveValue ? 0 : 1);
+            return hasLiveValue ? liveValue : fallbackMagnitude;
         }
 
         internal static float ReadAttributeValue(
@@ -505,6 +575,44 @@ namespace GAS.Runtime
 
             EnqueueMagnitudeFact(ref eventWriter, ge, context, type, eventCode, value);
             eventWriter.Flush();
+            EffectCommandSpecStream.AddMagnitudeSourceCounters(
+                em,
+                eventWriter.StreamEntity,
+                currentValueLookups: 0,
+                capturedValueHits: 0,
+                captureMisses: 0,
+                captureMissLiveLookups: 0,
+                fallbackValues: 0,
+                fallbackFacts: 1,
+                sourceAttributeLookups: 0,
+                targetAttributeLookups: 0,
+                executionInputLookups: 0);
+        }
+
+        private static void RecordMagnitudeSourceAttributeResolution(
+            EntityManager em,
+            EMagnitudeSource source,
+            int currentValueLookup,
+            int capturedValueHit,
+            int captureMiss,
+            int captureMissLiveLookup,
+            int fallbackValue)
+        {
+            if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity))
+                return;
+
+            EffectCommandSpecStream.AddMagnitudeSourceCounters(
+                em,
+                streamEntity,
+                currentValueLookup,
+                capturedValueHit,
+                captureMiss,
+                captureMissLiveLookup,
+                fallbackValue,
+                fallbackFacts: 0,
+                sourceAttributeLookups: source == EMagnitudeSource.SourceAttribute ? 1 : 0,
+                targetAttributeLookups: source == EMagnitudeSource.TargetAttribute ? 1 : 0,
+                executionInputLookups: 0);
         }
 
         private static void EnqueueMagnitudeFact(

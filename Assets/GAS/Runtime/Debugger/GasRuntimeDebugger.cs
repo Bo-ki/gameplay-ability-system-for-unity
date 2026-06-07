@@ -16,6 +16,7 @@ namespace GAS.Runtime
         RuntimeCoreCounters = 5,
         RuntimeCoreFrameBackbone = 6,
         ObservationMaterialization = 7,
+        MagnitudeSource = 8,
     }
 
     public enum EGasRuntimeDiagnosticSeverity : byte
@@ -111,6 +112,15 @@ namespace GAS.Runtime
         public int RuntimeCorePendingAttributeEstimatedRandomLookupCount;
         public int RuntimeCorePendingAttributeFactPatchCount;
         public int RuntimeCorePendingAttributeMigrationCarrierCount;
+        public int RuntimeCoreMagnitudeSourceCurrentValueLookupCount;
+        public int RuntimeCoreMagnitudeSourceCapturedValueHitCount;
+        public int RuntimeCoreMagnitudeSourceCaptureMissCount;
+        public int RuntimeCoreMagnitudeSourceCaptureMissLiveLookupCount;
+        public int RuntimeCoreMagnitudeSourceFallbackValueCount;
+        public int RuntimeCoreMagnitudeSourceFallbackFactCount;
+        public int RuntimeCoreMagnitudeSourceSourceAttributeLookupCount;
+        public int RuntimeCoreMagnitudeSourceTargetAttributeLookupCount;
+        public int RuntimeCoreMagnitudeSourceExecutionInputLookupCount;
         public int RuntimeCoreQueryBudget;
         public int RuntimeCoreFilteredQueryBudget;
         public int RuntimeCoreUnfilteredQueryBudget;
@@ -222,6 +232,15 @@ namespace GAS.Runtime
         public int PendingAttributeEstimatedRandomLookupCount;
         public int PendingAttributeFactPatchCount;
         public int PendingAttributeMigrationCarrierCount;
+        public int MagnitudeSourceCurrentValueLookupCount;
+        public int MagnitudeSourceCapturedValueHitCount;
+        public int MagnitudeSourceCaptureMissCount;
+        public int MagnitudeSourceCaptureMissLiveLookupCount;
+        public int MagnitudeSourceFallbackValueCount;
+        public int MagnitudeSourceFallbackFactCount;
+        public int MagnitudeSourceSourceAttributeLookupCount;
+        public int MagnitudeSourceTargetAttributeLookupCount;
+        public int MagnitudeSourceExecutionInputLookupCount;
         public int QueryBudget;
         public int FilteredQueryBudget;
         public int UnfilteredQueryBudget;
@@ -397,6 +416,68 @@ namespace GAS.Runtime
         }
     }
 
+    public readonly struct GasRuntimeMagnitudeSourceCounters
+    {
+        public readonly int CurrentValueLookupCount;
+        public readonly int CapturedValueHitCount;
+        public readonly int CaptureMissCount;
+        public readonly int CaptureMissLiveLookupCount;
+        public readonly int FallbackValueCount;
+        public readonly int FallbackFactCount;
+        public readonly int SourceAttributeLookupCount;
+        public readonly int TargetAttributeLookupCount;
+        public readonly int ExecutionInputLookupCount;
+
+        public static GasRuntimeMagnitudeSourceCounters Empty => default;
+
+        public GasRuntimeMagnitudeSourceCounters(
+            int currentValueLookupCount,
+            int capturedValueHitCount,
+            int captureMissCount,
+            int captureMissLiveLookupCount,
+            int fallbackValueCount,
+            int fallbackFactCount,
+            int sourceAttributeLookupCount,
+            int targetAttributeLookupCount,
+            int executionInputLookupCount)
+        {
+            CurrentValueLookupCount = currentValueLookupCount;
+            CapturedValueHitCount = capturedValueHitCount;
+            CaptureMissCount = captureMissCount;
+            CaptureMissLiveLookupCount = captureMissLiveLookupCount;
+            FallbackValueCount = fallbackValueCount;
+            FallbackFactCount = fallbackFactCount;
+            SourceAttributeLookupCount = sourceAttributeLookupCount;
+            TargetAttributeLookupCount = targetAttributeLookupCount;
+            ExecutionInputLookupCount = executionInputLookupCount;
+        }
+
+        public bool HasEvidence =>
+            CurrentValueLookupCount > 0
+            || CapturedValueHitCount > 0
+            || CaptureMissCount > 0
+            || CaptureMissLiveLookupCount > 0
+            || FallbackValueCount > 0
+            || FallbackFactCount > 0
+            || SourceAttributeLookupCount > 0
+            || TargetAttributeLookupCount > 0
+            || ExecutionInputLookupCount > 0;
+
+        public GasRuntimeMagnitudeSourceCounters Add(in GasRuntimeMagnitudeSourceCounters other)
+        {
+            return new GasRuntimeMagnitudeSourceCounters(
+                CurrentValueLookupCount + other.CurrentValueLookupCount,
+                CapturedValueHitCount + other.CapturedValueHitCount,
+                CaptureMissCount + other.CaptureMissCount,
+                CaptureMissLiveLookupCount + other.CaptureMissLiveLookupCount,
+                FallbackValueCount + other.FallbackValueCount,
+                FallbackFactCount + other.FallbackFactCount,
+                SourceAttributeLookupCount + other.SourceAttributeLookupCount,
+                TargetAttributeLookupCount + other.TargetAttributeLookupCount,
+                ExecutionInputLookupCount + other.ExecutionInputLookupCount);
+        }
+    }
+
     public readonly struct GasRuntimeCoreDiagnosticCounters
     {
         public readonly int RequestCount;
@@ -457,6 +538,15 @@ namespace GAS.Runtime
         public readonly int PendingAttributeEstimatedRandomLookupCount;
         public readonly int PendingAttributeFactPatchCount;
         public readonly int PendingAttributeMigrationCarrierCount;
+        public readonly int MagnitudeSourceCurrentValueLookupCount;
+        public readonly int MagnitudeSourceCapturedValueHitCount;
+        public readonly int MagnitudeSourceCaptureMissCount;
+        public readonly int MagnitudeSourceCaptureMissLiveLookupCount;
+        public readonly int MagnitudeSourceFallbackValueCount;
+        public readonly int MagnitudeSourceFallbackFactCount;
+        public readonly int MagnitudeSourceSourceAttributeLookupCount;
+        public readonly int MagnitudeSourceTargetAttributeLookupCount;
+        public readonly int MagnitudeSourceExecutionInputLookupCount;
         public readonly int QueryBudget;
         public readonly int FilteredQueryBudget;
         public readonly int UnfilteredQueryBudget;
@@ -527,6 +617,15 @@ namespace GAS.Runtime
             int pendingAttributeEstimatedRandomLookupCount = 0,
             int pendingAttributeFactPatchCount = 0,
             int pendingAttributeMigrationCarrierCount = 0,
+            int magnitudeSourceCurrentValueLookupCount = 0,
+            int magnitudeSourceCapturedValueHitCount = 0,
+            int magnitudeSourceCaptureMissCount = 0,
+            int magnitudeSourceCaptureMissLiveLookupCount = 0,
+            int magnitudeSourceFallbackValueCount = 0,
+            int magnitudeSourceFallbackFactCount = 0,
+            int magnitudeSourceSourceAttributeLookupCount = 0,
+            int magnitudeSourceTargetAttributeLookupCount = 0,
+            int magnitudeSourceExecutionInputLookupCount = 0,
             int queryBudget = 0,
             int filteredQueryBudget = 0,
             int unfilteredQueryBudget = 0,
@@ -596,6 +695,15 @@ namespace GAS.Runtime
             PendingAttributeEstimatedRandomLookupCount = pendingAttributeEstimatedRandomLookupCount;
             PendingAttributeFactPatchCount = pendingAttributeFactPatchCount;
             PendingAttributeMigrationCarrierCount = pendingAttributeMigrationCarrierCount;
+            MagnitudeSourceCurrentValueLookupCount = magnitudeSourceCurrentValueLookupCount;
+            MagnitudeSourceCapturedValueHitCount = magnitudeSourceCapturedValueHitCount;
+            MagnitudeSourceCaptureMissCount = magnitudeSourceCaptureMissCount;
+            MagnitudeSourceCaptureMissLiveLookupCount = magnitudeSourceCaptureMissLiveLookupCount;
+            MagnitudeSourceFallbackValueCount = magnitudeSourceFallbackValueCount;
+            MagnitudeSourceFallbackFactCount = magnitudeSourceFallbackFactCount;
+            MagnitudeSourceSourceAttributeLookupCount = magnitudeSourceSourceAttributeLookupCount;
+            MagnitudeSourceTargetAttributeLookupCount = magnitudeSourceTargetAttributeLookupCount;
+            MagnitudeSourceExecutionInputLookupCount = magnitudeSourceExecutionInputLookupCount;
             QueryBudget = queryBudget;
             FilteredQueryBudget = filteredQueryBudget;
             UnfilteredQueryBudget = unfilteredQueryBudget;
@@ -886,6 +994,7 @@ namespace GAS.Runtime
         public readonly GasRuntimeCoreDiagnosticCounters CoreCounters;
         public readonly GasRuntimeFrameBackboneDiagnosticCounters FrameBackboneCounters;
         public readonly GasRuntimeObservationMaterializationCounters ObservationMaterializationCounters;
+        public readonly GasRuntimeMagnitudeSourceCounters MagnitudeSourceCounters;
         public readonly GASRuntimeDiagnosticEventBuffer[] Events;
 
         public GasRuntimeDiagnosticSnapshot(
@@ -897,6 +1006,7 @@ namespace GAS.Runtime
                 coreCounters,
                 GasRuntimeFrameBackboneDiagnosticCounters.Empty,
                 GasRuntimeObservationMaterializationCounters.Empty,
+                GasRuntimeMagnitudeSourceCounters.Empty,
                 events)
         {
         }
@@ -911,6 +1021,7 @@ namespace GAS.Runtime
                 coreCounters,
                 frameBackboneCounters,
                 GasRuntimeObservationMaterializationCounters.Empty,
+                GasRuntimeMagnitudeSourceCounters.Empty,
                 events)
         {
         }
@@ -921,11 +1032,29 @@ namespace GAS.Runtime
             in GasRuntimeFrameBackboneDiagnosticCounters frameBackboneCounters,
             in GasRuntimeObservationMaterializationCounters observationMaterializationCounters,
             GASRuntimeDiagnosticEventBuffer[] events)
+            : this(
+                stats,
+                coreCounters,
+                frameBackboneCounters,
+                observationMaterializationCounters,
+                GasRuntimeMagnitudeSourceCounters.Empty,
+                events)
+        {
+        }
+
+        public GasRuntimeDiagnosticSnapshot(
+            in GasRuntimeDiagnosticStats stats,
+            in GasRuntimeCoreDiagnosticCounters coreCounters,
+            in GasRuntimeFrameBackboneDiagnosticCounters frameBackboneCounters,
+            in GasRuntimeObservationMaterializationCounters observationMaterializationCounters,
+            in GasRuntimeMagnitudeSourceCounters magnitudeSourceCounters,
+            GASRuntimeDiagnosticEventBuffer[] events)
         {
             Stats = stats;
             CoreCounters = coreCounters;
             FrameBackboneCounters = frameBackboneCounters;
             ObservationMaterializationCounters = observationMaterializationCounters;
+            MagnitudeSourceCounters = magnitudeSourceCounters;
             Events = events ?? Array.Empty<GASRuntimeDiagnosticEventBuffer>();
         }
 
@@ -1107,6 +1236,15 @@ namespace GAS.Runtime
             state.RuntimeCorePendingAttributeEstimatedRandomLookupCount = 0;
             state.RuntimeCorePendingAttributeFactPatchCount = 0;
             state.RuntimeCorePendingAttributeMigrationCarrierCount = 0;
+            state.RuntimeCoreMagnitudeSourceCurrentValueLookupCount = 0;
+            state.RuntimeCoreMagnitudeSourceCapturedValueHitCount = 0;
+            state.RuntimeCoreMagnitudeSourceCaptureMissCount = 0;
+            state.RuntimeCoreMagnitudeSourceCaptureMissLiveLookupCount = 0;
+            state.RuntimeCoreMagnitudeSourceFallbackValueCount = 0;
+            state.RuntimeCoreMagnitudeSourceFallbackFactCount = 0;
+            state.RuntimeCoreMagnitudeSourceSourceAttributeLookupCount = 0;
+            state.RuntimeCoreMagnitudeSourceTargetAttributeLookupCount = 0;
+            state.RuntimeCoreMagnitudeSourceExecutionInputLookupCount = 0;
             state.RuntimeCoreQueryBudget = 0;
             state.RuntimeCoreFilteredQueryBudget = 0;
             state.RuntimeCoreUnfilteredQueryBudget = 0;
@@ -1315,6 +1453,15 @@ namespace GAS.Runtime
                 counters.PendingAttributeEstimatedRandomLookupCount,
                 counters.PendingAttributeFactPatchCount,
                 counters.PendingAttributeMigrationCarrierCount,
+                counters.MagnitudeSourceCurrentValueLookupCount,
+                counters.MagnitudeSourceCapturedValueHitCount,
+                counters.MagnitudeSourceCaptureMissCount,
+                counters.MagnitudeSourceCaptureMissLiveLookupCount,
+                counters.MagnitudeSourceFallbackValueCount,
+                counters.MagnitudeSourceFallbackFactCount,
+                counters.MagnitudeSourceSourceAttributeLookupCount,
+                counters.MagnitudeSourceTargetAttributeLookupCount,
+                counters.MagnitudeSourceExecutionInputLookupCount,
                 counters.QueryBudget,
                 counters.FilteredQueryBudget,
                 counters.UnfilteredQueryBudget,
@@ -1398,7 +1545,16 @@ namespace GAS.Runtime
                 out var pendingAttributeMaxTargetRange,
                 out var pendingAttributeEstimatedRandomLookupCount,
                 out var pendingAttributeFactPatchCount,
-                out var pendingAttributeMigrationCarrierCount);
+                out var pendingAttributeMigrationCarrierCount,
+                out var magnitudeSourceCurrentValueLookupCount,
+                out var magnitudeSourceCapturedValueHitCount,
+                out var magnitudeSourceCaptureMissCount,
+                out var magnitudeSourceCaptureMissLiveLookupCount,
+                out var magnitudeSourceFallbackValueCount,
+                out var magnitudeSourceFallbackFactCount,
+                out var magnitudeSourceSourceAttributeLookupCount,
+                out var magnitudeSourceTargetAttributeLookupCount,
+                out var magnitudeSourceExecutionInputLookupCount);
             var currentFrame = ResolveCurrentFrame(em);
             ReadActiveEffectGlobalIndexCounters(
                 em,
@@ -1540,6 +1696,15 @@ namespace GAS.Runtime
                 pendingAttributeEstimatedRandomLookupCount,
                 pendingAttributeFactPatchCount,
                 pendingAttributeMigrationCarrierCount,
+                magnitudeSourceCurrentValueLookupCount,
+                magnitudeSourceCapturedValueHitCount,
+                magnitudeSourceCaptureMissCount,
+                magnitudeSourceCaptureMissLiveLookupCount,
+                magnitudeSourceFallbackValueCount,
+                magnitudeSourceFallbackFactCount,
+                magnitudeSourceSourceAttributeLookupCount,
+                magnitudeSourceTargetAttributeLookupCount,
+                magnitudeSourceExecutionInputLookupCount,
                 frameBudget.TotalQueryBudget,
                 frameBudget.TotalFilteredQueryBudget,
                 frameBudget.TotalUnfilteredQueryBudget,
@@ -1819,6 +1984,15 @@ namespace GAS.Runtime
             int pendingAttributeEstimatedRandomLookupCount = 0,
             int pendingAttributeFactPatchCount = 0,
             int pendingAttributeMigrationCarrierCount = 0,
+            int magnitudeSourceCurrentValueLookupCount = 0,
+            int magnitudeSourceCapturedValueHitCount = 0,
+            int magnitudeSourceCaptureMissCount = 0,
+            int magnitudeSourceCaptureMissLiveLookupCount = 0,
+            int magnitudeSourceFallbackValueCount = 0,
+            int magnitudeSourceFallbackFactCount = 0,
+            int magnitudeSourceSourceAttributeLookupCount = 0,
+            int magnitudeSourceTargetAttributeLookupCount = 0,
+            int magnitudeSourceExecutionInputLookupCount = 0,
             int queryBudget = 0,
             int filteredQueryBudget = 0,
             int unfilteredQueryBudget = 0,
@@ -1898,6 +2072,15 @@ namespace GAS.Runtime
             state.RuntimeCorePendingAttributeEstimatedRandomLookupCount += pendingAttributeEstimatedRandomLookupCount;
             state.RuntimeCorePendingAttributeFactPatchCount += pendingAttributeFactPatchCount;
             state.RuntimeCorePendingAttributeMigrationCarrierCount += pendingAttributeMigrationCarrierCount;
+            state.RuntimeCoreMagnitudeSourceCurrentValueLookupCount += magnitudeSourceCurrentValueLookupCount;
+            state.RuntimeCoreMagnitudeSourceCapturedValueHitCount += magnitudeSourceCapturedValueHitCount;
+            state.RuntimeCoreMagnitudeSourceCaptureMissCount += magnitudeSourceCaptureMissCount;
+            state.RuntimeCoreMagnitudeSourceCaptureMissLiveLookupCount += magnitudeSourceCaptureMissLiveLookupCount;
+            state.RuntimeCoreMagnitudeSourceFallbackValueCount += magnitudeSourceFallbackValueCount;
+            state.RuntimeCoreMagnitudeSourceFallbackFactCount += magnitudeSourceFallbackFactCount;
+            state.RuntimeCoreMagnitudeSourceSourceAttributeLookupCount += magnitudeSourceSourceAttributeLookupCount;
+            state.RuntimeCoreMagnitudeSourceTargetAttributeLookupCount += magnitudeSourceTargetAttributeLookupCount;
+            state.RuntimeCoreMagnitudeSourceExecutionInputLookupCount += magnitudeSourceExecutionInputLookupCount;
             state.RuntimeCoreQueryBudget = queryBudget;
             state.RuntimeCoreFilteredQueryBudget = filteredQueryBudget;
             state.RuntimeCoreUnfilteredQueryBudget = unfilteredQueryBudget;
@@ -1978,6 +2161,15 @@ namespace GAS.Runtime
                     PendingAttributeEstimatedRandomLookupCount = pendingAttributeEstimatedRandomLookupCount,
                     PendingAttributeFactPatchCount = pendingAttributeFactPatchCount,
                     PendingAttributeMigrationCarrierCount = pendingAttributeMigrationCarrierCount,
+                    MagnitudeSourceCurrentValueLookupCount = magnitudeSourceCurrentValueLookupCount,
+                    MagnitudeSourceCapturedValueHitCount = magnitudeSourceCapturedValueHitCount,
+                    MagnitudeSourceCaptureMissCount = magnitudeSourceCaptureMissCount,
+                    MagnitudeSourceCaptureMissLiveLookupCount = magnitudeSourceCaptureMissLiveLookupCount,
+                    MagnitudeSourceFallbackValueCount = magnitudeSourceFallbackValueCount,
+                    MagnitudeSourceFallbackFactCount = magnitudeSourceFallbackFactCount,
+                    MagnitudeSourceSourceAttributeLookupCount = magnitudeSourceSourceAttributeLookupCount,
+                    MagnitudeSourceTargetAttributeLookupCount = magnitudeSourceTargetAttributeLookupCount,
+                    MagnitudeSourceExecutionInputLookupCount = magnitudeSourceExecutionInputLookupCount,
                     QueryBudget = queryBudget,
                     FilteredQueryBudget = filteredQueryBudget,
                     UnfilteredQueryBudget = unfilteredQueryBudget,
@@ -2029,6 +2221,68 @@ namespace GAS.Runtime
                     ObservationPresentationOutboxQueryCount = counters.PresentationOutboxQueryCount,
                     ObservationPresentationOutboxEntityCount = counters.PresentationOutboxEntityCount,
                     ObservationPerformancePollutionRiskCount = counters.PerformancePollutionRiskCount,
+                });
+
+            ApplyRetention(log, ref state);
+            em.SetComponentData(debuggerEntity, state);
+        }
+
+        public static void RecordMagnitudeSourceEvidence(
+            EntityManager em,
+            Entity debuggerEntity,
+            int frame)
+        {
+            if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity)
+                || streamEntity == Entity.Null
+                || !em.Exists(streamEntity)
+                || !em.HasComponent<GEEffectCommandStreamComponent>(streamEntity))
+            {
+                return;
+            }
+
+            var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
+            var counters = new GasRuntimeMagnitudeSourceCounters(
+                stream.MagnitudeSourceCurrentValueLookupCount,
+                stream.MagnitudeSourceCapturedValueHitCount,
+                stream.MagnitudeSourceCaptureMissCount,
+                stream.MagnitudeSourceCaptureMissLiveLookupCount,
+                stream.MagnitudeSourceFallbackValueCount,
+                stream.MagnitudeSourceFallbackFactCount,
+                stream.MagnitudeSourceSourceAttributeLookupCount,
+                stream.MagnitudeSourceTargetAttributeLookupCount,
+                stream.MagnitudeSourceExecutionInputLookupCount);
+
+            if (!counters.HasEvidence
+                || !TryGetWritableLog(em, debuggerEntity, out var state, out var log))
+            {
+                return;
+            }
+
+            Append(
+                log,
+                ref state,
+                new GASRuntimeDiagnosticEventBuffer
+                {
+                    Frame = frame,
+                    Kind = EGasRuntimeDiagnosticKind.MagnitudeSource,
+                    Severity = EGasRuntimeDiagnosticSeverity.Trace,
+                    Module = EGasRuntimeDiagnosticModule.Effect,
+                    GroupName = "MagnitudeSource",
+                    SystemName = nameof(DiagnosticsSnapshotSystem),
+                    BufferName = nameof(GEEffectCommandStreamComponent),
+                    Count = counters.CurrentValueLookupCount + counters.CapturedValueHitCount,
+                    Capacity = counters.CaptureMissCount + counters.FallbackValueCount,
+                    ValueA = counters.SourceAttributeLookupCount,
+                    ValueB = counters.TargetAttributeLookupCount,
+                    MagnitudeSourceCurrentValueLookupCount = counters.CurrentValueLookupCount,
+                    MagnitudeSourceCapturedValueHitCount = counters.CapturedValueHitCount,
+                    MagnitudeSourceCaptureMissCount = counters.CaptureMissCount,
+                    MagnitudeSourceCaptureMissLiveLookupCount = counters.CaptureMissLiveLookupCount,
+                    MagnitudeSourceFallbackValueCount = counters.FallbackValueCount,
+                    MagnitudeSourceFallbackFactCount = counters.FallbackFactCount,
+                    MagnitudeSourceSourceAttributeLookupCount = counters.SourceAttributeLookupCount,
+                    MagnitudeSourceTargetAttributeLookupCount = counters.TargetAttributeLookupCount,
+                    MagnitudeSourceExecutionInputLookupCount = counters.ExecutionInputLookupCount,
                 });
 
             ApplyRetention(log, ref state);
@@ -2235,6 +2489,7 @@ namespace GAS.Runtime
             var slowSystemCount = 0;
             var bufferPressureWarningCount = 0;
             var observationMaterializationCounters = GasRuntimeObservationMaterializationCounters.Empty;
+            var magnitudeSourceCounters = GasRuntimeMagnitudeSourceCounters.Empty;
 
             for (var i = 0; i < log.Length; i++)
             {
@@ -2266,6 +2521,20 @@ namespace GAS.Runtime
                             evt.ObservationPresentationOutboxQueryCount,
                             evt.ObservationPresentationOutboxEntityCount,
                             evt.ObservationPerformancePollutionRiskCount));
+                }
+                if (evt.Kind == EGasRuntimeDiagnosticKind.MagnitudeSource)
+                {
+                    magnitudeSourceCounters = magnitudeSourceCounters.Add(
+                        new GasRuntimeMagnitudeSourceCounters(
+                            evt.MagnitudeSourceCurrentValueLookupCount,
+                            evt.MagnitudeSourceCapturedValueHitCount,
+                            evt.MagnitudeSourceCaptureMissCount,
+                            evt.MagnitudeSourceCaptureMissLiveLookupCount,
+                            evt.MagnitudeSourceFallbackValueCount,
+                            evt.MagnitudeSourceFallbackFactCount,
+                            evt.MagnitudeSourceSourceAttributeLookupCount,
+                            evt.MagnitudeSourceTargetAttributeLookupCount,
+                            evt.MagnitudeSourceExecutionInputLookupCount));
                 }
             }
 
@@ -2338,6 +2607,15 @@ namespace GAS.Runtime
                     state.RuntimeCorePendingAttributeEstimatedRandomLookupCount,
                     state.RuntimeCorePendingAttributeFactPatchCount,
                     state.RuntimeCorePendingAttributeMigrationCarrierCount,
+                    state.RuntimeCoreMagnitudeSourceCurrentValueLookupCount,
+                    state.RuntimeCoreMagnitudeSourceCapturedValueHitCount,
+                    state.RuntimeCoreMagnitudeSourceCaptureMissCount,
+                    state.RuntimeCoreMagnitudeSourceCaptureMissLiveLookupCount,
+                    state.RuntimeCoreMagnitudeSourceFallbackValueCount,
+                    state.RuntimeCoreMagnitudeSourceFallbackFactCount,
+                    state.RuntimeCoreMagnitudeSourceSourceAttributeLookupCount,
+                    state.RuntimeCoreMagnitudeSourceTargetAttributeLookupCount,
+                    state.RuntimeCoreMagnitudeSourceExecutionInputLookupCount,
                     state.RuntimeCoreQueryBudget,
                     state.RuntimeCoreFilteredQueryBudget,
                     state.RuntimeCoreUnfilteredQueryBudget,
@@ -2350,6 +2628,7 @@ namespace GAS.Runtime
                     state.RuntimeCoreRewindableAllocatorCandidateCount),
                 CreateFrameBackboneCounters(state),
                 observationMaterializationCounters,
+                magnitudeSourceCounters,
                 events);
         }
 
@@ -2373,6 +2652,7 @@ namespace GAS.Runtime
             AppendRuntimeCoreCounters(builder, snapshot.CoreCounters);
             AppendRuntimeCoreFrameBackboneCounters(builder, snapshot.FrameBackboneCounters);
             AppendObservationMaterializationCounters(builder, snapshot.ObservationMaterializationCounters);
+            AppendMagnitudeSourceCounters(builder, snapshot.MagnitudeSourceCounters);
 
             var events = snapshot.Events ?? Array.Empty<GASRuntimeDiagnosticEventBuffer>();
             var count = maxEvents > 0 && maxEvents < events.Length ? maxEvents : events.Length;
@@ -2439,7 +2719,16 @@ namespace GAS.Runtime
             out int pendingAttributeMaxTargetRange,
             out int pendingAttributeEstimatedRandomLookupCount,
             out int pendingAttributeFactPatchCount,
-            out int pendingAttributeMigrationCarrierCount)
+            out int pendingAttributeMigrationCarrierCount,
+            out int magnitudeSourceCurrentValueLookupCount,
+            out int magnitudeSourceCapturedValueHitCount,
+            out int magnitudeSourceCaptureMissCount,
+            out int magnitudeSourceCaptureMissLiveLookupCount,
+            out int magnitudeSourceFallbackValueCount,
+            out int magnitudeSourceFallbackFactCount,
+            out int magnitudeSourceSourceAttributeLookupCount,
+            out int magnitudeSourceTargetAttributeLookupCount,
+            out int magnitudeSourceExecutionInputLookupCount)
         {
             effectCommandCount = 0;
             instantSpecCount = 0;
@@ -2460,6 +2749,15 @@ namespace GAS.Runtime
             pendingAttributeEstimatedRandomLookupCount = 0;
             pendingAttributeFactPatchCount = 0;
             pendingAttributeMigrationCarrierCount = 0;
+            magnitudeSourceCurrentValueLookupCount = 0;
+            magnitudeSourceCapturedValueHitCount = 0;
+            magnitudeSourceCaptureMissCount = 0;
+            magnitudeSourceCaptureMissLiveLookupCount = 0;
+            magnitudeSourceFallbackValueCount = 0;
+            magnitudeSourceFallbackFactCount = 0;
+            magnitudeSourceSourceAttributeLookupCount = 0;
+            magnitudeSourceTargetAttributeLookupCount = 0;
+            magnitudeSourceExecutionInputLookupCount = 0;
 
             if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity))
                 return;
@@ -2487,6 +2785,15 @@ namespace GAS.Runtime
             pendingAttributeEstimatedRandomLookupCount = stream.PendingAttributeEstimatedRandomLookupCount;
             pendingAttributeFactPatchCount = stream.PendingAttributeFactPatchCount;
             pendingAttributeMigrationCarrierCount = stream.PendingAttributeMigrationCarrierCount;
+            magnitudeSourceCurrentValueLookupCount = stream.MagnitudeSourceCurrentValueLookupCount;
+            magnitudeSourceCapturedValueHitCount = stream.MagnitudeSourceCapturedValueHitCount;
+            magnitudeSourceCaptureMissCount = stream.MagnitudeSourceCaptureMissCount;
+            magnitudeSourceCaptureMissLiveLookupCount = stream.MagnitudeSourceCaptureMissLiveLookupCount;
+            magnitudeSourceFallbackValueCount = stream.MagnitudeSourceFallbackValueCount;
+            magnitudeSourceFallbackFactCount = stream.MagnitudeSourceFallbackFactCount;
+            magnitudeSourceSourceAttributeLookupCount = stream.MagnitudeSourceSourceAttributeLookupCount;
+            magnitudeSourceTargetAttributeLookupCount = stream.MagnitudeSourceTargetAttributeLookupCount;
+            magnitudeSourceExecutionInputLookupCount = stream.MagnitudeSourceExecutionInputLookupCount;
         }
 
         private static int CountTypedDamageFacts(EntityManager em)
@@ -3170,6 +3477,24 @@ namespace GAS.Runtime
                 .Append(evt.PendingAttributeFactPatchCount)
                 .Append("|pendingAttributeMigrationCarriers=")
                 .Append(evt.PendingAttributeMigrationCarrierCount)
+                .Append("|magnitudeSourceCurrentValueLookups=")
+                .Append(evt.MagnitudeSourceCurrentValueLookupCount)
+                .Append("|magnitudeSourceCapturedValueHits=")
+                .Append(evt.MagnitudeSourceCapturedValueHitCount)
+                .Append("|magnitudeSourceCaptureMisses=")
+                .Append(evt.MagnitudeSourceCaptureMissCount)
+                .Append("|magnitudeSourceCaptureMissLiveLookups=")
+                .Append(evt.MagnitudeSourceCaptureMissLiveLookupCount)
+                .Append("|magnitudeSourceFallbackValues=")
+                .Append(evt.MagnitudeSourceFallbackValueCount)
+                .Append("|magnitudeSourceFallbackFacts=")
+                .Append(evt.MagnitudeSourceFallbackFactCount)
+                .Append("|magnitudeSourceSourceAttributeLookups=")
+                .Append(evt.MagnitudeSourceSourceAttributeLookupCount)
+                .Append("|magnitudeSourceTargetAttributeLookups=")
+                .Append(evt.MagnitudeSourceTargetAttributeLookupCount)
+                .Append("|magnitudeSourceExecutionInputLookups=")
+                .Append(evt.MagnitudeSourceExecutionInputLookupCount)
                 .Append("|queryBudget=")
                 .Append(evt.QueryBudget)
                     .Append("|filteredQueryBudget=")
@@ -3268,6 +3593,29 @@ namespace GAS.Runtime
                     .Append(evt.ObservationPresentationOutboxEntityCount)
                     .Append("|performancePollutionRisks=")
                     .Append(evt.ObservationPerformancePollutionRiskCount);
+                builder.AppendLine();
+                return;
+            }
+            if (evt.Kind == EGasRuntimeDiagnosticKind.MagnitudeSource)
+            {
+                builder.Append("|currentValueLookups=")
+                    .Append(evt.MagnitudeSourceCurrentValueLookupCount)
+                    .Append("|capturedValueHits=")
+                    .Append(evt.MagnitudeSourceCapturedValueHitCount)
+                    .Append("|captureMisses=")
+                    .Append(evt.MagnitudeSourceCaptureMissCount)
+                    .Append("|captureMissLiveLookups=")
+                    .Append(evt.MagnitudeSourceCaptureMissLiveLookupCount)
+                    .Append("|fallbackValues=")
+                    .Append(evt.MagnitudeSourceFallbackValueCount)
+                    .Append("|fallbackFacts=")
+                    .Append(evt.MagnitudeSourceFallbackFactCount)
+                    .Append("|sourceAttributeLookups=")
+                    .Append(evt.MagnitudeSourceSourceAttributeLookupCount)
+                    .Append("|targetAttributeLookups=")
+                    .Append(evt.MagnitudeSourceTargetAttributeLookupCount)
+                    .Append("|executionInputLookups=")
+                    .Append(evt.MagnitudeSourceExecutionInputLookupCount);
                 builder.AppendLine();
                 return;
             }
@@ -3434,6 +3782,25 @@ namespace GAS.Runtime
                 .Append("|migrationCarriers=")
                 .Append(counters.PendingAttributeMigrationCarrierCount)
                 .AppendLine();
+            builder.Append("runtimeCoreMagnitudeSource|currentValueLookups=")
+                .Append(counters.MagnitudeSourceCurrentValueLookupCount)
+                .Append("|capturedValueHits=")
+                .Append(counters.MagnitudeSourceCapturedValueHitCount)
+                .Append("|captureMisses=")
+                .Append(counters.MagnitudeSourceCaptureMissCount)
+                .Append("|captureMissLiveLookups=")
+                .Append(counters.MagnitudeSourceCaptureMissLiveLookupCount)
+                .Append("|fallbackValues=")
+                .Append(counters.MagnitudeSourceFallbackValueCount)
+                .Append("|fallbackFacts=")
+                .Append(counters.MagnitudeSourceFallbackFactCount)
+                .Append("|sourceAttributeLookups=")
+                .Append(counters.MagnitudeSourceSourceAttributeLookupCount)
+                .Append("|targetAttributeLookups=")
+                .Append(counters.MagnitudeSourceTargetAttributeLookupCount)
+                .Append("|executionInputLookups=")
+                .Append(counters.MagnitudeSourceExecutionInputLookupCount)
+                .AppendLine();
             builder.Append("runtimeCoreFrameBudget|queryBudget=")
                 .Append(counters.QueryBudget)
                 .Append("|filteredQueryBudget=")
@@ -3477,6 +3844,31 @@ namespace GAS.Runtime
                 .Append(counters.PresentationOutboxEntityCount)
                 .Append("|performancePollutionRisks=")
                 .Append(counters.PerformancePollutionRiskCount)
+                .AppendLine();
+        }
+
+        private static void AppendMagnitudeSourceCounters(
+            StringBuilder builder,
+            in GasRuntimeMagnitudeSourceCounters counters)
+        {
+            builder.Append("runtimeMagnitudeSource|currentValueLookups=")
+                .Append(counters.CurrentValueLookupCount)
+                .Append("|capturedValueHits=")
+                .Append(counters.CapturedValueHitCount)
+                .Append("|captureMisses=")
+                .Append(counters.CaptureMissCount)
+                .Append("|captureMissLiveLookups=")
+                .Append(counters.CaptureMissLiveLookupCount)
+                .Append("|fallbackValues=")
+                .Append(counters.FallbackValueCount)
+                .Append("|fallbackFacts=")
+                .Append(counters.FallbackFactCount)
+                .Append("|sourceAttributeLookups=")
+                .Append(counters.SourceAttributeLookupCount)
+                .Append("|targetAttributeLookups=")
+                .Append(counters.TargetAttributeLookupCount)
+                .Append("|executionInputLookups=")
+                .Append(counters.ExecutionInputLookupCount)
                 .AppendLine();
         }
 

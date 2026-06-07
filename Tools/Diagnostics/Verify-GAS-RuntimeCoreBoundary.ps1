@@ -95,6 +95,7 @@ $autoChessCoreBridgePath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integrat
 $autoChessLifecyclePath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasBattleEntityLifecycle.cs"
 $autoChessUnitSnapshotProjectorPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Integration\GasCore\AutoChessGasBattleUnitSnapshotProjector.cs"
 $autoChessValidationReportPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Validation\AutoChessBattleValidationReport.cs"
+$autoChessValidationRunPath = Join-Path $ProjectPath "Assets\AutoChessDemo\Battle\Validation\AutoChessBattleValidationRun.cs"
 
 Assert-FileContains `
     -Path $deltaApplyPath `
@@ -225,9 +226,37 @@ Assert-FileContains `
     -Pattern "PerformancePollutionRiskCount" `
     -Message "GasRuntimeDebugger must tag observation materialization as performance-pass pollution risk."
 Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "GasRuntimeMagnitudeSourceCounters" `
+    -Message "GasRuntimeDebugger must expose magnitude source counters outside Runtime Core counters."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "MagnitudeSource\s*=\s*8" `
+    -Message "GasRuntimeDebugger must emit a dedicated magnitude source diagnostic event."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "runtimeMagnitudeSource" `
+    -Message "GasRuntimeDebugger text export must expose magnitude source counters."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "runtimeCoreMagnitudeSource" `
+    -Message "GasRuntimeDebugger RuntimeCore export must expose magnitude source owner counters."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "RecordMagnitudeSourceEvidence" `
+    -Message "GasRuntimeDebugger must materialize magnitude source stream counters into diagnostic evidence."
+Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "magnitudeSourceCounters\s*=\s*magnitudeSourceCounters\.Add" `
+    -Message "GasRuntimeDebugger snapshots must aggregate magnitude source events into machine-readable counters."
+Assert-FileContains `
+    -Path $diagnosticsSnapshotSystemPath `
+    -Pattern "RecordMagnitudeSourceEvidence" `
+    -Message "DiagnosticsSnapshotSystem must sample magnitude source debugger evidence."
+Assert-FileContains `
     -Path $autoChessValidationReportPath `
-    -Pattern "result\.RuntimeDiagnostics\.ObservationMaterializationCounters" `
-    -Message "AutoChess validation evidence must consume observation materialization counters from runtime diagnostics snapshots."
+    -Pattern "diagnosticResult\.RuntimeDiagnostics\.ObservationMaterializationCounters" `
+    -Message "AutoChess validation evidence must consume observation materialization counters from the diagnostic pass."
 Assert-FileContains `
     -Path $autoChessValidationReportPath `
     -Pattern "performancePassObservationPollutionRisks" `
@@ -237,9 +266,69 @@ Assert-FileContains `
     -Pattern "observationMaterializedQueries" `
     -Message "AutoChess validation evidence must expose observation materialized query count."
 Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "diagnosticResult\.RuntimeDiagnostics\.MagnitudeSourceCounters" `
+    -Message "AutoChess validation evidence must consume magnitude source counters from the diagnostic pass."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "magnitudeSourceCaptureMissLiveLookups" `
+    -Message "AutoChess validation evidence must expose magnitude source capture miss live lookup count."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "magnitudeSourceFallbackFacts" `
+    -Message "AutoChess validation evidence must expose magnitude source fallback fact count."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "diagnosticResult\.RuntimeDiagnostics\.ObservationMaterializationCounters" `
+    -Message "AutoChess validation evidence must read observation materialization detail from the diagnostic pass."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "performanceResult\.RuntimeDiagnostics\.ObservationMaterializationCounters" `
+    -Message "AutoChess validation evidence must read performance pollution risk from the performance pass."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "performanceObservation\.PerformancePollutionRiskCount" `
+    -Message "AutoChess validation evidence must not publish diagnostic observation materialization as performance pollution."
+Assert-FileContains `
+    -Path $autoChessValidationRunPath `
+    -Pattern "var performanceResult = RunGeneratedScenario\([\s\S]*?debuggerEnabled:\s*false[\s\S]*?captureSystemTimings:\s*false[\s\S]*?captureBufferPressure:\s*false" `
+    -Message "AutoChess headless performance pass must run without debugger observation materialization."
+Assert-FileContains `
+    -Path $autoChessValidationRunPath `
+    -Pattern "var diagnosticResult = RunGeneratedScenario\([\s\S]*?debuggerEnabled:\s*true[\s\S]*?captureSystemTimings:\s*true[\s\S]*?captureBufferPressure:\s*true" `
+    -Message "AutoChess headless diagnostic pass must be the dedicated runtime diagnostics owner."
+Assert-FileContains `
+    -Path $autoChessValidationRunPath `
+    -Pattern "var officialDiffResult = RunGeneratedScenario\([\s\S]*?debuggerEnabled:\s*false[\s\S]*?captureSystemTimings:\s*false[\s\S]*?captureBufferPressure:\s*false" `
+    -Message "AutoChess official diff replay must stay out of performance diagnostics sampling."
+Assert-FileContains `
+    -Path $autoChessValidationRunPath `
+    -Pattern "RunWarmupPass\(CreateGeneratedScenarioOptions\([\s\S]*?debuggerEnabled:\s*false[\s\S]*?captureSystemTimings:\s*false[\s\S]*?captureBufferPressure:\s*false" `
+    -Message "AutoChess process warmup pass must not enable debugger observation materialization."
+Assert-FileContains `
     -Path $streamPath `
     -Pattern "ResetFrameLocalCounters\(ref stream\)" `
     -Message "GEEffectCommandSpecStream must reset frame-local debugger counters during frame prepare."
+Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "AddMagnitudeSourceCounters" `
+    -Message "GEEffectCommandSpecStream must expose frame-local magnitude source counter accumulation."
+Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "MagnitudeSourceCaptureMissCount" `
+    -Message "GEEffectCommandSpecStream must own magnitude source capture miss evidence."
+Assert-FileContains `
+    -Path $effectMagnitudeResolverPath `
+    -Pattern "RecordMagnitudeSourceAttributeResolution" `
+    -Message "EffectMagnitudeResolver must record magnitude source attribute resolution evidence."
+Assert-FileContains `
+    -Path $effectMagnitudeResolverPath `
+    -Pattern "sourceAttributeLookups:\s*source == EMagnitudeSource\.SourceAttribute" `
+    -Message "EffectMagnitudeResolver must classify source attribute magnitude lookups."
+Assert-FileContains `
+    -Path $effectMagnitudeResolverPath `
+    -Pattern "targetAttributeLookups:\s*source == EMagnitudeSource\.TargetAttribute" `
+    -Message "EffectMagnitudeResolver must classify target attribute magnitude lookups."
 Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "BeginCommandWriter\(EntityManager em\)|BeginCommandWriter\(EntityManager em, int currentFrame\)" `
@@ -288,6 +377,14 @@ Assert-FileContains `
     -Path $executionCalculationSystemPath `
     -Pattern "EffectCommandSpecStreamPhaseUtility\.Allocate\(ref stream\.NextFactSequence\)" `
     -Message "GEExecutionCalculationSystem merge job must allocate deterministic fact sequences."
+Assert-FileContains `
+    -Path $executionCalculationSystemPath `
+    -Pattern "ExecutionMagnitudeSourceChunkCounters" `
+    -Message "GEExecutionCalculationSystem must keep magnitude source evidence chunk-local before deterministic merge."
+Assert-FileContains `
+    -Path $executionCalculationSystemPath `
+    -Pattern "MagnitudeSourceChunkCounters" `
+    -Message "GEExecutionCalculationSystem must merge magnitude source evidence through the execution fact merge job."
 Assert-FileNotContains `
     -Path $executionCalculationSystemPath `
     -Pattern "EndGASStructuralCommitECBSystem|FactEcb|EntityCommandBuffer|AppendToBuffer" `

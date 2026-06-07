@@ -60,7 +60,7 @@ namespace GAS.AutoChessDemo
             Debug.Log("AutoChessDemoRepeatRunEvidence: "
                       + AutoChessBattleValidationRun.CreateRepeatRunEvidenceSummary(runResult.RepeatRunEvidence));
             Debug.Log("AutoChessDemoRuntimeHotspots: "
-                      + AutoChessBattleValidationReport.CreateHotspotSummary(result));
+                      + AutoChessBattleValidationReport.CreateHotspotSummary(result, diagnosticResult));
             Debug.Log("AutoChessDemoBoundaryOwners: "
                       + AutoChessBattleValidationReport.CreateBoundaryOwnerSummary(result));
             Debug.Log("AutoChessDemoBoundaryReportKeys: "

@@ -43,6 +43,10 @@ namespace GAS.Runtime
                 em,
                 debuggerEntity,
                 currentFrame);
+            GasRuntimeDebugger.RecordMagnitudeSourceEvidence(
+                em,
+                debuggerEntity,
+                currentFrame);
             GasRuntimeDebugger.RecordCurrentRuntimeCoreFrameBackboneEvidence(
                 em,
                 debuggerEntity,

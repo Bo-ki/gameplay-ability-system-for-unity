@@ -10,6 +10,9 @@
 |---|---|---|---|
 | `CommandPort` | `Request*` command intent | direct buffer write、sequence、pending marker、validation reason | `EntityManager`、runtime buffer、立即执行语义 |
 | `SnapshotReadModel` | immutable snapshot / copy API | Boundary projection、cursor、ring buffer、event compaction | live `DynamicBuffer` / `EntityQuery` |
+| `RuntimeSession` | install / dispose / session state | World、SystemGroup、singleton owner、catalog bootstrap | public `World`、public `EntityManager`、gameplay formula |
+| `RunnerSync` | fixed tick / dependency drain / timing split | tick source、measurement fence、drain reason、runner budget | command write、snapshot read、diagnostics export |
+| `DefinitionCatalogLifetime` | catalog install / release / version handle | Blob lifetime、schema validation、dispose route | managed row、generated lifecycle、runtime registration |
 | `GASFrameKernel` | command / target / effect / modifier / fact records | `NativeStream`、sort、owner-local range、chunk applicator | singleton stream owner、global EventBus |
 | `StructuralCommit` | structural intent / ECB phase | custom ECB、bulk query、sort key | scattered create/destroy |
 | `DiagnosticsSink` | evidence snapshot | counters、official diff、Profiler metadata | gameplay decision |
@@ -24,18 +27,19 @@
 | Command capability | ability activate / GE apply / ASC destroy / target intent | owner-local command write、sequence、validation reason | 返回 runtime `Entity`、暴露 buffer、同步执行 gameplay |
 | Snapshot capability | immutable ASC / battle / presentation snapshot | BoundaryProjection cursor、ring buffer copy、snapshot version | getter 回读 live ECS、把 snapshot key 写成 raw `Entity` |
 | Diagnostics capability | structured evidence / counter / official diff snapshot | Debugger gather、Profiler / Journaling state、derived export | 反向写 simulation、与 command port 共用可写 handle |
-| Bootstrap capability | runtime session install / dispose / fixed tick owner | World / SystemGroup / catalog session implementation | 让 UI / Battle report / AI / Network 持有 World 或 `EntityManager` |
-| Definition capability | definition catalog install / validation artifact | Blob build、generated lookup、lifecycle owner evidence | managed config registry 进入 Core hot path |
+| RuntimeSession capability | runtime install / dispose / session state | World / SystemGroup / singleton owner / bootstrap validation | 让 UI / Battle report / AI / Network 持有 World 或 `EntityManager` |
+| RunnerSync capability | fixed tick request / dependency drain reason / timing split | tick source、measurement fence、runner budget、sync evidence | 承载 command write、snapshot read、diagnostics export 或 gameplay decision |
+| DefinitionCatalogLifetime capability | immutable catalog install / release / validation artifact | Blob build、schema check、generated lookup、dispose owner | managed config registry 进入 Core hot path、生成 runtime lifecycle owner |
 
 Shell capability 的验收原则：
 
 1. 一个 public Shell / Adapter API 不能同时返回 command port 与 `EntityManager`。
 2. Diagnostics / Editor watcher 只能消费 snapshot 或 evidence，不复用 command capability 的可写句柄。
-3. Bootstrap capability 可以在实现内部拥有 World / SystemGroup，但只能输出 session state、validation evidence 或 timing snapshot。
+3. RuntimeSession capability 可以在实现内部拥有 World / SystemGroup，但只能输出 session state、validation evidence 或 lifecycle result。
 4. runtime singleton 只能作为 Boundary implementation 的内部 owner；外部业务不得通过 Shell 取得 singleton `Entity`。
 5. proof-only compatibility 若必须暴露 ECS identity，必须标注 owner category、禁用业务持久化，并绑定退出条件。
-6. Runtime access implementation 可以在内部组合多个 capability，但 public seam、validation evidence 和性能归因必须按 capability 拆开；一个聚合 access API 不能同时作为 bootstrap、command、snapshot、diagnostics、definition 和 job-drain 的验收接口。
-7. Runner / validation 可以拥有 fixed tick driver，但 tick driver 只输出 timing snapshot 和 evidence，不得复用 command capability 的可写句柄，也不得把 dependency drain 成本并入 CoreSimulation 热路径结论。
+6. Runtime access implementation 可以在内部组合多个 capability，但 public seam、validation evidence 和性能归因必须按 capability 拆开；一个聚合 access API 不能同时作为 session、command、snapshot、diagnostics、definition 和 runner sync 的验收接口。
+7. RunnerSync / validation 可以拥有 fixed tick driver，但 tick driver 只输出 timing snapshot 和 evidence，不得复用 command capability 的可写句柄，也不得把 dependency drain 成本并入 CoreSimulation 热路径结论。
 8. Adapter topology 必须可追踪：每个 runtime-facing adapter type 要么是被 public boundary 聚合引用的 capability owner，要么是显式归档 / legacy 文件；未被消费的 shadow host、shadow gateway 或 shadow facade 不能作为目标态分层证明。
 9. Opaque handle 不得提供 public raw ECS identity 导出口。若 Boundary implementation 需要解析 `Entity`，只能通过 internal resolver 完成；Shell / Demo / UI / AI / Network 不能调用 `TryGetEntity*` 之类方法取得 raw `Entity`。
 10. Internal resolver 不是共享 access layer。它只能服务单一 capability owner 的实现细节，不能同时被 command、snapshot、diagnostics、bootstrap、report projection 复用成万能实体查询口；如果多个 capability 都需要同一 runtime identity，必须通过 opaque handle / report key / snapshot key 建立各自的稳定映射。
@@ -143,6 +147,21 @@ namespace GAS.Runtime.Boundary
         public readonly bool DependencyDrainObserved;
     }
 
+    public readonly struct GASRunnerSyncOptions
+    {
+        public readonly int SyncReason;
+        public readonly bool CaptureTiming;
+    }
+
+    public readonly struct GASRunnerSyncResult
+    {
+        public readonly int Frame;
+        public readonly int DrainedJobCount;
+        public readonly int SyncReason;
+        public readonly long DrainTicks;
+        public readonly long MeasurementTicks;
+    }
+
     public interface IGASCommandCapability
     {
         GASRequestId RequestActivateAbility(
@@ -184,14 +203,19 @@ namespace GAS.Runtime.Boundary
             GASDiagnosticsCaptureOptions options);
     }
 
-    public interface IGASBootstrapCapability
+    public interface IGASRuntimeSessionCapability
     {
         GASRuntimeSessionId InstallRuntime(in GASRuntimeInstallOptions options);
         void DisposeRuntime(GASRuntimeSessionId session);
-        GASFixedTickResult RunFixedTick(GASRuntimeSessionId session, in GASFixedTickOptions options);
     }
 
-    public interface IGASDefinitionCapability
+    public interface IGASRunnerSyncCapability
+    {
+        GASFixedTickResult RunFixedTick(GASRuntimeSessionId session, in GASFixedTickOptions options);
+        GASRunnerSyncResult DrainForMeasurement(GASRuntimeSessionId session, in GASRunnerSyncOptions options);
+    }
+
+    public interface IGASDefinitionCatalogLifetimeCapability
     {
         GASDefinitionCatalogHandle InstallCatalog(
             GASRuntimeSessionId session,
@@ -208,21 +232,24 @@ namespace GAS.Runtime.Boundary
             IGASCommandCapability commands,
             IGASSnapshotCapability snapshots,
             IGASDiagnosticsCapability diagnostics,
-            IGASBootstrapCapability bootstrap,
-            IGASDefinitionCapability definitions)
+            IGASRuntimeSessionCapability sessions,
+            IGASRunnerSyncCapability runnerSync,
+            IGASDefinitionCatalogLifetimeCapability definitions)
         {
             Commands = commands;
             Snapshots = snapshots;
             Diagnostics = diagnostics;
-            Bootstrap = bootstrap;
+            Sessions = sessions;
+            RunnerSync = runnerSync;
             Definitions = definitions;
         }
 
         public IGASCommandCapability Commands { get; }
         public IGASSnapshotCapability Snapshots { get; }
         public IGASDiagnosticsCapability Diagnostics { get; }
-        public IGASBootstrapCapability Bootstrap { get; }
-        public IGASDefinitionCapability Definitions { get; }
+        public IGASRuntimeSessionCapability Sessions { get; }
+        public IGASRunnerSyncCapability RunnerSync { get; }
+        public IGASDefinitionCatalogLifetimeCapability Definitions { get; }
     }
 
     internal readonly struct RuntimeResolvedAsc
@@ -244,8 +271,9 @@ namespace GAS.Runtime.Boundary
 | `IGASCommandCapability` | 只接收 command intent，返回 request id；写入 owner-local command record 或 Boundary queue，不同步执行 gameplay | `SYS-01`、`QRY-01`、`SC-01` |
 | `IGASSnapshotCapability` | 只读取 BoundaryProjection 产生的 snapshot；不得 live 读 `DynamicBuffer` 或查询 Runtime Core | `SYS-05`、`SEL-05`、`ODF-09` |
 | `IGASDiagnosticsCapability` | 只导出 structured evidence、Profiler / Journaling 状态和 derived export source；不得驱动 simulation | `DBG-01..05`、`SYS-05` |
-| `IGASBootstrapCapability` | 可以内部拥有 World / SystemGroup / fixed tick driver，但只能输出 session、tick result 和 dependency drain evidence | `SYS-02`、`JOB-02`、`ODF-09` |
-| `IGASDefinitionCapability` | 只安装 immutable catalog / Blob handle；Runtime Core hot path 只读 catalog，不重新构建 managed config | `BLOB-01`、`BLOB-02`、`ODF-13` |
+| `IGASRuntimeSessionCapability` | 可以内部拥有 World / SystemGroup / singleton owner，但只能输出 session lifecycle result | `SYS-02`、`ODF-09` |
+| `IGASRunnerSyncCapability` | 独立承载 fixed tick、dependency drain reason 和 timing split，不能成为 command / snapshot / diagnostics API 的副作用 | `JOB-02`、`DBG-05`、`ODF-09` |
+| `IGASDefinitionCatalogLifetimeCapability` | 只安装 immutable catalog / Blob handle；Runtime Core hot path 只读 catalog，不重新构建 managed config | `BLOB-01`、`BLOB-02`、`ODF-13` |
 | `IGASRuntimeEntityResolver` | raw `Entity` 只能停留在 internal implementation，用于 command write 或 snapshot source resolve | `SYS-05`、`QRY-04` |
 
 验收时，如果某个 adapter implementation 为方便实现把上述 capability 聚合在同一个类中，也必须在 public API、evidence 字段、timing split 和交还报告中分开证明。聚合 implementation 不能作为完成证明；只有 capability seam、owner 分类和成本归因都分开时，才算符合 Thin Adapter 目标态。
