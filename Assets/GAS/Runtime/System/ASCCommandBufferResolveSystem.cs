@@ -902,21 +902,12 @@ namespace GAS.Runtime
 
                 evt.Frame = Frame;
                 var stream = StreamLookup[StreamEntity];
-                evt.Sequence = Allocate(ref stream.NextFactSequence);
+                evt.Sequence = GASRuntimeSequenceAllocator.AllocateFactSequence(ref stream);
                 StreamLookup[StreamEntity] = stream;
                 ownerFacts.Add(new OwnerLocalGameplayFactBuffer
                 {
                     Fact = evt,
                 });
-            }
-
-            private static int Allocate(ref int next)
-            {
-                var value = next;
-                next++;
-                if (next <= 0)
-                    next = 1;
-                return value <= 0 ? Allocate(ref next) : value;
             }
 
             private bool IsAvailableAsc(Entity asc)

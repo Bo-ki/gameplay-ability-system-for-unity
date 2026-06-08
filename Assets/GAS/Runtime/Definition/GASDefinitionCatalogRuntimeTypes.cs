@@ -1,5 +1,6 @@
 using Unity.Collections;
 using Unity.Entities;
+using System;
 
 namespace GAS.Runtime
 {
@@ -25,6 +26,195 @@ namespace GAS.Runtime
         public BlobArray<GASCatalogTagMaskDefinitionBlob> TagMasks;
         public BlobArray<int> TagMaskCodes;
         public BlobArray<GASCatalogGrantedAbilityDefinitionBlob> GrantedAbilities;
+    }
+
+    [Flags]
+    public enum EGASOfficialConceptCoverageFlags
+    {
+        None = 0,
+        AbilityLifecycle = 1 << 0,
+        GameplayEffectSpec = 1 << 1,
+        AttributeModifier = 1 << 2,
+        MagnitudeEvaluation = 1 << 3,
+        TagTaxonomy = 1 << 4,
+        TagRequirement = 1 << 5,
+        GameplayCue = 1 << 6,
+        AbilitySystemComponentBinding = 1 << 7,
+        ActiveGameplayEffect = 1 << 8,
+        SetByCallerMagnitude = 1 << 9,
+        ExecutionCalculation = 1 << 10,
+        GrantedAbility = 1 << 11,
+        AbilityTaskContinuation = 1 << 12,
+    }
+
+    [Flags]
+    public enum EGASRuntimeTraceStageFlags
+    {
+        None = 0,
+        AbilityActivationPlan = 1 << 0,
+        AbilityRequirementQuery = 1 << 1,
+        GECommandSeed = 1 << 2,
+        GESpecShape = 1 << 3,
+        ModifierMagnitude = 1 << 4,
+        AttributeDelta = 1 << 5,
+        GameplayFact = 1 << 6,
+        GameplayCue = 1 << 7,
+        ActiveEffectMutation = 1 << 8,
+        BoundaryProjection = 1 << 9,
+        AbilityTaskContinuation = 1 << 10,
+    }
+
+    public readonly struct GASRuntimeConceptCoverageSnapshot
+    {
+        public readonly int SchemaVersion;
+        public readonly int AbilityCount;
+        public readonly int GameplayEffectCount;
+        public readonly int ModifierCount;
+        public readonly int RequirementCount;
+        public readonly int TagMaskCount;
+        public readonly int GameplayCueCount;
+        public readonly int GrantedAbilityCount;
+        public readonly int ActiveGameplayEffectDefinitionCount;
+        public readonly int SetByCallerModifierCount;
+        public readonly int ExecutionCalculationModifierCount;
+        public readonly EGASOfficialConceptCoverageFlags CoveredConcepts;
+        public readonly EGASOfficialConceptCoverageFlags MissingConcepts;
+
+        public GASRuntimeConceptCoverageSnapshot(
+            int schemaVersion,
+            int abilityCount,
+            int gameplayEffectCount,
+            int modifierCount,
+            int requirementCount,
+            int tagMaskCount,
+            int gameplayCueCount,
+            int grantedAbilityCount,
+            int activeGameplayEffectDefinitionCount,
+            int setByCallerModifierCount,
+            int executionCalculationModifierCount,
+            EGASOfficialConceptCoverageFlags coveredConcepts,
+            EGASOfficialConceptCoverageFlags missingConcepts)
+        {
+            SchemaVersion = schemaVersion;
+            AbilityCount = abilityCount;
+            GameplayEffectCount = gameplayEffectCount;
+            ModifierCount = modifierCount;
+            RequirementCount = requirementCount;
+            TagMaskCount = tagMaskCount;
+            GameplayCueCount = gameplayCueCount;
+            GrantedAbilityCount = grantedAbilityCount;
+            ActiveGameplayEffectDefinitionCount = activeGameplayEffectDefinitionCount;
+            SetByCallerModifierCount = setByCallerModifierCount;
+            ExecutionCalculationModifierCount = executionCalculationModifierCount;
+            CoveredConcepts = coveredConcepts;
+            MissingConcepts = missingConcepts;
+        }
+
+        public readonly int CoveredConceptMask => (int)CoveredConcepts;
+
+        public readonly int MissingConceptMask => (int)MissingConcepts;
+
+        public readonly bool HasMinimumRuntimeCoverage =>
+            (MissingConcepts & GASRuntimeConceptCoverage.RequiredMinimumConcepts)
+            == EGASOfficialConceptCoverageFlags.None;
+    }
+
+    public readonly struct GASRuntimeTracePreview
+    {
+        public readonly int Frame;
+        public readonly int AbilityCode;
+        public readonly int Level;
+        public readonly Entity SourceAsc;
+        public readonly Entity TargetAsc;
+        public readonly Entity SourceAbility;
+        public readonly int AbilityFailureReasonCode;
+        public readonly int SeedCount;
+        public readonly int ModifierCount;
+        public readonly int FactCount;
+        public readonly int CueCount;
+        public readonly int ActiveMutationSeedCount;
+        public readonly int ExecutionCalculationModifierCount;
+        public readonly EGASRuntimeTraceStageFlags StageMask;
+        public readonly EGASRuntimeTraceStageFlags MissingStageMask;
+        public readonly EGASOfficialConceptCoverageFlags ConceptMask;
+        public readonly EGASOfficialConceptCoverageFlags MissingConceptMask;
+
+        public GASRuntimeTracePreview(
+            int frame,
+            int abilityCode,
+            int level,
+            Entity sourceAsc,
+            Entity targetAsc,
+            Entity sourceAbility,
+            int abilityFailureReasonCode,
+            int seedCount,
+            int modifierCount,
+            int factCount,
+            int cueCount,
+            int activeMutationSeedCount,
+            int executionCalculationModifierCount,
+            EGASRuntimeTraceStageFlags stageMask,
+            EGASRuntimeTraceStageFlags missingStageMask,
+            EGASOfficialConceptCoverageFlags conceptMask,
+            EGASOfficialConceptCoverageFlags missingConceptMask)
+        {
+            Frame = frame;
+            AbilityCode = abilityCode;
+            Level = level;
+            SourceAsc = sourceAsc;
+            TargetAsc = targetAsc;
+            SourceAbility = sourceAbility;
+            AbilityFailureReasonCode = abilityFailureReasonCode;
+            SeedCount = seedCount;
+            ModifierCount = modifierCount;
+            FactCount = factCount;
+            CueCount = cueCount;
+            ActiveMutationSeedCount = activeMutationSeedCount;
+            ExecutionCalculationModifierCount = executionCalculationModifierCount;
+            StageMask = stageMask;
+            MissingStageMask = missingStageMask;
+            ConceptMask = conceptMask;
+            MissingConceptMask = missingConceptMask;
+        }
+
+        public readonly int StageMaskValue => (int)StageMask;
+
+        public readonly int MissingStageMaskValue => (int)MissingStageMask;
+
+        public readonly int ConceptMaskValue => (int)ConceptMask;
+
+        public readonly int MissingConceptMaskValue => (int)MissingConceptMask;
+    }
+
+    public static class GASRuntimeConceptCoverage
+    {
+        public const EGASOfficialConceptCoverageFlags RequiredMinimumConcepts =
+            EGASOfficialConceptCoverageFlags.AbilityLifecycle
+            | EGASOfficialConceptCoverageFlags.GameplayEffectSpec
+            | EGASOfficialConceptCoverageFlags.AttributeModifier
+            | EGASOfficialConceptCoverageFlags.MagnitudeEvaluation
+            | EGASOfficialConceptCoverageFlags.TagTaxonomy
+            | EGASOfficialConceptCoverageFlags.TagRequirement
+            | EGASOfficialConceptCoverageFlags.GameplayCue
+            | EGASOfficialConceptCoverageFlags.AbilitySystemComponentBinding
+            | EGASOfficialConceptCoverageFlags.ActiveGameplayEffect
+            | EGASOfficialConceptCoverageFlags.ExecutionCalculation;
+
+        public const EGASOfficialConceptCoverageFlags OfficialConceptMatrix =
+            RequiredMinimumConcepts
+            | EGASOfficialConceptCoverageFlags.SetByCallerMagnitude
+            | EGASOfficialConceptCoverageFlags.GrantedAbility
+            | EGASOfficialConceptCoverageFlags.AbilityTaskContinuation;
+
+        public const EGASRuntimeTraceStageFlags RequiredTraceStages =
+            EGASRuntimeTraceStageFlags.AbilityActivationPlan
+            | EGASRuntimeTraceStageFlags.GECommandSeed
+            | EGASRuntimeTraceStageFlags.GESpecShape
+            | EGASRuntimeTraceStageFlags.ModifierMagnitude
+            | EGASRuntimeTraceStageFlags.AttributeDelta
+            | EGASRuntimeTraceStageFlags.GameplayFact
+            | EGASRuntimeTraceStageFlags.BoundaryProjection
+            | EGASRuntimeTraceStageFlags.AbilityTaskContinuation;
     }
 
     public struct GASCatalogAbilityDefinitionBlob

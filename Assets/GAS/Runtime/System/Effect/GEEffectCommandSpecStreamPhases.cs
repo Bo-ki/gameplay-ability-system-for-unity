@@ -4,7 +4,6 @@ using Unity.Collections;
 using Unity.Burst.Intrinsics;
 using Unity.Entities;
 using Unity.Jobs;
-using static GAS.Runtime.EffectCommandSpecStreamPhaseUtility;
 
 namespace GAS.Runtime
 {
@@ -383,7 +382,7 @@ namespace GAS.Runtime
                 return;
             }
 
-            var factSequence = Allocate(ref stream.NextFactSequence);
+            var factSequence = GASRuntimeSequenceAllocator.AllocateFactSequence(ref stream);
             facts.Add(new OwnerLocalGameplayFactBuffer
             {
                 Fact = new GameplayEventBuffer
@@ -796,22 +795,4 @@ namespace GAS.Runtime
         }
     }
 
-
-    internal static class EffectCommandSpecStreamPhaseUtility
-    {
-        public static int ClampCursor(int cursor, int length)
-        {
-            if (cursor < 0)
-                return 0;
-            return cursor > length ? length : cursor;
-        }
-
-        public static int Allocate(ref int next)
-        {
-            if (next <= 0)
-                next = 1;
-
-            return next++;
-        }
-    }
 }

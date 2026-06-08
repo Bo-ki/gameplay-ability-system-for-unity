@@ -188,8 +188,8 @@ namespace GAS.AutoChessDemo
                         }
 
                         var commandFrame = spec.Frame != 0 ? spec.Frame : Frame;
-                        var deltaSequence = Allocate(ref stream.NextDeltaSequence);
-                        var factSequence = Allocate(ref stream.NextFactSequence);
+                        var deltaSequence = GASRuntimeSequenceAllocator.AllocateDeltaSequence(ref stream);
+                        var factSequence = GASRuntimeSequenceAllocator.AllocateFactSequence(ref stream);
                         targetDeltas.Add(new AttributeModifierBuffer
                         {
                             Sequence = deltaSequence,
@@ -322,13 +322,6 @@ namespace GAS.AutoChessDemo
             return left.Version.CompareTo(right.Version);
         }
 
-        private static int Allocate(ref int next)
-        {
-            if (next <= 0)
-                next = 1;
-
-            return next++;
-        }
         private static bool TryEvaluateExecuteDamage(
             DynamicBuffer<AttributeValueBuffer> attributes,
             in AutoChessExecuteDamageCalculationComponent calculation,

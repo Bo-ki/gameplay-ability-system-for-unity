@@ -255,7 +255,7 @@ namespace GAS.Runtime
                     Value = baseInfo.Code,
                 };
                 var stream = StreamLookup[StreamEntity];
-                fact.Sequence = Allocate(ref stream.NextFactSequence);
+                fact.Sequence = GASRuntimeSequenceAllocator.AllocateFactSequence(ref stream);
                 StreamLookup[StreamEntity] = stream;
                 OwnerFactLookup[baseInfo.Owner].Add(new OwnerLocalGameplayFactBuffer
                 {
@@ -263,14 +263,6 @@ namespace GAS.Runtime
                 });
             }
 
-            private static int Allocate(ref int next)
-            {
-                var value = next;
-                next++;
-                if (next <= 0)
-                    next = 1;
-                return value <= 0 ? Allocate(ref next) : value;
-            }
         }
     }
 }

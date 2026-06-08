@@ -1482,11 +1482,11 @@ namespace GAS.Runtime
             {
                 var resolved = command;
                 if (resolved.Sequence <= 0)
-                    resolved.Sequence = Allocate(ref stream.NextCommandSequence);
+                    resolved.Sequence = GASRuntimeSequenceAllocator.AllocateCommandSequence(ref stream);
                 if (resolved.Frame <= 0)
                     resolved.Frame = currentFrame;
                 if (resolved.ContextId <= 0)
-                    resolved.ContextId = Allocate(ref stream.NextContextId);
+                    resolved.ContextId = GASRuntimeSequenceAllocator.AllocateContextId(ref stream);
                 if (resolved.TargetAsc == Entity.Null)
                     resolved.TargetAsc = resolved.SourceAsc;
                 if (resolved.Instigator == Entity.Null)
@@ -1662,7 +1662,7 @@ namespace GAS.Runtime
                 if (StreamLookup.HasComponent(StreamEntity))
                 {
                     var stream = StreamLookup[StreamEntity];
-                    evt.Sequence = Allocate(ref stream.NextFactSequence);
+                    evt.Sequence = GASRuntimeSequenceAllocator.AllocateFactSequence(ref stream);
                     StreamLookup[StreamEntity] = stream;
                 }
                 else
@@ -2762,11 +2762,11 @@ namespace GAS.Runtime
             {
                 var resolved = command;
                 if (resolved.Sequence <= 0)
-                    resolved.Sequence = Allocate(ref stream.NextCommandSequence);
+                    resolved.Sequence = GASRuntimeSequenceAllocator.AllocateCommandSequence(ref stream);
                 if (resolved.Frame <= 0)
                     resolved.Frame = currentFrame;
                 if (resolved.ContextId <= 0)
-                    resolved.ContextId = Allocate(ref stream.NextContextId);
+                    resolved.ContextId = GASRuntimeSequenceAllocator.AllocateContextId(ref stream);
                 if (resolved.TargetAsc == Entity.Null)
                     resolved.TargetAsc = resolved.SourceAsc;
                 if (resolved.Instigator == Entity.Null)
@@ -2788,11 +2788,11 @@ namespace GAS.Runtime
             {
                 var resolved = command;
                 if (resolved.Sequence <= 0)
-                    resolved.Sequence = Allocate(ref stream.NextCommandSequence);
+                    resolved.Sequence = GASRuntimeSequenceAllocator.AllocateCommandSequence(ref stream);
                 if (resolved.Frame <= 0)
                     resolved.Frame = currentFrame;
                 if (resolved.ContextId <= 0)
-                    resolved.ContextId = Allocate(ref stream.NextContextId);
+                    resolved.ContextId = GASRuntimeSequenceAllocator.AllocateContextId(ref stream);
                 if (resolved.TargetAsc == Entity.Null)
                     resolved.TargetAsc = resolved.SourceAsc;
                 if (resolved.Instigator == Entity.Null)
@@ -2933,7 +2933,7 @@ namespace GAS.Runtime
                 if (StreamLookup.HasComponent(StreamEntity))
                 {
                     var stream = StreamLookup[StreamEntity];
-                    evt.Sequence = Allocate(ref stream.NextFactSequence);
+                    evt.Sequence = GASRuntimeSequenceAllocator.AllocateFactSequence(ref stream);
                     StreamLookup[StreamEntity] = stream;
                 }
                 else

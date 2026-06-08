@@ -472,7 +472,7 @@ namespace GAS.Runtime
                 }
 
                 if (resolved.Sequence <= 0)
-                    resolved.Sequence = Allocate(ref _stream.NextFactSequence);
+                    resolved.Sequence = GASRuntimeSequenceAllocator.AllocateFactSequence(ref _stream);
                 if (resolved.Frame <= 0)
                     resolved.Frame = _currentFrame;
 
@@ -839,14 +839,6 @@ namespace GAS.Runtime
             };
         }
 
-        private static int Allocate(ref int next)
-        {
-            if (next <= 0)
-                next = 1;
-
-            return next++;
-        }
-
         private static GEEffectCommandBuffer PrepareCommand(
             ref GEEffectCommandStreamComponent stream,
             int setByCallerStart,
@@ -856,11 +848,11 @@ namespace GAS.Runtime
         {
             var resolved = command;
             if (resolved.Sequence <= 0)
-                resolved.Sequence = Allocate(ref stream.NextCommandSequence);
+                resolved.Sequence = GASRuntimeSequenceAllocator.AllocateCommandSequence(ref stream);
             if (resolved.Frame <= 0)
                 resolved.Frame = currentFrame;
             if (resolved.ContextId <= 0)
-                resolved.ContextId = Allocate(ref stream.NextContextId);
+                resolved.ContextId = GASRuntimeSequenceAllocator.AllocateContextId(ref stream);
             if (resolved.TargetAsc == Entity.Null)
                 resolved.TargetAsc = resolved.SourceAsc;
             if (resolved.Instigator == Entity.Null)

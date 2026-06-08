@@ -68,6 +68,151 @@ namespace GAS.Runtime
         TargetAscThenAttributeThenDeltaSequence = 8,
     }
 
+    public enum EGasRuntimeSequenceKind
+    {
+        None = 0,
+        ContextId = 1,
+        CommandSequence = 2,
+        SpecSequence = 3,
+        DeltaSequence = 4,
+        FactSequence = 5,
+    }
+
+    public enum EGasRuntimeSequenceOwnerKind
+    {
+        None = 0,
+        EffectCommandStreamSingleton = 1,
+        AttributeDeltaOwnerLocalStream = 2,
+        TypedSimulationFactOwnerLocalStream = 3,
+    }
+
+    public readonly struct GASRuntimeSequenceOwnerEntry
+    {
+        public readonly EGasRuntimeSequenceKind SequenceKind;
+        public readonly EGasRuntimeSequenceOwnerKind OwnerKind;
+        public readonly EGasRuntimeFrameStreamId StreamId;
+        public readonly EGasRuntimeFrameStreamSortKey SortKey;
+        public readonly bool AffectsBattleHash;
+
+        public GASRuntimeSequenceOwnerEntry(
+            EGasRuntimeSequenceKind sequenceKind,
+            EGasRuntimeSequenceOwnerKind ownerKind,
+            EGasRuntimeFrameStreamId streamId,
+            EGasRuntimeFrameStreamSortKey sortKey,
+            bool affectsBattleHash)
+        {
+            SequenceKind = sequenceKind;
+            OwnerKind = ownerKind;
+            StreamId = streamId;
+            SortKey = sortKey;
+            AffectsBattleHash = affectsBattleHash;
+        }
+    }
+
+    public static class GASRuntimeSequenceOwnerContract
+    {
+        public static GASRuntimeSequenceOwnerEntry Resolve(EGasRuntimeSequenceKind sequenceKind)
+        {
+            switch (sequenceKind)
+            {
+                case EGasRuntimeSequenceKind.ContextId:
+                    return new GASRuntimeSequenceOwnerEntry(
+                        sequenceKind,
+                        EGasRuntimeSequenceOwnerKind.EffectCommandStreamSingleton,
+                        EGasRuntimeFrameStreamId.EffectCommand,
+                        EGasRuntimeFrameStreamSortKey.CommandSequence,
+                        affectsBattleHash: true);
+                case EGasRuntimeSequenceKind.CommandSequence:
+                    return new GASRuntimeSequenceOwnerEntry(
+                        sequenceKind,
+                        EGasRuntimeSequenceOwnerKind.EffectCommandStreamSingleton,
+                        EGasRuntimeFrameStreamId.EffectCommand,
+                        EGasRuntimeFrameStreamSortKey.CommandSequence,
+                        affectsBattleHash: true);
+                case EGasRuntimeSequenceKind.SpecSequence:
+                    return new GASRuntimeSequenceOwnerEntry(
+                        sequenceKind,
+                        EGasRuntimeSequenceOwnerKind.EffectCommandStreamSingleton,
+                        EGasRuntimeFrameStreamId.InstantEffectSpec,
+                        EGasRuntimeFrameStreamSortKey.TargetAscThenSpecSequence,
+                        affectsBattleHash: true);
+                case EGasRuntimeSequenceKind.DeltaSequence:
+                    return new GASRuntimeSequenceOwnerEntry(
+                        sequenceKind,
+                        EGasRuntimeSequenceOwnerKind.AttributeDeltaOwnerLocalStream,
+                        EGasRuntimeFrameStreamId.AttributeDelta,
+                        EGasRuntimeFrameStreamSortKey.TargetAscThenAttributeThenDeltaSequence,
+                        affectsBattleHash: true);
+                case EGasRuntimeSequenceKind.FactSequence:
+                    return new GASRuntimeSequenceOwnerEntry(
+                        sequenceKind,
+                        EGasRuntimeSequenceOwnerKind.TypedSimulationFactOwnerLocalStream,
+                        EGasRuntimeFrameStreamId.TypedSimulationFact,
+                        EGasRuntimeFrameStreamSortKey.TargetAscThenFactSequence,
+                        affectsBattleHash: true);
+                default:
+                    return default;
+            }
+        }
+    }
+
+    public static class GASRuntimeSequenceAllocator
+    {
+        public static int AllocateContextId(ref GEEffectCommandStreamComponent stream)
+        {
+            return Allocate(ref stream.NextContextId);
+        }
+
+        public static int AllocateCommandSequence(ref GEEffectCommandStreamComponent stream)
+        {
+            return Allocate(ref stream.NextCommandSequence);
+        }
+
+        public static int AllocateSpecSequence(ref GEEffectCommandStreamComponent stream)
+        {
+            return Allocate(ref stream.NextSpecSequence);
+        }
+
+        public static int AllocateDeltaSequence(ref GEEffectCommandStreamComponent stream)
+        {
+            return Allocate(ref stream.NextDeltaSequence);
+        }
+
+        public static int AllocateFactSequence(ref GEEffectCommandStreamComponent stream)
+        {
+            return Allocate(ref stream.NextFactSequence);
+        }
+
+        public static int Allocate(
+            ref GEEffectCommandStreamComponent stream,
+            EGasRuntimeSequenceKind sequenceKind)
+        {
+            switch (sequenceKind)
+            {
+                case EGasRuntimeSequenceKind.ContextId:
+                    return AllocateContextId(ref stream);
+                case EGasRuntimeSequenceKind.CommandSequence:
+                    return AllocateCommandSequence(ref stream);
+                case EGasRuntimeSequenceKind.SpecSequence:
+                    return AllocateSpecSequence(ref stream);
+                case EGasRuntimeSequenceKind.DeltaSequence:
+                    return AllocateDeltaSequence(ref stream);
+                case EGasRuntimeSequenceKind.FactSequence:
+                    return AllocateFactSequence(ref stream);
+                default:
+                    return 0;
+            }
+        }
+
+        private static int Allocate(ref int next)
+        {
+            if (next <= 0)
+                next = 1;
+
+            return next++;
+        }
+    }
+
     [Flags]
     public enum EGasRuntimeFrameStreamReselectTrigger
     {

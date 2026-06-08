@@ -365,13 +365,13 @@ namespace GAS.Runtime
                     if (record.TargetAsc == Entity.Null || !OwnerFactLookup.HasBuffer(record.TargetAsc))
                         continue;
 
-                    var deltaSequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextDeltaSequence);
+                    var deltaSequence = GASRuntimeSequenceAllocator.AllocateDeltaSequence(ref stream);
                     var facts = OwnerFactLookup[record.TargetAsc];
                     facts.Add(new OwnerLocalGameplayFactBuffer
                     {
                         Fact = new GameplayEventBuffer
                         {
-                            Sequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextFactSequence),
+                            Sequence = GASRuntimeSequenceAllocator.AllocateFactSequence(ref stream),
                             SourceDeltaSequence = deltaSequence,
                             Frame = record.Frame,
                             EventType = EGameplayEventType.AttributeBaseValueChanged,

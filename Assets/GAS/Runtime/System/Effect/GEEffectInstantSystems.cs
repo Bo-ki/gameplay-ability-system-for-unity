@@ -176,7 +176,7 @@ namespace GAS.Runtime
 
                     var specs = SpecLookup[record.Owner];
                     var setByCallerValues = SetByCallerLookup[record.Owner];
-                    var specSequence = Allocate(ref stream.NextSpecSequence);
+                    var specSequence = GASRuntimeSequenceAllocator.AllocateSpecSequence(ref stream);
                     var setByCallerStart = setByCallerValues.Length;
                     var setByCallerCount = CopySetByCallerValues(
                         Payloads,
@@ -361,13 +361,6 @@ namespace GAS.Runtime
             return result != 0 ? result : left.Version.CompareTo(right.Version);
         }
 
-        private static int Allocate(ref int next)
-        {
-            if (next <= 0)
-                next = 1;
-            return next++;
-        }
-
         private static bool IsUnavailableAsc(
             EntityStorageInfoLookup entityStorageInfoLookup,
             ComponentLookup<ASCDestroyingComponent> destroyingLookup,
@@ -546,12 +539,12 @@ namespace GAS.Runtime
                         attribute.CurrentValueChangePending = true;
                     }
 
-                    var deltaSequence = Allocate(ref stream.NextDeltaSequence);
+                    var deltaSequence = GASRuntimeSequenceAllocator.AllocateDeltaSequence(ref stream);
                     facts.Add(new OwnerLocalGameplayFactBuffer
                     {
                         Fact = new GameplayEventBuffer
                         {
-                            Sequence = Allocate(ref stream.NextFactSequence),
+                            Sequence = GASRuntimeSequenceAllocator.AllocateFactSequence(ref stream),
                             SourceCommandSequence = spec.SourceCommandSequence,
                             SourceSpecSequence = spec.Sequence,
                             SourceDeltaSequence = deltaSequence,
@@ -633,11 +626,5 @@ namespace GAS.Runtime
             return result != 0 ? result : left.Version.CompareTo(right.Version);
         }
 
-        private static int Allocate(ref int next)
-        {
-            if (next <= 0)
-                next = 1;
-            return next++;
-        }
     }
 }

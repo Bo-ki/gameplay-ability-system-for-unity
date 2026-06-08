@@ -56,6 +56,13 @@ namespace GAS.AutoChessDemo
                 reselectTriggerMask |= 64;
             }
 
+            var traceAbilityCode = AutoChessBattleRules.AbilityPlayerExecute;
+            AutoChessBattleDefinitionCatalogBuilder.TryCreateRuntimeConceptEvidence(
+                traceAbilityCode,
+                performanceResult.BattleTicks,
+                out var gasConceptCoverage,
+                out var runtimeTrace);
+
             return new AutoChessValidationEvidence(
                 performanceResult.Completed,
                 performanceResult.Winner,
@@ -101,6 +108,17 @@ namespace GAS.AutoChessDemo
                 AutoChessGasRuntimeAccessContract.PerformancePassRiskCount,
                 AutoChessGasRuntimeAccessContract.BattleHashAffectingCount,
                 AutoChessGasRuntimeAccessContract.CapabilityMask,
+                gasConceptCoverage.CoveredConceptMask,
+                gasConceptCoverage.MissingConceptMask,
+                traceAbilityCode,
+                runtimeTrace.StageMaskValue,
+                runtimeTrace.MissingStageMaskValue,
+                runtimeTrace.SeedCount,
+                runtimeTrace.ModifierCount,
+                runtimeTrace.FactCount,
+                runtimeTrace.CueCount,
+                runtimeTrace.ActiveMutationSeedCount,
+                runtimeTrace.ExecutionCalculationModifierCount,
                 counters.ActiveEffectSlotCount,
                 counters.ActiveEffectSlotActiveCount,
                 counters.ActiveEffectChunkSkipDuePeriodSlotCount,
@@ -244,6 +262,17 @@ namespace GAS.AutoChessDemo
                     + $"runtimeAccessPerformancePassRisks={evidence.RuntimeAccessPerformancePassRiskCount}, "
                     + $"runtimeAccessBattleHashAffecting={evidence.RuntimeAccessBattleHashAffectingCount}, "
                     + $"runtimeAccessCapabilityMask=0x{evidence.RuntimeAccessCapabilityMask:X}, "
+                    + $"gasConceptCoverageMask=0x{evidence.GasConceptCoverageMask:X}, "
+                    + $"gasConceptMissingMask=0x{evidence.GasConceptMissingMask:X}, "
+                    + $"runtimeTraceAbilityCode={evidence.RuntimeTraceAbilityCode}, "
+                    + $"runtimeTraceStageMask=0x{evidence.RuntimeTraceStageMask:X}, "
+                    + $"runtimeTraceMissingStageMask=0x{evidence.RuntimeTraceMissingStageMask:X}, "
+                    + $"runtimeTraceSeeds={evidence.RuntimeTraceSeedCount}, "
+                    + $"runtimeTraceModifiers={evidence.RuntimeTraceModifierCount}, "
+                    + $"runtimeTraceFacts={evidence.RuntimeTraceFactCount}, "
+                    + $"runtimeTraceCues={evidence.RuntimeTraceCueCount}, "
+                    + $"runtimeTraceActiveMutationSeeds={evidence.RuntimeTraceActiveMutationSeedCount}, "
+                    + $"runtimeTraceExecutionCalculationModifiers={evidence.RuntimeTraceExecutionCalculationModifierCount}, "
                     + $"activeEffectSlots={evidence.ActiveEffectSlotCount}, "
                     + $"activeEffectActiveSlots={evidence.ActiveEffectSlotActiveCount}, "
                     + $"activeEffectDuePeriodSlots={evidence.ActiveEffectChunkSkipDuePeriodSlotCount}, "

@@ -293,7 +293,7 @@ namespace GAS.Runtime
             {
                 Fact = new GameplayEventBuffer
                 {
-                    Sequence = Allocate(ref stream.NextFactSequence),
+                    Sequence = GASRuntimeSequenceAllocator.AllocateFactSequence(ref stream),
                     SourceCommandSequence = delta.SourceCommandSequence,
                     SourceSpecSequence = delta.SourceSpecSequence,
                     SourceDeltaSequence = delta.Sequence,
@@ -316,14 +316,6 @@ namespace GAS.Runtime
                     NewValue = newValue,
                 },
             });
-        }
-
-        private static int Allocate(ref int next)
-        {
-            if (next <= 0)
-                next = 1;
-
-            return next++;
         }
 
         private static void WritePendingAttributeDeltaStats(

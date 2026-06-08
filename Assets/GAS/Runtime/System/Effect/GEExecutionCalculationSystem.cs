@@ -527,7 +527,7 @@ namespace GAS.Runtime
                     {
                         Fact = new GameplayEventBuffer
                         {
-                            Sequence = EffectCommandSpecStreamPhaseUtility.Allocate(ref stream.NextFactSequence),
+                            Sequence = GASRuntimeSequenceAllocator.AllocateFactSequence(ref stream),
                             Frame = record.Frame,
                             EventType = EGameplayEventType.ExecutionCalculationOutputUpdated,
                             Domain = EGameplayFactDomain.ExecutionCalculation,

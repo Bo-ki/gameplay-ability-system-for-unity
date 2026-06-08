@@ -60,6 +60,41 @@ namespace GAS.AutoChessDemo
             DisposeInstalledCatalog();
         }
 
+        internal static bool TryCreateRuntimeConceptEvidence(
+            int abilityCode,
+            int frame,
+            out GASRuntimeConceptCoverageSnapshot coverage,
+            out GASRuntimeTracePreview trace)
+        {
+            var catalog = _installedCatalog;
+            var ownsCatalog = false;
+            if (!catalog.IsCreated)
+            {
+                catalog = BuildCatalog(Allocator.Persistent);
+                ownsCatalog = true;
+            }
+
+            try
+            {
+                ref var root = ref catalog.Value;
+                coverage = GASRuntimeDefinitionResolver.CreateConceptCoverageSnapshot(ref root);
+                return GASRuntimeDefinitionResolver.TryBuildRuntimeTracePreview(
+                    ref root,
+                    abilityCode,
+                    Entity.Null,
+                    Entity.Null,
+                    Entity.Null,
+                    frame,
+                    requestedLevel: 1,
+                    out trace);
+            }
+            finally
+            {
+                if (ownsCatalog && catalog.IsCreated)
+                    catalog.Dispose();
+            }
+        }
+
         private static void DisposeInstalledCatalog()
         {
             if (!_installedCatalog.IsCreated)

@@ -409,6 +409,17 @@ namespace GAS.AutoChessDemo
         public readonly int RuntimeAccessPerformancePassRiskCount;
         public readonly int RuntimeAccessBattleHashAffectingCount;
         public readonly int RuntimeAccessCapabilityMask;
+        public readonly int GasConceptCoverageMask;
+        public readonly int GasConceptMissingMask;
+        public readonly int RuntimeTraceAbilityCode;
+        public readonly int RuntimeTraceStageMask;
+        public readonly int RuntimeTraceMissingStageMask;
+        public readonly int RuntimeTraceSeedCount;
+        public readonly int RuntimeTraceModifierCount;
+        public readonly int RuntimeTraceFactCount;
+        public readonly int RuntimeTraceCueCount;
+        public readonly int RuntimeTraceActiveMutationSeedCount;
+        public readonly int RuntimeTraceExecutionCalculationModifierCount;
         public readonly int ActiveEffectSlotCount;
         public readonly int ActiveEffectSlotActiveCount;
         public readonly int ActiveEffectChunkSkipDuePeriodSlotCount;
@@ -506,6 +517,17 @@ namespace GAS.AutoChessDemo
             int runtimeAccessPerformancePassRiskCount,
             int runtimeAccessBattleHashAffectingCount,
             int runtimeAccessCapabilityMask,
+            int gasConceptCoverageMask,
+            int gasConceptMissingMask,
+            int runtimeTraceAbilityCode,
+            int runtimeTraceStageMask,
+            int runtimeTraceMissingStageMask,
+            int runtimeTraceSeedCount,
+            int runtimeTraceModifierCount,
+            int runtimeTraceFactCount,
+            int runtimeTraceCueCount,
+            int runtimeTraceActiveMutationSeedCount,
+            int runtimeTraceExecutionCalculationModifierCount,
             int activeEffectSlotCount,
             int activeEffectSlotActiveCount,
             int activeEffectChunkSkipDuePeriodSlotCount,
@@ -602,6 +624,17 @@ namespace GAS.AutoChessDemo
             RuntimeAccessPerformancePassRiskCount = runtimeAccessPerformancePassRiskCount;
             RuntimeAccessBattleHashAffectingCount = runtimeAccessBattleHashAffectingCount;
             RuntimeAccessCapabilityMask = runtimeAccessCapabilityMask;
+            GasConceptCoverageMask = gasConceptCoverageMask;
+            GasConceptMissingMask = gasConceptMissingMask;
+            RuntimeTraceAbilityCode = runtimeTraceAbilityCode;
+            RuntimeTraceStageMask = runtimeTraceStageMask;
+            RuntimeTraceMissingStageMask = runtimeTraceMissingStageMask;
+            RuntimeTraceSeedCount = runtimeTraceSeedCount;
+            RuntimeTraceModifierCount = runtimeTraceModifierCount;
+            RuntimeTraceFactCount = runtimeTraceFactCount;
+            RuntimeTraceCueCount = runtimeTraceCueCount;
+            RuntimeTraceActiveMutationSeedCount = runtimeTraceActiveMutationSeedCount;
+            RuntimeTraceExecutionCalculationModifierCount = runtimeTraceExecutionCalculationModifierCount;
             ActiveEffectSlotCount = activeEffectSlotCount;
             ActiveEffectSlotActiveCount = activeEffectSlotActiveCount;
             ActiveEffectChunkSkipDuePeriodSlotCount = activeEffectChunkSkipDuePeriodSlotCount;

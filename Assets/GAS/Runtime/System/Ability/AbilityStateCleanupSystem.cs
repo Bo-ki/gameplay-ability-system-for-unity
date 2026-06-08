@@ -399,21 +399,12 @@ namespace GAS.Runtime
                     Value = cleanupRequest.SourceAbilityCode,
                 };
                 var stream = StreamLookup[StreamEntity];
-                fact.Sequence = Allocate(ref stream.NextFactSequence);
+                fact.Sequence = GASRuntimeSequenceAllocator.AllocateFactSequence(ref stream);
                 StreamLookup[StreamEntity] = stream;
                 OwnerFactLookup[owner].Add(new OwnerLocalGameplayFactBuffer
                 {
                     Fact = fact,
                 });
-            }
-
-            private static int Allocate(ref int next)
-            {
-                var value = next;
-                next++;
-                if (next <= 0)
-                    next = 1;
-                return value <= 0 ? Allocate(ref next) : value;
             }
 
             private static int FindSlot(DynamicBuffer<ActiveGameplayEffectBuffer> slots, Entity effect)
