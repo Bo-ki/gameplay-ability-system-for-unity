@@ -292,14 +292,14 @@ namespace GAS.Runtime
             if (!EffectCommandSpecStream.TryGetSingleton(entityManager, out var streamEntity))
                 return;
 
-            var eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(
+            var factWriter = EffectCommandSpecStream.BeginOwnerLocalFactWriter(
                 entityManager,
                 streamEntity,
                 GASRuntimeFrameContext.ResolveCurrentFrame(entityManager));
-            if (!eventWriter.IsCreated)
+            if (!factWriter.IsCreated)
                 return;
 
-            eventWriter.AppendGameplayEvent(new GameplayEventBuffer
+            factWriter.AppendFact(new GameplayEventBuffer
             {
                 EventType = type,
                 Domain = EGameplayFactDomain.Ability,
@@ -313,7 +313,7 @@ namespace GAS.Runtime
                 ReasonCode = (int)reason,
                 Value = sourceAbilityCode,
             });
-            eventWriter.Flush();
+            factWriter.Flush();
         }
 
         private static bool TryGetBaseInfo(EntityManager entityManager, Entity ability, out AbilityStateComponent baseInfo)

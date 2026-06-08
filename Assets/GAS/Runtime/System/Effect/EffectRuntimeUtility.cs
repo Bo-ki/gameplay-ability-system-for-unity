@@ -107,16 +107,16 @@ namespace GAS.Runtime
             EntityManager em,
             Entity ge)
         {
-            var hasEventWriter = TryBeginGameplayEventWriter(em, out var eventWriter);
-            CleanupActiveEffect(em, ge, ref eventWriter);
-            if (hasEventWriter)
-                eventWriter.Flush();
+            var hasFactWriter = TryBeginOwnerLocalFactWriter(em, out var factWriter);
+            CleanupActiveEffect(em, ge, ref factWriter);
+            if (hasFactWriter)
+                factWriter.Flush();
         }
 
         public static void CleanupActiveEffect(
             EntityManager em,
             Entity ge,
-            ref EffectCommandSpecStream.GameplayEventWriter eventWriter)
+            ref EffectCommandSpecStream.OwnerLocalFactWriter factWriter)
         {
             if (ge == Entity.Null || !em.Exists(ge))
                 return;
@@ -149,7 +149,7 @@ namespace GAS.Runtime
                     cleanupSequence,
                     frame);
 
-            EnqueueRemovedEvent(ref eventWriter, em, ge, in context);
+            EnqueueRemovedEvent(ref factWriter, em, ge, in context);
 
             if (em.HasComponent<GEEffectFinalDestroyComponent>(ge))
                 em.SetComponentEnabled<GEEffectFinalDestroyComponent>(ge, true);
@@ -377,7 +377,7 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueRemovedEvent(
-            ref EffectCommandSpecStream.GameplayEventWriter writer,
+            ref EffectCommandSpecStream.OwnerLocalFactWriter writer,
             EntityManager em,
             Entity ge,
             in GEContextComponent context)
@@ -389,7 +389,7 @@ namespace GAS.Runtime
             if (em.HasComponent<GEEffectSpecComponent>(ge))
                 gameplayEffectCode = em.GetComponentData<GEEffectSpecComponent>(ge).GameplayEffectCode;
 
-            writer.AppendGameplayEvent(new GameplayEventBuffer
+            writer.AppendFact(new GameplayEventBuffer
             {
                 EventType = EGameplayEventType.GameplayEffectRemoved,
                 Domain = EGameplayFactDomain.GameplayEffect,
@@ -405,19 +405,19 @@ namespace GAS.Runtime
             });
         }
 
-        private static bool TryBeginGameplayEventWriter(
+        private static bool TryBeginOwnerLocalFactWriter(
             EntityManager em,
-            out EffectCommandSpecStream.GameplayEventWriter eventWriter)
+            out EffectCommandSpecStream.OwnerLocalFactWriter factWriter)
         {
-            eventWriter = default;
+            factWriter = default;
             if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity))
                 return false;
 
-            eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(
+            factWriter = EffectCommandSpecStream.BeginOwnerLocalFactWriter(
                 em,
                 streamEntity,
                 GASRuntimeFrameContext.ResolveCurrentFrame(em));
-            return eventWriter.IsCreated;
+            return factWriter.IsCreated;
         }
     }
 }

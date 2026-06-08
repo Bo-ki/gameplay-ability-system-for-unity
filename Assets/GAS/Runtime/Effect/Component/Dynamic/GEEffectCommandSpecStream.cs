@@ -430,7 +430,7 @@ namespace GAS.Runtime
             }
         }
 
-        public struct GameplayEventWriter
+        public struct OwnerLocalFactWriter
         {
             private EntityManager _em;
             private Entity _streamEntity;
@@ -438,7 +438,7 @@ namespace GAS.Runtime
             private int _currentFrame;
             private bool _isCreated;
 
-            internal GameplayEventWriter(
+            internal OwnerLocalFactWriter(
                 EntityManager em,
                 Entity streamEntity,
                 GEEffectCommandStreamComponent stream,
@@ -457,7 +457,7 @@ namespace GAS.Runtime
 
             public int CurrentFrame => _currentFrame;
 
-            public GameplayEventBuffer AppendGameplayEvent(in GameplayEventBuffer fact)
+            public GameplayEventBuffer AppendFact(in GameplayEventBuffer fact)
             {
                 if (!_isCreated)
                     return default;
@@ -622,7 +622,7 @@ namespace GAS.Runtime
                 currentFrame);
         }
 
-        public static GameplayEventWriter BeginGameplayEventWriter(
+        public static OwnerLocalFactWriter BeginOwnerLocalFactWriter(
             EntityManager em,
             Entity streamEntity,
             int currentFrame)
@@ -633,7 +633,7 @@ namespace GAS.Runtime
                 return default;
 
             var stream = em.GetComponentData<GEEffectCommandStreamComponent>(streamEntity);
-            return new GameplayEventWriter(
+            return new OwnerLocalFactWriter(
                 em,
                 streamEntity,
                 stream,

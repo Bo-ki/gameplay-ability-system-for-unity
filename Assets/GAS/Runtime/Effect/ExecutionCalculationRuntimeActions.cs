@@ -16,17 +16,17 @@ namespace GAS.Runtime
             float value,
             int calculationCode = 0)
         {
-            var hasEventWriter = TryBeginGameplayEventWriter(em, out var eventWriter);
+            var hasFactWriter = TryBeginOwnerLocalFactWriter(em, out var factWriter);
             var changed = SetOutputValue(
                 em,
                 ge,
                 context,
                 outputKey,
                 value,
-                ref eventWriter,
+                ref factWriter,
                 calculationCode);
-            if (hasEventWriter)
-                eventWriter.Flush();
+            if (hasFactWriter)
+                factWriter.Flush();
             return changed;
         }
 
@@ -36,14 +36,14 @@ namespace GAS.Runtime
             in GEContextComponent context,
             int outputKey,
             float value,
-            ref EffectCommandSpecStream.GameplayEventWriter eventWriter,
+            ref EffectCommandSpecStream.OwnerLocalFactWriter factWriter,
             int calculationCode = 0)
         {
             if (!WriteOutputValue(em, ge, outputKey, value))
                 return false;
 
             EnqueueOutputUpdatedFact(
-                ref eventWriter,
+                ref factWriter,
                 ge,
                 context,
                 ResolveEventCode(calculationCode, outputKey),
@@ -93,27 +93,27 @@ namespace GAS.Runtime
             int eventCode,
             float value)
         {
-            if (!TryBeginGameplayEventWriter(em, out var eventWriter))
+            if (!TryBeginOwnerLocalFactWriter(em, out var factWriter))
                 return;
 
             EnqueueOutputUpdatedFact(
-                ref eventWriter,
+                ref factWriter,
                 ge,
                 context,
                 eventCode,
                 value);
-            eventWriter.Flush();
+            factWriter.Flush();
         }
 
         public static void EnqueueOutputUpdatedFact(
-            ref EffectCommandSpecStream.GameplayEventWriter eventWriter,
+            ref EffectCommandSpecStream.OwnerLocalFactWriter factWriter,
             Entity ge,
             in GEContextComponent context,
             int eventCode,
             float value)
         {
             EnqueueExecutionFact(
-                ref eventWriter,
+                ref factWriter,
                 ge,
                 context,
                 EGameplayEventType.ExecutionCalculationOutputUpdated,
@@ -156,17 +156,17 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueExecutionFact(
-            ref EffectCommandSpecStream.GameplayEventWriter eventWriter,
+            ref EffectCommandSpecStream.OwnerLocalFactWriter factWriter,
             Entity ge,
             in GEContextComponent context,
             EGameplayEventType type,
             int eventCode,
             float value)
         {
-            if (!eventWriter.IsCreated)
+            if (!factWriter.IsCreated)
                 return;
 
-            eventWriter.AppendGameplayEvent(new GameplayEventBuffer
+            factWriter.AppendFact(new GameplayEventBuffer
             {
                 EventType = type,
                 Domain = EGameplayFactDomain.ExecutionCalculation,
@@ -182,19 +182,19 @@ namespace GAS.Runtime
             });
         }
 
-        private static bool TryBeginGameplayEventWriter(
+        private static bool TryBeginOwnerLocalFactWriter(
             EntityManager em,
-            out EffectCommandSpecStream.GameplayEventWriter eventWriter)
+            out EffectCommandSpecStream.OwnerLocalFactWriter factWriter)
         {
-            eventWriter = default;
+            factWriter = default;
             if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity))
                 return false;
 
-            eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(
+            factWriter = EffectCommandSpecStream.BeginOwnerLocalFactWriter(
                 em,
                 streamEntity,
                 GASRuntimeFrameContext.ResolveCurrentFrame(em));
-            return eventWriter.IsCreated;
+            return factWriter.IsCreated;
         }
     }
 }

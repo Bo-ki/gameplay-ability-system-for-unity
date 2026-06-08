@@ -1035,20 +1035,24 @@ Assert-FileNotContains `
     -Message "GEEffectCommandSpecStream must not expose implicit singleton command writer helpers."
 Assert-FileNotContains `
     -Path $streamPath `
-    -Pattern "BeginGameplayEventWriter\(EntityManager em\)" `
-    -Message "GEEffectCommandSpecStream must not expose implicit singleton gameplay event writer helpers."
+    -Pattern "BeginGameplayEventWriter|GameplayEventWriter" `
+    -Message "GEEffectCommandSpecStream must not expose legacy gameplay event writer helpers after owner-local fact migration."
+Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "OwnerLocalFactWriter" `
+    -Message "GEEffectCommandSpecStream must expose an explicit owner-local fact writer."
 Assert-FileContains `
     -Path $streamPath `
     -Pattern "_em\.GetBuffer<OwnerLocalGameplayFactBuffer>\(owner\)\.Add\(new OwnerLocalGameplayFactBuffer" `
-    -Message "GEEffectCommandSpecStream gameplay event writer must append facts through ASC owner-local fact buffers."
+    -Message "GEEffectCommandSpecStream owner-local fact writer must append facts through ASC owner-local fact buffers."
 Assert-FileContains `
     -Path $streamPath `
     -Pattern "ResolveFactOwner\(in GameplayEventBuffer fact\)" `
-    -Message "GEEffectCommandSpecStream gameplay event writer must resolve fact owner from TargetAsc/SourceAsc."
+    -Message "GEEffectCommandSpecStream owner-local fact writer must resolve fact owner from TargetAsc/SourceAsc."
 Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "DynamicBuffer<GameplayEventBuffer> _facts|_facts\.Add\(resolved\)|var facts = em\.GetBuffer<GameplayEventBuffer>\(streamEntity\)" `
-    -Message "GEEffectCommandSpecStream gameplay event writer must not keep singleton GameplayEventBuffer as its write target."
+    -Message "GEEffectCommandSpecStream owner-local fact writer must not keep singleton GameplayEventBuffer as its write target."
 Assert-FileNotContains `
     -Path $streamPath `
     -Pattern "AppendCommand\(EntityManager em|AppendGameplayEvent\(EntityManager em" `
@@ -1091,20 +1095,20 @@ Assert-FileContains `
     -Message "EffectCommandSpecStream writer must copy runtime request set-by-caller payloads to owner-local active mutation payload buffers."
 Assert-FileNotContains `
     -Path $abilityRuntimeActionsPath `
-    -Pattern "AppendGameplayEvent\(entityManager" `
-    -Message "AbilityRuntimeActions must resolve stream owner explicitly before writing facts."
+    -Pattern "BeginGameplayEventWriter|AppendGameplayEvent" `
+    -Message "AbilityRuntimeActions must use explicit owner-local fact writing for helper facts."
 Assert-FileNotContains `
     -Path $executionCalculationRuntimeActionsPath `
-    -Pattern "BeginGameplayEventWriter\(em\)" `
-    -Message "ExecutionCalculationRuntimeActions must resolve stream owner explicitly before writing facts."
+    -Pattern "BeginGameplayEventWriter|AppendGameplayEvent|GameplayEventWriter" `
+    -Message "ExecutionCalculationRuntimeActions must use explicit owner-local fact writing for helper facts."
 Assert-FileNotContains `
     -Path $effectMagnitudeResolverPath `
-    -Pattern "BeginGameplayEventWriter\(em\)" `
-    -Message "EffectMagnitudeResolver must resolve stream owner explicitly before writing facts."
+    -Pattern "BeginGameplayEventWriter|AppendGameplayEvent|GameplayEventWriter" `
+    -Message "EffectMagnitudeResolver must use explicit owner-local fact writing for fallback facts."
 Assert-FileNotContains `
     -Path $effectRuntimeUtilityPath `
-    -Pattern "BeginGameplayEventWriter\(em\)" `
-    -Message "EffectRuntimeUtility must resolve stream owner explicitly before writing facts."
+    -Pattern "BeginGameplayEventWriter|AppendGameplayEvent|GameplayEventWriter" `
+    -Message "EffectRuntimeUtility must use explicit owner-local fact writing for helper facts."
 Assert-FileContains `
     -Path $executionCalculationSystemPath `
     -Pattern "FactWriter\s*=\s*factStream\.AsWriter\(\)" `

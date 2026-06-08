@@ -570,14 +570,14 @@ namespace GAS.Runtime
             int eventCode,
             float value)
         {
-            if (!TryBeginGameplayEventWriter(em, out var eventWriter))
+            if (!TryBeginOwnerLocalFactWriter(em, out var factWriter))
                 return;
 
-            EnqueueMagnitudeFact(ref eventWriter, ge, context, type, eventCode, value);
-            eventWriter.Flush();
+            EnqueueMagnitudeFact(ref factWriter, ge, context, type, eventCode, value);
+            factWriter.Flush();
             EffectCommandSpecStream.AddMagnitudeSourceCounters(
                 em,
-                eventWriter.StreamEntity,
+                factWriter.StreamEntity,
                 currentValueLookups: 0,
                 capturedValueHits: 0,
                 captureMisses: 0,
@@ -616,17 +616,17 @@ namespace GAS.Runtime
         }
 
         private static void EnqueueMagnitudeFact(
-            ref EffectCommandSpecStream.GameplayEventWriter eventWriter,
+            ref EffectCommandSpecStream.OwnerLocalFactWriter factWriter,
             Entity ge,
             in GEContextComponent context,
             EGameplayEventType type,
             int eventCode,
             float value)
         {
-            if (!eventWriter.IsCreated)
+            if (!factWriter.IsCreated)
                 return;
 
-            eventWriter.AppendGameplayEvent(new GameplayEventBuffer
+            factWriter.AppendFact(new GameplayEventBuffer
             {
                 EventType = type,
                 Domain = EGameplayFactDomain.ExecutionCalculation,
@@ -642,19 +642,19 @@ namespace GAS.Runtime
             });
         }
 
-        private static bool TryBeginGameplayEventWriter(
+        private static bool TryBeginOwnerLocalFactWriter(
             EntityManager em,
-            out EffectCommandSpecStream.GameplayEventWriter eventWriter)
+            out EffectCommandSpecStream.OwnerLocalFactWriter factWriter)
         {
-            eventWriter = default;
+            factWriter = default;
             if (!EffectCommandSpecStream.TryGetSingleton(em, out var streamEntity))
                 return false;
 
-            eventWriter = EffectCommandSpecStream.BeginGameplayEventWriter(
+            factWriter = EffectCommandSpecStream.BeginOwnerLocalFactWriter(
                 em,
                 streamEntity,
                 GASRuntimeFrameContext.ResolveCurrentFrame(em));
-            return eventWriter.IsCreated;
+            return factWriter.IsCreated;
         }
     }
 }
