@@ -69,6 +69,17 @@ function Assert-FileNotContains {
     }
 }
 
+function Assert-FileNotExists {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Message
+    )
+
+    if (Test-Path -LiteralPath $Path) {
+        throw $Message
+    }
+}
+
 $deltaApplyPath = Join-Path $runtimePath "System\Attribute\GASAttributeModifierDeltaApplySystem.cs"
 $ascCommandResolvePath = Join-Path $runtimePath "System\ASCCommandBufferResolveSystem.cs"
 $ascArchetypePath = Join-Path $runtimePath "System\SystemGroup\GASRuntimeEntityArchetypes.cs"
@@ -104,6 +115,7 @@ $gasManagerPath = Join-Path $runtimePath "General\GASManager.cs"
 $debuggerPath = Join-Path $runtimePath "Debugger\GasRuntimeDebugger.cs"
 $generatedActiveEffectPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeActiveEffect.gen.cs"
 $activeEffectLifecycleOwnerPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\ActiveEffectLifecycleOwnerSystems.cs"
+$activeEffectLifecycleOwnerMetaPath = "$activeEffectLifecycleOwnerPath.meta"
 $generatedInstantEffectPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeEffectInstant.gen.cs"
 $generatedAbilityActivationPath = Join-Path $ProjectPath "Assets\GAS\Generated\CodeGen\Runtime\RuntimeAbilityActivation.gen.cs"
 $codeGenTemplatePath = Join-Path $ProjectPath "Assets\GAS\Editor\CodeGen\Phases\GasGlueCodeGenPhases.cs"
@@ -1169,6 +1181,12 @@ Assert-FileNotContains `
     -Path $generatedActiveEffectPath `
     -Pattern "GASActiveEffectRuntime|GEActiveEffectMutationChunkApplyJob|GEActiveEffectPreTickJob|GEActiveEffectMutationOwnerCommandCollectJob" `
     -Message "RuntimeActiveEffect.gen.cs must not regenerate active-effect runtime jobs after handwritten ownership migration."
+Assert-FileNotExists `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Message "ActiveEffectLifecycleOwnerSystems.cs must be physically removed from generated runtime asmdef after handwritten ownership migration."
+Assert-FileNotExists `
+    -Path $activeEffectLifecycleOwnerMetaPath `
+    -Message "ActiveEffectLifecycleOwnerSystems.cs.meta must be removed with the stale generated runtime companion artifact."
 Assert-FileNotContains `
     -Path $codeGenTemplatePath `
     -Pattern "Runtime/ActiveEffectLifecycleOwnerSystems\.cs" `
