@@ -13,13 +13,13 @@ GeneratedDuplicateMethodHits: `0`
 LubanNormalizedRowBoundaryHits: `0`
 AutoChessConfigBoundaryHits: `0`
 AbilityCommitQueryHits: `0`
-GeneratedRuntimeBoundaryHits: `1`
+GeneratedRuntimeBoundaryHits: `0`
 GeneratedRuntimePureGlueArtifacts: `4`
 GeneratedRuntimeLifecycleMigrationArtifacts: `0`
 GeneratedRuntimeLifecycleHits: `0`
 GeneratedRuntimeSystemRegistrationHits: `0`
 GeneratedRuntimeStructuralChangeHits: `0`
-GeneratedRuntimeOwnershipHits: `1`
+GeneratedRuntimeOwnershipHits: `0`
 GeneratedRuntimeRandomWriteLookupHits: `0`
 GeneratedRuntimeManagedConfigHits: `0`
 GeneratedRuntimeBoundaryGateMode: `blocking-unclassified-lifecycle-migration`
@@ -99,11 +99,11 @@ GeneratedRuntimeUnclassifiedBoundaryHits: `0`
 
 CurrentMode: `blocking-unclassified-lifecycle-migration`
 Target: SourceGenerator emits definition / blob / lookup / pure glue / validation only; Runtime lifecycle and ownership stay in handwritten ECS systems.
-AllowedMigrationProof: only manifest artifacts categorized as `RuntimeLifecycleMigration` may carry lifecycle / lookup / structural owner hits, and they remain bound to R2/R3/R5 exit work.
+AllowedMigrationProof: only manifest artifacts categorized as `RuntimeLifecycleMigration` may carry lifecycle / lookup / structural owner hits, and they remain bound to R2/R3/R5 exit work. Generated runtime catalog Blob materialization is not migration proof and must stay in Baking / handwritten bootstrap owners.
 
 | Rule | Gate | Disposition | File | Line | Evidence |
 | --- | --- | --- | --- | ---: | --- |
-| `NAT-01/NAT-03` | `native-container-owner` | `BootstrapDefinitionOwner` | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionCatalog.gen.cs` | `81` | `public static BlobAssetReference<GASDefinitionCatalogBlob> BuildCatalog(Allocator allocator = Allocator.Persistent)` |
+| `SYS-01/SYS-03/QRY-04/SC-01/BLOB-02/NAT-03` | none | pass | - | - | generated runtime contains no lifecycle, registration, structural, Blob materialization, ownership, lookup-owner, or managed-config boundary debt |
 
 ## Generated Runtime Hot Path Gate
 

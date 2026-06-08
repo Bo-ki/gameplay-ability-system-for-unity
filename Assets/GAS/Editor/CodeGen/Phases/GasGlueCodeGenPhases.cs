@@ -758,7 +758,7 @@ namespace GAS.Editor
             writer.Indent--;
             writer.WriteLine("}");
             writer.WriteLine("");
-            WriteCatalogBuilderClass(writer, model);
+            WriteCatalogDataClass(writer, model);
             writer.Indent--;
             writer.WriteLine("}");
         }
@@ -832,7 +832,13 @@ namespace GAS.Editor
             writer.WriteLine("{");
             writer.Indent++;
             writer.WriteLine("var entity = GetEntity(TransformUsageFlags.None);");
-            writer.WriteLine("var catalog = GASGeneratedDefinitionCatalogBuilder.BuildCatalog();");
+            writer.WriteLine("var builder = new BlobBuilder(Allocator.Temp);");
+            writer.WriteLine("try");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("ref var root = ref builder.ConstructRoot<GASDefinitionCatalogBlob>();");
+            writer.WriteLine("GASGeneratedDefinitionCatalogData.Populate(ref builder, ref root);");
+            writer.WriteLine("var catalog = builder.CreateBlobAssetReference<GASDefinitionCatalogBlob>(Allocator.Persistent);");
             writer.WriteLine("AddBlobAsset(ref catalog, out _);");
             writer.WriteLine("AddComponent(entity, new GASDefinitionCatalogComponent");
             writer.WriteLine("{");
@@ -843,6 +849,14 @@ namespace GAS.Editor
             writer.WriteLine("});");
             writer.Indent--;
             writer.WriteLine("}");
+            writer.WriteLine("finally");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("builder.Dispose();");
+            writer.Indent--;
+            writer.WriteLine("}");
+            writer.Indent--;
+            writer.WriteLine("}");
             writer.Indent--;
             writer.WriteLine("}");
             writer.Indent--;
@@ -850,16 +864,14 @@ namespace GAS.Editor
             writer.WriteLine("#endif");
         }
 
-        private static void WriteCatalogBuilderClass(IndentedWriter writer, CatalogModel model)
+        private static void WriteCatalogDataClass(IndentedWriter writer, CatalogModel model)
         {
-            writer.WriteLine("public static class GASGeneratedDefinitionCatalogBuilder");
+            writer.WriteLine("public static class GASGeneratedDefinitionCatalogData");
             writer.WriteLine("{");
             writer.Indent++;
-            writer.WriteLine("public static BlobAssetReference<GASDefinitionCatalogBlob> BuildCatalog(Allocator allocator = Allocator.Persistent)");
+            writer.WriteLine("public static void Populate(ref BlobBuilder builder, ref GASDefinitionCatalogBlob root)");
             writer.WriteLine("{");
             writer.Indent++;
-            writer.WriteLine("var builder = new BlobBuilder(Allocator.Temp);");
-            writer.WriteLine("ref var root = ref builder.ConstructRoot<GASDefinitionCatalogBlob>();");
             writer.WriteLine($"root.SchemaVersion = {SchemaVersion};");
             writer.WriteLine("");
             WriteIntArrayAllocation(writer, "AbilityCodes", model.Abilities.Select(item => item.AbilityCode).ToArray());
@@ -870,10 +882,6 @@ namespace GAS.Editor
             WriteRequirementAllocation(writer, model.Requirements);
             WriteTagMaskAllocation(writer, model.TagMasks);
             WriteGrantedAbilityAllocation(writer);
-            writer.WriteLine("");
-            writer.WriteLine("var blob = builder.CreateBlobAssetReference<GASDefinitionCatalogBlob>(allocator);");
-            writer.WriteLine("builder.Dispose();");
-            writer.WriteLine("return blob;");
             writer.Indent--;
             writer.WriteLine("}");
             writer.Indent--;
@@ -4641,6 +4649,8 @@ namespace __ROOT_NAMESPACE__
                     AddRuntimeBoundaryHitIfContains(hits, path, lineNumber, line, "NAT-01/NAT-03", "native-container-owner", "new NativeParallelHashMap<");
                     AddRuntimeBoundaryHitIfContains(hits, path, lineNumber, line, "NAT-01/NAT-03", "native-container-owner", "Allocator.TempJob");
                     AddRuntimeBoundaryHitIfContains(hits, path, lineNumber, line, "NAT-01/NAT-03", "native-container-owner", "Allocator.Persistent");
+                    AddRuntimeBoundaryHitIfContains(hits, path, lineNumber, line, "BLOB-02/NAT-03", "native-container-owner", "new BlobBuilder(");
+                    AddRuntimeBoundaryHitIfContains(hits, path, lineNumber, line, "BLOB-02/NAT-03", "native-container-owner", "CreateBlobAssetReference<");
 
                     if (IsGeneratedRuntimeLookupOwner(line))
                     {
@@ -4713,9 +4723,6 @@ namespace __ROOT_NAMESPACE__
             GasCodeGenManifest manifest,
             GeneratedHotPathRegressionHit hit)
         {
-            if (IsGeneratedRuntimeBoundaryBootstrapDefinitionOwner(context, hit))
-                return "BootstrapDefinitionOwner";
-
             return IsGeneratedRuntimeBoundaryMigrationProof(context, manifest, hit)
                 ? "MigrationProofOnly"
                 : "Blocking";
@@ -4726,8 +4733,7 @@ namespace __ROOT_NAMESPACE__
             GasCodeGenManifest manifest,
             GeneratedHotPathRegressionHit hit)
         {
-            return IsGeneratedRuntimeBoundaryMigrationProof(context, manifest, hit)
-                   || IsGeneratedRuntimeBoundaryBootstrapDefinitionOwner(context, hit);
+            return IsGeneratedRuntimeBoundaryMigrationProof(context, manifest, hit);
         }
 
         private static bool IsGeneratedRuntimeBoundaryMigrationProof(
@@ -4759,15 +4765,6 @@ namespace __ROOT_NAMESPACE__
             return manifest.Entries.Any(entry =>
                 string.Equals(entry.ProjectRelativePath, projectRelativePath, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(entry.ArtifactCategory, "RuntimeLifecycleMigration", StringComparison.Ordinal));
-        }
-
-        private static bool IsGeneratedRuntimeBoundaryBootstrapDefinitionOwner(
-            GasCodeGenContext context,
-            GeneratedHotPathRegressionHit hit)
-        {
-            var fileName = Path.GetFileName(hit.Path);
-            return string.Equals(fileName, "DefinitionCatalog.gen.cs", StringComparison.Ordinal)
-                   && string.Equals(hit.Kind, "native-container-owner", StringComparison.Ordinal);
         }
 
         private static IReadOnlyList<GeneratedBoundaryHit> CollectAbilityCommitQueryHits(

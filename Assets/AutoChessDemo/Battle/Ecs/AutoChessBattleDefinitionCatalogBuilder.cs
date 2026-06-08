@@ -17,7 +17,7 @@ namespace GAS.AutoChessDemo
             if (_installedCatalog.IsCreated)
                 _installedCatalog.Dispose();
 
-            _installedCatalog = GASGeneratedDefinitionCatalogBuilder.BuildCatalog(Allocator.Persistent);
+            _installedCatalog = BuildCatalog(Allocator.Persistent);
             _catalogEntity = ResolveCatalogEntity(entityManager);
             _catalogWorld = entityManager.World;
             entityManager.SetName(_catalogEntity, "AutoChessBattleDefinitionCatalog");
@@ -67,6 +67,21 @@ namespace GAS.AutoChessDemo
 
             _installedCatalog.Dispose();
             _installedCatalog = default;
+        }
+
+        private static BlobAssetReference<GASDefinitionCatalogBlob> BuildCatalog(Allocator allocator)
+        {
+            var builder = new BlobBuilder(Allocator.Temp);
+            try
+            {
+                ref var root = ref builder.ConstructRoot<GASDefinitionCatalogBlob>();
+                GASGeneratedDefinitionCatalogData.Populate(ref builder, ref root);
+                return builder.CreateBlobAssetReference<GASDefinitionCatalogBlob>(allocator);
+            }
+            finally
+            {
+                builder.Dispose();
+            }
         }
 
         private static Entity ResolveCatalogEntity(EntityManager entityManager)

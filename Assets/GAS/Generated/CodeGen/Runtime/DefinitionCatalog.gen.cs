@@ -76,12 +76,10 @@ namespace GAS.Runtime.Generated
         }
     }
 
-    public static class GASGeneratedDefinitionCatalogBuilder
+    public static class GASGeneratedDefinitionCatalogData
     {
-        public static BlobAssetReference<GASDefinitionCatalogBlob> BuildCatalog(Allocator allocator = Allocator.Persistent)
+        public static void Populate(ref BlobBuilder builder, ref GASDefinitionCatalogBlob root)
         {
-            var builder = new BlobBuilder(Allocator.Temp);
-            ref var root = ref builder.ConstructRoot<GASDefinitionCatalogBlob>();
             root.SchemaVersion = 1;
 
             var abilityCodes = builder.Allocate(ref root.AbilityCodes, 9);
@@ -1051,10 +1049,6 @@ namespace GAS.Runtime.Generated
             };
 
             builder.Allocate(ref root.GrantedAbilities, 0);
-
-            var blob = builder.CreateBlobAssetReference<GASDefinitionCatalogBlob>(allocator);
-            builder.Dispose();
-            return blob;
         }
     }
 }

@@ -21,13 +21,23 @@ namespace GAS.Runtime.Generated
         public override void Bake(GASGeneratedDefinitionCatalogAuthoring authoring)
         {
             var entity = GetEntity(TransformUsageFlags.None);
-            var catalog = GASGeneratedDefinitionCatalogBuilder.BuildCatalog();
-            AddBlobAsset(ref catalog, out _);
-            AddComponent(entity, new GASDefinitionCatalogComponent
+            var builder = new BlobBuilder(Allocator.Temp);
+            try
             {
-                Catalog = catalog,
-                Revision = authoring.Revision,
-            });
+                ref var root = ref builder.ConstructRoot<GASDefinitionCatalogBlob>();
+                GASGeneratedDefinitionCatalogData.Populate(ref builder, ref root);
+                var catalog = builder.CreateBlobAssetReference<GASDefinitionCatalogBlob>(Allocator.Persistent);
+                AddBlobAsset(ref catalog, out _);
+                AddComponent(entity, new GASDefinitionCatalogComponent
+                {
+                    Catalog = catalog,
+                    Revision = authoring.Revision,
+                });
+            }
+            finally
+            {
+                builder.Dispose();
+            }
         }
     }
 }
