@@ -7,6 +7,7 @@ namespace GAS.Runtime
 {
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
+    [UpdateAfter(typeof(GASActiveEffectRemoveSystem))]
     [UpdateBefore(typeof(GEEffectSpecBuildSystem))]
     public partial struct GEEffectCommandCatalogNormalizeSystem : ISystem
     {

@@ -232,11 +232,14 @@ namespace GAS.Runtime
 
         private static readonly Type[] CoreSimulationSystemTypes =
         {
+            typeof(GASActiveEffectPreTickSystem),
+            typeof(GASActiveEffectRemoveSystem),
+            typeof(GEEffectCommandCatalogNormalizeSystem),
+            typeof(GEEffectSpecBuildSystem),
+            typeof(GASActiveEffectMutationApplySystem),
             typeof(GEExecutionCalculationSystem),
             typeof(GEExecutionCalculationExtensionSystemGroup),
             typeof(GEExecutionCalculationOutputModifierSystem),
-            typeof(GEEffectCommandCatalogNormalizeSystem),
-            typeof(GEEffectSpecBuildSystem),
             typeof(GASAttributeSetReduceApplySystem),
             typeof(GASAttributeModifierDeltaApplySystem),
             typeof(AttributeOwnerMarkerRequestSystem),
@@ -250,11 +253,7 @@ namespace GAS.Runtime
         };
 
         private static readonly string[] GeneratedCoreSimulationSystemTypeNames =
-        {
-            "GAS.Runtime.Generated.GASActiveEffectMutationApplySystem, " + GeneratedRuntimeAssemblyName,
-            "GAS.Runtime.Generated.GASActiveEffectPreTickSystem, " + GeneratedRuntimeAssemblyName,
-            "GAS.Runtime.Generated.GASActiveEffectRemoveSystem, " + GeneratedRuntimeAssemblyName,
-        };
+            Array.Empty<string>();
 
         private static readonly Type[] StructuralCommitSystemTypes =
         {
