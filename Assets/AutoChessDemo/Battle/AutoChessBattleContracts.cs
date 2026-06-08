@@ -403,6 +403,12 @@ namespace GAS.AutoChessDemo
         public readonly int ProcessWarmupRuns;
         public readonly int ProofOnlyApiMask;
         public readonly int ReselectTriggerMask;
+        public readonly int RuntimeAccessContractEntryCount;
+        public readonly int RuntimeAccessEcsHandleProxyCount;
+        public readonly int RuntimeAccessManualSyncCount;
+        public readonly int RuntimeAccessPerformancePassRiskCount;
+        public readonly int RuntimeAccessBattleHashAffectingCount;
+        public readonly int RuntimeAccessCapabilityMask;
         public readonly int ActiveEffectSlotCount;
         public readonly int ActiveEffectSlotActiveCount;
         public readonly int ActiveEffectChunkSkipDuePeriodSlotCount;
@@ -494,6 +500,12 @@ namespace GAS.AutoChessDemo
             int processWarmupRuns,
             int proofOnlyApiMask,
             int reselectTriggerMask,
+            int runtimeAccessContractEntryCount,
+            int runtimeAccessEcsHandleProxyCount,
+            int runtimeAccessManualSyncCount,
+            int runtimeAccessPerformancePassRiskCount,
+            int runtimeAccessBattleHashAffectingCount,
+            int runtimeAccessCapabilityMask,
             int activeEffectSlotCount,
             int activeEffectSlotActiveCount,
             int activeEffectChunkSkipDuePeriodSlotCount,
@@ -584,6 +596,12 @@ namespace GAS.AutoChessDemo
             ProcessWarmupRuns = processWarmupRuns;
             ProofOnlyApiMask = proofOnlyApiMask;
             ReselectTriggerMask = reselectTriggerMask;
+            RuntimeAccessContractEntryCount = runtimeAccessContractEntryCount;
+            RuntimeAccessEcsHandleProxyCount = runtimeAccessEcsHandleProxyCount;
+            RuntimeAccessManualSyncCount = runtimeAccessManualSyncCount;
+            RuntimeAccessPerformancePassRiskCount = runtimeAccessPerformancePassRiskCount;
+            RuntimeAccessBattleHashAffectingCount = runtimeAccessBattleHashAffectingCount;
+            RuntimeAccessCapabilityMask = runtimeAccessCapabilityMask;
             ActiveEffectSlotCount = activeEffectSlotCount;
             ActiveEffectSlotActiveCount = activeEffectSlotActiveCount;
             ActiveEffectChunkSkipDuePeriodSlotCount = activeEffectChunkSkipDuePeriodSlotCount;

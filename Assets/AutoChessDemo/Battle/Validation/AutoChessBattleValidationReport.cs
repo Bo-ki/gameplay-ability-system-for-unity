@@ -95,6 +95,12 @@ namespace GAS.AutoChessDemo
                 scenario.ProcessWarmupRuns,
                 backbone.EvidenceMask,
                 reselectTriggerMask,
+                AutoChessGasRuntimeAccessContract.EntryCount,
+                AutoChessGasRuntimeAccessContract.EcsHandleProxyCount,
+                AutoChessGasRuntimeAccessContract.ManualSyncCount,
+                AutoChessGasRuntimeAccessContract.PerformancePassRiskCount,
+                AutoChessGasRuntimeAccessContract.BattleHashAffectingCount,
+                AutoChessGasRuntimeAccessContract.CapabilityMask,
                 counters.ActiveEffectSlotCount,
                 counters.ActiveEffectSlotActiveCount,
                 counters.ActiveEffectChunkSkipDuePeriodSlotCount,
@@ -229,9 +235,15 @@ namespace GAS.AutoChessDemo
                    + $"presentationDroppedLines={evidence.PresentationDroppedLineCount}, "
                    + $"presentationDisabledReason={evidence.PresentationDisabledReason}, "
                    + $"peakEventBus={evidence.PeakEventBusLength}, "
-                   + $"replayLag={evidence.ReplayLag}, "
+                    + $"replayLag={evidence.ReplayLag}, "
                     + $"proofOnlyApiMask={evidence.ProofOnlyApiMask}, "
                     + $"reselectTriggerMask={evidence.ReselectTriggerMask}, "
+                    + $"runtimeAccessContractEntries={evidence.RuntimeAccessContractEntryCount}, "
+                    + $"runtimeAccessEcsHandleProxies={evidence.RuntimeAccessEcsHandleProxyCount}, "
+                    + $"runtimeAccessManualSync={evidence.RuntimeAccessManualSyncCount}, "
+                    + $"runtimeAccessPerformancePassRisks={evidence.RuntimeAccessPerformancePassRiskCount}, "
+                    + $"runtimeAccessBattleHashAffecting={evidence.RuntimeAccessBattleHashAffectingCount}, "
+                    + $"runtimeAccessCapabilityMask=0x{evidence.RuntimeAccessCapabilityMask:X}, "
                     + $"activeEffectSlots={evidence.ActiveEffectSlotCount}, "
                     + $"activeEffectActiveSlots={evidence.ActiveEffectSlotActiveCount}, "
                     + $"activeEffectDuePeriodSlots={evidence.ActiveEffectChunkSkipDuePeriodSlotCount}, "
@@ -456,8 +468,17 @@ namespace GAS.AutoChessDemo
                    + "observationOwner=AutoChessGasObservationGateway, "
                    + "runnerSyncOwner=GASDependencyDrain, "
                    + "reportProjectionOwner=AutoChessRuntimeUnitResolver.BoundaryReportKey, "
+                   + $"runtimeAccessContractEntries={AutoChessGasRuntimeAccessContract.EntryCount}, "
+                   + $"runtimeAccessEcsHandleProxies={AutoChessGasRuntimeAccessContract.EcsHandleProxyCount}, "
+                   + $"runtimeAccessManualSync={AutoChessGasRuntimeAccessContract.ManualSyncCount}, "
+                   + $"runtimeAccessPerformancePassRisks={AutoChessGasRuntimeAccessContract.PerformancePassRiskCount}, "
                    + CreateBoundaryReportKeyCoverageSummary(result.StructuredLogSnapshot)
                    + $", factsHash=0x{CalculateFactsHash(result.StructuredLogSnapshot):X8}";
+        }
+
+        public static string CreateRuntimeAccessContractSummary()
+        {
+            return AutoChessGasRuntimeAccessContract.CreateSummary();
         }
 
         private static string Bool(bool value)
