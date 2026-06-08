@@ -15,6 +15,7 @@ namespace GAS.Editor
         private const string GameplayTagJson = "exgas_tbgameplaytags.json";
         private const string GameplayCueJson = "exgas_tbgameplaycue.json";
         private const string TimelineAbilityJson = "exgas_tbtimelineability.json";
+        private const string SourceGenConfigJson = "Datas/exgas.sourcegen.json";
         private const string OutputFileName = "Editor/LubanNormalizedRows.gen.cs";
 
         public static string Generate(GasCodeGenSettings settings)
@@ -436,11 +437,13 @@ namespace GAS.Editor
         {
             private readonly string m_projectRoot;
             private readonly GasCodeGenSettings m_settings;
+            private readonly SourceGenConfig m_sourceGenConfig;
 
             public LubanJsonReader(string projectRoot, GasCodeGenSettings settings)
             {
                 m_projectRoot = projectRoot;
                 m_settings = settings;
+                m_sourceGenConfig = SourceGenConfig.Load(projectRoot, settings);
             }
 
             public AbilityDefinitionRowModel[] CreateAbilityRows(IReadOnlyList<TimelineDefinitionRowModel> timelineRows)
@@ -633,11 +636,16 @@ namespace GAS.Editor
 
             private GameplayEffectDefinitionRowModel BuildGameplayEffectRow(JToken row)
             {
+                var gameplayEffectCode = Int(row["ID"]);
+                var name = String(row["Name"]);
                 var modifiers = Array(row["Modifiers"]);
                 var normalizedModifiers = modifiers
                     .Select(BuildModifierRow)
                     .Where(modifier => modifier.AttributeSetCode > 0 && modifier.AttributeCode > 0)
                     .ToArray();
+                var sourceGenModifiers = m_sourceGenConfig.CreateModifierRows(gameplayEffectCode, name);
+                if (sourceGenModifiers.Length > 0)
+                    normalizedModifiers = normalizedModifiers.Concat(sourceGenModifiers).ToArray();
                 var firstModifier = normalizedModifiers.Length > 0 ? normalizedModifiers[0] : default;
                 var duration = row["Duration"];
                 var period = row["Period"];
@@ -647,22 +655,22 @@ namespace GAS.Editor
                 var removeGameplayEffectsWithTags = ParseTagRequirement(row["RemoveGameplayEffectsWithTags"]);
                 var immunityTags = ParseTagRequirement(row["ImmunityTags"]);
 
-                return new GameplayEffectDefinitionRowModel
+                var model = new GameplayEffectDefinitionRowModel
                 {
-                    GameplayEffectCode = Int(row["ID"]),
-                    Name = String(row["Name"]),
+                    GameplayEffectCode = gameplayEffectCode,
+                    Name = name,
                     ModifierAttributeSetCode = firstModifier.AttributeSetCode,
                     ModifierAttributeCode = firstModifier.AttributeCode,
                     ModifierOperation = firstModifier.Operation,
                     ModifierMagnitude = firstModifier.Magnitude,
-                    ModifierMagnitudeSource = 0,
-                    ModifierMagnitudeKey = 0,
+                    ModifierMagnitudeSource = firstModifier.MagnitudeSource,
+                    ModifierMagnitudeKey = firstModifier.MagnitudeKey,
                     ModifierAttributeSetCodes = normalizedModifiers.Select(modifier => modifier.AttributeSetCode).ToArray(),
                     ModifierAttributeCodes = normalizedModifiers.Select(modifier => modifier.AttributeCode).ToArray(),
                     ModifierOperations = normalizedModifiers.Select(modifier => modifier.Operation).ToArray(),
                     ModifierMagnitudes = normalizedModifiers.Select(modifier => modifier.Magnitude).ToArray(),
-                    ModifierMagnitudeSources = normalizedModifiers.Select(_ => 0).ToArray(),
-                    ModifierMagnitudeKeys = normalizedModifiers.Select(_ => 0).ToArray(),
+                    ModifierMagnitudeSources = normalizedModifiers.Select(modifier => modifier.MagnitudeSource).ToArray(),
+                    ModifierMagnitudeKeys = normalizedModifiers.Select(modifier => modifier.MagnitudeKey).ToArray(),
                     DurationFrames = Int(duration?["Time"]),
                     PeriodFrames = Int(period?["Time"]),
                     PeriodGameplayEffectCode = FirstPositive(period?["Effects"]),
@@ -695,6 +703,8 @@ namespace GAS.Editor
                     ClearStackOnOverflow = Bool(stacking?["ClearStackOnOverflow"]),
                     OverflowGameplayEffectCode = FirstPositive(stacking?["OverflowEffects"]),
                 };
+                m_sourceGenConfig.ApplyGameplayEffectOverrides(ref model, gameplayEffectCode, name);
+                return model;
             }
 
             private ModifierRowModel BuildModifierRow(JToken row)
@@ -705,6 +715,8 @@ namespace GAS.Editor
                     AttributeCode = Int(row?["Attribute"]),
                     Operation = Int(row?["Operation"]),
                     Magnitude = Float(row?["Magnitude"]),
+                    MagnitudeSource = Int(row?["MagnitudeSource"]),
+                    MagnitudeKey = Int(row?["MagnitudeKey"]),
                 };
             }
 
@@ -772,6 +784,292 @@ namespace GAS.Editor
             private static string String(JToken token)
             {
                 return token == null || token.Type == JTokenType.Null ? string.Empty : token.Value<string>() ?? string.Empty;
+            }
+
+            private sealed class SourceGenConfig
+            {
+                private readonly ModifierAppendEntry[] m_modifierAppends;
+                private readonly GameplayEffectOverrideEntry[] m_gameplayEffectOverrides;
+
+                private SourceGenConfig(
+                    ModifierAppendEntry[] modifierAppends,
+                    GameplayEffectOverrideEntry[] gameplayEffectOverrides)
+                {
+                    m_modifierAppends = modifierAppends ?? System.Array.Empty<ModifierAppendEntry>();
+                    m_gameplayEffectOverrides = gameplayEffectOverrides
+                                                ?? System.Array.Empty<GameplayEffectOverrideEntry>();
+                }
+
+                public static SourceGenConfig Load(string projectRoot, GasCodeGenSettings settings)
+                {
+                    var path = Path.Combine(projectRoot, settings.ConfigProjectPath, SourceGenConfigJson);
+                    if (!File.Exists(path))
+                    {
+                        return new SourceGenConfig(
+                            System.Array.Empty<ModifierAppendEntry>(),
+                            System.Array.Empty<GameplayEffectOverrideEntry>());
+                    }
+
+                    var token = JToken.Parse(File.ReadAllText(path));
+                    if (token is not JObject root)
+                        throw new InvalidDataException($"SourceGen config root must be an object: {path}");
+
+                    var modifierAppends = Array(root["gameplayEffectModifierAppends"])
+                        .Select(ReadEntry)
+                        .Where(entry => entry.EffectCode > 0 || !string.IsNullOrWhiteSpace(entry.EffectName))
+                        .ToArray();
+                    var gameplayEffectOverrides = Array(root["gameplayEffectOverrides"])
+                        .Select(ReadGameplayEffectOverride)
+                        .Where(entry => entry.EffectCode > 0 || !string.IsNullOrWhiteSpace(entry.EffectName))
+                        .ToArray();
+                    return new SourceGenConfig(modifierAppends, gameplayEffectOverrides);
+                }
+
+                public ModifierRowModel[] CreateModifierRows(int gameplayEffectCode, string name)
+                {
+                    if (m_modifierAppends.Length == 0)
+                        return System.Array.Empty<ModifierRowModel>();
+
+                    var result = new List<ModifierRowModel>();
+                    for (var i = 0; i < m_modifierAppends.Length; i++)
+                    {
+                        var entry = m_modifierAppends[i];
+                        if (!entry.Matches(gameplayEffectCode, name))
+                            continue;
+
+                        result.AddRange(entry.Modifiers);
+                    }
+
+                    return result.ToArray();
+                }
+
+                public void ApplyGameplayEffectOverrides(
+                    ref GameplayEffectDefinitionRowModel model,
+                    int gameplayEffectCode,
+                    string name)
+                {
+                    if (m_gameplayEffectOverrides.Length == 0)
+                        return;
+
+                    for (var i = 0; i < m_gameplayEffectOverrides.Length; i++)
+                    {
+                        var entry = m_gameplayEffectOverrides[i];
+                        if (!entry.Matches(gameplayEffectCode, name))
+                            continue;
+
+                        entry.Apply(ref model);
+                    }
+                }
+
+                private static ModifierAppendEntry ReadEntry(JToken token)
+                {
+                    if (token is not JObject obj)
+                        throw new InvalidDataException("gameplayEffectModifierAppends item must be an object.");
+
+                    return new ModifierAppendEntry
+                    {
+                        EffectCode = Int(obj["effectCode"]),
+                        EffectName = String(obj["effectName"]),
+                        Modifiers = Array(obj["modifiers"])
+                            .Select(ReadModifier)
+                            .Where(modifier => modifier.AttributeSetCode > 0 && modifier.AttributeCode > 0)
+                            .ToArray(),
+                    };
+                }
+
+                private static ModifierRowModel ReadModifier(JToken token)
+                {
+                    if (token is not JObject obj)
+                        throw new InvalidDataException("SourceGen modifier append row must be an object.");
+
+                    return new ModifierRowModel
+                    {
+                        AttributeSetCode = Int(obj["attributeSet"]),
+                        AttributeCode = Int(obj["attribute"]),
+                        Operation = Int(obj["operation"]),
+                        Magnitude = Float(obj["magnitude"]),
+                        MagnitudeSource = ReadMagnitudeSource(obj["magnitudeSource"]),
+                        MagnitudeKey = Int(obj["magnitudeKey"]),
+                    };
+                }
+
+                private static GameplayEffectOverrideEntry ReadGameplayEffectOverride(JToken token)
+                {
+                    if (token is not JObject obj)
+                        throw new InvalidDataException("gameplayEffectOverrides item must be an object.");
+
+                    return new GameplayEffectOverrideEntry
+                    {
+                        EffectCode = Int(obj["effectCode"]),
+                        EffectName = String(obj["effectName"]),
+                        DurationFrames = ReadOptionalInt(obj["durationFrames"]),
+                        PeriodFrames = ReadOptionalInt(obj["periodFrames"]),
+                        PeriodGameplayEffectCode = ReadOptionalInt(obj["periodGameplayEffectCode"]),
+                        StackLimitCount = ReadOptionalInt(obj["stackLimitCount"]),
+                        StackType = ReadOptionalEnum(
+                            obj["stackType"],
+                            "stackType",
+                            ("AggregateBySource", 0),
+                            ("AggregateByTarget", 1)),
+                        EffectDurationRefreshPolicy = ReadOptionalEnum(
+                            obj["effectDurationRefreshPolicy"],
+                            "effectDurationRefreshPolicy",
+                            ("NeverRefresh", 0),
+                            ("RefreshOnSuccessfulApplication", 1)),
+                        EffectPeriodResetPolicy = ReadOptionalEnum(
+                            obj["effectPeriodResetPolicy"],
+                            "effectPeriodResetPolicy",
+                            ("NeverRefresh", 0),
+                            ("ResetOnSuccessfulApplication", 1)),
+                        EffectExpirationPolicy = ReadOptionalEnum(
+                            obj["effectExpirationPolicy"],
+                            "effectExpirationPolicy",
+                            ("ClearEntireStack", 0),
+                            ("RemoveSingleStackAndRefreshDuration", 1),
+                            ("RefreshDuration", 2)),
+                        DenyOverflowApplication = ReadOptionalBool(obj["denyOverflowApplication"]),
+                        ClearStackOnOverflow = ReadOptionalBool(obj["clearStackOnOverflow"]),
+                        OverflowGameplayEffectCode = ReadOptionalInt(obj["overflowGameplayEffectCode"]),
+                    };
+                }
+
+                private static int? ReadOptionalInt(JToken token)
+                {
+                    if (token == null || token.Type == JTokenType.Null)
+                        return null;
+
+                    if (token.Type == JTokenType.Integer)
+                        return token.Value<int>();
+
+                    var value = token.Value<string>();
+                    return int.TryParse(value, out var parsed)
+                        ? parsed
+                        : throw new InvalidDataException($"Expected integer value: {value}");
+                }
+
+                private static int? ReadOptionalEnum(
+                    JToken token,
+                    string fieldName,
+                    params (string Name, int Value)[] names)
+                {
+                    if (token == null || token.Type == JTokenType.Null)
+                        return null;
+
+                    if (token.Type == JTokenType.Integer)
+                        return token.Value<int>();
+
+                    var value = token.Value<string>();
+                    for (var i = 0; i < names.Length; i++)
+                    {
+                        if (string.Equals(value, names[i].Name, StringComparison.Ordinal))
+                            return names[i].Value;
+                    }
+
+                    throw new InvalidDataException($"Unknown {fieldName}: {value}");
+                }
+
+                private static bool? ReadOptionalBool(JToken token)
+                {
+                    if (token == null || token.Type == JTokenType.Null)
+                        return null;
+
+                    if (token.Type == JTokenType.Boolean)
+                        return token.Value<bool>();
+
+                    var value = token.Value<string>();
+                    return bool.TryParse(value, out var parsed)
+                        ? parsed
+                        : throw new InvalidDataException($"Expected boolean value: {value}");
+                }
+
+                private static int ReadMagnitudeSource(JToken token)
+                {
+                    if (token == null || token.Type == JTokenType.Null)
+                        return 0;
+
+                    if (token.Type == JTokenType.Integer)
+                        return token.Value<int>();
+
+                    var value = token.Value<string>();
+                    return value switch
+                    {
+                        "Constant" => 0,
+                        "SetByCaller" => 1,
+                        "SourceAttribute" => 2,
+                        "TargetAttribute" => 3,
+                        "ExecutionCalculation" => 4,
+                        "StackCount" => 5,
+                        _ => throw new InvalidDataException($"Unknown magnitudeSource: {value}"),
+                    };
+                }
+
+                private struct ModifierAppendEntry
+                {
+                    public int EffectCode;
+                    public string EffectName;
+                    public ModifierRowModel[] Modifiers;
+
+                    public bool Matches(int gameplayEffectCode, string name)
+                    {
+                        if (EffectCode > 0 && EffectCode == gameplayEffectCode)
+                            return true;
+
+                        return !string.IsNullOrWhiteSpace(EffectName)
+                               && string.Equals(EffectName, name, StringComparison.Ordinal);
+                    }
+                }
+
+                private struct GameplayEffectOverrideEntry
+                {
+                    public int EffectCode;
+                    public string EffectName;
+                    public int? DurationFrames;
+                    public int? PeriodFrames;
+                    public int? PeriodGameplayEffectCode;
+                    public int? StackLimitCount;
+                    public int? StackType;
+                    public int? EffectDurationRefreshPolicy;
+                    public int? EffectPeriodResetPolicy;
+                    public int? EffectExpirationPolicy;
+                    public bool? DenyOverflowApplication;
+                    public bool? ClearStackOnOverflow;
+                    public int? OverflowGameplayEffectCode;
+
+                    public bool Matches(int gameplayEffectCode, string name)
+                    {
+                        if (EffectCode > 0 && EffectCode == gameplayEffectCode)
+                            return true;
+
+                        return !string.IsNullOrWhiteSpace(EffectName)
+                               && string.Equals(EffectName, name, StringComparison.Ordinal);
+                    }
+
+                    public void Apply(ref GameplayEffectDefinitionRowModel model)
+                    {
+                        if (DurationFrames.HasValue)
+                            model.DurationFrames = DurationFrames.Value;
+                        if (PeriodFrames.HasValue)
+                            model.PeriodFrames = PeriodFrames.Value;
+                        if (PeriodGameplayEffectCode.HasValue)
+                            model.PeriodGameplayEffectCode = PeriodGameplayEffectCode.Value;
+                        if (StackLimitCount.HasValue)
+                            model.StackLimitCount = StackLimitCount.Value;
+                        if (StackType.HasValue)
+                            model.StackType = StackType.Value;
+                        if (EffectDurationRefreshPolicy.HasValue)
+                            model.EffectDurationRefreshPolicy = EffectDurationRefreshPolicy.Value;
+                        if (EffectPeriodResetPolicy.HasValue)
+                            model.EffectPeriodResetPolicy = EffectPeriodResetPolicy.Value;
+                        if (EffectExpirationPolicy.HasValue)
+                            model.EffectExpirationPolicy = EffectExpirationPolicy.Value;
+                        if (DenyOverflowApplication.HasValue)
+                            model.DenyOverflowApplication = DenyOverflowApplication.Value;
+                        if (ClearStackOnOverflow.HasValue)
+                            model.ClearStackOnOverflow = ClearStackOnOverflow.Value;
+                        if (OverflowGameplayEffectCode.HasValue)
+                            model.OverflowGameplayEffectCode = OverflowGameplayEffectCode.Value;
+                    }
+                }
             }
 
             private static int FirstPositive(JToken token)
@@ -977,6 +1275,8 @@ namespace GAS.Editor
             public int AttributeCode;
             public int Operation;
             public float Magnitude;
+            public int MagnitudeSource;
+            public int MagnitudeKey;
         }
     }
 }

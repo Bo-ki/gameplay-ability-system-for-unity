@@ -1,6 +1,6 @@
 {
   "OutputRoot": "Assets/AutoChessDemo/Generated",
-  "InputHash": "c2f4bf1737cd689d5a3e4a17f81df2cb407e677bff1e628fd178d9f5b45c158f",
+  "InputHash": "fce23ddf02035dd89e6ae773f259d4361de190b9a27bdcf3fb7bc5b5b767c44d",
   "Entries": [
     {
       "PhaseName": "AutoChessDemoConfig",
@@ -8,6 +8,7 @@
       "ProjectRelativePath": "Assets/AutoChessDemo/Generated/AutoChessGeneratedConfig.gen.cs",
       "Layer": "Runtime",
       "RuntimeVisible": true,
+      "ArtifactCategory": "",
       "VersionControlled": true
     }
   ]

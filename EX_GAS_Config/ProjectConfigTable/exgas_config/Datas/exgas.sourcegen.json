@@ -1,0 +1,26 @@
+{
+  "gameplayEffectModifierAppends": [
+    {
+      "effectCode": 9203,
+      "effectName": "AutoChessPlayerPoison",
+      "modifiers": [
+        {
+          "attributeSet": 9001,
+          "attribute": 2,
+          "operation": 0,
+          "magnitude": 0.0,
+          "magnitudeSource": "SourceAttribute",
+          "magnitudeKey": 0
+        }
+      ]
+    }
+  ],
+  "gameplayEffectOverrides": [
+    {
+      "effectCode": 9203,
+      "effectName": "AutoChessPlayerPoison",
+      "effectDurationRefreshPolicy": "NeverRefresh",
+      "effectExpirationPolicy": "RemoveSingleStackAndRefreshDuration"
+    }
+  ]
+}

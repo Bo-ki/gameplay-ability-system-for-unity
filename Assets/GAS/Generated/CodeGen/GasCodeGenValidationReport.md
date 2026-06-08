@@ -1,6 +1,6 @@
 # GAS CodeGen Validation Report
 
-InputHash: `3147276489687716b093ae7874cdb06b0d64f3b8ed9ce80d2daed29d5e1495bc`
+InputHash: `fce23ddf02035dd89e6ae773f259d4361de190b9a27bdcf3fb7bc5b5b767c44d`
 RowCount: `7`
 OrphansDeleted: `0`
 LubanCSharpOutput: `Assets/DataGenerated/Luban/CSharp`
@@ -99,11 +99,11 @@ GeneratedRuntimeUnclassifiedBoundaryHits: `0`
 
 CurrentMode: `blocking-unclassified-lifecycle-migration`
 Target: SourceGenerator emits definition / blob / lookup / pure glue / validation only; Runtime lifecycle and ownership stay in handwritten ECS systems.
-AllowedMigrationProof: only manifest artifacts categorized as `RuntimeLifecycleMigration` may carry lifecycle / lookup / structural owner hits, and they remain bound to R2/R3/R5 exit work. Generated runtime catalog Blob materialization is not migration proof and must stay in Baking / handwritten bootstrap owners.
+AllowedMigrationProof: only manifest artifacts categorized as `RuntimeLifecycleMigration` may carry lifecycle / lookup / structural owner hits, and they remain bound to R2/R3/R5 exit work.
 
 | Rule | Gate | Disposition | File | Line | Evidence |
 | --- | --- | --- | --- | ---: | --- |
-| `SYS-01/SYS-03/QRY-04/SC-01/BLOB-02/NAT-03` | none | pass | - | - | generated runtime contains no lifecycle, registration, structural, Blob materialization, ownership, lookup-owner, or managed-config boundary debt |
+| `SYS-01/SYS-03/QRY-04/SC-01/NAT-03` | none | pass | - | - | generated runtime contains no lifecycle, registration, structural, ownership, lookup-owner, or managed-config boundary debt |
 
 ## Generated Runtime Hot Path Gate
 

@@ -14,7 +14,7 @@ namespace GAS.Runtime.Generated
         public const int SchemaVersion = 1;
         public const int AbilityCount = 9;
         public const int GameplayEffectCount = 17;
-        public const int ModifierCount = 11;
+        public const int ModifierCount = 12;
         public const int TagMaskCount = 7;
     }
 
@@ -696,14 +696,14 @@ namespace GAS.Runtime.Generated
                 StackingCode = 0,
                 StackLimitCount = 3,
                 StackType = 9203,
-                EffectDurationRefreshPolicy = 1,
+                EffectDurationRefreshPolicy = 0,
                 EffectPeriodResetPolicy = 1,
-                EffectExpirationPolicy = 0,
+                EffectExpirationPolicy = 1,
                 DenyOverflowApplication = (byte)0,
                 ClearStackOnOverflow = (byte)0,
                 OverflowGameplayEffectCode = 0,
                 ModifierStart = 10,
-                ModifierCount = 0,
+                ModifierCount = 1,
                 RequirementStart = 3,
                 RequirementCount = 0,
                 GrantedAbilityStart = 0,
@@ -732,7 +732,7 @@ namespace GAS.Runtime.Generated
                 DenyOverflowApplication = (byte)0,
                 ClearStackOnOverflow = (byte)0,
                 OverflowGameplayEffectCode = 0,
-                ModifierStart = 10,
+                ModifierStart = 11,
                 ModifierCount = 1,
                 RequirementStart = 3,
                 RequirementCount = 0,
@@ -762,7 +762,7 @@ namespace GAS.Runtime.Generated
                 DenyOverflowApplication = (byte)0,
                 ClearStackOnOverflow = (byte)0,
                 OverflowGameplayEffectCode = 0,
-                ModifierStart = 11,
+                ModifierStart = 12,
                 ModifierCount = 0,
                 RequirementStart = 3,
                 RequirementCount = 0,
@@ -770,7 +770,7 @@ namespace GAS.Runtime.Generated
                 GrantedAbilityCount = 0,
             };
 
-            var modifiers = builder.Allocate(ref root.Modifiers, 11);
+            var modifiers = builder.Allocate(ref root.Modifiers, 12);
             modifiers[0] = new GASCatalogModifierDefinitionBlob
             {
                 GameplayEffectCode = 1002,
@@ -952,6 +952,24 @@ namespace GAS.Runtime.Generated
                 PostAdd = 0f,
             };
             modifiers[10] = new GASCatalogModifierDefinitionBlob
+            {
+                GameplayEffectCode = 9203,
+                ModifierIndex = 0,
+                AttributeSetCode = 9001,
+                AttributeCode = 2,
+                Operation = (EModifierOp)0,
+                BaseMagnitude = 0f,
+                MagnitudeSource = (EMagnitudeSource)2,
+                MagnitudeKey = 0,
+                CaptureAttributeSetCode = 9001,
+                CaptureAttributeCode = 2,
+                CaptureTiming = (EAttributeCaptureTiming)0,
+                FallbackMagnitude = 0f,
+                Coefficient = 1f,
+                PreAdd = 0f,
+                PostAdd = 0f,
+            };
+            modifiers[11] = new GASCatalogModifierDefinitionBlob
             {
                 GameplayEffectCode = 9204,
                 ModifierIndex = 0,
