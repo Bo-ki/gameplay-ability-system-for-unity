@@ -1,8 +1,8 @@
 # 2026-06-08 Debugger Profile Probe 驱动下一轮瘦身计划
 
 > Owner：`02-主线任务树`
-> 状态：切片 A 已完成，pending marker 反例已撤回，切片 C0/R7-R3 frame-lane counters 已完成，切片 C1/R7-R3 数据形态优化下一轮优先领取
-> 输入事实：`../00-当前架构事实/ISSUE-003-RuntimeCoreDebugger证据不足.md`、`../00-当前架构事实/ISSUE-014-Headless纯逻辑预算超标.md`、`../00-当前架构事实/_归档/2026-06-08-DebuggerProfileProbe-Run6.md`、`../00-当前架构事实/_归档/2026-06-08-DebuggerHotspotAttributionMatrix-Run4.md`、`../00-当前架构事实/_归档/2026-06-08-OwnerLocalPendingMarkerRejected-Run7.md`
+> 状态：切片 A 已完成，pending marker 反例已撤回，切片 C0/R7-R3 frame-lane counters 已完成，切片 C1/ActiveEffect NextTickFrame skip 已完成，下一轮优先领取 R3 fact fan-in 与 R7/R3 prepare dirty lane
+> 输入事实：`../00-当前架构事实/ISSUE-003-RuntimeCoreDebugger证据不足.md`、`../00-当前架构事实/ISSUE-014-Headless纯逻辑预算超标.md`、`../00-当前架构事实/_归档/2026-06-08-DebuggerProfileProbe-Run6.md`、`../00-当前架构事实/_归档/2026-06-08-DebuggerHotspotAttributionMatrix-Run4.md`、`../00-当前架构事实/_归档/2026-06-08-OwnerLocalPendingMarkerRejected-Run7.md`、`../00-当前架构事实/_归档/2026-06-08-R7FrameLaneCounters-Run8.md`、`../00-当前架构事实/_归档/2026-06-08-ActiveEffectNextTickFrameSkip-Run9b.md`
 > 目标约束：`../01-目标态架构共识/07-RuntimeCoreDebuggerSpec.md`
 
 本计划只定义下一轮可领取切片。实现事实回写 `00`，验证流水回写 `04`，目标态约束回写 `01`。
@@ -11,7 +11,7 @@
 
 DebuggerProbe Run7 证明 x50 strict pure logic budget 继续通过，但不能宣称 DOTS 性能优秀：Profiler evidence disabled，且 Debugger/Journaling/hotspot attribution matrix 已定位到明确的数据形态热点。Run6 的 pending marker 尝试已被证伪并撤回：局部 `FramePrepare` 下降不能抵消 `EnableComponent` / Job safety / CoreSimulation / battle completion 的整体回归。下一轮不应泛泛压总 ms，也不应继续沿高频 enableable marker 做 dirty lane，而应按 Debugger evidence 领取以下 owner：
 
-DebuggerProbe Run8 进一步把 R7/R3 热点从 Journaling TopN 推断推进到 Runtime-owned frame-lane counters：instant prepare、active mutation prepare 与 active effect pre-tick 已输出 scanned / skipped / dirty owner、due / noop slot 和 mutation write 计数。Run8 说明下一轮可以针对 owner 稀疏扫描、buffer clear/copy 和 due slot lane 做真实数据形态优化；但 `performanceExcellentPassed=False` 仍由 Profiler disabled 阻塞。
+DebuggerProbe Run8 进一步把 R7/R3 热点从 Journaling TopN 推断推进到 Runtime-owned frame-lane counters：instant prepare、active mutation prepare 与 active effect pre-tick 已输出 scanned / skipped / dirty owner、due / noop slot 和 mutation write 计数。Run9b 已完成 ActiveEffect owner-level `NextTickFrame` skip：pre-tick processed owners 从 `950` 降到 `600`，scanned slots 从 `1200` 降到 `750`，noop slots 从 `650` 降到 `200`，x50 strict budget 仍通过。下一轮不应继续在 ActiveEffect pre-tick 第一刀上加日志，而应转向仍在 matrix 顶部的 active mutation prepare、instant command prepare、OwnerLocalGameplayFactBuffer fact fan-in、GEEffectCommandStream singleton RW 和 Profiler enabled scale gate；`performanceExcellentPassed=False` 仍由 Profiler disabled 阻塞。
 
 1. R4：Debugger hotspot attribution matrix 已完成第一版；diagnostic materialization owner 仍需继续拆分。
 2. R3：OwnerLocalGameplayFactBuffer fact fan-in / dirty span lane 是下一轮首领。
@@ -63,6 +63,7 @@ Run6 / Run7 修正结论：
 | Run6 pending marker | `avgTickMs=12.643ms`、`CoreSimulation.avgMs=11.698ms`、`journalingWorldRecords=505543`、`EnableComponent=37384`、Job safety / aliasing exception、`completed=False` | 高频 enableable marker 不是当前 owner-local command / mutation dirty lane 的正确方向 |
 | Run7 marker removed | `passed=True`、`headlessLogicBudgetPassed=True`、`avgTickMs=0.970ms`、`CoreSimulation.avgMs=0.497ms`、`EnableComponent=650`、`journalingWorldRecords=87426` | 退回 owner-local buffer 事实源并通过防回归门；下一轮继续处理真实 RW 热点 |
 | Run8 frame-lane counters | `passed=True`、`headlessLogicBudgetPassed=True`、`avgTickMs=1.217ms`、`CoreSimulation.avgMs=0.726ms`、instant prepare `2400/1450/950`、active mutation prepare `2400/1750/650`、active effect pre-tick owners `2400/950/1450`、slots `1200/550/650` | Debugger 已能用 Runtime-owned counters 定位 R7/R3 稀疏 owner scan 与 pre-tick slot scan；下一步进入 dirty / due lane 设计，而不是继续补日志 |
+| Run9b ActiveEffect NextTickFrame skip | `passed=True`、`headlessLogicBudgetPassed=True`、`avgTickMs=1.057ms`、`CoreSimulation.avgMs=0.571ms`、active effect pre-tick owners `2400/600/1800`、slots `750/550/200`、mutation writes `600` | ActiveEffect pre-tick 第一刀完成：未到期 owner 的 resource capture / slot scan 被跳过；Run9 首跑为编译 / 冷启动污染样本，不作为性能基线 |
 
 Agent 读取策略：
 
@@ -108,23 +109,44 @@ Agent 读取策略：
 
 结论：Run8 没有宣称 R7/R3 优化完成，只把下一轮优化入口从“看 TopN 猜热点”推进为“对比 frame-lane counters”。后续必须让 scanned owner / skipped owner / noop slot / buffer clear-copy 等数据形态指标下降，或给出无法下降的业务原因。
 
-## 切片 C1：ActiveEffect PreTick / Instant Command Prepare RW 拆分
+## 切片 C1：ActiveEffect PreTick NextTickFrame Skip（已完成）
 
-目标：拆解 `GASActiveEffectPreTickSystem=15800`、`OwnerLocalInstantCommandFramePrepareSystem=9000`、`ActiveEffectOwnerLocalMutationFramePrepareSystem=13000` 三个 GetBufferRW 热点。禁止继续使用 Run6 已证伪的高频 enableable marker 作为默认方案；下一刀应围绕 dirty / due slot lane、owner-local range、buffer clear policy 或 generated index。
+目标：先拆 ActiveEffect pre-tick 的 due slot lane，跳过未到期 owner 的 source snapshot gather、resource capture 和 slot scan。禁止继续使用 Run6 已证伪的高频 enableable marker 作为默认方案。
+
+完成范围：
+
+1. `GASActiveEffectPreTickSystem`
+2. `ASCActiveEffectsComponent`
+3. `ActiveEffectChunkSkipIndexSnapshot`
+4. `GEActiveEffectPreTickSourceAttributeSnapshotGatherJob`
+5. `GEActiveEffectPreTickJob`
+
+完成证据：
+
+1. Run summary：`TestResults/AutoChess/Headless/AutoChessHeadlessValidation-DebuggerProbe-20260608-Run9b-NextTickFrameSkip.txt`。
+2. Brief：`TestResults/AutoChess/Analysis/DebuggerProbe-20260608-Run9b-NextTickFrameSkip/AutoChessProfileBrief.md`。
+3. 子报告：`TestResults/AutoChess/Analysis/DebuggerProbe-20260608-Run9b-NextTickFrameSkip/SubReports/DebuggerEvidence.md`、`HotspotAttribution.md`。
+4. 归档：`../00-当前架构事实/_归档/2026-06-08-ActiveEffectNextTickFrameSkip-Run9b.md`。
+
+结论：本切片让 active effect pre-tick owners `processed` 从 Run8 的 `950` 降到 `600`，`skipped` 从 `1450` 升到 `1800`，scanned slots 从 `1200` 降到 `750`，noop slots 从 `650` 降到 `200`，且 mutation writes 仍为 `600`。这说明 owner-level due lane 有效；但 Journaling TopN 仍显示 active mutation prepare、instant command prepare 和 active effect pre-tick GetBufferRW 在 High row，下一轮还需要处理 buffer clear/copy 与 broader fact fan-in。
+
+## 切片 C2：Instant / ActiveMutation Prepare Dirty Lane
+
+目标：拆解 `OwnerLocalInstantCommandFramePrepareSystem=9000` 与 `ActiveEffectOwnerLocalMutationFramePrepareSystem=13000` 暴露的 per-frame buffer clear/copy 热点。禁止恢复高频 enableable marker；优先设计 owner-local dirty span、generated dirty owner lane 或 buffer clear policy。
 
 执行范围：
 
-1. `GASActiveEffectPreTickSystem`
-2. `OwnerLocalInstantCommandFramePrepareSystem`
-3. `ActiveEffectOwnerLocalMutationFramePrepareSystem`
-4. 相关 active effect slot / owner-local command buffers。
+1. `OwnerLocalInstantCommandFramePrepareSystem`
+2. `ActiveEffectOwnerLocalMutationFramePrepareSystem`
+3. owner-local instant command / set-by-caller buffers
+4. active mutation command / set-by-caller buffers
 
 验收：
 
-1. 已完成 counter probe：每个系统输出 chunk count、owner count、active slot count、skipped slot count、buffer write count。
-2. 下一步必须证明热点来自必要 active slot 遍历，或改为 dirty / due slot lane。
-3. AutoChess x50 report TopN 可对比优化前后。
-4. 优化后不得出现 `EnableComponent` TopN 膨胀、Job safety aliasing exception 或 battle completion 回归。
+1. AutoChess x50 report 中 instant prepare scanned / skipped / dirty owner 与 active mutation prepare scanned / skipped / dirty owner 可对比下降，或报告给出不可下降的业务原因。
+2. `EnableComponent` TopN 不得膨胀，Job safety / aliasing exception 不得出现。
+3. `passed=True`、`headlessLogicBudgetPassed=True`、`repeatRunPassed=True`。
+4. Hotspot matrix 中 `GAS-ARCH-CMD-PREPARE` / `GAS-ARCH-AE-MUTATION-PREPARE` count 必须下降或被更精确 owner 替代。
 
 ## 切片 D：Execution Spec Generated Index
 

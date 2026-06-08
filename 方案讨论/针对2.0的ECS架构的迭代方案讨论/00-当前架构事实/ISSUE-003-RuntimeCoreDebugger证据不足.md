@@ -37,6 +37,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 27. 同一轮补充了 Agent 友好的 split report 输出：`Analyze-AutoChessProfile.ps1` 继续生成全量 `AutoChessProfileAnalysis.json/.md`，但额外生成 `AutoChessProfileBrief.md` 和 `SubReports/PerformanceBudget.md`、`HotspotAttribution.md`、`JournalingTopN.md`、`DebuggerEvidence.md`、`RuntimeBattleLog.md`。这把“默认读取短简报，按需读取领域子报告”变成 Debugger evidence surface 的消费契约，避免 Agent 每次为了一个 owner 路由读取全量 battle log / TopN / Debugger 明细。
 28. 2026-06-08 Run6 / Run7 证明 Debugger 已能识别并反证错误优化：Run6 引入 owner-local pending enableable marker 后，split report 显示 `avgTickMs=12.643ms`、`CoreSimulation.avgMs=11.698ms`、`journalingWorldRecords=505543`、`EnableComponent=37384`，并伴随 Job safety / aliasing 异常；Run7 移除该 marker 后恢复 `passed=True`、`headlessLogicBudgetPassed=True`、`avgTickMs=0.970ms`、`CoreSimulation.avgMs=0.497ms`、`EnableComponent=650`。这说明 hotspot matrix 不只用于找慢点，也必须用于阻断“把 buffer scan 成本转移为 enableable toggle 成本”的伪优化。
 29. 2026-06-08 Run8 已把 R7/R3 frame-lane 热点从 Journaling TopN 推断推进到 Runtime-owned counters：`OwnerLocalInstantCommandFramePrepareSystem`、`ActiveEffectOwnerLocalMutationFramePrepareSystem` 和 `GASActiveEffectPreTickSystem` 现在把 scanned / skipped / dirty owners、cleared buffers、promoted commands、scanned / due / noop slots、mutation writes 写入 `GEEffectCommandStreamComponent` counter，并经 `GasRuntimeDiagnosticEvidenceSnapshot`、AutoChess summary 与 split report 输出。Run8 x50 显示 instant prepare `2400/1450/950`、active mutation prepare `2400/1750/650`、active effect pre-tick owners `2400/950/1450`、pre-tick slots `1200/550/650`、mutation writes `600`；这直接证明当前热点包含 owner 稀疏扫描和 slot 扫描成本，而不是单纯的日志导出或 Journaling 采样噪声。
+30. 2026-06-08 Run9b 已把 Run8 的 ActiveEffect pre-tick 证据推进为数据形态优化：`ASCActiveEffectsComponent` 记录 `NextTickFrame` / duration due slot 计数，pre-tick snapshot gather 和 owner tick 均先用 `ActiveEffectStore.ShouldProcessTickOwner(...)` 跳过未到期 owner。有效 Run9b x50 显示 `passed=True`、`headlessLogicBudgetPassed=True`、`avgTickMs=1.057ms`、`GASCoreSimulationSystemGroup.avgMs=0.571ms`，active effect pre-tick owners 从 Run8 的 `2400/950/1450` 改为 `2400/600/1800`，slots 从 `1200/550/650` 改为 `750/550/200`。这证明 Debugger frame-lane counter 可以驱动真实 Runtime 瘦身：不改变业务完成、确定性和 mutation writes 的前提下，未到期 owner 的 resource capture / slot scan 被压下。Run9 首跑 `avgTickMs=3.650ms`、`headlessLogicBudgetPassed=False`，但同一代码 Run9b 复跑通过，归因于 Unity 编译/冷启动污染，不能作为本轮有效性能基线。
 
 ## 仍成立风险
 
@@ -100,6 +101,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 | debugger hotspot attribution matrix Run4 | `00-当前架构事实/_归档/2026-06-08-DebuggerHotspotAttributionMatrix-Run4.md` |
 | pending marker rejected Run7 | `00-当前架构事实/_归档/2026-06-08-OwnerLocalPendingMarkerRejected-Run7.md` |
 | frame lane counters Run8 | `00-当前架构事实/_归档/2026-06-08-R7FrameLaneCounters-Run8.md` |
+| active effect next tick skip Run9b | `00-当前架构事实/_归档/2026-06-08-ActiveEffectNextTickFrameSkip-Run9b.md` |
 
 ## 退出条件
 

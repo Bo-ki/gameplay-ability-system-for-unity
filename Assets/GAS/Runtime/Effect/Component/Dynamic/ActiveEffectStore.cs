@@ -55,6 +55,7 @@ namespace GAS.Runtime
         AllSlotsSkippable = 1 << 3,
         HasInhibitedSlots = 1 << 4,
         HasPendingRemoveSlots = 1 << 5,
+        NoDurationDue = 1 << 6,
     }
 
     [System.Flags]
@@ -81,8 +82,10 @@ namespace GAS.Runtime
         public int ChunkSkipMatchedSlotCount;
         public int ChunkSkipSkippedSlotCount;
         public int ChunkSkipDuePeriodSlotCount;
+        public int ChunkSkipDueDurationSlotCount;
         public int ChunkSkipNoopSlotCount;
         public int ChunkSkipReasonFlags;
+        public int NextTickFrame;
     }
 
     public struct ActiveGameplayEffectGlobalIndexComponent : IComponentData
@@ -270,7 +273,9 @@ namespace GAS.Runtime
         public readonly int MatchedSlotCount;
         public readonly int SkippedSlotCount;
         public readonly int DuePeriodSlotCount;
+        public readonly int DueDurationSlotCount;
         public readonly int NoopSlotCount;
+        public readonly int NextTickFrame;
         public readonly int ReasonFlags;
 
         public bool CanSkipOwner => MatchedSlotCount == 0
@@ -280,13 +285,17 @@ namespace GAS.Runtime
             int matchedSlotCount,
             int skippedSlotCount,
             int duePeriodSlotCount,
+            int dueDurationSlotCount,
             int noopSlotCount,
+            int nextTickFrame,
             int reasonFlags)
         {
             MatchedSlotCount = matchedSlotCount;
             SkippedSlotCount = skippedSlotCount;
             DuePeriodSlotCount = duePeriodSlotCount;
+            DueDurationSlotCount = dueDurationSlotCount;
             NoopSlotCount = noopSlotCount;
+            NextTickFrame = nextTickFrame;
             ReasonFlags = reasonFlags;
         }
     }
@@ -869,6 +878,17 @@ namespace GAS.Runtime
             return CreateTickActionFlags(slot, currentFrame) != (int)ActiveEffectTickActionFlags.None;
         }
 
+        public static bool ShouldProcessTickOwner(in ASCActiveEffectsComponent store, int currentFrame)
+        {
+            if (store.CleanupRecordCount > 0)
+                return true;
+            if (store.ChunkSkipMatchedSlotCount <= 0)
+                return false;
+            if (store.NextTickFrame <= 0)
+                return true;
+            return currentFrame >= store.NextTickFrame;
+        }
+
         public static int CreateTickActionFlags(in ActiveGameplayEffectBuffer slot, int currentFrame)
         {
             var flags = ActiveEffectTickActionFlags.None;
@@ -927,8 +947,10 @@ namespace GAS.Runtime
             var matchedSlotCount = slots.Length;
             var skippedSlotCount = 0;
             var duePeriodSlotCount = 0;
+            var dueDurationSlotCount = 0;
             var noopSlotCount = 0;
             var activeSlotCount = 0;
+            var nextTickFrame = 0;
             var hasInhibitedSlots = false;
             var hasPendingRemoveSlots = false;
 
@@ -942,12 +964,16 @@ namespace GAS.Runtime
                 if (slot.State == ActiveEffectSlotState.PendingRemove)
                     hasPendingRemoveSlots = true;
 
-                var periodDue = IsPeriodDue(slot, currentFrame);
-                if (periodDue)
+                var actionFlags = CreateTickActionFlags(in slot, currentFrame);
+                if ((actionFlags & (int)ActiveEffectTickActionFlags.Period) != 0)
                 {
                     duePeriodSlotCount++;
-                    continue;
                 }
+                if ((actionFlags & (int)ActiveEffectTickActionFlags.DurationExpire) != 0)
+                {
+                    dueDurationSlotCount++;
+                }
+                nextTickFrame = ResolveNextTickFrame(in slot, currentFrame, nextTickFrame);
 
                 if (IsNoopForChunkSkip(slot, currentFrame))
                 {
@@ -963,6 +989,8 @@ namespace GAS.Runtime
                 reasonFlags |= ActiveEffectChunkSkipReasonFlags.NoActiveSlots;
             if (duePeriodSlotCount == 0)
                 reasonFlags |= ActiveEffectChunkSkipReasonFlags.NoPeriodDue;
+            if (dueDurationSlotCount == 0)
+                reasonFlags |= ActiveEffectChunkSkipReasonFlags.NoDurationDue;
             if (matchedSlotCount > 0 && skippedSlotCount == matchedSlotCount)
                 reasonFlags |= ActiveEffectChunkSkipReasonFlags.AllSlotsSkippable;
             if (hasInhibitedSlots)
@@ -974,7 +1002,9 @@ namespace GAS.Runtime
                 matchedSlotCount,
                 skippedSlotCount,
                 duePeriodSlotCount,
+                dueDurationSlotCount,
                 noopSlotCount,
+                nextTickFrame,
                 (int)reasonFlags);
         }
 
@@ -996,9 +1026,39 @@ namespace GAS.Runtime
             store.ChunkSkipMatchedSlotCount = snapshot.MatchedSlotCount;
             store.ChunkSkipSkippedSlotCount = snapshot.SkippedSlotCount;
             store.ChunkSkipDuePeriodSlotCount = snapshot.DuePeriodSlotCount;
+            store.ChunkSkipDueDurationSlotCount = snapshot.DueDurationSlotCount;
             store.ChunkSkipNoopSlotCount = snapshot.NoopSlotCount;
             store.ChunkSkipReasonFlags = snapshot.ReasonFlags;
+            store.NextTickFrame = snapshot.NextTickFrame;
             return snapshot;
+        }
+
+        private static int ResolveNextTickFrame(
+            in ActiveGameplayEffectBuffer slot,
+            int currentFrame,
+            int currentNextTickFrame)
+        {
+            var nextTickFrame = currentNextTickFrame;
+            var periodDueFrame = ResolveNextPeriodTickFrame(in slot);
+            var durationDueFrame = ResolveNextDurationTickFrame(in slot);
+
+            nextTickFrame = SelectEarlierTickFrame(nextTickFrame, periodDueFrame, currentFrame);
+            nextTickFrame = SelectEarlierTickFrame(nextTickFrame, durationDueFrame, currentFrame);
+            return nextTickFrame;
+        }
+
+        private static int SelectEarlierTickFrame(int currentNextTickFrame, int candidateFrame, int currentFrame)
+        {
+            if (candidateFrame <= 0)
+                return currentNextTickFrame;
+
+            if (candidateFrame < currentFrame)
+                candidateFrame = currentFrame;
+
+            if (currentNextTickFrame <= 0 || candidateFrame < currentNextTickFrame)
+                return candidateFrame;
+
+            return currentNextTickFrame;
         }
 
         private static bool IsNoopForChunkSkip(ActiveGameplayEffectBuffer slot, int currentFrame)
@@ -1035,6 +1095,32 @@ namespace GAS.Runtime
             }
 
             return currentFrame - slot.StartFrame >= slot.RemainingFrame;
+        }
+
+        private static int ResolveNextPeriodTickFrame(in ActiveGameplayEffectBuffer slot)
+        {
+            if (slot.State != ActiveEffectSlotState.Active || slot.PeriodFrame <= 0)
+                return 0;
+
+            return slot.LastPeriodFrame + slot.PeriodFrame;
+        }
+
+        private static int ResolveNextDurationTickFrame(in ActiveGameplayEffectBuffer slot)
+        {
+            if (slot.DurationFrame <= 0
+                || slot.RemainingFrame <= 0)
+            {
+                return 0;
+            }
+
+            if (slot.State != ActiveEffectSlotState.Active
+                && (slot.State != ActiveEffectSlotState.Inhibited
+                    || !HasFlag(slot, ActiveEffectSlotFlags.TicksWhenInactive)))
+            {
+                return 0;
+            }
+
+            return slot.StartFrame + slot.RemainingFrame;
         }
 
         private static int ResolveDurationStartFrame(

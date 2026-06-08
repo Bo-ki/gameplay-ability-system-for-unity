@@ -1,0 +1,1086 @@
+[Licensing::Module] Trying to connect to existing licensing client channel...
+Built from '6000.3/staging' branch; Version is '6000.3.14f1 (d68c3f99a318) revision 14060607'; Using compiler version '194234433'; Build Type 'Release'
+[Licensing::IpcConnector] Channel LicenseClient-Y doesn't exist
+OS: 'Windows 11  (10.0.26200) Core' Language: 'zh' Physical Memory: 48943 MB
+BatchMode: 1, IsHumanControllingUs: 0, StartBugReporterOnCrash: 0, Is64bit: 1
+System  architecture: x64
+Process architecture: x64
+Date: 2026-06-08T08:31:32Z
+[Licensing::Module] Successfully launched the LicensingClient (PId: 3040)
+
+COMMAND LINE ARGUMENTS:
+E:\Unity\UnityEditor\6000.3.14f1\Editor\Unity.exe
+-batchmode
+-quit
+-projectPath
+.
+-executeMethod
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner.RunAutoChessBattleOnceAndExit
+-autoChessReportPath
+TestResults\AutoChess\Headless\AutoChessHeadlessValidation-DebuggerProbe-20260608-Run9b-NextTickFrameSkip.txt
+-logFile
+Logs\AutoChessHeadless-Run9b-NextTickFrameSkip-ExecuteMethod.log
+Successfully changed project path to: E:/Unity/UnityProjects/_Git/gameplay-ability-system-for-unity
+E:/Unity/UnityProjects/_Git/gameplay-ability-system-for-unity
+[UnityMemory] Configuration Parameters - Can be set up in boot.config
+    "memorysetup-temp-allocator-size-nav-mesh-worker=65536"
+    "memorysetup-temp-allocator-size-audio-worker=65536"
+    "memorysetup-temp-allocator-size-gfx=262144"
+    "memorysetup-allocator-temp-initial-block-size-main=262144"
+    "memorysetup-allocator-temp-initial-block-size-worker=262144"
+    "memorysetup-temp-allocator-size-background-worker=32768"
+    "memorysetup-temp-allocator-size-job-worker=262144"
+    "memorysetup-temp-allocator-size-preload-manager=33554432"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-bucket-allocator-granularity=16"
+    "memorysetup-bucket-allocator-bucket-count=8"
+    "memorysetup-bucket-allocator-block-size=33554432"
+    "memorysetup-bucket-allocator-block-count=8"
+    "memorysetup-main-allocator-block-size=16777216"
+    "memorysetup-thread-allocator-block-size=16777216"
+    "memorysetup-gfx-main-allocator-block-size=16777216"
+    "memorysetup-gfx-thread-allocator-block-size=16777216"
+    "memorysetup-cache-allocator-block-size=4194304"
+    "memorysetup-typetree-allocator-block-size=2097152"
+    "memorysetup-profiler-bucket-allocator-granularity=16"
+    "memorysetup-profiler-bucket-allocator-bucket-count=8"
+    "memorysetup-profiler-bucket-allocator-block-size=33554432"
+    "memorysetup-profiler-bucket-allocator-block-count=8"
+    "memorysetup-profiler-allocator-block-size=16777216"
+    "memorysetup-profiler-editor-allocator-block-size=1048576"
+    "memorysetup-temp-allocator-size-main=16777216"
+    "memorysetup-job-temp-allocator-block-size=2097152"
+    "memorysetup-job-temp-allocator-block-size-background=1048576"
+    "memorysetup-job-temp-allocator-reduction-small-platforms=262144"
+    "memorysetup-temp-allocator-size-cloud-worker=32768"
+Player connection [7584]  Target information:
+
+Player connection [7584]  * "[IP] 172.22.192.1 [Port] 55504 [Flags] 2 [Guid] 3661094193 [EditorId] 3661094193 [Version] 1048832 [Id] WindowsEditor(7,Y) [Debug] 1 [PackageName] WindowsEditor [ProjectName] Editor"
+
+Player connection [7584]  * "[IP] 192.168.1.85 [Port] 55504 [Flags] 2 [Guid] 3661094193 [EditorId] 3661094193 [Version] 1048832 [Id] WindowsEditor(7,Y) [Debug] 1 [PackageName] WindowsEditor [ProjectName] Editor"
+
+Unable to join player connection multicast group (err: 10013).
+Player connection [7584] Host joined alternative multi-casting on [225.0.0.222:34997]...
+Input System module state changed to: Initialized.
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-Y" at "2026-06-08T08:31:33.5621466Z"
+[Package Manager] Connected to IPC stream "Upm-20492" after 0.4 seconds.
+[Licensing::Module] Licensing is not yet initialized.
+[Licensing::Client] Handshaking with LicensingClient:
+  Version:                 1.18.1+9fbee8e
+  Session Id:              bbd7f457a698443f901eaa0440201c7f
+  Correlation Id:          ff6a390aaaeccbf7bf631b62ea6abfb7
+  External correlation Id: 8576820409188698269
+  Machine Id:              UtHw8tZ7YP8iwCH0Agz7aNRXLD0=
+[Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-Y" (connect: 0.57s, validation: 0.05s, handshake: 1.19s)
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-Y-notifications" at "2026-06-08T08:31:34.798795Z"
+[Licensing::Module] Connected to LicensingClient (PId: 3040, launch time: 0.01, total connection time: 1.80s)
+[Licensing::Module] Error: Access token is unavailable; failed to update
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] License group:
+  Id: ewogICJzdWJzR3JvdXAiIDogInVuaXR5IGVkaXRvciIsCiAgIm5hbWVzcGFjZSIgOiAidW5pdHlfZWRpdG9yIiwKICAidHlwZSIgOiAiRURJVE9SIiwKICAidGFnIiA6ICJVbml0eVBlcnNvbmFsXXXX
+  Product: Unity Personal Version
+  Type: Assigned
+  Expiration: Unlimited
+[Licensing::Client] Successfully updated license, isAsync: True, time: 0.01
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] Licensing Background thread has ended after 1.84s
+[Licensing::Module] Licensing is initialized (took 1.00s).
+[Licensing::Client] Successfully resolved entitlement details
+Library Redirect Path: Library/
+[Physics::Module] Selected backend.
+[Physics::Module] Name: PhysX
+[Physics::Module] Id: 0xf2b8ea05
+[Physics::Module] SDK Version: 4.1.2
+[Physics::Module] Integration Version: 1.0.0
+[Physics::Module] Threading Mode: Multi-Threaded
+Refreshing native plugins compatible for Editor in 0.47 ms, found 0 plugins.
+Preloading 0 native plugins for Editor in 0.00 ms.
+Initialize engine version: 6000.3.14f1 (d68c3f99a318)
+[Subsystems] Discovering subsystems at path E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/Resources/UnitySubsystems
+[Subsystems] Discovering subsystems at path E:/Unity/UnityProjects/_Git/gameplay-ability-system-for-unity/Assets
+GfxDevice: creating device client; kGfxThreadingModeNonThreaded
+Direct3D:
+    Version:  Direct3D 11.0 [level 11.1]
+    Renderer: NVIDIA GeForce RTX 4060 Ti (ID=0x2803)
+    Vendor:   NVIDIA
+    VRAM:     16109 MB
+    Driver:   32.0.15.9649
+Initialize mono
+Mono path[0] = 'E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/Managed'
+Mono path[1] = 'E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/MonoBleedingEdge/lib/mono/unityjit-win32'
+Mono config path = 'E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/MonoBleedingEdge/etc'
+Using monoOptions --debugger-agent=transport=dt_socket,embedding=1,server=y,suspend=n,address=127.0.0.1:56492
+Using cacheserver namespaces - metadata:defaultmetadata, artifacts:defaultartifacts
+Using cacheserver namespaces - metadata:defaultmetadata, artifacts:defaultartifacts
+ImportWorker Server TCP listen port: 0
+AcceleratorClientConnectionCallback - disconnected - :0
+Begin MonoManager ReloadAssembly
+Registering precompiled unity dll's ...
+Register platform support module: E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/PlaybackEngines/WebGLSupport/UnityEditor.WebGL.Extensions.dll
+Register platform support module: E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/PlaybackEngines/WindowsStandaloneSupport/UnityEditor.WindowsStandalone.Extensions.dll
+[Licensing::Client] Successfully resolved entitlement details
+Register platform support module: E:/Unity/UnityEditor/6000.3.14f1/Editor/Data/PlaybackEngines/AndroidPlayer/UnityEditor.Android.Extensions.dll
+Registered in 0.010445 seconds.
+- Loaded All Assemblies, in  0.467 seconds
+Native extension for Android target not found
+Native extension for WindowsStandalone target not found
+Native extension for WebGL target not found
+Package Manager log level set to [2]
+ScheduleIndexationOnStartup MainProcess:False IndexOnStartup:True
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  0.407 seconds
+Domain Reload Profiling: 871ms
+	BeginReloadAssembly (163ms)
+		ExecutionOrderSort (0ms)
+		DisableScriptedObjects (0ms)
+		BackupInstance (0ms)
+		ReleaseScriptingObjects (0ms)
+		CreateAndSetChildDomain (18ms)
+	RebuildCommonClasses (37ms)
+	RebuildNativeTypeToScriptingClass (12ms)
+	initialDomainReloadingComplete (60ms)
+	LoadAllAssembliesAndSetupDomain (191ms)
+		LoadAssemblies (145ms)
+		RebuildTransferFunctionScriptingTraits (0ms)
+		AnalyzeDomain (185ms)
+			TypeCache.Refresh (183ms)
+				TypeCache.ScanAssembly (169ms)
+			BuildScriptInfoCaches (0ms)
+			ResolveRequiredComponents (1ms)
+	FinalizeReload (407ms)
+		ReleaseScriptCaches (0ms)
+		RebuildScriptCaches (0ms)
+		SetupLoadedEditorAssemblies (370ms)
+			LogAssemblyErrors (0ms)
+			InitializePlatformSupportModulesInManaged (58ms)
+			SetLoadedEditorAssemblies (5ms)
+			BeforeProcessingInitializeOnLoad (68ms)
+			ProcessInitializeOnLoadAttributes (123ms)
+			ProcessInitializeOnLoadMethodAttributes (116ms)
+			AfterProcessingInitializeOnLoad (0ms)
+			EditorAssembliesLoaded (0ms)
+		ExecutionOrderSort2 (0ms)
+		AwakeInstancesAfterBackupRestoration (0ms)
+[Licensing::Client] Successfully resolved entitlement details
+Application.AssetDatabase Initial Refresh Start
+[Package Manager] Restoring resolved packages state from cache
+[Licensing::Client] Successfully resolved entitlement details
+[Package Manager] Registered 88 packages:
+  Packages from [https://packages.unity.com]:
+    com.unity.animation.rigging@1.4.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.animation.rigging@ae5f251e1ed4)
+    com.unity.collab-proxy@2.12.4 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.collab-proxy@0b1559bcd34e)
+    com.unity.entities@1.4.6 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.entities@e90944159b94)
+    com.unity.entities.graphics@1.4.19 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.entities.graphics@1e91bb5cdef3)
+    com.unity.ide.rider@3.0.39 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.ide.rider@4504839d03f7)
+    com.unity.inputsystem@1.19.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.inputsystem@21a28c3a6c83)
+    com.unity.mathematics@1.3.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.mathematics@19a9377c4ffa)
+    com.unity.netcode@1.10.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.netcode@5d39c9b3860a)
+    com.unity.nuget.newtonsoft-json@3.2.2 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.nuget.newtonsoft-json@4dfd81071c64)
+    com.unity.physics@1.4.6 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.physics@22d10f355559)
+    com.unity.probuilder@6.0.9 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.probuilder@1f279ab829b7)
+    com.unity.timeline@1.8.12 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.timeline@8cd8509afae5)
+    com.unity.visualscripting@1.9.11 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.visualscripting@8bed5ad90189)
+    com.unity.settings-manager@2.1.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.settings-manager@0b8638c5ce86)
+    com.unity.burst@1.8.29 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.burst@6bb9aca3ef38)
+    com.unity.collections@2.6.6 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.collections@9796e5ee0d9e)
+    com.unity.transport@2.7.2 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.transport@ed7eca02732f)
+    com.unity.cinemachine@3.1.6 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.cinemachine@285f38545487)
+    com.unity.ide.visualstudio@2.0.26 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.ide.visualstudio@a99d56dec63f)
+    com.unity.editorcoroutines@1.1.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.editorcoroutines@87a15ed012c2)
+    com.unity.performance.profile-analyzer@1.3.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.performance.profile-analyzer@10347e9ce886)
+    com.unity.testtools.codecoverage@1.3.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.testtools.codecoverage@19a841221620)
+    com.unity.2d.animation@13.0.4 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.animation@7396d8477ca9)
+    com.unity.2d.pixel-perfect@5.1.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.pixel-perfect@09d99455b901)
+    com.unity.2d.psdimporter@12.0.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.psdimporter@9abe0f7cac7e)
+    com.unity.2d.spriteshape@13.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.spriteshape@0738bab11647)
+    com.unity.2d.tilemap.extras@6.0.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.tilemap.extras@3dde84bf3867)
+    com.unity.2d.aseprite@3.0.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.aseprite@809e3a168ff7)
+    com.unity.2d.tooling@1.0.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.tooling@127d960d4dc1)
+    com.unity.serialization@3.1.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.serialization@7725fb70c685)
+    com.unity.profiling.core@1.0.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.profiling.core@8a49f7027d06)
+    com.unity.nuget.mono-cecil@1.11.6 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.nuget.mono-cecil@ecb9724e46ff)
+    com.unity.scriptablebuildpipeline@2.6.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.scriptablebuildpipeline@36e3b5898ee2)
+    com.unity.test-framework.performance@3.4.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.test-framework.performance@aa81a99c4a75)
+    com.unity.searcher@4.9.4 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.searcher@d45a78918735)
+    com.unity.splines@2.8.4 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.splines@9b00833aca09)
+    com.unity.2d.common@12.0.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.common@2af7c9b44b5c)
+  Built-in packages:
+    com.unity.feature.2d@2.0.2 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.feature.2d@0309d34ea7f2)
+    com.unity.feature.development@1.0.2 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.feature.development@767aadbc6eb7)
+    com.unity.feature.gameplay-storytelling@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.feature.gameplay-storytelling@16ce2b9ee1fa)
+    com.unity.multiplayer.center@1.0.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.multiplayer.center@f01f4ba8d00a)
+    com.unity.render-pipelines.universal@17.3.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.render-pipelines.universal@3b809f23691d)
+    com.unity.ugui@2.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.ugui@8ccc29d23a79)
+    com.unity.modules.accessibility@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.accessibility)
+    com.unity.modules.adaptiveperformance@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.adaptiveperformance)
+    com.unity.modules.ai@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.ai)
+    com.unity.modules.androidjni@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.androidjni)
+    com.unity.modules.animation@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.animation)
+    com.unity.modules.assetbundle@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.assetbundle)
+    com.unity.modules.audio@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.audio)
+    com.unity.modules.cloth@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.cloth)
+    com.unity.modules.director@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.director)
+    com.unity.modules.imageconversion@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.imageconversion)
+    com.unity.modules.imgui@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.imgui)
+    com.unity.modules.jsonserialize@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.jsonserialize)
+    com.unity.modules.particlesystem@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.particlesystem)
+    com.unity.modules.physics@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.physics)
+    com.unity.modules.physics2d@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.physics2d)
+    com.unity.modules.screencapture@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.screencapture)
+    com.unity.modules.terrain@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.terrain)
+    com.unity.modules.terrainphysics@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.terrainphysics)
+    com.unity.modules.tilemap@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.tilemap)
+    com.unity.modules.ui@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.ui)
+    com.unity.modules.uielements@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.uielements)
+    com.unity.modules.umbra@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.umbra)
+    com.unity.modules.unityanalytics@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.unityanalytics)
+    com.unity.modules.unitywebrequest@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.unitywebrequest)
+    com.unity.modules.unitywebrequestassetbundle@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.unitywebrequestassetbundle)
+    com.unity.modules.unitywebrequestaudio@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.unitywebrequestaudio)
+    com.unity.modules.unitywebrequesttexture@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.unitywebrequesttexture)
+    com.unity.modules.unitywebrequestwww@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.unitywebrequestwww)
+    com.unity.modules.vectorgraphics@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.vectorgraphics)
+    com.unity.modules.vehicles@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.vehicles)
+    com.unity.modules.video@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.video)
+    com.unity.modules.vr@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.vr)
+    com.unity.modules.wind@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.wind)
+    com.unity.modules.xr@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.xr)
+    com.unity.modules.subsystems@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.subsystems)
+    com.unity.modules.hierarchycore@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.modules.hierarchycore)
+    com.unity.render-pipelines.core@17.3.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.render-pipelines.core@02dfbe8e43de)
+    com.unity.shadergraph@17.3.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.shadergraph@28ee1cc75774)
+    com.unity.render-pipelines.universal-config@17.0.3 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.render-pipelines.universal-config@8dc1aab4af1d)
+    com.unity.test-framework@1.6.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.test-framework@aebcb98460c6)
+    com.unity.ext.nunit@2.0.5 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.ext.nunit@d8c07649098d)
+    com.unity.2d.sprite@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.sprite@d14b9d497a24)
+    com.unity.2d.tilemap@1.0.0 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.unity.2d.tilemap@43eb9b2da17d)
+  Git packages:
+    cn.lys.aibridge@https://github.com/liyingsong99/AIBridge.git#1.4.1 (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\cn.lys.aibridge@f203de2ec848)
+    com.cysharp.unitask@https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask (location: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Library\PackageCache\com.cysharp.unitask@228d03356bd8)
+[Subsystems] No new subsystems found in resolved package list.
+[Package Manager] Done registering packages in 0.04 seconds
+Assembly reference Packages/com.unity.cinemachine/Editor/Samples/ExposeHDRPInternals/HDRP-Editor-ref.asmref has no target assembly definition
+Assembly reference Packages/com.unity.entities/Unity.Scenes.Editor/Internals/Properties/Unity.Properties.Internals.asmref has no target assembly definition
+Assembly reference Packages/com.unity.cinemachine/Editor/Samples/ExposeHDRPInternals/HDRP-Editor-ref.asmref has no target assembly definition
+Assembly reference Packages/com.unity.entities/Unity.Scenes.Editor/Internals/Properties/Unity.Properties.Internals.asmref has no target assembly definition
+Refreshing native plugins compatible for Editor in 5.89 ms, found 6 plugins.
+Starting: E:\Unity\UnityEditor\6000.3.14f1\Editor\Data\Tools\BuildPipeline\bee_backend.exe --ipc --defer-dag-verification --dagfile="Library/Bee/1900b0aE.dag" --continue-on-failure --profile="Library/Bee/backend1.traceevents" ScriptAssemblies
+WorkingDir: E:/Unity/UnityProjects/_Git/gameplay-ability-system-for-unity
+DisplayProgressbar: Compiling Scripts
+ExitCode: 0 Duration: 0s675ms
+[1454/1929  0s] ILPP-Configuration Library/ilpp-configuration.nevergeneratedoutput
+*** Tundra build success (0.63 seconds), 1 items updated, 1929 evaluated
+AssetDatabase: script compilation time: 1.209554s
+Begin MonoManager ReloadAssembly
+- Loaded All Assemblies, in  1.526 seconds
+'Packages/com.unity.cinemachine/Editor/Editors/CinemachineVirtualCameraBaseEditor.cs' contains partial class of Unity.Object, exactly 1 of the partial classes needs to be in a file with the same filename. This is to know the one that can be referenced from ie. GameObjects
+'Packages/com.unity.cinemachine/Editor/Obsolete/CinemachineVirtualCameraBaseEditor.cs' contains partial class of Unity.Object, exactly 1 of the partial classes needs to be in a file with the same filename. This is to know the one that can be referenced from ie. GameObjects
+Refreshing native plugins compatible for Editor in 4.29 ms, found 6 plugins.
+Native extension for Android target not found
+Native extension for WindowsStandalone target not found
+Native extension for WebGL target not found
+Assembly reference Packages/com.unity.cinemachine/Editor/Samples/ExposeHDRPInternals/HDRP-Editor-ref.asmref has no target assembly definition
+Assembly reference Packages/com.unity.entities/Unity.Scenes.Editor/Internals/Properties/Unity.Properties.Internals.asmref has no target assembly definition
+[AIBridge] CommandRegistry initialized with 18 commands
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+AIBridge.Editor.AIBridgeLogger:LogInfo (string) (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Utils/AIBridgeLogger.cs:46)
+AIBridge.Editor.CommandRegistry:Initialize () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Commands/CommandRegistry.cs:89)
+AIBridge.Editor.AIBridge:Initialize () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:71)
+AIBridge.Editor.AIBridge:.cctor () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:56)
+System.Runtime.CompilerServices.RuntimeHelpers:RunClassConstructor (System.RuntimeTypeHandle)
+UnityEditor.EditorAssemblies:ProcessInitializeOnLoadAttributes (System.Type[])
+
+(Filename: ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Commands/CommandRegistry.cs Line: 89)
+
+[AIBridge] AI Bridge initialized. Directory: E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\.aibridge
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+AIBridge.Editor.AIBridgeLogger:LogInfo (string) (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Utils/AIBridgeLogger.cs:46)
+AIBridge.Editor.AIBridge:Initialize () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:87)
+AIBridge.Editor.AIBridge:.cctor () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:56)
+System.Runtime.CompilerServices.RuntimeHelpers:RunClassConstructor (System.RuntimeTypeHandle)
+UnityEditor.EditorAssemblies:ProcessInitializeOnLoadAttributes (System.Type[])
+
+(Filename: ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs Line: 87)
+
+[AIBridge] Registered commands: asset, batch, code, compile, editor, gameobject, gameview, get_logs, help, input, inspector, menu_item, prefab, scene, screenshot, selection, test, transform
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+AIBridge.Editor.AIBridgeLogger:LogInfo (string) (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Utils/AIBridgeLogger.cs:46)
+AIBridge.Editor.AIBridge:Initialize () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:88)
+AIBridge.Editor.AIBridge:.cctor () (at ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs:56)
+System.Runtime.CompilerServices.RuntimeHelpers:RunClassConstructor (System.RuntimeTypeHandle)
+UnityEditor.EditorAssemblies:ProcessInitializeOnLoadAttributes (System.Type[])
+
+(Filename: ./Library/PackageCache/cn.lys.aibridge@f203de2ec848/Editor/Core/AIBridge.cs Line: 88)
+
+Refreshing native plugins compatible for Editor in 5.38 ms, found 6 plugins.
+TypeManager.Initialize took: 240ms
+[MODES] ModeService[none].Initialize
+[MODES] ModeService[none].LoadModes
+[MODES] Loading mode Default (0) for mode-current-id-My project
+ScheduleIndexationOnStartup MainProcess:True IndexOnStartup:True
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  6.822 seconds
+Domain Reload Profiling: 8324ms
+	BeginReloadAssembly (340ms)
+		ExecutionOrderSort (0ms)
+		DisableScriptedObjects (35ms)
+		BackupInstance (0ms)
+		ReleaseScriptingObjects (0ms)
+		CreateAndSetChildDomain (155ms)
+	RebuildCommonClasses (38ms)
+	RebuildNativeTypeToScriptingClass (12ms)
+	initialDomainReloadingComplete (47ms)
+	LoadAllAssembliesAndSetupDomain (1064ms)
+		LoadAssemblies (681ms)
+		RebuildTransferFunctionScriptingTraits (0ms)
+		AnalyzeDomain (495ms)
+			TypeCache.Refresh (360ms)
+				TypeCache.ScanAssembly (330ms)
+			BuildScriptInfoCaches (117ms)
+			ResolveRequiredComponents (12ms)
+	FinalizeReload (6822ms)
+		ReleaseScriptCaches (0ms)
+		RebuildScriptCaches (0ms)
+		SetupLoadedEditorAssemblies (6506ms)
+			LogAssemblyErrors (0ms)
+			InitializePlatformSupportModulesInManaged (32ms)
+			SetLoadedEditorAssemblies (7ms)
+			BeforeProcessingInitializeOnLoad (198ms)
+			ProcessInitializeOnLoadAttributes (5810ms)
+			ProcessInitializeOnLoadMethodAttributes (452ms)
+			AfterProcessingInitializeOnLoad (6ms)
+			EditorAssembliesLoaded (1ms)
+		ExecutionOrderSort2 (0ms)
+		AwakeInstancesAfterBackupRestoration (18ms)
+Asset Pipeline Refresh (id=c75eb091dd993c34ba15ba066870a2f8): Total: 10.843 seconds - Initiated by InitialRefreshV2(ForceSynchronousImport)
+	Summary:
+		Imports: total=0 (actual=0, local cache=0, cache server=0)
+		Asset DB Process Time: managed=0 ms, native=7926 ms
+		Asset DB Callback time: managed=38 ms, native=49 ms
+		Scripting: domain reloads=1, domain reload time=1527 ms, compile time=1212 ms, other=89 ms
+		Project Asset Count: scripts=2594, non-scripts=4306
+		Asset File Changes: new=0, changed=0, moved=0, deleted=0
+		Scan Filter Count: 0
+	InvokeCustomDependenciesCallbacks: 0.003ms
+	InvokePackagesCallback: 54.224ms
+	ApplyChangesToAssetFolders: 1.147ms
+	Scan: 446.610ms
+	OnSourceAssetsModified: 0.005ms
+	CategorizeAssetsWithTransientArtifact: 98.242ms
+	ProcessAssetsWithTransientArtifactChanges: 162.593ms
+	CategorizeAssets: 94.584ms
+	ImportOutOfDateAssets: 6844.575ms (5629.381ms without children)
+		CompileScripts: 1211.503ms
+		ReloadNativeAssets: 0.043ms
+		UnloadImportedAssets: 0.836ms
+		EnsureUptoDateAssetsAreRegisteredWithGuidPM: 1.345ms
+		InitializingProgressBar: 0.000ms
+		PostProcessAllAssetNotificationsAddChangedAssets: 0.002ms
+		OnDemandSchedulerStart: 1.464ms
+	PostProcessAllAssets: 38.267ms
+	GatherAllCurrentPrimaryArtifactRevisions: 0.002ms
+	UnloadStreamsBegin: 3.637ms
+	PersistCurrentRevisions: 0.310ms
+	UnloadStreamsEnd: 0.002ms
+	GenerateScriptTypeHashes: 4.847ms
+	Untracked: 3098.891ms
+
+Application.AssetDatabase Initial Refresh End
+Launched and connected shader compiler UnityShaderCompiler.exe after 0.02 seconds
+Scanning for USB devices : 2.627ms
+Initializing Unity extensions:
+Unloading 25 Unused Serialized files (Serialized files now loaded: 0)
+Unloading 11345 unused Assets / (9.2 MB). Loaded Objects now: 12262.
+Memory consumption went from 268.6 MB to 259.4 MB.
+Total: 54.325900 ms (FindLiveObjects: 1.292500 ms CreateObjectMapping: 3.266400 ms MarkObjects: 41.216600 ms  DeleteObjects: 8.547100 ms)
+
+Ignoring invalid [Unity.Entities.UpdateAfterAttribute(GAS.Runtime.PresentationOutboxProjectionSystem)] attribute on GAS.Runtime.ReplayLogSystem because OrderFirst/OrderLast has higher precedence.
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:LogWarning (object)
+Unity.Debug:LogWarning (object) (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/Stubs/Unity/Debug.cs:13)
+Unity.Entities.ComponentSystemSorter:WarnAboutAnySystemAttributeBadness (int,Unity.Entities.ComponentSystemGroup) (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemSorter.cs:516)
+Unity.Entities.ComponentSystemGroup:GenerateMasterUpdateList () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:490)
+Unity.Entities.ComponentSystemGroup:RecurseUpdate () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:410)
+Unity.Entities.ComponentSystemGroup:SortSystems () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:598)
+GAS.Runtime.GASSystemScheduleContract:SortSystems (Unity.Entities.FixedStepSimulationSystemGroup,GAS.Runtime.GASSystemGroups) (at Assets/GAS/Runtime/System/SystemGroup/GASSystemScheduleContract.cs:364)
+GAS.Runtime.GASManager:CreateSystems (bool) (at Assets/GAS/Runtime/General/GASManager.cs:124)
+GAS.Runtime.GASManager:Initialize (bool) (at Assets/GAS/Runtime/General/GASManager.cs:57)
+GAS.AutoChessDemo.AutoChessGasRuntimeHost:EnsureRuntimeInitialized () (at Assets/AutoChessDemo/Integration/GasCore/AutoChessGasRuntimeHost.cs:11)
+GAS.AutoChessDemo.AutoChessBattleRuntime:Open (GAS.AutoChessDemo.AutoChessBattleOptions&) (at Assets/AutoChessDemo/Integration/GasCore/AutoChessBattleRuntime.cs:37)
+GAS.AutoChessDemo.AutoChessBattleRuntime:GAS.AutoChessDemo.IAutoChessBattleRuntime.Open (GAS.AutoChessDemo.AutoChessBattleOptions modreq(System.Runtime.InteropServices.InAttribute)&)
+GAS.AutoChessDemo.AutoChessBattleFlow:Open (GAS.AutoChessDemo.AutoChessBattleOptions,GAS.AutoChessDemo.AutoChessBattleProfileHooks) (at Assets/AutoChessDemo/Battle/Flow/AutoChessBattleFlow.cs:55)
+GAS.AutoChessDemo.AutoChessBattleManager:RunDefault (GAS.AutoChessDemo.AutoChessBattleOptions,GAS.AutoChessDemo.AutoChessBattleProfileHooks) (at Assets/AutoChessDemo/Battle/AutoChessBattleManager.cs:12)
+GAS.AutoChessDemo.AutoChessBattleValidationRun:RunWarmupPass (GAS.AutoChessDemo.AutoChessBattleOptions) (at Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs:550)
+GAS.AutoChessDemo.AutoChessBattleValidationRun:RunProcessWarmupBattles (GAS.AutoChessDemo.AutoChessGeneratedScenarioProfile) (at Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs:537)
+GAS.AutoChessDemo.AutoChessBattleValidationRun:RunHeadlessValidation (GAS.AutoChessDemo.AutoChessGeneratedScenarioProfile,GAS.AutoChessDemo.IAutoChessPresentationOutboxBridge,int) (at Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs:493)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:57)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/Stubs/Unity/Debug.cs Line: 13)
+
+Ignoring invalid [Unity.Entities.UpdateAfterAttribute(GAS.Runtime.PresentationOutboxProjectionSystem)] attribute on GAS.Runtime.ReplayLogSystem because OrderFirst/OrderLast has higher precedence.
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:LogWarning (object)
+Unity.Debug:LogWarning (object) (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/Stubs/Unity/Debug.cs:13)
+Unity.Entities.ComponentSystemSorter:WarnAboutAnySystemAttributeBadness (int,Unity.Entities.ComponentSystemGroup) (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemSorter.cs:516)
+Unity.Entities.ComponentSystemGroup:GenerateMasterUpdateList () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:490)
+Unity.Entities.ComponentSystemGroup:RecurseUpdate () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:410)
+Unity.Entities.ComponentSystemGroup:SortSystems () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:598)
+GAS.Runtime.GASSystemScheduleContract:SortSystems (Unity.Entities.FixedStepSimulationSystemGroup,GAS.Runtime.GASSystemGroups) (at Assets/GAS/Runtime/System/SystemGroup/GASSystemScheduleContract.cs:364)
+GAS.Runtime.GASManager:CreateSystems (bool) (at Assets/GAS/Runtime/General/GASManager.cs:124)
+GAS.Runtime.GASManager:Initialize (bool) (at Assets/GAS/Runtime/General/GASManager.cs:57)
+GAS.AutoChessDemo.AutoChessGasRuntimeHost:EnsureRuntimeInitialized () (at Assets/AutoChessDemo/Integration/GasCore/AutoChessGasRuntimeHost.cs:11)
+GAS.AutoChessDemo.AutoChessBattleRuntime:Open (GAS.AutoChessDemo.AutoChessBattleOptions&) (at Assets/AutoChessDemo/Integration/GasCore/AutoChessBattleRuntime.cs:37)
+GAS.AutoChessDemo.AutoChessBattleRuntime:GAS.AutoChessDemo.IAutoChessBattleRuntime.Open (GAS.AutoChessDemo.AutoChessBattleOptions modreq(System.Runtime.InteropServices.InAttribute)&)
+GAS.AutoChessDemo.AutoChessBattleFlow:Open (GAS.AutoChessDemo.AutoChessBattleOptions,GAS.AutoChessDemo.AutoChessBattleProfileHooks) (at Assets/AutoChessDemo/Battle/Flow/AutoChessBattleFlow.cs:55)
+GAS.AutoChessDemo.AutoChessBattleManager:RunDefault (GAS.AutoChessDemo.AutoChessBattleOptions,GAS.AutoChessDemo.AutoChessBattleProfileHooks) (at Assets/AutoChessDemo/Battle/AutoChessBattleManager.cs:12)
+GAS.AutoChessDemo.AutoChessBattleValidationRun:RunGeneratedScenario (GAS.AutoChessDemo.AutoChessGeneratedScenarioProfile,bool,bool,bool,bool) (at Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs:630)
+GAS.AutoChessDemo.AutoChessBattleValidationRun:RunRepeatRunCleanupProbe (GAS.AutoChessDemo.AutoChessGeneratedScenarioProfile) (at Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs:563)
+GAS.AutoChessDemo.AutoChessBattleValidationRun:RunHeadlessValidation (GAS.AutoChessDemo.AutoChessGeneratedScenarioProfile,GAS.AutoChessDemo.IAutoChessPresentationOutboxBridge,int) (at Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs:494)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:57)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/Stubs/Unity/Debug.cs Line: 13)
+
+Ignoring invalid [Unity.Entities.UpdateAfterAttribute(GAS.Runtime.PresentationOutboxProjectionSystem)] attribute on GAS.Runtime.ReplayLogSystem because OrderFirst/OrderLast has higher precedence.
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:LogWarning (object)
+Unity.Debug:LogWarning (object) (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/Stubs/Unity/Debug.cs:13)
+Unity.Entities.ComponentSystemSorter:WarnAboutAnySystemAttributeBadness (int,Unity.Entities.ComponentSystemGroup) (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemSorter.cs:516)
+Unity.Entities.ComponentSystemGroup:GenerateMasterUpdateList () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:490)
+Unity.Entities.ComponentSystemGroup:RecurseUpdate () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:410)
+Unity.Entities.ComponentSystemGroup:SortSystems () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:598)
+GAS.Runtime.GASSystemScheduleContract:SortSystems (Unity.Entities.FixedStepSimulationSystemGroup,GAS.Runtime.GASSystemGroups) (at Assets/GAS/Runtime/System/SystemGroup/GASSystemScheduleContract.cs:364)
+GAS.Runtime.GASManager:CreateSystems (bool) (at Assets/GAS/Runtime/General/GASManager.cs:124)
+GAS.Runtime.GASManager:Initialize (bool) (at Assets/GAS/Runtime/General/GASManager.cs:57)
+GAS.AutoChessDemo.AutoChessGasRuntimeHost:EnsureRuntimeInitialized () (at Assets/AutoChessDemo/Integration/GasCore/AutoChessGasRuntimeHost.cs:11)
+GAS.AutoChessDemo.AutoChessBattleRuntime:Open (GAS.AutoChessDemo.AutoChessBattleOptions&) (at Assets/AutoChessDemo/Integration/GasCore/AutoChessBattleRuntime.cs:37)
+GAS.AutoChessDemo.AutoChessBattleRuntime:GAS.AutoChessDemo.IAutoChessBattleRuntime.Open (GAS.AutoChessDemo.AutoChessBattleOptions modreq(System.Runtime.InteropServices.InAttribute)&)
+GAS.AutoChessDemo.AutoChessBattleFlow:Open (GAS.AutoChessDemo.AutoChessBattleOptions,GAS.AutoChessDemo.AutoChessBattleProfileHooks) (at Assets/AutoChessDemo/Battle/Flow/AutoChessBattleFlow.cs:55)
+GAS.AutoChessDemo.AutoChessBattleManager:RunDefault (GAS.AutoChessDemo.AutoChessBattleOptions,GAS.AutoChessDemo.AutoChessBattleProfileHooks) (at Assets/AutoChessDemo/Battle/AutoChessBattleManager.cs:12)
+GAS.AutoChessDemo.AutoChessBattleValidationRun:RunGeneratedScenario (GAS.AutoChessDemo.AutoChessGeneratedScenarioProfile,bool,bool,bool,bool) (at Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs:630)
+GAS.AutoChessDemo.AutoChessBattleValidationRun:RunHeadlessValidation (GAS.AutoChessDemo.AutoChessGeneratedScenarioProfile,GAS.AutoChessDemo.IAutoChessPresentationOutboxBridge,int) (at Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs:496)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:57)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/Stubs/Unity/Debug.cs Line: 13)
+
+Ignoring invalid [Unity.Entities.UpdateAfterAttribute(GAS.Runtime.PresentationOutboxProjectionSystem)] attribute on GAS.Runtime.ReplayLogSystem because OrderFirst/OrderLast has higher precedence.
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:LogWarning (object)
+Unity.Debug:LogWarning (object) (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/Stubs/Unity/Debug.cs:13)
+Unity.Entities.ComponentSystemSorter:WarnAboutAnySystemAttributeBadness (int,Unity.Entities.ComponentSystemGroup) (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemSorter.cs:516)
+Unity.Entities.ComponentSystemGroup:GenerateMasterUpdateList () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:490)
+Unity.Entities.ComponentSystemGroup:RecurseUpdate () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:410)
+Unity.Entities.ComponentSystemGroup:SortSystems () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:598)
+GAS.Runtime.GASSystemScheduleContract:SortSystems (Unity.Entities.FixedStepSimulationSystemGroup,GAS.Runtime.GASSystemGroups) (at Assets/GAS/Runtime/System/SystemGroup/GASSystemScheduleContract.cs:364)
+GAS.Runtime.GASManager:CreateSystems (bool) (at Assets/GAS/Runtime/General/GASManager.cs:124)
+GAS.Runtime.GASManager:Initialize (bool) (at Assets/GAS/Runtime/General/GASManager.cs:57)
+GAS.AutoChessDemo.AutoChessGasRuntimeHost:EnsureRuntimeInitialized () (at Assets/AutoChessDemo/Integration/GasCore/AutoChessGasRuntimeHost.cs:11)
+GAS.AutoChessDemo.AutoChessBattleRuntime:Open (GAS.AutoChessDemo.AutoChessBattleOptions&) (at Assets/AutoChessDemo/Integration/GasCore/AutoChessBattleRuntime.cs:37)
+GAS.AutoChessDemo.AutoChessBattleRuntime:GAS.AutoChessDemo.IAutoChessBattleRuntime.Open (GAS.AutoChessDemo.AutoChessBattleOptions modreq(System.Runtime.InteropServices.InAttribute)&)
+GAS.AutoChessDemo.AutoChessBattleFlow:Open (GAS.AutoChessDemo.AutoChessBattleOptions,GAS.AutoChessDemo.AutoChessBattleProfileHooks) (at Assets/AutoChessDemo/Battle/Flow/AutoChessBattleFlow.cs:55)
+GAS.AutoChessDemo.AutoChessBattleManager:RunDefault (GAS.AutoChessDemo.AutoChessBattleOptions,GAS.AutoChessDemo.AutoChessBattleProfileHooks) (at Assets/AutoChessDemo/Battle/AutoChessBattleManager.cs:12)
+GAS.AutoChessDemo.AutoChessBattleValidationRun:RunGeneratedScenario (GAS.AutoChessDemo.AutoChessGeneratedScenarioProfile,bool,bool,bool,bool) (at Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs:630)
+GAS.AutoChessDemo.AutoChessBattleValidationRun:RunHeadlessValidation (GAS.AutoChessDemo.AutoChessGeneratedScenarioProfile,GAS.AutoChessDemo.IAutoChessPresentationOutboxBridge,int) (at Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs:504)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:57)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/Stubs/Unity/Debug.cs Line: 13)
+
+Ignoring invalid [Unity.Entities.UpdateAfterAttribute(GAS.Runtime.PresentationOutboxProjectionSystem)] attribute on GAS.Runtime.ReplayLogSystem because OrderFirst/OrderLast has higher precedence.
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:LogWarning (object)
+Unity.Debug:LogWarning (object) (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/Stubs/Unity/Debug.cs:13)
+Unity.Entities.ComponentSystemSorter:WarnAboutAnySystemAttributeBadness (int,Unity.Entities.ComponentSystemGroup) (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemSorter.cs:516)
+Unity.Entities.ComponentSystemGroup:GenerateMasterUpdateList () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:490)
+Unity.Entities.ComponentSystemGroup:RecurseUpdate () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:410)
+Unity.Entities.ComponentSystemGroup:SortSystems () (at ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/ComponentSystemGroup.cs:598)
+GAS.Runtime.GASSystemScheduleContract:SortSystems (Unity.Entities.FixedStepSimulationSystemGroup,GAS.Runtime.GASSystemGroups) (at Assets/GAS/Runtime/System/SystemGroup/GASSystemScheduleContract.cs:364)
+GAS.Runtime.GASManager:CreateSystems (bool) (at Assets/GAS/Runtime/General/GASManager.cs:124)
+GAS.Runtime.GASManager:Initialize (bool) (at Assets/GAS/Runtime/General/GASManager.cs:57)
+GAS.AutoChessDemo.AutoChessGasRuntimeHost:EnsureRuntimeInitialized () (at Assets/AutoChessDemo/Integration/GasCore/AutoChessGasRuntimeHost.cs:11)
+GAS.AutoChessDemo.AutoChessBattleRuntime:Open (GAS.AutoChessDemo.AutoChessBattleOptions&) (at Assets/AutoChessDemo/Integration/GasCore/AutoChessBattleRuntime.cs:37)
+GAS.AutoChessDemo.AutoChessBattleRuntime:GAS.AutoChessDemo.IAutoChessBattleRuntime.Open (GAS.AutoChessDemo.AutoChessBattleOptions modreq(System.Runtime.InteropServices.InAttribute)&)
+GAS.AutoChessDemo.AutoChessBattleFlow:Open (GAS.AutoChessDemo.AutoChessBattleOptions,GAS.AutoChessDemo.AutoChessBattleProfileHooks) (at Assets/AutoChessDemo/Battle/Flow/AutoChessBattleFlow.cs:55)
+GAS.AutoChessDemo.AutoChessBattleManager:RunDefault (GAS.AutoChessDemo.AutoChessBattleOptions,GAS.AutoChessDemo.AutoChessBattleProfileHooks) (at Assets/AutoChessDemo/Battle/AutoChessBattleManager.cs:12)
+GAS.AutoChessDemo.AutoChessBattleValidationRun:RunGeneratedScenario (GAS.AutoChessDemo.AutoChessGeneratedScenarioProfile,bool,bool,bool,bool) (at Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs:630)
+GAS.AutoChessDemo.AutoChessBattleValidationRun:RunHeadlessValidation (GAS.AutoChessDemo.AutoChessGeneratedScenarioProfile,GAS.AutoChessDemo.IAutoChessPresentationOutboxBridge,int) (at Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs:513)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:57)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: ./Library/PackageCache/com.unity.entities@e90944159b94/Unity.Entities/Stubs/Unity/Debug.cs Line: 13)
+
+AutoChessDemoRuntimeRunner: completed=True, winner=Player, expectedWinner=Player, scale=50, units=200, battleTicks=11, totalTicks=12, warmupDroppedTicks=3, measuredTicks=9, commands=1050, attributeChanges=900, periodTickDamageFacts=150, periodTickDamageTotal=150, executionOutputs=350, executionSpecScans=1350, executionMatchedEffectSpecs=350, executionTargetOwnerMismatches=0, executionMissingAttributes=0, executionEvaluatorRejects=0, executionOutputWrites=350, cueRequests=1550, debugEvents=138, debugWarnings=58, debugErrors=0, blockingDebugErrors=0, coreRequests=0, coreFacts=5200, coreDeltas=0, coreCues=2450, presentationMarkers=0, presentationSourceLines=96, presentationDisplayedLines=96, presentationDroppedLines=0, presentationDisabledReason=headless-log-bridge, peakEventBus=950, replayLag=0, proofOnlyApiMask=131071, reselectTriggerMask=3, runtimeAccessContractEntries=15, runtimeAccessEcsHandleProxies=15, runtimeAccessManualSync=1, runtimeAccessPerformancePassRisks=15, runtimeAccessBattleHashAffecting=4, runtimeAccessCapabilityMask=0x3F, gasConceptCoverageMask=0x1FF, gasConceptMissingMask=0x1E00, runtimeTraceAbilityCode=9103, runtimeTraceStageMask=0x2CD, runtimeTraceMissingStageMask=0x430, runtimeTraceSeeds=1, runtimeTraceModifiers=0, runtimeTraceFacts=1, runtimeTraceCues=1, runtimeTraceActiveMutationSeeds=0, runtimeTraceExecutionCalculationModifiers=0, activeEffectSlots=100, activeEffectActiveSlots=100, activeEffectDuePeriodSlots=0, activeMutationCommands=200, activeMutationOwnerGroups=200, activeMutationMaxOwnerRange=1, activeMutationSortMoves=0, activeMutationEstimatedRandomLookups=0, activeMutationOwnerResourceLookups=0, activeMutationMigrationCarriers=0, pendingAttributeDeltas=350, pendingAttributeAppliedDeltas=250, pendingAttributeSkippedDeltas=100, pendingAttributeTargetGroups=250, pendingAttributeMaxTargetRange=2, pendingAttributeEstimatedRandomLookups=0, pendingAttributeFactPatches=250, pendingAttributeMigrationCarriers=0, ownerLocalFacts=5200, ownerLocalFactOwnerGroups=1400, ownerLocalFactMaxOwnerRange=9, ownerLocalFactFlushes=5200, ownerLocalFactChangedChunks=2400, ownerLocalFactScannedOwners=2400, ownerLocalFactDirtyOwners=1400, ownerLocalFactSkippedOwners=1000, ownerLocalFactClearedOwners=1400, streamCarrierPressureWarnings=0, streamCarrierPeak=0, streamCarrierCapacity=0, observationMaterializedQueries=12, observationMaterializedEntities=2400, observationMaterializationUs=121, performancePassObservationPollutionRisks=0, magnitudeSourceCurrentValueLookups=0, magnitudeSourceCapturedValueHits=250, magnitudeSourceCaptureMisses=0, magnitudeSourceCaptureMissLiveLookups=0, magnitudeSourceFallbackValues=0, magnitudeSourceFallbackFacts=0, magnitudeSourceSourceAttributeLookups=250, magnitudeSourceTargetAttributeLookups=0, magnitudeSourceExecutionInputLookups=0, journalingCaptured=True, profilerCaptureState=profiler disabled; Entities profiler modules collect no data, ecsRuntimeTickOnly=True, officialDiffSeparatePass=True, physicsDisabledReason=reported-by-runtime, renderDisabledReason=reported-by-runtime, processWarmupRuns=1, totalElapsedMs=19.791, factsHash=0x75720A4D, summaryHash=0xBB66A285, avgTickMs=1.057
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:76)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 76)
+
+AutoChessDemoValidationRunResult: passed=True, thresholdsPassed=True, headlessLogicBudgetPassed=True, performanceExcellentPassed=False, runtimeChainPassed=True, repeatRunProbe=True, repeatRunPassed=True, officialDiffRequired=True, presentationMarkers=0, presentationDisplayedLines=96, presentationDroppedLines=0, presentationDisabledReason=headless-log-bridge, summaryHash=0xBB66A285
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:78)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 78)
+
+AutoChessDemoRepeatRunEvidence: passed=True, firstCommands=1050, secondCommands=1050, firstAttributeChanges=900, secondAttributeChanges=900, firstExecutionOutputs=350, secondExecutionOutputs=350, firstCueRequests=1550, secondCueRequests=1550, firstPeriodTickDamageFacts=150, secondPeriodTickDamageFacts=150, firstAvgTickMs=1.673, secondAvgTickMs=1.819, deterministicCountsPassed=True, firstRuntimeChainPassed=True, secondRuntimeChainPassed=True, firstRuntimeEvents=138, secondRuntimeEvents=138, firstBlockingErrors=0, secondBlockingErrors=0, firstPendingAttributeAppliedDeltas=250, secondPendingAttributeAppliedDeltas=250, firstBattleLogPassed=True, secondBattleLogPassed=True
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:80)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 80)
+
+AutoChessDemoHeadlessLogicBudget: passed=True, performanceExcellentPassed=False, failureMask=0x0, performanceTimingAvailable=True, scorecardSource=GasRuntimeDataOrientedScorecard, metricFamilySource=DiagnosticPassGasData+PerformancePassOverhead, metricFamilyMask=0x7F, dominantRisk=DependencyWait, units=200, measuredTicks=9, commands=1050, commandsPerMeasuredTick=116.667, coreFacts=5200, coreFactsPerMeasuredTick=577.778, activeMutationCommands=200, activeMutationOwnerGroups=200, activeMutationMaxOwnerRange=1, activeMutationEstimatedRandomLookups=0, pendingAttributeDeltas=350, pendingAttributeTargetGroups=250, pendingAttributeMaxTargetRange=2, pendingAttributeEstimatedRandomLookups=0, ownerLocalFacts=5200, ownerLocalFactOwnerGroups=1400, ownerLocalFactMaxOwnerRange=9, ownerLocalFactFlushes=5200, ownerLocalFactChangedChunks=2400, ownerLocalFactScannedOwners=2400, ownerLocalFactDirtyOwners=1400, ownerLocalFactSkippedOwners=1000, ownerLocalFactClearedOwners=1400, activeEffectSlots=100, activeEffectSlotCapacity=1600, activeEffectDuePeriodSlots=0, queryBudget=13, lookupUpdateBudget=1, randomLookupBudget=1, syncQueryBudget=13, dependencyWaitRisks=4, measuredAvgTickMs=1.057/1.500, measuredAvgTickPassed=True, gasTickAvgMs=1.041/1.500, gasTickAvgPassed=True, gasTickMaxMs=1.685/3.000, gasTickMaxPassed=True, coreRuntimeOwnerAvgMs=0.709/1.000, coreRuntimeOwnerAvgPassed=True, coreSimulationAvgMs=0.571/0.900, coreSimulationAvgPassed=True, boundaryOwnerAvgMs=0.268/0.350, boundaryOwnerAvgPassed=True, runnerOwnerAvgMs=0.065/0.150, runnerOwnerAvgPassed=True, measuredUsPerUnit=5.285, gasTickUsPerUnit=5.207, coreSimulationUsPerUnit=2.853, gasTickUsPerCommand=8.926, coreSimulationUsPerCoreFact=0.987, performanceObservationPollutionRisks=0, performanceObservationCleanPassed=True, profilerEvidencePassed=False, profilerCaptureState=profiler disabled; Entities profiler modules collect no data
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:82)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 82)
+
+AutoChessDemoRuntimeDataOrientedScorecard:
+runtimeDataOrientedScorecard|source=GasRuntimeDataOrientedScorecard|readModel=PerformanceTiming+MetricFamilySnapshot|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|units=200|measuredTicks=9|commands=1050|commandsPerMeasuredTick=116.666667|coreFacts=5200|coreFactsPerMeasuredTick=577.777778|activeMutationCommands=200|activeMutationOwnerGroups=200|activeMutationMaxOwnerRange=1|activeMutationEstimatedRandomLookups=0|pendingAttributeDeltas=350|pendingAttributeTargetGroups=250|pendingAttributeMaxTargetRange=2|pendingAttributeEstimatedRandomLookups=0|ownerLocalFacts=5200|ownerLocalFactOwnerGroups=1400|ownerLocalFactMaxOwnerRange=9|ownerLocalFactFlushes=5200|ownerLocalFactChangedChunks=2400|ownerLocalFactScannedOwners=2400|ownerLocalFactDirtyOwners=1400|ownerLocalFactSkippedOwners=1000|ownerLocalFactClearedOwners=1400|activeEffectSlots=100|activeEffectSlotCapacity=1600|activeEffectDuePeriodSlots=0|queryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|dependencyWaitRisks=4|performanceObservationPollutionRisks=0|metricFamilyMask=0x7F|dominantRisk=DependencyWait|performanceTimingAvailable=True|profilerEvidencePassed=False|measuredAvgTickMs=1.05696667|gasTickAvgMs=1.04138889|gasTickMaxMs=1.6852|coreRuntimeAvgMs=0.708566667|coreSimulationAvgMs=0.570533333|boundaryAvgMs=0.267644444|runnerAvgMs=0.0651777778|measuredUsPerUnit=5.28483333|gasTickUsPerUnit=5.20694444|coreSimulationUsPerUnit=2.85266667|gasTickUsPerCommand=8.92619048|coreSimulationUsPerCoreFact=0.987461538|profilerCaptureState=profiler disabled; Entities profiler modules collect no data
+hotspotAttribution|source=GasRuntimeDerivedExportSink|readModel=PerformanceTiming+MetricFamilySnapshot|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-ARCH-07|severity=High|gasConcept=GameplayFact|phase=GASBoundaryProjectionSystemGroup|lane=OwnerLocalFactDirtySpan|system=GameplayBoundaryFactExportSystem|buffer=OwnerLocalGameplayFactBuffer|operation=OwnerLocalFactFlush|count=5200|dotsRisk=OwnerLocality|nextOwner=R3|recommendation=generated dirty owner/fact span lane|evidence=ownerLocalFactMaxOwnerRange=9;ownerLocalFactDirtyOwners=1400;ownerLocalFactSkippedOwners=1000
+hotspotAttribution|source=GasRuntimeDerivedExportSink|readModel=PerformanceTiming+MetricFamilySnapshot|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-ARCH-04|severity=High|gasConcept=AttributeFactFanIn|phase=GASCoreSimulationSystemGroup|lane=PendingAttributeDeltaApply|system=GASAttributeModifierDeltaApplySystem|buffer=OwnerLocalGameplayFactBuffer|operation=OwnerLocalFactAppend|count=350|dotsRisk=BroadBufferRW|nextOwner=R3|recommendation=fact reduce/apply lane|evidence=pendingAttributeMaxTargetRange=2
+hotspotAttribution|source=GasRuntimeDerivedExportSink|readModel=PerformanceTiming+MetricFamilySnapshot|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-ARCH-ActiveEffect|severity=High|gasConcept=ActiveEffectLifecycle|phase=GASCoreSimulationSystemGroup|lane=ActiveEffectPreTick|system=GASActiveEffectPreTickSystem|buffer=ActiveGameplayEffectBuffer|operation=ActiveSlotTick|count=100|dotsRisk=PerFrameSlotScan|nextOwner=R7/R3|recommendation=dirty/due active-effect slot lane|evidence=activeEffectDuePeriodSlots=0
+hotspotAttribution|source=GasRuntimeDerivedExportSink|readModel=PerformanceTiming+MetricFamilySnapshot|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-ARCH-01|severity=High|gasConcept=RuntimeCoreApiHealth|phase=AllRuntimeGroups|lane=DependencyAndSync|system=GASDependencyDrain|buffer=ComponentLookup+BufferLookup|operation=DependencyWait|count=17|dotsRisk=DependencyWait|nextOwner=R4|recommendation=per-owner API health attribution|evidence=syncQueryBudget=13
+hotspotAttribution|source=GasRuntimeDerivedExportSink|readModel=PerformanceTiming+MetricFamilySnapshot|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-MEASURE-02|severity=Medium|gasConcept=OfficialToolEvidence|phase=Validation|lane=ProfilerCapture|system=GasRuntimeOfficialToolDiff|buffer=Profiler|operation=ProfilerEvidence|count=1|dotsRisk=MissingProfilerEvidence|nextOwner=R8|recommendation=profiler-enabled scale gate|evidence=profilerCaptureState=profiler disabled; Entities profiler modules collect no data
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:85)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 85)
+
+AutoChessDemoRuntimeHotspots: primaryCommands=500, finisherCommands=350, lowestHealthSelections=450, tickAvgMs=1.041, coreRuntimeOwnerAvgMs=0.709, boundaryOwnerAvgMs=0.268, runnerOwnerAvgMs=0.065, debuggerOwnerAvgMs=179.795, commandResolveAvgMs=0.083, coreSimulationAvgMs=0.571, activeMutationCommands=200, activeMutationOwnerGroups=200, activeMutationMaxOwnerRange=1, activeMutationEstimatedRandomLookups=0, periodTickDamageFacts=150, executionSpecScans=1350, executionMatchedEffectSpecs=350, executionTargetOwnerMismatches=0, executionMissingAttributes=0, executionEvaluatorRejects=0, executionOutputWrites=350, pendingAttributeDeltas=350, pendingAttributeAppliedDeltas=250, pendingAttributeTargetGroups=250, pendingAttributeEstimatedRandomLookups=0, ownerLocalFacts=5200, ownerLocalFactOwnerGroups=1400, ownerLocalFactFlushes=5200, ownerLocalFactDirtyOwners=1400, ownerLocalFactSkippedOwners=1000, streamCarrierPressureWarnings=0, observationMaterializedQueries=12, observationMaterializationUs=121, performancePassObservationPollutionRisks=0, magnitudeSourceCaptureMisses=0, magnitudeSourceCaptureMissLiveLookups=0, magnitudeSourceFallbackValues=0, magnitudeSourceFallbackFacts=0, magnitudeSourceExecutionInputLookups=0, structuralCommitAvgMs=0.014, boundaryProjectionAvgMs=0.268, dependencyDrainAvgMs=0.065
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:88)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 88)
+
+AutoChessDemoHotspotAttributionMatrix:
+hotspotAttribution|source=AutoChessBattleValidationReport|readModel=JournalingTopN+DiagnosticMetricFamily|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=R4-DBG-MATRIX|severity=High|gasConcept=DebuggerEvidence|phase=DebuggerOwner|lane=HotspotAttribution|system=GasRuntimeDerivedExportSink|buffer=runtimeDataOrientedScorecard+JournalingTopN|operation=DerivedExport|count=81544|dotsRisk=ManualInference|nextOwner=R4|recommendation=keep matrix as validation contract|evidence=journalingWorldRecords=81544
+hotspotAttribution|source=AutoChessBattleValidationReport|readModel=JournalingTopN+DiagnosticMetricFamily|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-ARCH-07|severity=High|gasConcept=GameplayFact|phase=GASBoundaryProjectionSystemGroup|lane=OwnerLocalFactDirtySpan|system=GameplayBoundaryFactExportSystem|buffer=OwnerLocalGameplayFactBuffer|operation=GetBufferRW|count=11250|dotsRisk=BroadBufferRW+OwnerLocality|nextOwner=R3|recommendation=dirty owner/fact span lane|evidence=ownerLocalFactFlushes=5200;ownerLocalFactDirtyOwners=1400;ownerLocalFactSkippedOwners=1000
+hotspotAttribution|source=AutoChessBattleValidationReport|readModel=JournalingTopN+DiagnosticMetricFamily|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-ARCH-AE-PRETICK|severity=High|gasConcept=ActiveEffectLifecycle|phase=GASCoreSimulationSystemGroup|lane=ActiveEffectPreTick|system=GASActiveEffectPreTickSystem|buffer=ActiveGameplayEffectBuffer+ActiveEffectMutationBuffer|operation=GetBufferRW|count=8600|dotsRisk=PerFrameSlotScan|nextOwner=R7/R3|recommendation=dirty/due slot lane|evidence=activeEffectSlots=100
+hotspotAttribution|source=AutoChessBattleValidationReport|readModel=JournalingTopN+DiagnosticMetricFamily|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-ARCH-CMD-PREPARE|severity=High|gasConcept=CommandFanIn|phase=GASFramePrepareSystemGroup|lane=OwnerLocalInstantCommandPrepare|system=OwnerLocalInstantCommandFramePrepareSystem|buffer=GEEffectCommandBuffer+GESetByCallerValueBuffer|operation=GetBufferRW|count=9000|dotsRisk=PerFrameBufferClearCopy|nextOwner=R7/R3|recommendation=dirty command owner lane|evidence=commands=1050
+hotspotAttribution|source=AutoChessBattleValidationReport|readModel=JournalingTopN+DiagnosticMetricFamily|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-ARCH-AE-MUTATION-PREPARE|severity=High|gasConcept=ActiveEffectMutation|phase=GASFramePrepareSystemGroup|lane=ActiveEffectMutationPrepare|system=ActiveEffectOwnerLocalMutationFramePrepareSystem|buffer=ActiveEffectMutationBuffer|operation=GetBufferRW|count=13000|dotsRisk=PerFrameBufferClearCopy|nextOwner=R7/R3|recommendation=dirty active mutation owner lane|evidence=activeMutationCommands=200
+hotspotAttribution|source=AutoChessBattleValidationReport|readModel=JournalingTopN+DiagnosticMetricFamily|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-ARCH-06|severity=High|gasConcept=ExecutionCalculation|phase=GASCoreSimulationSystemGroup|lane=ExecutionSpecSelection|system=AutoChessExecuteDamageCalculationSystem|buffer=GEEffectSpecBuffer|operation=SpecScan|count=1350|dotsRisk=FanOutScan|nextOwner=R5/R3|recommendation=calculationCode to effect-spec generated index|evidence=scanMatchRatio=3.857
+hotspotAttribution|source=AutoChessBattleValidationReport|readModel=JournalingTopN+DiagnosticMetricFamily|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-ARCH-STREAM-RW|severity=High|gasConcept=EffectCommandStream|phase=GASCoreSimulationSystemGroup|lane=StreamSequenceAllocation|system=GEEffectCommandSpecStream|buffer=GEEffectCommandStreamComponent|operation=GetComponentDataRW|count=10555|dotsRisk=SingletonStreamRW|nextOwner=R4/R3|recommendation=per-lane sequence counter attribution|evidence=effectCommandBufferRW=4650
+hotspotAttribution|source=AutoChessBattleValidationReport|readModel=JournalingTopN+DiagnosticMetricFamily|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-ARCH-ATTR-RW|severity=High|gasConcept=AttributeState|phase=GASCoreSimulationSystemGroup|lane=AttributeDeltaApply|system=GASAttributeModifierDeltaApplySystem|buffer=AttributeValueBuffer|operation=GetBufferRW|count=7050|dotsRisk=BroadBufferRW|nextOwner=R3|recommendation=attribute dirty range apply lane|evidence=pendingAttributeDeltas=350
+hotspotAttribution|source=AutoChessBattleValidationReport|readModel=JournalingTopN+DiagnosticMetricFamily|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-DBG-01|severity=High|gasConcept=DebuggerObservation|phase=DebuggerOwner|lane=DiagnosticMaterialization|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|operation=Materialization|count=2412|dotsRisk=ObservationMaterialization|nextOwner=R4|recommendation=budgeted diagnostic materialization owner|evidence=queries=12;entities=2400
+hotspotAttribution|source=AutoChessBattleValidationReport|readModel=JournalingTopN+DiagnosticMetricFamily|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=GAS-MEASURE-02|severity=Medium|gasConcept=OfficialToolEvidence|phase=Validation|lane=ProfilerCapture|system=GasRuntimeOfficialToolDiff|buffer=Profiler|operation=ProfilerEvidence|count=1|dotsRisk=MissingProfilerEvidence|nextOwner=R8|recommendation=profiler-enabled x50/x100/x1000 scale gate|evidence=profilerCaptureState=profiler disabled; Entities profiler modules collect no data
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:90)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 90)
+
+AutoChessDemoBoundaryOwners: shellPublicRawEcsSurface=false, unitIdentity=AutoChessBattleUnitKey, unitRuntimeHandle=ASCHandle, unitCreateOwner=RuntimeShell.ASCCommandCapability, unitDestroyOwner=ASCCommandPort.RequestDestroy, driverLifecycleOwner=AutoChessBattleDriverRuntimeStore, driverHandle=OpaqueDriverIdVersion, driverAdapterRawEntity=false, driverOwnerInstalled=true, driverOwnerEnabled=true, driverOwnerHandleMatched=true, driverStructuralCreates=1, driverEnableRequests=1, driverDisableRequests=0, driverUninstallRequests=0, catalogOwner=AutoChessGasCatalogSession, snapshotOwner=AutoChessGasBattleUnitSnapshotProjector.StructuredLog, observationOwner=AutoChessGasObservationGateway, runnerSyncOwner=GASDependencyDrain, reportProjectionOwner=AutoChessRuntimeUnitResolver.BoundaryReportKey, runtimeAccessContractEntries=15, runtimeAccessEcsHandleProxies=15, runtimeAccessManualSync=1, runtimeAccessPerformancePassRisks=15, passed=True, entries=5200, sourceAscRefs=5200, sourceReportKeys=5200, missingSourceReportKeys=0, targetAscRefs=5200, targetReportKeys=5200, missingTargetReportKeys=0, factsHash=0x75720A4D
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:95)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 95)
+
+AutoChessDemoBoundaryReportKeys: passed=True, entries=5200, sourceAscRefs=5200, sourceReportKeys=5200, missingSourceReportKeys=0, targetAscRefs=5200, targetReportKeys=5200, missingTargetReportKeys=0
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:97)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 97)
+
+AutoChessDemoBattlePresentation: markers=0, sourceLines=96, displayedLines=96, droppedLines=0, disabledReason=headless-log-bridge
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:100)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 100)
+
+AutoChessDemoRuntimeBattleLog:
+[F0000] 游戏开始：玩家A 对阵 玩家B，房间=标准双人自走棋对局，棋子数=200。
+[F0000] 玩家A 上阵 霜卫先锋（前排战士，槽位0，HP 72）。
+[F0000] 玩家A 上阵 游侠射手（后排射手，槽位1，HP 54）。
+[F0000] 玩家B 上阵 荒原斗士（前排斗士，槽位0，HP 48）。
+[F0000] 玩家B 上阵 秘术术士（后排法师，槽位1，HP 42）。
+[F0000] 玩家A 上阵 霜卫先锋 #2（前排战士，槽位0，HP 72）。
+[F0000] 玩家A 上阵 游侠射手 #2（后排射手，槽位1，HP 54）。
+[F0000] 玩家B 上阵 荒原斗士 #2（前排斗士，槽位0，HP 48）。
+[F0000] 玩家B 上阵 秘术术士 #2（后排法师，槽位1，HP 42）。
+[F0000] 其余 192 名缩放棋子已进入各自镜像战场。
+[F0002] 玩家B的荒原斗士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 72 -> 64）。
+[F0002] 玩家B的秘术术士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 64 -> 56）。
+[F0002] 玩家A的霜卫先锋 对 玩家B的秘术术士 发动了 斩杀追击，造成 16 点处决伤害。
+[F0002] 玩家A的霜卫先锋 对 玩家B的秘术术士 发动了 斩杀追击，造成 16 点伤害（HP 42 -> 26）。
+[F0002] 玩家B的荒原斗士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 72 -> 64）。
+[F0002] 玩家B的秘术术士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 64 -> 56）。
+[F0002] 玩家A的霜卫先锋 #2 对 玩家B的秘术术士 #2 发动了 斩杀追击，造成 16 点处决伤害。
+[F0002] 玩家A的霜卫先锋 #2 对 玩家B的秘术术士 #2 发动了 斩杀追击，造成 16 点伤害（HP 42 -> 26）。
+[F0002] 玩家B的荒原斗士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 72 -> 64）。
+[F0002] 玩家B的秘术术士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 64 -> 56）。
+[F0002] 玩家A的霜卫先锋 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 16 点处决伤害。
+[F0002] 玩家A的霜卫先锋 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 16 点伤害（HP 42 -> 26）。
+[F0003] 玩家B的荒原斗士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 56 -> 48）。
+[F0003] 玩家B的秘术术士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 48 -> 40）。
+[F0003] 玩家A的游侠射手 对 玩家B的秘术术士 发动了 斩杀追击，造成 24 点处决伤害。
+[F0003] 玩家A的游侠射手 对 玩家B的秘术术士 发动了 斩杀追击，造成 24 点伤害（HP 26 -> 2）。
+[F0003] 玩家B的荒原斗士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 56 -> 48）。
+[F0003] 玩家B的秘术术士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 48 -> 40）。
+[F0003] 玩家A的游侠射手 #2 对 玩家B的秘术术士 #2 发动了 斩杀追击，造成 24 点处决伤害。
+[F0003] 玩家A的游侠射手 #2 对 玩家B的秘术术士 #2 发动了 斩杀追击，造成 24 点伤害（HP 26 -> 2）。
+[F0003] 玩家B的荒原斗士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 56 -> 48）。
+[F0003] 玩家B的秘术术士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 48 -> 40）。
+[F0003] 玩家A的游侠射手 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 24 点处决伤害。
+[F0003] 玩家A的游侠射手 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 24 点伤害（HP 26 -> 2）。
+[F0004] 玩家B的荒原斗士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 40 -> 32）。
+[F0004] 玩家B的秘术术士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 32 -> 24）。
+[F0004] 玩家A的霜卫先锋 对 玩家B的秘术术士 发动了 斩杀追击，造成 1 点处决伤害。
+[F0004] 玩家A的游侠射手 对 玩家B的秘术术士 发动了 斩杀追击，造成 36 点处决伤害。
+[F0004] 玩家A的游侠射手 对 玩家B的秘术术士 发动了 毒刃，造成 1 点伤害（HP 2 -> 1）。
+[F0004] 玩家A的霜卫先锋 对 玩家B的秘术术士 发动了 斩杀追击，造成 1 点伤害（HP 1 -> 0）。
+[F0004] 玩家B的秘术术士 受到致命伤害，死亡。
+[F0004] 玩家B的荒原斗士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 40 -> 32）。
+[F0004] 玩家B的秘术术士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 32 -> 24）。
+[F0004] 玩家A的霜卫先锋 #2 对 玩家B的秘术术士 #2 发动了 斩杀追击，造成 1 点处决伤害。
+[F0004] 玩家A的游侠射手 #2 对 玩家B的秘术术士 #2 发动了 斩杀追击，造成 36 点处决伤害。
+[F0004] 玩家A的游侠射手 #2 对 玩家B的秘术术士 #2 发动了 毒刃，造成 1 点伤害（HP 2 -> 1）。
+[F0004] 玩家A的霜卫先锋 #2 对 玩家B的秘术术士 #2 发动了 斩杀追击，造成 1 点伤害（HP 1 -> 0）。
+[F0004] 玩家B的秘术术士 #2 受到致命伤害，死亡。
+[F0004] 玩家B的荒原斗士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 40 -> 32）。
+[F0004] 玩家B的秘术术士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 32 -> 24）。
+[F0004] 玩家A的霜卫先锋 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 1 点处决伤害。
+[F0004] 玩家A的游侠射手 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 36 点处决伤害。
+[F0004] 玩家A的游侠射手 #3 对 玩家B的秘术术士 #3 发动了 毒刃，造成 1 点伤害（HP 2 -> 1）。
+[F0004] 玩家A的霜卫先锋 #3 对 玩家B的秘术术士 #3 发动了 斩杀追击，造成 1 点伤害（HP 1 -> 0）。
+[F0004] 玩家B的秘术术士 #3 受到致命伤害，死亡。
+[F0005] 玩家B的荒原斗士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 24 -> 16）。
+[F0005] 玩家A的霜卫先锋 对 玩家B的荒原斗士 发动了 破阵斩，造成 12 点伤害（HP 48 -> 36）。
+[F0005] 玩家A的霜卫先锋 对 玩家B的荒原斗士 发动了 毒刃，造成 1 点伤害（HP 36 -> 35）。
+[F0005] 玩家B的荒原斗士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 24 -> 16）。
+[F0005] 玩家A的霜卫先锋 #2 对 玩家B的荒原斗士 #2 发动了 破阵斩，造成 12 点伤害（HP 48 -> 36）。
+[F0005] 玩家A的霜卫先锋 #2 对 玩家B的荒原斗士 #2 发动了 毒刃，造成 1 点伤害（HP 36 -> 35）。
+[F0005] 玩家B的荒原斗士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 24 -> 16）。
+[F0005] 玩家A的霜卫先锋 #3 对 玩家B的荒原斗士 #3 发动了 破阵斩，造成 12 点伤害（HP 48 -> 36）。
+[F0005] 玩家A的霜卫先锋 #3 对 玩家B的荒原斗士 #3 发动了 毒刃，造成 1 点伤害（HP 36 -> 35）。
+[F0006] 玩家B的荒原斗士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 16 -> 8）。
+[F0006] 玩家A的游侠射手 对 玩家B的荒原斗士 发动了 斩杀追击，造成 22.5 点处决伤害。
+[F0006] 玩家A的游侠射手 对 玩家B的荒原斗士 发动了 斩杀追击，造成 22.5 点伤害（HP 35 -> 12.5）。
+[F0006] 玩家B的荒原斗士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 16 -> 8）。
+[F0006] 玩家A的游侠射手 #2 对 玩家B的荒原斗士 #2 发动了 斩杀追击，造成 22.5 点处决伤害。
+[F0006] 玩家A的游侠射手 #2 对 玩家B的荒原斗士 #2 发动了 斩杀追击，造成 22.5 点伤害（HP 35 -> 12.5）。
+[F0006] 玩家B的荒原斗士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 16 -> 8）。
+[F0006] 玩家A的游侠射手 #3 对 玩家B的荒原斗士 #3 发动了 斩杀追击，造成 22.5 点处决伤害。
+[F0006] 玩家A的游侠射手 #3 对 玩家B的荒原斗士 #3 发动了 斩杀追击，造成 22.5 点伤害（HP 35 -> 12.5）。
+[F0007] 玩家B的荒原斗士 对 玩家A的霜卫先锋 发动了 蛮力打击，造成 8 点伤害（HP 8 -> 0）。
+[F0007] 玩家A的霜卫先锋 受到致命伤害，死亡。
+[F0007] 玩家A的霜卫先锋 对 玩家B的荒原斗士 发动了 斩杀追击，造成 11.5 点处决伤害。
+[F0007] 玩家A的游侠射手 对 玩家B的荒原斗士 发动了 斩杀追击，造成 33.8 点处决伤害。
+[F0007] 玩家A的游侠射手 对 玩家B的荒原斗士 发动了 毒刃，造成 1 点伤害（HP 12.5 -> 11.5）。
+[F0007] 玩家A的霜卫先锋 对 玩家B的荒原斗士 发动了 斩杀追击，造成 11.5 点伤害（HP 11.5 -> 0）。
+[F0007] 玩家B的荒原斗士 受到致命伤害，死亡。
+[F0007] 玩家B的荒原斗士 #2 对 玩家A的霜卫先锋 #2 发动了 蛮力打击，造成 8 点伤害（HP 8 -> 0）。
+[F0007] 玩家A的霜卫先锋 #2 受到致命伤害，死亡。
+[F0007] 玩家A的霜卫先锋 #2 对 玩家B的荒原斗士 #2 发动了 斩杀追击，造成 11.5 点处决伤害。
+[F0007] 玩家A的游侠射手 #2 对 玩家B的荒原斗士 #2 发动了 斩杀追击，造成 33.8 点处决伤害。
+[F0007] 玩家A的游侠射手 #2 对 玩家B的荒原斗士 #2 发动了 毒刃，造成 1 点伤害（HP 12.5 -> 11.5）。
+[F0007] 玩家A的霜卫先锋 #2 对 玩家B的荒原斗士 #2 发动了 斩杀追击，造成 11.5 点伤害（HP 11.5 -> 0）。
+[F0007] 玩家B的荒原斗士 #2 受到致命伤害，死亡。
+[F0007] 玩家B的荒原斗士 #3 对 玩家A的霜卫先锋 #3 发动了 蛮力打击，造成 8 点伤害（HP 8 -> 0）。
+[F0007] 玩家A的霜卫先锋 #3 受到致命伤害，死亡。
+[F0007] 玩家A的霜卫先锋 #3 对 玩家B的荒原斗士 #3 发动了 斩杀追击，造成 11.5 点处决伤害。
+[F0007] 玩家A的游侠射手 #3 对 玩家B的荒原斗士 #3 发动了 斩杀追击，造成 33.8 点处决伤害。
+[F0007] 玩家A的游侠射手 #3 对 玩家B的荒原斗士 #3 发动了 毒刃，造成 1 点伤害（HP 12.5 -> 11.5）。
+[F0007] 玩家A的霜卫先锋 #3 对 玩家B的荒原斗士 #3 发动了 斩杀追击，造成 11.5 点伤害（HP 11.5 -> 0）。
+[F0007] 玩家B的荒原斗士 #3 受到致命伤害，死亡。
+[F0011] 已折叠 1316 条镜像战场重复日志，当前画面只展示前 3 组的详细过程。
+[F0011] 战斗结束：胜者=玩家A，战斗帧=11。
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:102)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 102)
+
+AutoChessDemoRuntimeDebugger: runtimeDiagnosticsSource=GasRuntimeDiagnosticEvidenceSnapshot, events=138, dropped=0, warnings=58, errors=0, blockingErrors=0, requests=0, specs=1350, deltas=0, facts=5200, cues=2450, presentation=8300, activeEffectOwners=200, activeEffectSlots=100, periodTickDamageFacts=150, queryBudget=13, lookupBudget=1, randomLookupBudget=1, syncQueryBudget=13, activeMutationCommands=200, activeMutationOwnerGroups=200, activeMutationMaxOwnerRange=1, activeMutationSortMoves=0, activeMutationEstimatedRandomLookups=0, activeMutationOwnerResourceLookups=0, activeMutationMigrationCarriers=0, pendingAttributeDeltas=350, pendingAttributeAppliedDeltas=250, pendingAttributeSkippedDeltas=100, pendingAttributeTargetGroups=250, pendingAttributeMaxTargetRange=2, pendingAttributeEstimatedRandomLookups=0, pendingAttributeFactPatches=250, pendingAttributeMigrationCarriers=0, ownerLocalFacts=5200, ownerLocalFactOwnerGroups=1400, ownerLocalFactMaxOwnerRange=9, ownerLocalFactFlushes=5200, ownerLocalFactChangedChunks=2400, ownerLocalFactScannedOwners=2400, ownerLocalFactDirtyOwners=1400, ownerLocalFactSkippedOwners=1000, ownerLocalFactClearedOwners=1400, ownerLocalInstantPrepareChunks=2400, ownerLocalInstantPrepareScannedOwners=2400, ownerLocalInstantPrepareSkippedOwners=1450, ownerLocalInstantPrepareDirtyOwners=950, ownerLocalInstantPrepareClearedCommands=1350, ownerLocalInstantPrepareClearedSpecs=1350, ownerLocalInstantPreparePromotedCommands=0, activeMutationPrepareChunks=2400, activeMutationPrepareScannedOwners=2400, activeMutationPrepareSkippedOwners=1750, activeMutationPrepareDirtyOwners=650, activeMutationPrepareClearedMutations=750, activeMutationPreparePromotedCommands=0, activeEffectPreTickChunks=2400, activeEffectPreTickScannedOwners=2400, activeEffectPreTickSkippedOwners=1800, activeEffectPreTickProcessedOwners=600, activeEffectPreTickScannedSlots=750, activeEffectPreTickDueSlots=550, activeEffectPreTickNoopSlots=200, activeEffectPreTickMutationWrites=600, streamCarrierPressureWarnings=0, observationMaterializedQueries=12, observationMaterializedEntities=2400, observationMaterializationUs=121, performancePassObservationPollutionRisks=12, magnitudeSourceCurrentValueLookups=0, magnitudeSourceCapturedValueHits=250, magnitudeSourceCaptureMisses=0, magnitudeSourceCaptureMissLiveLookups=0, magnitudeSourceFallbackValues=0, magnitudeSourceFallbackFacts=0, magnitudeSourceSourceAttributeLookups=250, magnitudeSourceTargetAttributeLookups=0, magnitudeSourceExecutionInputLookups=0, frameBackbonePhases=8, streams=8, migrationCarriers=8, profilerMarkerContracts=4, journalingMarkerContracts=1
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:103)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 103)
+
+AutoChessDemoRuntimeTiming: ecsRuntimeTickOnly=True, ownerSplit=core/boundary/debugger/runner/physics/render, physicsDisabledReason=reported-by-runtime, renderDisabledReason=reported-by-runtime, presentationDisabledReason=headless-log-bridge | CoreRuntimeOwner(samples=9,avgMs=0.709,maxMs=1.119) | BoundaryOwner(samples=9,avgMs=0.268,maxMs=0.487) | DebuggerOwner(samples=1,avgMs=179.795,maxMs=179.795) | RunnerOwner(samples=9,avgMs=0.065,maxMs=0.216) | PhysicsOwner(samples=0,avgMs=0.000,maxMs=0.000) | RenderOwner(samples=0,avgMs=0.000,maxMs=0.000) | GASTickTotal(samples=9,avgMs=1.041,maxMs=1.685) | GASFramePrepareSystemGroup(samples=9,avgMs=0.040,maxMs=0.075) | GASCommandResolveSystemGroup(samples=9,avgMs=0.083,maxMs=0.129) | GASCoreSimulationSystemGroup(samples=9,avgMs=0.571,maxMs=0.978) | GASStructuralCommitSystemGroup(samples=9,avgMs=0.014,maxMs=0.020) | GASBoundaryProjectionSystemGroup(samples=9,avgMs=0.268,maxMs=0.487) | GASDependencyDrain(samples=9,avgMs=0.065,maxMs=0.216)
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:105)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 105)
+
+AutoChessDemoOfficialToolDiff: runtimeSelfDiagnostics=events:0, officialDiffSeparatePass=True, journalingAvailable=True, journalingCaptured=True, journalingWorldRecords=81544, runtimeStructuralApprox=0, journalingStructural=0, deltaStructural=0, runtimeCreates=0, journalingCreates=0, deltaCreates=0, runtimeDestroys=0, journalingDestroys=0, deltaDestroys=0, journalingAddComponents=0, journalingRemoveComponents=0, journalingEnableComponents=650, journalingDisableComponents=0, journalingSetComponentData=0, journalingSetBuffer=0, journalingGetComponentDataRW=20210, journalingGetBufferRW=60684, profilerAvailable=True, profilerEnabled=False, structuralProfilerCategoryEnabled=False, memoryProfilerCategoryEnabled=False, profilerCaptureState=profiler disabled; Entities profiler modules collect no data, journalingRecordTopN=GetBufferRW=60684;GetComponentDataRW=20210;EnableComponent=650, journalingSystemTopN=GetBufferRW@GAS.Runtime.ActiveEffectOwnerLocalMutationFramePrepareSystem=9000;GetBufferRW@GAS.Runtime.OwnerLocalInstantCommandFramePrepareSystem=9000;GetBufferRW@GAS.Runtime.GASActiveEffectPreTickSystem=8600;GetBufferRW@GAS.Runtime.GASAttributeModifierDeltaApplySystem=5400;GetBufferRW@GAS.Runtime.ASCCommandBufferResolveSystem=4550;GetComponentDataRW@GAS.Runtime.GASActiveEffectPreTickSystem=4209;GetBufferRW@GAS.Runtime.GASActiveEffectMutationApplySystem=3750;GetComponentDataRW@GAS.AutoChessDemo.AutoChessExecuteDamageCalculationSystem=3609, journalingComponentTopN=GetBufferRW:GAS.Runtime.OwnerLocalGameplayFactBuffer=11250;GetComponentDataRW:GAS.Runtime.GEEffectCommandStreamComponent=10555;GetBufferRW:GAS.Runtime.AttributeValueBuffer=7050;GetBufferRW:GAS.Runtime.GEEffectCommandBuffer=4650;GetBufferRW:GAS.Runtime.ActiveEffectMutationBuffer=4000;GetBufferRW:GAS.Runtime.AttributeModifierBuffer=3600;GetComponentDataRW:GAS.Runtime.PendingAttributeModifierComponent=3600;GetBufferRW:GAS.Runtime.GESetByCallerValueBuffer=3350
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:107)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 107)
+
+AutoChessDemoRuntimeDataFlow:
+```mermaid
+flowchart LR
+    CommandDrive["AutoChessBattleCommandDriveSystem\nscale: 50, units: 200\ncommands: 1050"] --> AbilityBuffer["AbilityCommandBuffer\nrequest entities avoided"]
+    AbilityBuffer --> RuntimeCore["GAS Runtime Core\nspecs: 0"]
+    RuntimeCore --> GEStream["GEEffectCommandBuffer / Spec / Delta\ndeltas: 0"]
+    GEStream --> Execution["AutoChessExecuteDamageCalculationSystem\nexecution outputs: 350"]
+    Execution --> PendingDelta["pending AttributeModifierBuffer\nexecution outputs: 350"]
+    PendingDelta --> Attribute["GASAttributeModifierDeltaApplySystem\nattribute changes: 900"]
+    Attribute --> Facts["GameplayEventBuffer typed facts\nfacts: 0"]
+    Facts --> Projection["Replay / Presentation / Layer 2 Diagnostics\nreplay events: 5200"]
+    Projection --> OfficialDiff["Official tool diff\nseparate pass, journaling records: 81544"]
+```
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:109)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 109)
+
+AutoChessDemoRuntimeSequence:
+```mermaid
+sequenceDiagram
+    participant Runner as AutoChess Demo Runner
+    participant Drive as AutoChessBattle Command Drive
+    participant Core as GAS Runtime Core
+    participant Exec as Execution Calculation
+    participant Obs as Replay / Projection
+    participant Debug as Layer 2 DiagnosticsSink
+    participant Unity as Unity Journaling / Profiler
+    Runner->>Drive: fixed ticks 12, battle ticks 11, scale 50
+    Drive->>Core: AbilityCommandBuffer commands 1050
+    Core->>Exec: execute GE commands, finishers 350
+    Exec->>Core: pending modifier + typed fact outputs 350
+    Core->>Core: apply pending modifier deltas 900
+    Core->>Obs: attribute changes 900, cue requests 1550
+    Obs->>Debug: counters 0, warnings 0, errors 0
+    Debug->>Unity: read EntitiesJournaling records in a separate official-diff pass
+    Unity-->>Debug: journaling structural records 0, profiler state profiler disabled; Entities profiler modules collect no data
+```
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:111)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 111)
+
+AutoChessDemoRuntimeDiagnostics:
+runtimeDiagnostics|events=138|dropped=0|warnings=58|errors=0|slowSystems=58|bufferPressureWarnings=0
+runtimeCoreCounters|requests=0|specs=1350|deltas=0|facts=5200|cues=2450|presentation=8300|entityCreates=0|entityDestroys=50|ecbPlaybacks=0
+runtimeCoreCountersPeak|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=950|presentationCursorLag=0|replayCursorLag=0
+runtimeCoreActiveEffectStore|owners=200|slots=100|capacity=1600|pendingApply=0|active=100|inhibited=0|pendingRemove=0|legacyBacked=0|externalizedOwners=0|grantedTags=0|grantedAbilities=0|chunkSkipMatched=100|chunkSkipSkipped=100|chunkSkipDuePeriod=0|chunkSkipNoop=100|chunkSkipOwners=200|globalIndexOwners=1|globalIndexCount=0|globalIndexActive=0|globalIndexInhibited=0|globalIndexPendingRemove=0|globalIndexPeriodDue=0|globalIndexDurationDue=0|globalIndexStale=0|globalIndexBucketOwners=16|globalIndexBucketIndexCount=0|globalIndexMaxBucketLength=0|globalIndexStableRows=0|globalIndexStaleStableRows=0
+runtimeCoreActiveMutation|commands=200|ownerGroups=200|maxOwnerRange=1|sortMoves=0|estimatedRandomLookups=0|ownerResourceLookups=0|migrationCarriers=0
+runtimeCorePendingAttributeDelta|pending=350|applied=250|skipped=100|targetGroups=250|maxTargetRange=2|estimatedRandomLookups=0|factPatches=250|migrationCarriers=0|ownerLocalFacts=5200|ownerGroups=1400|maxOwnerRange=9|flushes=5200|changedChunks=2400|scannedOwners=2400|dirtyOwners=1400|skippedOwners=1000|clearedOwners=1400
+runtimeCoreFrameLane|ownerLocalInstantPrepareChunks=2400|ownerLocalInstantPrepareScannedOwners=2400|ownerLocalInstantPrepareSkippedOwners=1450|ownerLocalInstantPrepareDirtyOwners=950|ownerLocalInstantPrepareClearedCommands=1350|ownerLocalInstantPrepareClearedSpecs=1350|ownerLocalInstantPreparePromotedCommands=0|activeMutationPrepareChunks=2400|activeMutationPrepareScannedOwners=2400|activeMutationPrepareSkippedOwners=1750|activeMutationPrepareDirtyOwners=650|activeMutationPrepareClearedMutations=750|activeMutationPreparePromotedCommands=0|activeEffectPreTickChunks=2400|activeEffectPreTickScannedOwners=2400|activeEffectPreTickSkippedOwners=1800|activeEffectPreTickProcessedOwners=600|activeEffectPreTickScannedSlots=750|activeEffectPreTickDueSlots=550|activeEffectPreTickNoopSlots=200|activeEffectPreTickMutationWrites=600
+runtimeCoreMagnitudeSource|currentValueLookups=0|capturedValueHits=250|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=250|targetAttributeLookups=0|executionInputLookups=0
+runtimeCoreFrameBudget|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeCoreFrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|dependencyWaitRisks=4|allocatorOwners=1|rewindableAllocatorCandidates=1|streams=8|migrationCarriers=8|nativeStreamCandidates=1|ownerLocalBufferCandidates=5|battleHashStreams=8|deterministicMergePolicies=8|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0
+runtimeCoreFrameBackboneEvidence|profilerMarkers=4|journalingMarkers=1|evidenceMask=131071|burstWarmupPolicy=1
+runtimeCoreCostSplit|core=1|physics=1|render=1|runner=1|physicsDisabledReasons=1|renderDisabledReasons=1
+runtimeCoreDebuggerOverhead|samplingInterval=1|overheadBudgetUs=50|disablePolicy=1|hotPathManagedStrings=0
+runtimeObservationMaterialization|queries=12|entities=2400|elapsedUs=121|activeEffectStoreQueries=12|activeEffectStoreEntities=2400|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=12
+runtimeMagnitudeSource|currentValueLookups=0|capturedValueHits=250|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=250|targetAttributeLookups=0|executionInputLookups=0|activeEffectSlotSourceSnapshotCapacity=19200|activeEffectSlotSourceSnapshotGatherAttempts=550|activeEffectSlotSourceSnapshotWrites=550|activeEffectSlotSourceSnapshotWriteFailures=0|activeEffectSlotSourceSnapshotAttributeMisses=0|activeEffectSlotSourceSnapshotApplyHits=50|activeEffectSlotSourceSnapshotApplyMisses=0|activeEffectSlotSourceSnapshotFallbacks=0|activeEffectSlotSourceSnapshotCapacityPressure=0|activeEffectSlotSourceSnapshotSpills=0
+runtimeDiagnostic|seq=0|frame=1|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=0|specs=0|deltas=0|facts=0|cues=0|presentation=0|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=0|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=0|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=0|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=0|activeEffectChunkSkipSkippedSlots=0|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=0|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=0|activeMutationOwnerGroups=0|activeMutationMaxOwnerRange=0|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=0|pendingAttributeAppliedDeltas=0|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=0|pendingAttributeMaxTargetRange=0|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=0|pendingAttributeMigrationCarriers=0|ownerLocalFacts=0|ownerLocalFactOwnerGroups=0|ownerLocalFactMaxOwnerRange=0|ownerLocalFactFlushes=0|ownerLocalFactChangedChunks=200|ownerLocalFactScannedOwners=200|ownerLocalFactDirtyOwners=0|ownerLocalFactSkippedOwners=200|ownerLocalFactClearedOwners=0|ownerLocalInstantPrepareChunks=200|ownerLocalInstantPrepareScannedOwners=200|ownerLocalInstantPrepareSkippedOwners=200|ownerLocalInstantPrepareDirtyOwners=0|ownerLocalInstantPrepareClearedCommands=0|ownerLocalInstantPrepareClearedSpecs=0|ownerLocalInstantPreparePromotedCommands=0|activeMutationPrepareChunks=200|activeMutationPrepareScannedOwners=200|activeMutationPrepareSkippedOwners=200|activeMutationPrepareDirtyOwners=0|activeMutationPrepareClearedMutations=0|activeMutationPreparePromotedCommands=0|activeEffectPreTickChunks=200|activeEffectPreTickScannedOwners=200|activeEffectPreTickSkippedOwners=200|activeEffectPreTickProcessedOwners=0|activeEffectPreTickScannedSlots=0|activeEffectPreTickDueSlots=0|activeEffectPreTickNoopSlots=0|activeEffectPreTickMutationWrites=0|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=1|frame=1|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=8|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=2|frame=1|kind=MagnitudeSource|severity=Trace|module=Effect|group=MagnitudeSource|system=DiagnosticsSnapshotSystem|buffer=GEEffectCommandStreamComponent|currentValueLookups=0|capturedValueHits=0|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=0|targetAttributeLookups=0|executionInputLookups=0|activeEffectSlotSourceSnapshotCapacity=1600|activeEffectSlotSourceSnapshotGatherAttempts=0|activeEffectSlotSourceSnapshotWrites=0|activeEffectSlotSourceSnapshotWriteFailures=0|activeEffectSlotSourceSnapshotAttributeMisses=0|activeEffectSlotSourceSnapshotApplyHits=0|activeEffectSlotSourceSnapshotApplyMisses=0|activeEffectSlotSourceSnapshotFallbacks=0|activeEffectSlotSourceSnapshotCapacityPressure=0|activeEffectSlotSourceSnapshotSpills=0
+runtimeDiagnostic|seq=3|frame=1|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=8|migrationCarriers=8|nativeStreamCandidates=1|battleHashStreams=8|deterministicMergePolicies=8|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=4|frame=2|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=0|specs=150|deltas=0|facts=850|cues=350|presentation=1300|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=850|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=50|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=50|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=50|activeEffectChunkSkipSkippedSlots=50|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=50|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=50|activeMutationOwnerGroups=50|activeMutationMaxOwnerRange=1|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=50|pendingAttributeAppliedDeltas=50|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=50|pendingAttributeMaxTargetRange=1|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=50|pendingAttributeMigrationCarriers=0|ownerLocalFacts=850|ownerLocalFactOwnerGroups=200|ownerLocalFactMaxOwnerRange=7|ownerLocalFactFlushes=850|ownerLocalFactChangedChunks=200|ownerLocalFactScannedOwners=200|ownerLocalFactDirtyOwners=200|ownerLocalFactSkippedOwners=0|ownerLocalFactClearedOwners=200|ownerLocalInstantPrepareChunks=200|ownerLocalInstantPrepareScannedOwners=200|ownerLocalInstantPrepareSkippedOwners=200|ownerLocalInstantPrepareDirtyOwners=0|ownerLocalInstantPrepareClearedCommands=0|ownerLocalInstantPrepareClearedSpecs=0|ownerLocalInstantPreparePromotedCommands=0|activeMutationPrepareChunks=200|activeMutationPrepareScannedOwners=200|activeMutationPrepareSkippedOwners=200|activeMutationPrepareDirtyOwners=0|activeMutationPrepareClearedMutations=0|activeMutationPreparePromotedCommands=0|activeEffectPreTickChunks=200|activeEffectPreTickScannedOwners=200|activeEffectPreTickSkippedOwners=200|activeEffectPreTickProcessedOwners=0|activeEffectPreTickScannedSlots=0|activeEffectPreTickDueSlots=0|activeEffectPreTickNoopSlots=0|activeEffectPreTickMutationWrites=0|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=50|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=50|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=5|frame=2|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=23|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=6|frame=2|kind=MagnitudeSource|severity=Trace|module=Effect|group=MagnitudeSource|system=DiagnosticsSnapshotSystem|buffer=GEEffectCommandStreamComponent|currentValueLookups=0|capturedValueHits=50|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=50|targetAttributeLookups=0|executionInputLookups=0|activeEffectSlotSourceSnapshotCapacity=1600|activeEffectSlotSourceSnapshotGatherAttempts=0|activeEffectSlotSourceSnapshotWrites=0|activeEffectSlotSourceSnapshotWriteFailures=0|activeEffectSlotSourceSnapshotAttributeMisses=0|activeEffectSlotSourceSnapshotApplyHits=0|activeEffectSlotSourceSnapshotApplyMisses=0|activeEffectSlotSourceSnapshotFallbacks=0|activeEffectSlotSourceSnapshotCapacityPressure=0|activeEffectSlotSourceSnapshotSpills=0
+runtimeDiagnostic|seq=7|frame=2|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=8|migrationCarriers=8|nativeStreamCandidates=1|battleHashStreams=8|deterministicMergePolicies=8|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=8|frame=3|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=0|specs=150|deltas=0|facts=850|cues=350|presentation=1300|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=850|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=100|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=100|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=100|activeEffectChunkSkipSkippedSlots=100|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=100|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=50|activeMutationOwnerGroups=50|activeMutationMaxOwnerRange=1|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=50|pendingAttributeAppliedDeltas=50|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=50|pendingAttributeMaxTargetRange=1|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=50|pendingAttributeMigrationCarriers=0|ownerLocalFacts=850|ownerLocalFactOwnerGroups=200|ownerLocalFactMaxOwnerRange=6|ownerLocalFactFlushes=850|ownerLocalFactChangedChunks=200|ownerLocalFactScannedOwners=200|ownerLocalFactDirtyOwners=200|ownerLocalFactSkippedOwners=0|ownerLocalFactClearedOwners=200|ownerLocalInstantPrepareChunks=200|ownerLocalInstantPrepareScannedOwners=200|ownerLocalInstantPrepareSkippedOwners=100|ownerLocalInstantPrepareDirtyOwners=100|ownerLocalInstantPrepareClearedCommands=150|ownerLocalInstantPrepareClearedSpecs=150|ownerLocalInstantPreparePromotedCommands=0|activeMutationPrepareChunks=200|activeMutationPrepareScannedOwners=200|activeMutationPrepareSkippedOwners=150|activeMutationPrepareDirtyOwners=50|activeMutationPrepareClearedMutations=50|activeMutationPreparePromotedCommands=0|activeEffectPreTickChunks=200|activeEffectPreTickScannedOwners=200|activeEffectPreTickSkippedOwners=200|activeEffectPreTickProcessedOwners=0|activeEffectPreTickScannedSlots=0|activeEffectPreTickDueSlots=0|activeEffectPreTickNoopSlots=0|activeEffectPreTickMutationWrites=0|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=50|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=50|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=9|frame=3|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=15|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=10|frame=3|kind=MagnitudeSource|severity=Trace|module=Effect|group=MagnitudeSource|system=DiagnosticsSnapshotSystem|buffer=GEEffectCommandStreamComponent|currentValueLookups=0|capturedValueHits=50|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=50|targetAttributeLookups=0|executionInputLookups=0|activeEffectSlotSourceSnapshotCapacity=1600|activeEffectSlotSourceSnapshotGatherAttempts=0|activeEffectSlotSourceSnapshotWrites=0|activeEffectSlotSourceSnapshotWriteFailures=0|activeEffectSlotSourceSnapshotAttributeMisses=0|activeEffectSlotSourceSnapshotApplyHits=0|activeEffectSlotSourceSnapshotApplyMisses=0|activeEffectSlotSourceSnapshotFallbacks=0|activeEffectSlotSourceSnapshotCapacityPressure=0|activeEffectSlotSourceSnapshotSpills=0
+runtimeDiagnostic|seq=11|frame=3|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=8|migrationCarriers=8|nativeStreamCandidates=1|battleHashStreams=8|deterministicMergePolicies=8|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=12|frame=4|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=0|specs=250|deltas=0|facts=950|cues=450|presentation=1500|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=950|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=100|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=100|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=100|activeEffectChunkSkipSkippedSlots=100|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=100|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=0|activeMutationOwnerGroups=0|activeMutationMaxOwnerRange=0|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=100|pendingAttributeAppliedDeltas=50|pendingAttributeSkippedDeltas=50|pendingAttributeTargetGroups=50|pendingAttributeMaxTargetRange=2|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=50|pendingAttributeMigrationCarriers=0|ownerLocalFacts=950|ownerLocalFactOwnerGroups=200|ownerLocalFactMaxOwnerRange=9|ownerLocalFactFlushes=950|ownerLocalFactChangedChunks=200|ownerLocalFactScannedOwners=200|ownerLocalFactDirtyOwners=200|ownerLocalFactSkippedOwners=0|ownerLocalFactClearedOwners=200|ownerLocalInstantPrepareChunks=200|ownerLocalInstantPrepareScannedOwners=200|ownerLocalInstantPrepareSkippedOwners=100|ownerLocalInstantPrepareDirtyOwners=100|ownerLocalInstantPrepareClearedCommands=150|ownerLocalInstantPrepareClearedSpecs=150|ownerLocalInstantPreparePromotedCommands=0|activeMutationPrepareChunks=200|activeMutationPrepareScannedOwners=200|activeMutationPrepareSkippedOwners=150|activeMutationPrepareDirtyOwners=50|activeMutationPrepareClearedMutations=50|activeMutationPreparePromotedCommands=0|activeEffectPreTickChunks=200|activeEffectPreTickScannedOwners=200|activeEffectPreTickSkippedOwners=150|activeEffectPreTickProcessedOwners=50|activeEffectPreTickScannedSlots=50|activeEffectPreTickDueSlots=50|activeEffectPreTickNoopSlots=0|activeEffectPreTickMutationWrites=50|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=13|frame=4|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=10|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=14|frame=4|kind=MagnitudeSource|severity=Trace|module=Effect|group=MagnitudeSource|system=DiagnosticsSnapshotSystem|buffer=GEEffectCommandStreamComponent|currentValueLookups=0|capturedValueHits=0|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=0|targetAttributeLookups=0|executionInputLookups=0|activeEffectSlotSourceSnapshotCapacity=1600|activeEffectSlotSourceSnapshotGatherAttempts=50|activeEffectSlotSourceSnapshotWrites=50|activeEffectSlotSourceSnapshotWriteFailures=0|activeEffectSlotSourceSnapshotAttributeMisses=0|activeEffectSlotSourceSnapshotApplyHits=0|activeEffectSlotSourceSnapshotApplyMisses=0|activeEffectSlotSourceSnapshotFallbacks=0|activeEffectSlotSourceSnapshotCapacityPressure=0|activeEffectSlotSourceSnapshotSpills=0
+runtimeDiagnostic|seq=15|frame=4|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=8|migrationCarriers=8|nativeStreamCandidates=1|battleHashStreams=8|deterministicMergePolicies=8|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=16|frame=4|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASTickTotal|elapsedUs=3071|totalUs=3071|calls=1
+runtimeDiagnostic|seq=17|frame=4|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASFramePrepareSystemGroup|elapsedUs=171|totalUs=171|calls=1
+runtimeDiagnostic|seq=18|frame=4|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCommandResolveSystemGroup|elapsedUs=131|totalUs=131|calls=1
+runtimeDiagnostic|seq=19|frame=4|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCoreSimulationSystemGroup|elapsedUs=963|totalUs=963|calls=1
+runtimeDiagnostic|seq=20|frame=4|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASStructuralCommitSystemGroup|elapsedUs=15|totalUs=15|calls=1
+runtimeDiagnostic|seq=21|frame=4|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASBoundaryProjectionSystemGroup|elapsedUs=1733|totalUs=1733|calls=1
+runtimeDiagnostic|seq=22|frame=4|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASDependencyDrain|elapsedUs=59|totalUs=59|calls=1
+runtimeDiagnostic|seq=23|frame=4|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=CoreRuntimeOwner|elapsedUs=1280|totalUs=1280|calls=1
+runtimeDiagnostic|seq=24|frame=4|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=BoundaryOwner|elapsedUs=1733|totalUs=1733|calls=1
+runtimeDiagnostic|seq=25|frame=4|kind=SystemTiming|severity=Trace|module=Runtime|group=OwnerSplit|system=RunnerOwner|elapsedUs=59|totalUs=59|calls=1
+runtimeDiagnostic|seq=26|frame=5|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=0|specs=150|deltas=0|facts=700|cues=350|presentation=1100|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=700|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=150|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=150|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=150|activeEffectChunkSkipSkippedSlots=150|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=150|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=50|activeMutationOwnerGroups=50|activeMutationMaxOwnerRange=1|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=0|pendingAttributeAppliedDeltas=0|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=0|pendingAttributeMaxTargetRange=0|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=0|pendingAttributeMigrationCarriers=0|ownerLocalFacts=700|ownerLocalFactOwnerGroups=150|ownerLocalFactMaxOwnerRange=8|ownerLocalFactFlushes=700|ownerLocalFactChangedChunks=200|ownerLocalFactScannedOwners=200|ownerLocalFactDirtyOwners=150|ownerLocalFactSkippedOwners=50|ownerLocalFactClearedOwners=150|ownerLocalInstantPrepareChunks=200|ownerLocalInstantPrepareScannedOwners=200|ownerLocalInstantPrepareSkippedOwners=100|ownerLocalInstantPrepareDirtyOwners=100|ownerLocalInstantPrepareClearedCommands=250|ownerLocalInstantPrepareClearedSpecs=250|ownerLocalInstantPreparePromotedCommands=0|activeMutationPrepareChunks=200|activeMutationPrepareScannedOwners=200|activeMutationPrepareSkippedOwners=150|activeMutationPrepareDirtyOwners=50|activeMutationPrepareClearedMutations=50|activeMutationPreparePromotedCommands=0|activeEffectPreTickChunks=200|activeEffectPreTickScannedOwners=200|activeEffectPreTickSkippedOwners=150|activeEffectPreTickProcessedOwners=50|activeEffectPreTickScannedSlots=50|activeEffectPreTickDueSlots=50|activeEffectPreTickNoopSlots=0|activeEffectPreTickMutationWrites=50|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=50|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=50|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=27|frame=5|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=12|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=28|frame=5|kind=MagnitudeSource|severity=Trace|module=Effect|group=MagnitudeSource|system=DiagnosticsSnapshotSystem|buffer=GEEffectCommandStreamComponent|currentValueLookups=0|capturedValueHits=50|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=50|targetAttributeLookups=0|executionInputLookups=0|activeEffectSlotSourceSnapshotCapacity=1600|activeEffectSlotSourceSnapshotGatherAttempts=50|activeEffectSlotSourceSnapshotWrites=50|activeEffectSlotSourceSnapshotWriteFailures=0|activeEffectSlotSourceSnapshotAttributeMisses=0|activeEffectSlotSourceSnapshotApplyHits=0|activeEffectSlotSourceSnapshotApplyMisses=0|activeEffectSlotSourceSnapshotFallbacks=0|activeEffectSlotSourceSnapshotCapacityPressure=0|activeEffectSlotSourceSnapshotSpills=0
+runtimeDiagnostic|seq=29|frame=5|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=8|migrationCarriers=8|nativeStreamCandidates=1|battleHashStreams=8|deterministicMergePolicies=8|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=30|frame=5|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASTickTotal|elapsedUs=3110|totalUs=3110|calls=1
+runtimeDiagnostic|seq=31|frame=5|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASFramePrepareSystemGroup|elapsedUs=110|totalUs=110|calls=1
+runtimeDiagnostic|seq=32|frame=5|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASCommandResolveSystemGroup|elapsedUs=95|totalUs=95|calls=1
+runtimeDiagnostic|seq=33|frame=5|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCoreSimulationSystemGroup|elapsedUs=819|totalUs=819|calls=1
+runtimeDiagnostic|seq=34|frame=5|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASStructuralCommitSystemGroup|elapsedUs=36|totalUs=36|calls=1
+runtimeDiagnostic|seq=35|frame=5|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASBoundaryProjectionSystemGroup|elapsedUs=1928|totalUs=1928|calls=1
+runtimeDiagnostic|seq=36|frame=5|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASDependencyDrain|elapsedUs=122|totalUs=122|calls=1
+runtimeDiagnostic|seq=37|frame=5|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=CoreRuntimeOwner|elapsedUs=1060|totalUs=1060|calls=1
+runtimeDiagnostic|seq=38|frame=5|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=BoundaryOwner|elapsedUs=1928|totalUs=1928|calls=1
+runtimeDiagnostic|seq=39|frame=5|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=RunnerOwner|elapsedUs=122|totalUs=122|calls=1
+runtimeDiagnostic|seq=40|frame=6|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=0|specs=150|deltas=0|facts=700|cues=300|presentation=1100|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=700|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=150|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=150|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=150|activeEffectChunkSkipSkippedSlots=150|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=150|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=50|activeMutationOwnerGroups=50|activeMutationMaxOwnerRange=1|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=50|pendingAttributeAppliedDeltas=50|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=50|pendingAttributeMaxTargetRange=1|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=50|pendingAttributeMigrationCarriers=0|ownerLocalFacts=700|ownerLocalFactOwnerGroups=200|ownerLocalFactMaxOwnerRange=7|ownerLocalFactFlushes=700|ownerLocalFactChangedChunks=200|ownerLocalFactScannedOwners=200|ownerLocalFactDirtyOwners=200|ownerLocalFactSkippedOwners=0|ownerLocalFactClearedOwners=200|ownerLocalInstantPrepareChunks=200|ownerLocalInstantPrepareScannedOwners=200|ownerLocalInstantPrepareSkippedOwners=100|ownerLocalInstantPrepareDirtyOwners=100|ownerLocalInstantPrepareClearedCommands=150|ownerLocalInstantPrepareClearedSpecs=150|ownerLocalInstantPreparePromotedCommands=0|activeMutationPrepareChunks=200|activeMutationPrepareScannedOwners=200|activeMutationPrepareSkippedOwners=150|activeMutationPrepareDirtyOwners=50|activeMutationPrepareClearedMutations=50|activeMutationPreparePromotedCommands=0|activeEffectPreTickChunks=200|activeEffectPreTickScannedOwners=200|activeEffectPreTickSkippedOwners=150|activeEffectPreTickProcessedOwners=50|activeEffectPreTickScannedSlots=50|activeEffectPreTickDueSlots=50|activeEffectPreTickNoopSlots=0|activeEffectPreTickMutationWrites=50|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=50|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=50|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=41|frame=6|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=9|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=42|frame=6|kind=MagnitudeSource|severity=Trace|module=Effect|group=MagnitudeSource|system=DiagnosticsSnapshotSystem|buffer=GEEffectCommandStreamComponent|currentValueLookups=0|capturedValueHits=50|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=50|targetAttributeLookups=0|executionInputLookups=0|activeEffectSlotSourceSnapshotCapacity=1600|activeEffectSlotSourceSnapshotGatherAttempts=50|activeEffectSlotSourceSnapshotWrites=50|activeEffectSlotSourceSnapshotWriteFailures=0|activeEffectSlotSourceSnapshotAttributeMisses=0|activeEffectSlotSourceSnapshotApplyHits=0|activeEffectSlotSourceSnapshotApplyMisses=0|activeEffectSlotSourceSnapshotFallbacks=0|activeEffectSlotSourceSnapshotCapacityPressure=0|activeEffectSlotSourceSnapshotSpills=0
+runtimeDiagnostic|seq=43|frame=6|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=8|migrationCarriers=8|nativeStreamCandidates=1|battleHashStreams=8|deterministicMergePolicies=8|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=44|frame=6|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASTickTotal|elapsedUs=2979|totalUs=2979|calls=1
+runtimeDiagnostic|seq=45|frame=6|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASFramePrepareSystemGroup|elapsedUs=156|totalUs=156|calls=1
+runtimeDiagnostic|seq=46|frame=6|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCommandResolveSystemGroup|elapsedUs=194|totalUs=194|calls=1
+runtimeDiagnostic|seq=47|frame=6|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCoreSimulationSystemGroup|elapsedUs=932|totalUs=932|calls=1
+runtimeDiagnostic|seq=48|frame=6|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASStructuralCommitSystemGroup|elapsedUs=47|totalUs=47|calls=1
+runtimeDiagnostic|seq=49|frame=6|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASBoundaryProjectionSystemGroup|elapsedUs=1593|totalUs=1593|calls=1
+runtimeDiagnostic|seq=50|frame=6|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASDependencyDrain|elapsedUs=58|totalUs=58|calls=1
+runtimeDiagnostic|seq=51|frame=6|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=CoreRuntimeOwner|elapsedUs=1329|totalUs=1329|calls=1
+runtimeDiagnostic|seq=52|frame=6|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=BoundaryOwner|elapsedUs=1593|totalUs=1593|calls=1
+runtimeDiagnostic|seq=53|frame=6|kind=SystemTiming|severity=Trace|module=Runtime|group=OwnerSplit|system=RunnerOwner|elapsedUs=58|totalUs=58|calls=1
+runtimeDiagnostic|seq=54|frame=7|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=0|specs=200|deltas=0|facts=750|cues=350|presentation=1200|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=750|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=150|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=150|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=150|activeEffectChunkSkipSkippedSlots=150|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=150|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=0|activeMutationOwnerGroups=0|activeMutationMaxOwnerRange=0|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=100|pendingAttributeAppliedDeltas=50|pendingAttributeSkippedDeltas=50|pendingAttributeTargetGroups=50|pendingAttributeMaxTargetRange=2|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=50|pendingAttributeMigrationCarriers=0|ownerLocalFacts=750|ownerLocalFactOwnerGroups=150|ownerLocalFactMaxOwnerRange=9|ownerLocalFactFlushes=750|ownerLocalFactChangedChunks=200|ownerLocalFactScannedOwners=200|ownerLocalFactDirtyOwners=150|ownerLocalFactSkippedOwners=50|ownerLocalFactClearedOwners=150|ownerLocalInstantPrepareChunks=200|ownerLocalInstantPrepareScannedOwners=200|ownerLocalInstantPrepareSkippedOwners=50|ownerLocalInstantPrepareDirtyOwners=150|ownerLocalInstantPrepareClearedCommands=150|ownerLocalInstantPrepareClearedSpecs=150|ownerLocalInstantPreparePromotedCommands=0|activeMutationPrepareChunks=200|activeMutationPrepareScannedOwners=200|activeMutationPrepareSkippedOwners=100|activeMutationPrepareDirtyOwners=100|activeMutationPrepareClearedMutations=100|activeMutationPreparePromotedCommands=0|activeEffectPreTickChunks=200|activeEffectPreTickScannedOwners=200|activeEffectPreTickSkippedOwners=150|activeEffectPreTickProcessedOwners=50|activeEffectPreTickScannedSlots=100|activeEffectPreTickDueSlots=50|activeEffectPreTickNoopSlots=50|activeEffectPreTickMutationWrites=50|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=55|frame=7|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=7|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=56|frame=7|kind=MagnitudeSource|severity=Trace|module=Effect|group=MagnitudeSource|system=DiagnosticsSnapshotSystem|buffer=GEEffectCommandStreamComponent|currentValueLookups=0|capturedValueHits=0|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=0|targetAttributeLookups=0|executionInputLookups=0|activeEffectSlotSourceSnapshotCapacity=1600|activeEffectSlotSourceSnapshotGatherAttempts=50|activeEffectSlotSourceSnapshotWrites=50|activeEffectSlotSourceSnapshotWriteFailures=0|activeEffectSlotSourceSnapshotAttributeMisses=0|activeEffectSlotSourceSnapshotApplyHits=0|activeEffectSlotSourceSnapshotApplyMisses=0|activeEffectSlotSourceSnapshotFallbacks=0|activeEffectSlotSourceSnapshotCapacityPressure=0|activeEffectSlotSourceSnapshotSpills=0
+runtimeDiagnostic|seq=57|frame=7|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=8|migrationCarriers=8|nativeStreamCandidates=1|battleHashStreams=8|deterministicMergePolicies=8|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=58|frame=7|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASTickTotal|elapsedUs=2653|totalUs=2653|calls=1
+runtimeDiagnostic|seq=59|frame=7|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASFramePrepareSystemGroup|elapsedUs=120|totalUs=120|calls=1
+runtimeDiagnostic|seq=60|frame=7|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCommandResolveSystemGroup|elapsedUs=110|totalUs=110|calls=1
+runtimeDiagnostic|seq=61|frame=7|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCoreSimulationSystemGroup|elapsedUs=776|totalUs=776|calls=1
+runtimeDiagnostic|seq=62|frame=7|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASStructuralCommitSystemGroup|elapsedUs=15|totalUs=15|calls=1
+runtimeDiagnostic|seq=63|frame=7|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASBoundaryProjectionSystemGroup|elapsedUs=1578|totalUs=1578|calls=1
+runtimeDiagnostic|seq=64|frame=7|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASDependencyDrain|elapsedUs=55|totalUs=55|calls=1
+runtimeDiagnostic|seq=65|frame=7|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=CoreRuntimeOwner|elapsedUs=1020|totalUs=1020|calls=1
+runtimeDiagnostic|seq=66|frame=7|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=BoundaryOwner|elapsedUs=1578|totalUs=1578|calls=1
+runtimeDiagnostic|seq=67|frame=7|kind=SystemTiming|severity=Trace|module=Runtime|group=OwnerSplit|system=RunnerOwner|elapsedUs=55|totalUs=55|calls=1
+runtimeDiagnostic|seq=68|frame=8|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=0|specs=100|deltas=0|facts=100|cues=100|presentation=200|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=100|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=150|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=150|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=150|activeEffectChunkSkipSkippedSlots=150|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=150|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=0|activeMutationOwnerGroups=0|activeMutationMaxOwnerRange=0|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=0|pendingAttributeAppliedDeltas=0|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=0|pendingAttributeMaxTargetRange=0|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=0|pendingAttributeMigrationCarriers=0|ownerLocalFacts=100|ownerLocalFactOwnerGroups=100|ownerLocalFactMaxOwnerRange=1|ownerLocalFactFlushes=100|ownerLocalFactChangedChunks=200|ownerLocalFactScannedOwners=200|ownerLocalFactDirtyOwners=100|ownerLocalFactSkippedOwners=100|ownerLocalFactClearedOwners=100|ownerLocalInstantPrepareChunks=200|ownerLocalInstantPrepareScannedOwners=200|ownerLocalInstantPrepareSkippedOwners=100|ownerLocalInstantPrepareDirtyOwners=100|ownerLocalInstantPrepareClearedCommands=200|ownerLocalInstantPrepareClearedSpecs=200|ownerLocalInstantPreparePromotedCommands=0|activeMutationPrepareChunks=200|activeMutationPrepareScannedOwners=200|activeMutationPrepareSkippedOwners=150|activeMutationPrepareDirtyOwners=50|activeMutationPrepareClearedMutations=50|activeMutationPreparePromotedCommands=0|activeEffectPreTickChunks=200|activeEffectPreTickScannedOwners=200|activeEffectPreTickSkippedOwners=100|activeEffectPreTickProcessedOwners=100|activeEffectPreTickScannedSlots=150|activeEffectPreTickDueSlots=100|activeEffectPreTickNoopSlots=50|activeEffectPreTickMutationWrites=100|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=69|frame=8|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=10|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=70|frame=8|kind=MagnitudeSource|severity=Trace|module=Effect|group=MagnitudeSource|system=DiagnosticsSnapshotSystem|buffer=GEEffectCommandStreamComponent|currentValueLookups=0|capturedValueHits=0|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=0|targetAttributeLookups=0|executionInputLookups=0|activeEffectSlotSourceSnapshotCapacity=1600|activeEffectSlotSourceSnapshotGatherAttempts=100|activeEffectSlotSourceSnapshotWrites=100|activeEffectSlotSourceSnapshotWriteFailures=0|activeEffectSlotSourceSnapshotAttributeMisses=0|activeEffectSlotSourceSnapshotApplyHits=0|activeEffectSlotSourceSnapshotApplyMisses=0|activeEffectSlotSourceSnapshotFallbacks=0|activeEffectSlotSourceSnapshotCapacityPressure=0|activeEffectSlotSourceSnapshotSpills=0
+runtimeDiagnostic|seq=71|frame=8|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=8|migrationCarriers=8|nativeStreamCandidates=1|battleHashStreams=8|deterministicMergePolicies=8|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=72|frame=8|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASTickTotal|elapsedUs=1682|totalUs=1682|calls=1
+runtimeDiagnostic|seq=73|frame=8|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASFramePrepareSystemGroup|elapsedUs=98|totalUs=98|calls=1
+runtimeDiagnostic|seq=74|frame=8|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCommandResolveSystemGroup|elapsedUs=107|totalUs=107|calls=1
+runtimeDiagnostic|seq=75|frame=8|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCoreSimulationSystemGroup|elapsedUs=452|totalUs=452|calls=1
+runtimeDiagnostic|seq=76|frame=8|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASStructuralCommitSystemGroup|elapsedUs=22|totalUs=22|calls=1
+runtimeDiagnostic|seq=77|frame=8|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASBoundaryProjectionSystemGroup|elapsedUs=918|totalUs=918|calls=1
+runtimeDiagnostic|seq=78|frame=8|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASDependencyDrain|elapsedUs=85|totalUs=85|calls=1
+runtimeDiagnostic|seq=79|frame=8|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=CoreRuntimeOwner|elapsedUs=678|totalUs=678|calls=1
+runtimeDiagnostic|seq=80|frame=8|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=BoundaryOwner|elapsedUs=918|totalUs=918|calls=1
+runtimeDiagnostic|seq=81|frame=8|kind=SystemTiming|severity=Trace|module=Runtime|group=OwnerSplit|system=RunnerOwner|elapsedUs=85|totalUs=85|calls=1
+runtimeDiagnostic|seq=82|frame=9|kind=RuntimeCoreCounters|severity=Trace|module=Runtime|group=RuntimeCore|requests=0|specs=50|deltas=0|facts=50|cues=50|presentation=100|entityCreates=0|entityDestroys=0|ecbPlaybacks=0|activeEffectEntities=0|pendingApplyCommandOwners=0|eventBusBufferLength=50|presentationCursorLag=0|replayCursorLag=0|activeEffectStoreOwners=200|activeEffectSlots=150|activeEffectSlotCapacity=1600|activeEffectSlotPendingApply=0|activeEffectSlotActive=150|activeEffectSlotInhibited=0|activeEffectSlotPendingRemove=0|activeEffectSlotLegacyBacked=0|activeEffectSlotExternalizedOwners=0|activeEffectSlotGrantedTags=0|activeEffectSlotGrantedAbilities=0|activeEffectChunkSkipMatchedSlots=150|activeEffectChunkSkipSkippedSlots=150|activeEffectChunkSkipDuePeriodSlots=0|activeEffectChunkSkipNoopSlots=150|activeEffectChunkSkipOwners=200|activeEffectGlobalIndexOwners=1|activeEffectGlobalIndexCount=0|activeEffectGlobalIndexActive=0|activeEffectGlobalIndexInhibited=0|activeEffectGlobalIndexPendingRemove=0|activeEffectGlobalIndexPeriodDue=0|activeEffectGlobalIndexDurationDue=0|activeEffectGlobalIndexStale=0|activeEffectGlobalIndexBucketOwners=16|activeEffectGlobalIndexBucketIndexCount=0|activeEffectGlobalIndexMaxBucketLength=0|activeEffectGlobalIndexStableRows=0|activeEffectGlobalIndexStaleStableRows=0|activeMutationCommands=0|activeMutationOwnerGroups=0|activeMutationMaxOwnerRange=0|activeMutationSortMoves=0|activeMutationEstimatedRandomLookups=0|activeMutationOwnerResourceLookups=0|activeMutationMigrationCarriers=0|pendingAttributeDeltas=0|pendingAttributeAppliedDeltas=0|pendingAttributeSkippedDeltas=0|pendingAttributeTargetGroups=0|pendingAttributeMaxTargetRange=0|pendingAttributeEstimatedRandomLookups=0|pendingAttributeFactPatches=0|pendingAttributeMigrationCarriers=0|ownerLocalFacts=50|ownerLocalFactOwnerGroups=50|ownerLocalFactMaxOwnerRange=1|ownerLocalFactFlushes=50|ownerLocalFactChangedChunks=200|ownerLocalFactScannedOwners=200|ownerLocalFactDirtyOwners=50|ownerLocalFactSkippedOwners=150|ownerLocalFactClearedOwners=50|ownerLocalInstantPrepareChunks=200|ownerLocalInstantPrepareScannedOwners=200|ownerLocalInstantPrepareSkippedOwners=100|ownerLocalInstantPrepareDirtyOwners=100|ownerLocalInstantPrepareClearedCommands=100|ownerLocalInstantPrepareClearedSpecs=100|ownerLocalInstantPreparePromotedCommands=0|activeMutationPrepareChunks=200|activeMutationPrepareScannedOwners=200|activeMutationPrepareSkippedOwners=100|activeMutationPrepareDirtyOwners=100|activeMutationPrepareClearedMutations=100|activeMutationPreparePromotedCommands=0|activeEffectPreTickChunks=200|activeEffectPreTickScannedOwners=200|activeEffectPreTickSkippedOwners=150|activeEffectPreTickProcessedOwners=50|activeEffectPreTickScannedSlots=100|activeEffectPreTickDueSlots=50|activeEffectPreTickNoopSlots=50|activeEffectPreTickMutationWrites=50|magnitudeSourceCurrentValueLookups=0|magnitudeSourceCapturedValueHits=0|magnitudeSourceCaptureMisses=0|magnitudeSourceCaptureMissLiveLookups=0|magnitudeSourceFallbackValues=0|magnitudeSourceFallbackFacts=0|magnitudeSourceSourceAttributeLookups=0|magnitudeSourceTargetAttributeLookups=0|magnitudeSourceExecutionInputLookups=0|queryBudget=13|filteredQueryBudget=0|unfilteredQueryBudget=13|lookupUpdateBudget=1|randomLookupBudget=1|syncQueryBudget=13|helperTempQueryRisks=0|dependencyWaitRisks=4|worldUpdateAllocatorOwners=1|rewindableAllocatorCandidates=1
+runtimeDiagnostic|seq=83|frame=9|kind=ObservationMaterialization|severity=Trace|module=Presentation|group=DebuggerObservation|system=DiagnosticsSnapshotSystem|buffer=ToEntityArray|materializedQueries=1|materializedEntities=200|elapsedUs=10|activeEffectStoreQueries=1|activeEffectStoreEntities=200|presentationOutboxQueries=0|presentationOutboxEntities=0|performancePollutionRisks=1
+runtimeDiagnostic|seq=84|frame=9|kind=MagnitudeSource|severity=Trace|module=Effect|group=MagnitudeSource|system=DiagnosticsSnapshotSystem|buffer=GEEffectCommandStreamComponent|currentValueLookups=0|capturedValueHits=0|captureMisses=0|captureMissLiveLookups=0|fallbackValues=0|fallbackFacts=0|sourceAttributeLookups=0|targetAttributeLookups=0|executionInputLookups=0|activeEffectSlotSourceSnapshotCapacity=1600|activeEffectSlotSourceSnapshotGatherAttempts=50|activeEffectSlotSourceSnapshotWrites=50|activeEffectSlotSourceSnapshotWriteFailures=0|activeEffectSlotSourceSnapshotAttributeMisses=0|activeEffectSlotSourceSnapshotApplyHits=0|activeEffectSlotSourceSnapshotApplyMisses=0|activeEffectSlotSourceSnapshotFallbacks=0|activeEffectSlotSourceSnapshotCapacityPressure=0|activeEffectSlotSourceSnapshotSpills=0
+runtimeDiagnostic|seq=85|frame=9|kind=RuntimeCoreFrameBackbone|severity=Trace|module=Runtime|group=FrameBackbone|phases=8|contractOnlyPhases=8|queryBudget=13|lookupUpdateBudget=1|dependencyWaitRisks=4|streams=8|migrationCarriers=8|nativeStreamCandidates=1|battleHashStreams=8|deterministicMergePolicies=8|mergeCostUs=0|mergeCostMeasured=0|requiredStructuralPlaybacks=5|recordedStructuralPlaybacks=0|ecbCommands=0|bulkQueries=0|profilerMarkers=4|journalingMarkers=1|coreCostGroups=1|physicsCostGroups=1|renderCostGroups=1|runnerCostGroups=1|overheadBudgetUs=50|samplingInterval=1|disablePolicy=1|hotPathManagedStrings=0
+runtimeDiagnostic|seq=86|frame=9|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASTickTotal|elapsedUs=1378|totalUs=1378|calls=1
+runtimeDiagnostic|seq=87|frame=9|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASFramePrepareSystemGroup|elapsedUs=121|totalUs=121|calls=1
+runtimeDiagnostic|seq=88|frame=9|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCommandResolveSystemGroup|elapsedUs=101|totalUs=101|calls=1
+runtimeDiagnostic|seq=89|frame=9|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASCoreSimulationSystemGroup|elapsedUs=359|totalUs=359|calls=1
+runtimeDiagnostic|seq=90|frame=9|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASStructuralCommitSystemGroup|elapsedUs=14|totalUs=14|calls=1
+runtimeDiagnostic|seq=91|frame=9|kind=SystemTiming|severity=Warning|module=Runtime|group=PhysicalGroup|system=GASBoundaryProjectionSystemGroup|elapsedUs=731|totalUs=731|calls=1
+runtimeDiagnostic|seq=92|frame=9|kind=SystemTiming|severity=Trace|module=Runtime|group=PhysicalGroup|system=GASDependencyDrain|elapsedUs=52|totalUs=52|calls=1
+runtimeDiagnostic|seq=93|frame=9|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=CoreRuntimeOwner|elapsedUs=595|totalUs=595|calls=1
+runtimeDiagnostic|seq=94|frame=9|kind=SystemTiming|severity=Warning|module=Runtime|group=OwnerSplit|system=BoundaryOwner|elapsedUs=731|totalUs=731|calls=1
+runtimeDiagnostic|seq=95|frame=9|kind=SystemTiming|severity=Trace|module=Runtime|group=OwnerSplit|system=RunnerOwner|elapsedUs=52|totalUs=52|calls=1
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:LogRunResult (GAS.AutoChessDemo.AutoChessValidationRunResult&) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:113)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:61)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 113)
+
+AutoChessDemoRuntimeReport: path=E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\TestResults\AutoChess\Headless\AutoChessHeadlessValidation-DebuggerProbe-20260608-Run9b-NextTickFrameSkip.txt
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:WriteRunReport (GAS.AutoChessDemo.AutoChessValidationRunResult&,string) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:132)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleForValidation (GAS.AutoChessDemo.AutoChessRuntimeRunner/AutoChessRuntimeRunnerOptions) (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:62)
+GAS.AutoChessDemo.AutoChessRuntimeRunner:RunAutoChessBattleOnce () (at Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs:20)
+GAS.AutoChessDemo.Editor.AutoChessDemoBatchRunner:RunAutoChessBattleOnceAndExit () (at Assets/AutoChessDemo/Editor/AutoChessDemoBatchRunner.cs:31)
+
+(Filename: Assets/AutoChessDemo/AutoRunner/AutoChessRuntimeRunner.cs Line: 132)
+
+Unloading 2 Unused Serialized files (Serialized files now loaded: 0)
+Killing ADB server in 2.1085009 seconds.
+Unloading 1 unused Assets / (0.5 KB). Loaded Objects now: 12264.
+Memory consumption went from 300.0 MB to 300.0 MB.
+Total: 37.376500 ms (FindLiveObjects: 0.795800 ms CreateObjectMapping: 0.691700 ms MarkObjects: 35.814200 ms  DeleteObjects: 0.072700 ms)
+
+[Physics::Module] Cleanup current backend.
+[Physics::Module] Id: 0xf2b8ea05
+Input System module state changed to: ShutdownInProgress.
+Input System polling thread exited.
+Input System module state changed to: Shutdown.
+[Licensing::IpcConnector] LicenseClient-Y-notifications channel disconnected successfully.
+[Licensing::IpcConnector] LicenseClient-Y channel disconnected successfully.
+AcceleratorClientConnectionCallback - disconnected - :0
+Cleanup mono
+16:31:56.308 |V| RiderPlugin                    | :1                             | AppDomain.CurrentDomain.DomainUnload lifetimeDefinition.Terminate
+Checking for leaked weakptr:
+  Found no leaked weakptrs.
+[Package Manager] Server process was shutdown
+##utp:{"type":"MemoryLeaks","version":2,"phase":"Immediate","time":1780907516688,"processId":20492,"allocatedMemory":22118790,"memoryLabels":[{"Default":29313},{"Permanent":15236},{"NewDelete":67891},{"Thread":4230384},{"Manager":3093869},{"VertexData":8},{"Geometry":816},{"Texture":160},{"Shader":80507},{"Material":24},{"GfxDevice":55865},{"Animation":392},{"Audio":3040},{"FreeType":8},{"FontEngine":736},{"Physics":2090},{"Physics2D":16},{"Serialization":528},{"Input":14984},{"JobScheduler":33024},{"TextLib":216},{"Mono":32},{"MonoCode":64},{"ScriptingNativeRuntime":155060},{"BaseObject":1620336},{"Resource":1336},{"Renderer":3000},{"Transform":4685},{"File":1016},{"WebCam":616},{"Culling":32},{"Terrain":11394},{"Wind":24},{"STL":40},{"String":15797},{"DynamicArray":131659},{"HashMap":97364},{"Utility":2660822},{"Curl":3099},{"PoolAlloc":7624},{"AI":80},{"TypeTree":5341},{"ScriptManager":512},{"RuntimeInitializeOnLoadManager":64},{"SpriteAtlas":112},{"GI":7792},{"Director":8240},{"CloudService":7344},{"WebRequest":845},{"VR":47994},{"SceneManager":504},{"Video":64},{"LazyScriptCache":32},{"Camera":17},{"Secure":2113},{"SerializationCache":1576},{"APIUpdating":10320},{"Subsystems":336},{"VirtualTexturing":57888},{"StaticSafetyDebugInfo":278528},{"Analytics":384},{"Hierarchy":608},{"CoreStats":13032},{"Identifiers":12960},{"Gui":96},{"EditorUtility":139592},{"VersionControl":4},{"Undo":947},{"AssetDatabase":9132825},{"EditorGi":328},{"UnityConnect":29208},{"Upm":1896},{"AssetCompliance":64},{"DrivenProperties":72},{"LocalIPC":176},{"ProfilerEditor":9746},{"CoreBusinessMetrics":2851},{"Licensing":1232},{"AssetReference":32},{"IPCStream":32}]}
+~StackAllocator(ALLOC_TEMP_MAIN) m_LastAlloc not NULL. Did you forget to call FreeAllStackAllocations()? To get more information, run app with -diag-temp-memory-leak-validation cmd line argument

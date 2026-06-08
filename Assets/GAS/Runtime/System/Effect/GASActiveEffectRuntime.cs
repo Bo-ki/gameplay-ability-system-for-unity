@@ -1734,6 +1734,7 @@ namespace GAS.Runtime
         public struct GEActiveEffectPreTickSourceAttributeSnapshotGatherJob : IJobChunk
         {
             [ReadOnly] public EntityTypeHandle EntityTypeHandle;
+            [ReadOnly] public ComponentTypeHandle<ASCActiveEffectsComponent> ActiveEffectsTypeHandle;
             [ReadOnly] public BufferTypeHandle<ActiveGameplayEffectBuffer> ActiveEffectSlotBufferTypeHandle;
             [ReadOnly] public BufferLookup<AttributeValueBuffer> AttributeLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
@@ -1752,6 +1753,7 @@ namespace GAS.Runtime
 
                 ref var catalog = ref Catalog.Value;
                 var owners = chunk.GetNativeArray(EntityTypeHandle);
+                var stores = chunk.GetNativeArray(ref ActiveEffectsTypeHandle);
                 var slotBuffers = chunk.GetBufferAccessorRO(ref ActiveEffectSlotBufferTypeHandle);
                 var snapshotLaneCounters = default(ActiveEffectSlotSourceSnapshotLaneCounters);
                 var hasSnapshotLaneCounters = SnapshotLaneCounters.IsCreated
@@ -1762,6 +1764,10 @@ namespace GAS.Runtime
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
+                    var store = stores[entityIndex];
+                    if (!ActiveEffectStore.ShouldProcessTickOwner(in store, Frame))
+                        continue;
+
                     var owner = owners[entityIndex];
                     var slots = slotBuffers[entityIndex];
                     for (var slotIndex = 0; slotIndex < slots.Length; slotIndex++)
@@ -1940,36 +1946,43 @@ namespace GAS.Runtime
                 {
                     preTickLaneCounters.ScannedOwnerCount++;
                     var owner = owners[entityIndex];
+                    var store = stores[entityIndex];
+                    var shouldProcessTickOwner =
+                        ProcessTickRecords && ActiveEffectStore.ShouldProcessTickOwner(in store, Frame);
+                    var removeCommands = ProcessExplicitRemoveCommands
+                        ? removeCommandBuffers[entityIndex]
+                        : default;
+                    var hasExplicitRemoveCommands = ProcessExplicitRemoveCommands && removeCommands.Length > 0;
+                    if (!shouldProcessTickOwner && !hasExplicitRemoveCommands)
+                    {
+                        preTickLaneCounters.SkippedOwnerCount++;
+                        continue;
+                    }
+
                     var mutations = mutationBuffers[entityIndex];
                     var mutationLengthBefore = mutations.Length;
                     var processedOwner = false;
                     var ownerResources = CaptureActiveEffectOwnerResources(
                         owner,
-                        stores[entityIndex],
+                        store,
                         slotBuffers[entityIndex]);
 
-                    if (ProcessTickRecords)
+                    if (shouldProcessTickOwner)
                     {
-                        if (ownerResources.Store.ChunkSkipMatchedSlotCount > 0
-                            || ownerResources.Store.ChunkSkipDuePeriodSlotCount > 0
-                            || ownerResources.Store.CleanupRecordCount > 0)
-                        {
-                            processedOwner = true;
-                            ref var catalog = ref Catalog.Value;
-                            ProcessTickOwner(
-                                ref ownerResources,
-                                mutations,
-                                ref catalog,
-                                ref magnitudeSourceCounters,
-                                ref snapshotLaneCounters,
-                                ref preTickLaneCounters);
-                        }
+                        processedOwner = true;
+                        ref var catalog = ref Catalog.Value;
+                        ProcessTickOwner(
+                            ref ownerResources,
+                            mutations,
+                            ref catalog,
+                            ref magnitudeSourceCounters,
+                            ref snapshotLaneCounters,
+                            ref preTickLaneCounters);
                     }
 
                     if (ProcessExplicitRemoveCommands)
                     {
-                        var removeCommands = removeCommandBuffers[entityIndex];
-                        if (removeCommands.Length > 0)
+                        if (hasExplicitRemoveCommands)
                             processedOwner = true;
                         for (var commandIndex = 0; commandIndex < removeCommands.Length; commandIndex++)
                         {

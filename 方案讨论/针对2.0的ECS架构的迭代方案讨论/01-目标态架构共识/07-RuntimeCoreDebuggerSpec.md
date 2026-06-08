@@ -135,6 +135,7 @@ R7/R3 这类 frame-lane 优化必须具备 Runtime-owned counters，不能只依
 | owner-local instant prepare | scanned owners、skipped owners、dirty owners、cleared commands/specs、promoted commands | 判断 command prepare 是否仍在稀疏扫描 owner buffer，或是否只是清空/复制空 buffer |
 | active mutation prepare | scanned owners、skipped owners、dirty owners、cleared mutation commands、promoted commands | 判断 active mutation fan-in 是否存在 per-frame clear/copy 热点 |
 | active effect pre-tick | scanned owners、processed owners、skipped owners、scanned slots、due slots、noop slots、mutation writes | 判断 duration / period / stack / granted state tick 是否退化为全量 slot scan |
+| active effect due lane | due duration slots、due period slots、next tick frame、owner-level skip count | 判断 ActiveEffect 是否能以 owner-local due frame 跳过未到期 owner 的 resource capture / slot scan |
 
 解释规则：
 
@@ -142,6 +143,7 @@ R7/R3 这类 frame-lane 优化必须具备 Runtime-owned counters，不能只依
 2. 优化前后必须对比 counter 与 hotspot matrix：若 `avgTickMs` 下降但 scanned owner / slot、noop slot 或 buffer clear count 没有改善，只能写成局部耗时波动。
 3. 高频 enableable marker 不得作为默认 dirty lane；任何 marker 方案必须同时证明 `EnableComponent` TopN、Job safety、dependency wait 和 battle completion 不回归。
 4. Profiler disabled 时，frame-lane counter 可以作为任务路由证据，但不能把样本写成 DOTS profiler-backed excellent。
+5. ActiveEffect pre-tick 的 owner-level `NextTickFrame` / due slot index 是合法的 store-local skip contract：它只能压缩未到期 owner 的 source snapshot gather、resource capture 和 slot scan，不得改变 duration / period / explicit remove / cleanup 的业务语义；explicit remove command 与 cleanup record 必须绕过 skip gate。
 
 ### Split Report Contract
 

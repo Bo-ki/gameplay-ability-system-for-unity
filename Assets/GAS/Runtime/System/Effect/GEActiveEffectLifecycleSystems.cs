@@ -223,6 +223,8 @@ namespace GAS.Runtime
             var snapshotGatherJob = new GASActiveEffectRuntime.GEActiveEffectPreTickSourceAttributeSnapshotGatherJob
             {
                 EntityTypeHandle = SystemAPI.GetEntityTypeHandle(),
+                ActiveEffectsTypeHandle =
+                    SystemAPI.GetComponentTypeHandle<ASCActiveEffectsComponent>(isReadOnly: true),
                 ActiveEffectSlotBufferTypeHandle =
                     SystemAPI.GetBufferTypeHandle<ActiveGameplayEffectBuffer>(isReadOnly: true),
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: true),
