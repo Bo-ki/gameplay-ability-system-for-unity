@@ -84,6 +84,26 @@ Debugger 采样必须显式声明 pass mode。pass mode 是 performance 结论�
 
 Metric family 必须能被 scorecard 压缩成机器字段：`metricFamilyMask` 表示本次证据覆盖的 workload / GAS concept / data shape / API health / timing / overhead 族，`dominantRisk` 表示当前最应优先领取的 DOTS 数据风险。它们是任务路由字段，不替代底层 typed buffers，也不能只从字符串 summary 反推。
 
+`MetricFamilySnapshot` 是 Debugger 对外的稳定证据合约。项目当前仍处快速迭代期，Runtime Core 的 counter、event buffer、materialization pass 和 official capture owner 会继续重构，因此 AutoChess、Editor Debugger、CI report 和外部 profiler driver 不得直接绑定 `GASRuntimeDiagnosticEventBuffer` 的内部字段布局。它们只能消费 family snapshot、scorecard、hotspot matrix 或 official diff 这类 stable evidence surface；底层可以从 mega-row 迁移到 typed buffer、SoA snapshot、NativeStream aggregate 或 generated metric glue，而外部迁移成本应保持接近 0。
+
+目标态 family snapshot 至少分为：
+
+| Snapshot family | 来源 | 对外承诺 |
+|---|---|---|
+| `Workload` | command / spec / delta / fact / cue / presentation counter | 支撑 workload-normalized cost |
+| `GasConcept` | Ability / GE / Attribute / Tag / Cue / Magnitude semantic counter | 保留 GAS 语义链，不泄漏物理 buffer 形态 |
+| `DataShape` | owner group、max range、slot / buffer capacity、spill | 解释 chunk locality 与 carrier pressure |
+| `ApiHealth` | query、lookup、random access、sync、dependency wait、allocator owner | 解释 DOTS API 选型健康度 |
+| `Structural` | entity create / destroy、ECB playback、required / recorded playback、bulk query | 解释结构变化和 structural phase |
+| `Overhead` | observation materialization、profiler / journaling marker、export / sampling budget | 阻断 Debugger / official capture 污染 performance pass |
+
+解释规则：
+
+1. `MetricFamilySnapshot` 是外部稳定合约，不是最终物理存储形态。
+2. `DataOrientedScorecard`、summary、Mermaid、Editor chart 必须从 snapshot / matrix / official diff 派生，不能重新扫描 Runtime Core。
+3. 当内部 counter owner 继续拆分时，只允许更新 snapshot builder，不允许让业务层跟随内部字段迁移。
+4. 新增 GAS 概念或 DOTS 指标时，先选择 family 与 evidence id，再决定 typed buffer / aggregate 形态；禁止先扩展单个稀疏大 event row。
+
 ### 目标代码形态
 
 代码形态重点是 **小 component + typed buffer + evidence id**。下列代码是目标结构示意，不是当前实现事实：
@@ -266,6 +286,7 @@ Runtime Debugger 必须直接生成或支持生成同构 scorecard，AutoChess�
 2. 任何失败项必须给出 failure mask 和 next owner：`CommandPort`、`EffectFanInStore`、`ActiveEffectStore`、`AttributeApply`、`StructuralCommit`、`DiagnosticsSink`、`OfficialCapture`、`RunnerSync` 等。
 3. scorecard 字段必须以 machine evidence 为源；中文 summary、Mermaid、Editor 图表只能引用 evidence id。
 4. `metricFamilyMask` 和 `dominantRisk` 必须由 metric family / counter / validation evidence 计算，不允许由人读文案或导出文本硬编码。
+5. Scorecard 的 GAS 概念字段、data shape 字段、API health 字段和 overhead 字段必须优先来自 `MetricFamilySnapshot` 或等价 family aggregate；只有 snapshot builder 可以读取底层 raw counters。
 
 ## UML 类图
 

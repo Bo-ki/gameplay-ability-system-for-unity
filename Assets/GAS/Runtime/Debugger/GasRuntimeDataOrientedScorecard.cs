@@ -39,8 +39,9 @@ namespace GAS.Runtime
         GasConcept = 1 << 1,
         DataShape = 1 << 2,
         ApiHealth = 1 << 3,
-        Timing = 1 << 4,
-        Overhead = 1 << 5,
+        Structural = 1 << 4,
+        Timing = 1 << 5,
+        Overhead = 1 << 6,
     }
 
     public enum GasRuntimeDataOrientedDominantRisk : byte
@@ -152,40 +153,39 @@ namespace GAS.Runtime
 
         private GasRuntimeDataOrientedScorecard(
             in GasRuntimeDataOrientedScorecardInput input,
-            in GasRuntimeCoreDiagnosticCounters counters,
-            in GasRuntimeObservationMaterializationCounters observation)
+            in GasRuntimeMetricFamilySnapshot metricFamilies)
         {
             UnitCount = input.UnitCount;
             MeasuredTicks = input.MeasuredTicks;
             CommandCount = input.CommandCount;
-            CoreFactCount = counters.FactCount;
-            ActiveMutationCommandCount = counters.ActiveMutationCommandCount;
-            ActiveMutationOwnerGroupCount = counters.ActiveMutationOwnerGroupCount;
-            ActiveMutationMaxOwnerRange = counters.ActiveMutationMaxOwnerRange;
+            CoreFactCount = metricFamilies.Workload.FactCount;
+            ActiveMutationCommandCount = metricFamilies.GasConcept.ActiveMutationCommandCount;
+            ActiveMutationOwnerGroupCount = metricFamilies.DataShape.ActiveMutationOwnerGroupCount;
+            ActiveMutationMaxOwnerRange = metricFamilies.DataShape.ActiveMutationMaxOwnerRange;
             ActiveMutationEstimatedRandomLookupCount =
-                counters.ActiveMutationEstimatedRandomLookupCount;
-            PendingAttributeDeltaCount = counters.PendingAttributeDeltaCount;
-            PendingAttributeTargetGroupCount = counters.PendingAttributeTargetGroupCount;
-            PendingAttributeMaxTargetRange = counters.PendingAttributeMaxTargetRange;
+                metricFamilies.ApiHealth.ActiveMutationEstimatedRandomLookupCount;
+            PendingAttributeDeltaCount = metricFamilies.GasConcept.PendingAttributeDeltaCount;
+            PendingAttributeTargetGroupCount = metricFamilies.DataShape.PendingAttributeTargetGroupCount;
+            PendingAttributeMaxTargetRange = metricFamilies.DataShape.PendingAttributeMaxTargetRange;
             PendingAttributeEstimatedRandomLookupCount =
-                counters.PendingAttributeEstimatedRandomLookupCount;
-            OwnerLocalFactCount = counters.OwnerLocalFactCount;
-            OwnerLocalFactOwnerGroupCount = counters.OwnerLocalFactOwnerGroupCount;
-            OwnerLocalFactMaxOwnerRange = counters.OwnerLocalFactMaxOwnerRange;
-            OwnerLocalFactFlushCount = counters.OwnerLocalFactFlushCount;
-            ActiveEffectSlotCount = counters.ActiveEffectSlotCount;
-            ActiveEffectSlotCapacity = counters.ActiveEffectSlotCapacity;
+                metricFamilies.ApiHealth.PendingAttributeEstimatedRandomLookupCount;
+            OwnerLocalFactCount = metricFamilies.GasConcept.OwnerLocalFactCount;
+            OwnerLocalFactOwnerGroupCount = metricFamilies.DataShape.OwnerLocalFactOwnerGroupCount;
+            OwnerLocalFactMaxOwnerRange = metricFamilies.DataShape.OwnerLocalFactMaxOwnerRange;
+            OwnerLocalFactFlushCount = metricFamilies.DataShape.OwnerLocalFactFlushCount;
+            ActiveEffectSlotCount = metricFamilies.DataShape.ActiveEffectSlotCount;
+            ActiveEffectSlotCapacity = metricFamilies.DataShape.ActiveEffectSlotCapacity;
             ActiveEffectChunkSkipDuePeriodSlotCount =
-                counters.ActiveEffectChunkSkipDuePeriodSlotCount;
-            QueryBudget = counters.QueryBudget;
-            LookupUpdateBudget = counters.LookupUpdateBudget;
-            RandomLookupBudget = counters.RandomLookupBudget;
-            SyncQueryBudget = counters.SyncQueryBudget;
-            DependencyWaitRiskCount = counters.DependencyWaitRiskCount;
+                metricFamilies.GasConcept.ActiveEffectDuePeriodSlotCount;
+            QueryBudget = metricFamilies.ApiHealth.QueryBudget;
+            LookupUpdateBudget = metricFamilies.ApiHealth.LookupUpdateBudget;
+            RandomLookupBudget = metricFamilies.ApiHealth.RandomLookupBudget;
+            SyncQueryBudget = metricFamilies.ApiHealth.SyncQueryBudget;
+            DependencyWaitRiskCount = metricFamilies.ApiHealth.DependencyWaitRiskCount;
             PerformanceObservationPollutionRiskCount =
-                observation.PerformancePollutionRiskCount;
-            MetricFamilyMask = ComputeMetricFamilyMask(input, counters, observation);
-            DominantRisk = ComputeDominantRisk(input, counters, observation);
+                metricFamilies.Overhead.ObservationPerformancePollutionRiskCount;
+            MetricFamilyMask = ComputeMetricFamilyMask(input, metricFamilies);
+            DominantRisk = ComputeDominantRisk(input, metricFamilies);
             PerformanceTimingAvailable = input.PerformanceTimingAvailable;
             ProfilerEvidencePassed = input.ProfilerEvidencePassed;
             MeasuredAverageTickMilliseconds = input.MeasuredAverageTickMilliseconds;
@@ -196,7 +196,7 @@ namespace GAS.Runtime
             BoundaryAverageMilliseconds = input.BoundaryAverageMilliseconds;
             RunnerAverageMilliseconds = input.RunnerAverageMilliseconds;
             CommandsPerMeasuredTick = Divide(input.CommandCount, input.MeasuredTicks);
-            CoreFactsPerMeasuredTick = Divide(counters.FactCount, input.MeasuredTicks);
+            CoreFactsPerMeasuredTick = Divide(metricFamilies.Workload.FactCount, input.MeasuredTicks);
             MeasuredMicrosecondsPerUnit =
                 Divide(input.MeasuredAverageTickMilliseconds * 1000d, input.UnitCount);
             GasTickMicrosecondsPerUnit =
@@ -216,8 +216,14 @@ namespace GAS.Runtime
         {
             return new GasRuntimeDataOrientedScorecard(
                 input,
-                diagnostics.CoreCounters,
-                diagnostics.ObservationMaterializationCounters);
+                diagnostics.MetricFamilies);
+        }
+
+        public static GasRuntimeDataOrientedScorecard Create(
+            in GasRuntimeDataOrientedScorecardInput input,
+            in GasRuntimeMetricFamilySnapshot metricFamilies)
+        {
+            return new GasRuntimeDataOrientedScorecard(input, metricFamilies);
         }
 
         private static double Divide(double numerator, double denominator)
@@ -227,48 +233,15 @@ namespace GAS.Runtime
 
         private static GasRuntimeDiagnosticsMetricFamilyMask ComputeMetricFamilyMask(
             in GasRuntimeDataOrientedScorecardInput input,
-            in GasRuntimeCoreDiagnosticCounters counters,
-            in GasRuntimeObservationMaterializationCounters observation)
+            in GasRuntimeMetricFamilySnapshot metricFamilies)
         {
-            var mask = GasRuntimeDiagnosticsMetricFamilyMask.None;
+            var mask = metricFamilies.MetricFamilyMask;
 
             if (input.UnitCount > 0
                 || input.MeasuredTicks > 0
-                || input.CommandCount > 0
-                || counters.FactCount > 0)
+                || input.CommandCount > 0)
             {
                 mask |= GasRuntimeDiagnosticsMetricFamilyMask.Workload;
-            }
-
-            if (input.CommandCount > 0
-                || counters.SpecCount > 0
-                || counters.DeltaCount > 0
-                || counters.FactCount > 0
-                || counters.CueCount > 0
-                || counters.ActiveEffectSlotCount > 0
-                || counters.PendingAttributeDeltaCount > 0)
-            {
-                mask |= GasRuntimeDiagnosticsMetricFamilyMask.GasConcept;
-            }
-
-            if (counters.ActiveMutationOwnerGroupCount > 0
-                || counters.ActiveMutationMaxOwnerRange > 0
-                || counters.PendingAttributeTargetGroupCount > 0
-                || counters.PendingAttributeMaxTargetRange > 0
-                || counters.OwnerLocalFactOwnerGroupCount > 0
-                || counters.OwnerLocalFactMaxOwnerRange > 0
-                || counters.ActiveEffectSlotCapacity > 0)
-            {
-                mask |= GasRuntimeDiagnosticsMetricFamilyMask.DataShape;
-            }
-
-            if (counters.QueryBudget > 0
-                || counters.LookupUpdateBudget > 0
-                || counters.RandomLookupBudget > 0
-                || counters.SyncQueryBudget > 0
-                || counters.DependencyWaitRiskCount > 0)
-            {
-                mask |= GasRuntimeDiagnosticsMetricFamilyMask.ApiHealth;
             }
 
             if (input.PerformanceTimingAvailable
@@ -279,8 +252,7 @@ namespace GAS.Runtime
                 mask |= GasRuntimeDiagnosticsMetricFamilyMask.Timing;
             }
 
-            if (observation.PerformancePollutionRiskCount > 0
-                || !input.ProfilerEvidencePassed
+            if (!input.ProfilerEvidencePassed
                 || !string.IsNullOrEmpty(input.ProfilerCaptureState))
             {
                 mask |= GasRuntimeDiagnosticsMetricFamilyMask.Overhead;
@@ -291,31 +263,31 @@ namespace GAS.Runtime
 
         private static GasRuntimeDataOrientedDominantRisk ComputeDominantRisk(
             in GasRuntimeDataOrientedScorecardInput input,
-            in GasRuntimeCoreDiagnosticCounters counters,
-            in GasRuntimeObservationMaterializationCounters observation)
+            in GasRuntimeMetricFamilySnapshot metricFamilies)
         {
             if (!input.PerformanceTimingAvailable)
                 return GasRuntimeDataOrientedDominantRisk.MissingPerformanceTiming;
-            if (observation.PerformancePollutionRiskCount > 0)
+            if (metricFamilies.Overhead.ObservationPerformancePollutionRiskCount > 0)
                 return GasRuntimeDataOrientedDominantRisk.ObservationPollution;
-            if (counters.DependencyWaitRiskCount > 0)
+            if (metricFamilies.ApiHealth.DependencyWaitRiskCount > 0)
                 return GasRuntimeDataOrientedDominantRisk.DependencyWait;
-            if (counters.SyncQueryBudget > 0)
+            if (metricFamilies.ApiHealth.SyncQueryBudget > 0)
                 return GasRuntimeDataOrientedDominantRisk.SyncQuery;
-            if (counters.RandomLookupBudget > 0
-                || counters.ActiveMutationEstimatedRandomLookupCount > 0
-                || counters.PendingAttributeEstimatedRandomLookupCount > 0)
+            if (metricFamilies.ApiHealth.RandomLookupBudget > 0
+                || metricFamilies.ApiHealth.ActiveMutationEstimatedRandomLookupCount > 0
+                || metricFamilies.ApiHealth.PendingAttributeEstimatedRandomLookupCount > 0)
             {
                 return GasRuntimeDataOrientedDominantRisk.RandomLookup;
             }
-            if (counters.ActiveMutationMaxOwnerRange > 1
-                || counters.PendingAttributeMaxTargetRange > 1
-                || counters.OwnerLocalFactMaxOwnerRange > 1)
+            if (metricFamilies.DataShape.ActiveMutationMaxOwnerRange > 1
+                || metricFamilies.DataShape.PendingAttributeMaxTargetRange > 1
+                || metricFamilies.DataShape.OwnerLocalFactMaxOwnerRange > 1)
             {
                 return GasRuntimeDataOrientedDominantRisk.OwnerLocality;
             }
-            if (counters.ActiveEffectSlotCapacity > 0
-                && counters.ActiveEffectSlotCount * 100 >= counters.ActiveEffectSlotCapacity * 70)
+            if (metricFamilies.DataShape.ActiveEffectSlotCapacity > 0
+                && metricFamilies.DataShape.ActiveEffectSlotCount * 100
+                >= metricFamilies.DataShape.ActiveEffectSlotCapacity * 70)
             {
                 return GasRuntimeDataOrientedDominantRisk.BufferCapacityPressure;
             }
