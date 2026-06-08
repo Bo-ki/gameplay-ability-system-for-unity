@@ -10,9 +10,7 @@ namespace GAS.AutoChessDemo
             if (!GASManager.IsInitialized)
                 GASManager.Initialize(attachToPlayerLoop: false);
 
-            if (AutoChessGasRuntimeAccess.TryResolveSessionWorld(out var world))
-                AutoChessRuntimeSystemBootstrap.RegisterSystems(world);
-
+            AutoChessGasRuntimeAccess.TryRegisterRuntimeSystems();
             AutoChessGasCatalogSession.TryInstall();
         }
 
@@ -26,40 +24,6 @@ namespace GAS.AutoChessDemo
             AutoChessRuntimeSystemBootstrap.Reset();
             AutoChessGasBattleEntityLifecycle.ResetRuntimeCache();
             GASManager.Shutdown();
-        }
-
-        public static bool TryGetRuntimeTickGroups(out AutoChessGasRuntimeTickGroups groups)
-        {
-            groups = default;
-            if (!AutoChessGasRuntimeAccess.TryResolveSessionWorld(out var world))
-                return false;
-
-            var framePrepare = world.GetExistingSystemManaged<GASFramePrepareSystemGroup>();
-            var commandResolve = world.GetExistingSystemManaged<GASCommandResolveSystemGroup>();
-            var coreSimulation = world.GetExistingSystemManaged<GASCoreSimulationSystemGroup>();
-            var structuralCommit = world.GetExistingSystemManaged<GASStructuralCommitSystemGroup>();
-            var boundaryProjection = world.GetExistingSystemManaged<GASBoundaryProjectionSystemGroup>();
-            if (framePrepare == null
-                || commandResolve == null
-                || coreSimulation == null
-                || structuralCommit == null
-                || boundaryProjection == null)
-            {
-                return false;
-            }
-
-            groups = new AutoChessGasRuntimeTickGroups(
-                framePrepare,
-                commandResolve,
-                coreSimulation,
-                structuralCommit,
-                boundaryProjection);
-            return true;
-        }
-
-        public static bool TryCompleteRuntimeJobs()
-        {
-            return AutoChessGasRuntimeAccess.TryDrainRunnerJobs();
         }
     }
 

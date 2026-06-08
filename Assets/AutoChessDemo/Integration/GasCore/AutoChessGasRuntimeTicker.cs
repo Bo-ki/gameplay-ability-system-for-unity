@@ -9,7 +9,7 @@ namespace GAS.AutoChessDemo
             bool recordTiming,
             ref AutoChessBattleRuntimeTiming runtimeTiming)
         {
-            if (!AutoChessGasRuntimeHost.TryGetRuntimeTickGroups(out var groups))
+            if (!AutoChessGasRuntimeAccess.TryCreateRuntimeTickGroups(out var groups))
                 return;
 
             var framePrepareTicks = UpdateTimed(groups.FramePrepare);
@@ -53,7 +53,7 @@ namespace GAS.AutoChessDemo
         private static long CompleteRuntimeJobsTimed()
         {
             var start = Stopwatch.GetTimestamp();
-            AutoChessGasRuntimeHost.TryCompleteRuntimeJobs();
+            AutoChessGasRuntimeAccess.TryDrainRunnerJobs();
             return Stopwatch.GetTimestamp() - start;
         }
 

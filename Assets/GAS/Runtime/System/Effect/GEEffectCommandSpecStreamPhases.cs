@@ -66,7 +66,6 @@ namespace GAS.Runtime
     {
         private EntityQuery _ownerInstantCommandQuery;
 
-        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             _ownerInstantCommandQuery = state.GetEntityQuery(new EntityQueryDesc
@@ -151,7 +150,6 @@ namespace GAS.Runtime
     {
         private EntityQuery _ownerMutationQuery;
 
-        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             _ownerMutationQuery = state.GetEntityQuery(new EntityQueryDesc
@@ -245,7 +243,6 @@ namespace GAS.Runtime
     {
         private EntityQuery _ownerFactQuery;
 
-        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             _ownerFactQuery = state.GetEntityQuery(new EntityQueryDesc
@@ -296,7 +293,6 @@ namespace GAS.Runtime
     {
         private EntityQuery _ownerSpecQuery;
 
-        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             _ownerSpecQuery = state.GetEntityQuery(new EntityQueryDesc
@@ -428,7 +424,6 @@ namespace GAS.Runtime
     {
         private EntityQuery _ownerFactQuery;
 
-        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             _ownerFactQuery = state.GetEntityQuery(new EntityQueryDesc
@@ -611,7 +606,7 @@ namespace GAS.Runtime
                 if (result != 0)
                     return result;
 
-                return x.Source.CompareTo(y.Source);
+                return ((int)x.Source).CompareTo((int)y.Source);
             }
         }
 

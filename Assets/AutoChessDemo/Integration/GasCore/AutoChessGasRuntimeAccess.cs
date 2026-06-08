@@ -5,24 +5,107 @@ namespace GAS.AutoChessDemo
 {
     internal static class AutoChessGasRuntimeAccess
     {
-        internal static bool TryResolveSessionWorld(out World world)
+        internal static bool TryRegisterRuntimeSystems()
         {
-            return GASRuntimeShell.TryResolveRuntimeWorld(out world);
+            if (!TryResolveSessionWorld(out var world))
+                return false;
+
+            AutoChessRuntimeSystemBootstrap.RegisterSystems(world);
+            return true;
         }
 
-        internal static bool TryResolveDefinitionEntityManager(out EntityManager entityManager)
+        internal static bool TryCreateRuntimeTickGroups(out AutoChessGasRuntimeTickGroups groups)
         {
-            return GASRuntimeShell.TryResolveRuntimeEntityManager(out entityManager);
+            groups = default;
+            if (!TryResolveSessionWorld(out var world))
+                return false;
+
+            var framePrepare = world.GetExistingSystemManaged<GASFramePrepareSystemGroup>();
+            var commandResolve = world.GetExistingSystemManaged<GASCommandResolveSystemGroup>();
+            var coreSimulation = world.GetExistingSystemManaged<GASCoreSimulationSystemGroup>();
+            var structuralCommit = world.GetExistingSystemManaged<GASStructuralCommitSystemGroup>();
+            var boundaryProjection = world.GetExistingSystemManaged<GASBoundaryProjectionSystemGroup>();
+            if (framePrepare == null
+                || commandResolve == null
+                || coreSimulation == null
+                || structuralCommit == null
+                || boundaryProjection == null)
+            {
+                return false;
+            }
+
+            groups = new AutoChessGasRuntimeTickGroups(
+                framePrepare,
+                commandResolve,
+                coreSimulation,
+                structuralCommit,
+                boundaryProjection);
+            return true;
         }
 
-        internal static bool TryResolveBattleLifecycleEntityManager(out EntityManager entityManager)
+        internal static bool TryInstallDefinitionCatalogSession()
         {
-            return GASRuntimeShell.TryResolveRuntimeEntityManager(out entityManager);
+            if (!TryResolveRuntimeEntityManager(out var entityManager))
+                return false;
+
+            AutoChessBattleDefinitionCatalogBuilder.Install(entityManager);
+            AutoChessBattleDriverRuntimeStore.Ensure(entityManager);
+            return true;
         }
 
-        internal static bool TryResolveDiagnosticsWorld(out World world)
+        internal static void UninstallDefinitionCatalogSession()
         {
-            return GASRuntimeShell.TryResolveRuntimeWorld(out world);
+            if (!TryResolveRuntimeEntityManager(out var entityManager))
+                return;
+
+            AutoChessBattleDriverRuntimeStore.Uninstall(entityManager);
+            AutoChessBattleDefinitionCatalogBuilder.Uninstall(entityManager);
+        }
+
+        internal static bool TryCreateBattleDriver(out AutoChessGasBattleDriverHandle driverHandle)
+        {
+            driverHandle = default;
+            if (!TryResolveRuntimeEntityManager(out var entityManager))
+                return false;
+
+            driverHandle = AutoChessBattleDriverRuntimeStore.ResetAndEnable(entityManager);
+            return driverHandle.IsValid;
+        }
+
+        internal static AutoChessBattleDriverComponent ReadBattleDriver(
+            AutoChessGasBattleDriverHandle driverHandle)
+        {
+            return TryResolveRuntimeEntityManager(out var entityManager)
+                ? AutoChessBattleDriverRuntimeStore.Read(entityManager, driverHandle)
+                : default;
+        }
+
+        internal static AutoChessBattleDriverOwnerSnapshot CreateBattleDriverOwnerSnapshot(
+            AutoChessGasBattleDriverHandle driverHandle)
+        {
+            return TryResolveRuntimeEntityManager(out var entityManager)
+                ? AutoChessBattleDriverRuntimeStore.CreateOwnerSnapshot(entityManager, driverHandle)
+                : default;
+        }
+
+        internal static void DisableBattleDriver(AutoChessGasBattleDriverHandle driverHandle)
+        {
+            if (!TryResolveRuntimeEntityManager(out var entityManager))
+                return;
+
+            AutoChessBattleDriverRuntimeStore.Disable(entityManager, driverHandle);
+        }
+
+        internal static bool TryBeginOfficialToolDiffCapture(
+            out AutoChessGasCoreOfficialToolDiffCapture capture)
+        {
+            capture = default;
+            if (!TryResolveSessionWorld(out var world))
+                return false;
+
+            capture = new AutoChessGasCoreOfficialToolDiffCapture(
+                GasRuntimeOfficialToolDiffCapture.Begin(world));
+            return true;
         }
 
         internal static bool TryResolveDiagnosticsGlobalTimer(
@@ -70,6 +153,16 @@ namespace GAS.AutoChessDemo
         internal static bool TryDrainRunnerJobs()
         {
             return GASRuntimeShell.TryDrainRuntimeJobs();
+        }
+
+        private static bool TryResolveSessionWorld(out World world)
+        {
+            return GASRuntimeShell.TryResolveRuntimeWorld(out world);
+        }
+
+        private static bool TryResolveRuntimeEntityManager(out EntityManager entityManager)
+        {
+            return GASRuntimeShell.TryResolveRuntimeEntityManager(out entityManager);
         }
     }
 }

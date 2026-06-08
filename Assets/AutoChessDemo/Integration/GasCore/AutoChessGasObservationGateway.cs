@@ -10,9 +10,8 @@ namespace GAS.AutoChessDemo
 
         public static AutoChessGasCoreOfficialToolDiffCapture BeginOfficialToolDiffCapture()
         {
-            return AutoChessGasRuntimeAccess.TryResolveDiagnosticsWorld(out var world)
-                ? new AutoChessGasCoreOfficialToolDiffCapture(
-                    GasRuntimeOfficialToolDiffCapture.Begin(world))
+            return AutoChessGasRuntimeAccess.TryBeginOfficialToolDiffCapture(out var capture)
+                ? capture
                 : default;
         }
 

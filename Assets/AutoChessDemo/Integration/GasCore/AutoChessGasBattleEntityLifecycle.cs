@@ -48,10 +48,9 @@ namespace GAS.AutoChessDemo
 
         public static AutoChessGasBattleDriverHandle CreateBattleDriver()
         {
-            if (!AutoChessGasRuntimeAccess.TryResolveBattleLifecycleEntityManager(out var entityManager))
-                return default;
-
-            return AutoChessBattleDriverRuntimeStore.ResetAndEnable(entityManager);
+            return AutoChessGasRuntimeAccess.TryCreateBattleDriver(out var driverHandle)
+                ? driverHandle
+                : default;
         }
 
         public static AutoChessBattleReportFact[] CreateReportFacts(
@@ -81,27 +80,18 @@ namespace GAS.AutoChessDemo
         public static AutoChessBattleDriverComponent GetBattleDriverStats(
             AutoChessGasBattleDriverHandle driverHandle)
         {
-            if (!AutoChessGasRuntimeAccess.TryResolveBattleLifecycleEntityManager(out var entityManager))
-                return default;
-
-            return AutoChessBattleDriverRuntimeStore.Read(entityManager, driverHandle);
+            return AutoChessGasRuntimeAccess.ReadBattleDriver(driverHandle);
         }
 
         public static AutoChessBattleDriverOwnerSnapshot GetBattleDriverOwnerSnapshot(
             AutoChessGasBattleDriverHandle driverHandle)
         {
-            if (!AutoChessGasRuntimeAccess.TryResolveBattleLifecycleEntityManager(out var entityManager))
-                return default;
-
-            return AutoChessBattleDriverRuntimeStore.CreateOwnerSnapshot(entityManager, driverHandle);
+            return AutoChessGasRuntimeAccess.CreateBattleDriverOwnerSnapshot(driverHandle);
         }
 
         public static void CloseBattleDriver(AutoChessGasBattleDriverHandle driverHandle)
         {
-            if (!AutoChessGasRuntimeAccess.TryResolveBattleLifecycleEntityManager(out var entityManager))
-                return;
-
-            AutoChessBattleDriverRuntimeStore.Disable(entityManager, driverHandle);
+            AutoChessGasRuntimeAccess.DisableBattleDriver(driverHandle);
         }
 
         public static void DestroyBattleUnit(AutoChessGasBattleUnitHandle handle)

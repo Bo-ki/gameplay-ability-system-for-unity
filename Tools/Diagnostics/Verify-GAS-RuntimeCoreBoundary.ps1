@@ -87,6 +87,8 @@ $effectRuntimeUtilityPath = Join-Path $runtimePath "System\Effect\EffectRuntimeU
 $executionCalculationSystemPath = Join-Path $runtimePath "System\Effect\GEExecutionCalculationSystem.cs"
 $executionCalculationOutputModifierSystemPath = Join-Path $runtimePath "System\Effect\GEExecutionCalculationOutputModifierSystem.cs"
 $activeEffectCommandNormalizePath = Join-Path $runtimePath "System\Effect\GEActiveEffectCommandNormalizeSystem.cs"
+$activeEffectRuntimePath = Join-Path $runtimePath "System\Effect\GASActiveEffectRuntime.cs"
+$activeEffectLifecycleSystemsPath = Join-Path $runtimePath "System\Effect\GEActiveEffectLifecycleSystems.cs"
 $effectInstantSystemsPath = Join-Path $runtimePath "System\Effect\GEEffectInstantSystems.cs"
 $diagnosticsSnapshotSystemPath = Join-Path $runtimePath "System\Event\DiagnosticsSnapshotSystem.cs"
 $scheduleContractPath = Join-Path $runtimePath "System\SystemGroup\GASSystemScheduleContract.cs"
@@ -495,6 +497,14 @@ Assert-FileNotContains `
     -Path $debuggerPath `
     -Pattern "RecordFrameStreamBufferPressure<GEEffectSpecBuffer>" `
     -Message "Debugger stream pressure sampling must not treat owner-local GEEffectSpecBuffer as an EffectCommandSpecStream buffer."
+Assert-FileNotContains `
+    -Path $streamPhasePath `
+    -Pattern "\[BurstCompile\]\s*public void OnCreate\(ref SystemState state\)\s*\{\s*_[A-Za-z0-9]+Query\s*=\s*state\.GetEntityQuery\(new EntityQueryDesc" `
+    -Message "Frame stream phase query setup OnCreate must not be Burst-compiled while constructing managed EntityQueryDesc arrays."
+Assert-FileNotContains `
+    -Path $streamPhasePath `
+    -Pattern "\.Source\.CompareTo\(" `
+    -Message "Frame stream phase Burst comparers must cast enum sources before comparing to avoid enum boxing."
 Assert-FileContains `
     -Path $debuggerPath `
     -Pattern "instantSpecCount\s*=\s*stream\.OwnerLocalSpecCount" `
@@ -509,12 +519,24 @@ Assert-FileContains `
     -Message "Handwritten active-effect command normalize owner must order before instant spec build."
 Assert-FileContains `
     -Path $activeEffectCommandNormalizePath `
+    -Pattern "\[UpdateAfter\(typeof\(GASActiveEffectRemoveSystem\)\)\][\s\S]*?GEEffectCommandCatalogNormalizeSystem\s*:\s*ISystem" `
+    -Message "Handwritten active-effect command normalize owner must order after handwritten active-effect remove."
+Assert-FileContains `
+    -Path $activeEffectCommandNormalizePath `
     -Pattern "GASRuntimeDefinitionResolver\.TryNormalizeGameplayEffectCommand" `
     -Message "Handwritten active-effect command normalize owner must use runtime definition resolver instead of generated catalog helpers."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
-    -Pattern "UpdateBefore\(typeof\(GAS\.Runtime\.GEEffectCommandCatalogNormalizeSystem\)\)[\s\S]*?GASActiveEffectRemoveSystem\s*:\s*ISystem" `
-    -Message "Generated active-effect remove wrapper must order before the handwritten command normalize owner without runtime depending on generated types."
+    -Path $activeEffectLifecycleSystemsPath `
+    -Pattern "UpdateBefore\(typeof\(GEEffectCommandCatalogNormalizeSystem\)\)[\s\S]*?GASActiveEffectRemoveSystem\s*:\s*ISystem" `
+    -Message "Handwritten active-effect remove owner must order before command normalize."
+Assert-FileContains `
+    -Path $activeEffectRuntimePath `
+    -Pattern "public static class GASActiveEffectRuntime" `
+    -Message "Active-effect runtime jobs must live in handwritten Runtime Core."
+Assert-FileNotContains `
+    -Path $activeEffectRuntimePath `
+    -Pattern "GASGeneratedDefinitionCatalogLookup|GASGeneratedRequirementEvaluator|GASGeneratedMagnitudeEvaluator" `
+    -Message "Handwritten active-effect runtime jobs must use runtime lookup/evaluator helpers, not generated helpers."
 Assert-FileContains `
     -Path $codeGenTemplatePath `
     -Pattern "GASGeneratedEffectInstantRuntimeMarker" `
@@ -1136,17 +1158,17 @@ Assert-FileContains `
     -Pattern "RuntimeCoreActiveMutationCommandCount \+= activeMutationCommandCount" `
     -Message "GasRuntimeDebugger snapshot counters must accumulate active mutation frame-local evidence."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
-    -Pattern "GEEffectCommandCatalogNormalizeSystem\s*:\s*ISystem[\s\S]*?GASActiveEffectMutationApplySystem\s*:\s*ISystem" `
-    -Message "Active effect lifecycle systems must live in the dedicated owner artifact, not RuntimeActiveEffect.gen.cs."
+    -Path $activeEffectLifecycleSystemsPath `
+    -Pattern "GASActiveEffectMutationApplySystem\s*:\s*ISystem[\s\S]*?GASActiveEffectPreTickSystem\s*:\s*ISystem[\s\S]*?GASActiveEffectRemoveSystem\s*:\s*ISystem" `
+    -Message "Active effect lifecycle systems must live in handwritten Runtime Core, not generated runtime."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
-    -Pattern "GEEffectCommandCatalogNormalizeSystem\s*:\s*ISystem[\s\S]*?GASActiveEffectRemoveSystem\s*:\s*ISystem" `
-    -Message "Dedicated active effect lifecycle owner file must carry normalize/apply/pre-tick/remove system wrappers."
+    -Path $generatedActiveEffectPath `
+    -Pattern "GASGeneratedActiveEffectRuntimeMarker[\s\S]*?HandwrittenRuntimeOwner\s*=\s*true" `
+    -Message "RuntimeActiveEffect.gen.cs must be reduced to a handwritten runtime owner marker."
 Assert-FileNotContains `
     -Path $generatedActiveEffectPath `
-    -Pattern "(GEEffectCommandCatalogNormalizeSystem|GASActiveEffectMutationApplySystem|GASActiveEffectPreTickSystem|GASActiveEffectRemoveSystem)\s*:\s*ISystem" `
-    -Message "RuntimeActiveEffect.gen.cs must not regenerate active-effect lifecycle ISystem wrappers."
+    -Pattern "GASActiveEffectRuntime|GEActiveEffectMutationChunkApplyJob|GEActiveEffectPreTickJob|GEActiveEffectMutationOwnerCommandCollectJob" `
+    -Message "RuntimeActiveEffect.gen.cs must not regenerate active-effect runtime jobs after handwritten ownership migration."
 Assert-FileNotContains `
     -Path $codeGenTemplatePath `
     -Pattern "Runtime/ActiveEffectLifecycleOwnerSystems\.cs" `
@@ -1184,247 +1206,247 @@ Assert-FileContains `
     -Pattern '\|\s*`?RuntimeLifecycleMigration`?\s*\|\s*`?Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant\.gen\.cs`?\s*\|\s*`?Runtime`?\s*\|\s*`?True`?\s*\|\s*`?RuntimePureGlue`?\s*\|\s*`?True`?\s*\|' `
     -Message "GasCodeGen validation report must classify RuntimeEffectInstant as RuntimePureGlue after the handwritten instant effect owner migration."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationOwnerCommandCollectJob\s*:\s*IJobChunk" `
     -Message "Generated active effect runtime must collect active mutation commands from owner-local buffers before chunk-local apply."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk" `
     -Message "Generated active effect runtime must apply active mutations through ASC chunk-local IJobChunk."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "BuildActiveMutationSourceAttributeSnapshots" `
     -Message "Generated active mutation must build a frame-local SourceAttribute snapshot before chunk-local apply."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationOwnerCommandFinalizeJob\s*:\s*IJob[\s\S]*?\[ReadOnly\] public BufferLookup<AttributeValueBuffer> AttributeLookup" `
     -Message "Generated active mutation SourceAttribute capture must happen in the read-only owner-local finalize/snapshot lane."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]*?\[ReadOnly\] public NativeParallelHashMap<long, float> ActiveMutationSourceAttributeSnapshots" `
     -Message "Generated active mutation chunk apply must consume SourceAttribute snapshots instead of live cross-owner attribute lookup."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "ActiveMutationCommands\.Length == 0" `
     -Message "Generated active mutation chunk apply must skip ASC chunk scans when there are no active mutation commands."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk" `
     -Message "CodeGen template must keep active mutation apply on the chunk-local path."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "BuildActiveMutationSourceAttributeSnapshots" `
     -Message "CodeGen template must keep active mutation SourceAttribute capture in the frame-local snapshot lane."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectPreTickSourceAttributeSnapshotGatherJob" `
     -Message "Generated active effect pre-tick must gather SourceAttribute snapshots before slot rebuild."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "ActiveEffectSlotSourceAttributeSnapshots\s*=\s*activeEffectSlotSourceAttributeSnapshots\.AsParallelWriter" `
     -Message "Dedicated active effect pre-tick owner must write SourceAttribute snapshots through a parallel writer."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "ActiveEffectSlotSourceAttributeSnapshotKey\s*:\s*IEquatable<ActiveEffectSlotSourceAttributeSnapshotKey>" `
     -Message "Generated active effect pre-tick snapshot key must include owner identity, not only owner-local slot sequence."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "EstimateActiveEffectSlotSourceAttributeSnapshotCapacity[\s\S]*?maxSourceAttributeModifierCount" `
     -Message "Generated active effect pre-tick snapshot capacity must be driven by catalog SourceAttribute modifier upper bound."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectPreTickJob\s*:\s*IJobChunk[\s\S]*?\[ReadOnly\] public NativeParallelHashMap<ActiveEffectSlotSourceAttributeSnapshotKey, float> ActiveEffectSlotSourceAttributeSnapshots" `
     -Message "Generated active effect pre-tick apply must consume SourceAttribute snapshots instead of live cross-owner attribute lookup."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(owner,\s*slot\.Sequence,\s*modifierIndex\)" `
     -Message "Generated active effect pre-tick gather must key SourceAttribute snapshots by target owner and owner-local slot sequence."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "ActiveEffectSlotSourceAttributeSnapshots\.TryAdd\(snapshotKey,\s*sourceValue\)" `
     -Message "Generated active effect pre-tick snapshot gather must use bounded snapshot writes; misses are exposed by magnitude-source fallback counters."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "ActiveEffectSlotSourceSnapshotLaneCounters" `
     -Message "Generated active effect pre-tick must expose lane-specific SourceAttribute snapshot counters."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "SnapshotLaneCounters\s*=\s*activeEffectSlotSourceSnapshotLaneCounters" `
     -Message "Dedicated active effect pre-tick owner must pass SourceAttribute snapshot lane counters through gather and apply jobs."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "RecordSnapshotWrite\(\s*ActiveEffectSlotSourceAttributeSnapshots\.TryAdd\(snapshotKey,\s*sourceValue\)\)" `
     -Message "Generated active effect pre-tick gather must record snapshot write success/failure evidence."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "snapshotLaneCounters\.ApplyHitCount\+\+" `
     -Message "Generated active effect pre-tick apply must record source snapshot hit evidence."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "snapshotLaneCounters\.ApplyMissCount\+\+" `
     -Message "Generated active effect pre-tick apply must record source snapshot miss evidence."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "snapshotLaneCounters\.FallbackValueCount\+\+" `
     -Message "Generated active effect pre-tick apply must record source snapshot fallback evidence."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "SetActiveEffectSlotSourceSnapshotCapacity" `
     -Message "Dedicated active effect pre-tick owner must record SourceAttribute snapshot capacity evidence."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(ownerResources\.Owner,\s*slot\.Sequence,\s*modifierIndex\)" `
     -Message "Generated active effect pre-tick apply must read SourceAttribute snapshots by the same target owner key."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectPreTickSourceAttributeSnapshotGatherJob" `
     -Message "CodeGen template must keep active effect pre-tick SourceAttribute snapshot gather."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "ActiveEffectSlotSourceAttributeSnapshots\s*=\s*activeEffectSlotSourceAttributeSnapshots\.AsParallelWriter" `
     -Message "CodeGen template must keep active effect pre-tick SourceAttribute snapshots on a parallel writer."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "ActiveEffectSlotSourceAttributeSnapshotKey\s*:\s*IEquatable<ActiveEffectSlotSourceAttributeSnapshotKey>" `
     -Message "CodeGen template must keep owner-aware active effect pre-tick snapshot keys."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "EstimateActiveEffectSlotSourceAttributeSnapshotCapacity[\s\S]*?maxSourceAttributeModifierCount" `
     -Message "CodeGen template must keep catalog-driven active effect pre-tick snapshot capacity."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(owner,\s*slot\.Sequence,\s*modifierIndex\)" `
     -Message "CodeGen template must keep pre-tick snapshot gather keyed by target owner."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "ActiveEffectSlotSourceAttributeSnapshots\.TryAdd\(snapshotKey,\s*sourceValue\)" `
     -Message "CodeGen template must keep bounded active effect pre-tick snapshot writes with fallback evidence."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "ActiveEffectSlotSourceSnapshotLaneCounters" `
     -Message "CodeGen template must keep active effect SourceAttribute snapshot lane counters."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "SnapshotLaneCounters\s*=\s*activeEffectSlotSourceSnapshotLaneCounters" `
     -Message "CodeGen template must pass active effect SourceAttribute snapshot lane counters through gather and apply jobs."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "RecordSnapshotWrite\(\s*ActiveEffectSlotSourceAttributeSnapshots\.TryAdd\(snapshotKey,\s*sourceValue\)\)" `
     -Message "CodeGen template must preserve snapshot write success/failure evidence."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "snapshotLaneCounters\.ApplyHitCount\+\+" `
     -Message "CodeGen template must keep source snapshot hit evidence."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "snapshotLaneCounters\.ApplyMissCount\+\+" `
     -Message "CodeGen template must keep source snapshot miss evidence."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "snapshotLaneCounters\.FallbackValueCount\+\+" `
     -Message "CodeGen template must keep source snapshot fallback evidence."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "SetActiveEffectSlotSourceSnapshotCapacity" `
     -Message "CodeGen template must preserve SourceAttribute snapshot capacity evidence."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "ActiveEffectMagnitudeSourceCounters[\s\S]*?CaptureMissCount[\s\S]*?FallbackValueCount" `
     -Message "Generated active effect magnitude snapshot lane must expose capture misses and fallback values."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "ActiveEffectMagnitudeSourceCounters[\s\S]*?CaptureMissCount[\s\S]*?FallbackValueCount" `
     -Message "CodeGen template must keep active effect magnitude snapshot miss and fallback evidence."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(ownerResources\.Owner,\s*slot\.Sequence,\s*modifierIndex\)" `
     -Message "CodeGen template must keep pre-tick snapshot apply keyed by target owner."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "activeEffectSlotSourceAttributeSnapshotCapacity\s*=\s*ownerCapacity\s*\*" `
     -Message "Generated active effect pre-tick snapshot capacity must not regress to a raw owner-count estimate."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "activeEffectSlotSourceAttributeSnapshotCapacity\s*=\s*ownerCapacity\s*\*" `
     -Message "CodeGen template must not regenerate raw owner-count snapshot capacity."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(slot\.Sequence,\s*modifierIndex\)" `
     -Message "Generated active effect pre-tick snapshot key must not regress to owner-local slot sequence only."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "MakeActiveEffectSlotSourceAttributeSnapshotKey\(slot\.Sequence,\s*modifierIndex\)" `
     -Message "CodeGen template must not regenerate owner-local-only pre-tick snapshot keys."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "ActiveMutationCommandLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationCommandBuffer>" `
     -Message "Active mutation commands must be projected into ASC owner-local command buffers."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "ActiveMutationSetByCallerLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>" `
     -Message "Active mutation set-by-caller payloads must be projected into ASC owner-local buffers."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectCommandNormalizePath `
     -Pattern "CopySetByCallerValuesToOwner" `
     -Message "Active mutation normalize must copy stream set-by-caller ranges into owner-local command payloads."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "SetByCallerBufferTypeHandle\s*=[\s\S]*?SystemAPI\.GetBufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>" `
     -Message "Active mutation owner system must pass owner-local set-by-caller buffers into the collect job."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationOwnerCommandCollectJob\s*:\s*IJobChunk" `
     -Message "Generated active mutation command source must collect from owner-local command buffers."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "BufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>\s+SetByCallerBufferTypeHandle" `
     -Message "Generated active mutation command source must collect owner-local set-by-caller payloads."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "ActiveMutationSetByCallerValues\.Add\(new GESetByCallerValueBuffer" `
     -Message "Generated active mutation collect must flatten owner-local set-by-caller payloads into a frame-local list."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "\[ReadOnly\] public NativeList<GESetByCallerValueBuffer> ActiveMutationSetByCallerValues" `
     -Message "Generated active mutation apply must consume frame-local set-by-caller payloads."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "TryApplyActiveMutationToOwner[\s\S]*?NativeList<GESetByCallerValueBuffer> setByCallerValues" `
     -Message "Generated active mutation apply must pass owner-local set-by-caller payloads through the active mutation path."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "TryFindSetByCallerValue\([\s\S]*?NativeList<GESetByCallerValueBuffer> setByCallerValues" `
     -Message "Generated active mutation magnitude resolution must read set-by-caller payloads from the owner-local frame list."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationOwnerCommandFinalizeJob\s*:\s*IJob" `
     -Message "Generated active mutation finalize must keep owner-local commands separate from singleton stream gather."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationOwnerCommandCollectJob\s*:\s*IJobChunk" `
     -Message "CodeGen template must keep owner-local active mutation command collection."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "SetByCallerBufferTypeHandle\s*=[\s\S]*?SystemAPI\.GetBufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>" `
     -Message "CodeGen template must keep owner-local active mutation set-by-caller collection."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "BufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>\s+SetByCallerBufferTypeHandle" `
     -Message "CodeGen template must keep active mutation collect job set-by-caller buffer field."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "ActiveMutationSetByCallerValues\.Add\(new GESetByCallerValueBuffer" `
     -Message "CodeGen template must keep frame-local set-by-caller flattening for active mutation."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "\[ReadOnly\] public NativeList<GESetByCallerValueBuffer> ActiveMutationSetByCallerValues" `
     -Message "CodeGen template must keep active mutation apply on owner-local set-by-caller payloads."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "TryFindSetByCallerValue\([\s\S]*?NativeList<GESetByCallerValueBuffer> setByCallerValues" `
     -Message "CodeGen template must not regenerate stream-backed set-by-caller magnitude resolution for active mutation."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationOwnerCommandFinalizeJob\s*:\s*IJob" `
     -Message "CodeGen template must keep owner-local active mutation command finalization."
 Assert-FileContains `
@@ -1519,10 +1541,18 @@ Assert-FileContains `
     -Path $scheduleContractPath `
     -Pattern "typeof\(GEEffectCommandCatalogNormalizeSystem\)[\s\S]*?typeof\(GEEffectSpecBuildSystem\)" `
     -Message "Runtime schedule contract must register handwritten active-effect command normalize before instant spec build."
+Assert-FileContains `
+    -Path $scheduleContractPath `
+    -Pattern "typeof\(GASActiveEffectPreTickSystem\)[\s\S]*?typeof\(GASActiveEffectRemoveSystem\)[\s\S]*?typeof\(GEEffectCommandCatalogNormalizeSystem\)[\s\S]*?typeof\(GEEffectSpecBuildSystem\)[\s\S]*?typeof\(GASActiveEffectMutationApplySystem\)" `
+    -Message "Runtime schedule contract must register handwritten active-effect pre-tick/remove/normalize/spec-build/apply chain."
 Assert-FileNotContains `
     -Path $scheduleContractPath `
-    -Pattern "GAS\.Runtime\.Generated\.GEEffectCommandCatalogNormalizeSystem" `
-    -Message "Runtime schedule contract must not register generated active-effect command normalize after handwritten ownership migration."
+    -Pattern "GAS\.Runtime\.Generated\.(GEEffectCommandCatalogNormalizeSystem|GASActiveEffectMutationApplySystem|GASActiveEffectPreTickSystem|GASActiveEffectRemoveSystem)" `
+    -Message "Runtime schedule contract must not register generated active-effect lifecycle systems after handwritten ownership migration."
+Assert-FileContains `
+    -Path $scheduleContractPath `
+    -Pattern "GeneratedCoreSimulationSystemTypeNames\s*=\s*[\s\S]*?Array\.Empty<string>\(\)" `
+    -Message "Runtime schedule contract must have no generated core simulation system registrations after active-effect ownership migration."
 Assert-FileContains `
     -Path $scheduleContractPath `
     -Pattern "typeof\(GEEffectSpecBuildSystem\)[\s\S]*?typeof\(GASAttributeSetReduceApplySystem\)[\s\S]*?typeof\(GASAttributeModifierDeltaApplySystem\)" `
@@ -1548,35 +1578,35 @@ Assert-FileNotContains `
     -Pattern "FactLookup\[StreamEntity\]\.Add\(evt\)" `
     -Message "ASC command resolve facts must not append directly to the singleton fact stream."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "OwnerFactLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactBuffer>\(isReadOnly:\s*false\)" `
     -Message "Active effect lifecycle owner systems must acquire ASC owner-local gameplay fact buffers."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;" `
     -Message "Generated active effect runtime jobs must expose ASC owner-local gameplay fact lookup."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "OwnerFactLookup\[owner\]\.Add\(new OwnerLocalGameplayFactBuffer" `
     -Message "Generated active effect lifecycle facts must append to the ASC owner-local fact buffer."
 Assert-FileNotContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "FactLookup\s*=\s*SystemAPI\.GetBufferLookup<GameplayEventBuffer>\(isReadOnly:\s*false\)" `
     -Message "Active effect lifecycle owner systems must not acquire singleton GameplayEventBuffer for core facts."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "public BufferLookup<GameplayEventBuffer> FactLookup|FactLookup\[StreamEntity\]\.Add\(evt\)" `
     -Message "Generated active effect lifecycle facts must not append directly to the singleton fact stream."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;" `
     -Message "CodeGen template must regenerate active effect owner-local gameplay fact lookup fields."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "OwnerFactLookup\[owner\]\.Add\(new OwnerLocalGameplayFactBuffer" `
     -Message "CodeGen template must regenerate active effect lifecycle owner-local fact append."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "public BufferLookup<GameplayEventBuffer> FactLookup|FactLookup\[StreamEntity\]\.Add\(evt\)" `
     -Message "CodeGen template must not regenerate active effect singleton fact stream append."
 Assert-FileContains `
@@ -1608,119 +1638,119 @@ Assert-FileNotContains `
     -Pattern "PrepareOwnerLocalCommand|Allocate\(ref stream\.NextCommandSequence\)" `
     -Message "GameplayEffectRequestWriter must not duplicate EffectCommandSpecStream command sequence allocation."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "MutationBufferTypeHandle\s*=\s*SystemAPI\.GetBufferTypeHandle<ActiveEffectMutationBuffer>\(isReadOnly:\s*false\)" `
     -Message "Generated active effect pre-tick/remove must pass ASC owner-local mutation buffers by chunk type handle."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "public BufferTypeHandle<ActiveEffectMutationBuffer>\s+MutationBufferTypeHandle" `
     -Message "Generated active effect pre-tick/remove job must own ActiveEffectMutationBuffer as an owner-local chunk buffer."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "var mutationBuffers\s*=\s*chunk\.GetBufferAccessor\(ref MutationBufferTypeHandle\)[\s\S]*?var mutations\s*=\s*mutationBuffers\[entityIndex\]" `
     -Message "Generated active effect pre-tick/remove must write mutations to the current ASC owner-local buffer."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "var mutationBuffers\s*=\s*chunk\.GetBufferAccessor\(ref MutationBufferTypeHandle\)[\s\S]*?var mutations\s*=\s*mutationBuffers\[entityIndex\]" `
     -Message "CodeGen template must keep active effect pre-tick/remove mutation output owner-local."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "MutationLookup\.HasBuffer\(StreamEntity\)|MutationLookup\[StreamEntity\]|public BufferLookup<ActiveEffectMutationBuffer>\s+MutationLookup" `
     -Message "Generated active effect pre-tick/remove must not read ActiveEffectMutationBuffer from the singleton stream owner."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "MutationLookup\.HasBuffer\(StreamEntity\)|MutationLookup\[StreamEntity\]|public BufferLookup<ActiveEffectMutationBuffer>\s+MutationLookup" `
     -Message "CodeGen template must not regenerate singleton stream ActiveEffectMutationBuffer access for pre-tick/remove."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "ActiveMutationCommandLookup\s*=\s*SystemAPI\.GetBufferLookup<ActiveEffectMutationCommandBuffer>\(isReadOnly:\s*false\)" `
     -Message "Generated active effect pre-tick must acquire ASC owner-local active mutation command buffers for period commands."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "if\s*\(kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?ActiveMutationCommandLookup\[ownerResources\.Owner\]\.Add\(new ActiveEffectMutationCommandBuffer" `
     -Message "Generated period active mutation commands must be routed to owner-local ASC buffers."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "var ownerCommand = PrepareCommand\([\s\S]*?ownerSetByCallerValues\.Length[\s\S]*?Command = ownerCommand" `
     -Message "Generated period active mutation route must remap set-by-caller payloads into owner-local command payload ranges."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "if\s*\(kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?ActiveMutationCommandLookup\[ownerResources\.Owner\]\.Add\(new ActiveEffectMutationCommandBuffer" `
     -Message "CodeGen template must keep period active mutation commands off the singleton command stream."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "var ownerCommand = PrepareCommand\([\s\S]*?ownerSetByCallerValues\.Length[\s\S]*?Command = ownerCommand" `
     -Message "CodeGen template must keep owner-local period set-by-caller payload remapping."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "var ownerInstantSetByCallerValues\s*=\s*CommandSetByCallerLookup\[ownerResources\.Owner\][\s\S]*?CommandLookup\[ownerResources\.Owner\]\.Add\(resolved\)" `
     -Message "Generated period instant commands must be routed through ASC owner-local instant buffers."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "var ownerInstantSetByCallerValues\s*=\s*CommandSetByCallerLookup\[ownerResources\.Owner\][\s\S]*?CommandLookup\[ownerResources\.Owner\]\.Add\(resolved\)" `
     -Message "CodeGen template must keep period instant commands on ASC owner-local instant buffers."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "EmitPeriodCommand[\s\S]*?CommandSetByCallerLookup\[StreamEntity\][\s\S]*?CommandLookup\[StreamEntity\]\.Add\(resolved\)" `
     -Message "Generated period instant commands must not append to singleton stream command buffers."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "EmitPeriodCommand[\s\S]*?CommandSetByCallerLookup\[StreamEntity\][\s\S]*?CommandLookup\[StreamEntity\]\.Add\(resolved\)" `
     -Message "CodeGen template must not regenerate singleton stream appends for period instant commands."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "NextFrameInstantCommandLookup\s*=\s*[\s\S]*?SystemAPI\.GetBufferLookup<OwnerLocalInstantNextFrameCommandBuffer>\(isReadOnly:\s*false\)" `
     -Message "Generated active mutation apply must acquire owner-local next-frame instant command buffers for post-flush instant producers."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "NextFrameInstantSetByCallerLookup\s*=\s*[\s\S]*?SystemAPI\.GetBufferLookup<OwnerLocalInstantNextFrameSetByCallerValueBuffer>\(isReadOnly:\s*false\)" `
     -Message "Generated active mutation apply must acquire owner-local next-frame instant payload buffers for post-flush instant producers."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "NextFrameActiveMutationCommandLookup\s*=\s*[\s\S]*?SystemAPI\.GetBufferLookup<ActiveEffectNextFrameMutationCommandBuffer>\(isReadOnly:\s*false\)" `
     -Message "Generated active mutation apply must acquire owner-local next-frame command buffers for post-collect active mutation producers."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectLifecycleSystemsPath `
     -Pattern "NextFrameActiveMutationSetByCallerLookup\s*=\s*[\s\S]*?SystemAPI\.GetBufferLookup<ActiveEffectNextFrameMutationSetByCallerValueBuffer>\(isReadOnly:\s*false\)" `
     -Message "Generated active mutation apply must acquire owner-local next-frame payload buffers for post-collect active mutation producers."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "EmitOverflowCommand[\s\S]*?if\s*\(kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?NextFrameActiveMutationCommandLookup\[targetAsc\]\.Add\(new ActiveEffectNextFrameMutationCommandBuffer" `
     -Message "Generated overflow active mutation commands must use next-frame owner-local active mutation buffers."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "EmitOverflowCommand[\s\S]*?if\s*\(kind == GEEffectCommandKind\.ActiveMutation\)[\s\S]*?NextFrameActiveMutationCommandLookup\[targetAsc\]\.Add\(new ActiveEffectNextFrameMutationCommandBuffer" `
     -Message "CodeGen template must keep overflow active mutation commands on next-frame owner-local active mutation buffers."
 Assert-FileContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "EmitOverflowCommand[\s\S]*?NextFrameInstantCommandLookup\[instantTargetAsc\]\.Add\(new OwnerLocalInstantNextFrameCommandBuffer" `
     -Message "Generated overflow instant commands must use next-frame owner-local instant buffers."
 Assert-FileContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "EmitOverflowCommand[\s\S]*?NextFrameInstantCommandLookup\[instantTargetAsc\]\.Add\(new OwnerLocalInstantNextFrameCommandBuffer" `
     -Message "CodeGen template must keep overflow instant commands on next-frame owner-local instant buffers."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "EmitOverflowCommand[\s\S]*?EffectCommandSpecStream\.AppendPreparedCommand" `
     -Message "Generated overflow command emission must not fall back to the singleton command/spec stream."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "EmitOverflowCommand[\s\S]*?EffectCommandSpecStream\.AppendPreparedCommand" `
     -Message "CodeGen template must not regenerate singleton command/spec stream fallback for overflow commands."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]{0,3000}\|\| !CommandSetByCallerLookup\.HasBuffer\(StreamEntity\)" `
     -Message "Generated active mutation apply must not require singleton stream set-by-caller buffers before processing owner-local commands."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]{0,3000}\|\| !CommandSetByCallerLookup\.HasBuffer\(StreamEntity\)" `
     -Message "CodeGen template must not regenerate stream set-by-caller as an active mutation apply precondition."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]{0,5000}var setByCallerValues\s*=\s*CommandSetByCallerLookup\[StreamEntity\]" `
     -Message "Generated active mutation apply must not read active mutation set-by-caller input from the singleton stream buffer."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]{0,5000}var setByCallerValues\s*=\s*CommandSetByCallerLookup\[StreamEntity\]" `
     -Message "CodeGen template must not regenerate singleton stream set-by-caller input reads for active mutation apply."
 Assert-FileNotContains `
@@ -1728,43 +1758,43 @@ Assert-FileNotContains `
     -Pattern "ActiveMutationCommandCursor" `
     -Message "EffectCommandStream must not retain the old active mutation singleton command cursor."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationGatherJob\s*:\s*IJob" `
     -Message "Generated active mutation command source must not regress to singleton stream gather."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationGatherJob\s*:\s*IJob" `
     -Message "CodeGen template must not regenerate singleton stream active mutation gather."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationApplyJob\s*:\s*IJob" `
     -Message "Generated active effect runtime must not regress to serial active mutation owner lookup apply."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "TryReadAttributeValue\(ref ownerResources,\s*command\.SourceAsc" `
     -Message "Generated active mutation apply must not read cross-owner SourceAttribute through owner resources directly."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "TryReadAttributeValue\(ref ownerResources,\s*command\.SourceAsc" `
     -Message "CodeGen template must not regenerate direct SourceAttribute owner-resource reads."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "BuildMagnitudeContextFromSlot[\s\S]*?TryReadAttributeValue\(ref ownerResources,\s*slot\.SourceAsc" `
     -Message "Generated active effect pre-tick must not read slot SourceAttribute through live owner-resource lookup."
 Assert-FileNotContains `
-    -Path $codeGenTemplatePath `
+    -Path $activeEffectRuntimePath `
     -Pattern "BuildMagnitudeContextFromSlot[\s\S]*?TryReadAttributeValue\(ref ownerResources,\s*slot\.SourceAsc" `
     -Message "CodeGen template must not regenerate slot SourceAttribute live owner-resource lookup."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "ActiveMutationOwnerResourceLookupCount \+= ownerGroupCount" `
     -Message "Active mutation owner groups must not be counted as random owner resource lookups on the chunk-local path."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "EstimateActiveMutationRandomLookupCount" `
     -Message "Active mutation chunk-local path must not use the old estimated random lookup budget."
 Assert-FileNotContains `
-    -Path $generatedActiveEffectPath `
+    -Path $activeEffectRuntimePath `
     -Pattern "GEActiveEffectMutationChunkApplyJob\s*:\s*IJobChunk[\s\S]*?BufferLookup<AttributeValueBuffer> AttributeLookup[\s\S]*?\[ReadOnly\] public NativeList<GEEffectCommandBuffer> ActiveMutationCommands" `
     -Message "Active mutation chunk-local apply must not hold AttributeValueBuffer lookup aliases beside writable chunk buffers."
 Assert-FileContains `
@@ -1791,22 +1821,58 @@ Assert-FileContains `
     -Path $autoChessRuntimeAccessPath `
     -Pattern "internal static class AutoChessGasRuntimeAccess" `
     -Message "AutoChess runtime access capability owner must stay internal to the AutoChess adapter."
+Assert-FileNotContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "internal static bool TryResolveSessionWorld" `
+    -Message "AutoChess runtime access must not expose raw World as a shared session capability."
+Assert-FileNotContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "internal static bool TryResolveDefinitionEntityManager" `
+    -Message "AutoChess runtime access must not expose a generic definition/catalog EntityManager capability."
+Assert-FileNotContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "internal static bool TryResolveBattleLifecycleEntityManager" `
+    -Message "AutoChess runtime access must not expose a generic battle lifecycle EntityManager capability."
+Assert-FileNotContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "internal static bool TryResolveDiagnosticsWorld" `
+    -Message "AutoChess runtime access must not expose raw diagnostics World as a shared capability."
 Assert-FileContains `
     -Path $autoChessRuntimeAccessPath `
-    -Pattern "TryResolveSessionWorld" `
-    -Message "AutoChess runtime access must expose a session world capability."
+    -Pattern "TryRegisterRuntimeSystems" `
+    -Message "AutoChess runtime access must expose runtime system registration as a capability, not raw World."
 Assert-FileContains `
     -Path $autoChessRuntimeAccessPath `
-    -Pattern "TryResolveDefinitionEntityManager" `
-    -Message "AutoChess runtime access must expose a definition/catalog EntityManager capability."
+    -Pattern "TryCreateRuntimeTickGroups" `
+    -Message "AutoChess runtime access must expose runtime tick group resolution as a typed runner capability."
 Assert-FileContains `
     -Path $autoChessRuntimeAccessPath `
-    -Pattern "TryResolveBattleLifecycleEntityManager" `
-    -Message "AutoChess runtime access must expose a battle lifecycle EntityManager capability."
+    -Pattern "TryInstallDefinitionCatalogSession" `
+    -Message "AutoChess runtime access must expose catalog installation as a capability, not raw EntityManager."
 Assert-FileContains `
     -Path $autoChessRuntimeAccessPath `
-    -Pattern "TryResolveDiagnosticsWorld" `
-    -Message "AutoChess runtime access must expose a diagnostics world capability."
+    -Pattern "UninstallDefinitionCatalogSession" `
+    -Message "AutoChess runtime access must expose catalog uninstall as a capability, not raw EntityManager."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "TryCreateBattleDriver" `
+    -Message "AutoChess runtime access must expose battle driver creation as a lifecycle capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "ReadBattleDriver" `
+    -Message "AutoChess runtime access must expose battle driver read as a lifecycle capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "CreateBattleDriverOwnerSnapshot" `
+    -Message "AutoChess runtime access must expose battle driver owner snapshot as structured evidence."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "DisableBattleDriver" `
+    -Message "AutoChess runtime access must expose battle driver close as a lifecycle capability."
+Assert-FileContains `
+    -Path $autoChessRuntimeAccessPath `
+    -Pattern "TryBeginOfficialToolDiffCapture" `
+    -Message "AutoChess runtime access must expose official diff capture without returning diagnostics World."
 Assert-FileContains `
     -Path $autoChessRuntimeAccessPath `
     -Pattern "TryResolveDiagnosticsGlobalTimer" `
@@ -1887,8 +1953,8 @@ Assert-FileContains `
     -Message "AutoChess runtime host must uninstall catalog lifetime through the catalog session capability."
 Assert-FileContains `
     -Path $autoChessCatalogSessionPath `
-    -Pattern "TryInstall\(\)[\s\S]*?AutoChessGasRuntimeAccess\.TryResolveDefinitionEntityManager" `
-    -Message "AutoChess catalog session must resolve definition/catalog lifetime through AutoChessGasRuntimeAccess."
+    -Pattern "TryInstall\(\)[\s\S]*?AutoChessGasRuntimeAccess\.TryInstallDefinitionCatalogSession" `
+    -Message "AutoChess catalog session must install definition/catalog lifetime through a concrete AutoChessGasRuntimeAccess capability."
 Assert-FileNotContains `
     -Path $autoChessCatalogSessionPath `
     -Pattern "public\s+static\s+\w+\s+\w+\s*\(\s*EntityManager" `
@@ -1991,6 +2057,6 @@ Write-Host "GAS Runtime Core active mutation SourceAttribute contract passed: re
 Write-Host "GAS Runtime Core owner-local fact lane contract passed: Attribute facts use ASC-local carrier and debugger-visible export counters."
 Write-Host "GAS Runtime Core AttributeDelta owner-local fact projection contract passed: generated instant and execution output no longer write stream deltas."
 Write-Host "AutoChess R1/R6 snapshot contract passed: unit result snapshots are projected from structured boundary evidence, not live ASCReadModel."
-Write-Host "AutoChess R1/R6 runtime access capability contract passed: raw GASRuntimeShell ECS seams are centralized behind AutoChessGasRuntimeAccess."
+Write-Host "AutoChess R1/R6 runtime access capability contract passed: AutoChess capabilities no longer expose shared raw World/EntityManager resolvers."
 Write-Host "AutoChess R6 driver owner contract passed: driver owner snapshot is exposed without raw Entity adapter APIs."
 Write-Host "AutoChess R6/R8 timing owner split contract passed: Runtime Debugger publishes core, boundary, and runner timing owners."
