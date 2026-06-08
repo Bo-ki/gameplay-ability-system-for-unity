@@ -25,12 +25,17 @@ namespace GAS.Runtime
             });
             state.RequireForUpdate(_query);
             state.RequireForUpdate<GASDefinitionCatalogComponent>();
+            state.RequireForUpdate<GEEffectCommandStreamComponent>();
         }
 
         public void OnUpdate(ref SystemState state)
         {
             var catalogComponent = SystemAPI.GetSingleton<GASDefinitionCatalogComponent>();
             if (!GASDefinitionCatalogLookup.IsCatalogCreated(catalogComponent.Catalog))
+                return;
+
+            var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
+            if (!EffectCommandSpecStream.HasRequiredBuffers(state.EntityManager, streamEntity))
                 return;
 
             state.Dependency = new GEEffectCommandCatalogNormalizeJob
@@ -41,7 +46,10 @@ namespace GAS.Runtime
                     SystemAPI.GetBufferLookup<ActiveEffectMutationCommandBuffer>(isReadOnly: false),
                 ActiveMutationSetByCallerLookup =
                     SystemAPI.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: false),
+                ActiveMutationPrepareDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer>(isReadOnly: false),
                 Catalog = catalogComponent.Catalog,
+                StreamEntity = streamEntity,
             }.Schedule(_query, state.Dependency);
         }
 
@@ -51,7 +59,9 @@ namespace GAS.Runtime
             [ReadOnly] public BufferTypeHandle<GESetByCallerValueBuffer> SetByCallerTypeHandle;
             public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;
             public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;
+            public BufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer> ActiveMutationPrepareDirtyOwnerLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
+            public Entity StreamEntity;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -98,6 +108,10 @@ namespace GAS.Runtime
                 {
                     Command = ownerCommand,
                 });
+                EffectCommandSpecStream.MarkActiveMutationPrepareDirty(
+                    ActiveMutationPrepareDirtyOwnerLookup,
+                    StreamEntity,
+                    command.TargetAsc);
             }
 
             private static GEEffectCommandBuffer CopySetByCallerValuesToOwner(

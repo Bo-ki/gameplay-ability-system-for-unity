@@ -134,6 +134,10 @@ namespace GAS.Runtime
                     SystemAPI.GetBufferLookup<ActiveEffectNextFrameMutationCommandBuffer>(isReadOnly: false),
                 NextFrameActiveMutationSetByCallerLookup =
                     SystemAPI.GetBufferLookup<ActiveEffectNextFrameMutationSetByCallerValueBuffer>(isReadOnly: false),
+                OwnerLocalInstantPrepareDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalInstantPrepareDirtyOwnerBuffer>(isReadOnly: false),
+                ActiveMutationPrepareDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer>(isReadOnly: false),
                 AttributeOwnerMarkerRequestLookup =
                     SystemAPI.GetBufferLookup<AttributeOwnerMarkerRequestBuffer>(isReadOnly: false),
                 AbilityStateLookup = SystemAPI.GetComponentLookup<AbilityStateComponent>(isReadOnly: false),
@@ -264,6 +268,10 @@ namespace GAS.Runtime
                     SystemAPI.GetBufferLookup<ActiveEffectMutationCommandBuffer>(isReadOnly: false),
                 ActiveMutationSetByCallerLookup =
                     SystemAPI.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: false),
+                OwnerLocalInstantPrepareDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalInstantPrepareDirtyOwnerBuffer>(isReadOnly: false),
+                ActiveMutationPrepareDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer>(isReadOnly: false),
                 AbilityLifecycleRequestLookup =
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
                 OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
@@ -358,6 +366,10 @@ namespace GAS.Runtime
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 CommandLookup = SystemAPI.GetBufferLookup<GEEffectCommandBuffer>(isReadOnly: false),
                 CommandSetByCallerLookup = SystemAPI.GetBufferLookup<GESetByCallerValueBuffer>(isReadOnly: false),
+                OwnerLocalInstantPrepareDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalInstantPrepareDirtyOwnerBuffer>(isReadOnly: false),
+                ActiveMutationPrepareDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer>(isReadOnly: false),
                 AbilityLifecycleRequestLookup =
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
                 OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(isReadOnly: false),

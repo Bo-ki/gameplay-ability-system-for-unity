@@ -116,7 +116,9 @@ namespace GAS.Runtime
             if (!_effectCommandStream.Valid)
             {
                 _effectCommandStream = em.CreateArchetype(
-                    ComponentType.ReadWrite<GEEffectCommandStreamComponent>());
+                    ComponentType.ReadWrite<GEEffectCommandStreamComponent>(),
+                    ComponentType.ReadWrite<OwnerLocalInstantPrepareDirtyOwnerBuffer>(),
+                    ComponentType.ReadWrite<ActiveEffectMutationPrepareDirtyOwnerBuffer>());
             }
 
             return _effectCommandStream;

@@ -14,6 +14,8 @@ namespace GAS.Runtime
         TypedSimulationFact = 6,
         ActiveEffectNextFrameMutation = 7,
         OwnerLocalInstantNextFrame = 8,
+        OwnerLocalInstantPrepareDirtyOwner = 9,
+        ActiveEffectMutationPrepareDirtyOwner = 10,
     }
 
     public enum EGasRuntimeFrameStreamAuthority
@@ -536,6 +538,32 @@ namespace GAS.Runtime
                     EGasRuntimeFrameStreamMergePolicy.StableSortByTargetThenSequence,
                     EGasRuntimeFrameStreamSortKey.TargetAscThenCommandSequence,
                     internalBufferCapacity: 4),
+                Entry(
+                    EGasRuntimeFrameStreamId.OwnerLocalInstantPrepareDirtyOwner,
+                    GASRuntimeLayoutComponentSlot.OwnerLocalInstantPrepareDirtyOwnerBuffer,
+                    EGasRuntimeCoreFramePhase.FramePrepare,
+                    EGasRuntimeCoreFramePhase.CommandIngest,
+                    EGasRuntimeCoreFramePhase.FramePrepare,
+                    EGasRuntimeCoreFramePhase.FramePrepare,
+                    EGasRuntimeFrameStreamAuthority.GameplayAuxiliaryDeterministic,
+                    EGasRuntimeFrameStreamCarrier.SingletonDynamicBuffer,
+                    EGasRuntimeFrameStreamCarrier.OwnerLocalDynamicBuffer,
+                    EGasRuntimeFrameStreamMergePolicy.StableSortByTargetThenSequence,
+                    EGasRuntimeFrameStreamSortKey.TargetAscThenCommandSequence,
+                    internalBufferCapacity: 64),
+                Entry(
+                    EGasRuntimeFrameStreamId.ActiveEffectMutationPrepareDirtyOwner,
+                    GASRuntimeLayoutComponentSlot.ActiveEffectMutationPrepareDirtyOwnerBuffer,
+                    EGasRuntimeCoreFramePhase.FramePrepare,
+                    EGasRuntimeCoreFramePhase.ActiveEffectLifecycle,
+                    EGasRuntimeCoreFramePhase.FramePrepare,
+                    EGasRuntimeCoreFramePhase.FramePrepare,
+                    EGasRuntimeFrameStreamAuthority.GameplayAuxiliaryDeterministic,
+                    EGasRuntimeFrameStreamCarrier.SingletonDynamicBuffer,
+                    EGasRuntimeFrameStreamCarrier.OwnerLocalDynamicBuffer,
+                    EGasRuntimeFrameStreamMergePolicy.StableSortByTargetThenSequence,
+                    EGasRuntimeFrameStreamSortKey.TargetAscThenCommandSequence,
+                    internalBufferCapacity: 64),
                 Entry(
                     EGasRuntimeFrameStreamId.AttributeDelta,
                     GASRuntimeLayoutComponentSlot.AttributeDeltaBuffer,

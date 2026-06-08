@@ -38,6 +38,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 28. 2026-06-08 Run6 / Run7 证明 Debugger 已能识别并反证错误优化：Run6 引入 owner-local pending enableable marker 后，split report 显示 `avgTickMs=12.643ms`、`CoreSimulation.avgMs=11.698ms`、`journalingWorldRecords=505543`、`EnableComponent=37384`，并伴随 Job safety / aliasing 异常；Run7 移除该 marker 后恢复 `passed=True`、`headlessLogicBudgetPassed=True`、`avgTickMs=0.970ms`、`CoreSimulation.avgMs=0.497ms`、`EnableComponent=650`。这说明 hotspot matrix 不只用于找慢点，也必须用于阻断“把 buffer scan 成本转移为 enableable toggle 成本”的伪优化。
 29. 2026-06-08 Run8 已把 R7/R3 frame-lane 热点从 Journaling TopN 推断推进到 Runtime-owned counters：`OwnerLocalInstantCommandFramePrepareSystem`、`ActiveEffectOwnerLocalMutationFramePrepareSystem` 和 `GASActiveEffectPreTickSystem` 现在把 scanned / skipped / dirty owners、cleared buffers、promoted commands、scanned / due / noop slots、mutation writes 写入 `GEEffectCommandStreamComponent` counter，并经 `GasRuntimeDiagnosticEvidenceSnapshot`、AutoChess summary 与 split report 输出。Run8 x50 显示 instant prepare `2400/1450/950`、active mutation prepare `2400/1750/650`、active effect pre-tick owners `2400/950/1450`、pre-tick slots `1200/550/650`、mutation writes `600`；这直接证明当前热点包含 owner 稀疏扫描和 slot 扫描成本，而不是单纯的日志导出或 Journaling 采样噪声。
 30. 2026-06-08 Run9b 已把 Run8 的 ActiveEffect pre-tick 证据推进为数据形态优化：`ASCActiveEffectsComponent` 记录 `NextTickFrame` / duration due slot 计数，pre-tick snapshot gather 和 owner tick 均先用 `ActiveEffectStore.ShouldProcessTickOwner(...)` 跳过未到期 owner。有效 Run9b x50 显示 `passed=True`、`headlessLogicBudgetPassed=True`、`avgTickMs=1.057ms`、`GASCoreSimulationSystemGroup.avgMs=0.571ms`，active effect pre-tick owners 从 Run8 的 `2400/950/1450` 改为 `2400/600/1800`，slots 从 `1200/550/650` 改为 `750/550/200`。这证明 Debugger frame-lane counter 可以驱动真实 Runtime 瘦身：不改变业务完成、确定性和 mutation writes 的前提下，未到期 owner 的 resource capture / slot scan 被压下。Run9 首跑 `avgTickMs=3.650ms`、`headlessLogicBudgetPassed=False`，但同一代码 Run9b 复跑通过，归因于 Unity 编译/冷启动污染，不能作为本轮有效性能基线。
+31. 2026-06-08 Run10c 已把 Run9b 后剩余的 instant / active mutation prepare 稀疏 owner 扫描改成 dirty owner index：`OwnerLocalInstantPrepareDirtyOwnerBuffer` 与 `ActiveEffectMutationPrepareDirtyOwnerBuffer` 挂在 EffectCommandStream owner 上，由 producer 写入 dirty ASC，FramePrepare 只消费 dirty owner 并去重。有效 Run10c x50 显示 `passed=True`、`headlessLogicBudgetPassed=True`、`repeatRunPassed=True`、`avgTickMs=0.898ms`、`GASCoreSimulationSystemGroup.avgMs=0.494ms`、FramePrepare `avgMs=0.037ms`。相对 Run9b，instant prepare 从 `2400/1450/950` 变为 `950/0/950`，active mutation prepare 从 `2400/1750/650` 变为 `200/0/200`，`GetBufferRW` 从 `60684` 降到 `48852`，`EnableComponent` 保持 `650`，无 Job safety / aliasing 异常。这说明 Debugger frame-lane counter 不只定位热点，也能验证 DOTS 数据形态优化：全 ASC 扫描被 dirty owner index 替代。Run10 首跑 `avgTickMs=4.369ms` 且日志包含脚本编译 / domain reload，只保留为冷启动污染样本；Run10b 为项目锁冲突样本，不作为性能证据。
 
 ## 仍成立风险
 
@@ -55,6 +56,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 12. DebuggerProbe Run4 的 hotspot matrix 只能作为任务路由 evidence，不能替代真实优化结果。矩阵把 `OwnerLocalGameplayFactBuffer`、ActiveEffect pre-tick、instant command prepare、execution spec scan、diagnostic materialization 和 Profiler disabled 明确分派给 R3/R4/R5/R7/R8；如果后续代码优化后矩阵仍只显示相同 High rows，说明只是在压 ms，没有改变 DOTS 数据形态。
 13. 日志拆分只能降低 Agent / 人读读取成本，不等于 Runtime hot path 已解耦。当前 split report 仍由离线分析脚本从全量 report 派生；后续 Debugger 内部仍需把 metric family、materialization、official diff、battle log / replay export 物理拆成独立 owner。
 14. Run6 的 pending marker 回归说明 Debugger 必须保留失败优化证据。若下一轮只看 `FramePrepare.avgMs` 局部下降而忽略 `EnableComponent`、Journaling 总量、CoreSimulation、Job safety 和业务完成状态，就会把错误方向写成成功。
+15. Run10c 虽然证明 dirty owner index 能显著降低 prepare 稀疏扫描，但 Hotspot Matrix 仍保留 `GAS-ARCH-CMD-PREPARE=4259`、`GAS-ARCH-AE-PRETICK=9100`、`GAS-ARCH-STREAM-RW=10549`、`OwnerLocalGameplayFactBuffer=11250` 和 `Profiler disabled`。因此 C2 只能写成“prepare dirty lane 第一刀完成”，不能写成 Runtime Core 数据形态整体达标或 Profiler-backed 性能优秀。
 
 ## Debugger 模块重构事实结论
 
@@ -102,6 +104,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 | pending marker rejected Run7 | `00-当前架构事实/_归档/2026-06-08-OwnerLocalPendingMarkerRejected-Run7.md` |
 | frame lane counters Run8 | `00-当前架构事实/_归档/2026-06-08-R7FrameLaneCounters-Run8.md` |
 | active effect next tick skip Run9b | `00-当前架构事实/_归档/2026-06-08-ActiveEffectNextTickFrameSkip-Run9b.md` |
+| prepare dirty owner index Run10c | `00-当前架构事实/_归档/2026-06-08-PrepareDirtyOwnerIndex-Run10c.md` |
 
 ## 退出条件
 

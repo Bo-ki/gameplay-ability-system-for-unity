@@ -268,6 +268,18 @@ namespace GAS.Runtime
         public GESetByCallerValueBuffer Value;
     }
 
+    [InternalBufferCapacity(64)]
+    public struct OwnerLocalInstantPrepareDirtyOwnerBuffer : IBufferElementData
+    {
+        public Entity Owner;
+    }
+
+    [InternalBufferCapacity(64)]
+    public struct ActiveEffectMutationPrepareDirtyOwnerBuffer : IBufferElementData
+    {
+        public Entity Owner;
+    }
+
     [InternalBufferCapacity(0)]
     public struct GameplayEventBuffer : IBufferElementData
     {
@@ -360,6 +372,7 @@ namespace GAS.Runtime
                 {
                     Command = resolved,
                 });
+                MarkActiveMutationPrepareDirty(_em, _streamEntity, resolved.TargetAsc);
                 return resolved;
             }
 
@@ -389,6 +402,7 @@ namespace GAS.Runtime
                 {
                     Command = resolved,
                 });
+                MarkActiveMutationPrepareDirty(_em, _streamEntity, resolved.TargetAsc);
                 return resolved;
             }
 
@@ -414,6 +428,7 @@ namespace GAS.Runtime
 
                 CopyRequestSetByCallerValues(ownerSetByCallerValues, setByCallerValues, resolved.Sequence);
                 ownerCommands.Add(resolved);
+                MarkOwnerLocalInstantPrepareDirty(_em, _streamEntity, resolved.TargetAsc);
                 return resolved;
             }
 
@@ -440,6 +455,7 @@ namespace GAS.Runtime
 
                 CopyRequestSetByCallerValues(ownerSetByCallerValues, setByCallerValues, resolved.Sequence);
                 ownerCommands.Add(resolved);
+                MarkOwnerLocalInstantPrepareDirty(_em, _streamEntity, resolved.TargetAsc);
                 return resolved;
             }
 
@@ -582,7 +598,9 @@ namespace GAS.Runtime
             if (streamEntity == Entity.Null || !em.Exists(streamEntity))
                 return false;
 
-            return em.HasComponent<GEEffectCommandStreamComponent>(streamEntity);
+            return em.HasComponent<GEEffectCommandStreamComponent>(streamEntity)
+                   && em.HasBuffer<OwnerLocalInstantPrepareDirtyOwnerBuffer>(streamEntity)
+                   && em.HasBuffer<ActiveEffectMutationPrepareDirtyOwnerBuffer>(streamEntity);
         }
 
         public static void EnsureBuffers(EntityManager em, Entity streamEntity)
@@ -627,7 +645,85 @@ namespace GAS.Runtime
                    && em.World != null
                    && em.World.IsCreated
                    && em.Exists(streamEntity)
-                   && em.HasComponent<GEEffectCommandStreamComponent>(streamEntity);
+                   && em.HasComponent<GEEffectCommandStreamComponent>(streamEntity)
+                   && em.HasBuffer<OwnerLocalInstantPrepareDirtyOwnerBuffer>(streamEntity)
+                   && em.HasBuffer<ActiveEffectMutationPrepareDirtyOwnerBuffer>(streamEntity);
+        }
+
+        public static void MarkOwnerLocalInstantPrepareDirty(
+            EntityManager em,
+            Entity streamEntity,
+            Entity owner)
+        {
+            if (owner == Entity.Null
+                || streamEntity == Entity.Null
+                || !em.Exists(streamEntity)
+                || !em.HasBuffer<OwnerLocalInstantPrepareDirtyOwnerBuffer>(streamEntity))
+            {
+                return;
+            }
+
+            em.GetBuffer<OwnerLocalInstantPrepareDirtyOwnerBuffer>(streamEntity).Add(
+                new OwnerLocalInstantPrepareDirtyOwnerBuffer
+                {
+                    Owner = owner,
+                });
+        }
+
+        public static void MarkActiveMutationPrepareDirty(
+            EntityManager em,
+            Entity streamEntity,
+            Entity owner)
+        {
+            if (owner == Entity.Null
+                || streamEntity == Entity.Null
+                || !em.Exists(streamEntity)
+                || !em.HasBuffer<ActiveEffectMutationPrepareDirtyOwnerBuffer>(streamEntity))
+            {
+                return;
+            }
+
+            em.GetBuffer<ActiveEffectMutationPrepareDirtyOwnerBuffer>(streamEntity).Add(
+                new ActiveEffectMutationPrepareDirtyOwnerBuffer
+                {
+                    Owner = owner,
+                });
+        }
+
+        public static void MarkOwnerLocalInstantPrepareDirty(
+            BufferLookup<OwnerLocalInstantPrepareDirtyOwnerBuffer> dirtyOwnerLookup,
+            Entity streamEntity,
+            Entity owner)
+        {
+            if (owner == Entity.Null
+                || streamEntity == Entity.Null
+                || !dirtyOwnerLookup.HasBuffer(streamEntity))
+            {
+                return;
+            }
+
+            dirtyOwnerLookup[streamEntity].Add(new OwnerLocalInstantPrepareDirtyOwnerBuffer
+            {
+                Owner = owner,
+            });
+        }
+
+        public static void MarkActiveMutationPrepareDirty(
+            BufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer> dirtyOwnerLookup,
+            Entity streamEntity,
+            Entity owner)
+        {
+            if (owner == Entity.Null
+                || streamEntity == Entity.Null
+                || !dirtyOwnerLookup.HasBuffer(streamEntity))
+            {
+                return;
+            }
+
+            dirtyOwnerLookup[streamEntity].Add(new ActiveEffectMutationPrepareDirtyOwnerBuffer
+            {
+                Owner = owner,
+            });
         }
 
         public static CommandWriter BeginCommandWriter(

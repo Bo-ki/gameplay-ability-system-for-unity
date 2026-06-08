@@ -470,28 +470,44 @@ Assert-FileContains `
     -Pattern "OwnerLocalInstantCommandFramePrepareSystem" `
     -Message "Runtime Core must clear ASC owner-local instant commands during FramePrepare."
 Assert-FileContains `
-    -Path $streamPhasePath `
-    -Pattern "BufferTypeHandle<GEEffectCommandBuffer>" `
-    -Message "Runtime Core must clear ASC owner-local instant commands with a chunk buffer type handle."
+    -Path $streamPath `
+    -Pattern "struct OwnerLocalInstantPrepareDirtyOwnerBuffer\s*:\s*IBufferElementData" `
+    -Message "Runtime Core must define a dirty owner index buffer for owner-local instant FramePrepare."
+Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<OwnerLocalInstantPrepareDirtyOwnerBuffer>\(\)" `
+    -Message "EffectCommandStream archetype must own the owner-local instant dirty owner index buffer."
 Assert-FileContains `
     -Path $streamPhasePath `
-    -Pattern "BufferTypeHandle<GESetByCallerValueBuffer>" `
-    -Message "Runtime Core must clear ASC owner-local instant set-by-caller payloads with a chunk buffer type handle."
+    -Pattern "OwnerLocalInstantCommandFramePrepareSystem[\s\S]*DirtyOwnerLookup[\s\S]*GetBufferLookup<OwnerLocalInstantPrepareDirtyOwnerBuffer>" `
+    -Message "OwnerLocalInstantCommandFramePrepareSystem must consume the dirty owner index instead of scanning every ASC owner."
 Assert-FileContains `
     -Path $streamPhasePath `
-    -Pattern "BufferTypeHandle<GEEffectSpecBuffer>" `
-    -Message "Runtime Core must clear ASC owner-local instant specs with a chunk buffer type handle."
+    -Pattern "OwnerLocalInstantCommandFramePrepareSystem[\s\S]*ProcessedOwners\.TryAdd" `
+    -Message "OwnerLocalInstantCommandFramePrepareSystem must de-duplicate dirty owner references before clearing or promoting buffers."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "BufferLookup<GEEffectCommandBuffer>" `
+    -Message "Runtime Core must clear ASC owner-local instant commands through owner BufferLookup after dirty index selection."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "BufferLookup<GESetByCallerValueBuffer>" `
+    -Message "Runtime Core must clear ASC owner-local instant set-by-caller payloads through owner BufferLookup after dirty index selection."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "BufferLookup<GEEffectSpecBuffer>" `
+    -Message "Runtime Core must clear ASC owner-local instant specs through owner BufferLookup after dirty index selection."
 Assert-FileNotContains `
     -Path $streamPhasePath `
-    -Pattern "GEEffectCommandSpecStreamFramePrepareSystem[\s\S]*SpecLookup\s*=\s*SystemAPI\.GetBufferLookup<GEEffectSpecBuffer>" `
+    -Pattern "GEEffectCommandSpecStreamFramePrepareSystem(?:(?!OwnerLocalInstantCommandFramePrepareSystem)[\s\S])*SpecLookup\s*=\s*SystemAPI\.GetBufferLookup<GEEffectSpecBuffer>" `
     -Message "FramePrepare must not clear GEEffectSpecBuffer from the singleton command stream."
 Assert-FileContains `
     -Path $streamPhasePath `
-    -Pattern "OwnerLocalInstantCommandFramePrepareSystem[\s\S]*?NextFrameCommandType[\s\S]*GetBufferTypeHandle<OwnerLocalInstantNextFrameCommandBuffer>[\s\S]*deferredCommands\.Clear\(\)" `
+    -Pattern "OwnerLocalInstantCommandFramePrepareSystem[\s\S]*?NextFrameCommandLookup[\s\S]*GetBufferLookup<OwnerLocalInstantNextFrameCommandBuffer>[\s\S]*deferredCommands\.Clear\(\)" `
     -Message "FramePrepare must move next-frame instant commands into current owner-local instant commands before clearing the deferred carrier."
 Assert-FileContains `
     -Path $streamPhasePath `
-    -Pattern "OwnerLocalInstantCommandFramePrepareSystem[\s\S]*?NextFrameSetByCallerType[\s\S]*GetBufferTypeHandle<OwnerLocalInstantNextFrameSetByCallerValueBuffer>[\s\S]*deferredSetByCallerValues\.Clear\(\)" `
+    -Pattern "OwnerLocalInstantCommandFramePrepareSystem[\s\S]*?NextFrameSetByCallerLookup[\s\S]*GetBufferLookup<OwnerLocalInstantNextFrameSetByCallerValueBuffer>[\s\S]*deferredSetByCallerValues\.Clear\(\)" `
     -Message "FramePrepare must move next-frame instant payloads into current owner-local instant payloads before clearing the deferred carrier."
 Assert-FileNotContains `
     -Path $streamPhasePath `
@@ -770,13 +786,29 @@ Assert-FileContains `
     -Pattern "ActiveEffectOwnerLocalMutationFramePrepareSystem" `
     -Message "Runtime Core must clear ASC owner-local active effect mutations during FramePrepare."
 Assert-FileContains `
-    -Path $streamPhasePath `
-    -Pattern "BufferTypeHandle<ActiveEffectMutationCommandBuffer>" `
-    -Message "Runtime Core must clear ASC owner-local active mutation commands during FramePrepare."
+    -Path $streamPath `
+    -Pattern "struct ActiveEffectMutationPrepareDirtyOwnerBuffer\s*:\s*IBufferElementData" `
+    -Message "Runtime Core must define a dirty owner index buffer for active mutation FramePrepare."
+Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<ActiveEffectMutationPrepareDirtyOwnerBuffer>\(\)" `
+    -Message "EffectCommandStream archetype must own the active mutation dirty owner index buffer."
 Assert-FileContains `
     -Path $streamPhasePath `
-    -Pattern "BufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>" `
-    -Message "Runtime Core must clear ASC owner-local active mutation set-by-caller payloads during FramePrepare."
+    -Pattern "ActiveEffectOwnerLocalMutationFramePrepareSystem[\s\S]*DirtyOwnerLookup[\s\S]*GetBufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer>" `
+    -Message "ActiveEffectOwnerLocalMutationFramePrepareSystem must consume the dirty owner index instead of scanning every ASC owner."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "ActiveEffectOwnerLocalMutationFramePrepareSystem[\s\S]*ProcessedOwners\.TryAdd" `
+    -Message "ActiveEffectOwnerLocalMutationFramePrepareSystem must de-duplicate dirty owner references before clearing or promoting buffers."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "BufferLookup<ActiveEffectMutationCommandBuffer>" `
+    -Message "Runtime Core must clear ASC owner-local active mutation commands through owner BufferLookup after dirty index selection."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "BufferLookup<ActiveEffectMutationSetByCallerValueBuffer>" `
+    -Message "Runtime Core must clear ASC owner-local active mutation set-by-caller payloads through owner BufferLookup after dirty index selection."
 Assert-FileContains `
     -Path $scheduleContractPath `
     -Pattern "ActiveEffectOwnerLocalMutationFramePrepareSystem" `
@@ -823,11 +855,11 @@ Assert-FileContains `
     -Message "ASC runtime component completeness check must require owner-local next-frame active mutation payload buffer."
 Assert-FileContains `
     -Path $streamPhasePath `
-    -Pattern "NextFrameCommandType[\s\S]*GetBufferTypeHandle<ActiveEffectNextFrameMutationCommandBuffer>[\s\S]*deferredCommands\.Clear\(\)" `
+    -Pattern "NextFrameCommandLookup[\s\S]*GetBufferLookup<ActiveEffectNextFrameMutationCommandBuffer>[\s\S]*deferredCommands\.Clear\(\)" `
     -Message "FramePrepare must move next-frame active mutation commands into current owner-local commands before clearing the deferred carrier."
 Assert-FileContains `
     -Path $streamPhasePath `
-    -Pattern "NextFrameSetByCallerType[\s\S]*GetBufferTypeHandle<ActiveEffectNextFrameMutationSetByCallerValueBuffer>[\s\S]*deferredSetByCallerValues\.Clear\(\)" `
+    -Pattern "NextFrameSetByCallerLookup[\s\S]*GetBufferLookup<ActiveEffectNextFrameMutationSetByCallerValueBuffer>[\s\S]*deferredSetByCallerValues\.Clear\(\)" `
     -Message "FramePrepare must move next-frame active mutation payloads into current owner-local payloads before clearing the deferred carrier."
 Assert-FileNotContains `
     -Path $streamPhasePath `

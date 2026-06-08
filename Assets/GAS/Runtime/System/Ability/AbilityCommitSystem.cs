@@ -61,6 +61,10 @@ namespace GAS.Runtime
                     SystemAPI.GetBufferLookup<ActiveEffectMutationCommandBuffer>(isReadOnly: false),
                 ActiveMutationSetByCallerLookup =
                     SystemAPI.GetBufferLookup<ActiveEffectMutationSetByCallerValueBuffer>(isReadOnly: false),
+                OwnerLocalInstantPrepareDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalInstantPrepareDirtyOwnerBuffer>(isReadOnly: false),
+                ActiveMutationPrepareDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer>(isReadOnly: false),
                 OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(),
                 Catalog = catalogComponent.Catalog,
                 StreamEntity = streamEntity,
@@ -88,6 +92,8 @@ namespace GAS.Runtime
             [ReadOnly] public BufferLookup<GESetByCallerValueBuffer> SetByCallerLookup;
             public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;
             public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;
+            public BufferLookup<OwnerLocalInstantPrepareDirtyOwnerBuffer> OwnerLocalInstantPrepareDirtyOwnerLookup;
+            public BufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer> ActiveMutationPrepareDirtyOwnerLookup;
             public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public Entity StreamEntity;
@@ -379,6 +385,10 @@ namespace GAS.Runtime
                 {
                     Command = ownerCommand,
                 });
+                EffectCommandSpecStream.MarkActiveMutationPrepareDirty(
+                    ActiveMutationPrepareDirtyOwnerLookup,
+                    StreamEntity,
+                    targetAsc);
             }
 
             private void AppendInstantCommand(in GEEffectCommandBuffer command)
@@ -388,6 +398,10 @@ namespace GAS.Runtime
                 ownerCommand.SetByCallerStart = SetByCallerLookup[targetAsc].Length;
                 ownerCommand.SetByCallerCount = 0;
                 CommandLookup[targetAsc].Add(ownerCommand);
+                EffectCommandSpecStream.MarkOwnerLocalInstantPrepareDirty(
+                    OwnerLocalInstantPrepareDirtyOwnerLookup,
+                    StreamEntity,
+                    targetAsc);
             }
 
             private static Entity ResolveTargetAsc(in GEEffectCommandBuffer command)

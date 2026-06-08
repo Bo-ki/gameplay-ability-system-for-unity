@@ -147,6 +147,8 @@ namespace GAS.Runtime
         ActiveEffectNextFrameMutationSetByCallerBuffer = 53,
         OwnerLocalInstantNextFrameCommandBuffer = 54,
         OwnerLocalInstantNextFrameSetByCallerBuffer = 55,
+        OwnerLocalInstantPrepareDirtyOwnerBuffer = 56,
+        ActiveEffectMutationPrepareDirtyOwnerBuffer = 57,
     }
 
     public readonly struct GASRuntimeQueryLayoutEntry
@@ -459,6 +461,8 @@ namespace GAS.Runtime
                     {
                         GASRuntimeLayoutComponentSlot.EffectCommandStreamOwner,
                         GASRuntimeLayoutComponentSlot.EffectCommandBuffer,
+                        GASRuntimeLayoutComponentSlot.OwnerLocalInstantPrepareDirtyOwnerBuffer,
+                        GASRuntimeLayoutComponentSlot.ActiveEffectMutationPrepareDirtyOwnerBuffer,
                     },
                     new[]
                     {

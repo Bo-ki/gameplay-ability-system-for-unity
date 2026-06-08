@@ -513,6 +513,8 @@ namespace GAS.Runtime
             public BufferLookup<OwnerLocalInstantNextFrameSetByCallerValueBuffer> NextFrameInstantSetByCallerLookup;
             public BufferLookup<ActiveEffectNextFrameMutationCommandBuffer> NextFrameActiveMutationCommandLookup;
             public BufferLookup<ActiveEffectNextFrameMutationSetByCallerValueBuffer> NextFrameActiveMutationSetByCallerLookup;
+            public BufferLookup<OwnerLocalInstantPrepareDirtyOwnerBuffer> OwnerLocalInstantPrepareDirtyOwnerLookup;
+            public BufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer> ActiveMutationPrepareDirtyOwnerLookup;
             public BufferLookup<AttributeOwnerMarkerRequestBuffer> AttributeOwnerMarkerRequestLookup;
             public ComponentLookup<AbilityStateComponent> AbilityStateLookup;
             [ReadOnly] public ComponentLookup<AbilityGrantedByEffectComponent> AbilityGrantedLookup;
@@ -1488,6 +1490,10 @@ namespace GAS.Runtime
                     {
                         Command = ownerCommand,
                     });
+                    EffectCommandSpecStream.MarkActiveMutationPrepareDirty(
+                        ActiveMutationPrepareDirtyOwnerLookup,
+                        StreamEntity,
+                        targetAsc);
                     return;
                 }
 
@@ -1510,6 +1516,10 @@ namespace GAS.Runtime
                 {
                     Command = instantCommand,
                 });
+                EffectCommandSpecStream.MarkOwnerLocalInstantPrepareDirty(
+                    OwnerLocalInstantPrepareDirtyOwnerLookup,
+                    StreamEntity,
+                    instantTargetAsc);
             }
 
             private GEEffectCommandBuffer PrepareCommand(
@@ -1872,6 +1882,8 @@ namespace GAS.Runtime
             public BufferLookup<GESetByCallerValueBuffer> CommandSetByCallerLookup;
             public BufferLookup<ActiveEffectMutationCommandBuffer> ActiveMutationCommandLookup;
             public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;
+            public BufferLookup<OwnerLocalInstantPrepareDirtyOwnerBuffer> OwnerLocalInstantPrepareDirtyOwnerLookup;
+            public BufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer> ActiveMutationPrepareDirtyOwnerLookup;
             public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
             public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             public EntityCommandBuffer StructuralEcb;
@@ -2815,6 +2827,10 @@ namespace GAS.Runtime
                     {
                         Command = ownerCommand,
                     });
+                    EffectCommandSpecStream.MarkActiveMutationPrepareDirty(
+                        ActiveMutationPrepareDirtyOwnerLookup,
+                        StreamEntity,
+                        ownerResources.Owner);
                     StreamLookup[StreamEntity] = stream;
                     return;
                 }
@@ -2834,6 +2850,10 @@ namespace GAS.Runtime
                     slot.GameplayEffectCode,
                     resolved.Sequence);
                 CommandLookup[ownerResources.Owner].Add(resolved);
+                EffectCommandSpecStream.MarkOwnerLocalInstantPrepareDirty(
+                    OwnerLocalInstantPrepareDirtyOwnerLookup,
+                    StreamEntity,
+                    ownerResources.Owner);
                 StreamLookup[StreamEntity] = stream;
             }
 

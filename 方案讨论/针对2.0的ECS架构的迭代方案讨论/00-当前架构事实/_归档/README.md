@@ -23,6 +23,7 @@
 | [2026-06-08-OwnerLocalPendingMarkerRejected-Run7](2026-06-08-OwnerLocalPendingMarkerRejected-Run7.md) | owner-local pending enableable marker 回归反例、撤回与 Run7 有效无头验证基线 |
 | [2026-06-08-R7FrameLaneCounters-Run8](2026-06-08-R7FrameLaneCounters-Run8.md) | R7/R3 frame-lane counters：instant prepare、active mutation prepare 与 active effect pre-tick 稀疏扫描证据 |
 | [2026-06-08-ActiveEffectNextTickFrameSkip-Run9b](2026-06-08-ActiveEffectNextTickFrameSkip-Run9b.md) | ActiveEffect pre-tick `NextTickFrame` due lane：跳过未到期 owner 的 snapshot/resource/slot scan |
+| [2026-06-08-PrepareDirtyOwnerIndex-Run10c](2026-06-08-PrepareDirtyOwnerIndex-Run10c.md) | instant / active mutation prepare dirty owner index：FramePrepare 退出全 ASC 稀疏 owner 扫描 |
 | [2026-06-08-AutoChessBattleValidation-DebuggerRegisteredOwner-Run1](2026-06-08-AutoChessBattleValidation-DebuggerRegisteredOwner-Run1.log) | Debugger registered owner 切片的 AutoChess x50 原始日志 |
 | [2026-06-08-AutoChessBattleValidation-ObservationMaterialization-Run1](2026-06-08-AutoChessBattleValidation-ObservationMaterialization-Run1.log) | Debugger observation materialization 归因切片的 AutoChess x50 原始日志 |
 | [2026-06-08-AutoChessBattleValidation-PerformanceObservationIsolation-Run1](2026-06-08-AutoChessBattleValidation-PerformanceObservationIsolation-Run1.log) | Debugger observation materialization 从 performance pass 隔离后的 AutoChess x50 原始日志 |

@@ -144,6 +144,8 @@ R7/R3 这类 frame-lane 优化必须具备 Runtime-owned counters，不能只依
 3. 高频 enableable marker 不得作为默认 dirty lane；任何 marker 方案必须同时证明 `EnableComponent` TopN、Job safety、dependency wait 和 battle completion 不回归。
 4. Profiler disabled 时，frame-lane counter 可以作为任务路由证据，但不能把样本写成 DOTS profiler-backed excellent。
 5. ActiveEffect pre-tick 的 owner-level `NextTickFrame` / due slot index 是合法的 store-local skip contract：它只能压缩未到期 owner 的 source snapshot gather、resource capture 和 slot scan，不得改变 duration / period / explicit remove / cleanup 的业务语义；explicit remove command 与 cleanup record 必须绕过 skip gate。
+6. owner-local instant prepare / active mutation prepare 的默认 dirty lane 是 stream-owned dirty owner index buffer，而不是 ASC enableable marker。producer 必须在写入 owner-local current / next-frame command、payload 或 mutation carrier 时登记 dirty owner；FramePrepare 只能消费 dirty owner index、去重、清理 / 晋升对应 owner buffer，并把需要跨帧继续处理的 owner 写回 dirty index。若某帧没有 dirty owner，不得扫描全 ASC owner 只为了清空空 buffer。
+7. dirty owner index 属于 RuntimeMetric / DiagnosticEvidence 的稳定语义 surface，外部报告只读取 `scanned/skipped/dirty/promoted/cleared` counter；内部 buffer 名称、slot id 或 carrier 布局可以继续重构，但不得要求 AutoChess、CI、Editor Debugger 跟随迁移。
 
 ### Split Report Contract
 
