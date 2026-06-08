@@ -158,6 +158,45 @@ namespace GAS.Runtime
             }
         }
 
+        public struct ActiveEffectPreTickLaneCounters
+        {
+            public int ChunkCount;
+            public int ScannedOwnerCount;
+            public int SkippedOwnerCount;
+            public int ProcessedOwnerCount;
+            public int ScannedSlotCount;
+            public int DueSlotCount;
+            public int NoopSlotCount;
+            public int MutationWriteCount;
+
+            public bool HasEvidence =>
+                ChunkCount > 0
+                || ScannedOwnerCount > 0
+                || SkippedOwnerCount > 0
+                || ProcessedOwnerCount > 0
+                || ScannedSlotCount > 0
+                || DueSlotCount > 0
+                || NoopSlotCount > 0
+                || MutationWriteCount > 0;
+
+            public void AddToStream(ref GEEffectCommandStreamComponent stream)
+            {
+                if (!HasEvidence)
+                    return;
+
+                EffectCommandSpecStream.AddActiveEffectPreTickCounters(
+                    ref stream,
+                    ChunkCount,
+                    ScannedOwnerCount,
+                    SkippedOwnerCount,
+                    ProcessedOwnerCount,
+                    ScannedSlotCount,
+                    DueSlotCount,
+                    NoopSlotCount,
+                    MutationWriteCount);
+            }
+        }
+
         private struct ActiveEffectMagnitudeSourceCounters
         {
             public int CurrentValueLookupCount;
@@ -1883,6 +1922,8 @@ namespace GAS.Runtime
                 var mutationBuffers = chunk.GetBufferAccessor(ref MutationBufferTypeHandle);
                 var magnitudeSourceCounters = default(ActiveEffectMagnitudeSourceCounters);
                 var snapshotLaneCounters = default(ActiveEffectSlotSourceSnapshotLaneCounters);
+                var preTickLaneCounters = default(ActiveEffectPreTickLaneCounters);
+                preTickLaneCounters.ChunkCount++;
                 var hasSnapshotLaneCounters = SnapshotLaneCounters.IsCreated
                     && (uint)unfilteredChunkIndex < (uint)SnapshotLaneCounters.Length;
                 if (hasSnapshotLaneCounters)
@@ -1897,8 +1938,11 @@ namespace GAS.Runtime
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
+                    preTickLaneCounters.ScannedOwnerCount++;
                     var owner = owners[entityIndex];
                     var mutations = mutationBuffers[entityIndex];
+                    var mutationLengthBefore = mutations.Length;
+                    var processedOwner = false;
                     var ownerResources = CaptureActiveEffectOwnerResources(
                         owner,
                         stores[entityIndex],
@@ -1910,19 +1954,23 @@ namespace GAS.Runtime
                             || ownerResources.Store.ChunkSkipDuePeriodSlotCount > 0
                             || ownerResources.Store.CleanupRecordCount > 0)
                         {
+                            processedOwner = true;
                             ref var catalog = ref Catalog.Value;
                             ProcessTickOwner(
                                 ref ownerResources,
                                 mutations,
                                 ref catalog,
                                 ref magnitudeSourceCounters,
-                                ref snapshotLaneCounters);
+                                ref snapshotLaneCounters,
+                                ref preTickLaneCounters);
                         }
                     }
 
                     if (ProcessExplicitRemoveCommands)
                     {
                         var removeCommands = removeCommandBuffers[entityIndex];
+                        if (removeCommands.Length > 0)
+                            processedOwner = true;
                         for (var commandIndex = 0; commandIndex < removeCommands.Length; commandIndex++)
                         {
                             RemoveMatchingOwnerLocalEffects(
@@ -1935,6 +1983,19 @@ namespace GAS.Runtime
                         removePendingMask[entityIndex] = false;
                     }
 
+                    if (processedOwner)
+                    {
+                        preTickLaneCounters.ProcessedOwnerCount++;
+                    }
+                    else
+                    {
+                        preTickLaneCounters.SkippedOwnerCount++;
+                    }
+
+                    var mutationWriteCount = mutations.Length - mutationLengthBefore;
+                    if (mutationWriteCount > 0)
+                        preTickLaneCounters.MutationWriteCount += mutationWriteCount;
+
                     ActiveEffectStore.RefreshChunkSkipIndexCounters(ref ownerResources.Store, ownerResources.Slots, Frame);
                     FlushActiveEffectOwnerResources(ref ownerResources);
                     stores[entityIndex] = ownerResources.Store;
@@ -1943,7 +2004,7 @@ namespace GAS.Runtime
                 if (hasSnapshotLaneCounters)
                     SnapshotLaneCounters[unfilteredChunkIndex] = snapshotLaneCounters;
 
-                FlushMagnitudeSourceCounters(ref magnitudeSourceCounters, ref snapshotLaneCounters);
+                FlushMagnitudeSourceCounters(ref magnitudeSourceCounters, ref snapshotLaneCounters, ref preTickLaneCounters);
             }
 
             private ActiveEffectOwnerResources CaptureActiveEffectOwnerResources(
@@ -2005,10 +2066,12 @@ namespace GAS.Runtime
 
             private void FlushMagnitudeSourceCounters(
                 ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters,
-                ref ActiveEffectSlotSourceSnapshotLaneCounters snapshotLaneCounters)
+                ref ActiveEffectSlotSourceSnapshotLaneCounters snapshotLaneCounters,
+                ref ActiveEffectPreTickLaneCounters preTickLaneCounters)
             {
                 if (!magnitudeSourceCounters.HasEvidence
-                    && !snapshotLaneCounters.HasEvidence)
+                    && !snapshotLaneCounters.HasEvidence
+                    && !preTickLaneCounters.HasEvidence)
                 {
                     return;
                 }
@@ -2021,6 +2084,7 @@ namespace GAS.Runtime
                 var stream = StreamLookup[StreamEntity];
                 magnitudeSourceCounters.AddToStream(ref stream);
                 snapshotLaneCounters.AddToStream(ref stream);
+                preTickLaneCounters.AddToStream(ref stream);
                 StreamLookup[StreamEntity] = stream;
             }
 
@@ -2038,7 +2102,8 @@ namespace GAS.Runtime
                 DynamicBuffer<ActiveEffectMutationBuffer> mutations,
                 ref GASDefinitionCatalogBlob catalog,
                 ref ActiveEffectMagnitudeSourceCounters magnitudeSourceCounters,
-                ref ActiveEffectSlotSourceSnapshotLaneCounters snapshotLaneCounters)
+                ref ActiveEffectSlotSourceSnapshotLaneCounters snapshotLaneCounters,
+                ref ActiveEffectPreTickLaneCounters preTickLaneCounters)
             {
                 if (!StreamLookup.HasComponent(StreamEntity))
                     return;
@@ -2047,8 +2112,14 @@ namespace GAS.Runtime
                 {
                     var slot = ownerResources.Slots[slotIndex];
                     var actionFlags = ActiveEffectStore.CreateTickActionFlags(in slot, Frame);
+                    preTickLaneCounters.ScannedSlotCount++;
                     if (actionFlags == (int)ActiveEffectTickActionFlags.None)
+                    {
+                        preTickLaneCounters.NoopSlotCount++;
                         continue;
+                    }
+
+                    preTickLaneCounters.DueSlotCount++;
 
                     if ((actionFlags & (int)ActiveEffectTickActionFlags.Period) != 0)
                     {

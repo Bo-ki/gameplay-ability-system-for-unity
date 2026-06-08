@@ -121,6 +121,27 @@ namespace GAS.Runtime
         public int RuntimeCoreOwnerLocalFactDirtyOwnerCount;
         public int RuntimeCoreOwnerLocalFactSkippedOwnerCount;
         public int RuntimeCoreOwnerLocalFactClearedOwnerCount;
+        public int RuntimeCoreOwnerLocalInstantPrepareChunkCount;
+        public int RuntimeCoreOwnerLocalInstantPrepareScannedOwnerCount;
+        public int RuntimeCoreOwnerLocalInstantPrepareSkippedOwnerCount;
+        public int RuntimeCoreOwnerLocalInstantPrepareDirtyOwnerCount;
+        public int RuntimeCoreOwnerLocalInstantPrepareClearedCommandCount;
+        public int RuntimeCoreOwnerLocalInstantPrepareClearedSpecCount;
+        public int RuntimeCoreOwnerLocalInstantPreparePromotedCommandCount;
+        public int RuntimeCoreActiveMutationPrepareChunkCount;
+        public int RuntimeCoreActiveMutationPrepareScannedOwnerCount;
+        public int RuntimeCoreActiveMutationPrepareSkippedOwnerCount;
+        public int RuntimeCoreActiveMutationPrepareDirtyOwnerCount;
+        public int RuntimeCoreActiveMutationPrepareClearedMutationCount;
+        public int RuntimeCoreActiveMutationPreparePromotedCommandCount;
+        public int RuntimeCoreActiveEffectPreTickChunkCount;
+        public int RuntimeCoreActiveEffectPreTickScannedOwnerCount;
+        public int RuntimeCoreActiveEffectPreTickSkippedOwnerCount;
+        public int RuntimeCoreActiveEffectPreTickProcessedOwnerCount;
+        public int RuntimeCoreActiveEffectPreTickScannedSlotCount;
+        public int RuntimeCoreActiveEffectPreTickDueSlotCount;
+        public int RuntimeCoreActiveEffectPreTickNoopSlotCount;
+        public int RuntimeCoreActiveEffectPreTickMutationWriteCount;
         public int RuntimeCoreMagnitudeSourceCurrentValueLookupCount;
         public int RuntimeCoreMagnitudeSourceCapturedValueHitCount;
         public int RuntimeCoreMagnitudeSourceCaptureMissCount;
@@ -250,6 +271,27 @@ namespace GAS.Runtime
         public int OwnerLocalFactDirtyOwnerCount;
         public int OwnerLocalFactSkippedOwnerCount;
         public int OwnerLocalFactClearedOwnerCount;
+        public int OwnerLocalInstantPrepareChunkCount;
+        public int OwnerLocalInstantPrepareScannedOwnerCount;
+        public int OwnerLocalInstantPrepareSkippedOwnerCount;
+        public int OwnerLocalInstantPrepareDirtyOwnerCount;
+        public int OwnerLocalInstantPrepareClearedCommandCount;
+        public int OwnerLocalInstantPrepareClearedSpecCount;
+        public int OwnerLocalInstantPreparePromotedCommandCount;
+        public int ActiveMutationPrepareChunkCount;
+        public int ActiveMutationPrepareScannedOwnerCount;
+        public int ActiveMutationPrepareSkippedOwnerCount;
+        public int ActiveMutationPrepareDirtyOwnerCount;
+        public int ActiveMutationPrepareClearedMutationCount;
+        public int ActiveMutationPreparePromotedCommandCount;
+        public int ActiveEffectPreTickChunkCount;
+        public int ActiveEffectPreTickScannedOwnerCount;
+        public int ActiveEffectPreTickSkippedOwnerCount;
+        public int ActiveEffectPreTickProcessedOwnerCount;
+        public int ActiveEffectPreTickScannedSlotCount;
+        public int ActiveEffectPreTickDueSlotCount;
+        public int ActiveEffectPreTickNoopSlotCount;
+        public int ActiveEffectPreTickMutationWriteCount;
         public int MagnitudeSourceCurrentValueLookupCount;
         public int MagnitudeSourceCapturedValueHitCount;
         public int MagnitudeSourceCaptureMissCount;
@@ -625,6 +667,27 @@ namespace GAS.Runtime
         public readonly int OwnerLocalFactDirtyOwnerCount;
         public readonly int OwnerLocalFactSkippedOwnerCount;
         public readonly int OwnerLocalFactClearedOwnerCount;
+        public readonly int OwnerLocalInstantPrepareChunkCount;
+        public readonly int OwnerLocalInstantPrepareScannedOwnerCount;
+        public readonly int OwnerLocalInstantPrepareSkippedOwnerCount;
+        public readonly int OwnerLocalInstantPrepareDirtyOwnerCount;
+        public readonly int OwnerLocalInstantPrepareClearedCommandCount;
+        public readonly int OwnerLocalInstantPrepareClearedSpecCount;
+        public readonly int OwnerLocalInstantPreparePromotedCommandCount;
+        public readonly int ActiveMutationPrepareChunkCount;
+        public readonly int ActiveMutationPrepareScannedOwnerCount;
+        public readonly int ActiveMutationPrepareSkippedOwnerCount;
+        public readonly int ActiveMutationPrepareDirtyOwnerCount;
+        public readonly int ActiveMutationPrepareClearedMutationCount;
+        public readonly int ActiveMutationPreparePromotedCommandCount;
+        public readonly int ActiveEffectPreTickChunkCount;
+        public readonly int ActiveEffectPreTickScannedOwnerCount;
+        public readonly int ActiveEffectPreTickSkippedOwnerCount;
+        public readonly int ActiveEffectPreTickProcessedOwnerCount;
+        public readonly int ActiveEffectPreTickScannedSlotCount;
+        public readonly int ActiveEffectPreTickDueSlotCount;
+        public readonly int ActiveEffectPreTickNoopSlotCount;
+        public readonly int ActiveEffectPreTickMutationWriteCount;
         public readonly int MagnitudeSourceCurrentValueLookupCount;
         public readonly int MagnitudeSourceCapturedValueHitCount;
         public readonly int MagnitudeSourceCaptureMissCount;
@@ -731,7 +794,28 @@ namespace GAS.Runtime
             int ownerLocalFactScannedOwnerCount = 0,
             int ownerLocalFactDirtyOwnerCount = 0,
             int ownerLocalFactSkippedOwnerCount = 0,
-            int ownerLocalFactClearedOwnerCount = 0)
+            int ownerLocalFactClearedOwnerCount = 0,
+            int ownerLocalInstantPrepareChunkCount = 0,
+            int ownerLocalInstantPrepareScannedOwnerCount = 0,
+            int ownerLocalInstantPrepareSkippedOwnerCount = 0,
+            int ownerLocalInstantPrepareDirtyOwnerCount = 0,
+            int ownerLocalInstantPrepareClearedCommandCount = 0,
+            int ownerLocalInstantPrepareClearedSpecCount = 0,
+            int ownerLocalInstantPreparePromotedCommandCount = 0,
+            int activeMutationPrepareChunkCount = 0,
+            int activeMutationPrepareScannedOwnerCount = 0,
+            int activeMutationPrepareSkippedOwnerCount = 0,
+            int activeMutationPrepareDirtyOwnerCount = 0,
+            int activeMutationPrepareClearedMutationCount = 0,
+            int activeMutationPreparePromotedCommandCount = 0,
+            int activeEffectPreTickChunkCount = 0,
+            int activeEffectPreTickScannedOwnerCount = 0,
+            int activeEffectPreTickSkippedOwnerCount = 0,
+            int activeEffectPreTickProcessedOwnerCount = 0,
+            int activeEffectPreTickScannedSlotCount = 0,
+            int activeEffectPreTickDueSlotCount = 0,
+            int activeEffectPreTickNoopSlotCount = 0,
+            int activeEffectPreTickMutationWriteCount = 0)
         {
             RequestCount = requestCount;
             SpecCount = specCount;
@@ -800,6 +884,27 @@ namespace GAS.Runtime
             OwnerLocalFactDirtyOwnerCount = ownerLocalFactDirtyOwnerCount;
             OwnerLocalFactSkippedOwnerCount = ownerLocalFactSkippedOwnerCount;
             OwnerLocalFactClearedOwnerCount = ownerLocalFactClearedOwnerCount;
+            OwnerLocalInstantPrepareChunkCount = ownerLocalInstantPrepareChunkCount;
+            OwnerLocalInstantPrepareScannedOwnerCount = ownerLocalInstantPrepareScannedOwnerCount;
+            OwnerLocalInstantPrepareSkippedOwnerCount = ownerLocalInstantPrepareSkippedOwnerCount;
+            OwnerLocalInstantPrepareDirtyOwnerCount = ownerLocalInstantPrepareDirtyOwnerCount;
+            OwnerLocalInstantPrepareClearedCommandCount = ownerLocalInstantPrepareClearedCommandCount;
+            OwnerLocalInstantPrepareClearedSpecCount = ownerLocalInstantPrepareClearedSpecCount;
+            OwnerLocalInstantPreparePromotedCommandCount = ownerLocalInstantPreparePromotedCommandCount;
+            ActiveMutationPrepareChunkCount = activeMutationPrepareChunkCount;
+            ActiveMutationPrepareScannedOwnerCount = activeMutationPrepareScannedOwnerCount;
+            ActiveMutationPrepareSkippedOwnerCount = activeMutationPrepareSkippedOwnerCount;
+            ActiveMutationPrepareDirtyOwnerCount = activeMutationPrepareDirtyOwnerCount;
+            ActiveMutationPrepareClearedMutationCount = activeMutationPrepareClearedMutationCount;
+            ActiveMutationPreparePromotedCommandCount = activeMutationPreparePromotedCommandCount;
+            ActiveEffectPreTickChunkCount = activeEffectPreTickChunkCount;
+            ActiveEffectPreTickScannedOwnerCount = activeEffectPreTickScannedOwnerCount;
+            ActiveEffectPreTickSkippedOwnerCount = activeEffectPreTickSkippedOwnerCount;
+            ActiveEffectPreTickProcessedOwnerCount = activeEffectPreTickProcessedOwnerCount;
+            ActiveEffectPreTickScannedSlotCount = activeEffectPreTickScannedSlotCount;
+            ActiveEffectPreTickDueSlotCount = activeEffectPreTickDueSlotCount;
+            ActiveEffectPreTickNoopSlotCount = activeEffectPreTickNoopSlotCount;
+            ActiveEffectPreTickMutationWriteCount = activeEffectPreTickMutationWriteCount;
             MagnitudeSourceCurrentValueLookupCount = magnitudeSourceCurrentValueLookupCount;
             MagnitudeSourceCapturedValueHitCount = magnitudeSourceCapturedValueHitCount;
             MagnitudeSourceCaptureMissCount = magnitudeSourceCaptureMissCount;
@@ -1365,6 +1470,27 @@ namespace GAS.Runtime
             state.RuntimeCoreOwnerLocalFactDirtyOwnerCount = 0;
             state.RuntimeCoreOwnerLocalFactSkippedOwnerCount = 0;
             state.RuntimeCoreOwnerLocalFactClearedOwnerCount = 0;
+            state.RuntimeCoreOwnerLocalInstantPrepareChunkCount = 0;
+            state.RuntimeCoreOwnerLocalInstantPrepareScannedOwnerCount = 0;
+            state.RuntimeCoreOwnerLocalInstantPrepareSkippedOwnerCount = 0;
+            state.RuntimeCoreOwnerLocalInstantPrepareDirtyOwnerCount = 0;
+            state.RuntimeCoreOwnerLocalInstantPrepareClearedCommandCount = 0;
+            state.RuntimeCoreOwnerLocalInstantPrepareClearedSpecCount = 0;
+            state.RuntimeCoreOwnerLocalInstantPreparePromotedCommandCount = 0;
+            state.RuntimeCoreActiveMutationPrepareChunkCount = 0;
+            state.RuntimeCoreActiveMutationPrepareScannedOwnerCount = 0;
+            state.RuntimeCoreActiveMutationPrepareSkippedOwnerCount = 0;
+            state.RuntimeCoreActiveMutationPrepareDirtyOwnerCount = 0;
+            state.RuntimeCoreActiveMutationPrepareClearedMutationCount = 0;
+            state.RuntimeCoreActiveMutationPreparePromotedCommandCount = 0;
+            state.RuntimeCoreActiveEffectPreTickChunkCount = 0;
+            state.RuntimeCoreActiveEffectPreTickScannedOwnerCount = 0;
+            state.RuntimeCoreActiveEffectPreTickSkippedOwnerCount = 0;
+            state.RuntimeCoreActiveEffectPreTickProcessedOwnerCount = 0;
+            state.RuntimeCoreActiveEffectPreTickScannedSlotCount = 0;
+            state.RuntimeCoreActiveEffectPreTickDueSlotCount = 0;
+            state.RuntimeCoreActiveEffectPreTickNoopSlotCount = 0;
+            state.RuntimeCoreActiveEffectPreTickMutationWriteCount = 0;
             state.RuntimeCoreMagnitudeSourceCurrentValueLookupCount = 0;
             state.RuntimeCoreMagnitudeSourceCapturedValueHitCount = 0;
             state.RuntimeCoreMagnitudeSourceCaptureMissCount = 0;
@@ -1609,7 +1735,28 @@ namespace GAS.Runtime
                 counters.OwnerLocalFactScannedOwnerCount,
                 counters.OwnerLocalFactDirtyOwnerCount,
                 counters.OwnerLocalFactSkippedOwnerCount,
-                counters.OwnerLocalFactClearedOwnerCount);
+                counters.OwnerLocalFactClearedOwnerCount,
+                counters.OwnerLocalInstantPrepareChunkCount,
+                counters.OwnerLocalInstantPrepareScannedOwnerCount,
+                counters.OwnerLocalInstantPrepareSkippedOwnerCount,
+                counters.OwnerLocalInstantPrepareDirtyOwnerCount,
+                counters.OwnerLocalInstantPrepareClearedCommandCount,
+                counters.OwnerLocalInstantPrepareClearedSpecCount,
+                counters.OwnerLocalInstantPreparePromotedCommandCount,
+                counters.ActiveMutationPrepareChunkCount,
+                counters.ActiveMutationPrepareScannedOwnerCount,
+                counters.ActiveMutationPrepareSkippedOwnerCount,
+                counters.ActiveMutationPrepareDirtyOwnerCount,
+                counters.ActiveMutationPrepareClearedMutationCount,
+                counters.ActiveMutationPreparePromotedCommandCount,
+                counters.ActiveEffectPreTickChunkCount,
+                counters.ActiveEffectPreTickScannedOwnerCount,
+                counters.ActiveEffectPreTickSkippedOwnerCount,
+                counters.ActiveEffectPreTickProcessedOwnerCount,
+                counters.ActiveEffectPreTickScannedSlotCount,
+                counters.ActiveEffectPreTickDueSlotCount,
+                counters.ActiveEffectPreTickNoopSlotCount,
+                counters.ActiveEffectPreTickMutationWriteCount);
         }
 
         public static GasRuntimeCoreDiagnosticCounters CollectRuntimeCoreCounters(
@@ -1693,6 +1840,27 @@ namespace GAS.Runtime
                 out var ownerLocalFactDirtyOwnerCount,
                 out var ownerLocalFactSkippedOwnerCount,
                 out var ownerLocalFactClearedOwnerCount,
+                out var ownerLocalInstantPrepareChunkCount,
+                out var ownerLocalInstantPrepareScannedOwnerCount,
+                out var ownerLocalInstantPrepareSkippedOwnerCount,
+                out var ownerLocalInstantPrepareDirtyOwnerCount,
+                out var ownerLocalInstantPrepareClearedCommandCount,
+                out var ownerLocalInstantPrepareClearedSpecCount,
+                out var ownerLocalInstantPreparePromotedCommandCount,
+                out var activeMutationPrepareChunkCount,
+                out var activeMutationPrepareScannedOwnerCount,
+                out var activeMutationPrepareSkippedOwnerCount,
+                out var activeMutationPrepareDirtyOwnerCount,
+                out var activeMutationPrepareClearedMutationCount,
+                out var activeMutationPreparePromotedCommandCount,
+                out var activeEffectPreTickChunkCount,
+                out var activeEffectPreTickScannedOwnerCount,
+                out var activeEffectPreTickSkippedOwnerCount,
+                out var activeEffectPreTickProcessedOwnerCount,
+                out var activeEffectPreTickScannedSlotCount,
+                out var activeEffectPreTickDueSlotCount,
+                out var activeEffectPreTickNoopSlotCount,
+                out var activeEffectPreTickMutationWriteCount,
                 out var magnitudeSourceCurrentValueLookupCount,
                 out var magnitudeSourceCapturedValueHitCount,
                 out var magnitudeSourceCaptureMissCount,
@@ -1871,7 +2039,28 @@ namespace GAS.Runtime
                 ownerLocalFactScannedOwnerCount,
                 ownerLocalFactDirtyOwnerCount,
                 ownerLocalFactSkippedOwnerCount,
-                ownerLocalFactClearedOwnerCount);
+                ownerLocalFactClearedOwnerCount,
+                ownerLocalInstantPrepareChunkCount,
+                ownerLocalInstantPrepareScannedOwnerCount,
+                ownerLocalInstantPrepareSkippedOwnerCount,
+                ownerLocalInstantPrepareDirtyOwnerCount,
+                ownerLocalInstantPrepareClearedCommandCount,
+                ownerLocalInstantPrepareClearedSpecCount,
+                ownerLocalInstantPreparePromotedCommandCount,
+                activeMutationPrepareChunkCount,
+                activeMutationPrepareScannedOwnerCount,
+                activeMutationPrepareSkippedOwnerCount,
+                activeMutationPrepareDirtyOwnerCount,
+                activeMutationPrepareClearedMutationCount,
+                activeMutationPreparePromotedCommandCount,
+                activeEffectPreTickChunkCount,
+                activeEffectPreTickScannedOwnerCount,
+                activeEffectPreTickSkippedOwnerCount,
+                activeEffectPreTickProcessedOwnerCount,
+                activeEffectPreTickScannedSlotCount,
+                activeEffectPreTickDueSlotCount,
+                activeEffectPreTickNoopSlotCount,
+                activeEffectPreTickMutationWriteCount);
         }
 
         public static void CollectAndRecordRuntimeCoreCounters(
@@ -2168,7 +2357,28 @@ namespace GAS.Runtime
             int ownerLocalFactScannedOwnerCount = 0,
             int ownerLocalFactDirtyOwnerCount = 0,
             int ownerLocalFactSkippedOwnerCount = 0,
-            int ownerLocalFactClearedOwnerCount = 0)
+            int ownerLocalFactClearedOwnerCount = 0,
+            int ownerLocalInstantPrepareChunkCount = 0,
+            int ownerLocalInstantPrepareScannedOwnerCount = 0,
+            int ownerLocalInstantPrepareSkippedOwnerCount = 0,
+            int ownerLocalInstantPrepareDirtyOwnerCount = 0,
+            int ownerLocalInstantPrepareClearedCommandCount = 0,
+            int ownerLocalInstantPrepareClearedSpecCount = 0,
+            int ownerLocalInstantPreparePromotedCommandCount = 0,
+            int activeMutationPrepareChunkCount = 0,
+            int activeMutationPrepareScannedOwnerCount = 0,
+            int activeMutationPrepareSkippedOwnerCount = 0,
+            int activeMutationPrepareDirtyOwnerCount = 0,
+            int activeMutationPrepareClearedMutationCount = 0,
+            int activeMutationPreparePromotedCommandCount = 0,
+            int activeEffectPreTickChunkCount = 0,
+            int activeEffectPreTickScannedOwnerCount = 0,
+            int activeEffectPreTickSkippedOwnerCount = 0,
+            int activeEffectPreTickProcessedOwnerCount = 0,
+            int activeEffectPreTickScannedSlotCount = 0,
+            int activeEffectPreTickDueSlotCount = 0,
+            int activeEffectPreTickNoopSlotCount = 0,
+            int activeEffectPreTickMutationWriteCount = 0)
         {
             if (!TryGetWritableLog(em, debuggerEntity, out var state, out var log))
                 return;
@@ -2248,6 +2458,27 @@ namespace GAS.Runtime
             state.RuntimeCoreOwnerLocalFactDirtyOwnerCount += ownerLocalFactDirtyOwnerCount;
             state.RuntimeCoreOwnerLocalFactSkippedOwnerCount += ownerLocalFactSkippedOwnerCount;
             state.RuntimeCoreOwnerLocalFactClearedOwnerCount += ownerLocalFactClearedOwnerCount;
+            state.RuntimeCoreOwnerLocalInstantPrepareChunkCount += ownerLocalInstantPrepareChunkCount;
+            state.RuntimeCoreOwnerLocalInstantPrepareScannedOwnerCount += ownerLocalInstantPrepareScannedOwnerCount;
+            state.RuntimeCoreOwnerLocalInstantPrepareSkippedOwnerCount += ownerLocalInstantPrepareSkippedOwnerCount;
+            state.RuntimeCoreOwnerLocalInstantPrepareDirtyOwnerCount += ownerLocalInstantPrepareDirtyOwnerCount;
+            state.RuntimeCoreOwnerLocalInstantPrepareClearedCommandCount += ownerLocalInstantPrepareClearedCommandCount;
+            state.RuntimeCoreOwnerLocalInstantPrepareClearedSpecCount += ownerLocalInstantPrepareClearedSpecCount;
+            state.RuntimeCoreOwnerLocalInstantPreparePromotedCommandCount += ownerLocalInstantPreparePromotedCommandCount;
+            state.RuntimeCoreActiveMutationPrepareChunkCount += activeMutationPrepareChunkCount;
+            state.RuntimeCoreActiveMutationPrepareScannedOwnerCount += activeMutationPrepareScannedOwnerCount;
+            state.RuntimeCoreActiveMutationPrepareSkippedOwnerCount += activeMutationPrepareSkippedOwnerCount;
+            state.RuntimeCoreActiveMutationPrepareDirtyOwnerCount += activeMutationPrepareDirtyOwnerCount;
+            state.RuntimeCoreActiveMutationPrepareClearedMutationCount += activeMutationPrepareClearedMutationCount;
+            state.RuntimeCoreActiveMutationPreparePromotedCommandCount += activeMutationPreparePromotedCommandCount;
+            state.RuntimeCoreActiveEffectPreTickChunkCount += activeEffectPreTickChunkCount;
+            state.RuntimeCoreActiveEffectPreTickScannedOwnerCount += activeEffectPreTickScannedOwnerCount;
+            state.RuntimeCoreActiveEffectPreTickSkippedOwnerCount += activeEffectPreTickSkippedOwnerCount;
+            state.RuntimeCoreActiveEffectPreTickProcessedOwnerCount += activeEffectPreTickProcessedOwnerCount;
+            state.RuntimeCoreActiveEffectPreTickScannedSlotCount += activeEffectPreTickScannedSlotCount;
+            state.RuntimeCoreActiveEffectPreTickDueSlotCount += activeEffectPreTickDueSlotCount;
+            state.RuntimeCoreActiveEffectPreTickNoopSlotCount += activeEffectPreTickNoopSlotCount;
+            state.RuntimeCoreActiveEffectPreTickMutationWriteCount += activeEffectPreTickMutationWriteCount;
             state.RuntimeCoreMagnitudeSourceCurrentValueLookupCount += magnitudeSourceCurrentValueLookupCount;
             state.RuntimeCoreMagnitudeSourceCapturedValueHitCount += magnitudeSourceCapturedValueHitCount;
             state.RuntimeCoreMagnitudeSourceCaptureMissCount += magnitudeSourceCaptureMissCount;
@@ -2346,6 +2577,27 @@ namespace GAS.Runtime
                     OwnerLocalFactDirtyOwnerCount = ownerLocalFactDirtyOwnerCount,
                     OwnerLocalFactSkippedOwnerCount = ownerLocalFactSkippedOwnerCount,
                     OwnerLocalFactClearedOwnerCount = ownerLocalFactClearedOwnerCount,
+                    OwnerLocalInstantPrepareChunkCount = ownerLocalInstantPrepareChunkCount,
+                    OwnerLocalInstantPrepareScannedOwnerCount = ownerLocalInstantPrepareScannedOwnerCount,
+                    OwnerLocalInstantPrepareSkippedOwnerCount = ownerLocalInstantPrepareSkippedOwnerCount,
+                    OwnerLocalInstantPrepareDirtyOwnerCount = ownerLocalInstantPrepareDirtyOwnerCount,
+                    OwnerLocalInstantPrepareClearedCommandCount = ownerLocalInstantPrepareClearedCommandCount,
+                    OwnerLocalInstantPrepareClearedSpecCount = ownerLocalInstantPrepareClearedSpecCount,
+                    OwnerLocalInstantPreparePromotedCommandCount = ownerLocalInstantPreparePromotedCommandCount,
+                    ActiveMutationPrepareChunkCount = activeMutationPrepareChunkCount,
+                    ActiveMutationPrepareScannedOwnerCount = activeMutationPrepareScannedOwnerCount,
+                    ActiveMutationPrepareSkippedOwnerCount = activeMutationPrepareSkippedOwnerCount,
+                    ActiveMutationPrepareDirtyOwnerCount = activeMutationPrepareDirtyOwnerCount,
+                    ActiveMutationPrepareClearedMutationCount = activeMutationPrepareClearedMutationCount,
+                    ActiveMutationPreparePromotedCommandCount = activeMutationPreparePromotedCommandCount,
+                    ActiveEffectPreTickChunkCount = activeEffectPreTickChunkCount,
+                    ActiveEffectPreTickScannedOwnerCount = activeEffectPreTickScannedOwnerCount,
+                    ActiveEffectPreTickSkippedOwnerCount = activeEffectPreTickSkippedOwnerCount,
+                    ActiveEffectPreTickProcessedOwnerCount = activeEffectPreTickProcessedOwnerCount,
+                    ActiveEffectPreTickScannedSlotCount = activeEffectPreTickScannedSlotCount,
+                    ActiveEffectPreTickDueSlotCount = activeEffectPreTickDueSlotCount,
+                    ActiveEffectPreTickNoopSlotCount = activeEffectPreTickNoopSlotCount,
+                    ActiveEffectPreTickMutationWriteCount = activeEffectPreTickMutationWriteCount,
                     MagnitudeSourceCurrentValueLookupCount = magnitudeSourceCurrentValueLookupCount,
                     MagnitudeSourceCapturedValueHitCount = magnitudeSourceCapturedValueHitCount,
                     MagnitudeSourceCaptureMissCount = magnitudeSourceCaptureMissCount,
@@ -2813,7 +3065,28 @@ namespace GAS.Runtime
                     state.RuntimeCoreOwnerLocalFactScannedOwnerCount,
                     state.RuntimeCoreOwnerLocalFactDirtyOwnerCount,
                     state.RuntimeCoreOwnerLocalFactSkippedOwnerCount,
-                    state.RuntimeCoreOwnerLocalFactClearedOwnerCount),
+                    state.RuntimeCoreOwnerLocalFactClearedOwnerCount,
+                    state.RuntimeCoreOwnerLocalInstantPrepareChunkCount,
+                    state.RuntimeCoreOwnerLocalInstantPrepareScannedOwnerCount,
+                    state.RuntimeCoreOwnerLocalInstantPrepareSkippedOwnerCount,
+                    state.RuntimeCoreOwnerLocalInstantPrepareDirtyOwnerCount,
+                    state.RuntimeCoreOwnerLocalInstantPrepareClearedCommandCount,
+                    state.RuntimeCoreOwnerLocalInstantPrepareClearedSpecCount,
+                    state.RuntimeCoreOwnerLocalInstantPreparePromotedCommandCount,
+                    state.RuntimeCoreActiveMutationPrepareChunkCount,
+                    state.RuntimeCoreActiveMutationPrepareScannedOwnerCount,
+                    state.RuntimeCoreActiveMutationPrepareSkippedOwnerCount,
+                    state.RuntimeCoreActiveMutationPrepareDirtyOwnerCount,
+                    state.RuntimeCoreActiveMutationPrepareClearedMutationCount,
+                    state.RuntimeCoreActiveMutationPreparePromotedCommandCount,
+                    state.RuntimeCoreActiveEffectPreTickChunkCount,
+                    state.RuntimeCoreActiveEffectPreTickScannedOwnerCount,
+                    state.RuntimeCoreActiveEffectPreTickSkippedOwnerCount,
+                    state.RuntimeCoreActiveEffectPreTickProcessedOwnerCount,
+                    state.RuntimeCoreActiveEffectPreTickScannedSlotCount,
+                    state.RuntimeCoreActiveEffectPreTickDueSlotCount,
+                    state.RuntimeCoreActiveEffectPreTickNoopSlotCount,
+                    state.RuntimeCoreActiveEffectPreTickMutationWriteCount),
                 CreateFrameBackboneCounters(state),
                 observationMaterializationCounters,
                 magnitudeSourceCounters,
@@ -2948,6 +3221,27 @@ namespace GAS.Runtime
             out int ownerLocalFactDirtyOwnerCount,
             out int ownerLocalFactSkippedOwnerCount,
             out int ownerLocalFactClearedOwnerCount,
+            out int ownerLocalInstantPrepareChunkCount,
+            out int ownerLocalInstantPrepareScannedOwnerCount,
+            out int ownerLocalInstantPrepareSkippedOwnerCount,
+            out int ownerLocalInstantPrepareDirtyOwnerCount,
+            out int ownerLocalInstantPrepareClearedCommandCount,
+            out int ownerLocalInstantPrepareClearedSpecCount,
+            out int ownerLocalInstantPreparePromotedCommandCount,
+            out int activeMutationPrepareChunkCount,
+            out int activeMutationPrepareScannedOwnerCount,
+            out int activeMutationPrepareSkippedOwnerCount,
+            out int activeMutationPrepareDirtyOwnerCount,
+            out int activeMutationPrepareClearedMutationCount,
+            out int activeMutationPreparePromotedCommandCount,
+            out int activeEffectPreTickChunkCount,
+            out int activeEffectPreTickScannedOwnerCount,
+            out int activeEffectPreTickSkippedOwnerCount,
+            out int activeEffectPreTickProcessedOwnerCount,
+            out int activeEffectPreTickScannedSlotCount,
+            out int activeEffectPreTickDueSlotCount,
+            out int activeEffectPreTickNoopSlotCount,
+            out int activeEffectPreTickMutationWriteCount,
             out int magnitudeSourceCurrentValueLookupCount,
             out int magnitudeSourceCapturedValueHitCount,
             out int magnitudeSourceCaptureMissCount,
@@ -2986,6 +3280,27 @@ namespace GAS.Runtime
             ownerLocalFactDirtyOwnerCount = 0;
             ownerLocalFactSkippedOwnerCount = 0;
             ownerLocalFactClearedOwnerCount = 0;
+            ownerLocalInstantPrepareChunkCount = 0;
+            ownerLocalInstantPrepareScannedOwnerCount = 0;
+            ownerLocalInstantPrepareSkippedOwnerCount = 0;
+            ownerLocalInstantPrepareDirtyOwnerCount = 0;
+            ownerLocalInstantPrepareClearedCommandCount = 0;
+            ownerLocalInstantPrepareClearedSpecCount = 0;
+            ownerLocalInstantPreparePromotedCommandCount = 0;
+            activeMutationPrepareChunkCount = 0;
+            activeMutationPrepareScannedOwnerCount = 0;
+            activeMutationPrepareSkippedOwnerCount = 0;
+            activeMutationPrepareDirtyOwnerCount = 0;
+            activeMutationPrepareClearedMutationCount = 0;
+            activeMutationPreparePromotedCommandCount = 0;
+            activeEffectPreTickChunkCount = 0;
+            activeEffectPreTickScannedOwnerCount = 0;
+            activeEffectPreTickSkippedOwnerCount = 0;
+            activeEffectPreTickProcessedOwnerCount = 0;
+            activeEffectPreTickScannedSlotCount = 0;
+            activeEffectPreTickDueSlotCount = 0;
+            activeEffectPreTickNoopSlotCount = 0;
+            activeEffectPreTickMutationWriteCount = 0;
             magnitudeSourceCurrentValueLookupCount = 0;
             magnitudeSourceCapturedValueHitCount = 0;
             magnitudeSourceCaptureMissCount = 0;
@@ -3031,6 +3346,27 @@ namespace GAS.Runtime
             ownerLocalFactDirtyOwnerCount = stream.OwnerLocalFactDirtyOwnerCount;
             ownerLocalFactSkippedOwnerCount = stream.OwnerLocalFactSkippedOwnerCount;
             ownerLocalFactClearedOwnerCount = stream.OwnerLocalFactClearedOwnerCount;
+            ownerLocalInstantPrepareChunkCount = stream.OwnerLocalInstantPrepareChunkCount;
+            ownerLocalInstantPrepareScannedOwnerCount = stream.OwnerLocalInstantPrepareScannedOwnerCount;
+            ownerLocalInstantPrepareSkippedOwnerCount = stream.OwnerLocalInstantPrepareSkippedOwnerCount;
+            ownerLocalInstantPrepareDirtyOwnerCount = stream.OwnerLocalInstantPrepareDirtyOwnerCount;
+            ownerLocalInstantPrepareClearedCommandCount = stream.OwnerLocalInstantPrepareClearedCommandCount;
+            ownerLocalInstantPrepareClearedSpecCount = stream.OwnerLocalInstantPrepareClearedSpecCount;
+            ownerLocalInstantPreparePromotedCommandCount = stream.OwnerLocalInstantPreparePromotedCommandCount;
+            activeMutationPrepareChunkCount = stream.ActiveMutationPrepareChunkCount;
+            activeMutationPrepareScannedOwnerCount = stream.ActiveMutationPrepareScannedOwnerCount;
+            activeMutationPrepareSkippedOwnerCount = stream.ActiveMutationPrepareSkippedOwnerCount;
+            activeMutationPrepareDirtyOwnerCount = stream.ActiveMutationPrepareDirtyOwnerCount;
+            activeMutationPrepareClearedMutationCount = stream.ActiveMutationPrepareClearedMutationCount;
+            activeMutationPreparePromotedCommandCount = stream.ActiveMutationPreparePromotedCommandCount;
+            activeEffectPreTickChunkCount = stream.ActiveEffectPreTickChunkCount;
+            activeEffectPreTickScannedOwnerCount = stream.ActiveEffectPreTickScannedOwnerCount;
+            activeEffectPreTickSkippedOwnerCount = stream.ActiveEffectPreTickSkippedOwnerCount;
+            activeEffectPreTickProcessedOwnerCount = stream.ActiveEffectPreTickProcessedOwnerCount;
+            activeEffectPreTickScannedSlotCount = stream.ActiveEffectPreTickScannedSlotCount;
+            activeEffectPreTickDueSlotCount = stream.ActiveEffectPreTickDueSlotCount;
+            activeEffectPreTickNoopSlotCount = stream.ActiveEffectPreTickNoopSlotCount;
+            activeEffectPreTickMutationWriteCount = stream.ActiveEffectPreTickMutationWriteCount;
             magnitudeSourceCurrentValueLookupCount = stream.MagnitudeSourceCurrentValueLookupCount;
             magnitudeSourceCapturedValueHitCount = stream.MagnitudeSourceCapturedValueHitCount;
             magnitudeSourceCaptureMissCount = stream.MagnitudeSourceCaptureMissCount;
@@ -3729,6 +4065,48 @@ namespace GAS.Runtime
                 .Append(evt.OwnerLocalFactSkippedOwnerCount)
                 .Append("|ownerLocalFactClearedOwners=")
                 .Append(evt.OwnerLocalFactClearedOwnerCount)
+                .Append("|ownerLocalInstantPrepareChunks=")
+                .Append(evt.OwnerLocalInstantPrepareChunkCount)
+                .Append("|ownerLocalInstantPrepareScannedOwners=")
+                .Append(evt.OwnerLocalInstantPrepareScannedOwnerCount)
+                .Append("|ownerLocalInstantPrepareSkippedOwners=")
+                .Append(evt.OwnerLocalInstantPrepareSkippedOwnerCount)
+                .Append("|ownerLocalInstantPrepareDirtyOwners=")
+                .Append(evt.OwnerLocalInstantPrepareDirtyOwnerCount)
+                .Append("|ownerLocalInstantPrepareClearedCommands=")
+                .Append(evt.OwnerLocalInstantPrepareClearedCommandCount)
+                .Append("|ownerLocalInstantPrepareClearedSpecs=")
+                .Append(evt.OwnerLocalInstantPrepareClearedSpecCount)
+                .Append("|ownerLocalInstantPreparePromotedCommands=")
+                .Append(evt.OwnerLocalInstantPreparePromotedCommandCount)
+                .Append("|activeMutationPrepareChunks=")
+                .Append(evt.ActiveMutationPrepareChunkCount)
+                .Append("|activeMutationPrepareScannedOwners=")
+                .Append(evt.ActiveMutationPrepareScannedOwnerCount)
+                .Append("|activeMutationPrepareSkippedOwners=")
+                .Append(evt.ActiveMutationPrepareSkippedOwnerCount)
+                .Append("|activeMutationPrepareDirtyOwners=")
+                .Append(evt.ActiveMutationPrepareDirtyOwnerCount)
+                .Append("|activeMutationPrepareClearedMutations=")
+                .Append(evt.ActiveMutationPrepareClearedMutationCount)
+                .Append("|activeMutationPreparePromotedCommands=")
+                .Append(evt.ActiveMutationPreparePromotedCommandCount)
+                .Append("|activeEffectPreTickChunks=")
+                .Append(evt.ActiveEffectPreTickChunkCount)
+                .Append("|activeEffectPreTickScannedOwners=")
+                .Append(evt.ActiveEffectPreTickScannedOwnerCount)
+                .Append("|activeEffectPreTickSkippedOwners=")
+                .Append(evt.ActiveEffectPreTickSkippedOwnerCount)
+                .Append("|activeEffectPreTickProcessedOwners=")
+                .Append(evt.ActiveEffectPreTickProcessedOwnerCount)
+                .Append("|activeEffectPreTickScannedSlots=")
+                .Append(evt.ActiveEffectPreTickScannedSlotCount)
+                .Append("|activeEffectPreTickDueSlots=")
+                .Append(evt.ActiveEffectPreTickDueSlotCount)
+                .Append("|activeEffectPreTickNoopSlots=")
+                .Append(evt.ActiveEffectPreTickNoopSlotCount)
+                .Append("|activeEffectPreTickMutationWrites=")
+                .Append(evt.ActiveEffectPreTickMutationWriteCount)
                 .Append("|magnitudeSourceCurrentValueLookups=")
                 .Append(evt.MagnitudeSourceCurrentValueLookupCount)
                 .Append("|magnitudeSourceCapturedValueHits=")
@@ -4071,6 +4449,49 @@ namespace GAS.Runtime
                 .Append(counters.OwnerLocalFactSkippedOwnerCount)
                 .Append("|clearedOwners=")
                 .Append(counters.OwnerLocalFactClearedOwnerCount)
+                .AppendLine();
+            builder.Append("runtimeCoreFrameLane|ownerLocalInstantPrepareChunks=")
+                .Append(counters.OwnerLocalInstantPrepareChunkCount)
+                .Append("|ownerLocalInstantPrepareScannedOwners=")
+                .Append(counters.OwnerLocalInstantPrepareScannedOwnerCount)
+                .Append("|ownerLocalInstantPrepareSkippedOwners=")
+                .Append(counters.OwnerLocalInstantPrepareSkippedOwnerCount)
+                .Append("|ownerLocalInstantPrepareDirtyOwners=")
+                .Append(counters.OwnerLocalInstantPrepareDirtyOwnerCount)
+                .Append("|ownerLocalInstantPrepareClearedCommands=")
+                .Append(counters.OwnerLocalInstantPrepareClearedCommandCount)
+                .Append("|ownerLocalInstantPrepareClearedSpecs=")
+                .Append(counters.OwnerLocalInstantPrepareClearedSpecCount)
+                .Append("|ownerLocalInstantPreparePromotedCommands=")
+                .Append(counters.OwnerLocalInstantPreparePromotedCommandCount)
+                .Append("|activeMutationPrepareChunks=")
+                .Append(counters.ActiveMutationPrepareChunkCount)
+                .Append("|activeMutationPrepareScannedOwners=")
+                .Append(counters.ActiveMutationPrepareScannedOwnerCount)
+                .Append("|activeMutationPrepareSkippedOwners=")
+                .Append(counters.ActiveMutationPrepareSkippedOwnerCount)
+                .Append("|activeMutationPrepareDirtyOwners=")
+                .Append(counters.ActiveMutationPrepareDirtyOwnerCount)
+                .Append("|activeMutationPrepareClearedMutations=")
+                .Append(counters.ActiveMutationPrepareClearedMutationCount)
+                .Append("|activeMutationPreparePromotedCommands=")
+                .Append(counters.ActiveMutationPreparePromotedCommandCount)
+                .Append("|activeEffectPreTickChunks=")
+                .Append(counters.ActiveEffectPreTickChunkCount)
+                .Append("|activeEffectPreTickScannedOwners=")
+                .Append(counters.ActiveEffectPreTickScannedOwnerCount)
+                .Append("|activeEffectPreTickSkippedOwners=")
+                .Append(counters.ActiveEffectPreTickSkippedOwnerCount)
+                .Append("|activeEffectPreTickProcessedOwners=")
+                .Append(counters.ActiveEffectPreTickProcessedOwnerCount)
+                .Append("|activeEffectPreTickScannedSlots=")
+                .Append(counters.ActiveEffectPreTickScannedSlotCount)
+                .Append("|activeEffectPreTickDueSlots=")
+                .Append(counters.ActiveEffectPreTickDueSlotCount)
+                .Append("|activeEffectPreTickNoopSlots=")
+                .Append(counters.ActiveEffectPreTickNoopSlotCount)
+                .Append("|activeEffectPreTickMutationWrites=")
+                .Append(counters.ActiveEffectPreTickMutationWriteCount)
                 .AppendLine();
             builder.Append("runtimeCoreMagnitudeSource|currentValueLookups=")
                 .Append(counters.MagnitudeSourceCurrentValueLookupCount)

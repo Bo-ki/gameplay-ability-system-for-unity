@@ -409,6 +409,24 @@ $ownerLocalFactSkippedOwners = Get-MapNumber $debugger "ownerLocalFactSkippedOwn
     Get-MapNumber $scorecard "ownerLocalFactSkippedOwners")
 $ownerLocalFactClearedOwners = Get-MapNumber $debugger "ownerLocalFactClearedOwners" (
     Get-MapNumber $scorecard "ownerLocalFactClearedOwners")
+$ownerLocalInstantPrepareScannedOwners = Get-MapNumber $debugger "ownerLocalInstantPrepareScannedOwners"
+$ownerLocalInstantPrepareSkippedOwners = Get-MapNumber $debugger "ownerLocalInstantPrepareSkippedOwners"
+$ownerLocalInstantPrepareDirtyOwners = Get-MapNumber $debugger "ownerLocalInstantPrepareDirtyOwners"
+$ownerLocalInstantPrepareClearedCommands = Get-MapNumber $debugger "ownerLocalInstantPrepareClearedCommands"
+$ownerLocalInstantPrepareClearedSpecs = Get-MapNumber $debugger "ownerLocalInstantPrepareClearedSpecs"
+$ownerLocalInstantPreparePromotedCommands = Get-MapNumber $debugger "ownerLocalInstantPreparePromotedCommands"
+$activeMutationPrepareScannedOwners = Get-MapNumber $debugger "activeMutationPrepareScannedOwners"
+$activeMutationPrepareSkippedOwners = Get-MapNumber $debugger "activeMutationPrepareSkippedOwners"
+$activeMutationPrepareDirtyOwners = Get-MapNumber $debugger "activeMutationPrepareDirtyOwners"
+$activeMutationPrepareClearedMutations = Get-MapNumber $debugger "activeMutationPrepareClearedMutations"
+$activeMutationPreparePromotedCommands = Get-MapNumber $debugger "activeMutationPreparePromotedCommands"
+$activeEffectPreTickScannedOwners = Get-MapNumber $debugger "activeEffectPreTickScannedOwners"
+$activeEffectPreTickSkippedOwners = Get-MapNumber $debugger "activeEffectPreTickSkippedOwners"
+$activeEffectPreTickProcessedOwners = Get-MapNumber $debugger "activeEffectPreTickProcessedOwners"
+$activeEffectPreTickScannedSlots = Get-MapNumber $debugger "activeEffectPreTickScannedSlots"
+$activeEffectPreTickDueSlots = Get-MapNumber $debugger "activeEffectPreTickDueSlots"
+$activeEffectPreTickNoopSlots = Get-MapNumber $debugger "activeEffectPreTickNoopSlots"
+$activeEffectPreTickMutationWrites = Get-MapNumber $debugger "activeEffectPreTickMutationWrites"
 $diagnosticObservationQueries = Get-MapNumber $debugger "observationMaterializedQueries"
 $diagnosticObservationEntities = Get-MapNumber $debugger "observationMaterializedEntities"
 $diagnosticObservationMicroseconds = Get-MapNumber $debugger "observationMaterializationUs"
@@ -485,6 +503,31 @@ $derived = [ordered]@{
     ownerLocalFactSkippedOwnersPerTick = $ownerLocalFactSkippedOwners / $measuredTicks
     ownerLocalFactSkipRatePct = if ($ownerLocalFactScannedOwners -gt 0) { 100.0 * $ownerLocalFactSkippedOwners / $ownerLocalFactScannedOwners } else { 0 }
     ownerLocalFactsPerDirtyOwner = if ($ownerLocalFactDirtyOwners -gt 0) { $ownerLocalFactFlushes / $ownerLocalFactDirtyOwners } else { 0 }
+    ownerLocalInstantPrepareScannedOwners = $ownerLocalInstantPrepareScannedOwners
+    ownerLocalInstantPrepareSkippedOwners = $ownerLocalInstantPrepareSkippedOwners
+    ownerLocalInstantPrepareDirtyOwners = $ownerLocalInstantPrepareDirtyOwners
+    ownerLocalInstantPrepareScannedOwnersPerTick = $ownerLocalInstantPrepareScannedOwners / $measuredTicks
+    ownerLocalInstantPrepareSkipRatePct = if ($ownerLocalInstantPrepareScannedOwners -gt 0) { 100.0 * $ownerLocalInstantPrepareSkippedOwners / $ownerLocalInstantPrepareScannedOwners } else { 0 }
+    ownerLocalInstantPreparePromotedCommands = $ownerLocalInstantPreparePromotedCommands
+    ownerLocalInstantPreparePromotedCommandsPerDirtyOwner = if ($ownerLocalInstantPrepareDirtyOwners -gt 0) { $ownerLocalInstantPreparePromotedCommands / $ownerLocalInstantPrepareDirtyOwners } else { 0 }
+    activeMutationPrepareScannedOwners = $activeMutationPrepareScannedOwners
+    activeMutationPrepareSkippedOwners = $activeMutationPrepareSkippedOwners
+    activeMutationPrepareDirtyOwners = $activeMutationPrepareDirtyOwners
+    activeMutationPrepareScannedOwnersPerTick = $activeMutationPrepareScannedOwners / $measuredTicks
+    activeMutationPrepareSkipRatePct = if ($activeMutationPrepareScannedOwners -gt 0) { 100.0 * $activeMutationPrepareSkippedOwners / $activeMutationPrepareScannedOwners } else { 0 }
+    activeMutationPreparePromotedCommands = $activeMutationPreparePromotedCommands
+    activeMutationPreparePromotedCommandsPerDirtyOwner = if ($activeMutationPrepareDirtyOwners -gt 0) { $activeMutationPreparePromotedCommands / $activeMutationPrepareDirtyOwners } else { 0 }
+    activeEffectPreTickScannedOwners = $activeEffectPreTickScannedOwners
+    activeEffectPreTickSkippedOwners = $activeEffectPreTickSkippedOwners
+    activeEffectPreTickProcessedOwners = $activeEffectPreTickProcessedOwners
+    activeEffectPreTickScannedSlots = $activeEffectPreTickScannedSlots
+    activeEffectPreTickDueSlots = $activeEffectPreTickDueSlots
+    activeEffectPreTickNoopSlots = $activeEffectPreTickNoopSlots
+    activeEffectPreTickMutationWrites = $activeEffectPreTickMutationWrites
+    activeEffectPreTickScannedOwnersPerTick = $activeEffectPreTickScannedOwners / $measuredTicks
+    activeEffectPreTickProcessedOwnersPerTick = $activeEffectPreTickProcessedOwners / $measuredTicks
+    activeEffectPreTickDueSlotRatePct = if ($activeEffectPreTickScannedSlots -gt 0) { 100.0 * $activeEffectPreTickDueSlots / $activeEffectPreTickScannedSlots } else { 0 }
+    activeEffectPreTickSkipRatePct = if ($activeEffectPreTickScannedOwners -gt 0) { 100.0 * $activeEffectPreTickSkippedOwners / $activeEffectPreTickScannedOwners } else { 0 }
     performanceExcellentPassed = $performanceExcellentPassed
     profilerEvidencePassed = $profilerEvidencePassed
     dominantRisk = if ($scorecard.Contains("dominantRisk")) { $scorecard["dominantRisk"] } else { "" }
@@ -559,6 +602,36 @@ if ($ownerLocalFactScannedOwners -gt 0 -and $derived.ownerLocalFactSkipRatePct -
         "Medium" `
         ("OwnerLocalFact changed chunks scan {0:n0} owners but skip {1:n0} empty owners ({2})." -f $ownerLocalFactScannedOwners, $ownerLocalFactSkippedOwners, (Format-Percent $derived.ownerLocalFactSkipRatePct)) `
         "Use generated owner-local fact dirty owner list if changed-version chunk granularity stays noisy at larger scale."
+}
+
+if ($ownerLocalInstantPrepareScannedOwners -gt 0 -and $derived.ownerLocalInstantPrepareSkipRatePct -gt 50) {
+    $findings += New-Finding `
+        "R7-INSTANT-PREPARE-SPARSE-SCAN" `
+        "Medium" `
+        ("OwnerLocalInstant prepare scans {0:n0} owners but skips {1:n0} ({2}); promoted commands={3:n0}." -f $ownerLocalInstantPrepareScannedOwners, $ownerLocalInstantPrepareSkippedOwners, (Format-Percent $derived.ownerLocalInstantPrepareSkipRatePct), $ownerLocalInstantPreparePromotedCommands) `
+        "The instant command frame lane is sparse at owner granularity." `
+        "The current prepare system has owner-local buffers but no compact dirty owner read model for frame-local promotion work." `
+        "Target generated dirty-owner lanes or owner-local command spans; do not reintroduce enableable marker toggles."
+}
+
+if ($activeMutationPrepareScannedOwners -gt 0 -and $derived.activeMutationPrepareSkipRatePct -gt 50) {
+    $findings += New-Finding `
+        "R7-ACTIVE-MUTATION-PREPARE-SPARSE-SCAN" `
+        "Medium" `
+        ("ActiveMutation prepare scans {0:n0} owners but skips {1:n0} ({2}); promoted commands={3:n0}." -f $activeMutationPrepareScannedOwners, $activeMutationPrepareSkippedOwners, (Format-Percent $derived.activeMutationPrepareSkipRatePct), $activeMutationPreparePromotedCommands) `
+        "The active-effect mutation frame lane is sparse at owner granularity." `
+        "The prepare system still pays broad owner scans for clear/copy even when mutation promotion work is zero." `
+        "Use owner-local dirty spans or generated active-effect mutation fan-in before changing query gates."
+}
+
+if ($activeEffectPreTickScannedSlots -gt 0 -and $derived.activeEffectPreTickDueSlotRatePct -lt 20) {
+    $findings += New-Finding `
+        "R7-ACTIVE-EFFECT-PRETICK-SLOT-DENSITY" `
+        "Medium" `
+        ("ActiveEffect PreTick scans {0:n0} slots but only {1:n0} are due ({2}); owner skip rate={3}." -f $activeEffectPreTickScannedSlots, $activeEffectPreTickDueSlots, (Format-Percent $derived.activeEffectPreTickDueSlotRatePct), (Format-Percent $derived.activeEffectPreTickSkipRatePct)) `
+        "The pre-tick lane may need a due-slot index if low due density persists in real battle scale." `
+        "ActiveEffect lifecycle currently depends on per-owner slot scans after chunk-skip hints rather than a compact due-slot lane." `
+        "Probe period/duration bucket density before introducing a due-slot index."
 }
 
 if ($derived.executionSpecScansPerMatchedEffect -gt 2.0) {
@@ -699,6 +772,9 @@ $builder = [System.Text.StringBuilder]::new()
 [void]$builder.AppendLine(("- scorecard owner-local fact max range: {0:n0}" -f $derived.scorecardOwnerLocalFactMaxOwnerRange))
 [void]$builder.AppendLine(("- owner-local fact dirty owners/tick: {0:n1}" -f $derived.ownerLocalFactDirtyOwnersPerTick))
 [void]$builder.AppendLine(("- owner-local fact scanned/skipped owners: {0:n0}/{1:n0} ({2})" -f $derived.ownerLocalFactScannedOwners, $derived.ownerLocalFactSkippedOwners, (Format-Percent $derived.ownerLocalFactSkipRatePct)))
+[void]$builder.AppendLine(("- instant prepare scanned/skipped owners: {0:n0}/{1:n0} ({2})" -f $derived.ownerLocalInstantPrepareScannedOwners, $derived.ownerLocalInstantPrepareSkippedOwners, (Format-Percent $derived.ownerLocalInstantPrepareSkipRatePct)))
+[void]$builder.AppendLine(("- active mutation prepare scanned/skipped owners: {0:n0}/{1:n0} ({2})" -f $derived.activeMutationPrepareScannedOwners, $derived.activeMutationPrepareSkippedOwners, (Format-Percent $derived.activeMutationPrepareSkipRatePct)))
+[void]$builder.AppendLine(("- active effect pre-tick processed owners/slots due: {0:n0}/{1:n0} ({2})" -f $derived.activeEffectPreTickProcessedOwners, $derived.activeEffectPreTickDueSlots, (Format-Percent $derived.activeEffectPreTickDueSlotRatePct)))
 [void]$builder.AppendLine(("- events/warnings/errors: {0:n0}/{1:n0}/{2:n0}" -f (Get-MapNumber $debugger "events"), (Get-MapNumber $debugger "warnings"), (Get-MapNumber $debugger "errors")))
 [void]$builder.AppendLine(("- observation materialization: queries={0:n0}, entities={1:n0}, us={2:n0}" -f $derived.diagnosticObservationQueries, $derived.diagnosticObservationEntities, $derived.diagnosticObservationMicroseconds))
 [void]$builder.AppendLine(("- execution spec scan ratio: {0:n2}:1" -f $derived.executionSpecScansPerMatchedEffect))
@@ -787,6 +863,15 @@ $brief = [System.Text.StringBuilder]::new()
 [void]$brief.AppendLine(("- dirty owners / tick: {0:n1}" -f $derived.ownerLocalFactDirtyOwnersPerTick))
 [void]$brief.AppendLine(("- skipped owners: {0:n0} ({1})" -f $derived.ownerLocalFactSkippedOwners, (Format-Percent $derived.ownerLocalFactSkipRatePct)))
 [void]$brief.AppendLine(("- facts / dirty owner: {0:n2}" -f $derived.ownerLocalFactsPerDirtyOwner))
+[void]$brief.AppendLine()
+[void]$brief.AppendLine("## R7 Frame Lane Counters")
+[void]$brief.AppendLine()
+[void]$brief.AppendLine(("- instant prepare scanned/skipped/dirty owners: {0:n0}/{1:n0}/{2:n0}" -f $derived.ownerLocalInstantPrepareScannedOwners, $derived.ownerLocalInstantPrepareSkippedOwners, $derived.ownerLocalInstantPrepareDirtyOwners))
+[void]$brief.AppendLine(("- instant prepare promoted commands: {0:n0}" -f $derived.ownerLocalInstantPreparePromotedCommands))
+[void]$brief.AppendLine(("- active mutation prepare scanned/skipped/dirty owners: {0:n0}/{1:n0}/{2:n0}" -f $derived.activeMutationPrepareScannedOwners, $derived.activeMutationPrepareSkippedOwners, $derived.activeMutationPrepareDirtyOwners))
+[void]$brief.AppendLine(("- active mutation prepare promoted commands: {0:n0}" -f $derived.activeMutationPreparePromotedCommands))
+[void]$brief.AppendLine(("- active effect pre-tick owners scanned/processed/skipped: {0:n0}/{1:n0}/{2:n0}" -f $derived.activeEffectPreTickScannedOwners, $derived.activeEffectPreTickProcessedOwners, $derived.activeEffectPreTickSkippedOwners))
+[void]$brief.AppendLine(("- active effect pre-tick slots scanned/due/noop: {0:n0}/{1:n0}/{2:n0} ({3} due)" -f $derived.activeEffectPreTickScannedSlots, $derived.activeEffectPreTickDueSlots, $derived.activeEffectPreTickNoopSlots, (Format-Percent $derived.activeEffectPreTickDueSlotRatePct)))
 [void]$brief.AppendLine()
 [void]$brief.AppendLine("## Top Next Owners")
 [void]$brief.AppendLine()
@@ -914,6 +999,20 @@ $debuggerReport = [System.Text.StringBuilder]::new()
 [void]$debuggerReport.AppendLine(("| owner local fact skipped owners | {0:n0} |" -f $derived.ownerLocalFactSkippedOwners))
 [void]$debuggerReport.AppendLine(("| owner local fact cleared owners | {0:n0} |" -f $derived.ownerLocalFactClearedOwners))
 [void]$debuggerReport.AppendLine(("| owner local fact skip rate | {0} |" -f (Format-Percent $derived.ownerLocalFactSkipRatePct)))
+[void]$debuggerReport.AppendLine(("| instant prepare scanned owners | {0:n0} |" -f $derived.ownerLocalInstantPrepareScannedOwners))
+[void]$debuggerReport.AppendLine(("| instant prepare skipped owners | {0:n0} |" -f $derived.ownerLocalInstantPrepareSkippedOwners))
+[void]$debuggerReport.AppendLine(("| instant prepare dirty owners | {0:n0} |" -f $derived.ownerLocalInstantPrepareDirtyOwners))
+[void]$debuggerReport.AppendLine(("| instant prepare promoted commands | {0:n0} |" -f $derived.ownerLocalInstantPreparePromotedCommands))
+[void]$debuggerReport.AppendLine(("| active mutation prepare scanned owners | {0:n0} |" -f $derived.activeMutationPrepareScannedOwners))
+[void]$debuggerReport.AppendLine(("| active mutation prepare skipped owners | {0:n0} |" -f $derived.activeMutationPrepareSkippedOwners))
+[void]$debuggerReport.AppendLine(("| active mutation prepare dirty owners | {0:n0} |" -f $derived.activeMutationPrepareDirtyOwners))
+[void]$debuggerReport.AppendLine(("| active mutation prepare promoted commands | {0:n0} |" -f $derived.activeMutationPreparePromotedCommands))
+[void]$debuggerReport.AppendLine(("| active effect pre-tick scanned owners | {0:n0} |" -f $derived.activeEffectPreTickScannedOwners))
+[void]$debuggerReport.AppendLine(("| active effect pre-tick processed owners | {0:n0} |" -f $derived.activeEffectPreTickProcessedOwners))
+[void]$debuggerReport.AppendLine(("| active effect pre-tick skipped owners | {0:n0} |" -f $derived.activeEffectPreTickSkippedOwners))
+[void]$debuggerReport.AppendLine(("| active effect pre-tick scanned slots | {0:n0} |" -f $derived.activeEffectPreTickScannedSlots))
+[void]$debuggerReport.AppendLine(("| active effect pre-tick due slots | {0:n0} |" -f $derived.activeEffectPreTickDueSlots))
+[void]$debuggerReport.AppendLine(("| active effect pre-tick mutation writes | {0:n0} |" -f $derived.activeEffectPreTickMutationWrites))
 [void]$debuggerReport.AppendLine()
 [void]$debuggerReport.AppendLine("## Findings")
 [void]$debuggerReport.AppendLine()

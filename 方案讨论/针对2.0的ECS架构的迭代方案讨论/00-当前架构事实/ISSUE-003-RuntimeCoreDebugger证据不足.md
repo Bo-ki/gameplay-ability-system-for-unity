@@ -36,6 +36,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 26. 2026-06-08 DebuggerProbe Run4 已把热点定位从人读 TopN 推进为机器可读 `hotspotAttribution|...` 矩阵：`GasRuntimeDerivedExportSink` 在 `runtimeDataOrientedScorecard` 后输出 Runtime-owned attribution rows，`AutoChessBattleValidationReport` 合并 `JournalingTopN + DiagnosticMetricFamily` 输出 AutoChess validation matrix，`Analyze-AutoChessProfile.ps1` 解析为 JSON `hotspotAttribution` 与 Markdown 表格。Run4 关键路由为 `R4-DBG-MATRIX count=87426 nextOwner=R4`、`GAS-ARCH-07 OwnerLocalGameplayFactBuffer count=11250 nextOwner=R3`、`GAS-ARCH-AE-PRETICK count=15800 nextOwner=R7/R3`、`GAS-ARCH-CMD-PREPARE count=9000 nextOwner=R7/R3`、`GAS-ARCH-AE-MUTATION-PREPARE count=13000 nextOwner=R7/R3`、`GAS-ARCH-06 scanMatchRatio=3.857 nextOwner=R5/R3`、`GAS-ARCH-ATTR-RW count=8250 nextOwner=R3`、`GAS-DBG-01 materialization count=2412 nextOwner=R4`、`GAS-MEASURE-02 profiler disabled nextOwner=R8`。
 27. 同一轮补充了 Agent 友好的 split report 输出：`Analyze-AutoChessProfile.ps1` 继续生成全量 `AutoChessProfileAnalysis.json/.md`，但额外生成 `AutoChessProfileBrief.md` 和 `SubReports/PerformanceBudget.md`、`HotspotAttribution.md`、`JournalingTopN.md`、`DebuggerEvidence.md`、`RuntimeBattleLog.md`。这把“默认读取短简报，按需读取领域子报告”变成 Debugger evidence surface 的消费契约，避免 Agent 每次为了一个 owner 路由读取全量 battle log / TopN / Debugger 明细。
 28. 2026-06-08 Run6 / Run7 证明 Debugger 已能识别并反证错误优化：Run6 引入 owner-local pending enableable marker 后，split report 显示 `avgTickMs=12.643ms`、`CoreSimulation.avgMs=11.698ms`、`journalingWorldRecords=505543`、`EnableComponent=37384`，并伴随 Job safety / aliasing 异常；Run7 移除该 marker 后恢复 `passed=True`、`headlessLogicBudgetPassed=True`、`avgTickMs=0.970ms`、`CoreSimulation.avgMs=0.497ms`、`EnableComponent=650`。这说明 hotspot matrix 不只用于找慢点，也必须用于阻断“把 buffer scan 成本转移为 enableable toggle 成本”的伪优化。
+29. 2026-06-08 Run8 已把 R7/R3 frame-lane 热点从 Journaling TopN 推断推进到 Runtime-owned counters：`OwnerLocalInstantCommandFramePrepareSystem`、`ActiveEffectOwnerLocalMutationFramePrepareSystem` 和 `GASActiveEffectPreTickSystem` 现在把 scanned / skipped / dirty owners、cleared buffers、promoted commands、scanned / due / noop slots、mutation writes 写入 `GEEffectCommandStreamComponent` counter，并经 `GasRuntimeDiagnosticEvidenceSnapshot`、AutoChess summary 与 split report 输出。Run8 x50 显示 instant prepare `2400/1450/950`、active mutation prepare `2400/1750/650`、active effect pre-tick owners `2400/950/1450`、pre-tick slots `1200/550/650`、mutation writes `600`；这直接证明当前热点包含 owner 稀疏扫描和 slot 扫描成本，而不是单纯的日志导出或 Journaling 采样噪声。
 
 ## 仍成立风险
 
@@ -98,6 +99,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 | debugger profile probe Run3 | `00-当前架构事实/_归档/2026-06-08-DebuggerProfileProbe-Run6.md` |
 | debugger hotspot attribution matrix Run4 | `00-当前架构事实/_归档/2026-06-08-DebuggerHotspotAttributionMatrix-Run4.md` |
 | pending marker rejected Run7 | `00-当前架构事实/_归档/2026-06-08-OwnerLocalPendingMarkerRejected-Run7.md` |
+| frame lane counters Run8 | `00-当前架构事实/_归档/2026-06-08-R7FrameLaneCounters-Run8.md` |
 
 ## 退出条件
 
@@ -112,3 +114,4 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 9. `GASRuntimeDiagnosticEventBuffer` 稀疏 mega-row 被拆成 metric family buffers 或等价 SoA snapshot；新增 GAS 概念不得继续通过扩展大事件结构体落地。短期外部消费必须走 `GasRuntimeMetricFamilySnapshot` / `GasRuntimeDiagnosticEvidenceSnapshot` / scorecard / derived export，不允许 AutoChess、Editor 或 CI 继续按 Debugger 内部 counter 字段二次拼接稳定语义。
 10. Debugger / AutoChess / analysis script 必须输出并解析 `hotspotAttribution` 矩阵：每个 High row 至少包含 GAS concept、phase/lane、system、buffer、operation、count、DOTS risk、next owner 和 evidence；后续 R3/R5/R7/R8 优化必须用同构矩阵证明热点 owner 已下降或被更精确的业务原因替代。
 11. 分析产物必须生成短简报 + 分域子报告：Agent 默认读取 `AutoChessProfileBrief.md`，只有需要深入性能预算、热点矩阵、Journaling、Debugger evidence 或战斗业务日志时，才读取对应 `SubReports/*.md`。
+12. R7/R3 frame-lane 优化不得只看 system timing；必须保留并对比 instant prepare、active mutation prepare 和 active effect pre-tick 的 scanned / skipped / dirty / due / write counters。若下一轮优化后 `avgTickMs` 下降但这些 counters 未下降，或只是把成本转移到 enableable toggles / dependency wait / materialization，不能写成 DOTS 数据形态优化完成。

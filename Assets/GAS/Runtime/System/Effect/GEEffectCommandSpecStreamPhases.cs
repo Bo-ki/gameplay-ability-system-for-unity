@@ -1,6 +1,7 @@
 using Unity.Burst;
 using System.Collections.Generic;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Burst.Intrinsics;
 using Unity.Entities;
 using Unity.Jobs;
@@ -80,19 +81,68 @@ namespace GAS.Runtime
                 },
             });
             state.RequireForUpdate(_ownerInstantCommandQuery);
+            state.RequireForUpdate<GEEffectCommandStreamComponent>();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency = new PromoteOwnerLocalInstantCommandsJob
+            var chunkCount = _ownerInstantCommandQuery.CalculateChunkCountWithoutFiltering();
+            if (chunkCount <= 0)
+                return;
+
+            var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
+            var counters =
+                CollectionHelper.CreateNativeArray<OwnerLocalInstantPrepareCounters>(
+                    chunkCount,
+                    state.WorldUpdateAllocator,
+                    NativeArrayOptions.ClearMemory);
+            var promoteDependency = new PromoteOwnerLocalInstantCommandsJob
             {
                 CommandType = SystemAPI.GetBufferTypeHandle<GEEffectCommandBuffer>(),
                 SetByCallerType = SystemAPI.GetBufferTypeHandle<GESetByCallerValueBuffer>(),
                 SpecType = SystemAPI.GetBufferTypeHandle<GEEffectSpecBuffer>(),
                 NextFrameCommandType = SystemAPI.GetBufferTypeHandle<OwnerLocalInstantNextFrameCommandBuffer>(),
                 NextFrameSetByCallerType = SystemAPI.GetBufferTypeHandle<OwnerLocalInstantNextFrameSetByCallerValueBuffer>(),
+                Counters = counters,
             }.Schedule(_ownerInstantCommandQuery, state.Dependency);
+            state.Dependency = new FlushOwnerLocalInstantPrepareCountersJob
+            {
+                StreamEntity = streamEntity,
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
+                Counters = counters,
+            }.Schedule(promoteDependency);
+        }
+
+        private struct OwnerLocalInstantPrepareCounters
+        {
+            public int ChunkCount;
+            public int ScannedOwnerCount;
+            public int SkippedOwnerCount;
+            public int DirtyOwnerCount;
+            public int ClearedCommandCount;
+            public int ClearedSpecCount;
+            public int PromotedCommandCount;
+
+            public bool HasEvidence =>
+                ChunkCount > 0
+                || ScannedOwnerCount > 0
+                || SkippedOwnerCount > 0
+                || DirtyOwnerCount > 0
+                || ClearedCommandCount > 0
+                || ClearedSpecCount > 0
+                || PromotedCommandCount > 0;
+
+            public void Add(in OwnerLocalInstantPrepareCounters other)
+            {
+                ChunkCount += other.ChunkCount;
+                ScannedOwnerCount += other.ScannedOwnerCount;
+                SkippedOwnerCount += other.SkippedOwnerCount;
+                DirtyOwnerCount += other.DirtyOwnerCount;
+                ClearedCommandCount += other.ClearedCommandCount;
+                ClearedSpecCount += other.ClearedSpecCount;
+                PromotedCommandCount += other.PromotedCommandCount;
+            }
         }
 
         [BurstCompile]
@@ -103,6 +153,7 @@ namespace GAS.Runtime
             public BufferTypeHandle<GEEffectSpecBuffer> SpecType;
             public BufferTypeHandle<OwnerLocalInstantNextFrameCommandBuffer> NextFrameCommandType;
             public BufferTypeHandle<OwnerLocalInstantNextFrameSetByCallerValueBuffer> NextFrameSetByCallerType;
+            [NativeDisableParallelForRestriction] public NativeArray<OwnerLocalInstantPrepareCounters> Counters;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -115,9 +166,12 @@ namespace GAS.Runtime
                 var specs = chunk.GetBufferAccessor(ref SpecType);
                 var nextFrameCommands = chunk.GetBufferAccessor(ref NextFrameCommandType);
                 var nextFrameSetByCallerValues = chunk.GetBufferAccessor(ref NextFrameSetByCallerType);
+                var counters = default(OwnerLocalInstantPrepareCounters);
+                counters.ChunkCount++;
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
+                    counters.ScannedOwnerCount++;
                     var currentCommands = commands[entityIndex];
                     var currentSetByCallerValues = setByCallerValues[entityIndex];
                     var currentSpecs = specs[entityIndex];
@@ -129,8 +183,14 @@ namespace GAS.Runtime
                         && deferredCommands.Length == 0
                         && deferredSetByCallerValues.Length == 0)
                     {
+                        counters.SkippedOwnerCount++;
                         continue;
                     }
+
+                    counters.DirtyOwnerCount++;
+                    counters.ClearedCommandCount += currentCommands.Length;
+                    counters.ClearedSpecCount += currentSpecs.Length;
+                    counters.PromotedCommandCount += deferredCommands.Length;
 
                     currentCommands.Clear();
                     currentSetByCallerValues.Clear();
@@ -145,6 +205,49 @@ namespace GAS.Runtime
                     deferredCommands.Clear();
                     deferredSetByCallerValues.Clear();
                 }
+
+                if (Counters.IsCreated
+                    && (uint)unfilteredChunkIndex < (uint)Counters.Length)
+                {
+                    Counters[unfilteredChunkIndex] = counters;
+                }
+            }
+        }
+
+        [BurstCompile]
+        private struct FlushOwnerLocalInstantPrepareCountersJob : IJob
+        {
+            public Entity StreamEntity;
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            [ReadOnly] public NativeArray<OwnerLocalInstantPrepareCounters> Counters;
+
+            public void Execute()
+            {
+                if (StreamEntity == Entity.Null
+                    || !StreamLookup.HasComponent(StreamEntity)
+                    || !Counters.IsCreated)
+                {
+                    return;
+                }
+
+                var total = default(OwnerLocalInstantPrepareCounters);
+                for (var i = 0; i < Counters.Length; i++)
+                    total.Add(Counters[i]);
+
+                if (!total.HasEvidence)
+                    return;
+
+                var stream = StreamLookup[StreamEntity];
+                EffectCommandSpecStream.AddOwnerLocalInstantPrepareCounters(
+                    ref stream,
+                    total.ChunkCount,
+                    total.ScannedOwnerCount,
+                    total.SkippedOwnerCount,
+                    total.DirtyOwnerCount,
+                    total.ClearedCommandCount,
+                    total.ClearedSpecCount,
+                    total.PromotedCommandCount);
+                StreamLookup[StreamEntity] = stream;
             }
         }
     }
@@ -172,19 +275,65 @@ namespace GAS.Runtime
                 },
             });
             state.RequireForUpdate(_ownerMutationQuery);
+            state.RequireForUpdate<GEEffectCommandStreamComponent>();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency = new ClearOwnerLocalActiveEffectMutationsJob
+            var chunkCount = _ownerMutationQuery.CalculateChunkCountWithoutFiltering();
+            if (chunkCount <= 0)
+                return;
+
+            var streamEntity = SystemAPI.GetSingletonEntity<GEEffectCommandStreamComponent>();
+            var counters =
+                CollectionHelper.CreateNativeArray<ActiveMutationPrepareCounters>(
+                    chunkCount,
+                    state.WorldUpdateAllocator,
+                    NativeArrayOptions.ClearMemory);
+            var clearDependency = new ClearOwnerLocalActiveEffectMutationsJob
             {
                 CommandType = SystemAPI.GetBufferTypeHandle<ActiveEffectMutationCommandBuffer>(),
                 SetByCallerType = SystemAPI.GetBufferTypeHandle<ActiveEffectMutationSetByCallerValueBuffer>(),
                 NextFrameCommandType = SystemAPI.GetBufferTypeHandle<ActiveEffectNextFrameMutationCommandBuffer>(),
                 NextFrameSetByCallerType = SystemAPI.GetBufferTypeHandle<ActiveEffectNextFrameMutationSetByCallerValueBuffer>(),
                 MutationType = SystemAPI.GetBufferTypeHandle<ActiveEffectMutationBuffer>(),
+                Counters = counters,
             }.Schedule(_ownerMutationQuery, state.Dependency);
+            state.Dependency = new FlushActiveMutationPrepareCountersJob
+            {
+                StreamEntity = streamEntity,
+                StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
+                Counters = counters,
+            }.Schedule(clearDependency);
+        }
+
+        private struct ActiveMutationPrepareCounters
+        {
+            public int ChunkCount;
+            public int ScannedOwnerCount;
+            public int SkippedOwnerCount;
+            public int DirtyOwnerCount;
+            public int ClearedMutationCount;
+            public int PromotedCommandCount;
+
+            public bool HasEvidence =>
+                ChunkCount > 0
+                || ScannedOwnerCount > 0
+                || SkippedOwnerCount > 0
+                || DirtyOwnerCount > 0
+                || ClearedMutationCount > 0
+                || PromotedCommandCount > 0;
+
+            public void Add(in ActiveMutationPrepareCounters other)
+            {
+                ChunkCount += other.ChunkCount;
+                ScannedOwnerCount += other.ScannedOwnerCount;
+                SkippedOwnerCount += other.SkippedOwnerCount;
+                DirtyOwnerCount += other.DirtyOwnerCount;
+                ClearedMutationCount += other.ClearedMutationCount;
+                PromotedCommandCount += other.PromotedCommandCount;
+            }
         }
 
         [BurstCompile]
@@ -195,6 +344,7 @@ namespace GAS.Runtime
             public BufferTypeHandle<ActiveEffectNextFrameMutationCommandBuffer> NextFrameCommandType;
             public BufferTypeHandle<ActiveEffectNextFrameMutationSetByCallerValueBuffer> NextFrameSetByCallerType;
             public BufferTypeHandle<ActiveEffectMutationBuffer> MutationType;
+            [NativeDisableParallelForRestriction] public NativeArray<ActiveMutationPrepareCounters> Counters;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -207,9 +357,12 @@ namespace GAS.Runtime
                 var nextFrameCommands = chunk.GetBufferAccessor(ref NextFrameCommandType);
                 var nextFrameSetByCallerValues = chunk.GetBufferAccessor(ref NextFrameSetByCallerType);
                 var mutations = chunk.GetBufferAccessor(ref MutationType);
+                var counters = default(ActiveMutationPrepareCounters);
+                counters.ChunkCount++;
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
+                    counters.ScannedOwnerCount++;
                     var currentCommands = commands[entityIndex];
                     var currentSetByCallerValues = setByCallerValues[entityIndex];
                     var deferredCommands = nextFrameCommands[entityIndex];
@@ -220,8 +373,13 @@ namespace GAS.Runtime
                         && deferredCommands.Length == 0
                         && deferredSetByCallerValues.Length == 0)
                     {
+                        counters.SkippedOwnerCount++;
                         continue;
                     }
+
+                    counters.DirtyOwnerCount++;
+                    counters.ClearedMutationCount += mutations[entityIndex].Length;
+                    counters.PromotedCommandCount += deferredCommands.Length;
 
                     currentCommands.Clear();
                     currentSetByCallerValues.Clear();
@@ -246,6 +404,48 @@ namespace GAS.Runtime
                     deferredCommands.Clear();
                     deferredSetByCallerValues.Clear();
                 }
+
+                if (Counters.IsCreated
+                    && (uint)unfilteredChunkIndex < (uint)Counters.Length)
+                {
+                    Counters[unfilteredChunkIndex] = counters;
+                }
+            }
+        }
+
+        [BurstCompile]
+        private struct FlushActiveMutationPrepareCountersJob : IJob
+        {
+            public Entity StreamEntity;
+            public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            [ReadOnly] public NativeArray<ActiveMutationPrepareCounters> Counters;
+
+            public void Execute()
+            {
+                if (StreamEntity == Entity.Null
+                    || !StreamLookup.HasComponent(StreamEntity)
+                    || !Counters.IsCreated)
+                {
+                    return;
+                }
+
+                var total = default(ActiveMutationPrepareCounters);
+                for (var i = 0; i < Counters.Length; i++)
+                    total.Add(Counters[i]);
+
+                if (!total.HasEvidence)
+                    return;
+
+                var stream = StreamLookup[StreamEntity];
+                EffectCommandSpecStream.AddActiveMutationPrepareCounters(
+                    ref stream,
+                    total.ChunkCount,
+                    total.ScannedOwnerCount,
+                    total.SkippedOwnerCount,
+                    total.DirtyOwnerCount,
+                    total.ClearedMutationCount,
+                    total.PromotedCommandCount);
+                StreamLookup[StreamEntity] = stream;
             }
         }
     }

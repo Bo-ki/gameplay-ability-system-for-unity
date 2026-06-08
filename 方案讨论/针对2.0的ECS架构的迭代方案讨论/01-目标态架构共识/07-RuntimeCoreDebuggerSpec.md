@@ -126,6 +126,23 @@ Debugger 必须能记录失败优化，而不是只记录最终成功基线。�
 3. 如果某个优化让 `FramePrepare` 或单个 system timing 下降，但 `journalingWorldRecords`、`EnableComponent`、`CoreSimulation`、`DependencyWait`、Job safety exception 或 battle completion 变差，Matrix 必须输出 regression row 或在归档中记录为反例。
 4. Brief / 子报告必须保留失败样本路径，避免后续 agent 只复用成功结论而重新引入已证伪链路。
 
+### Frame Lane Counter Contract
+
+R7/R3 这类 frame-lane 优化必须具备 Runtime-owned counters，不能只依赖 Journaling TopN 或 system timing 推断。目标态 Debugger 至少要能输出下列字段族：
+
+| Lane | 必填 counter | 用途 |
+|---|---|---|
+| owner-local instant prepare | scanned owners、skipped owners、dirty owners、cleared commands/specs、promoted commands | 判断 command prepare 是否仍在稀疏扫描 owner buffer，或是否只是清空/复制空 buffer |
+| active mutation prepare | scanned owners、skipped owners、dirty owners、cleared mutation commands、promoted commands | 判断 active mutation fan-in 是否存在 per-frame clear/copy 热点 |
+| active effect pre-tick | scanned owners、processed owners、skipped owners、scanned slots、due slots、noop slots、mutation writes | 判断 duration / period / stack / granted state tick 是否退化为全量 slot scan |
+
+解释规则：
+
+1. 这些 counter 属于 RuntimeMetric / DiagnosticEvidence stable surface，外部 AutoChess、CI、Editor Debugger 和 analysis script 只能消费 evidence envelope，不得绑定内部 component / buffer 字段布局。
+2. 优化前后必须对比 counter 与 hotspot matrix：若 `avgTickMs` 下降但 scanned owner / slot、noop slot 或 buffer clear count 没有改善，只能写成局部耗时波动。
+3. 高频 enableable marker 不得作为默认 dirty lane；任何 marker 方案必须同时证明 `EnableComponent` TopN、Job safety、dependency wait 和 battle completion 不回归。
+4. Profiler disabled 时，frame-lane counter 可以作为任务路由证据，但不能把样本写成 DOTS profiler-backed excellent。
+
 ### Split Report Contract
 
 Debugger / validation 报告必须默认面向 Agent 可读性设计。全量 log 可以保留为原始证据，但常规审查入口必须是一份短简报和若干领域子报告：

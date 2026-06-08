@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-当前 AutoChess x50 无头验证已经能把“业务链路通过”“strict pure logic budget 通过”和“DOTS Profiler-backed performance excellent”拆成三种不同结论。无头场景没有模型、特效、UI、动画、音频和真实 PlayerLoop 表现成本；真实游戏里这些成本会占用大部分帧预算，因此 GAS Runtime 纯逻辑平均耗时必须远低于 16.67ms / 33.33ms 的整帧预算。最新有效基线是 DebuggerProbe Run7：x50 strict pure logic budget 通过，但不能写成性能优秀，因为 Profiler evidence disabled，且 Debugger/Journaling/hotspot attribution matrix 仍定位出明确的数据形态热点。
+当前 AutoChess x50 无头验证已经能把“业务链路通过”“strict pure logic budget 通过”和“DOTS Profiler-backed performance excellent”拆成三种不同结论。无头场景没有模型、特效、UI、动画、音频和真实 PlayerLoop 表现成本；真实游戏里这些成本会占用大部分帧预算，因此 GAS Runtime 纯逻辑平均耗时必须远低于 16.67ms / 33.33ms 的整帧预算。最新有效基线是 DebuggerProbe Run8：x50 strict pure logic budget 通过，但不能写成性能优秀，因为 Profiler evidence disabled；同时 Runtime-owned frame-lane counters 已把 R7/R3 热点定位到 owner 稀疏扫描、active mutation prepare 和 active effect pre-tick slot 扫描。
 
 上一轮 x50 / 200 units / measuredTicks=9 证据显示：
 
@@ -64,6 +64,22 @@ DebuggerProbe Run6 / pending marker 尝试是明确反例：它把 `OwnerLocalIn
 | `DebuggerOwner.avgMs` | 42.750ms | 不并入 performance pass | diagnostic-only |
 | `performanceExcellentPassed` | false | 必须 profiler evidence enabled | 阻塞 |
 
+最新 DebuggerProbe Run8 / frame-lane counters / x50 / 200 units / measuredTicks=9 证据显示：
+
+| 指标 | Run8 当前值 | 严格预算 | 判定 |
+|---|---:|---:|---|
+| `passed` | true | 业务链路必须通过 | 通过 |
+| `avgTickMs` | 1.217ms | 1.500ms | 通过 |
+| `GASTickTotal.avgMs` | 1.201ms | 1.500ms | 通过 |
+| `GASCoreSimulationSystemGroup.avgMs` | 0.726ms | 0.900ms | 通过 |
+| `BoundaryOwner.avgMs` | 0.273ms | 0.350ms | 通过 |
+| `DebuggerOwner.avgMs` | 115.012ms | 不并入 performance pass | diagnostic-only |
+| `performanceExcellentPassed` | false | 必须 profiler evidence enabled | 阻塞 |
+| instant prepare scanned/skipped/dirty owners | 2400 / 1450 / 950 | 必须可对比下降 | 新 R7/R3 基线 |
+| active mutation prepare scanned/skipped/dirty owners | 2400 / 1750 / 650 | 必须可对比下降 | 新 R7/R3 基线 |
+| active effect pre-tick owners scanned/processed/skipped | 2400 / 950 / 1450 | 必须可对比下降 | 新 R7/R3 基线 |
+| active effect pre-tick slots scanned/due/noop | 1200 / 550 / 650 | 必须可对比下降 | 新 R7/R3 基线 |
+
 ## 当前代码事实
 
 1. `AutoChessBattleValidationRun` 已新增 `AutoChessHeadlessLogicBudgetResult`，把严格无头逻辑预算接入 `AutoChessValidationRunResult.Passed`。
@@ -75,6 +91,7 @@ DebuggerProbe Run6 / pending marker 尝试是明确反例：它把 `OwnerLocalIn
 7. 2026-06-08 DebuggerProbe Run4 已把 strict budget 报告与 hotspot attribution matrix 合并：报告输出 `AutoChessDemoHeadlessHotspotAttributionMatrix:`，分析脚本输出 Markdown `Hotspot Attribution Matrix` 与 JSON `hotspotAttribution`。该矩阵把 `OwnerLocalGameplayFactBuffer=11250`、`GASActiveEffectPreTickSystem=15800`、`OwnerLocalInstantCommandFramePrepareSystem=9000`、`ActiveEffectOwnerLocalMutationFramePrepareSystem=13000`、`AttributeValueBuffer=8250`、`executionSpecScans=1350` 和 `Profiler disabled` 分派到下一轮 owner。
 8. `Analyze-AutoChessProfile.ps1` 现在额外输出 `AutoChessProfileBrief.md` 和 `SubReports/PerformanceBudget.md`、`HotspotAttribution.md`、`JournalingTopN.md`、`DebuggerEvidence.md`、`RuntimeBattleLog.md`。后续性能审查默认先读 brief，只有需要对应领域证据时再读子报告，避免 Agent 为一个性能 owner 读取整份长日志。
 9. 2026-06-08 Run7 已移除 `OwnerLocalInstantCommandPendingComponent` / `ActiveEffectMutationPendingComponent` 这条高频 enableable marker 热路径；ASC archetype 回到 38 个 core component，FramePrepare / Normalize / SpecBuild 以 owner-local buffer 作为事实源，并通过 `Tools/Diagnostics/Verify-GAS-RuntimeCoreBoundary.ps1` 阻断 pending marker 回流。
+10. 2026-06-08 Run8 已接入 frame-lane counters：`OwnerLocalInstantPrepare*`、`ActiveMutationPrepare*`、`ActiveEffectPreTick*` 进入 Runtime Debugger evidence、AutoChess headless report 和 split report。后续 R7/R3 优化必须用这些 counters 证明 scanned owner、skipped owner、dirty owner、due slot、noop slot 或 mutation write 的数据形态变化，不能只用平均耗时波动交还。
 
 ## 官方规则对照
 
@@ -108,7 +125,7 @@ DebuggerProbe Run6 / pending marker 尝试是明确反例：它把 `OwnerLocalIn
 3. Debugger diagnostic pass 的 `DebuggerOwner` 成本只能用于热点定位，不能并入 performance pass，也不能被忽略。
 4. `CoreRuntimeOwner` 与 `GASCoreSimulationSystemGroup` 是下一轮首要瘦身目标；`BoundaryOwner` 是第二优先级，说明 observation / projection / report side 仍然过重。
 5. `GetBufferRW=67884`、`GetComponentDataRW=18892`、`GetBufferRW@GASActiveEffectPreTickSystem=15800`、`OwnerLocalGameplayFactBuffer=11250`、`GEEffectCommandStreamComponent=9237` 这类 TopN 必须按数据 owner 继续拆，不得只作为日志数字归档。
-6. Run7 虽然 x50 strict budget 通过，但仍命中 `dependencyWaitRisks=4`、`syncQueryBudget=13`、`ownerLocalFactMaxOwnerRange=9`、`executionSpecScans/executionMatchedEffectSpecs=3.86:1`、`GetBufferRW=67884`、`GetComponentDataRW=18892` 和 `Profiler disabled`；因此 ISSUE-014 不关闭，只从“x50 预算超标”升级为“x50 预算通过但规模化 / Profiler / 数据形态未达 DOTS 优秀”。
+6. Run8 虽然 x50 strict budget 通过，但仍命中 `dependencyWaitRisks=4`、`syncQueryBudget=13`、`ownerLocalFactMaxOwnerRange=9`、`executionSpecScans/executionMatchedEffectSpecs=3.86:1`、`GetBufferRW=67884` 级别、`GetComponentDataRW=20210` 级别、R7/R3 frame-lane 稀疏扫描和 `Profiler disabled`；因此 ISSUE-014 不关闭，只从“x50 预算超标”升级为“x50 预算通过但规模化 / Profiler / 数据形态未达 DOTS 优秀”。
 7. Run7 的 Unity batchmode 首次执行只完成编译刷新，第二次执行才写出有效 summary；后续验证必须以 summary 文件和 `AutoChessDemoRuntimeReport` 为准，不能只看 Unity exit code 0。
 8. 高频 enableable marker 会把 dirty lane 成本转移成 `EnableComponent` / Job safety 风险。若后续再尝试 marker 门控，必须证明 toggle 次数按 owner 去重且无 aliasing；否则默认禁止进入 Runtime Core hot path。
 

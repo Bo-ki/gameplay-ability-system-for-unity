@@ -87,6 +87,27 @@ namespace GAS.Runtime
         public int OwnerLocalFactDirtyOwnerCount;
         public int OwnerLocalFactSkippedOwnerCount;
         public int OwnerLocalFactClearedOwnerCount;
+        public int OwnerLocalInstantPrepareChunkCount;
+        public int OwnerLocalInstantPrepareScannedOwnerCount;
+        public int OwnerLocalInstantPrepareSkippedOwnerCount;
+        public int OwnerLocalInstantPrepareDirtyOwnerCount;
+        public int OwnerLocalInstantPrepareClearedCommandCount;
+        public int OwnerLocalInstantPrepareClearedSpecCount;
+        public int OwnerLocalInstantPreparePromotedCommandCount;
+        public int ActiveMutationPrepareChunkCount;
+        public int ActiveMutationPrepareScannedOwnerCount;
+        public int ActiveMutationPrepareSkippedOwnerCount;
+        public int ActiveMutationPrepareDirtyOwnerCount;
+        public int ActiveMutationPrepareClearedMutationCount;
+        public int ActiveMutationPreparePromotedCommandCount;
+        public int ActiveEffectPreTickChunkCount;
+        public int ActiveEffectPreTickScannedOwnerCount;
+        public int ActiveEffectPreTickSkippedOwnerCount;
+        public int ActiveEffectPreTickProcessedOwnerCount;
+        public int ActiveEffectPreTickScannedSlotCount;
+        public int ActiveEffectPreTickDueSlotCount;
+        public int ActiveEffectPreTickNoopSlotCount;
+        public int ActiveEffectPreTickMutationWriteCount;
         public int MagnitudeSourceCurrentValueLookupCount;
         public int MagnitudeSourceCapturedValueHitCount;
         public int MagnitudeSourceCaptureMissCount;
@@ -713,6 +734,27 @@ namespace GAS.Runtime
             stream.OwnerLocalFactDirtyOwnerCount = 0;
             stream.OwnerLocalFactSkippedOwnerCount = 0;
             stream.OwnerLocalFactClearedOwnerCount = 0;
+            stream.OwnerLocalInstantPrepareChunkCount = 0;
+            stream.OwnerLocalInstantPrepareScannedOwnerCount = 0;
+            stream.OwnerLocalInstantPrepareSkippedOwnerCount = 0;
+            stream.OwnerLocalInstantPrepareDirtyOwnerCount = 0;
+            stream.OwnerLocalInstantPrepareClearedCommandCount = 0;
+            stream.OwnerLocalInstantPrepareClearedSpecCount = 0;
+            stream.OwnerLocalInstantPreparePromotedCommandCount = 0;
+            stream.ActiveMutationPrepareChunkCount = 0;
+            stream.ActiveMutationPrepareScannedOwnerCount = 0;
+            stream.ActiveMutationPrepareSkippedOwnerCount = 0;
+            stream.ActiveMutationPrepareDirtyOwnerCount = 0;
+            stream.ActiveMutationPrepareClearedMutationCount = 0;
+            stream.ActiveMutationPreparePromotedCommandCount = 0;
+            stream.ActiveEffectPreTickChunkCount = 0;
+            stream.ActiveEffectPreTickScannedOwnerCount = 0;
+            stream.ActiveEffectPreTickSkippedOwnerCount = 0;
+            stream.ActiveEffectPreTickProcessedOwnerCount = 0;
+            stream.ActiveEffectPreTickScannedSlotCount = 0;
+            stream.ActiveEffectPreTickDueSlotCount = 0;
+            stream.ActiveEffectPreTickNoopSlotCount = 0;
+            stream.ActiveEffectPreTickMutationWriteCount = 0;
             stream.MagnitudeSourceCurrentValueLookupCount = 0;
             stream.MagnitudeSourceCapturedValueHitCount = 0;
             stream.MagnitudeSourceCaptureMissCount = 0;
@@ -790,6 +832,63 @@ namespace GAS.Runtime
             stream.MagnitudeSourceSourceAttributeLookupCount += sourceAttributeLookups;
             stream.MagnitudeSourceTargetAttributeLookupCount += targetAttributeLookups;
             stream.MagnitudeSourceExecutionInputLookupCount += executionInputLookups;
+        }
+
+        public static void AddOwnerLocalInstantPrepareCounters(
+            ref GEEffectCommandStreamComponent stream,
+            int chunks,
+            int scannedOwners,
+            int skippedOwners,
+            int dirtyOwners,
+            int clearedCommands,
+            int clearedSpecs,
+            int promotedCommands)
+        {
+            stream.OwnerLocalInstantPrepareChunkCount += chunks;
+            stream.OwnerLocalInstantPrepareScannedOwnerCount += scannedOwners;
+            stream.OwnerLocalInstantPrepareSkippedOwnerCount += skippedOwners;
+            stream.OwnerLocalInstantPrepareDirtyOwnerCount += dirtyOwners;
+            stream.OwnerLocalInstantPrepareClearedCommandCount += clearedCommands;
+            stream.OwnerLocalInstantPrepareClearedSpecCount += clearedSpecs;
+            stream.OwnerLocalInstantPreparePromotedCommandCount += promotedCommands;
+        }
+
+        public static void AddActiveMutationPrepareCounters(
+            ref GEEffectCommandStreamComponent stream,
+            int chunks,
+            int scannedOwners,
+            int skippedOwners,
+            int dirtyOwners,
+            int clearedMutations,
+            int promotedCommands)
+        {
+            stream.ActiveMutationPrepareChunkCount += chunks;
+            stream.ActiveMutationPrepareScannedOwnerCount += scannedOwners;
+            stream.ActiveMutationPrepareSkippedOwnerCount += skippedOwners;
+            stream.ActiveMutationPrepareDirtyOwnerCount += dirtyOwners;
+            stream.ActiveMutationPrepareClearedMutationCount += clearedMutations;
+            stream.ActiveMutationPreparePromotedCommandCount += promotedCommands;
+        }
+
+        public static void AddActiveEffectPreTickCounters(
+            ref GEEffectCommandStreamComponent stream,
+            int chunks,
+            int scannedOwners,
+            int skippedOwners,
+            int processedOwners,
+            int scannedSlots,
+            int dueSlots,
+            int noopSlots,
+            int mutationWrites)
+        {
+            stream.ActiveEffectPreTickChunkCount += chunks;
+            stream.ActiveEffectPreTickScannedOwnerCount += scannedOwners;
+            stream.ActiveEffectPreTickSkippedOwnerCount += skippedOwners;
+            stream.ActiveEffectPreTickProcessedOwnerCount += processedOwners;
+            stream.ActiveEffectPreTickScannedSlotCount += scannedSlots;
+            stream.ActiveEffectPreTickDueSlotCount += dueSlots;
+            stream.ActiveEffectPreTickNoopSlotCount += noopSlots;
+            stream.ActiveEffectPreTickMutationWriteCount += mutationWrites;
         }
 
         public static void SetActiveEffectSlotSourceSnapshotCapacity(

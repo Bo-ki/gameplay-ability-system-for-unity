@@ -36,6 +36,14 @@ namespace GAS.Runtime
         public readonly int SlotInhibitedCount;
         public readonly int SlotPendingRemoveCount;
         public readonly int ChunkSkipDuePeriodSlotCount;
+        public readonly int PreTickChunkCount;
+        public readonly int PreTickScannedOwnerCount;
+        public readonly int PreTickSkippedOwnerCount;
+        public readonly int PreTickProcessedOwnerCount;
+        public readonly int PreTickScannedSlotCount;
+        public readonly int PreTickDueSlotCount;
+        public readonly int PreTickNoopSlotCount;
+        public readonly int PreTickMutationWriteCount;
 
         public GasRuntimeActiveEffectEvidenceSnapshot(in GasRuntimeCoreDiagnosticCounters counters)
         {
@@ -47,6 +55,14 @@ namespace GAS.Runtime
             SlotInhibitedCount = counters.ActiveEffectSlotInhibitedCount;
             SlotPendingRemoveCount = counters.ActiveEffectSlotPendingRemoveCount;
             ChunkSkipDuePeriodSlotCount = counters.ActiveEffectChunkSkipDuePeriodSlotCount;
+            PreTickChunkCount = counters.ActiveEffectPreTickChunkCount;
+            PreTickScannedOwnerCount = counters.ActiveEffectPreTickScannedOwnerCount;
+            PreTickSkippedOwnerCount = counters.ActiveEffectPreTickSkippedOwnerCount;
+            PreTickProcessedOwnerCount = counters.ActiveEffectPreTickProcessedOwnerCount;
+            PreTickScannedSlotCount = counters.ActiveEffectPreTickScannedSlotCount;
+            PreTickDueSlotCount = counters.ActiveEffectPreTickDueSlotCount;
+            PreTickNoopSlotCount = counters.ActiveEffectPreTickNoopSlotCount;
+            PreTickMutationWriteCount = counters.ActiveEffectPreTickMutationWriteCount;
         }
     }
 
@@ -91,6 +107,19 @@ namespace GAS.Runtime
         public readonly int OwnerLocalFactDirtyOwnerCount;
         public readonly int OwnerLocalFactSkippedOwnerCount;
         public readonly int OwnerLocalFactClearedOwnerCount;
+        public readonly int OwnerLocalInstantPrepareChunkCount;
+        public readonly int OwnerLocalInstantPrepareScannedOwnerCount;
+        public readonly int OwnerLocalInstantPrepareSkippedOwnerCount;
+        public readonly int OwnerLocalInstantPrepareDirtyOwnerCount;
+        public readonly int OwnerLocalInstantPrepareClearedCommandCount;
+        public readonly int OwnerLocalInstantPrepareClearedSpecCount;
+        public readonly int OwnerLocalInstantPreparePromotedCommandCount;
+        public readonly int ActiveMutationPrepareChunkCount;
+        public readonly int ActiveMutationPrepareScannedOwnerCount;
+        public readonly int ActiveMutationPrepareSkippedOwnerCount;
+        public readonly int ActiveMutationPrepareDirtyOwnerCount;
+        public readonly int ActiveMutationPrepareClearedMutationCount;
+        public readonly int ActiveMutationPreparePromotedCommandCount;
 
         public GasRuntimeAttributeFactEvidenceSnapshot(in GasRuntimeCoreDiagnosticCounters counters)
         {
@@ -111,6 +140,19 @@ namespace GAS.Runtime
             OwnerLocalFactDirtyOwnerCount = counters.OwnerLocalFactDirtyOwnerCount;
             OwnerLocalFactSkippedOwnerCount = counters.OwnerLocalFactSkippedOwnerCount;
             OwnerLocalFactClearedOwnerCount = counters.OwnerLocalFactClearedOwnerCount;
+            OwnerLocalInstantPrepareChunkCount = counters.OwnerLocalInstantPrepareChunkCount;
+            OwnerLocalInstantPrepareScannedOwnerCount = counters.OwnerLocalInstantPrepareScannedOwnerCount;
+            OwnerLocalInstantPrepareSkippedOwnerCount = counters.OwnerLocalInstantPrepareSkippedOwnerCount;
+            OwnerLocalInstantPrepareDirtyOwnerCount = counters.OwnerLocalInstantPrepareDirtyOwnerCount;
+            OwnerLocalInstantPrepareClearedCommandCount = counters.OwnerLocalInstantPrepareClearedCommandCount;
+            OwnerLocalInstantPrepareClearedSpecCount = counters.OwnerLocalInstantPrepareClearedSpecCount;
+            OwnerLocalInstantPreparePromotedCommandCount = counters.OwnerLocalInstantPreparePromotedCommandCount;
+            ActiveMutationPrepareChunkCount = counters.ActiveMutationPrepareChunkCount;
+            ActiveMutationPrepareScannedOwnerCount = counters.ActiveMutationPrepareScannedOwnerCount;
+            ActiveMutationPrepareSkippedOwnerCount = counters.ActiveMutationPrepareSkippedOwnerCount;
+            ActiveMutationPrepareDirtyOwnerCount = counters.ActiveMutationPrepareDirtyOwnerCount;
+            ActiveMutationPrepareClearedMutationCount = counters.ActiveMutationPrepareClearedMutationCount;
+            ActiveMutationPreparePromotedCommandCount = counters.ActiveMutationPreparePromotedCommandCount;
         }
     }
 
