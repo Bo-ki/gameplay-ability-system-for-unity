@@ -72,9 +72,8 @@ namespace GAS.AutoChessDemo
         public static AutoChessBattlePresentationSource FromResult(
             in AutoChessBattleResult result)
         {
-            var counters = result.RuntimeDiagnostics.CoreCounters;
-            var backbone = result.RuntimeDiagnostics.FrameBackboneCounters;
-            var disabledReason = backbone.RenderDisabledReasonCount > 0
+            var evidence = result.RuntimeDiagnostics.Evidence;
+            var disabledReason = evidence.FrameBackbone.RenderDisabledReasonCount > 0
                 ? "reported-by-runtime"
                 : "headless-log-bridge";
             return new AutoChessBattlePresentationSource(
@@ -82,7 +81,7 @@ namespace GAS.AutoChessDemo
                 result.Winner,
                 result.BattleTicks,
                 result.DriverIssuedCommands,
-                counters.PresentationCount,
+                evidence.Workload.PresentationCount,
                 disabledReason,
                 result.BattleLog);
         }

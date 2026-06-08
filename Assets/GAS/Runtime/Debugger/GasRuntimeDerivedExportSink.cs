@@ -13,6 +13,7 @@ namespace GAS.Runtime
             var diagnosticsText = GasRuntimeDebugger.ExportToText(snapshot, maxEvents);
             var builder = new StringBuilder(diagnosticsText.Length + 3072);
             builder.Append(diagnosticsText);
+            AppendDiagnosticEvidenceSnapshot(builder, snapshot.Evidence);
             AppendMetricFamilySnapshot(builder, snapshot.MetricFamilies);
             AppendDataOrientedScorecard(builder, scorecard);
             return builder.ToString();
@@ -24,6 +25,46 @@ namespace GAS.Runtime
             var builder = new StringBuilder(1024);
             AppendDataOrientedScorecard(builder, scorecard);
             return builder.ToString();
+        }
+
+        private static void AppendDiagnosticEvidenceSnapshot(
+            StringBuilder builder,
+            in GasRuntimeDiagnosticEvidenceSnapshot evidence)
+        {
+            builder.Append("runtimeDiagnosticEvidenceSnapshot|source=GasRuntimeDiagnosticEvidenceSnapshot")
+                .Append("|passMode=")
+                .Append(nameof(GasRuntimeDiagnosticsPassMode.DerivedExport))
+                .Append("|costDomain=")
+                .Append(nameof(GasRuntimeDiagnosticsCostDomain.Debugger))
+                .Append("|evidenceTier=")
+                .Append(nameof(GasRuntimeDiagnosticsEvidenceTier.DerivedExport))
+                .Append("|events=")
+                .Append(evidence.Events.EventCount)
+                .Append("|dropped=")
+                .Append(evidence.Events.DroppedEventCount)
+                .Append("|warnings=")
+                .Append(evidence.Events.WarningCount)
+                .Append("|errors=")
+                .Append(evidence.Events.ErrorCount)
+                .Append("|blockingErrors=")
+                .Append(evidence.Events.BlockingErrorCount)
+                .Append("|effectCommandStreamPressureWarnings=")
+                .Append(evidence.Events.EffectCommandStreamPressure.WarningCount)
+                .Append("|effectCommandStreamPeakCount=")
+                .Append(evidence.Events.EffectCommandStreamPressure.PeakCount)
+                .Append("|effectCommandStreamPeakCapacity=")
+                .Append(evidence.Events.EffectCommandStreamPressure.PeakCapacity)
+                .Append("|workloadRequests=")
+                .Append(evidence.Workload.RequestCount)
+                .Append("|workloadFacts=")
+                .Append(evidence.Workload.FactCount)
+                .Append("|activeMutationCommands=")
+                .Append(evidence.ActiveMutation.CommandCount)
+                .Append("|pendingAttributeAppliedDeltas=")
+                .Append(evidence.AttributeFact.PendingAppliedDeltaCount)
+                .Append("|runtimeStructuralApprox=")
+                .Append(evidence.Structural.RuntimeStructuralApproximationCount)
+                .AppendLine();
         }
 
         private static void AppendMetricFamilySnapshot(

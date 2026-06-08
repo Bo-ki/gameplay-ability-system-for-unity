@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-Debugger 与 official diff 工具已经存在，不再是“没有证据工具”。当前问题已经升级为：Debugger 模块本身还没有成为数据导向的性能证据系统。它能输出 GAS 概念计数、timing、buffer pressure、observation materialization 和 official diff，但 `GasRuntimeDebugger.cs` 当前仍把配置、singleton 解析、采样、snapshot、diagnostic event schema、retention、官方工具差分口径和文本导出塞进同一条大链路。性能优化下一步必须落到 Debugger 模块的架构瘦身：把 hot-path numeric counters、diagnostic materialization、official capture 和 derived export 拆成不同 owner，并把 GAS 概念字段映射到 DOTS 数据维度，而不是继续向单个大事件结构追加字段。
+Debugger 与 official diff 工具已经存在，不再是“没有证据工具”。当前问题已经升级为：Debugger 模块本身还没有成为数据导向的性能证据系统。它能输出 GAS 概念计数、timing、buffer pressure、observation materialization 和 official diff，但 `GasRuntimeDebugger.cs` 当前仍把配置、singleton 解析、采样、snapshot、diagnostic event schema、retention、官方工具差分口径和文本导出塞进同一条大链路。性能优化下一步必须落到 Debugger 模块的架构瘦身：把 hot-path numeric counters、diagnostic materialization、official capture 和 derived export 拆成不同 owner，并把 GAS 概念字段映射到 DOTS 数据维度，而不是继续向单个大事件结构追加字段。由于当前 GAS DOTS 架构仍处快速迭代期，Debugger 内部物理结构允许继续破坏性重构；外部 AutoChess、CI、Editor Debugger 和报告链路只能消费稳定 evidence surface，避免每次内部 counter / buffer / pass owner 调整都产生迁移适配成本。
 
 ## 已成立事实
 
@@ -15,7 +15,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 5. AutoChess validation report 已能输出 runtime diagnostics、physical group timing、hotspot summary、official diff summary、dataflow 和 sequence 导出；这些导出是 structured evidence 的消费面，不是机器验收源本身。
 6. 2026-06-08 Observation materialization 切片已把 Debugger `ToEntityArray` 成本拆到专用 evidence：`ObservationMaterialization` diagnostic event、`runtimeObservationMaterialization` text export、AutoChess `observationMaterializedQueries` / `observationMaterializationUs` / `performancePassObservationPollutionRisks` 字段均已出现。
 7. 2026-06-08 Performance observation isolation 切片已把 AutoChess headless validation 拆成 performance pass、diagnostic pass 和 official diff pass：performance summary / hotspot summary 输出 `performancePassObservationPollutionRisks=0`，diagnostic Debugger summary 仍输出 `observationMaterializedQueries=12` 和 diagnostic 口径的 `performancePassObservationPollutionRisks=12`。
-8. 2026-06-08 Magnitude Source 切片已把 `EffectMagnitudeResolver` 与 `GEExecutionCalculationSystem` 的 current value lookup、snapshot hit/miss、capture miss live lookup、fallback value/fact、source/target attribute lookup、execution input lookup 写入 frame-local stream counter，并由 `GasRuntimeDebugger.RecordMagnitudeSourceEvidence(...)` 采样为 `MagnitudeSource` diagnostic event、`GasRuntimeMagnitudeSourceCounters` snapshot 和 `runtimeMagnitudeSource` text export；AutoChess validation report 代码路径已消费 `RuntimeDiagnostics.MagnitudeSourceCounters` 并输出 `magnitudeSourceCaptureMissLiveLookups` / `magnitudeSourceFallbackFacts` 等字段。`PassSplitMagnitudeSource-Run1` x50 日志证明 pass 隔离与导出链路未破坏业务链路，但不是 Profiler enabled、x100/x1000 规模或真实 magnitude 热点覆盖证明。
+8. 2026-06-08 Magnitude Source 切片已把 `EffectMagnitudeResolver` 与 `GEExecutionCalculationSystem` 的 current value lookup、snapshot hit/miss、capture miss live lookup、fallback value/fact、source/target attribute lookup、execution input lookup 写入 frame-local stream counter，并由 `GasRuntimeDebugger.RecordMagnitudeSourceEvidence(...)` 采样为 `MagnitudeSource` diagnostic event、`GasRuntimeMagnitudeSourceCounters` snapshot 和 `runtimeMagnitudeSource` text export；最新 AutoChess validation report 代码路径已改为消费 `RuntimeDiagnostics.Evidence.MagnitudeSource` 并输出 `magnitudeSourceCaptureMissLiveLookups` / `magnitudeSourceFallbackFacts` 等字段。`PassSplitMagnitudeSource-Run1` x50 日志证明 pass 隔离与导出链路未破坏业务链路，但不是 Profiler enabled、x100/x1000 规模或真实 magnitude 热点覆盖证明。
 9. 2026-06-08 `PassSplitMagnitudeSource-Run1` x50 日志显示 `AutoChessDemoValidationRunResult passed=True` / `thresholdsPassed=True` / `runtimeChainPassed=True` / `repeatRunPassed=True`，并导出 `runtimeCoreMagnitudeSource` 与 `runtimeMagnitudeSource`；当前 `magnitudeSource*` 字段全为 0，只能证明 evidence 链路贯通，不能证明真实 SourceAttribute / TargetAttribute / ExecutionCalculation 业务覆盖。
 10. 2026-06-08 `TagRequirementQuery-Run5` x50 日志显示 active effect slot pre-tick SourceAttribute snapshot gather / explicit remove lane counter 修复、TagRequirement catalog/evaluator 贯通和 instant GE requirement gate 修复后，AutoChess validation 仍满足 `passed=True` / `thresholdsPassed=True` / `runtimeChainPassed=True` / `repeatRunPassed=True` / `blockingDebugErrors=0`，且未命中 `Exception`、`SnapshotLaneCounters`、`Use CollectionHelper` 或 `error CS`。早期 Run 日志如果业务字段通过但仍含 Unity job safety 异常，不作为最终干净证据。Run5 仍显示 `profiler disabled; Entities profiler modules collect no data`，`magnitudeSource*` 字段仍为 0，因此只能作为本切片业务链路和 safety 回归证据，不能作为 Debugger / Profiler 性能闭环或真实 magnitude source 热点覆盖证明。
 11. 2026-06-08 Debugger 模块复审确认 `GasRuntimeDebugger.cs` 已膨胀为约 4k 行级单体：文件同时声明 `GASRuntimeDebuggerComponent`、`GASRuntimeDiagnosticEventBuffer`、`GasRuntimeCoreDiagnosticCounters`、`GasRuntimeFrameBackboneDiagnosticCounters`、snapshot、singleton cache、采样 API、retention、text export 和多个私有读取器。这是当前架构事实，不是目标态形态。
@@ -29,6 +29,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 19. 2026-06-08 第二轮 Debugger 瘦身已新增 `Assets/GAS/Runtime/Debugger/GasRuntimeDerivedExportSink.cs`，把 `runtimeDataOrientedScorecard` 文本派生导出从 4k 行级 `GasRuntimeDebugger.cs` 物理拆出；`GasRuntimeDebugger` 现在只保留 public facade overload，并委托给 `GasRuntimeDerivedExportSink`。这说明 `DerivedExportSink` owner 已开始落地，但 snapshot 读取、event schema、retention、materialization 和 official diff 仍未拆出。
 20. `GasRuntimeDataOrientedScorecard` 当前已新增 `MetricFamilyMask` 与 `DominantRisk`，AutoChess headless budget summary 和 Runtime text export 均输出 `metricFamilyMask=0x...` / `dominantRisk=...`。该字段能把 workload、GAS concept、data shape、API health、timing、overhead 聚合成机器可读风险分类；但它仍只是 scorecard 派生分类，不等于 `GASRuntimeDiagnosticEventBuffer` 已拆为 metric family buffers 或 SoA snapshot。
 21. 2026-06-08 第三刀已新增 `Assets/GAS/Runtime/Debugger/GasRuntimeMetricFamilySnapshot.cs`：`GasRuntimeDiagnosticSnapshot` 现在在构造时生成 `MetricFamilies`，把 workload、GAS concept、data shape、API health、structural、overhead 分为只读 family snapshot；magnitude source family 口径会用 core counter 与 diagnostic event counter 取最大值，避免 performance pass 关闭 raw event 时丢 evidence，也避免 diagnostic pass 双计；`GasRuntimeDataOrientedScorecard` 改为消费该 snapshot，而不是直接读取 raw core counters / observation counters；`GasRuntimeDerivedExportSink` 新增机器可读 `runtimeMetricFamilySnapshot|source=GasRuntimeMetricFamilySnapshot` 行；AutoChess headless budget summary 新增 `metricFamilySource=GasRuntimeMetricFamilySnapshot`。这说明外部 evidence 面已经从易变内部 counter 解耦出第一层稳定合约，但 event buffer 物理形态仍是 mega-row，`DiagnosticMaterializationPass` / `RuntimeMetricSink` / `OfficialCorrelationPass` 也仍未拆出。
+22. 2026-06-08 第四刀已新增 `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticEvidenceSnapshot.cs`：`GasRuntimeDiagnosticSnapshot` 现在构造 `Evidence`，把 raw event / core counter / materialization counter 物化成 `Events`、`Workload`、`ActiveEffect`、`ActiveMutation`、`AttributeFact`、`ApiHealth`、`Structural`、`FrameBackbone`、`Observation`、`MagnitudeSource` 等稳定 read model；`GasRuntimeDerivedExportSink` 新增机器可读 `runtimeDiagnosticEvidenceSnapshot|source=GasRuntimeDiagnosticEvidenceSnapshot` 行；AutoChess validation、hotspot、runtime chain、repeat-run、presentation bridge 和 README 均已改为消费 `RuntimeDiagnostics.Evidence.*`，当前 AutoChess 代码不再直接绑定 `RuntimeDiagnostics.CoreCounters` / `FrameBackboneCounters` / `ObservationMaterializationCounters` / `MagnitudeSourceCounters` / `Events` / `Stats`。这降低了 Debugger 内部继续拆 typed buffer / SoA snapshot / pass owner 时的外部迁移成本，但不代表 `GASRuntimeDiagnosticEventBuffer` 物理拆分已完成。
 
 ## 仍成立风险
 
@@ -41,7 +42,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 7. 最新 AutoChess x50 日志显示 performance pass 对 Debugger observation materialization 的污染风险已为 0；但 diagnostic pass 仍有 `ToEntityArray` 物化，且同轮日志仍显示 `profiler disabled; Entities profiler modules collect no data` 与 UTP shutdown memory report，不能把这轮写成 Profiler 性能闭环或 Debugger 成本完全消失。
 8. Magnitude Source evidence 当前只把 capture miss / fallback / lookup 热点显性化；它不等于 active effect slot tick、pre-tick magnitude source、generated template capacity / spill 或完整 snapshot lane 已终局。
 9. Debugger 当前没有把 GAS 概念维度和 DOTS 数据维度建成一张统一矩阵。Ability / GE / Attribute / Tag / Cue 的业务计数已经存在，query / lookup / buffer / sync / structural / owner-local range 的 DOTS 计数也开始出现，但二者还没有统一 evidence id、cost domain、phase/lane、source component、carrier、overhead owner 和 official diff correlation。
-10. 如果继续向 `GASRuntimeDiagnosticEventBuffer` 增加字段，短期能输出更多日志，长期会把 Debugger 固化成“日志总线 + 大结构体快照”，无法支撑数据导向性能优化。第三刀的 `GasRuntimeMetricFamilySnapshot` 只能降低外部消费迁移成本，不能替代后续物理 buffer / pass owner 拆分。
+10. 如果继续向 `GASRuntimeDiagnosticEventBuffer` 增加字段，短期能输出更多日志，长期会把 Debugger 固化成“日志总线 + 大结构体快照”，无法支撑数据导向性能优化。第三刀 `GasRuntimeMetricFamilySnapshot` 和第四刀 `GasRuntimeDiagnosticEvidenceSnapshot` 已降低外部消费迁移成本，但仍不能替代后续物理 buffer / pass owner 拆分。
 
 ## Debugger 模块重构事实结论
 
@@ -51,7 +52,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 |---|---|---|---|
 | singleton 解析 / cache | `GasRuntimeDebugger` static cache | 与采样、导出混在同一类 | 保留 capability，但迁出到 runtime diagnostics access / bootstrap owner |
 | config / retention | `GASRuntimeDebuggerComponent` | 与累计 counter、frame evidence 混在同一 component | 拆成 config、frame state、aggregate summary |
-| runtime numeric counter | `GASRuntimeDebuggerComponent` + event buffer + `GasRuntimeMetricFamilySnapshot` | 外部已出现 family snapshot 合约，但底层仍由同一大 component / event row 汇聚 | 继续拆成按 metric family 分组的 buffer / snapshot，外部消费只面对稳定 family snapshot |
+| runtime numeric counter | `GASRuntimeDebuggerComponent` + event buffer + `GasRuntimeMetricFamilySnapshot` + `GasRuntimeDiagnosticEvidenceSnapshot` | 外部已出现 family snapshot / evidence read model 合约，但底层仍由同一大 component / event row 汇聚 | 继续拆成按 metric family 分组的 buffer / snapshot，外部消费只面对稳定 evidence surface |
 | diagnostic materialization | `CollectRuntimeCoreCounters` / `ReadActiveEffectStoreCounters` | `CalculateEntityCount`、`ToEntityArray`、buffer 遍历集中在一个 snapshot | 只允许 diagnostic pass，输出 overhead owner |
 | official diff | `GasRuntimeOfficialToolDiff` | 字符串 TopN / dictionary / Journaling 开关有开销 | separate pass，不进入 performance pass |
 | derived export | `ExportToText` / AutoChess summary / Mermaid | 文本拼接只适合边界导出 | 派生自机器 evidence，不回写验收源 |
@@ -65,6 +66,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 | runtime debugger | `Assets/GAS/Runtime/Debugger/GasRuntimeDebugger.cs` |
 | data-oriented scorecard | `Assets/GAS/Runtime/Debugger/GasRuntimeDataOrientedScorecard.cs` |
 | metric family snapshot | `Assets/GAS/Runtime/Debugger/GasRuntimeMetricFamilySnapshot.cs` |
+| diagnostic evidence snapshot | `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticEvidenceSnapshot.cs` |
 | derived export sink | `Assets/GAS/Runtime/Debugger/GasRuntimeDerivedExportSink.cs` |
 | official diff | `Assets/GAS/Runtime/Debugger/GasRuntimeOfficialToolDiff.cs` |
 | Debugger boundary system | `Assets/GAS/Runtime/System/Event/DiagnosticsSnapshotSystem.cs` |
@@ -72,6 +74,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 | AutoChess timing gateway | `Assets/AutoChessDemo/Integration/GasCore/AutoChessGasRuntimeTicker.cs` |
 | structured log | `Assets/GAS/Runtime/Event/GasStructuredLogExport.cs`, `GasStructuredLogView.cs` |
 | AutoChess export | `Assets/AutoChessDemo/Integration/GasCore/AutoChessGasCoreBridge.cs` |
+| AutoChess stable evidence consumer | `Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationReport.cs`, `Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs`, `Assets/AutoChessDemo/Presentation/AutoChessPresentationOutboxBridge.cs` |
 | observation materialization x50 | `00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-ObservationMaterialization-Run1.log` |
 | performance observation isolation x50 | `00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-PerformanceObservationIsolation-Run1.log` |
 | magnitude source evidence | `Assets/GAS/Runtime/Effect/Component/Dynamic/GEEffectCommandSpecStream.cs`, `Assets/GAS/Runtime/System/Effect/EffectMagnitudeResolver.cs`, `Assets/GAS/Runtime/System/Effect/GEExecutionCalculationSystem.cs`, `Assets/GAS/Runtime/Debugger/GasRuntimeDebugger.cs`, `Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationReport.cs` |
@@ -88,4 +91,4 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 6. Magnitude Source capture miss / fallback / live lookup 有稳定 event、snapshot、validation evidence 代码路径，并与 active effect slot tick / pre-tick / generated template snapshot lane 的退出门分开验收；后续仍需用真实业务样本覆盖非零热点和规模 profile。
 7. Debugger hot path 只写固定宽度 numeric metrics / FixedString ids / small counters；禁止托管字符串、Dictionary、反射、文本导出或 `ToEntityArray` 进入 performance pass。
 8. Debugger 输出 `DataOrientedScorecard`：workload-normalized cost、chunk locality、lookup pressure、buffer pressure、structural phase、sync/materialization、Burst/managed boundary、debugger overhead，且每项能回连 GAS concept、phase/lane、system/component/buffer 和 official diff source。
-9. `GASRuntimeDiagnosticEventBuffer` 稀疏 mega-row 被拆成 metric family buffers 或等价 SoA snapshot；新增 GAS 概念不得继续通过扩展大事件结构体落地。短期外部消费必须走 `GasRuntimeMetricFamilySnapshot` / scorecard / derived export，不允许 AutoChess、Editor 或 CI 继续按 Debugger 内部 counter 字段二次拼接稳定语义。
+9. `GASRuntimeDiagnosticEventBuffer` 稀疏 mega-row 被拆成 metric family buffers 或等价 SoA snapshot；新增 GAS 概念不得继续通过扩展大事件结构体落地。短期外部消费必须走 `GasRuntimeMetricFamilySnapshot` / `GasRuntimeDiagnosticEvidenceSnapshot` / scorecard / derived export，不允许 AutoChess、Editor 或 CI 继续按 Debugger 内部 counter 字段二次拼接稳定语义。

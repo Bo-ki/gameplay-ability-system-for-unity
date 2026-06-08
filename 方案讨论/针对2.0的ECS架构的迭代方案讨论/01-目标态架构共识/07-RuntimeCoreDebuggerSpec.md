@@ -84,7 +84,9 @@ Debugger 采样必须显式声明 pass mode。pass mode 是 performance 结论�
 
 Metric family 必须能被 scorecard 压缩成机器字段：`metricFamilyMask` 表示本次证据覆盖的 workload / GAS concept / data shape / API health / timing / overhead 族，`dominantRisk` 表示当前最应优先领取的 DOTS 数据风险。它们是任务路由字段，不替代底层 typed buffers，也不能只从字符串 summary 反推。
 
-`MetricFamilySnapshot` 是 Debugger 对外的稳定证据合约。项目当前仍处快速迭代期，Runtime Core 的 counter、event buffer、materialization pass 和 official capture owner 会继续重构，因此 AutoChess、Editor Debugger、CI report 和外部 profiler driver 不得直接绑定 `GASRuntimeDiagnosticEventBuffer` 的内部字段布局。它们只能消费 family snapshot、scorecard、hotspot matrix 或 official diff 这类 stable evidence surface；底层可以从 mega-row 迁移到 typed buffer、SoA snapshot、NativeStream aggregate 或 generated metric glue，而外部迁移成本应保持接近 0。
+`MetricFamilySnapshot` 是 Debugger 对外的稳定证据合约。项目当前仍处快速迭代期，Runtime Core 的 counter、event buffer、materialization pass 和 official capture owner 会继续重构，因此 AutoChess、Editor Debugger、CI report 和外部 profiler driver 不得直接绑定 `GASRuntimeDiagnosticEventBuffer` 的内部字段布局。它们只能消费 family snapshot、diagnostic evidence snapshot、scorecard、hotspot matrix 或 official diff 这类 stable evidence surface；底层可以从 mega-row 迁移到 typed buffer、SoA snapshot、NativeStream aggregate 或 generated metric glue，而外部迁移成本应保持接近 0。
+
+`DiagnosticEvidenceSnapshot` 是比 family snapshot 更贴近业务验收的稳定 envelope。它不承诺 Runtime 内部 counter 的物理布局，只承诺外部 read model 的语义分组：`Events`、`Workload`、`ActiveEffect`、`ActiveMutation`、`AttributeFact`、`ApiHealth`、`Structural`、`FrameBackbone`、`Observation`、`MagnitudeSource`。AutoChess、CI、Editor Debugger 和外部报告只能读取这些分组，不得扫描 raw event buffer，也不得重新绑定 `CoreCounters` / `FrameBackboneCounters` / `ObservationMaterializationCounters` / `MagnitudeSourceCounters` 这类过渡内部结构。后续如果 Debugger 内部从大 component / event row 迁移到 typed metric buffers，只更新 envelope builder。
 
 目标态 family snapshot 至少分为：
 
@@ -100,9 +102,10 @@ Metric family 必须能被 scorecard 压缩成机器字段：`metricFamilyMask` 
 解释规则：
 
 1. `MetricFamilySnapshot` 是外部稳定合约，不是最终物理存储形态。
-2. `DataOrientedScorecard`、summary、Mermaid、Editor chart 必须从 snapshot / matrix / official diff 派生，不能重新扫描 Runtime Core。
-3. 当内部 counter owner 继续拆分时，只允许更新 snapshot builder，不允许让业务层跟随内部字段迁移。
-4. 新增 GAS 概念或 DOTS 指标时，先选择 family 与 evidence id，再决定 typed buffer / aggregate 形态；禁止先扩展单个稀疏大 event row。
+2. `DiagnosticEvidenceSnapshot` 是外部业务验收 envelope，不是最终物理存储形态。
+3. `DataOrientedScorecard`、summary、Mermaid、Editor chart 必须从 snapshot / envelope / matrix / official diff 派生，不能重新扫描 Runtime Core。
+4. 当内部 counter owner 继续拆分时，只允许更新 snapshot / envelope builder，不允许让业务层跟随内部字段迁移；外部 consumer 的迁移成本必须被压到 evidence builder 内部。
+5. 新增 GAS 概念或 DOTS 指标时，先选择 family 与 evidence id，再决定 typed buffer / aggregate 形态；禁止先扩展单个稀疏大 event row。
 
 ### 目标代码形态
 
@@ -622,6 +625,7 @@ Debugger 必须先对齐 `UnityDOTS官方文档参考/README.md`，再吸收 `Un
 6. Debugger summary 必须能标记 proof-only API，并输出重新选型触发条件；否则兼容承载容易被误判为最终目标态。
 7. Debugger summary 必须输出 `ODF-*` 官方文档覆盖检查结果，并能说明哪些官方工具或文档机制可验证被分析热点。
 8. 涉及 Physics / Graphics 的验证必须输出 `PHY-*` / `GFX-*` 相关 counters；未启用时必须输出 disabled reason，避免把无头缺省误判为链路缺失。
+9. AutoChess、CI 和 Editor Debugger 不得直接消费 `GASRuntimeDiagnosticEventBuffer` 或过渡内部 counter snapshot；验收代码必须通过 `MetricFamilySnapshot`、`DiagnosticEvidenceSnapshot`、scorecard、hotspot matrix 或 official diff 派生。
 
 ## 历史方案定位
 

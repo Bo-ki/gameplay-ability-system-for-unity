@@ -28,22 +28,29 @@ namespace GAS.AutoChessDemo
             in AutoChessPresentationSnapshot presentation,
             bool officialDiffSeparatePass)
         {
-            var counters = diagnosticResult.RuntimeDiagnostics.CoreCounters;
-            var backbone = diagnosticResult.RuntimeDiagnostics.FrameBackboneCounters;
-            var observation = diagnosticResult.RuntimeDiagnostics.ObservationMaterializationCounters;
-            var performanceObservation = performanceResult.RuntimeDiagnostics.ObservationMaterializationCounters;
-            var magnitudeSource = diagnosticResult.RuntimeDiagnostics.MagnitudeSourceCounters;
+            var diagnosticEvidence = diagnosticResult.RuntimeDiagnostics.Evidence;
+            var performanceEvidence = performanceResult.RuntimeDiagnostics.Evidence;
+            var eventEvidence = diagnosticEvidence.Events;
+            var workload = diagnosticEvidence.Workload;
+            var activeEffect = diagnosticEvidence.ActiveEffect;
+            var mutation = diagnosticEvidence.ActiveMutation;
+            var attributeFact = diagnosticEvidence.AttributeFact;
+            var apiHealth = diagnosticEvidence.ApiHealth;
+            var backbone = diagnosticEvidence.FrameBackbone;
+            var observation = diagnosticEvidence.Observation;
+            var performanceObservation = performanceEvidence.Observation;
+            var magnitudeSource = diagnosticEvidence.MagnitudeSource;
             var factsHash = CalculateFactsHash(performanceResult.StructuredLogSnapshot);
             var summaryHash = CalculateSummaryHash(performanceResult, presentation.RuntimeMarkerCount, factsHash);
             var streamCarrierPressure = CalculateStreamCarrierPressure(diagnosticResult.RuntimeDiagnostics);
             var reselectTriggerMask = 0;
-            if (counters.RandomLookupBudget > 0)
+            if (apiHealth.RandomLookupBudget > 0)
                 reselectTriggerMask |= 1;
             if (performanceResult.DriverIssuedCommands > 1000)
                 reselectTriggerMask |= 2;
-            if (counters.ActiveMutationMigrationCarrierCount > 0)
+            if (mutation.MigrationCarrierCount > 0)
                 reselectTriggerMask |= 4;
-            if (counters.ActiveMutationEstimatedRandomLookupCount > 0)
+            if (mutation.EstimatedRandomLookupCount > 0)
                 reselectTriggerMask |= 8;
             if (streamCarrierPressure.WarningCount > 0)
                 reselectTriggerMask |= 16;
@@ -85,20 +92,20 @@ namespace GAS.AutoChessDemo
                 performanceResult.DriverExecutionEvaluatorRejects,
                 performanceResult.DriverExecutionOutputWrites,
                 performanceResult.EventCounts.CueRequests,
-                diagnosticResult.RuntimeDiagnostics.EventCount,
-                diagnosticResult.RuntimeDiagnostics.Stats.WarningCount,
-                diagnosticResult.RuntimeDiagnostics.Stats.ErrorCount,
-                AutoChessBattleValidationRun.CountBlockingDiagnosticErrors(diagnosticResult.RuntimeDiagnostics),
-                counters.RequestCount,
-                counters.FactCount,
-                counters.DeltaCount,
-                counters.CueCount,
+                eventEvidence.EventCount,
+                eventEvidence.WarningCount,
+                eventEvidence.ErrorCount,
+                eventEvidence.BlockingErrorCount,
+                workload.RequestCount,
+                workload.FactCount,
+                workload.DeltaCount,
+                workload.CueCount,
                 presentation.RuntimeMarkerCount,
                 presentation.SourceLineCount,
                 presentation.DisplayLineCount,
                 presentation.DroppedLineCount,
-                counters.PeakEventBusBufferLength,
-                counters.PeakReplayCursorLag,
+                workload.PeakEventBusBufferLength,
+                workload.PeakReplayCursorLag,
                 scenario.ProcessWarmupRuns,
                 backbone.EvidenceMask,
                 reselectTriggerMask,
@@ -119,28 +126,28 @@ namespace GAS.AutoChessDemo
                 runtimeTrace.CueCount,
                 runtimeTrace.ActiveMutationSeedCount,
                 runtimeTrace.ExecutionCalculationModifierCount,
-                counters.ActiveEffectSlotCount,
-                counters.ActiveEffectSlotActiveCount,
-                counters.ActiveEffectChunkSkipDuePeriodSlotCount,
-                counters.ActiveMutationCommandCount,
-                counters.ActiveMutationOwnerGroupCount,
-                counters.ActiveMutationMaxOwnerRange,
-                counters.ActiveMutationSortMoveCount,
-                counters.ActiveMutationEstimatedRandomLookupCount,
-                counters.ActiveMutationOwnerResourceLookupCount,
-                counters.ActiveMutationMigrationCarrierCount,
-                counters.PendingAttributeDeltaCount,
-                counters.PendingAttributeAppliedDeltaCount,
-                counters.PendingAttributeSkippedDeltaCount,
-                counters.PendingAttributeTargetGroupCount,
-                counters.PendingAttributeMaxTargetRange,
-                counters.PendingAttributeEstimatedRandomLookupCount,
-                counters.PendingAttributeFactPatchCount,
-                counters.PendingAttributeMigrationCarrierCount,
-                counters.OwnerLocalFactCount,
-                counters.OwnerLocalFactOwnerGroupCount,
-                counters.OwnerLocalFactMaxOwnerRange,
-                counters.OwnerLocalFactFlushCount,
+                activeEffect.SlotCount,
+                activeEffect.SlotActiveCount,
+                activeEffect.ChunkSkipDuePeriodSlotCount,
+                mutation.CommandCount,
+                mutation.OwnerGroupCount,
+                mutation.MaxOwnerRange,
+                mutation.SortMoveCount,
+                mutation.EstimatedRandomLookupCount,
+                mutation.OwnerResourceLookupCount,
+                mutation.MigrationCarrierCount,
+                attributeFact.PendingDeltaCount,
+                attributeFact.PendingAppliedDeltaCount,
+                attributeFact.PendingSkippedDeltaCount,
+                attributeFact.PendingTargetGroupCount,
+                attributeFact.PendingMaxTargetRange,
+                attributeFact.PendingEstimatedRandomLookupCount,
+                attributeFact.PendingFactPatchCount,
+                attributeFact.PendingMigrationCarrierCount,
+                attributeFact.OwnerLocalFactCount,
+                attributeFact.OwnerLocalFactOwnerGroupCount,
+                attributeFact.OwnerLocalFactMaxOwnerRange,
+                attributeFact.OwnerLocalFactFlushCount,
                 streamCarrierPressure.WarningCount,
                 streamCarrierPressure.PeakCount,
                 streamCarrierPressure.PeakCapacity,
@@ -403,49 +410,55 @@ namespace GAS.AutoChessDemo
 
         public static string CreateDebuggerSummary(in AutoChessBattleResult result)
         {
-            var stats = result.RuntimeDiagnostics.Stats;
-            var counters = result.RuntimeDiagnostics.CoreCounters;
-            var backbone = result.RuntimeDiagnostics.FrameBackboneCounters;
-            var observation = result.RuntimeDiagnostics.ObservationMaterializationCounters;
-            var magnitudeSource = result.RuntimeDiagnostics.MagnitudeSourceCounters;
-            return $"runtimeDiagnostics events={stats.RetainedEventCount}, "
-                   + $"dropped={stats.DroppedEventCount}, "
-                   + $"warnings={stats.WarningCount}, "
-                   + $"errors={stats.ErrorCount}, "
-                   + $"blockingErrors={AutoChessBattleValidationRun.CountBlockingDiagnosticErrors(result.RuntimeDiagnostics)}, "
-                   + $"requests={counters.RequestCount}, "
-                   + $"specs={counters.SpecCount}, "
-                   + $"deltas={counters.DeltaCount}, "
-                   + $"facts={counters.FactCount}, "
-                   + $"cues={counters.CueCount}, "
-                   + $"presentation={counters.PresentationCount}, "
-                   + $"activeEffectOwners={counters.ActiveEffectStoreOwnerCount}, "
-                   + $"activeEffectSlots={counters.ActiveEffectSlotCount}, "
+            var evidence = result.RuntimeDiagnostics.Evidence;
+            var events = evidence.Events;
+            var workload = evidence.Workload;
+            var activeEffect = evidence.ActiveEffect;
+            var mutation = evidence.ActiveMutation;
+            var attributeFact = evidence.AttributeFact;
+            var apiHealth = evidence.ApiHealth;
+            var backbone = evidence.FrameBackbone;
+            var observation = evidence.Observation;
+            var magnitudeSource = evidence.MagnitudeSource;
+            return $"runtimeDiagnosticsSource=GasRuntimeDiagnosticEvidenceSnapshot, "
+                   + $"events={events.EventCount}, "
+                   + $"dropped={events.DroppedEventCount}, "
+                   + $"warnings={events.WarningCount}, "
+                   + $"errors={events.ErrorCount}, "
+                   + $"blockingErrors={events.BlockingErrorCount}, "
+                   + $"requests={workload.RequestCount}, "
+                   + $"specs={workload.SpecCount}, "
+                   + $"deltas={workload.DeltaCount}, "
+                   + $"facts={workload.FactCount}, "
+                   + $"cues={workload.CueCount}, "
+                   + $"presentation={workload.PresentationCount}, "
+                   + $"activeEffectOwners={activeEffect.StoreOwnerCount}, "
+                   + $"activeEffectSlots={activeEffect.SlotCount}, "
                    + $"periodTickDamageFacts={result.EventCounts.PeriodTickDamageFacts}, "
-                   + $"queryBudget={counters.QueryBudget}, "
-                   + $"lookupBudget={counters.LookupUpdateBudget}, "
-                   + $"randomLookupBudget={counters.RandomLookupBudget}, "
-                   + $"syncQueryBudget={counters.SyncQueryBudget}, "
-                   + $"activeMutationCommands={counters.ActiveMutationCommandCount}, "
-                   + $"activeMutationOwnerGroups={counters.ActiveMutationOwnerGroupCount}, "
-                   + $"activeMutationMaxOwnerRange={counters.ActiveMutationMaxOwnerRange}, "
-                   + $"activeMutationSortMoves={counters.ActiveMutationSortMoveCount}, "
-                   + $"activeMutationEstimatedRandomLookups={counters.ActiveMutationEstimatedRandomLookupCount}, "
-                   + $"activeMutationOwnerResourceLookups={counters.ActiveMutationOwnerResourceLookupCount}, "
-                   + $"activeMutationMigrationCarriers={counters.ActiveMutationMigrationCarrierCount}, "
-                   + $"pendingAttributeDeltas={counters.PendingAttributeDeltaCount}, "
-                   + $"pendingAttributeAppliedDeltas={counters.PendingAttributeAppliedDeltaCount}, "
-                   + $"pendingAttributeSkippedDeltas={counters.PendingAttributeSkippedDeltaCount}, "
-                   + $"pendingAttributeTargetGroups={counters.PendingAttributeTargetGroupCount}, "
-                   + $"pendingAttributeMaxTargetRange={counters.PendingAttributeMaxTargetRange}, "
-                   + $"pendingAttributeEstimatedRandomLookups={counters.PendingAttributeEstimatedRandomLookupCount}, "
-                   + $"pendingAttributeFactPatches={counters.PendingAttributeFactPatchCount}, "
-                   + $"pendingAttributeMigrationCarriers={counters.PendingAttributeMigrationCarrierCount}, "
-                   + $"ownerLocalFacts={counters.OwnerLocalFactCount}, "
-                   + $"ownerLocalFactOwnerGroups={counters.OwnerLocalFactOwnerGroupCount}, "
-                   + $"ownerLocalFactMaxOwnerRange={counters.OwnerLocalFactMaxOwnerRange}, "
-                   + $"ownerLocalFactFlushes={counters.OwnerLocalFactFlushCount}, "
-                   + $"streamCarrierPressureWarnings={CalculateStreamCarrierPressure(result.RuntimeDiagnostics).WarningCount}, "
+                   + $"queryBudget={apiHealth.QueryBudget}, "
+                   + $"lookupBudget={apiHealth.LookupUpdateBudget}, "
+                   + $"randomLookupBudget={apiHealth.RandomLookupBudget}, "
+                   + $"syncQueryBudget={apiHealth.SyncQueryBudget}, "
+                   + $"activeMutationCommands={mutation.CommandCount}, "
+                   + $"activeMutationOwnerGroups={mutation.OwnerGroupCount}, "
+                   + $"activeMutationMaxOwnerRange={mutation.MaxOwnerRange}, "
+                   + $"activeMutationSortMoves={mutation.SortMoveCount}, "
+                   + $"activeMutationEstimatedRandomLookups={mutation.EstimatedRandomLookupCount}, "
+                   + $"activeMutationOwnerResourceLookups={mutation.OwnerResourceLookupCount}, "
+                   + $"activeMutationMigrationCarriers={mutation.MigrationCarrierCount}, "
+                   + $"pendingAttributeDeltas={attributeFact.PendingDeltaCount}, "
+                   + $"pendingAttributeAppliedDeltas={attributeFact.PendingAppliedDeltaCount}, "
+                   + $"pendingAttributeSkippedDeltas={attributeFact.PendingSkippedDeltaCount}, "
+                   + $"pendingAttributeTargetGroups={attributeFact.PendingTargetGroupCount}, "
+                   + $"pendingAttributeMaxTargetRange={attributeFact.PendingMaxTargetRange}, "
+                   + $"pendingAttributeEstimatedRandomLookups={attributeFact.PendingEstimatedRandomLookupCount}, "
+                   + $"pendingAttributeFactPatches={attributeFact.PendingFactPatchCount}, "
+                   + $"pendingAttributeMigrationCarriers={attributeFact.PendingMigrationCarrierCount}, "
+                   + $"ownerLocalFacts={attributeFact.OwnerLocalFactCount}, "
+                   + $"ownerLocalFactOwnerGroups={attributeFact.OwnerLocalFactOwnerGroupCount}, "
+                   + $"ownerLocalFactMaxOwnerRange={attributeFact.OwnerLocalFactMaxOwnerRange}, "
+                   + $"ownerLocalFactFlushes={attributeFact.OwnerLocalFactFlushCount}, "
+                   + $"streamCarrierPressureWarnings={events.EffectCommandStreamPressure.WarningCount}, "
                    + $"observationMaterializedQueries={observation.MaterializedQueryCount}, "
                    + $"observationMaterializedEntities={observation.MaterializedEntityCount}, "
                    + $"observationMaterializationUs={observation.ElapsedMicroseconds}, "
@@ -505,10 +518,13 @@ namespace GAS.AutoChessDemo
             in AutoChessBattleResult performanceResult,
             in AutoChessBattleResult diagnosticResult)
         {
-            var counters = diagnosticResult.RuntimeDiagnostics.CoreCounters;
-            var observation = diagnosticResult.RuntimeDiagnostics.ObservationMaterializationCounters;
-            var performanceObservation = performanceResult.RuntimeDiagnostics.ObservationMaterializationCounters;
-            var magnitudeSource = diagnosticResult.RuntimeDiagnostics.MagnitudeSourceCounters;
+            var diagnosticEvidence = diagnosticResult.RuntimeDiagnostics.Evidence;
+            var performanceEvidence = performanceResult.RuntimeDiagnostics.Evidence;
+            var mutation = diagnosticEvidence.ActiveMutation;
+            var attributeFact = diagnosticEvidence.AttributeFact;
+            var observation = diagnosticEvidence.Observation;
+            var performanceObservation = performanceEvidence.Observation;
+            var magnitudeSource = diagnosticEvidence.MagnitudeSource;
             return $"primaryCommands={performanceResult.DriverIssuedPrimaryCommands}, "
                    + $"finisherCommands={performanceResult.DriverIssuedFinisherCommands}, "
                    + $"lowestHealthSelections={performanceResult.DriverLowestHealthTargetSelections}, "
@@ -519,10 +535,10 @@ namespace GAS.AutoChessDemo
                    + $"debuggerOwnerAvgMs={performanceResult.RuntimeTiming.Debugger.AverageMilliseconds:0.000}, "
                    + $"commandResolveAvgMs={performanceResult.RuntimeTiming.CommandResolve.AverageMilliseconds:0.000}, "
                    + $"coreSimulationAvgMs={performanceResult.RuntimeTiming.CoreSimulation.AverageMilliseconds:0.000}, "
-                   + $"activeMutationCommands={counters.ActiveMutationCommandCount}, "
-                   + $"activeMutationOwnerGroups={counters.ActiveMutationOwnerGroupCount}, "
-                   + $"activeMutationMaxOwnerRange={counters.ActiveMutationMaxOwnerRange}, "
-                   + $"activeMutationEstimatedRandomLookups={counters.ActiveMutationEstimatedRandomLookupCount}, "
+                   + $"activeMutationCommands={mutation.CommandCount}, "
+                   + $"activeMutationOwnerGroups={mutation.OwnerGroupCount}, "
+                   + $"activeMutationMaxOwnerRange={mutation.MaxOwnerRange}, "
+                   + $"activeMutationEstimatedRandomLookups={mutation.EstimatedRandomLookupCount}, "
                    + $"periodTickDamageFacts={performanceResult.EventCounts.PeriodTickDamageFacts}, "
                    + $"executionSpecScans={performanceResult.DriverExecutionSpecScans}, "
                    + $"executionMatchedEffectSpecs={performanceResult.DriverExecutionMatchedEffectSpecs}, "
@@ -530,14 +546,14 @@ namespace GAS.AutoChessDemo
                    + $"executionMissingAttributes={performanceResult.DriverExecutionMissingAttributes}, "
                    + $"executionEvaluatorRejects={performanceResult.DriverExecutionEvaluatorRejects}, "
                    + $"executionOutputWrites={performanceResult.DriverExecutionOutputWrites}, "
-                   + $"pendingAttributeDeltas={counters.PendingAttributeDeltaCount}, "
-                   + $"pendingAttributeAppliedDeltas={counters.PendingAttributeAppliedDeltaCount}, "
-                   + $"pendingAttributeTargetGroups={counters.PendingAttributeTargetGroupCount}, "
-                   + $"pendingAttributeEstimatedRandomLookups={counters.PendingAttributeEstimatedRandomLookupCount}, "
-                   + $"ownerLocalFacts={counters.OwnerLocalFactCount}, "
-                   + $"ownerLocalFactOwnerGroups={counters.OwnerLocalFactOwnerGroupCount}, "
-                   + $"ownerLocalFactFlushes={counters.OwnerLocalFactFlushCount}, "
-                   + $"streamCarrierPressureWarnings={CalculateStreamCarrierPressure(diagnosticResult.RuntimeDiagnostics).WarningCount}, "
+                   + $"pendingAttributeDeltas={attributeFact.PendingDeltaCount}, "
+                   + $"pendingAttributeAppliedDeltas={attributeFact.PendingAppliedDeltaCount}, "
+                   + $"pendingAttributeTargetGroups={attributeFact.PendingTargetGroupCount}, "
+                   + $"pendingAttributeEstimatedRandomLookups={attributeFact.PendingEstimatedRandomLookupCount}, "
+                   + $"ownerLocalFacts={attributeFact.OwnerLocalFactCount}, "
+                   + $"ownerLocalFactOwnerGroups={attributeFact.OwnerLocalFactOwnerGroupCount}, "
+                   + $"ownerLocalFactFlushes={attributeFact.OwnerLocalFactFlushCount}, "
+                   + $"streamCarrierPressureWarnings={diagnosticEvidence.Events.EffectCommandStreamPressure.WarningCount}, "
                    + $"observationMaterializedQueries={observation.MaterializedQueryCount}, "
                    + $"observationMaterializationUs={observation.ElapsedMicroseconds}, "
                    + $"performancePassObservationPollutionRisks={performanceObservation.PerformancePollutionRiskCount}, "
@@ -597,10 +613,10 @@ namespace GAS.AutoChessDemo
             in AutoChessValidationEvidence evidence)
         {
             var official = result.OfficialToolDiff;
-            var runtime = result.RuntimeDiagnostics.CoreCounters;
-            var runtimeStructural = runtime.EntityCreateCount + runtime.EntityDestroyCount;
+            var runtime = result.RuntimeDiagnostics.Evidence.Structural;
+            var runtimeStructural = runtime.RuntimeStructuralApproximationCount;
             var officialStructural = official.JournalingStructuralRecordCount;
-            return $"runtimeSelfDiagnostics=events:{result.RuntimeDiagnostics.EventCount}, "
+            return $"runtimeSelfDiagnostics=events:{result.RuntimeDiagnostics.Evidence.Events.EventCount}, "
                    + $"officialDiffSeparatePass={evidence.OfficialDiffSeparatePass}, "
                    + $"journalingAvailable={evidence.JournalingAvailable}, "
                    + $"journalingCaptured={evidence.JournalingCaptured}, "
@@ -634,15 +650,16 @@ namespace GAS.AutoChessDemo
 
         public static string CreateDataFlowDiagram(in AutoChessBattleResult result)
         {
+            var workload = result.RuntimeDiagnostics.Evidence.Workload;
             return "```mermaid\n"
                    + "flowchart LR\n"
                    + $"    CommandDrive[\"AutoChessBattleCommandDriveSystem\\nscale: {result.ScenarioScale}, units: {result.Units.Length}\\ncommands: {result.DriverIssuedCommands}\"] --> AbilityBuffer[\"AbilityCommandBuffer\\nrequest entities avoided\"]\n"
-                   + $"    AbilityBuffer --> RuntimeCore[\"GAS Runtime Core\\nspecs: {result.RuntimeDiagnostics.CoreCounters.SpecCount}\"]\n"
-                   + $"    RuntimeCore --> GEStream[\"GEEffectCommandBuffer / Spec / Delta\\ndeltas: {result.RuntimeDiagnostics.CoreCounters.DeltaCount}\"]\n"
+                   + $"    AbilityBuffer --> RuntimeCore[\"GAS Runtime Core\\nspecs: {workload.SpecCount}\"]\n"
+                   + $"    RuntimeCore --> GEStream[\"GEEffectCommandBuffer / Spec / Delta\\ndeltas: {workload.DeltaCount}\"]\n"
                    + $"    GEStream --> Execution[\"AutoChessExecuteDamageCalculationSystem\\nexecution outputs: {result.EventCounts.ExecutionCalculationOutputUpdated}\"]\n"
                    + $"    Execution --> PendingDelta[\"pending AttributeModifierBuffer\\nexecution outputs: {result.EventCounts.ExecutionCalculationOutputUpdated}\"]\n"
                    + $"    PendingDelta --> Attribute[\"GASAttributeModifierDeltaApplySystem\\nattribute changes: {result.EventCounts.AttributeChanges}\"]\n"
-                   + $"    Attribute --> Facts[\"GameplayEventBuffer typed facts\\nfacts: {result.RuntimeDiagnostics.CoreCounters.FactCount}\"]\n"
+                   + $"    Attribute --> Facts[\"GameplayEventBuffer typed facts\\nfacts: {workload.FactCount}\"]\n"
                    + $"    Facts --> Projection[\"Replay / Presentation / Layer 2 Diagnostics\\nreplay events: {result.EventCounts.ReplayEvents}\"]\n"
                    + $"    Projection --> OfficialDiff[\"Official tool diff\\nseparate pass, journaling records: {result.OfficialToolDiff.JournalingWorldRecordCount}\"]\n"
                    + "```";
@@ -650,6 +667,7 @@ namespace GAS.AutoChessDemo
 
         public static string CreateSequenceDiagram(in AutoChessBattleResult result)
         {
+            var diagnosticEvents = result.RuntimeDiagnostics.Evidence.Events;
             return "```mermaid\n"
                    + "sequenceDiagram\n"
                    + "    participant Runner as AutoChess Demo Runner\n"
@@ -665,7 +683,7 @@ namespace GAS.AutoChessDemo
                    + $"    Exec->>Core: pending modifier + typed fact outputs {result.EventCounts.ExecutionCalculationOutputUpdated}\n"
                    + $"    Core->>Core: apply pending modifier deltas {result.EventCounts.AttributeChanges}\n"
                    + $"    Core->>Obs: attribute changes {result.EventCounts.AttributeChanges}, cue requests {result.EventCounts.CueRequests}\n"
-                   + $"    Obs->>Debug: counters {result.RuntimeDiagnostics.EventCount}, warnings {result.RuntimeDiagnostics.Stats.WarningCount}, errors {result.RuntimeDiagnostics.Stats.ErrorCount}\n"
+                   + $"    Obs->>Debug: counters {diagnosticEvents.EventCount}, warnings {diagnosticEvents.WarningCount}, errors {diagnosticEvents.ErrorCount}\n"
                    + $"    Debug->>Unity: read EntitiesJournaling records in a separate official-diff pass\n"
                    + $"    Unity-->>Debug: journaling structural records {result.OfficialToolDiff.JournalingStructuralRecordCount}, profiler state {result.OfficialToolDiff.ProfilerCaptureState}\n"
                    + "```";
@@ -763,35 +781,11 @@ namespace GAS.AutoChessDemo
         private static StreamCarrierPressure CalculateStreamCarrierPressure(
             in GasRuntimeDiagnosticSnapshot diagnostics)
         {
-            var events = diagnostics.Events ?? Array.Empty<GASRuntimeDiagnosticEventBuffer>();
-            var warningCount = 0;
-            var peakCount = 0;
-            var peakCapacity = 0;
-
-            for (var i = 0; i < events.Length; i++)
-            {
-                var evt = events[i];
-                if (evt.Kind != EGasRuntimeDiagnosticKind.BufferPressure
-                    || evt.Module != EGasRuntimeDiagnosticModule.Effect
-                    || evt.GroupName.ToString() != "EffectCommandSpecStream")
-                {
-                    continue;
-                }
-
-                if (evt.Severity >= EGasRuntimeDiagnosticSeverity.Warning
-                    || evt.ValueB > 0)
-                {
-                    warningCount++;
-                }
-
-                if (evt.Count > peakCount)
-                {
-                    peakCount = evt.Count;
-                    peakCapacity = evt.Capacity;
-                }
-            }
-
-            return new StreamCarrierPressure(warningCount, peakCount, peakCapacity);
+            var pressure = diagnostics.Evidence.Events.EffectCommandStreamPressure;
+            return new StreamCarrierPressure(
+                pressure.WarningCount,
+                pressure.PeakCount,
+                pressure.PeakCapacity);
         }
 
         private static uint CalculateSummaryHash(
@@ -811,7 +805,7 @@ namespace GAS.AutoChessDemo
                 hash = AppendHash(hash, result.EventCounts.PeriodTickDamageFacts);
                 hash = AppendHash(hash, result.EventCounts.ExecutionCalculationOutputUpdated);
                 hash = AppendHash(hash, result.EventCounts.CueRequests);
-                hash = AppendHash(hash, result.RuntimeDiagnostics.EventCount);
+                hash = AppendHash(hash, result.RuntimeDiagnostics.Evidence.Events.EventCount);
                 hash = AppendHash(hash, result.OfficialToolDiff.JournalingWorldRecordCount);
                 hash = AppendHash(hash, presentationMarkerCount);
                 return hash;

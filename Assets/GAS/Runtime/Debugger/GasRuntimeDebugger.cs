@@ -1076,6 +1076,7 @@ namespace GAS.Runtime
         public readonly GasRuntimeObservationMaterializationCounters ObservationMaterializationCounters;
         public readonly GasRuntimeMagnitudeSourceCounters MagnitudeSourceCounters;
         public readonly GasRuntimeMetricFamilySnapshot MetricFamilies;
+        public readonly GasRuntimeDiagnosticEvidenceSnapshot Evidence;
         public readonly GASRuntimeDiagnosticEventBuffer[] Events;
 
         public GasRuntimeDiagnosticSnapshot(
@@ -1142,9 +1143,17 @@ namespace GAS.Runtime
                 observationMaterializationCounters,
                 magnitudeSourceCounters);
             Events = events ?? Array.Empty<GASRuntimeDiagnosticEventBuffer>();
+            Evidence = GasRuntimeDiagnosticEvidenceSnapshot.Create(
+                stats,
+                coreCounters,
+                frameBackboneCounters,
+                observationMaterializationCounters,
+                magnitudeSourceCounters,
+                MetricFamilies,
+                Events);
         }
 
-        public int EventCount => Events?.Length ?? 0;
+        public int EventCount => Evidence.Events.EventCount;
     }
 
     public static class GasRuntimeDebugger

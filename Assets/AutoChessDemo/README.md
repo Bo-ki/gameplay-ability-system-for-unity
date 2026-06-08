@@ -79,12 +79,12 @@ $CLI = 'Library\PackageCache\cn.lys.aibridge@f203de2ec848\Tools~\CLI\win-x64\AIB
 - `EventCounts.ExecutionCalculationOutputUpdated > 0`
 - `EventCounts.CueRequests > 0`
 - `Completed == true`
-- `RuntimeDiagnostics.EventCount > 0`
+- `RuntimeDiagnostics.Evidence.Events.EventCount > 0`
 - `OfficialToolDiff.JournalingCaptured == true`
 - `blockingDebugErrors == 0`
 - `AutoChessDemoValidationRunResult: passed=True`，并输出 `thresholdsPassed / runtimeChainPassed / repeatRunPassed / presentationMarkers / presentationDroppedLines`
-- `RuntimeDiagnostics.CoreCounters.RequestCount > 0`
-- `RuntimeDiagnostics.CoreCounters.FactCount > 0`
+- `RuntimeDiagnostics.Evidence.Workload.RequestCount > 0`
+- `RuntimeDiagnostics.Evidence.Workload.FactCount > 0`
 - `AutoChessDemoRepeatRunEvidence: passed=True`，同一 Runtime World 连跑两局时 commands / attribute changes / execution outputs / cue requests 不漂移
 - `AutoChessDemoRuntimeHotspots` 输出 `commandResolveAvgMs`、`coreSimulationAvgMs`、`structuralCommitAvgMs`、`boundaryProjectionAvgMs` 和 `dependencyDrainAvgMs`
 - `AutoChessDemoBattlePresentation` 输出 `markers / sourceLines / displayedLines / droppedLines / disabledReason`

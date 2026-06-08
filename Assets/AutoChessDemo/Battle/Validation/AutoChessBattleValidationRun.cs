@@ -560,12 +560,12 @@ namespace GAS.AutoChessDemo
                     deterministicCountsPassed,
                     firstRuntimeChainPassed,
                     secondRuntimeChainPassed,
-                    first.RuntimeDiagnostics.EventCount,
-                    second.RuntimeDiagnostics.EventCount,
+                    first.RuntimeDiagnostics.Evidence.Events.EventCount,
+                    second.RuntimeDiagnostics.Evidence.Events.EventCount,
                     CountBlockingDiagnosticErrors(first.RuntimeDiagnostics),
                     CountBlockingDiagnosticErrors(second.RuntimeDiagnostics),
-                    first.RuntimeDiagnostics.CoreCounters.PendingAttributeAppliedDeltaCount,
-                    second.RuntimeDiagnostics.CoreCounters.PendingAttributeAppliedDeltaCount,
+                    first.RuntimeDiagnostics.Evidence.AttributeFact.PendingAppliedDeltaCount,
+                    second.RuntimeDiagnostics.Evidence.AttributeFact.PendingAppliedDeltaCount,
                     HasRequiredBattleLog(first.BattleLog),
                     HasRequiredBattleLog(second.BattleLog));
 
@@ -735,20 +735,21 @@ namespace GAS.AutoChessDemo
             in AutoChessBattleResult diagnosticResult,
             AutoChessGeneratedScenarioProfile scenario)
         {
-            var counters = diagnosticResult.RuntimeDiagnostics.CoreCounters;
+            var activeEffect = diagnosticResult.RuntimeDiagnostics.Evidence.ActiveEffect;
+            var mutation = diagnosticResult.RuntimeDiagnostics.Evidence.ActiveMutation;
             return result.Completed
                    && result.Winner == scenario.ExpectedWinner
                    && result.DriverIssuedCommands >= scenario.MinDriverIssuedCommands
                    && result.EventCounts.AttributeChanges >= scenario.MinAttributeChanges
                    && result.EventCounts.ExecutionCalculationOutputUpdated >= scenario.MinExecutionOutputs
                    && result.EventCounts.CueRequests >= scenario.MinCueRequests
-                   && counters.ActiveEffectSlotCount >= scenario.MinActiveEffectSlots
+                   && activeEffect.SlotCount >= scenario.MinActiveEffectSlots
                    && result.EventCounts.PeriodTickDamageFacts >= scenario.MinPeriodTickDamageFacts
-                   && counters.ActiveMutationCommandCount >= scenario.MinActiveMutationCommands
-                   && counters.ActiveMutationOwnerGroupCount >= scenario.MinActiveMutationOwnerGroups
-                   && counters.ActiveMutationEstimatedRandomLookupCount <= scenario.MaxActiveMutationEstimatedRandomLookups
-                   && counters.ActiveMutationOwnerResourceLookupCount <= scenario.MaxActiveMutationOwnerResourceLookups
-                   && counters.ActiveMutationMigrationCarrierCount <= scenario.MaxActiveMutationMigrationCarriers;
+                   && mutation.CommandCount >= scenario.MinActiveMutationCommands
+                   && mutation.OwnerGroupCount >= scenario.MinActiveMutationOwnerGroups
+                   && mutation.EstimatedRandomLookupCount <= scenario.MaxActiveMutationEstimatedRandomLookups
+                   && mutation.OwnerResourceLookupCount <= scenario.MaxActiveMutationOwnerResourceLookups
+                   && mutation.MigrationCarrierCount <= scenario.MaxActiveMutationMigrationCarriers;
         }
 
         public static bool HasRequiredRuntimeChain(
@@ -756,18 +757,20 @@ namespace GAS.AutoChessDemo
             in AutoChessBattleResult diagnosticResult,
             bool requireOfficialToolDiff)
         {
-            var counters = diagnosticResult.RuntimeDiagnostics.CoreCounters;
+            var evidence = diagnosticResult.RuntimeDiagnostics.Evidence;
+            var workload = evidence.Workload;
+            var attributeFact = evidence.AttributeFact;
             return result.Completed
                    && result.DriverIssuedCommands > 0
                    && result.EventCounts.AttributeChanges > 0
                    && result.EventCounts.ExecutionCalculationOutputUpdated > 0
                    && result.EventCounts.PeriodTickDamageFacts > 0
                    && result.EventCounts.CueRequests > 0
-                   && diagnosticResult.RuntimeDiagnostics.EventCount > 0
-                    && counters.SpecCount > 0
-                    && counters.FactCount > 0
-                    && counters.PendingAttributeAppliedDeltaCount > 0
-                    && counters.OwnerLocalFactFlushCount > 0
+                   && evidence.Events.EventCount > 0
+                    && workload.SpecCount > 0
+                    && workload.FactCount > 0
+                    && attributeFact.PendingAppliedDeltaCount > 0
+                    && attributeFact.OwnerLocalFactFlushCount > 0
                     && HasRequiredBattleLog(result.BattleLog)
                     && AutoChessBattleValidationReport.HasBoundaryReportKeyCoverage(
                         result.StructuredLogSnapshot)
@@ -782,24 +785,7 @@ namespace GAS.AutoChessDemo
 
         public static int CountBlockingDiagnosticErrors(GAS.Runtime.GasRuntimeDiagnosticSnapshot diagnostics)
         {
-            var events = diagnostics.Events ?? Array.Empty<GAS.Runtime.GASRuntimeDiagnosticEventBuffer>();
-            var count = 0;
-            for (var i = 0; i < events.Length; i++)
-            {
-                var evt = events[i];
-                if (evt.Severity < GAS.Runtime.EGasRuntimeDiagnosticSeverity.Error)
-                    continue;
-
-                if (evt.Kind == GAS.Runtime.EGasRuntimeDiagnosticKind.SystemTiming
-                    || evt.Kind == GAS.Runtime.EGasRuntimeDiagnosticKind.TickSummary)
-                {
-                    continue;
-                }
-
-                count++;
-            }
-
-            return count;
+            return diagnostics.Evidence.Events.BlockingErrorCount;
         }
 
         public static string CreateRepeatRunEvidenceSummary(

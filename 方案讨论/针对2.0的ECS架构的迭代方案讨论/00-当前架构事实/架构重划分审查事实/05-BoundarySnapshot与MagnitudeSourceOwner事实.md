@@ -20,7 +20,7 @@
   - `GEExecutionCalculationSystem` 已用 `ExecutionMagnitudeSourceChunkCounters` / `NativeArray` 汇总 execution input lookup 和 attribute lookup，再在 deterministic merge job 写回 stream
   - `GasRuntimeDebugger` 已有 `GasRuntimeMagnitudeSourceCounters`、`MagnitudeSource` diagnostic event、`runtimeMagnitudeSource` / `runtimeCoreMagnitudeSource` text export
   - `DiagnosticsSnapshotSystem` 每帧采样 `RecordMagnitudeSourceEvidence(...)`
-  - `AutoChessBattleValidationReport` 代码路径已消费 diagnostic result 的 `RuntimeDiagnostics.MagnitudeSourceCounters`
+  - `AutoChessBattleValidationReport` 代码路径已改为消费 diagnostic result 的 `RuntimeDiagnostics.Evidence.MagnitudeSource`
   - `AutoChessBattleValidationRun` 已拆 `performanceResult` / `diagnosticResult` / `officialDiffResult`；performance 与 official diff pass 关闭 Debugger、system timings 和 buffer pressure，diagnostic pass 打开这些观测
   - `Verify-GAS-RuntimeCoreBoundary.ps1` 已加入 Magnitude Source evidence 与三 pass 分离静态门
   - `_归档/2026-06-08-AutoChessBattleValidation-PassSplitMagnitudeSource-Run1.log`: `passed=True` / `runtimeChainPassed=True` / `repeatRunPassed=True`，performance summary 为 `performancePassObservationPollutionRisks=0`，diagnostic Debugger summary 仍有 `observationMaterializedQueries=12`，`runtimeCoreMagnitudeSource` / `runtimeMagnitudeSource` 导出字段全为 0
@@ -34,7 +34,7 @@
 1. Magnitude Source 相关计数已进入 runtime stream owner：current value lookup、captured value hit、capture miss、capture miss live lookup、fallback value、fallback fact、source attribute lookup、target attribute lookup 和 execution input lookup 都有 frame-local counter。
 2. Managed resolver 路径不再只有人工读代码才能定位风险：resolver 在 capture hit / miss / fallback 和 SourceAttribute / TargetAttribute 解析时会写 counter；execution calculation job 也把 chunk 内 input lookup 与 attribute lookup 合并后写回 stream。
 3. Debugger evidence 已具备三层消费面：diagnostic event、snapshot counter 和 derived text export。它们能解释 magnitude source 热点来源，但 text export 仍只是派生格式，不是验收源。
-4. AutoChess validation report 的机器 evidence 已能消费 diagnostic pass 中的 magnitude source counter，并把 capture miss / live lookup / fallback / execution input lookup 输出到 summary / hotspot 口径。
+4. AutoChess validation report 的机器 evidence 已能通过 `RuntimeDiagnostics.Evidence.MagnitudeSource` 消费 diagnostic pass 中的 magnitude source counter，并把 capture miss / live lookup / fallback / execution input lookup 输出到 summary / hotspot 口径。
 5. AutoChess validation runner 当前代码路径已经把 performance pass、diagnostic pass 和 official diff pass 分开：performance pass 用于业务和 tick 口径，diagnostic pass 负责 Debugger / timing / buffer pressure 证据，official diff pass 独立捕获并与 performance pass 对比关键业务计数。
 
 ### 仍成立风险
@@ -57,12 +57,12 @@
 
 1. R3：把 current / captured-on-apply / captured-on-tick / captured-before-execution 的 magnitude source timing key、owner 和 fallback fact 收敛为目标态 snapshot record。
 2. R4：把 magnitude source counter、observation materialization counter、official diff 和 timing split 纳入同一个 validation evidence model；禁止 derived export 作为机器验收源。
-3. R5：SourceGenerator 模板已补 active effect slot tick SourceAttribute snapshot gather，但 generated lifecycle / lookup owner 仍不能写成 pure glue 完成；execution calculation 隐藏 lookup owner 若暂留，必须标记 `MigrationProofOnly` 并绑定退出门。
+3. R5：active effect slot tick SourceAttribute snapshot gather 已由手写 Runtime owner 承接；SourceGenerator 当前只保留 marker / pure glue / validation gate 口径。execution calculation 隐藏 lookup owner若暂留，必须标记 `MigrationProofOnly` 并绑定退出门；generated lifecycle / lookup owner 回流必须由 R5 gate 阻断。
 4. R8：AutoChess x100 / x1000 与 Profiler enabled 场景必须证明 performance pass、diagnostic pass 和 official diff pass 的业务计数可对齐，且 Debugger / Boundary 成本不污染 CoreSimulation 结论。
 
 ## 2026-06-07 整体复核：Boundary Snapshot 与 Magnitude Source Owner
 
-本轮继续对 `Assets/GAS/Runtime`、`Assets/GAS/Generated/CodeGen/Runtime`、`Assets/GAS/Editor/CodeGen/Phases`、`Assets/AutoChessDemo` 和 `Tools/Diagnostics/Verify-GAS-RuntimeCoreBoundary.ps1` 做静态复核并执行一轮收口。结论是：AutoChess 业务 report snapshot 已向 Boundary structured evidence 收敛，这是 R1/R6 的正向进展；active mutation 的跨 owner `SourceAttribute` 已进入 frame-local snapshot lane。2026-06-08 追加复核后，generated active effect slot tick 的跨 owner `SourceAttribute` 也已进入 owner-aware snapshot gather；但 execution calculation 和 handwritten resolver 仍只是 evidence 显性化，不能把当前状态写成全部 magnitude source capture 完成态。
+本轮继续对 `Assets/GAS/Runtime`、`Assets/GAS/Generated/CodeGen/Runtime`、`Assets/GAS/Editor/CodeGen/Phases`、`Assets/AutoChessDemo` 和 `Tools/Diagnostics/Verify-GAS-RuntimeCoreBoundary.ps1` 做静态复核并执行一轮收口。结论是：AutoChess 业务 report snapshot 已向 Boundary structured evidence 收敛，这是 R1/R6 的正向进展；active mutation 的跨 owner `SourceAttribute` 已进入 frame-local snapshot lane。2026-06-08 追加复核后，active effect slot tick 的跨 owner `SourceAttribute` 也已进入手写 Runtime owner 的 owner-aware snapshot gather；但 execution calculation 和 handwritten resolver 仍只是 evidence 显性化，不能把当前状态写成全部 magnitude source capture 完成态。
 
 ### 事实消费卡
 
@@ -76,7 +76,8 @@
   - `Tools/Diagnostics/Verify-GAS-RuntimeCoreBoundary.ps1:87-108`、`:274-308`
   - `Assets/GAS/Runtime/System/Effect/EffectMagnitudeResolver.cs:315-374`、`:378-493`、`:537-549`
   - `Assets/GAS/Runtime/System/Effect/GEExecutionCalculationSystem.cs:209-310`
-  - `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs:141-201`、`:372-460`、`:949-1008`、`:2026-2068`
+  - `Assets/GAS/Runtime/System/Effect/GASActiveEffectRuntime.cs`、`Assets/GAS/Runtime/System/Effect/GEActiveEffectLifecycleSystems.cs`
+  - `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` 当前仅为 marker，不再作为 helper/job 行号事实源
   - `Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs:3032-3089`、`:3268-3351`、`:3840-3899`、`:4917-4960`
 第一 owner：00
 长期有效：待复核；当前代码事实会随后续 R1/R3/R5/R6 执行变化
@@ -88,8 +89,8 @@
 1. AutoChess unit result snapshot 已从 live ASC read model 转向 structured boundary evidence：`AutoChessBattleSession.CreateUnitResults(...)` 接收 `GasStructuredLogExportSnapshot`，`AutoChessBattleResultBuilder.Build(...)` 传入 `coreObservation.StructuredLog`，`AutoChessGasBattleUnitSnapshotProjector.Project(...)` 用 `TargetReportKey` 匹配 attribute change 并回放 health / energy。`AutoChessBattleValidationReport.CreateBoundaryOwnerSummary(...)` 已输出 `snapshotOwner=AutoChessGasBattleUnitSnapshotProjector.StructuredLog`。2026-06-07 batchmode 归档日志 `_归档/2026-06-07-AutoChessBattleValidation-StructuredSnapshot-Run1.log` 验证该 owner 进入 runner 输出，且 `passed=True` / `runtimeChainPassed=True` / `repeatRunPassed=True` / `blockingDebugErrors=0`。
 2. diagnostics 脚本已把这条边界收敛做成静态门：禁止 `AutoChessBattleSession` / `AutoChessGasCoreBridge` / `AutoChessGasBattleEntityLifecycle` 继续出现 `ReadCombatAttributes` 或 `TryCaptureASCReadModel`，并要求 result builder 把 structured log 传给 unit results。
 3. AutoChess 旧 live-read 关键词扫描当前只在 snapshot projector、session 调用和 validation summary 正向命中；这说明业务 report 层已经不再依赖 session 阶段直接抓取 ASC read model 来生成最终单位结果。
-4. generated active mutation 的 `BuildMagnitudeContext(...)` 已改为 `TryReadSourceAttributeValue(...)`：同 owner SourceAttribute 继续读取当前 owner chunk attribute；跨 owner SourceAttribute 只读取 `ActiveMutationSourceAttributeSnapshots`。snapshot 由 `GEActiveEffectMutationGatherJob : IJob` 通过 `[ReadOnly] BufferLookup<AttributeValueBuffer>` 在 apply 前构建，`GEActiveEffectMutationChunkApplyJob : IJobChunk` 不再打开 `AttributeValueBuffer` lookup alias。
-5. diagnostics 脚本已加入 SourceAttribute snapshot 防回流门：要求 generated 输出与 CodeGen 模板同时存在 `BuildActiveMutationSourceAttributeSnapshots`，要求 gather job 拥有 read-only `AttributeLookup`，要求 chunk apply 消费 `NativeParallelHashMap<long, float> ActiveMutationSourceAttributeSnapshots`，并禁止重新生成 `TryReadAttributeValue(ref ownerResources, command.SourceAsc, ...)`。
+4. active mutation 的 `BuildMagnitudeContext(...)` / SourceAttribute snapshot 路径当前由手写 `GASActiveEffectRuntime` 承载：同 owner SourceAttribute 继续读取当前 owner chunk attribute；跨 owner SourceAttribute 只读取 `ActiveMutationSourceAttributeSnapshots`。snapshot 由 owner command finalize/gather 阶段通过只读 `BufferLookup<AttributeValueBuffer>` 在 apply 前构建，`GEActiveEffectMutationChunkApplyJob : IJobChunk` 不再打开 `AttributeValueBuffer` lookup alias。
+5. diagnostics 脚本已加入 SourceAttribute snapshot 防回流门：要求 Runtime owner / CodeGen 模板 / generated marker 对账，要求 gather 阶段拥有 read-only `AttributeLookup`，要求 chunk apply 消费 `NativeParallelHashMap<long, float> ActiveMutationSourceAttributeSnapshots`，并禁止重新生成 `TryReadAttributeValue(ref ownerResources, command.SourceAsc, ...)`。
 
 ### 验证补录：SourceAttributeSnapshotLane Run1
 
@@ -107,7 +108,7 @@
 
 1. `EffectMagnitudeResolver.ResolveAttributeCapture(...)` 仍支持在 capture miss 时通过 `EntityManager` 读取 `SourceAsc` / `TargetAsc` 的 `AttributeValueBuffer`，再写回 `GEAttributeCaptureValueBuffer`。其中 `StoreCapturedAttributeValue(EntityManager, ref EntityCommandBuffer, ...)` overload 实际没有使用 `ecb`，仍通过 `em.GetBuffer<GEAttributeCaptureValueBuffer>(ge).Add(...)` 直接写 buffer；该 overload 名称不能作为 deferred structural / playback 证明。
 2. `GEExecutionCalculationSystem` 的 `ResolveInput(...)` 对 `SourceAttribute` / `TargetAttribute` 走 `ResolveAttributeCapture(...)`，`CurrentValue` 时通过 `AttributeLookup[asc]` 读取 live attribute。它是 job 内 lookup 读路径，不是 owner-local magnitude snapshot lane。
-3. generated active effect slot tick 的旧 `BuildMagnitudeContextFromSlot(...) -> TryReadAttributeValue(ref ActiveEffectOwnerResources, slot.SourceAsc, ...)` 跨 owner live lookup 已被 2026-06-08 追加切片替换为 `GEActiveEffectPreTickSourceAttributeSnapshotGatherJob` + `ActiveEffectSlotSourceAttributeSnapshotKey`。最新事实见 [06 ActiveEffectSlot Magnitude Snapshot](06-ActiveEffectSlotMagnitudeSnapshot事实.md)。剩余风险转为 generated lifecycle owner、capacity / spill evidence、非零业务覆盖和 execution calculation / handwritten resolver snapshot lane。
+3. active effect slot tick 的旧 `BuildMagnitudeContextFromSlot(...) -> TryReadAttributeValue(ref ActiveEffectOwnerResources, slot.SourceAsc, ...)` 跨 owner live lookup 已被 2026-06-08 追加切片替换为 `GEActiveEffectPreTickSourceAttributeSnapshotGatherJob` + `ActiveEffectSlotSourceAttributeSnapshotKey`，且当前承载在手写 Runtime owner 中。最新事实见 [06 ActiveEffectSlot Magnitude Snapshot](06-ActiveEffectSlotMagnitudeSnapshot事实.md)。剩余风险转为 generated lifecycle 防回流、capacity / spill evidence、非零业务覆盖和 execution calculation / handwritten resolver snapshot lane。
 4. `EffectMagnitudeResolver.EnqueueMagnitudeFact(...)` 仍通过 `EffectCommandSpecStream.TryGetSingleton(...)` 与 `BeginGameplayEventWriter(...)` 把 execution calculation missing fact 写入 singleton fact carrier。这是 telemetry / boundary observation 的迁移路径，不是 Core reaction fact 的 scale-ready owner-local fact lane。
 
 ### 验证补录：TagRequirementQuery Run5
