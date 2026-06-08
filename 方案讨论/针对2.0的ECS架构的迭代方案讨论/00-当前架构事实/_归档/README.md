@@ -15,6 +15,7 @@
 | 文件 | 内容 |
 |---|---|
 | [2026-06-07-GAS架构瘦身执行记录](2026-06-07-GAS架构瘦身执行记录.md) | 本轮 GAS Runtime 瘦身执行记录、验证证据和复发入口 |
+| [2026-06-08-DebuggerDerivedExportSink-Run2](2026-06-08-DebuggerDerivedExportSink-Run2.md) | Debugger Data-Oriented Scorecard 第二刀：DerivedExportSink、metric family mask 与 dominant risk 归档 |
 | [2026-06-08-AutoChessBattleValidation-DebuggerRegisteredOwner-Run1](2026-06-08-AutoChessBattleValidation-DebuggerRegisteredOwner-Run1.log) | Debugger registered owner 切片的 AutoChess x50 原始日志 |
 | [2026-06-08-AutoChessBattleValidation-ObservationMaterialization-Run1](2026-06-08-AutoChessBattleValidation-ObservationMaterialization-Run1.log) | Debugger observation materialization 归因切片的 AutoChess x50 原始日志 |
 | [2026-06-08-AutoChessBattleValidation-PerformanceObservationIsolation-Run1](2026-06-08-AutoChessBattleValidation-PerformanceObservationIsolation-Run1.log) | Debugger observation materialization 从 performance pass 隔离后的 AutoChess x50 原始日志 |

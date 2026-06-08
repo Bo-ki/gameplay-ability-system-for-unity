@@ -26,6 +26,8 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 16. AutoChess strict headless budget 已开始消费数据导向字段：units、measured ticks、commands/facts per tick、us per unit/command/fact、owner group/range、lookup/query/sync/materialization budget。但这些字段目前由 AutoChess report 从 `RuntimeDiagnostics` 和 timing summary 二次组装，Debugger 模块本身还没有提供统一的 `DataOrientedScorecard` / hotspot attribution matrix。
 17. 2026-06-08 第一轮 Debugger 改造已新增 `Assets/GAS/Runtime/Debugger/GasRuntimeDataOrientedScorecard.cs`，把 workload-normalized、owner locality、lookup/query/sync、observation pollution 和 timing split 汇总为 Runtime-owned `GasRuntimeDataOrientedScorecard`。`AutoChessHeadlessLogicBudgetResult.Evaluate(...)` 当前改为先创建 scorecard，再做预算阈值判定；`AutoChessDemoHeadlessLogicBudget` summary 输出 `scorecardSource=GasRuntimeDataOrientedScorecard`。
 18. 2026-06-08 第二刀已在 `GasRuntimeDebugger` 增加 `ExportDataOrientedScorecardToText(...)` 与 snapshot + scorecard overload，输出机器可读 `runtimeDataOrientedScorecard` 行；`AutoChessRuntimeRunner` 的日志和 headless report 已改为调用 Runtime Debugger export，而不是只依赖 AutoChess report 自己拼接。该结果仍不是完整 Debugger 瘦身完成，只是把性能预算证据 owner 和 derived export owner 从 AutoChess validation 进一步前移到 GAS Runtime Debugger 模块。
+19. 2026-06-08 第二轮 Debugger 瘦身已新增 `Assets/GAS/Runtime/Debugger/GasRuntimeDerivedExportSink.cs`，把 `runtimeDataOrientedScorecard` 文本派生导出从 4k 行级 `GasRuntimeDebugger.cs` 物理拆出；`GasRuntimeDebugger` 现在只保留 public facade overload，并委托给 `GasRuntimeDerivedExportSink`。这说明 `DerivedExportSink` owner 已开始落地，但 snapshot 读取、event schema、retention、materialization 和 official diff 仍未拆出。
+20. `GasRuntimeDataOrientedScorecard` 当前已新增 `MetricFamilyMask` 与 `DominantRisk`，AutoChess headless budget summary 和 Runtime text export 均输出 `metricFamilyMask=0x...` / `dominantRisk=...`。该字段能把 workload、GAS concept、data shape、API health、timing、overhead 聚合成机器可读风险分类；但它仍只是 scorecard 派生分类，不等于 `GASRuntimeDiagnosticEventBuffer` 已拆为 metric family buffers 或 SoA snapshot。
 
 ## 仍成立风险
 
@@ -61,6 +63,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 |---|---|
 | runtime debugger | `Assets/GAS/Runtime/Debugger/GasRuntimeDebugger.cs` |
 | data-oriented scorecard | `Assets/GAS/Runtime/Debugger/GasRuntimeDataOrientedScorecard.cs` |
+| derived export sink | `Assets/GAS/Runtime/Debugger/GasRuntimeDerivedExportSink.cs` |
 | official diff | `Assets/GAS/Runtime/Debugger/GasRuntimeOfficialToolDiff.cs` |
 | Debugger boundary system | `Assets/GAS/Runtime/System/Event/DiagnosticsSnapshotSystem.cs` |
 | AutoChess observation gateway | `Assets/AutoChessDemo/Integration/GasCore/AutoChessGasObservationGateway.cs` |

@@ -1,3 +1,5 @@
+using System;
+
 namespace GAS.Runtime
 {
     public enum GasRuntimeDiagnosticsPassMode : byte
@@ -27,6 +29,31 @@ namespace GAS.Runtime
         OfficialCapture = 2,
         ValidationEvidence = 3,
         DerivedExport = 4,
+    }
+
+    [Flags]
+    public enum GasRuntimeDiagnosticsMetricFamilyMask : int
+    {
+        None = 0,
+        Workload = 1 << 0,
+        GasConcept = 1 << 1,
+        DataShape = 1 << 2,
+        ApiHealth = 1 << 3,
+        Timing = 1 << 4,
+        Overhead = 1 << 5,
+    }
+
+    public enum GasRuntimeDataOrientedDominantRisk : byte
+    {
+        None = 0,
+        MissingPerformanceTiming = 1,
+        ObservationPollution = 2,
+        DependencyWait = 3,
+        SyncQuery = 4,
+        RandomLookup = 5,
+        OwnerLocality = 6,
+        BufferCapacityPressure = 7,
+        MissingProfilerEvidence = 8,
     }
 
     public readonly struct GasRuntimeDataOrientedScorecardInput
@@ -103,6 +130,8 @@ namespace GAS.Runtime
         public readonly int SyncQueryBudget;
         public readonly int DependencyWaitRiskCount;
         public readonly int PerformanceObservationPollutionRiskCount;
+        public readonly GasRuntimeDiagnosticsMetricFamilyMask MetricFamilyMask;
+        public readonly GasRuntimeDataOrientedDominantRisk DominantRisk;
         public readonly bool PerformanceTimingAvailable;
         public readonly bool ProfilerEvidencePassed;
         public readonly double MeasuredAverageTickMilliseconds;
@@ -155,6 +184,8 @@ namespace GAS.Runtime
             DependencyWaitRiskCount = counters.DependencyWaitRiskCount;
             PerformanceObservationPollutionRiskCount =
                 observation.PerformancePollutionRiskCount;
+            MetricFamilyMask = ComputeMetricFamilyMask(input, counters, observation);
+            DominantRisk = ComputeDominantRisk(input, counters, observation);
             PerformanceTimingAvailable = input.PerformanceTimingAvailable;
             ProfilerEvidencePassed = input.ProfilerEvidencePassed;
             MeasuredAverageTickMilliseconds = input.MeasuredAverageTickMilliseconds;
@@ -192,6 +223,106 @@ namespace GAS.Runtime
         private static double Divide(double numerator, double denominator)
         {
             return denominator > 0d ? numerator / denominator : 0d;
+        }
+
+        private static GasRuntimeDiagnosticsMetricFamilyMask ComputeMetricFamilyMask(
+            in GasRuntimeDataOrientedScorecardInput input,
+            in GasRuntimeCoreDiagnosticCounters counters,
+            in GasRuntimeObservationMaterializationCounters observation)
+        {
+            var mask = GasRuntimeDiagnosticsMetricFamilyMask.None;
+
+            if (input.UnitCount > 0
+                || input.MeasuredTicks > 0
+                || input.CommandCount > 0
+                || counters.FactCount > 0)
+            {
+                mask |= GasRuntimeDiagnosticsMetricFamilyMask.Workload;
+            }
+
+            if (input.CommandCount > 0
+                || counters.SpecCount > 0
+                || counters.DeltaCount > 0
+                || counters.FactCount > 0
+                || counters.CueCount > 0
+                || counters.ActiveEffectSlotCount > 0
+                || counters.PendingAttributeDeltaCount > 0)
+            {
+                mask |= GasRuntimeDiagnosticsMetricFamilyMask.GasConcept;
+            }
+
+            if (counters.ActiveMutationOwnerGroupCount > 0
+                || counters.ActiveMutationMaxOwnerRange > 0
+                || counters.PendingAttributeTargetGroupCount > 0
+                || counters.PendingAttributeMaxTargetRange > 0
+                || counters.OwnerLocalFactOwnerGroupCount > 0
+                || counters.OwnerLocalFactMaxOwnerRange > 0
+                || counters.ActiveEffectSlotCapacity > 0)
+            {
+                mask |= GasRuntimeDiagnosticsMetricFamilyMask.DataShape;
+            }
+
+            if (counters.QueryBudget > 0
+                || counters.LookupUpdateBudget > 0
+                || counters.RandomLookupBudget > 0
+                || counters.SyncQueryBudget > 0
+                || counters.DependencyWaitRiskCount > 0)
+            {
+                mask |= GasRuntimeDiagnosticsMetricFamilyMask.ApiHealth;
+            }
+
+            if (input.PerformanceTimingAvailable
+                || input.MeasuredAverageTickMilliseconds > 0d
+                || input.GasTickAverageMilliseconds > 0d
+                || input.CoreSimulationAverageMilliseconds > 0d)
+            {
+                mask |= GasRuntimeDiagnosticsMetricFamilyMask.Timing;
+            }
+
+            if (observation.PerformancePollutionRiskCount > 0
+                || !input.ProfilerEvidencePassed
+                || !string.IsNullOrEmpty(input.ProfilerCaptureState))
+            {
+                mask |= GasRuntimeDiagnosticsMetricFamilyMask.Overhead;
+            }
+
+            return mask;
+        }
+
+        private static GasRuntimeDataOrientedDominantRisk ComputeDominantRisk(
+            in GasRuntimeDataOrientedScorecardInput input,
+            in GasRuntimeCoreDiagnosticCounters counters,
+            in GasRuntimeObservationMaterializationCounters observation)
+        {
+            if (!input.PerformanceTimingAvailable)
+                return GasRuntimeDataOrientedDominantRisk.MissingPerformanceTiming;
+            if (observation.PerformancePollutionRiskCount > 0)
+                return GasRuntimeDataOrientedDominantRisk.ObservationPollution;
+            if (counters.DependencyWaitRiskCount > 0)
+                return GasRuntimeDataOrientedDominantRisk.DependencyWait;
+            if (counters.SyncQueryBudget > 0)
+                return GasRuntimeDataOrientedDominantRisk.SyncQuery;
+            if (counters.RandomLookupBudget > 0
+                || counters.ActiveMutationEstimatedRandomLookupCount > 0
+                || counters.PendingAttributeEstimatedRandomLookupCount > 0)
+            {
+                return GasRuntimeDataOrientedDominantRisk.RandomLookup;
+            }
+            if (counters.ActiveMutationMaxOwnerRange > 1
+                || counters.PendingAttributeMaxTargetRange > 1
+                || counters.OwnerLocalFactMaxOwnerRange > 1)
+            {
+                return GasRuntimeDataOrientedDominantRisk.OwnerLocality;
+            }
+            if (counters.ActiveEffectSlotCapacity > 0
+                && counters.ActiveEffectSlotCount * 100 >= counters.ActiveEffectSlotCapacity * 70)
+            {
+                return GasRuntimeDataOrientedDominantRisk.BufferCapacityPressure;
+            }
+            if (!input.ProfilerEvidencePassed)
+                return GasRuntimeDataOrientedDominantRisk.MissingProfilerEvidence;
+
+            return GasRuntimeDataOrientedDominantRisk.None;
         }
     }
 }

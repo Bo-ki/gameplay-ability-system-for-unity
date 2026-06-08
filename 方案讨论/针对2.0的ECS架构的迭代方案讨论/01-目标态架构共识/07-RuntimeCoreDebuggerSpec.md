@@ -32,6 +32,241 @@ flowchart TD
     Bridge --> Headless
 ```
 
+## 数据导向 Debugger 重构架构
+
+目标态 Debugger 不是“GAS 日志中心”，而是 **GAS concept aware + DOTS data-oriented** 的 evidence pipeline。它必须同时回答两类问题：
+
+1. GAS 概念视角：Ability、GameplayEffect、Attribute、Tag、Cue、GameplayFact 在本帧发生了什么，语义链是否完整。
+2. DOTS 数据视角：这些语义成本落在哪个 phase / lane / system / job / component / buffer / lookup / allocator / structural playback / sync point 上，是否符合 `QRY/JOB/BUF/NAT/PRF/DBG` 规则。
+
+目标态分成五个 owner，任何实现不得再把它们塞回同一个大类或单个稀疏事件行：
+
+| Owner | 允许职责 | 禁止职责 |
+|---|---|---|
+| `DiagnosticsConfigOwner` | 采样开关、pass mode、sampling interval、overhead budget、retention budget | 保存 runtime 业务计数、执行 query、导出字符串 |
+| `RuntimeMetricSink` | hot path 写固定宽度 numeric metric、FixedString id、sample count、min/max/total | `ToEntityArray`、`Dictionary`、托管字符串、Profiler/Journaling 开关 |
+| `DiagnosticMaterializationPass` | diagnostic pass 中做 query materialization、TopN、active store 深扫、observation 物化成本归因 | 被 performance pass 隐式开启，或把 materialization 成本并入 CoreSimulation |
+| `OfficialCorrelationPass` | separate pass 读取 Entities Journaling / Profiler state / official TopN，并与 metric id 对齐 | 替代 runtime counter，或在 strict performance pass 中启用 Journaling |
+| `DerivedExportSink` | 文本、Mermaid、sequence、Editor chart、中文日志、报告摘要 | 成为机器验收源，或被 Runtime Core 读取改变 gameplay |
+
+### Pass Mode
+
+Debugger 采样必须显式声明 pass mode。pass mode 是 performance 结论的前置条件，不是报告注释：
+
+| Mode | 用途 | 允许开销 | 典型输出 |
+|---|---|---|---|
+| `Off` | 生产或极限 benchmark | 0 | 仅保留必要 battle hash / result |
+| `PerfCounter` | strict headless performance pass | 低开销 numeric counter、timing split、必要 facts | `DataOrientedScorecard`、owner split、failure mask |
+| `DiagnosticSample` | 架构定位 / x50 复诊 | query materialization、buffer 深扫、TopN、raw snapshot | hotspot matrix、buffer pressure、materialization owner |
+| `OfficialCapture` | official diff separate pass | Profiler/Journaling/Burst evidence 开销 | Journaling TopN、Profiler state、official disabled reason |
+| `DerivedExport` | 人读报告 / Editor Window | 字符串和图表导出 | text / Mermaid / chart，不参与机器 gate |
+
+解释规则：
+
+1. Performance pass 只能消费 `PerfCounter` 级 evidence；如果 Debugger materialization、official capture 或 derived export 开启，该样本只能作为 diagnostic evidence。
+2. Diagnostic pass 可以重，但必须输出 `overheadOwner=Debugger` / `Observation` / `OfficialTool`，并保留 materialized query/entity/time。
+3. Official capture pass 必须与 performance pass 分离，并对照 commands/facts/cues/hash，证明采样窗口业务等价。
+
+### Metric Family
+
+目标态不再使用单个 `DiagnosticEvent` 大结构体承载全部字段。metric 必须按数据访问模式分族，便于 Burst-friendly 写入和边界导出：
+
+| Metric family | 物理形态 | 示例字段 | 数据导向目的 |
+|---|---|---|---|
+| `CostMetric` | compact DynamicBuffer / frame aggregate | domain、phase、lane、system id、samples、total/min/max us | 找到 cost owner |
+| `WorkloadMetric` | frame aggregate | units、commands、specs、deltas、facts、cues、measured ticks | 归一化 us / unit / command / fact |
+| `GasConceptMetric` | concept id + counter | ability commits、GE specs、active slots、attribute deltas、tag requirement、cue requests | 保留 GAS 语义链 |
+| `DataShapeMetric` | owner-local range / chunk / buffer counter | owner groups、max range、chunk count、buffer length/capacity/spill | 判断 chunk locality / buffer pressure |
+| `ApiHealthMetric` | fixed id counter | query count、lookup refresh、random lookup、sync query、dependency wait | 识别 DOTS API 选型问题 |
+| `StructuralMetric` | structural phase aggregate | ECB commands、playback us、create/destroy/add/remove、official structural records | 判断结构变化是否集中 |
+| `OverheadMetric` | pass-local counter | debugger enabled、materialized queries、Journaling enabled、export bytes | 阻断观测污染 |
+| `OfficialCorrelationMetric` | official source id + TopN id | Journaling RW TopN、Profiler state、Burst/AOT state | 与 Unity 官方工具对齐 |
+
+Metric family 必须能被 scorecard 压缩成机器字段：`metricFamilyMask` 表示本次证据覆盖的 workload / GAS concept / data shape / API health / timing / overhead 族，`dominantRisk` 表示当前最应优先领取的 DOTS 数据风险。它们是任务路由字段，不替代底层 typed buffers，也不能只从字符串 summary 反推。
+
+### 目标代码形态
+
+代码形态重点是 **小 component + typed buffer + evidence id**。下列代码是目标结构示意，不是当前实现事实：
+
+```csharp
+public enum GASDiagnosticPassMode : byte
+{
+    Off,
+    PerfCounter,
+    DiagnosticSample,
+    OfficialCapture,
+    DerivedExport,
+}
+
+public enum GASDiagnosticCostDomain : byte
+{
+    Core,
+    Boundary,
+    Debugger,
+    Runner,
+    Physics,
+    Render,
+    Presentation,
+}
+
+public enum GASDiagnosticEvidenceTier : byte
+{
+    RuntimeCounter,
+    DiagnosticMaterialization,
+    OfficialCapture,
+    ValidationEvidence,
+    DerivedExport,
+}
+
+public struct GASDiagnosticsConfigComponent : IComponentData
+{
+    public GASDiagnosticPassMode PassMode;
+    public int SamplingInterval;
+    public int OverheadBudgetMicroseconds;
+    public int MaxMetricRows;
+}
+
+public struct GASDiagnosticsFrameStateComponent : IComponentData
+{
+    public int Frame;
+    public int Sequence;
+    public int DroppedMetricRows;
+    public int EvidenceMask;
+}
+
+[InternalBufferCapacity(64)]
+public struct GASCostMetricBuffer : IBufferElementData
+{
+    public int EvidenceId;
+    public GASDiagnosticCostDomain Domain;
+    public GASDiagnosticEvidenceTier Tier;
+    public ushort PhaseId;
+    public ushort LaneId;
+    public ushort SystemId;
+    public int Samples;
+    public int TotalMicroseconds;
+    public int MaxMicroseconds;
+}
+
+[InternalBufferCapacity(64)]
+public struct GASApiHealthMetricBuffer : IBufferElementData
+{
+    public int EvidenceId;
+    public ushort PhaseId;
+    public ushort LaneId;
+    public ushort SourceId;
+    public int QueryCount;
+    public int LookupRefreshCount;
+    public int RandomLookupReadCount;
+    public int RandomLookupWriteCount;
+    public int SyncQueryCount;
+    public int DependencyWaitCount;
+}
+
+[InternalBufferCapacity(64)]
+public struct GASDataShapeMetricBuffer : IBufferElementData
+{
+    public int EvidenceId;
+    public ushort ConceptId;
+    public ushort CarrierId;
+    public int OwnerGroupCount;
+    public int MaxOwnerRange;
+    public int BufferLength;
+    public int BufferCapacity;
+    public int ExternalizedOrSpillCount;
+}
+
+public readonly ref struct GASMetricWriter
+{
+    private readonly GASDiagnosticPassMode _mode;
+    private readonly DynamicBuffer<GASCostMetricBuffer> _costs;
+
+    public GASMetricWriter(
+        GASDiagnosticPassMode mode,
+        DynamicBuffer<GASCostMetricBuffer> costs)
+    {
+        _mode = mode;
+        _costs = costs;
+    }
+
+    public void AddCost(
+        int evidenceId,
+        GASDiagnosticCostDomain domain,
+        ushort phaseId,
+        ushort laneId,
+        ushort systemId,
+        int elapsedMicroseconds)
+    {
+        if (_mode == GASDiagnosticPassMode.Off)
+            return;
+
+        _costs.Add(new GASCostMetricBuffer
+        {
+            EvidenceId = evidenceId,
+            Domain = domain,
+            Tier = GASDiagnosticEvidenceTier.RuntimeCounter,
+            PhaseId = phaseId,
+            LaneId = laneId,
+            SystemId = systemId,
+            Samples = 1,
+            TotalMicroseconds = elapsedMicroseconds,
+            MaxMicroseconds = elapsedMicroseconds,
+        });
+    }
+}
+```
+
+关键约束：
+
+1. Hot path writer 不接收 `string`，只接收 generated / static id、numeric counter、FixedString 短 id 或 enum。
+2. `DiagnosticMaterializationPass` 可以把 id 解析成人读名称；Runtime Core 不做解析。
+3. metric family 允许按实现继续拆 buffer；不允许退回单个稀疏大 event row。
+4. `DerivedExportSink` 只能从 snapshot / metric buffers 生成文本，不允许自行扫描 Runtime Core 数据。
+
+## GAS 概念到 DOTS 指标映射
+
+目标态 Debugger 必须保留 GAS 语言，但它的性能解释必须落到 DOTS 数据形状：
+
+| GAS 概念 | 必须输出的语义 evidence | 必须绑定的 DOTS evidence |
+|---|---|---|
+| Ability | activation requests、commit accepted/rejected、cost/cooldown/tag requirement result | command owner、target resolve lane、query/lookup count、commit system cost |
+| GameplayEffect Instant | command seed、spec build、modifier count、cue-only spec、requirement pass/fail | fan-in carrier、NativeStream segment、spec buffer pressure、deterministic merge |
+| GameplayEffect Duration | active slot count/state、period due、duration due、stack policy、granted tag/ability | owner-local slot capacity、chunk skip、global index pressure、cleanup structural phase |
+| Magnitude / ExecutionCalculation | captured value hit、capture miss、fallback value/fact、source/target lookup、execution input | snapshot lane owner、random lookup TopN、owner range、cache miss budget |
+| Attribute | pending/applied/skipped delta、target groups、max target range、dirty owners | target-grouped reduce/apply cost、owner-local fact flush、buffer spill |
+| GameplayTag / Requirement | tag mask changes、requirement query result、blocked reason | chunk locality、enableable / mask policy、query filter health |
+| Cue / Presentation | cue request、presentation marker、outbox count/drop | Boundary cost、managed bridge count、render/presentation disabled reason |
+| GameplayFact / Replay | fact count、sequence、domain/event type、hash | deterministic order、stream carrier、BoundaryProjection cost |
+
+解释规则：
+
+1. GAS concept metric 只回答“发生了什么”；DOTS metric 回答“为什么快/慢”。
+2. 每条 hotspot 必须同时有 concept id 和 data-shape id。只有其中一侧时，只能作为 partial evidence。
+3. `avgTickMs` 只能作为入口信号；任务 owner 必须由 phase/lane/system/component/buffer/lookup/official source 推出。
+
+## DataOrientedScorecard
+
+Runtime Debugger 必须直接生成或支持生成同构 scorecard，AutoChess、Scene Runner、Editor Window 和 CI 只消费它，不各自拼字段。scorecard 至少包含：
+
+| Scorecard 维度 | 必填字段 |
+|---|---|
+| Workload-normalized cost | units、measured ticks、commands/facts per tick、us per unit / command / fact |
+| Chunk locality | owner groups、max owner range、chunk count、enabled mask skip、chunk skip reason |
+| Lookup pressure | lookup refresh、random read/write、GetComponentDataRW / GetBufferRW TopN、snapshot miss |
+| Buffer pressure | length、capacity、externalized / spill、overflow、clear phase |
+| Structural phase | required / recorded playback、ECB commands、Journaling structural records、playback us |
+| Sync / materialization | dependency drain us、sync query count、ToEntityArray count、materialized entity count |
+| Burst / managed boundary | Burst warmup state、managed allocation、managed bridge count、SystemBase / callback hit |
+| Debugger overhead | pass mode、Debugger enabled、Journaling enabled、Profiler state、export bytes、overhead us |
+| Evidence routing | metric family mask、dominant risk、failure mask、next owner |
+
+验收规则：
+
+1. strict performance pass 必须输出 scorecard，即使 Debugger raw trace 关闭。
+2. 任何失败项必须给出 failure mask 和 next owner：`CommandPort`、`EffectFanInStore`、`ActiveEffectStore`、`AttributeApply`、`StructuralCommit`、`DiagnosticsSink`、`OfficialCapture`、`RunnerSync` 等。
+3. scorecard 字段必须以 machine evidence 为源；中文 summary、Mermaid、Editor 图表只能引用 evidence id。
+4. `metricFamilyMask` 和 `dominantRisk` 必须由 metric family / counter / validation evidence 计算，不允许由人读文案或导出文本硬编码。
+
 ## UML 类图
 
 ```mermaid
@@ -109,6 +344,32 @@ sequenceDiagram
 5. **Derived Export**：中文日志、summary、Mermaid dataflow、sequence diagram 和 Editor 图表，只能从前四类 evidence 派生，不反向参与验收。
 
 任何性能结论必须显式区分 performance pass 与 diagnostic pass。若 Debugger、Journaling、Profiler 或图表导出改变了采样成本，evidence 必须标记 overhead owner，并禁止把该样本直接消费为 Core tick 优秀证明。
+
+## Hotspot Attribution Evidence Contract
+
+目标态 Debugger 的核心 Interface 不是“输出更多日志”，而是把热点归因压缩成一张可机读矩阵。这个矩阵必须能让执行 Agent 直接回答：热点属于哪个 SystemGroup、lane、system、job、component、buffer / lookup、carrier、allocator、dependency、structural phase、official tool source 和后续任务 owner。
+
+每条 hotspot evidence 至少包含以下字段族：
+
+| 字段族 | 必填语义 | 目标 |
+|---|---|---|
+| Cost domain | core、boundary、diagnostics、runner、presentation、physics、render | 防止把 Debugger / Presentation / Runner 成本混入 Runtime Core |
+| Phase / lane | frame phase、data lane、structural phase、fan-in / reduce / apply / projection | 把平均 tick 拆成可行动 owner |
+| Source identity | system group、system、job、component / buffer / lookup、carrier id | 让 TopN 能落到具体实现单元 |
+| Evidence tier | contract、runtime counter、official capture、validation evidence、derived export | 防止用 contract 或派生文本替代运行证据 |
+| API health | proof-only / scale-ready、reselect trigger、query / lookup / buffer / allocator / dependency markers | 把 API 选型风险转为任务树可领取项 |
+| Official diff | profiler state、journaling state、TopN source、disabled / unsupported reason | 让官方工具和项目 counter 可对照 |
+| Overhead owner | sampling switch、debugger enabled、journaling enabled、export enabled、measured window | 区分 performance pass 与 diagnostic pass |
+| Determinism | warmup ticks、measurement ticks、fixed-step policy、hash / order violation | 支撑 AutoChess scale gate 与 replay 判定 |
+| Derived output source | summary、Mermaid、sequence、Editor chart 的 source evidence id | 确保图表和中文日志只从机器 evidence 派生 |
+
+解释规则：
+
+1. TopN 必须以 evidence id 连接 runtime counter 与 official capture；无法连接时输出 disabled / unsupported reason，而不是静默降级为文本说明。
+2. Performance pass 只允许消费 low-overhead runtime counter、hash、必要 facts 和 timing split；Diagnostic pass 才允许 observation materialization、full Debugger snapshot、Journaling、Profiler capture、raw export 和 derived diagram。
+3. Hotspot evidence 必须能生成任务 owner 建议：例如 Shell / Adapter、CommandPort、EffectFanInStore、ActiveEffectStore、StructuralCommit、DiagnosticsSink、GeneratedDefinitionGlue、RunnerSync 或 DefinitionCatalogLifetime。
+4. `avgTickMs`、`blockingDebugErrors=0`、字符串 summary、Mermaid 图和 Editor UI 状态都不是 hotspot evidence 的权威源；它们只能引用矩阵中的 evidence id。
+5. Debugger 自身的采样成本必须可被度量和关闭；无法度量时，该样本不得用于 DOTS 性能优秀结论。
 
 ## 必备 counters
 
