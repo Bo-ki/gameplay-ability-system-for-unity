@@ -235,6 +235,7 @@ namespace GAS.Runtime
             typeof(GEExecutionCalculationSystem),
             typeof(GEExecutionCalculationExtensionSystemGroup),
             typeof(GEExecutionCalculationOutputModifierSystem),
+            typeof(GEEffectCommandCatalogNormalizeSystem),
             typeof(GEEffectSpecBuildSystem),
             typeof(GASAttributeSetReduceApplySystem),
             typeof(GASAttributeModifierDeltaApplySystem),
@@ -250,7 +251,6 @@ namespace GAS.Runtime
 
         private static readonly string[] GeneratedCoreSimulationSystemTypeNames =
         {
-            "GAS.Runtime.Generated.GEEffectCommandCatalogNormalizeSystem, " + GeneratedRuntimeAssemblyName,
             "GAS.Runtime.Generated.GASActiveEffectMutationApplySystem, " + GeneratedRuntimeAssemblyName,
             "GAS.Runtime.Generated.GASActiveEffectPreTickSystem, " + GeneratedRuntimeAssemblyName,
             "GAS.Runtime.Generated.GASActiveEffectRemoveSystem, " + GeneratedRuntimeAssemblyName,

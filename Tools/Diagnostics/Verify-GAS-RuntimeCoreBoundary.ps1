@@ -86,6 +86,7 @@ $effectMagnitudeResolverPath = Join-Path $runtimePath "System\Effect\EffectMagni
 $effectRuntimeUtilityPath = Join-Path $runtimePath "System\Effect\EffectRuntimeUtility.cs"
 $executionCalculationSystemPath = Join-Path $runtimePath "System\Effect\GEExecutionCalculationSystem.cs"
 $executionCalculationOutputModifierSystemPath = Join-Path $runtimePath "System\Effect\GEExecutionCalculationOutputModifierSystem.cs"
+$activeEffectCommandNormalizePath = Join-Path $runtimePath "System\Effect\GEActiveEffectCommandNormalizeSystem.cs"
 $effectInstantSystemsPath = Join-Path $runtimePath "System\Effect\GEEffectInstantSystems.cs"
 $diagnosticsSnapshotSystemPath = Join-Path $runtimePath "System\Event\DiagnosticsSnapshotSystem.cs"
 $scheduleContractPath = Join-Path $runtimePath "System\SystemGroup\GASSystemScheduleContract.cs"
@@ -503,9 +504,17 @@ Assert-FileNotContains `
     -Pattern "OwnerLocalInstantCommandFlushSystem" `
     -Message "Generated instant marker must not depend on the deleted owner-local instant command flush system."
 Assert-FileContains `
-    -Path $activeEffectLifecycleOwnerPath `
+    -Path $activeEffectCommandNormalizePath `
     -Pattern "\[UpdateBefore\(typeof\(GEEffectSpecBuildSystem\)\)\][\s\S]*?GEEffectCommandCatalogNormalizeSystem\s*:\s*ISystem" `
-    -Message "Active-effect normalize wrapper must still order before the handwritten instant spec build owner."
+    -Message "Handwritten active-effect command normalize owner must order before instant spec build."
+Assert-FileContains `
+    -Path $activeEffectCommandNormalizePath `
+    -Pattern "GASRuntimeDefinitionResolver\.TryNormalizeGameplayEffectCommand" `
+    -Message "Handwritten active-effect command normalize owner must use runtime definition resolver instead of generated catalog helpers."
+Assert-FileContains `
+    -Path $activeEffectLifecycleOwnerPath `
+    -Pattern "UpdateBefore\(typeof\(GAS\.Runtime\.GEEffectCommandCatalogNormalizeSystem\)\)[\s\S]*?GASActiveEffectRemoveSystem\s*:\s*ISystem" `
+    -Message "Generated active-effect remove wrapper must order before the handwritten command normalize owner without runtime depending on generated types."
 Assert-FileContains `
     -Path $codeGenTemplatePath `
     -Pattern "GASGeneratedEffectInstantRuntimeMarker" `
@@ -1506,6 +1515,14 @@ Assert-FileNotContains `
     -Path $scheduleContractPath `
     -Pattern "AbilityCatalogCommitSystem" `
     -Message "Runtime schedule contract must not reference generated AbilityCatalogCommitSystem after handwritten ownership migration."
+Assert-FileContains `
+    -Path $scheduleContractPath `
+    -Pattern "typeof\(GEEffectCommandCatalogNormalizeSystem\)[\s\S]*?typeof\(GEEffectSpecBuildSystem\)" `
+    -Message "Runtime schedule contract must register handwritten active-effect command normalize before instant spec build."
+Assert-FileNotContains `
+    -Path $scheduleContractPath `
+    -Pattern "GAS\.Runtime\.Generated\.GEEffectCommandCatalogNormalizeSystem" `
+    -Message "Runtime schedule contract must not register generated active-effect command normalize after handwritten ownership migration."
 Assert-FileContains `
     -Path $scheduleContractPath `
     -Pattern "typeof\(GEEffectSpecBuildSystem\)[\s\S]*?typeof\(GASAttributeSetReduceApplySystem\)[\s\S]*?typeof\(GASAttributeModifierDeltaApplySystem\)" `

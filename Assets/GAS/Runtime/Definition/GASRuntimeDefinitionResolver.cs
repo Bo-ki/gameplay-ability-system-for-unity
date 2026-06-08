@@ -94,6 +94,42 @@ namespace GAS.Runtime
             return failureReason == GASFailureReasonCodes.None;
         }
 
+        public static bool TryNormalizeGameplayEffectCommand(
+            ref GASDefinitionCatalogBlob catalog,
+            ref GEEffectCommandBuffer command)
+        {
+            if (command.GameplayEffectCode <= 0
+                || !GASDefinitionCatalogLookup.TryGetGameplayEffectIndex(
+                    ref catalog,
+                    command.GameplayEffectCode,
+                    out var gameplayEffectIndex))
+            {
+                return false;
+            }
+
+            ref readonly var gameplayEffect = ref GASDefinitionCatalogLookup.GetGameplayEffect(
+                ref catalog,
+                gameplayEffectIndex);
+            var durationFrame = ResolveDurationFrame(in command, in gameplayEffect);
+            var isActiveMutation = RequiresActiveMutationLane(in gameplayEffect, durationFrame);
+            command.Kind = isActiveMutation ? GEEffectCommandKind.ActiveMutation : GEEffectCommandKind.Instant;
+            command.DurationFrameOverride = durationFrame;
+            if (isActiveMutation)
+                command.Flags |= GASGECommandSeedFlags.ActiveMutation;
+            else
+                command.Flags &= ~GASGECommandSeedFlags.ActiveMutation;
+            return true;
+        }
+
+        private static int ResolveDurationFrame(
+            in GEEffectCommandBuffer command,
+            in GASCatalogGameplayEffectDefinitionBlob gameplayEffect)
+        {
+            return command.DurationFrameOverride > 0
+                ? command.DurationFrameOverride
+                : gameplayEffect.DurationFrames;
+        }
+
         private static bool RequiresActiveMutationLane(
             in GASCatalogGameplayEffectDefinitionBlob gameplayEffect,
             int durationFrameOverride)

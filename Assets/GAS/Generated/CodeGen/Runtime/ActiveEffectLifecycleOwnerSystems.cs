@@ -426,6 +426,7 @@ namespace GAS.Runtime.Generated
     [DisableAutoCreation]
     [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
     [UpdateAfter(typeof(GASActiveEffectPreTickSystem))]
+    [UpdateBefore(typeof(GAS.Runtime.GEEffectCommandCatalogNormalizeSystem))]
     public partial struct GASActiveEffectRemoveSystem : ISystem
     {
         private EntityQuery _removeCommandQuery;
