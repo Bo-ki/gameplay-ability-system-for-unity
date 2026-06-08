@@ -211,7 +211,7 @@ namespace GAS.Runtime
         {
             if (command.Kind == GEEffectCommandKind.Instant)
             {
-                return TryGetInstantCommandOwnerPayload(
+                var resolved = TryGetInstantCommandOwnerPayload(
                         em,
                         in command,
                         out var instantCommands,
@@ -222,9 +222,10 @@ namespace GAS.Runtime
                         instantSetByCallerValues,
                         setByCallerValues)
                     : default;
+                return resolved;
             }
 
-            return TryGetActiveMutationOwnerPayload(
+            var activeMutationResolved = TryGetActiveMutationOwnerPayload(
                     em,
                     in command,
                     out var activeMutationCommands,
@@ -235,6 +236,7 @@ namespace GAS.Runtime
                     activeMutationSetByCallerValues,
                     setByCallerValues)
                 : default;
+            return activeMutationResolved;
         }
 
         private static GEEffectCommandBuffer AppendPreparedCommand(
@@ -245,7 +247,7 @@ namespace GAS.Runtime
         {
             if (command.Kind == GEEffectCommandKind.Instant)
             {
-                return TryGetInstantCommandOwnerPayload(
+                var resolved = TryGetInstantCommandOwnerPayload(
                         em,
                         in command,
                         out var instantCommands,
@@ -256,9 +258,10 @@ namespace GAS.Runtime
                         instantSetByCallerValues,
                         setByCallerValues)
                     : default;
+                return resolved;
             }
 
-            return TryGetActiveMutationOwnerPayload(
+            var activeMutationResolved = TryGetActiveMutationOwnerPayload(
                     em,
                     in command,
                     out var activeMutationCommands,
@@ -269,6 +272,7 @@ namespace GAS.Runtime
                     activeMutationSetByCallerValues,
                     setByCallerValues)
                 : default;
+            return activeMutationResolved;
         }
 
         private static bool TryGetActiveMutationOwnerPayload(

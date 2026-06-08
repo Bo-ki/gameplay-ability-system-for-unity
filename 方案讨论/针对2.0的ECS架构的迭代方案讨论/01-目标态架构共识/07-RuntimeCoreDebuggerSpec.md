@@ -85,6 +85,68 @@ Debugger 采样必须显式声明 pass mode。pass mode 是 performance 结论�
 3. `dominantRisk` 只能从 family snapshot / scorecard 计算，不允许由人读日志手填；当 Profiler disabled 时可以阻塞 `performanceExcellentPassed`，但不能吞掉已存在的 data shape / API health 风险。
 4. `runtimeDataOrientedScorecard` 文本行属于 `DerivedExport`，Core 不得读取它，也不得把它当成 raw perf counter。
 
+### Hotspot Attribution Matrix
+
+`HotspotAttributionMatrix` 是 scorecard 之后的任务路由 read model。它不替代 Unity Profiler、Entities Journaling 或 Runtime counter，而是把已有 evidence 连接成 `GAS concept -> phase/lane -> system -> component/buffer -> operation -> DOTS risk -> next owner`。
+
+目标态输出应是机器可读行，例如：
+
+```text
+hotspotAttribution|source=...|readModel=...|passMode=DerivedExport|costDomain=Debugger|evidenceTier=ValidationEvidence|id=...|severity=High|gasConcept=GameplayFact|phase=GASBoundaryProjectionSystemGroup|lane=OwnerLocalFactDirtySpan|system=GameplayBoundaryFactExportSystem|buffer=OwnerLocalGameplayFactBuffer|operation=GetBufferRW|count=11250|dotsRisk=BroadBufferRW+OwnerLocality|nextOwner=R3|recommendation=dirty owner/fact span lane|evidence=ownerLocalFactFlushes=5200
+```
+
+字段规则：
+
+| 字段 | 目的 | 禁止误用 |
+|---|---|---|
+| `id` | 稳定 evidence id，例如 `GAS-ARCH-07` / `GAS-DBG-01` / `GAS-MEASURE-02` | 不允许每次导出换随机名字 |
+| `gasConcept` | Ability / GE / Attribute / GameplayFact / Cue / Debugger 等业务语义 | 不允许只写 system 名 |
+| `phase` / `lane` | 物理 group 和逻辑 lane | 不允许把 Core、Boundary、Debugger、OfficialCapture 混成同一 owner |
+| `system` / `buffer` / `operation` | 可回到代码和 DOTS API 的热点位置 | 不允许只写“慢”或“待优化” |
+| `count` | 当前样本的机器计数，可来自 scorecard、Journaling TopN、diagnostic evidence 或 official diff | 不允许手填无法复算的估计值 |
+| `dotsRisk` | 数据导向风险，如 `BroadBufferRW`、`PerFrameSlotScan`、`FanOutScan`、`DependencyWait` | 不允许写抽象 OOP 评价 |
+| `nextOwner` | R3/R4/R5/R7/R8 等任务 owner | 不允许没有下一步 owner 的 High finding |
+
+解释规则：
+
+1. Matrix 属于 `DerivedExport` 和 validation evidence，不进入 Core gameplay，也不回写 Runtime 状态。
+2. Matrix 的 `source` 可以是 Runtime `DerivedExportSink` 或 AutoChess validation report；外部 analysis 必须合并同构行，而不是解析中文 summary。
+3. High row 必须有可执行 owner。`OwnerLocalGameplayFactBuffer` / `AttributeValueBuffer` 默认归 R3，ActiveEffect pre-tick / command prepare 可归 R7/R3，execution spec scan 归 R5/R3，diagnostic materialization 归 R4，Profiler disabled 归 R8。
+4. 每轮性能优化的交付必须包含优化前后的 Matrix 对比：如果 avg ms 下降但 High row 和 DOTS risk 不变，只能写成局部耗时波动，不能写成数据形态优化完成。
+5. 当 `performanceExcellentPassed=False` 且原因是 Profiler disabled，Matrix 仍可用于任务路由，但不能把该样本写成 DOTS profiler-backed 优秀结论。
+
+### Regression Evidence Contract
+
+Debugger 必须能记录失败优化，而不是只记录最终成功基线。任何“局部指标下降”的优化都必须同时通过业务链路、strict budget、Journaling TopN、Job safety、owner timing 和 hotspot matrix 交叉验证。
+
+防回归规则：
+
+1. 高频 enableable marker 不能默认作为 owner-local dirty lane。只有在 toggle 次数按 owner 去重、无 Job aliasing、无 `EnableComponent` TopN 膨胀、且业务链路通过时，才允许进入 Runtime Core hot path。
+2. owner-local command / mutation / fact 的事实源优先是 typed DynamicBuffer、dirty span、due slot 或 generated index；marker 只能作为低频生命周期状态，不允许把每条命令的写入变成 `SetComponentEnabled`。
+3. 如果某个优化让 `FramePrepare` 或单个 system timing 下降，但 `journalingWorldRecords`、`EnableComponent`、`CoreSimulation`、`DependencyWait`、Job safety exception 或 battle completion 变差，Matrix 必须输出 regression row 或在归档中记录为反例。
+4. Brief / 子报告必须保留失败样本路径，避免后续 agent 只复用成功结论而重新引入已证伪链路。
+
+### Split Report Contract
+
+Debugger / validation 报告必须默认面向 Agent 可读性设计。全量 log 可以保留为原始证据，但常规审查入口必须是一份短简报和若干领域子报告：
+
+| 报告 | 内容边界 | 读取策略 |
+|---|---|---|
+| `AutoChessProfileBrief.md` | pass / budget / performance excellent / dominant risk / Top next owners / 子报告路径 | Agent 默认只读此文件 |
+| `SubReports/PerformanceBudget.md` | strict budget、timing split、performance pollution、Profiler gate | 只在判断预算和 ms 口径时读取 |
+| `SubReports/HotspotAttribution.md` | `hotspotAttribution` 全量矩阵 | 只在制定 R3/R4/R5/R7/R8 owner 时读取 |
+| `SubReports/JournalingTopN.md` | record/system/component TopN 与 per-tick 折算 | 只在追 DOTS API / buffer RW 热点时读取 |
+| `SubReports/DebuggerEvidence.md` | metric family、observation materialization、finding / next probe | 只在审查 Debugger owner / materialization 成本时读取 |
+| `SubReports/RuntimeBattleLog.md` | 中文业务战斗日志 / replay 派生文本 | 只在验证业务表现或 replay 可读性时读取 |
+
+解释规则：
+
+1. 原始 headless report 与全量 `AutoChessProfileAnalysis.md/json` 仍是完整证据，不删除。
+2. Brief 必须足够短，不能重新复制全量 TopN 或 battle log。
+3. 子报告必须按领域 owner 拆分，不允许把性能预算、业务战斗日志、Journaling TopN 和 Debugger materialization 继续堆在同一个默认读取文件。
+4. Runtime Debugger 内部后续拆分也应遵守同样领域边界：PerformanceBudget、HotspotAttribution、Journaling/OfficialCorrelation、DebuggerEvidence、Replay/BattleLog 分别由不同 owner 派生。
+5. Agent / CI / 文档复审默认引用 Brief 路径；需要追责某个 owner 时再引用对应子报告，降低 token 和人工审查成本。
+
 ### Metric Family
 
 目标态不再使用单个 `DiagnosticEvent` 大结构体承载全部字段。metric 必须按数据访问模式分族，便于 Burst-friendly 写入和边界导出：

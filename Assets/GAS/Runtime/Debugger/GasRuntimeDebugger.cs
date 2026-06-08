@@ -116,6 +116,11 @@ namespace GAS.Runtime
         public int RuntimeCoreOwnerLocalFactOwnerGroupCount;
         public int RuntimeCoreOwnerLocalFactMaxOwnerRange;
         public int RuntimeCoreOwnerLocalFactFlushCount;
+        public int RuntimeCoreOwnerLocalFactChangedChunkCount;
+        public int RuntimeCoreOwnerLocalFactScannedOwnerCount;
+        public int RuntimeCoreOwnerLocalFactDirtyOwnerCount;
+        public int RuntimeCoreOwnerLocalFactSkippedOwnerCount;
+        public int RuntimeCoreOwnerLocalFactClearedOwnerCount;
         public int RuntimeCoreMagnitudeSourceCurrentValueLookupCount;
         public int RuntimeCoreMagnitudeSourceCapturedValueHitCount;
         public int RuntimeCoreMagnitudeSourceCaptureMissCount;
@@ -240,6 +245,11 @@ namespace GAS.Runtime
         public int OwnerLocalFactOwnerGroupCount;
         public int OwnerLocalFactMaxOwnerRange;
         public int OwnerLocalFactFlushCount;
+        public int OwnerLocalFactChangedChunkCount;
+        public int OwnerLocalFactScannedOwnerCount;
+        public int OwnerLocalFactDirtyOwnerCount;
+        public int OwnerLocalFactSkippedOwnerCount;
+        public int OwnerLocalFactClearedOwnerCount;
         public int MagnitudeSourceCurrentValueLookupCount;
         public int MagnitudeSourceCapturedValueHitCount;
         public int MagnitudeSourceCaptureMissCount;
@@ -610,6 +620,11 @@ namespace GAS.Runtime
         public readonly int OwnerLocalFactOwnerGroupCount;
         public readonly int OwnerLocalFactMaxOwnerRange;
         public readonly int OwnerLocalFactFlushCount;
+        public readonly int OwnerLocalFactChangedChunkCount;
+        public readonly int OwnerLocalFactScannedOwnerCount;
+        public readonly int OwnerLocalFactDirtyOwnerCount;
+        public readonly int OwnerLocalFactSkippedOwnerCount;
+        public readonly int OwnerLocalFactClearedOwnerCount;
         public readonly int MagnitudeSourceCurrentValueLookupCount;
         public readonly int MagnitudeSourceCapturedValueHitCount;
         public readonly int MagnitudeSourceCaptureMissCount;
@@ -711,7 +726,12 @@ namespace GAS.Runtime
             int ownerLocalFactCount = 0,
             int ownerLocalFactOwnerGroupCount = 0,
             int ownerLocalFactMaxOwnerRange = 0,
-            int ownerLocalFactFlushCount = 0)
+            int ownerLocalFactFlushCount = 0,
+            int ownerLocalFactChangedChunkCount = 0,
+            int ownerLocalFactScannedOwnerCount = 0,
+            int ownerLocalFactDirtyOwnerCount = 0,
+            int ownerLocalFactSkippedOwnerCount = 0,
+            int ownerLocalFactClearedOwnerCount = 0)
         {
             RequestCount = requestCount;
             SpecCount = specCount;
@@ -775,6 +795,11 @@ namespace GAS.Runtime
             OwnerLocalFactOwnerGroupCount = ownerLocalFactOwnerGroupCount;
             OwnerLocalFactMaxOwnerRange = ownerLocalFactMaxOwnerRange;
             OwnerLocalFactFlushCount = ownerLocalFactFlushCount;
+            OwnerLocalFactChangedChunkCount = ownerLocalFactChangedChunkCount;
+            OwnerLocalFactScannedOwnerCount = ownerLocalFactScannedOwnerCount;
+            OwnerLocalFactDirtyOwnerCount = ownerLocalFactDirtyOwnerCount;
+            OwnerLocalFactSkippedOwnerCount = ownerLocalFactSkippedOwnerCount;
+            OwnerLocalFactClearedOwnerCount = ownerLocalFactClearedOwnerCount;
             MagnitudeSourceCurrentValueLookupCount = magnitudeSourceCurrentValueLookupCount;
             MagnitudeSourceCapturedValueHitCount = magnitudeSourceCapturedValueHitCount;
             MagnitudeSourceCaptureMissCount = magnitudeSourceCaptureMissCount;
@@ -1335,6 +1360,11 @@ namespace GAS.Runtime
             state.RuntimeCoreOwnerLocalFactOwnerGroupCount = 0;
             state.RuntimeCoreOwnerLocalFactMaxOwnerRange = 0;
             state.RuntimeCoreOwnerLocalFactFlushCount = 0;
+            state.RuntimeCoreOwnerLocalFactChangedChunkCount = 0;
+            state.RuntimeCoreOwnerLocalFactScannedOwnerCount = 0;
+            state.RuntimeCoreOwnerLocalFactDirtyOwnerCount = 0;
+            state.RuntimeCoreOwnerLocalFactSkippedOwnerCount = 0;
+            state.RuntimeCoreOwnerLocalFactClearedOwnerCount = 0;
             state.RuntimeCoreMagnitudeSourceCurrentValueLookupCount = 0;
             state.RuntimeCoreMagnitudeSourceCapturedValueHitCount = 0;
             state.RuntimeCoreMagnitudeSourceCaptureMissCount = 0;
@@ -1574,7 +1604,12 @@ namespace GAS.Runtime
                 counters.OwnerLocalFactCount,
                 counters.OwnerLocalFactOwnerGroupCount,
                 counters.OwnerLocalFactMaxOwnerRange,
-                counters.OwnerLocalFactFlushCount);
+                counters.OwnerLocalFactFlushCount,
+                counters.OwnerLocalFactChangedChunkCount,
+                counters.OwnerLocalFactScannedOwnerCount,
+                counters.OwnerLocalFactDirtyOwnerCount,
+                counters.OwnerLocalFactSkippedOwnerCount,
+                counters.OwnerLocalFactClearedOwnerCount);
         }
 
         public static GasRuntimeCoreDiagnosticCounters CollectRuntimeCoreCounters(
@@ -1653,6 +1688,11 @@ namespace GAS.Runtime
                 out var ownerLocalFactOwnerGroupCount,
                 out var ownerLocalFactMaxOwnerRange,
                 out var ownerLocalFactFlushCount,
+                out var ownerLocalFactChangedChunkCount,
+                out var ownerLocalFactScannedOwnerCount,
+                out var ownerLocalFactDirtyOwnerCount,
+                out var ownerLocalFactSkippedOwnerCount,
+                out var ownerLocalFactClearedOwnerCount,
                 out var magnitudeSourceCurrentValueLookupCount,
                 out var magnitudeSourceCapturedValueHitCount,
                 out var magnitudeSourceCaptureMissCount,
@@ -1826,7 +1866,12 @@ namespace GAS.Runtime
                 ownerLocalFactCount,
                 ownerLocalFactOwnerGroupCount,
                 ownerLocalFactMaxOwnerRange,
-                ownerLocalFactFlushCount);
+                ownerLocalFactFlushCount,
+                ownerLocalFactChangedChunkCount,
+                ownerLocalFactScannedOwnerCount,
+                ownerLocalFactDirtyOwnerCount,
+                ownerLocalFactSkippedOwnerCount,
+                ownerLocalFactClearedOwnerCount);
         }
 
         public static void CollectAndRecordRuntimeCoreCounters(
@@ -2118,7 +2163,12 @@ namespace GAS.Runtime
             int ownerLocalFactCount = 0,
             int ownerLocalFactOwnerGroupCount = 0,
             int ownerLocalFactMaxOwnerRange = 0,
-            int ownerLocalFactFlushCount = 0)
+            int ownerLocalFactFlushCount = 0,
+            int ownerLocalFactChangedChunkCount = 0,
+            int ownerLocalFactScannedOwnerCount = 0,
+            int ownerLocalFactDirtyOwnerCount = 0,
+            int ownerLocalFactSkippedOwnerCount = 0,
+            int ownerLocalFactClearedOwnerCount = 0)
         {
             if (!TryGetWritableLog(em, debuggerEntity, out var state, out var log))
                 return;
@@ -2193,6 +2243,11 @@ namespace GAS.Runtime
             if (ownerLocalFactMaxOwnerRange > state.RuntimeCoreOwnerLocalFactMaxOwnerRange)
                 state.RuntimeCoreOwnerLocalFactMaxOwnerRange = ownerLocalFactMaxOwnerRange;
             state.RuntimeCoreOwnerLocalFactFlushCount += ownerLocalFactFlushCount;
+            state.RuntimeCoreOwnerLocalFactChangedChunkCount += ownerLocalFactChangedChunkCount;
+            state.RuntimeCoreOwnerLocalFactScannedOwnerCount += ownerLocalFactScannedOwnerCount;
+            state.RuntimeCoreOwnerLocalFactDirtyOwnerCount += ownerLocalFactDirtyOwnerCount;
+            state.RuntimeCoreOwnerLocalFactSkippedOwnerCount += ownerLocalFactSkippedOwnerCount;
+            state.RuntimeCoreOwnerLocalFactClearedOwnerCount += ownerLocalFactClearedOwnerCount;
             state.RuntimeCoreMagnitudeSourceCurrentValueLookupCount += magnitudeSourceCurrentValueLookupCount;
             state.RuntimeCoreMagnitudeSourceCapturedValueHitCount += magnitudeSourceCapturedValueHitCount;
             state.RuntimeCoreMagnitudeSourceCaptureMissCount += magnitudeSourceCaptureMissCount;
@@ -2286,6 +2341,11 @@ namespace GAS.Runtime
                     OwnerLocalFactOwnerGroupCount = ownerLocalFactOwnerGroupCount,
                     OwnerLocalFactMaxOwnerRange = ownerLocalFactMaxOwnerRange,
                     OwnerLocalFactFlushCount = ownerLocalFactFlushCount,
+                    OwnerLocalFactChangedChunkCount = ownerLocalFactChangedChunkCount,
+                    OwnerLocalFactScannedOwnerCount = ownerLocalFactScannedOwnerCount,
+                    OwnerLocalFactDirtyOwnerCount = ownerLocalFactDirtyOwnerCount,
+                    OwnerLocalFactSkippedOwnerCount = ownerLocalFactSkippedOwnerCount,
+                    OwnerLocalFactClearedOwnerCount = ownerLocalFactClearedOwnerCount,
                     MagnitudeSourceCurrentValueLookupCount = magnitudeSourceCurrentValueLookupCount,
                     MagnitudeSourceCapturedValueHitCount = magnitudeSourceCapturedValueHitCount,
                     MagnitudeSourceCaptureMissCount = magnitudeSourceCaptureMissCount,
@@ -2748,7 +2808,12 @@ namespace GAS.Runtime
                     state.RuntimeCoreOwnerLocalFactCount,
                     state.RuntimeCoreOwnerLocalFactOwnerGroupCount,
                     state.RuntimeCoreOwnerLocalFactMaxOwnerRange,
-                    state.RuntimeCoreOwnerLocalFactFlushCount),
+                    state.RuntimeCoreOwnerLocalFactFlushCount,
+                    state.RuntimeCoreOwnerLocalFactChangedChunkCount,
+                    state.RuntimeCoreOwnerLocalFactScannedOwnerCount,
+                    state.RuntimeCoreOwnerLocalFactDirtyOwnerCount,
+                    state.RuntimeCoreOwnerLocalFactSkippedOwnerCount,
+                    state.RuntimeCoreOwnerLocalFactClearedOwnerCount),
                 CreateFrameBackboneCounters(state),
                 observationMaterializationCounters,
                 magnitudeSourceCounters,
@@ -2878,6 +2943,11 @@ namespace GAS.Runtime
             out int ownerLocalFactOwnerGroupCount,
             out int ownerLocalFactMaxOwnerRange,
             out int ownerLocalFactFlushCount,
+            out int ownerLocalFactChangedChunkCount,
+            out int ownerLocalFactScannedOwnerCount,
+            out int ownerLocalFactDirtyOwnerCount,
+            out int ownerLocalFactSkippedOwnerCount,
+            out int ownerLocalFactClearedOwnerCount,
             out int magnitudeSourceCurrentValueLookupCount,
             out int magnitudeSourceCapturedValueHitCount,
             out int magnitudeSourceCaptureMissCount,
@@ -2911,6 +2981,11 @@ namespace GAS.Runtime
             ownerLocalFactOwnerGroupCount = 0;
             ownerLocalFactMaxOwnerRange = 0;
             ownerLocalFactFlushCount = 0;
+            ownerLocalFactChangedChunkCount = 0;
+            ownerLocalFactScannedOwnerCount = 0;
+            ownerLocalFactDirtyOwnerCount = 0;
+            ownerLocalFactSkippedOwnerCount = 0;
+            ownerLocalFactClearedOwnerCount = 0;
             magnitudeSourceCurrentValueLookupCount = 0;
             magnitudeSourceCapturedValueHitCount = 0;
             magnitudeSourceCaptureMissCount = 0;
@@ -2951,6 +3026,11 @@ namespace GAS.Runtime
             ownerLocalFactOwnerGroupCount = stream.OwnerLocalFactOwnerGroupCount;
             ownerLocalFactMaxOwnerRange = stream.OwnerLocalFactMaxOwnerRange;
             ownerLocalFactFlushCount = stream.OwnerLocalFactFlushCount;
+            ownerLocalFactChangedChunkCount = stream.OwnerLocalFactChangedChunkCount;
+            ownerLocalFactScannedOwnerCount = stream.OwnerLocalFactScannedOwnerCount;
+            ownerLocalFactDirtyOwnerCount = stream.OwnerLocalFactDirtyOwnerCount;
+            ownerLocalFactSkippedOwnerCount = stream.OwnerLocalFactSkippedOwnerCount;
+            ownerLocalFactClearedOwnerCount = stream.OwnerLocalFactClearedOwnerCount;
             magnitudeSourceCurrentValueLookupCount = stream.MagnitudeSourceCurrentValueLookupCount;
             magnitudeSourceCapturedValueHitCount = stream.MagnitudeSourceCapturedValueHitCount;
             magnitudeSourceCaptureMissCount = stream.MagnitudeSourceCaptureMissCount;
@@ -3639,6 +3719,16 @@ namespace GAS.Runtime
                 .Append(evt.OwnerLocalFactMaxOwnerRange)
                 .Append("|ownerLocalFactFlushes=")
                 .Append(evt.OwnerLocalFactFlushCount)
+                .Append("|ownerLocalFactChangedChunks=")
+                .Append(evt.OwnerLocalFactChangedChunkCount)
+                .Append("|ownerLocalFactScannedOwners=")
+                .Append(evt.OwnerLocalFactScannedOwnerCount)
+                .Append("|ownerLocalFactDirtyOwners=")
+                .Append(evt.OwnerLocalFactDirtyOwnerCount)
+                .Append("|ownerLocalFactSkippedOwners=")
+                .Append(evt.OwnerLocalFactSkippedOwnerCount)
+                .Append("|ownerLocalFactClearedOwners=")
+                .Append(evt.OwnerLocalFactClearedOwnerCount)
                 .Append("|magnitudeSourceCurrentValueLookups=")
                 .Append(evt.MagnitudeSourceCurrentValueLookupCount)
                 .Append("|magnitudeSourceCapturedValueHits=")
@@ -3971,6 +4061,16 @@ namespace GAS.Runtime
                 .Append(counters.OwnerLocalFactMaxOwnerRange)
                 .Append("|flushes=")
                 .Append(counters.OwnerLocalFactFlushCount)
+                .Append("|changedChunks=")
+                .Append(counters.OwnerLocalFactChangedChunkCount)
+                .Append("|scannedOwners=")
+                .Append(counters.OwnerLocalFactScannedOwnerCount)
+                .Append("|dirtyOwners=")
+                .Append(counters.OwnerLocalFactDirtyOwnerCount)
+                .Append("|skippedOwners=")
+                .Append(counters.OwnerLocalFactSkippedOwnerCount)
+                .Append("|clearedOwners=")
+                .Append(counters.OwnerLocalFactClearedOwnerCount)
                 .AppendLine();
             builder.Append("runtimeCoreMagnitudeSource|currentValueLookups=")
                 .Append(counters.MagnitudeSourceCurrentValueLookupCount)

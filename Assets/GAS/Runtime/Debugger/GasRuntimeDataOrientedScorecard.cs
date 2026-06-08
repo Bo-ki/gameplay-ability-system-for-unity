@@ -122,6 +122,11 @@ namespace GAS.Runtime
         public readonly int OwnerLocalFactOwnerGroupCount;
         public readonly int OwnerLocalFactMaxOwnerRange;
         public readonly int OwnerLocalFactFlushCount;
+        public readonly int OwnerLocalFactChangedChunkCount;
+        public readonly int OwnerLocalFactScannedOwnerCount;
+        public readonly int OwnerLocalFactDirtyOwnerCount;
+        public readonly int OwnerLocalFactSkippedOwnerCount;
+        public readonly int OwnerLocalFactClearedOwnerCount;
         public readonly int ActiveEffectSlotCount;
         public readonly int ActiveEffectSlotCapacity;
         public readonly int ActiveEffectChunkSkipDuePeriodSlotCount;
@@ -173,6 +178,11 @@ namespace GAS.Runtime
             OwnerLocalFactOwnerGroupCount = metricFamilies.DataShape.OwnerLocalFactOwnerGroupCount;
             OwnerLocalFactMaxOwnerRange = metricFamilies.DataShape.OwnerLocalFactMaxOwnerRange;
             OwnerLocalFactFlushCount = metricFamilies.DataShape.OwnerLocalFactFlushCount;
+            OwnerLocalFactChangedChunkCount = metricFamilies.DataShape.OwnerLocalFactChangedChunkCount;
+            OwnerLocalFactScannedOwnerCount = metricFamilies.DataShape.OwnerLocalFactScannedOwnerCount;
+            OwnerLocalFactDirtyOwnerCount = metricFamilies.DataShape.OwnerLocalFactDirtyOwnerCount;
+            OwnerLocalFactSkippedOwnerCount = metricFamilies.DataShape.OwnerLocalFactSkippedOwnerCount;
+            OwnerLocalFactClearedOwnerCount = metricFamilies.DataShape.OwnerLocalFactClearedOwnerCount;
             ActiveEffectSlotCount = metricFamilies.DataShape.ActiveEffectSlotCount;
             ActiveEffectSlotCapacity = metricFamilies.DataShape.ActiveEffectSlotCapacity;
             ActiveEffectChunkSkipDuePeriodSlotCount =

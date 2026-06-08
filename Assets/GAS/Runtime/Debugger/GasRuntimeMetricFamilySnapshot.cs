@@ -85,6 +85,11 @@ namespace GAS.Runtime
         public readonly int OwnerLocalFactOwnerGroupCount;
         public readonly int OwnerLocalFactMaxOwnerRange;
         public readonly int OwnerLocalFactFlushCount;
+        public readonly int OwnerLocalFactChangedChunkCount;
+        public readonly int OwnerLocalFactScannedOwnerCount;
+        public readonly int OwnerLocalFactDirtyOwnerCount;
+        public readonly int OwnerLocalFactSkippedOwnerCount;
+        public readonly int OwnerLocalFactClearedOwnerCount;
         public readonly int ActiveEffectSlotCount;
         public readonly int ActiveEffectSlotCapacity;
         public readonly int ActiveEffectSlotSourceSnapshotCapacity;
@@ -98,6 +103,11 @@ namespace GAS.Runtime
             int ownerLocalFactOwnerGroupCount,
             int ownerLocalFactMaxOwnerRange,
             int ownerLocalFactFlushCount,
+            int ownerLocalFactChangedChunkCount,
+            int ownerLocalFactScannedOwnerCount,
+            int ownerLocalFactDirtyOwnerCount,
+            int ownerLocalFactSkippedOwnerCount,
+            int ownerLocalFactClearedOwnerCount,
             int activeEffectSlotCount,
             int activeEffectSlotCapacity,
             int activeEffectSlotSourceSnapshotCapacity,
@@ -110,6 +120,11 @@ namespace GAS.Runtime
             OwnerLocalFactOwnerGroupCount = ownerLocalFactOwnerGroupCount;
             OwnerLocalFactMaxOwnerRange = ownerLocalFactMaxOwnerRange;
             OwnerLocalFactFlushCount = ownerLocalFactFlushCount;
+            OwnerLocalFactChangedChunkCount = ownerLocalFactChangedChunkCount;
+            OwnerLocalFactScannedOwnerCount = ownerLocalFactScannedOwnerCount;
+            OwnerLocalFactDirtyOwnerCount = ownerLocalFactDirtyOwnerCount;
+            OwnerLocalFactSkippedOwnerCount = ownerLocalFactSkippedOwnerCount;
+            OwnerLocalFactClearedOwnerCount = ownerLocalFactClearedOwnerCount;
             ActiveEffectSlotCount = activeEffectSlotCount;
             ActiveEffectSlotCapacity = activeEffectSlotCapacity;
             ActiveEffectSlotSourceSnapshotCapacity = activeEffectSlotSourceSnapshotCapacity;
@@ -124,6 +139,11 @@ namespace GAS.Runtime
             || OwnerLocalFactOwnerGroupCount > 0
             || OwnerLocalFactMaxOwnerRange > 0
             || OwnerLocalFactFlushCount > 0
+            || OwnerLocalFactChangedChunkCount > 0
+            || OwnerLocalFactScannedOwnerCount > 0
+            || OwnerLocalFactDirtyOwnerCount > 0
+            || OwnerLocalFactSkippedOwnerCount > 0
+            || OwnerLocalFactClearedOwnerCount > 0
             || ActiveEffectSlotCount > 0
             || ActiveEffectSlotCapacity > 0
             || ActiveEffectSlotSourceSnapshotCapacity > 0
@@ -354,6 +374,11 @@ namespace GAS.Runtime
                 core.OwnerLocalFactOwnerGroupCount,
                 core.OwnerLocalFactMaxOwnerRange,
                 core.OwnerLocalFactFlushCount,
+                core.OwnerLocalFactChangedChunkCount,
+                core.OwnerLocalFactScannedOwnerCount,
+                core.OwnerLocalFactDirtyOwnerCount,
+                core.OwnerLocalFactSkippedOwnerCount,
+                core.OwnerLocalFactClearedOwnerCount,
                 core.ActiveEffectSlotCount,
                 core.ActiveEffectSlotCapacity,
                 magnitude.ActiveEffectSlotSourceSnapshotCapacity,

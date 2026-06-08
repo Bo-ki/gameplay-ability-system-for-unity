@@ -87,6 +87,11 @@ namespace GAS.AutoChessDemo
                           runResult.HeadlessLogicBudget.RuntimeScorecard));
             Debug.Log("AutoChessDemoRuntimeHotspots: "
                       + AutoChessBattleValidationReport.CreateHotspotSummary(result, diagnosticResult));
+            Debug.Log("AutoChessDemoHotspotAttributionMatrix:\n"
+                      + AutoChessBattleValidationReport.CreateHotspotAttributionMatrix(
+                          result,
+                          diagnosticResult,
+                          runResult.HeadlessLogicBudget));
             Debug.Log("AutoChessDemoBoundaryOwners: "
                       + AutoChessBattleValidationReport.CreateBoundaryOwnerSummary(result));
             Debug.Log("AutoChessDemoBoundaryReportKeys: "
@@ -150,6 +155,12 @@ namespace GAS.AutoChessDemo
                                + AutoChessBattleValidationReport.CreateHotspotSummary(
                                    result,
                                    diagnosticResult));
+            builder.AppendLine("AutoChessDemoHeadlessHotspotAttributionMatrix:");
+            builder.Append(
+                AutoChessBattleValidationReport.CreateHotspotAttributionMatrix(
+                    result,
+                    diagnosticResult,
+                    runResult.HeadlessLogicBudget));
             builder.AppendLine("AutoChessDemoHeadlessBoundaryOwners: "
                                + AutoChessBattleValidationReport.CreateBoundaryOwnerSummary(result));
             builder.AppendLine("AutoChessDemoHeadlessBoundaryReportKeys: "

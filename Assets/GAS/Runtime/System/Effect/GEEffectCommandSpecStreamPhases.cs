@@ -123,6 +123,14 @@ namespace GAS.Runtime
                     var currentSpecs = specs[entityIndex];
                     var deferredCommands = nextFrameCommands[entityIndex];
                     var deferredSetByCallerValues = nextFrameSetByCallerValues[entityIndex];
+                    if (currentCommands.Length == 0
+                        && currentSetByCallerValues.Length == 0
+                        && currentSpecs.Length == 0
+                        && deferredCommands.Length == 0
+                        && deferredSetByCallerValues.Length == 0)
+                    {
+                        continue;
+                    }
 
                     currentCommands.Clear();
                     currentSetByCallerValues.Clear();
@@ -206,6 +214,14 @@ namespace GAS.Runtime
                     var currentSetByCallerValues = setByCallerValues[entityIndex];
                     var deferredCommands = nextFrameCommands[entityIndex];
                     var deferredSetByCallerValues = nextFrameSetByCallerValues[entityIndex];
+                    if (currentCommands.Length == 0
+                        && currentSetByCallerValues.Length == 0
+                        && mutations[entityIndex].Length == 0
+                        && deferredCommands.Length == 0
+                        && deferredSetByCallerValues.Length == 0)
+                    {
+                        continue;
+                    }
 
                     currentCommands.Clear();
                     currentSetByCallerValues.Clear();
@@ -240,46 +256,16 @@ namespace GAS.Runtime
     [BurstCompile]
     public partial struct GameplayOwnerLocalFactFramePrepareSystem : ISystem
     {
-        private EntityQuery _ownerFactQuery;
-
         public void OnCreate(ref SystemState state)
         {
-            _ownerFactQuery = state.GetEntityQuery(new EntityQueryDesc
-            {
-                All = new[]
-                {
-                    ComponentType.ReadWrite<OwnerLocalGameplayFactBuffer>(),
-                    ComponentType.ReadOnly<ASCIdentityComponent>(),
-                },
-            });
-            state.RequireForUpdate(_ownerFactQuery);
+            state.RequireForUpdate<GEEffectCommandStreamComponent>();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency = new ClearOwnerLocalGameplayFactsJob
-            {
-                OwnerFactType = SystemAPI.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>(),
-            }.Schedule(_ownerFactQuery, state.Dependency);
-        }
-
-        [BurstCompile]
-        private struct ClearOwnerLocalGameplayFactsJob : IJobChunk
-        {
-            public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactType;
-
-            public void Execute(
-                in ArchetypeChunk chunk,
-                int unfilteredChunkIndex,
-                bool useEnabledMask,
-                in v128 chunkEnabledMask)
-            {
-                var ownerFacts = chunk.GetBufferAccessor(ref OwnerFactType);
-                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
-                while (enumerator.NextEntityIndex(out var entityIndex))
-                    ownerFacts[entityIndex].Clear();
-            }
+            // owner-local facts are cleared by GameplayBoundaryFactExportSystem after export.
+            // Keeping FramePrepare read-only preserves the OwnerLocalGameplayFactBuffer changed-version lane.
         }
     }
 
@@ -430,9 +416,10 @@ namespace GAS.Runtime
                 All = new[]
                 {
                     ComponentType.ReadOnly<ASCIdentityComponent>(),
-                    ComponentType.ReadOnly<OwnerLocalGameplayFactBuffer>(),
+                    ComponentType.ReadWrite<OwnerLocalGameplayFactBuffer>(),
                 },
             });
+            _ownerFactQuery.SetChangedVersionFilter(ComponentType.ReadWrite<OwnerLocalGameplayFactBuffer>());
             state.RequireForUpdate<GEEffectCommandStreamComponent>();
             state.RequireForUpdate<GameplayEventBusComponent>();
         }
@@ -448,11 +435,13 @@ namespace GAS.Runtime
             }
 
             var records = new NativeList<BoundaryObservationFactRecord>(1, Allocator.TempJob);
+            var collectCounters = new NativeArray<OwnerLocalFactCollectCounters>(1, Allocator.TempJob);
             var collectHandle = new CollectOwnerLocalGameplayFactsJob
             {
                 EntityType = SystemAPI.GetEntityTypeHandle(),
-                OwnerFactType = SystemAPI.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>(isReadOnly: true),
+                OwnerFactType = SystemAPI.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>(),
                 Records = records,
+                Counters = collectCounters,
             }.Schedule(_ownerFactQuery, state.Dependency);
             var exportHandle = new ExportBoundaryObservationFactsJob
             {
@@ -461,9 +450,12 @@ namespace GAS.Runtime
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 BoundaryObservationLookup = SystemAPI.GetBufferLookup<BoundaryObservationFactBuffer>(isReadOnly: false),
                 Records = records,
+                Counters = collectCounters,
             }.Schedule(collectHandle);
 
-            state.Dependency = records.Dispose(exportHandle);
+            var recordsDisposeHandle = records.Dispose(exportHandle);
+            var countersDisposeHandle = collectCounters.Dispose(exportHandle);
+            state.Dependency = JobHandle.CombineDependencies(recordsDisposeHandle, countersDisposeHandle);
         }
 
         private struct BoundaryObservationFactRecord
@@ -474,12 +466,23 @@ namespace GAS.Runtime
             public EBoundaryObservationFactSource Source;
         }
 
+        private struct OwnerLocalFactCollectCounters
+        {
+            public int ChangedChunkCount;
+            public int ScannedOwnerCount;
+            public int DirtyOwnerCount;
+            public int DirtyFactCount;
+            public int SkippedOwnerCount;
+            public int ClearedOwnerCount;
+        }
+
         [BurstCompile]
         private struct CollectOwnerLocalGameplayFactsJob : IJobChunk
         {
             [ReadOnly] public EntityTypeHandle EntityType;
-            [ReadOnly] public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactType;
+            public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactType;
             public NativeList<BoundaryObservationFactRecord> Records;
+            public NativeArray<OwnerLocalFactCollectCounters> Counters;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -487,13 +490,24 @@ namespace GAS.Runtime
                 bool useEnabledMask,
                 in v128 chunkEnabledMask)
             {
+                var counters = Counters[0];
+                counters.ChangedChunkCount++;
                 var entities = chunk.GetNativeArray(EntityType);
                 var ownerFacts = chunk.GetBufferAccessor(ref OwnerFactType);
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (enumerator.NextEntityIndex(out var entityIndex))
                 {
+                    counters.ScannedOwnerCount++;
                     var owner = entities[entityIndex];
                     var facts = ownerFacts[entityIndex];
+                    if (facts.Length == 0)
+                    {
+                        counters.SkippedOwnerCount++;
+                        continue;
+                    }
+
+                    counters.DirtyOwnerCount++;
+                    counters.DirtyFactCount += facts.Length;
                     for (var factIndex = 0; factIndex < facts.Length; factIndex++)
                     {
                         Records.Add(new BoundaryObservationFactRecord
@@ -504,7 +518,12 @@ namespace GAS.Runtime
                             Source = EBoundaryObservationFactSource.OwnerLocalCore,
                         });
                     }
+
+                    facts.Clear();
+                    counters.ClearedOwnerCount++;
                 }
+
+                Counters[0] = counters;
             }
         }
 
@@ -516,6 +535,7 @@ namespace GAS.Runtime
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<BoundaryObservationFactBuffer> BoundaryObservationLookup;
             public NativeList<BoundaryObservationFactRecord> Records;
+            [ReadOnly] public NativeArray<OwnerLocalFactCollectCounters> Counters;
 
             public void Execute()
             {
@@ -530,6 +550,7 @@ namespace GAS.Runtime
                 var stream = StreamLookup[StreamEntity];
                 if (Records.Length == 0)
                 {
+                    AddCollectCounters(ref stream, Counters[0]);
                     StreamLookup[StreamEntity] = stream;
                     return;
                 }
@@ -581,7 +602,19 @@ namespace GAS.Runtime
                 if (maxOwnerRange > stream.OwnerLocalFactMaxOwnerRange)
                     stream.OwnerLocalFactMaxOwnerRange = maxOwnerRange;
                 stream.OwnerLocalFactFlushCount += ownerLocalFlushCount;
+                AddCollectCounters(ref stream, Counters[0]);
                 StreamLookup[StreamEntity] = stream;
+            }
+
+            private static void AddCollectCounters(
+                ref GEEffectCommandStreamComponent stream,
+                in OwnerLocalFactCollectCounters counters)
+            {
+                stream.OwnerLocalFactChangedChunkCount += counters.ChangedChunkCount;
+                stream.OwnerLocalFactScannedOwnerCount += counters.ScannedOwnerCount;
+                stream.OwnerLocalFactDirtyOwnerCount += counters.DirtyOwnerCount;
+                stream.OwnerLocalFactSkippedOwnerCount += counters.SkippedOwnerCount;
+                stream.OwnerLocalFactClearedOwnerCount += counters.ClearedOwnerCount;
             }
         }
 

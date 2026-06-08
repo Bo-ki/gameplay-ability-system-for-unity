@@ -148,6 +148,11 @@ namespace GAS.AutoChessDemo
                 attributeFact.OwnerLocalFactOwnerGroupCount,
                 attributeFact.OwnerLocalFactMaxOwnerRange,
                 attributeFact.OwnerLocalFactFlushCount,
+                attributeFact.OwnerLocalFactChangedChunkCount,
+                attributeFact.OwnerLocalFactScannedOwnerCount,
+                attributeFact.OwnerLocalFactDirtyOwnerCount,
+                attributeFact.OwnerLocalFactSkippedOwnerCount,
+                attributeFact.OwnerLocalFactClearedOwnerCount,
                 streamCarrierPressure.WarningCount,
                 streamCarrierPressure.PeakCount,
                 streamCarrierPressure.PeakCapacity,
@@ -227,6 +232,11 @@ namespace GAS.AutoChessDemo
                    + $"ownerLocalFactOwnerGroups={budget.OwnerLocalFactOwnerGroupCount}, "
                    + $"ownerLocalFactMaxOwnerRange={budget.OwnerLocalFactMaxOwnerRange}, "
                    + $"ownerLocalFactFlushes={budget.OwnerLocalFactFlushCount}, "
+                   + $"ownerLocalFactChangedChunks={budget.OwnerLocalFactChangedChunkCount}, "
+                   + $"ownerLocalFactScannedOwners={budget.OwnerLocalFactScannedOwnerCount}, "
+                   + $"ownerLocalFactDirtyOwners={budget.OwnerLocalFactDirtyOwnerCount}, "
+                   + $"ownerLocalFactSkippedOwners={budget.OwnerLocalFactSkippedOwnerCount}, "
+                   + $"ownerLocalFactClearedOwners={budget.OwnerLocalFactClearedOwnerCount}, "
                    + $"activeEffectSlots={budget.ActiveEffectSlotCount}, "
                    + $"activeEffectSlotCapacity={budget.ActiveEffectSlotCapacity}, "
                    + $"activeEffectDuePeriodSlots="
@@ -379,6 +389,11 @@ namespace GAS.AutoChessDemo
                     + $"ownerLocalFactOwnerGroups={evidence.OwnerLocalFactOwnerGroupCount}, "
                     + $"ownerLocalFactMaxOwnerRange={evidence.OwnerLocalFactMaxOwnerRange}, "
                     + $"ownerLocalFactFlushes={evidence.OwnerLocalFactFlushCount}, "
+                    + $"ownerLocalFactChangedChunks={evidence.OwnerLocalFactChangedChunkCount}, "
+                    + $"ownerLocalFactScannedOwners={evidence.OwnerLocalFactScannedOwnerCount}, "
+                    + $"ownerLocalFactDirtyOwners={evidence.OwnerLocalFactDirtyOwnerCount}, "
+                    + $"ownerLocalFactSkippedOwners={evidence.OwnerLocalFactSkippedOwnerCount}, "
+                    + $"ownerLocalFactClearedOwners={evidence.OwnerLocalFactClearedOwnerCount}, "
                     + $"streamCarrierPressureWarnings={evidence.StreamCarrierPressureWarningCount}, "
                     + $"streamCarrierPeak={evidence.StreamCarrierPeakCount}, "
                     + $"streamCarrierCapacity={evidence.StreamCarrierPeakCapacity}, "
@@ -458,6 +473,11 @@ namespace GAS.AutoChessDemo
                    + $"ownerLocalFactOwnerGroups={attributeFact.OwnerLocalFactOwnerGroupCount}, "
                    + $"ownerLocalFactMaxOwnerRange={attributeFact.OwnerLocalFactMaxOwnerRange}, "
                    + $"ownerLocalFactFlushes={attributeFact.OwnerLocalFactFlushCount}, "
+                   + $"ownerLocalFactChangedChunks={attributeFact.OwnerLocalFactChangedChunkCount}, "
+                   + $"ownerLocalFactScannedOwners={attributeFact.OwnerLocalFactScannedOwnerCount}, "
+                   + $"ownerLocalFactDirtyOwners={attributeFact.OwnerLocalFactDirtyOwnerCount}, "
+                   + $"ownerLocalFactSkippedOwners={attributeFact.OwnerLocalFactSkippedOwnerCount}, "
+                   + $"ownerLocalFactClearedOwners={attributeFact.OwnerLocalFactClearedOwnerCount}, "
                    + $"streamCarrierPressureWarnings={events.EffectCommandStreamPressure.WarningCount}, "
                    + $"observationMaterializedQueries={observation.MaterializedQueryCount}, "
                    + $"observationMaterializedEntities={observation.MaterializedEntityCount}, "
@@ -553,6 +573,8 @@ namespace GAS.AutoChessDemo
                    + $"ownerLocalFacts={attributeFact.OwnerLocalFactCount}, "
                    + $"ownerLocalFactOwnerGroups={attributeFact.OwnerLocalFactOwnerGroupCount}, "
                    + $"ownerLocalFactFlushes={attributeFact.OwnerLocalFactFlushCount}, "
+                   + $"ownerLocalFactDirtyOwners={attributeFact.OwnerLocalFactDirtyOwnerCount}, "
+                   + $"ownerLocalFactSkippedOwners={attributeFact.OwnerLocalFactSkippedOwnerCount}, "
                    + $"streamCarrierPressureWarnings={diagnosticEvidence.Events.EffectCommandStreamPressure.WarningCount}, "
                    + $"observationMaterializedQueries={observation.MaterializedQueryCount}, "
                    + $"observationMaterializationUs={observation.ElapsedMicroseconds}, "
@@ -565,6 +587,238 @@ namespace GAS.AutoChessDemo
                    + $"structuralCommitAvgMs={performanceResult.RuntimeTiming.StructuralCommit.AverageMilliseconds:0.000}, "
                    + $"boundaryProjectionAvgMs={performanceResult.RuntimeTiming.BoundaryProjection.AverageMilliseconds:0.000}, "
                    + $"dependencyDrainAvgMs={performanceResult.RuntimeTiming.DependencyDrain.AverageMilliseconds:0.000}";
+        }
+
+        public static string CreateHotspotAttributionMatrix(
+            in AutoChessBattleResult performanceResult,
+            in AutoChessBattleResult diagnosticResult,
+            in AutoChessHeadlessLogicBudgetResult budget)
+        {
+            var builder = new StringBuilder(1024);
+            var official = performanceResult.OfficialToolDiff;
+            var diagnosticEvidence = diagnosticResult.RuntimeDiagnostics.Evidence;
+            var performanceEvidence = performanceResult.RuntimeDiagnostics.Evidence;
+            var activeEffectPreTickCount = FindTopNCount(
+                official.JournalingSystemTopN,
+                "GetBufferRW",
+                "GAS.Runtime.GASActiveEffectPreTickSystem");
+            var instantPrepareCount = FindTopNCount(
+                official.JournalingSystemTopN,
+                "GetBufferRW",
+                "GAS.Runtime.OwnerLocalInstantCommandFramePrepareSystem");
+            var activeMutationPrepareCount = FindTopNCount(
+                official.JournalingSystemTopN,
+                "GetBufferRW",
+                "GAS.Runtime.ActiveEffectOwnerLocalMutationFramePrepareSystem");
+            var ownerFactBufferCount = FindTopNCount(
+                official.JournalingComponentTopN,
+                "GetBufferRW",
+                "GAS.Runtime.OwnerLocalGameplayFactBuffer");
+            var streamComponentRwCount = FindTopNCount(
+                official.JournalingComponentTopN,
+                "GetComponentDataRW",
+                "GAS.Runtime.GEEffectCommandStreamComponent");
+            var attributeBufferRwCount = FindTopNCount(
+                official.JournalingComponentTopN,
+                "GetBufferRW",
+                "GAS.Runtime.AttributeValueBuffer");
+            var effectCommandBufferRwCount = FindTopNCount(
+                official.JournalingComponentTopN,
+                "GetBufferRW",
+                "GAS.Runtime.GEEffectCommandBuffer");
+            var activeMutationBufferRwCount = FindTopNCount(
+                official.JournalingComponentTopN,
+                "GetBufferRW",
+                "GAS.Runtime.ActiveEffectMutationBuffer");
+            var executionScanCount = performanceResult.DriverExecutionSpecScans;
+            var executionMatchedCount = performanceResult.DriverExecutionMatchedEffectSpecs;
+            var executionScanRatio = executionMatchedCount > 0
+                ? (double)executionScanCount / executionMatchedCount
+                : 0d;
+            var observationQueryCount = diagnosticEvidence.Observation.MaterializedQueryCount;
+            var observationEntityCount = diagnosticEvidence.Observation.MaterializedEntityCount;
+            var performancePollutionCount =
+                performanceEvidence.Observation.PerformancePollutionRiskCount;
+
+            AppendAttributionRow(
+                builder,
+                "R4-DBG-MATRIX",
+                "High",
+                "DebuggerEvidence",
+                "DebuggerOwner",
+                "HotspotAttribution",
+                "GasRuntimeDerivedExportSink",
+                "runtimeDataOrientedScorecard+JournalingTopN",
+                "DerivedExport",
+                official.JournalingWorldRecordCount,
+                "ManualInference",
+                "R4",
+                "keep matrix as validation contract",
+                "journalingWorldRecords=" + official.JournalingWorldRecordCount);
+
+            AppendAttributionRow(
+                builder,
+                "GAS-ARCH-07",
+                "High",
+                "GameplayFact",
+                nameof(GASBoundaryProjectionSystemGroup),
+                "OwnerLocalFactDirtySpan",
+                "GameplayBoundaryFactExportSystem",
+                "OwnerLocalGameplayFactBuffer",
+                "GetBufferRW",
+                ownerFactBufferCount,
+                "BroadBufferRW+OwnerLocality",
+                "R3",
+                "dirty owner/fact span lane",
+                "ownerLocalFactFlushes=" + diagnosticEvidence.AttributeFact.OwnerLocalFactFlushCount
+                + ";ownerLocalFactDirtyOwners=" + diagnosticEvidence.AttributeFact.OwnerLocalFactDirtyOwnerCount
+                + ";ownerLocalFactSkippedOwners=" + diagnosticEvidence.AttributeFact.OwnerLocalFactSkippedOwnerCount);
+
+            AppendAttributionRow(
+                builder,
+                "GAS-ARCH-AE-PRETICK",
+                "High",
+                "ActiveEffectLifecycle",
+                nameof(GASCoreSimulationSystemGroup),
+                "ActiveEffectPreTick",
+                "GASActiveEffectPreTickSystem",
+                "ActiveGameplayEffectBuffer+ActiveEffectMutationBuffer",
+                "GetBufferRW",
+                activeEffectPreTickCount,
+                "PerFrameSlotScan",
+                "R7/R3",
+                "dirty/due slot lane",
+                "activeEffectSlots=" + diagnosticEvidence.ActiveEffect.SlotCount);
+
+            AppendAttributionRow(
+                builder,
+                "GAS-ARCH-CMD-PREPARE",
+                "High",
+                "CommandFanIn",
+                nameof(GASFramePrepareSystemGroup),
+                "OwnerLocalInstantCommandPrepare",
+                "OwnerLocalInstantCommandFramePrepareSystem",
+                "GEEffectCommandBuffer+GESetByCallerValueBuffer",
+                "GetBufferRW",
+                instantPrepareCount,
+                "PerFrameBufferClearCopy",
+                "R7/R3",
+                "dirty command owner lane",
+                "commands=" + performanceResult.DriverIssuedCommands);
+
+            AppendAttributionRow(
+                builder,
+                "GAS-ARCH-AE-MUTATION-PREPARE",
+                "High",
+                "ActiveEffectMutation",
+                nameof(GASFramePrepareSystemGroup),
+                "ActiveEffectMutationPrepare",
+                "ActiveEffectOwnerLocalMutationFramePrepareSystem",
+                "ActiveEffectMutationBuffer",
+                "GetBufferRW",
+                activeMutationPrepareCount + activeMutationBufferRwCount,
+                "PerFrameBufferClearCopy",
+                "R7/R3",
+                "dirty active mutation owner lane",
+                "activeMutationCommands=" + diagnosticEvidence.ActiveMutation.CommandCount);
+
+            AppendAttributionRow(
+                builder,
+                "GAS-ARCH-06",
+                "High",
+                "ExecutionCalculation",
+                nameof(GASCoreSimulationSystemGroup),
+                "ExecutionSpecSelection",
+                "AutoChessExecuteDamageCalculationSystem",
+                "GEEffectSpecBuffer",
+                "SpecScan",
+                executionScanCount,
+                "FanOutScan",
+                "R5/R3",
+                "calculationCode to effect-spec generated index",
+                "scanMatchRatio=" + executionScanRatio.ToString("0.###"));
+
+            AppendAttributionRow(
+                builder,
+                "GAS-ARCH-STREAM-RW",
+                "High",
+                "EffectCommandStream",
+                nameof(GASCoreSimulationSystemGroup),
+                "StreamSequenceAllocation",
+                "GEEffectCommandSpecStream",
+                "GEEffectCommandStreamComponent",
+                "GetComponentDataRW",
+                streamComponentRwCount,
+                "SingletonStreamRW",
+                "R4/R3",
+                "per-lane sequence counter attribution",
+                "effectCommandBufferRW=" + effectCommandBufferRwCount);
+
+            AppendAttributionRow(
+                builder,
+                "GAS-ARCH-ATTR-RW",
+                "High",
+                "AttributeState",
+                nameof(GASCoreSimulationSystemGroup),
+                "AttributeDeltaApply",
+                "GASAttributeModifierDeltaApplySystem",
+                "AttributeValueBuffer",
+                "GetBufferRW",
+                attributeBufferRwCount,
+                "BroadBufferRW",
+                "R3",
+                "attribute dirty range apply lane",
+                "pendingAttributeDeltas=" + diagnosticEvidence.AttributeFact.PendingDeltaCount);
+
+            AppendAttributionRow(
+                builder,
+                "GAS-DBG-01",
+                "High",
+                "DebuggerObservation",
+                "DebuggerOwner",
+                "DiagnosticMaterialization",
+                "DiagnosticsSnapshotSystem",
+                "ToEntityArray",
+                "Materialization",
+                observationQueryCount + observationEntityCount,
+                "ObservationMaterialization",
+                "R4",
+                "budgeted diagnostic materialization owner",
+                "queries=" + observationQueryCount + ";entities=" + observationEntityCount);
+
+            AppendAttributionRow(
+                builder,
+                "GAS-MEASURE-02",
+                "Medium",
+                "OfficialToolEvidence",
+                "Validation",
+                "ProfilerCapture",
+                "GasRuntimeOfficialToolDiff",
+                "Profiler",
+                "ProfilerEvidence",
+                budget.ProfilerEvidencePassed ? 0 : 1,
+                "MissingProfilerEvidence",
+                "R8",
+                "profiler-enabled x50/x100/x1000 scale gate",
+                "profilerCaptureState=" + budget.ProfilerCaptureState);
+
+            AppendAttributionRow(
+                builder,
+                "GAS-DBG-POLLUTION-GATE",
+                "High",
+                "DebuggerObservation",
+                "PerformancePass",
+                "ObservationPollutionGate",
+                "AutoChessHeadlessLogicBudgetResult",
+                "performanceObservationPollutionRisks",
+                "PollutionGate",
+                performancePollutionCount,
+                "PerformanceObservationPollution",
+                "R4",
+                "keep performance pass counter-only",
+                "performanceObservationPollutionRisks=" + performancePollutionCount);
+
+            return builder.ToString();
         }
 
         public static string CreateBoundaryOwnerSummary(in AutoChessBattleResult result)
@@ -606,6 +860,89 @@ namespace GAS.AutoChessDemo
         private static string Bool(bool value)
         {
             return value ? "true" : "false";
+        }
+
+        private static void AppendAttributionRow(
+            StringBuilder builder,
+            string id,
+            string severity,
+            string gasConcept,
+            string phase,
+            string lane,
+            string system,
+            string buffer,
+            string operation,
+            int count,
+            string dotsRisk,
+            string nextOwner,
+            string recommendation,
+            string evidence)
+        {
+            if (count <= 0)
+                return;
+
+            builder.Append("hotspotAttribution|source=AutoChessBattleValidationReport")
+                .Append("|readModel=JournalingTopN+DiagnosticMetricFamily")
+                .Append("|passMode=DerivedExport")
+                .Append("|costDomain=Debugger")
+                .Append("|evidenceTier=ValidationEvidence")
+                .Append("|id=")
+                .Append(id)
+                .Append("|severity=")
+                .Append(severity)
+                .Append("|gasConcept=")
+                .Append(gasConcept)
+                .Append("|phase=")
+                .Append(phase)
+                .Append("|lane=")
+                .Append(lane)
+                .Append("|system=")
+                .Append(system)
+                .Append("|buffer=")
+                .Append(buffer)
+                .Append("|operation=")
+                .Append(operation)
+                .Append("|count=")
+                .Append(count)
+                .Append("|dotsRisk=")
+                .Append(dotsRisk)
+                .Append("|nextOwner=")
+                .Append(nextOwner)
+                .Append("|recommendation=")
+                .Append(recommendation)
+                .Append("|evidence=")
+                .Append(evidence)
+                .AppendLine();
+        }
+
+        private static int FindTopNCount(string topN, string operation, string target)
+        {
+            if (string.IsNullOrEmpty(topN)
+                || string.IsNullOrEmpty(operation)
+                || string.IsNullOrEmpty(target))
+            {
+                return 0;
+            }
+
+            var entries = topN.Split(';');
+            for (var i = 0; i < entries.Length; i++)
+            {
+                var entry = entries[i].Trim();
+                if (!entry.StartsWith(operation, StringComparison.Ordinal)
+                    || entry.IndexOf(target, StringComparison.Ordinal) < 0)
+                {
+                    continue;
+                }
+
+                var equalsIndex = entry.LastIndexOf('=');
+                if (equalsIndex < 0 || equalsIndex + 1 >= entry.Length)
+                    continue;
+
+                if (int.TryParse(entry.Substring(equalsIndex + 1), out var count))
+                    return count;
+            }
+
+            return 0;
         }
 
         public static string CreateOfficialToolDiffSummary(

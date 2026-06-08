@@ -82,6 +82,11 @@ namespace GAS.Runtime
         public int OwnerLocalFactOwnerGroupCount;
         public int OwnerLocalFactMaxOwnerRange;
         public int OwnerLocalFactFlushCount;
+        public int OwnerLocalFactChangedChunkCount;
+        public int OwnerLocalFactScannedOwnerCount;
+        public int OwnerLocalFactDirtyOwnerCount;
+        public int OwnerLocalFactSkippedOwnerCount;
+        public int OwnerLocalFactClearedOwnerCount;
         public int MagnitudeSourceCurrentValueLookupCount;
         public int MagnitudeSourceCapturedValueHitCount;
         public int MagnitudeSourceCaptureMissCount;
@@ -703,6 +708,11 @@ namespace GAS.Runtime
             stream.OwnerLocalFactOwnerGroupCount = 0;
             stream.OwnerLocalFactMaxOwnerRange = 0;
             stream.OwnerLocalFactFlushCount = 0;
+            stream.OwnerLocalFactChangedChunkCount = 0;
+            stream.OwnerLocalFactScannedOwnerCount = 0;
+            stream.OwnerLocalFactDirtyOwnerCount = 0;
+            stream.OwnerLocalFactSkippedOwnerCount = 0;
+            stream.OwnerLocalFactClearedOwnerCount = 0;
             stream.MagnitudeSourceCurrentValueLookupCount = 0;
             stream.MagnitudeSourceCapturedValueHitCount = 0;
             stream.MagnitudeSourceCaptureMissCount = 0;

@@ -292,7 +292,15 @@ Assert-FileNotContains `
 Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "GameplayOwnerLocalFactFramePrepareSystem" `
-    -Message "Runtime Core must clear owner-local gameplay facts during FramePrepare."
+    -Message "Runtime Core must keep an owner-local gameplay fact frame phase without returning to singleton facts."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "SetChangedVersionFilter\(ComponentType\.ReadWrite<OwnerLocalGameplayFactBuffer>\(\)\)" `
+    -Message "Boundary fact export must use OwnerLocalGameplayFactBuffer changed-version filtering."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "facts\.Clear\(\)" `
+    -Message "Boundary fact export must clear dirty owner-local fact buffers after copying observations."
 Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "GameplayBoundaryFactExportSystem" `
@@ -358,9 +366,17 @@ Assert-FileContains `
     -Pattern "ownerLocalFactFlushes" `
     -Message "Runtime Debugger text summaries must expose owner-local fact export counters."
 Assert-FileContains `
+    -Path $debuggerPath `
+    -Pattern "ownerLocalFactDirtyOwners" `
+    -Message "Runtime Debugger text summaries must expose owner-local fact dirty owner counters."
+Assert-FileContains `
     -Path $autoChessValidationReportPath `
     -Pattern "ownerLocalFactFlushes" `
     -Message "AutoChess validation summary must expose owner-local fact flush evidence."
+Assert-FileContains `
+    -Path $autoChessValidationReportPath `
+    -Pattern "ownerLocalFactSkippedOwners" `
+    -Message "AutoChess validation summary must expose owner-local fact dirty-span skip evidence."
 Assert-FileContains `
     -Path $autoChessValidationRunPath `
     -Pattern "OwnerLocalFactFlushCount\s*>\s*0" `
@@ -385,6 +401,14 @@ Assert-FileContains `
     -Path $ascArchetypePath `
     -Pattern "ComponentType\.ReadWrite<GESetByCallerValueBuffer>\(\)" `
     -Message "ASC runtime archetype must own GESetByCallerValueBuffer as owner-local instant command payload."
+Assert-FileNotContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<OwnerLocalInstantCommandPendingComponent>\(\)" `
+    -Message "ASC runtime archetype must not reintroduce OwnerLocalInstantCommandPendingComponent; owner-local buffers are the command fact source."
+Assert-FileNotContains `
+    -Path $ascArchetypePath `
+    -Pattern "ComponentType\.ReadWrite<ActiveEffectMutationPendingComponent>\(\)" `
+    -Message "ASC runtime archetype must not reintroduce ActiveEffectMutationPendingComponent; owner-local buffers are the mutation fact source."
 Assert-FileContains `
     -Path $ascArchetypePath `
     -Pattern "componentTypes\[index\+\+\]\s*=\s*ComponentType\.ReadWrite<GEEffectSpecBuffer>\(\)" `
@@ -469,6 +493,10 @@ Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "OwnerLocalInstantCommandFramePrepareSystem[\s\S]*?NextFrameSetByCallerType[\s\S]*GetBufferTypeHandle<OwnerLocalInstantNextFrameSetByCallerValueBuffer>[\s\S]*deferredSetByCallerValues\.Clear\(\)" `
     -Message "FramePrepare must move next-frame instant payloads into current owner-local instant payloads before clearing the deferred carrier."
+Assert-FileNotContains `
+    -Path $streamPhasePath `
+    -Pattern "OwnerLocalInstantCommandFramePrepareSystem[\s\S]*OwnerLocalInstantCommandPendingComponent" `
+    -Message "OwnerLocalInstantCommandFramePrepareSystem must not use the rejected instant pending marker hot path."
 Assert-FileNotContains `
     -Path $streamPhasePath `
     -Pattern "OwnerLocalInstantCommandFlushSystem" `
@@ -801,6 +829,10 @@ Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "NextFrameSetByCallerType[\s\S]*GetBufferTypeHandle<ActiveEffectNextFrameMutationSetByCallerValueBuffer>[\s\S]*deferredSetByCallerValues\.Clear\(\)" `
     -Message "FramePrepare must move next-frame active mutation payloads into current owner-local payloads before clearing the deferred carrier."
+Assert-FileNotContains `
+    -Path $streamPhasePath `
+    -Pattern "ActiveEffectOwnerLocalMutationFramePrepareSystem[\s\S]*ActiveEffectMutationPendingComponent" `
+    -Message "ActiveEffectOwnerLocalMutationFramePrepareSystem must not use the rejected active mutation pending marker hot path."
 Assert-FileContains `
     -Path $queryLayoutPlanPath `
     -Pattern "GASRuntimeQueryLayoutEntryId\.ActiveEffectStore[\s\S]*GASRuntimeLayoutComponentSlot\.ActiveEffectNextFrameMutationCommandBuffer" `
@@ -955,7 +987,7 @@ Assert-FileContains `
     -Message "DiagnosticsSnapshotSystem must sample magnitude source debugger evidence."
 Assert-FileContains `
     -Path $autoChessValidationReportPath `
-    -Pattern "diagnosticResult\.RuntimeDiagnostics\.ObservationMaterializationCounters" `
+    -Pattern "diagnosticResult\.RuntimeDiagnostics\.Evidence[\s\S]*?Observation" `
     -Message "AutoChess validation evidence must consume observation materialization counters from the diagnostic pass."
 Assert-FileContains `
     -Path $autoChessValidationReportPath `
@@ -967,7 +999,7 @@ Assert-FileContains `
     -Message "AutoChess validation evidence must expose observation materialized query count."
 Assert-FileContains `
     -Path $autoChessValidationReportPath `
-    -Pattern "diagnosticResult\.RuntimeDiagnostics\.MagnitudeSourceCounters" `
+    -Pattern "diagnosticResult\.RuntimeDiagnostics\.Evidence[\s\S]*?MagnitudeSource" `
     -Message "AutoChess validation evidence must consume magnitude source counters from the diagnostic pass."
 Assert-FileContains `
     -Path $autoChessValidationReportPath `
@@ -979,11 +1011,11 @@ Assert-FileContains `
     -Message "AutoChess validation evidence must expose magnitude source fallback fact count."
 Assert-FileContains `
     -Path $autoChessValidationReportPath `
-    -Pattern "diagnosticResult\.RuntimeDiagnostics\.ObservationMaterializationCounters" `
+    -Pattern "diagnosticEvidence\.Observation" `
     -Message "AutoChess validation evidence must read observation materialization detail from the diagnostic pass."
 Assert-FileContains `
     -Path $autoChessValidationReportPath `
-    -Pattern "performanceResult\.RuntimeDiagnostics\.ObservationMaterializationCounters" `
+    -Pattern "performanceEvidence\.Observation" `
     -Message "AutoChess validation evidence must read performance pollution risk from the performance pass."
 Assert-FileContains `
     -Path $autoChessValidationReportPath `
@@ -1131,7 +1163,7 @@ Assert-FileContains `
     -Message "GEExecutionCalculationSystem execution output facts must append to ASC owner-local fact buffers."
 Assert-FileContains `
     -Path $executionCalculationSystemPath `
-    -Pattern "EffectCommandSpecStreamPhaseUtility\.Allocate\(ref stream\.NextFactSequence\)" `
+    -Pattern "GASRuntimeSequenceAllocator\.AllocateFactSequence\(ref stream\)" `
     -Message "GEExecutionCalculationSystem merge job must allocate deterministic fact sequences."
 Assert-FileNotContains `
     -Path $executionCalculationSystemPath `

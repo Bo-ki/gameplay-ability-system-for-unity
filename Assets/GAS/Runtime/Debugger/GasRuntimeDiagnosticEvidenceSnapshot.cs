@@ -86,6 +86,11 @@ namespace GAS.Runtime
         public readonly int OwnerLocalFactOwnerGroupCount;
         public readonly int OwnerLocalFactMaxOwnerRange;
         public readonly int OwnerLocalFactFlushCount;
+        public readonly int OwnerLocalFactChangedChunkCount;
+        public readonly int OwnerLocalFactScannedOwnerCount;
+        public readonly int OwnerLocalFactDirtyOwnerCount;
+        public readonly int OwnerLocalFactSkippedOwnerCount;
+        public readonly int OwnerLocalFactClearedOwnerCount;
 
         public GasRuntimeAttributeFactEvidenceSnapshot(in GasRuntimeCoreDiagnosticCounters counters)
         {
@@ -101,6 +106,11 @@ namespace GAS.Runtime
             OwnerLocalFactOwnerGroupCount = counters.OwnerLocalFactOwnerGroupCount;
             OwnerLocalFactMaxOwnerRange = counters.OwnerLocalFactMaxOwnerRange;
             OwnerLocalFactFlushCount = counters.OwnerLocalFactFlushCount;
+            OwnerLocalFactChangedChunkCount = counters.OwnerLocalFactChangedChunkCount;
+            OwnerLocalFactScannedOwnerCount = counters.OwnerLocalFactScannedOwnerCount;
+            OwnerLocalFactDirtyOwnerCount = counters.OwnerLocalFactDirtyOwnerCount;
+            OwnerLocalFactSkippedOwnerCount = counters.OwnerLocalFactSkippedOwnerCount;
+            OwnerLocalFactClearedOwnerCount = counters.OwnerLocalFactClearedOwnerCount;
         }
     }
 

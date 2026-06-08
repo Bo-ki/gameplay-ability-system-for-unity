@@ -33,6 +33,9 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 23. 2026-06-08 第五刀已新增 `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticRetentionPolicy.cs`：`GasRuntimeDebugger` 不再内联 event retention 删除策略，所有写入点改为调用 `GasRuntimeDiagnosticRetentionPolicy.Apply(...)`。这把 `MaxRetainedEvents`、`FirstRetainedSequence`、`DroppedEventCount` 和 buffer `RemoveRange` 的策略 owner 从 4k 行级 Debugger 单体中迁出，是 config / retention 拆分的第一步；但 `GASRuntimeDebuggerComponent` 仍同时承载 config、retention state 和 runtime numeric counters，尚未拆成独立 `DiagnosticsConfigOwner` / frame state / aggregate summary component。
 24. 2026-06-08 DebuggerProbe Run2 暴露 scorecard evidence source 缺陷：`AutoChessHeadlessLogicBudgetResult.Evaluate(...)` 只消费 performance pass 的 `RuntimeDiagnostics`，导致 `AutoChessDemoHeadlessLogicBudget` 中 `coreFacts=0`、`activeMutationCommands=0`、`ownerLocalFacts=0`，但同一份 diagnostic summary 已有 `facts=5200`、`activeMutationCommands=200`、`ownerLocalFactMaxOwnerRange=9`。本轮已把 scorecard 改为 `performance timing + diagnostic GAS/data/API/structural metric families + performance pass overhead gate` 的 read model，并把 `runtimeDataOrientedScorecard` 标记为 `passMode=DerivedExport` / `readModel=PerformanceTiming+MetricFamilySnapshot`。DebuggerProbe Run3 证明修复有效：`metricFamilyMask=0x7F`、`coreFacts=5200`、`activeMutationCommands=200`、`ownerLocalFacts=5200`、`performanceObservationPollutionRisks=0`。
 25. 2026-06-08 DebuggerProbe Run3 证明 Debugger 已具备定位当前 GAS/DOTS 热点的能力：Journaling TopN 指向 `GetBufferRW=67884`、`GetComponentDataRW=18892`、`EnableComponent=650`；系统热点为 `GASActiveEffectPreTickSystem=15800`、`OwnerLocalInstantCommandFramePrepareSystem=9000`、`ActiveEffectOwnerLocalMutationFramePrepareSystem=9000`、`GASAttributeModifierDeltaApplySystem=5400`、`ASCCommandBufferResolveSystem=4550`；组件热点为 `OwnerLocalGameplayFactBuffer=11250`、`GEEffectCommandStreamComponent=9237`、`AttributeValueBuffer=8250`、`GEEffectCommandBuffer=4650`。派生分析还命中 `OwnerLocalFact max owner range=9`、`ownerLocalFactFlushes=5200`、`executionSpecScans=1350` / `executionMatchedEffectSpecs=350`，说明后续性能迭代应优先领取 fact fan-in / active effect pre-tick / instant command prepare / execution spec index，而不是继续泛泛压总 ms。
+26. 2026-06-08 DebuggerProbe Run4 已把热点定位从人读 TopN 推进为机器可读 `hotspotAttribution|...` 矩阵：`GasRuntimeDerivedExportSink` 在 `runtimeDataOrientedScorecard` 后输出 Runtime-owned attribution rows，`AutoChessBattleValidationReport` 合并 `JournalingTopN + DiagnosticMetricFamily` 输出 AutoChess validation matrix，`Analyze-AutoChessProfile.ps1` 解析为 JSON `hotspotAttribution` 与 Markdown 表格。Run4 关键路由为 `R4-DBG-MATRIX count=87426 nextOwner=R4`、`GAS-ARCH-07 OwnerLocalGameplayFactBuffer count=11250 nextOwner=R3`、`GAS-ARCH-AE-PRETICK count=15800 nextOwner=R7/R3`、`GAS-ARCH-CMD-PREPARE count=9000 nextOwner=R7/R3`、`GAS-ARCH-AE-MUTATION-PREPARE count=13000 nextOwner=R7/R3`、`GAS-ARCH-06 scanMatchRatio=3.857 nextOwner=R5/R3`、`GAS-ARCH-ATTR-RW count=8250 nextOwner=R3`、`GAS-DBG-01 materialization count=2412 nextOwner=R4`、`GAS-MEASURE-02 profiler disabled nextOwner=R8`。
+27. 同一轮补充了 Agent 友好的 split report 输出：`Analyze-AutoChessProfile.ps1` 继续生成全量 `AutoChessProfileAnalysis.json/.md`，但额外生成 `AutoChessProfileBrief.md` 和 `SubReports/PerformanceBudget.md`、`HotspotAttribution.md`、`JournalingTopN.md`、`DebuggerEvidence.md`、`RuntimeBattleLog.md`。这把“默认读取短简报，按需读取领域子报告”变成 Debugger evidence surface 的消费契约，避免 Agent 每次为了一个 owner 路由读取全量 battle log / TopN / Debugger 明细。
+28. 2026-06-08 Run6 / Run7 证明 Debugger 已能识别并反证错误优化：Run6 引入 owner-local pending enableable marker 后，split report 显示 `avgTickMs=12.643ms`、`CoreSimulation.avgMs=11.698ms`、`journalingWorldRecords=505543`、`EnableComponent=37384`，并伴随 Job safety / aliasing 异常；Run7 移除该 marker 后恢复 `passed=True`、`headlessLogicBudgetPassed=True`、`avgTickMs=0.970ms`、`CoreSimulation.avgMs=0.497ms`、`EnableComponent=650`。这说明 hotspot matrix 不只用于找慢点，也必须用于阻断“把 buffer scan 成本转移为 enableable toggle 成本”的伪优化。
 
 ## 仍成立风险
 
@@ -47,6 +50,9 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 9. Debugger 当前没有把 GAS 概念维度和 DOTS 数据维度建成一张统一矩阵。Ability / GE / Attribute / Tag / Cue 的业务计数已经存在，query / lookup / buffer / sync / structural / owner-local range 的 DOTS 计数也开始出现，但二者还没有统一 evidence id、cost domain、phase/lane、source component、carrier、overhead owner 和 official diff correlation。
 10. 如果继续向 `GASRuntimeDiagnosticEventBuffer` 增加字段，短期能输出更多日志，长期会把 Debugger 固化成“日志总线 + 大结构体快照”，无法支撑数据导向性能优化。第三刀 `GasRuntimeMetricFamilySnapshot` 和第四刀 `GasRuntimeDiagnosticEvidenceSnapshot` 已降低外部消费迁移成本，但仍不能替代后续物理 buffer / pass owner 拆分。
 11. DebuggerProbe Run3 的 `DebuggerOwner.avgMs=49.094` 是 diagnostic-only 一次性物化 / 导出成本，不并入 performance pass；它能帮助定位热点，但也证明 `DiagnosticMaterializationPass` 与 `DerivedExportSink` 仍需继续预算化、可采样化和按 owner 拆分。
+12. DebuggerProbe Run4 的 hotspot matrix 只能作为任务路由 evidence，不能替代真实优化结果。矩阵把 `OwnerLocalGameplayFactBuffer`、ActiveEffect pre-tick、instant command prepare、execution spec scan、diagnostic materialization 和 Profiler disabled 明确分派给 R3/R4/R5/R7/R8；如果后续代码优化后矩阵仍只显示相同 High rows，说明只是在压 ms，没有改变 DOTS 数据形态。
+13. 日志拆分只能降低 Agent / 人读读取成本，不等于 Runtime hot path 已解耦。当前 split report 仍由离线分析脚本从全量 report 派生；后续 Debugger 内部仍需把 metric family、materialization、official diff、battle log / replay export 物理拆成独立 owner。
+14. Run6 的 pending marker 回归说明 Debugger 必须保留失败优化证据。若下一轮只看 `FramePrepare.avgMs` 局部下降而忽略 `EnableComponent`、Journaling 总量、CoreSimulation、Job safety 和业务完成状态，就会把错误方向写成成功。
 
 ## Debugger 模块重构事实结论
 
@@ -73,6 +79,8 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 | diagnostic evidence snapshot | `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticEvidenceSnapshot.cs` |
 | diagnostic retention policy | `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticRetentionPolicy.cs` |
 | derived export sink | `Assets/GAS/Runtime/Debugger/GasRuntimeDerivedExportSink.cs` |
+| hotspot attribution matrix | `Assets/GAS/Runtime/Debugger/GasRuntimeDerivedExportSink.cs`, `Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationReport.cs`, `Tools/Diagnostics/Analyze-AutoChessProfile.ps1` |
+| split report export | `Tools/Diagnostics/Analyze-AutoChessProfile.ps1` |
 | scorecard pass-source fix | `Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs`, `Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationReport.cs` |
 | AutoChess profile analysis | `Tools/Diagnostics/Analyze-AutoChessProfile.ps1` |
 | official diff | `Assets/GAS/Runtime/Debugger/GasRuntimeOfficialToolDiff.cs` |
@@ -88,6 +96,8 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 | pass split + magnitude source x50 | `00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-PassSplitMagnitudeSource-Run1.log` |
 | tag requirement / pre-tick snapshot x50 | `00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-TagRequirementQuery-Run5.log` |
 | debugger profile probe Run3 | `00-当前架构事实/_归档/2026-06-08-DebuggerProfileProbe-Run6.md` |
+| debugger hotspot attribution matrix Run4 | `00-当前架构事实/_归档/2026-06-08-DebuggerHotspotAttributionMatrix-Run4.md` |
+| pending marker rejected Run7 | `00-当前架构事实/_归档/2026-06-08-OwnerLocalPendingMarkerRejected-Run7.md` |
 
 ## 退出条件
 
@@ -100,3 +110,5 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 7. Debugger hot path 只写固定宽度 numeric metrics / FixedString ids / small counters；禁止托管字符串、Dictionary、反射、文本导出或 `ToEntityArray` 进入 performance pass。
 8. Debugger 输出 `DataOrientedScorecard`：workload-normalized cost、chunk locality、lookup pressure、buffer pressure、structural phase、sync/materialization、Burst/managed boundary、debugger overhead，且每项能回连 GAS concept、phase/lane、system/component/buffer 和 official diff source。
 9. `GASRuntimeDiagnosticEventBuffer` 稀疏 mega-row 被拆成 metric family buffers 或等价 SoA snapshot；新增 GAS 概念不得继续通过扩展大事件结构体落地。短期外部消费必须走 `GasRuntimeMetricFamilySnapshot` / `GasRuntimeDiagnosticEvidenceSnapshot` / scorecard / derived export，不允许 AutoChess、Editor 或 CI 继续按 Debugger 内部 counter 字段二次拼接稳定语义。
+10. Debugger / AutoChess / analysis script 必须输出并解析 `hotspotAttribution` 矩阵：每个 High row 至少包含 GAS concept、phase/lane、system、buffer、operation、count、DOTS risk、next owner 和 evidence；后续 R3/R5/R7/R8 优化必须用同构矩阵证明热点 owner 已下降或被更精确的业务原因替代。
+11. 分析产物必须生成短简报 + 分域子报告：Agent 默认读取 `AutoChessProfileBrief.md`，只有需要深入性能预算、热点矩阵、Journaling、Debugger evidence 或战斗业务日志时，才读取对应 `SubReports/*.md`。

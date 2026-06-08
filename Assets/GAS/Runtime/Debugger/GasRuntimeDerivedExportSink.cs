@@ -16,6 +16,7 @@ namespace GAS.Runtime
             AppendDiagnosticEvidenceSnapshot(builder, snapshot.Evidence);
             AppendMetricFamilySnapshot(builder, snapshot.MetricFamilies);
             AppendDataOrientedScorecard(builder, scorecard);
+            AppendHotspotAttributionMatrix(builder, scorecard);
             return builder.ToString();
         }
 
@@ -24,6 +25,7 @@ namespace GAS.Runtime
         {
             var builder = new StringBuilder(1024);
             AppendDataOrientedScorecard(builder, scorecard);
+            AppendHotspotAttributionMatrix(builder, scorecard);
             return builder.ToString();
         }
 
@@ -122,6 +124,16 @@ namespace GAS.Runtime
                 .Append(metricFamilies.DataShape.OwnerLocalFactMaxOwnerRange)
                 .Append("|dataShapeOwnerLocalFactFlushes=")
                 .Append(metricFamilies.DataShape.OwnerLocalFactFlushCount)
+                .Append("|dataShapeOwnerLocalFactChangedChunks=")
+                .Append(metricFamilies.DataShape.OwnerLocalFactChangedChunkCount)
+                .Append("|dataShapeOwnerLocalFactScannedOwners=")
+                .Append(metricFamilies.DataShape.OwnerLocalFactScannedOwnerCount)
+                .Append("|dataShapeOwnerLocalFactDirtyOwners=")
+                .Append(metricFamilies.DataShape.OwnerLocalFactDirtyOwnerCount)
+                .Append("|dataShapeOwnerLocalFactSkippedOwners=")
+                .Append(metricFamilies.DataShape.OwnerLocalFactSkippedOwnerCount)
+                .Append("|dataShapeOwnerLocalFactClearedOwners=")
+                .Append(metricFamilies.DataShape.OwnerLocalFactClearedOwnerCount)
                 .Append("|dataShapeActiveEffectSlots=")
                 .Append(metricFamilies.DataShape.ActiveEffectSlotCount)
                 .Append("|dataShapeActiveEffectSlotCapacity=")
@@ -235,6 +247,16 @@ namespace GAS.Runtime
                 .Append(scorecard.OwnerLocalFactMaxOwnerRange)
                 .Append("|ownerLocalFactFlushes=")
                 .Append(scorecard.OwnerLocalFactFlushCount)
+                .Append("|ownerLocalFactChangedChunks=")
+                .Append(scorecard.OwnerLocalFactChangedChunkCount)
+                .Append("|ownerLocalFactScannedOwners=")
+                .Append(scorecard.OwnerLocalFactScannedOwnerCount)
+                .Append("|ownerLocalFactDirtyOwners=")
+                .Append(scorecard.OwnerLocalFactDirtyOwnerCount)
+                .Append("|ownerLocalFactSkippedOwners=")
+                .Append(scorecard.OwnerLocalFactSkippedOwnerCount)
+                .Append("|ownerLocalFactClearedOwners=")
+                .Append(scorecard.OwnerLocalFactClearedOwnerCount)
                 .Append("|activeEffectSlots=")
                 .Append(scorecard.ActiveEffectSlotCount)
                 .Append("|activeEffectSlotCapacity=")
@@ -287,6 +309,165 @@ namespace GAS.Runtime
             AppendInvariantDouble(builder, scorecard.CoreSimulationMicrosecondsPerCoreFact);
             builder.Append("|profilerCaptureState=")
                 .Append(scorecard.ProfilerCaptureState)
+                .AppendLine();
+        }
+
+        private static void AppendHotspotAttributionMatrix(
+            StringBuilder builder,
+            in GasRuntimeDataOrientedScorecard scorecard)
+        {
+            AppendHotspotAttribution(
+                builder,
+                "GAS-ARCH-07",
+                "High",
+                "GameplayFact",
+                nameof(GASBoundaryProjectionSystemGroup),
+                "OwnerLocalFactDirtySpan",
+                "GameplayBoundaryFactExportSystem",
+                "OwnerLocalGameplayFactBuffer",
+                "OwnerLocalFactFlush",
+                scorecard.OwnerLocalFactFlushCount,
+                "OwnerLocality",
+                "R3",
+                "generated dirty owner/fact span lane",
+                "ownerLocalFactMaxOwnerRange=" + scorecard.OwnerLocalFactMaxOwnerRange
+                + ";ownerLocalFactDirtyOwners=" + scorecard.OwnerLocalFactDirtyOwnerCount
+                + ";ownerLocalFactSkippedOwners=" + scorecard.OwnerLocalFactSkippedOwnerCount);
+
+            AppendHotspotAttribution(
+                builder,
+                "GAS-ARCH-04",
+                "High",
+                "AttributeFactFanIn",
+                nameof(GASCoreSimulationSystemGroup),
+                "PendingAttributeDeltaApply",
+                "GASAttributeModifierDeltaApplySystem",
+                "OwnerLocalGameplayFactBuffer",
+                "OwnerLocalFactAppend",
+                scorecard.PendingAttributeDeltaCount,
+                "BroadBufferRW",
+                "R3",
+                "fact reduce/apply lane",
+                "pendingAttributeMaxTargetRange=" + scorecard.PendingAttributeMaxTargetRange);
+
+            AppendHotspotAttribution(
+                builder,
+                "GAS-ARCH-ActiveEffect",
+                "High",
+                "ActiveEffectLifecycle",
+                nameof(GASCoreSimulationSystemGroup),
+                "ActiveEffectPreTick",
+                "GASActiveEffectPreTickSystem",
+                "ActiveGameplayEffectBuffer",
+                "ActiveSlotTick",
+                scorecard.ActiveEffectSlotCount,
+                "PerFrameSlotScan",
+                "R7/R3",
+                "dirty/due active-effect slot lane",
+                "activeEffectDuePeriodSlots=" + scorecard.ActiveEffectChunkSkipDuePeriodSlotCount);
+
+            AppendHotspotAttribution(
+                builder,
+                "GAS-ARCH-01",
+                "High",
+                "RuntimeCoreApiHealth",
+                "AllRuntimeGroups",
+                "DependencyAndSync",
+                "GASDependencyDrain",
+                "ComponentLookup+BufferLookup",
+                "DependencyWait",
+                scorecard.DependencyWaitRiskCount + scorecard.SyncQueryBudget,
+                "DependencyWait",
+                "R4",
+                "per-owner API health attribution",
+                "syncQueryBudget=" + scorecard.SyncQueryBudget);
+
+            AppendHotspotAttribution(
+                builder,
+                "GAS-DBG-01",
+                "High",
+                "DebuggerObservation",
+                "DebuggerOwner",
+                "DiagnosticMaterialization",
+                "DiagnosticsSnapshotSystem",
+                "ToEntityArray",
+                "Materialization",
+                scorecard.PerformanceObservationPollutionRiskCount,
+                "ObservationPollution",
+                "R4",
+                "budgeted diagnostic materialization owner",
+                "performanceObservationPollutionRisks=" + scorecard.PerformanceObservationPollutionRiskCount);
+
+            AppendHotspotAttribution(
+                builder,
+                "GAS-MEASURE-02",
+                "Medium",
+                "OfficialToolEvidence",
+                "Validation",
+                "ProfilerCapture",
+                "GasRuntimeOfficialToolDiff",
+                "Profiler",
+                "ProfilerEvidence",
+                scorecard.ProfilerEvidencePassed ? 0 : 1,
+                "MissingProfilerEvidence",
+                "R8",
+                "profiler-enabled scale gate",
+                "profilerCaptureState=" + scorecard.ProfilerCaptureState);
+        }
+
+        private static void AppendHotspotAttribution(
+            StringBuilder builder,
+            string id,
+            string severity,
+            string gasConcept,
+            string phase,
+            string lane,
+            string system,
+            string buffer,
+            string operation,
+            int count,
+            string dotsRisk,
+            string nextOwner,
+            string recommendation,
+            string evidence)
+        {
+            if (count <= 0)
+                return;
+
+            builder.Append("hotspotAttribution|source=GasRuntimeDerivedExportSink")
+                .Append("|readModel=PerformanceTiming+MetricFamilySnapshot")
+                .Append("|passMode=")
+                .Append(nameof(GasRuntimeDiagnosticsPassMode.DerivedExport))
+                .Append("|costDomain=")
+                .Append(nameof(GasRuntimeDiagnosticsCostDomain.Debugger))
+                .Append("|evidenceTier=")
+                .Append(nameof(GasRuntimeDiagnosticsEvidenceTier.ValidationEvidence))
+                .Append("|id=")
+                .Append(id)
+                .Append("|severity=")
+                .Append(severity)
+                .Append("|gasConcept=")
+                .Append(gasConcept)
+                .Append("|phase=")
+                .Append(phase)
+                .Append("|lane=")
+                .Append(lane)
+                .Append("|system=")
+                .Append(system)
+                .Append("|buffer=")
+                .Append(buffer)
+                .Append("|operation=")
+                .Append(operation)
+                .Append("|count=")
+                .Append(count)
+                .Append("|dotsRisk=")
+                .Append(dotsRisk)
+                .Append("|nextOwner=")
+                .Append(nextOwner)
+                .Append("|recommendation=")
+                .Append(recommendation)
+                .Append("|evidence=")
+                .Append(evidence)
                 .AppendLine();
         }
 

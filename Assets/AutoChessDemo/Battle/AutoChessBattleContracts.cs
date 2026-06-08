@@ -442,6 +442,11 @@ namespace GAS.AutoChessDemo
         public readonly int OwnerLocalFactOwnerGroupCount;
         public readonly int OwnerLocalFactMaxOwnerRange;
         public readonly int OwnerLocalFactFlushCount;
+        public readonly int OwnerLocalFactChangedChunkCount;
+        public readonly int OwnerLocalFactScannedOwnerCount;
+        public readonly int OwnerLocalFactDirtyOwnerCount;
+        public readonly int OwnerLocalFactSkippedOwnerCount;
+        public readonly int OwnerLocalFactClearedOwnerCount;
         public readonly int StreamCarrierPressureWarningCount;
         public readonly int StreamCarrierPeakCount;
         public readonly int StreamCarrierPeakCapacity;
@@ -550,6 +555,11 @@ namespace GAS.AutoChessDemo
             int ownerLocalFactOwnerGroupCount,
             int ownerLocalFactMaxOwnerRange,
             int ownerLocalFactFlushCount,
+            int ownerLocalFactChangedChunkCount,
+            int ownerLocalFactScannedOwnerCount,
+            int ownerLocalFactDirtyOwnerCount,
+            int ownerLocalFactSkippedOwnerCount,
+            int ownerLocalFactClearedOwnerCount,
             int streamCarrierPressureWarningCount,
             int streamCarrierPeakCount,
             int streamCarrierPeakCapacity,
@@ -657,6 +667,11 @@ namespace GAS.AutoChessDemo
             OwnerLocalFactOwnerGroupCount = ownerLocalFactOwnerGroupCount;
             OwnerLocalFactMaxOwnerRange = ownerLocalFactMaxOwnerRange;
             OwnerLocalFactFlushCount = ownerLocalFactFlushCount;
+            OwnerLocalFactChangedChunkCount = ownerLocalFactChangedChunkCount;
+            OwnerLocalFactScannedOwnerCount = ownerLocalFactScannedOwnerCount;
+            OwnerLocalFactDirtyOwnerCount = ownerLocalFactDirtyOwnerCount;
+            OwnerLocalFactSkippedOwnerCount = ownerLocalFactSkippedOwnerCount;
+            OwnerLocalFactClearedOwnerCount = ownerLocalFactClearedOwnerCount;
             StreamCarrierPressureWarningCount = streamCarrierPressureWarningCount;
             StreamCarrierPeakCount = streamCarrierPeakCount;
             StreamCarrierPeakCapacity = streamCarrierPeakCapacity;

@@ -53,6 +53,11 @@ namespace GAS.AutoChessDemo
         public readonly int OwnerLocalFactOwnerGroupCount;
         public readonly int OwnerLocalFactMaxOwnerRange;
         public readonly int OwnerLocalFactFlushCount;
+        public readonly int OwnerLocalFactChangedChunkCount;
+        public readonly int OwnerLocalFactScannedOwnerCount;
+        public readonly int OwnerLocalFactDirtyOwnerCount;
+        public readonly int OwnerLocalFactSkippedOwnerCount;
+        public readonly int OwnerLocalFactClearedOwnerCount;
         public readonly int ActiveEffectSlotCount;
         public readonly int ActiveEffectSlotCapacity;
         public readonly int ActiveEffectChunkSkipDuePeriodSlotCount;
@@ -110,6 +115,11 @@ namespace GAS.AutoChessDemo
             int ownerLocalFactOwnerGroupCount,
             int ownerLocalFactMaxOwnerRange,
             int ownerLocalFactFlushCount,
+            int ownerLocalFactChangedChunkCount,
+            int ownerLocalFactScannedOwnerCount,
+            int ownerLocalFactDirtyOwnerCount,
+            int ownerLocalFactSkippedOwnerCount,
+            int ownerLocalFactClearedOwnerCount,
             int activeEffectSlotCount,
             int activeEffectSlotCapacity,
             int activeEffectChunkSkipDuePeriodSlotCount,
@@ -164,6 +174,11 @@ namespace GAS.AutoChessDemo
             OwnerLocalFactOwnerGroupCount = ownerLocalFactOwnerGroupCount;
             OwnerLocalFactMaxOwnerRange = ownerLocalFactMaxOwnerRange;
             OwnerLocalFactFlushCount = ownerLocalFactFlushCount;
+            OwnerLocalFactChangedChunkCount = ownerLocalFactChangedChunkCount;
+            OwnerLocalFactScannedOwnerCount = ownerLocalFactScannedOwnerCount;
+            OwnerLocalFactDirtyOwnerCount = ownerLocalFactDirtyOwnerCount;
+            OwnerLocalFactSkippedOwnerCount = ownerLocalFactSkippedOwnerCount;
+            OwnerLocalFactClearedOwnerCount = ownerLocalFactClearedOwnerCount;
             ActiveEffectSlotCount = activeEffectSlotCount;
             ActiveEffectSlotCapacity = activeEffectSlotCapacity;
             ActiveEffectChunkSkipDuePeriodSlotCount = activeEffectChunkSkipDuePeriodSlotCount;
@@ -299,6 +314,11 @@ namespace GAS.AutoChessDemo
                 scorecard.OwnerLocalFactOwnerGroupCount,
                 scorecard.OwnerLocalFactMaxOwnerRange,
                 scorecard.OwnerLocalFactFlushCount,
+                scorecard.OwnerLocalFactChangedChunkCount,
+                scorecard.OwnerLocalFactScannedOwnerCount,
+                scorecard.OwnerLocalFactDirtyOwnerCount,
+                scorecard.OwnerLocalFactSkippedOwnerCount,
+                scorecard.OwnerLocalFactClearedOwnerCount,
                 scorecard.ActiveEffectSlotCount,
                 scorecard.ActiveEffectSlotCapacity,
                 scorecard.ActiveEffectChunkSkipDuePeriodSlotCount,

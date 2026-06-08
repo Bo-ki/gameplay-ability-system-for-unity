@@ -20,6 +20,7 @@
 | [2026-06-08-DebuggerDiagnosticEvidenceSnapshot-Run4](2026-06-08-DebuggerDiagnosticEvidenceSnapshot-Run4.md) | Debugger Data-Oriented Evidence 第四刀：DiagnosticEvidenceSnapshot envelope 与 AutoChess 外部消费解耦归档 |
 | [2026-06-08-DebuggerRetentionPolicy-Run5](2026-06-08-DebuggerRetentionPolicy-Run5.md) | Debugger Retention 第五刀：event retention policy owner 从 GasRuntimeDebugger 单体拆出 |
 | [2026-06-08-DebuggerProfileProbe-Run6](2026-06-08-DebuggerProfileProbe-Run6.md) | Debugger Profile Probe 第六刀：scorecard pass-source 修复、Run3 无头实测和热点定位归档 |
+| [2026-06-08-OwnerLocalPendingMarkerRejected-Run7](2026-06-08-OwnerLocalPendingMarkerRejected-Run7.md) | owner-local pending enableable marker 回归反例、撤回与 Run7 有效无头验证基线 |
 | [2026-06-08-AutoChessBattleValidation-DebuggerRegisteredOwner-Run1](2026-06-08-AutoChessBattleValidation-DebuggerRegisteredOwner-Run1.log) | Debugger registered owner 切片的 AutoChess x50 原始日志 |
 | [2026-06-08-AutoChessBattleValidation-ObservationMaterialization-Run1](2026-06-08-AutoChessBattleValidation-ObservationMaterialization-Run1.log) | Debugger observation materialization 归因切片的 AutoChess x50 原始日志 |
 | [2026-06-08-AutoChessBattleValidation-PerformanceObservationIsolation-Run1](2026-06-08-AutoChessBattleValidation-PerformanceObservationIsolation-Run1.log) | Debugger observation materialization 从 performance pass 隔离后的 AutoChess x50 原始日志 |

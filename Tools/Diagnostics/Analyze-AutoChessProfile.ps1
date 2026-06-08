@@ -185,6 +185,37 @@ function ConvertTo-TopNEntries {
     return @($entries | Sort-Object -Property count -Descending)
 }
 
+function ConvertTo-HotspotAttributionEntries {
+    param([string[]]$Lines)
+
+    $entries = @()
+    foreach ($line in $Lines) {
+        $map = ConvertTo-PipeKeyValueMap $line
+        if ($map.Count -eq 0) {
+            continue
+        }
+
+        $entries += [pscustomobject]@{
+            source = if ($map.Contains("source")) { $map["source"] } else { "" }
+            id = if ($map.Contains("id")) { $map["id"] } else { "" }
+            severity = if ($map.Contains("severity")) { $map["severity"] } else { "" }
+            gasConcept = if ($map.Contains("gasConcept")) { $map["gasConcept"] } else { "" }
+            phase = if ($map.Contains("phase")) { $map["phase"] } else { "" }
+            lane = if ($map.Contains("lane")) { $map["lane"] } else { "" }
+            system = if ($map.Contains("system")) { $map["system"] } else { "" }
+            buffer = if ($map.Contains("buffer")) { $map["buffer"] } else { "" }
+            operation = if ($map.Contains("operation")) { $map["operation"] } else { "" }
+            count = if ($map.Contains("count")) { [long]$map["count"] } else { 0 }
+            dotsRisk = if ($map.Contains("dotsRisk")) { $map["dotsRisk"] } else { "" }
+            nextOwner = if ($map.Contains("nextOwner")) { $map["nextOwner"] } else { "" }
+            recommendation = if ($map.Contains("recommendation")) { $map["recommendation"] } else { "" }
+            evidence = if ($map.Contains("evidence")) { $map["evidence"] } else { "" }
+        }
+    }
+
+    return @($entries | Sort-Object -Property count -Descending)
+}
+
 function Get-MapNumber {
     param(
         [System.Collections.IDictionary]$Map,
@@ -197,6 +228,20 @@ function Get-MapNumber {
     }
 
     return [double]$Map[$Key]
+}
+
+function Get-MapValue {
+    param(
+        [System.Collections.IDictionary]$Map,
+        [string]$Key,
+        $Default = ""
+    )
+
+    if ($null -eq $Map -or -not $Map.Contains($Key) -or $null -eq $Map[$Key]) {
+        return $Default
+    }
+
+    return $Map[$Key]
 }
 
 function Get-TimingAvg {
@@ -238,16 +283,45 @@ function New-Finding {
     }
 }
 
+function Write-Utf8NoBom {
+    param(
+        [string]$Path,
+        [string]$Content
+    )
+
+    [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
+}
+
 $lines = Get-Content -LiteralPath $SummaryPath
 $sections = [ordered]@{}
+$hotspotAttributionLines = @()
+$battleLogLines = @()
+$currentSection = ""
 foreach ($line in $lines) {
+    if ($line -match '^(hotspotAttribution)\|') {
+        $hotspotAttributionLines += $line
+        continue
+    }
+
     if ($line -match '^(runtimeDataOrientedScorecard)\|') {
         $sections[$Matches[1]] = $line
         continue
     }
 
     if ($line -match '^([^:]+):\s*(.*)$') {
-        $sections[$Matches[1]] = $Matches[2]
+        $currentSection = $Matches[1]
+        $sections[$currentSection] = $Matches[2]
+        if (($currentSection -eq "AutoChessDemoHeadlessRuntimeBattleLog" `
+                -or $currentSection -eq "HeadlessAutoChessPlayModeRuntimeBattleLog") `
+            -and -not [string]::IsNullOrWhiteSpace($Matches[2])) {
+            $battleLogLines += $Matches[2]
+        }
+        continue
+    }
+
+    if ($currentSection -eq "AutoChessDemoHeadlessRuntimeBattleLog" `
+        -or $currentSection -eq "HeadlessAutoChessPlayModeRuntimeBattleLog") {
+        $battleLogLines += $line
     }
 }
 
@@ -288,6 +362,9 @@ $diagnostic = ConvertTo-KeyValueMap (Get-Section @(
 $logicBudget = ConvertTo-KeyValueMap (Get-Section @(
         "AutoChessDemoHeadlessLogicBudget",
         "HeadlessAutoChessPlayModeLogicBudget"))
+$validation = ConvertTo-KeyValueMap (Get-Section @(
+        "AutoChessDemoHeadlessValidationRunResult",
+        "HeadlessAutoChessPlayModeValidationRunResult"))
 $hotspots = ConvertTo-KeyValueMap (Get-Section @(
         "AutoChessDemoHeadlessRuntimeHotspots",
         "HeadlessAutoChessPlayModeHotspots"))
@@ -297,6 +374,7 @@ $scorecard = ConvertTo-PipeKeyValueMap (Get-Section @(
 $recordTopN = ConvertTo-TopNEntries $official["journalingRecordTopN"] "Record"
 $systemTopN = ConvertTo-TopNEntries $official["journalingSystemTopN"] "System"
 $componentTopN = ConvertTo-TopNEntries $official["journalingComponentTopN"] "Component"
+$hotspotAttributions = ConvertTo-HotspotAttributionEntries $hotspotAttributionLines
 
 $measuredTicks = [math]::Max(1, (Get-MapNumber $performance "measuredTicks"))
 $diagnosticTicks = [math]::Max(1, (Get-MapNumber $diagnostic "measuredTicks" $measuredTicks))
@@ -321,6 +399,16 @@ $profilerLastFrame = Get-MapNumber $profiler "lastFrameIndex" -1
 $executionSpecScans = Get-MapNumber $performance "executionSpecScans" (Get-MapNumber $hotspots "executionSpecScans")
 $executionMatchedEffectSpecs = Get-MapNumber $performance "executionMatchedEffectSpecs" (Get-MapNumber $hotspots "executionMatchedEffectSpecs")
 $ownerLocalFactFlushes = Get-MapNumber $debugger "ownerLocalFactFlushes" (Get-MapNumber $performance "ownerLocalFactFlushes")
+$ownerLocalFactChangedChunks = Get-MapNumber $debugger "ownerLocalFactChangedChunks" (
+    Get-MapNumber $scorecard "ownerLocalFactChangedChunks")
+$ownerLocalFactScannedOwners = Get-MapNumber $debugger "ownerLocalFactScannedOwners" (
+    Get-MapNumber $scorecard "ownerLocalFactScannedOwners")
+$ownerLocalFactDirtyOwners = Get-MapNumber $debugger "ownerLocalFactDirtyOwners" (
+    Get-MapNumber $scorecard "ownerLocalFactDirtyOwners")
+$ownerLocalFactSkippedOwners = Get-MapNumber $debugger "ownerLocalFactSkippedOwners" (
+    Get-MapNumber $scorecard "ownerLocalFactSkippedOwners")
+$ownerLocalFactClearedOwners = Get-MapNumber $debugger "ownerLocalFactClearedOwners" (
+    Get-MapNumber $scorecard "ownerLocalFactClearedOwners")
 $diagnosticObservationQueries = Get-MapNumber $debugger "observationMaterializedQueries"
 $diagnosticObservationEntities = Get-MapNumber $debugger "observationMaterializedEntities"
 $diagnosticObservationMicroseconds = Get-MapNumber $debugger "observationMaterializationUs"
@@ -330,6 +418,8 @@ $scorecardOwnerLocalFactMaxOwnerRange = Get-MapNumber $scorecard "ownerLocalFact
     Get-MapNumber $debugger "ownerLocalFactMaxOwnerRange")
 $scorecardMetricFamilyMask = if ($scorecard.Contains("metricFamilyMask")) { $scorecard["metricFamilyMask"] } else { "" }
 $metricFamilySource = if ($logicBudget.Contains("metricFamilySource")) { $logicBudget["metricFamilySource"] } else { "" }
+$performanceObservationPollutionRisks = Get-MapNumber $scorecard "performanceObservationPollutionRisks" (
+    Get-MapNumber $logicBudget "performanceObservationPollutionRisks")
 $performanceExcellentPassed = $null
 if ($logicBudget.Contains("performanceExcellentPassed")) {
     $performanceExcellentPassed = $logicBudget["performanceExcellentPassed"]
@@ -384,6 +474,17 @@ $derived = [ordered]@{
     executionSpecScansPerMatchedEffect = if ($executionMatchedEffectSpecs -gt 0) { $executionSpecScans / $executionMatchedEffectSpecs } else { 0 }
     executionSpecScansPerTick = $executionSpecScans / $measuredTicks
     ownerLocalFactFlushesPerTick = $ownerLocalFactFlushes / $measuredTicks
+    ownerLocalFactChangedChunks = $ownerLocalFactChangedChunks
+    ownerLocalFactScannedOwners = $ownerLocalFactScannedOwners
+    ownerLocalFactDirtyOwners = $ownerLocalFactDirtyOwners
+    ownerLocalFactSkippedOwners = $ownerLocalFactSkippedOwners
+    ownerLocalFactClearedOwners = $ownerLocalFactClearedOwners
+    ownerLocalFactChangedChunksPerTick = $ownerLocalFactChangedChunks / $measuredTicks
+    ownerLocalFactScannedOwnersPerTick = $ownerLocalFactScannedOwners / $measuredTicks
+    ownerLocalFactDirtyOwnersPerTick = $ownerLocalFactDirtyOwners / $measuredTicks
+    ownerLocalFactSkippedOwnersPerTick = $ownerLocalFactSkippedOwners / $measuredTicks
+    ownerLocalFactSkipRatePct = if ($ownerLocalFactScannedOwners -gt 0) { 100.0 * $ownerLocalFactSkippedOwners / $ownerLocalFactScannedOwners } else { 0 }
+    ownerLocalFactsPerDirtyOwner = if ($ownerLocalFactDirtyOwners -gt 0) { $ownerLocalFactFlushes / $ownerLocalFactDirtyOwners } else { 0 }
     performanceExcellentPassed = $performanceExcellentPassed
     profilerEvidencePassed = $profilerEvidencePassed
     dominantRisk = if ($scorecard.Contains("dominantRisk")) { $scorecard["dominantRisk"] } else { "" }
@@ -452,6 +553,14 @@ if ($derived.scorecardOwnerLocalFactMaxOwnerRange -gt 4) {
         "Add dirty owner/fact span counters and move OwnerLocalGameplayFactBuffer writes behind a generated fact reduce/apply lane."
 }
 
+if ($ownerLocalFactScannedOwners -gt 0 -and $derived.ownerLocalFactSkipRatePct -gt 50) {
+    $findings += New-Finding `
+        "R3-OWNER-LOCAL-CHUNK-GRANULARITY" `
+        "Medium" `
+        ("OwnerLocalFact changed chunks scan {0:n0} owners but skip {1:n0} empty owners ({2})." -f $ownerLocalFactScannedOwners, $ownerLocalFactSkippedOwners, (Format-Percent $derived.ownerLocalFactSkipRatePct)) `
+        "Use generated owner-local fact dirty owner list if changed-version chunk granularity stays noisy at larger scale."
+}
+
 if ($derived.executionSpecScansPerMatchedEffect -gt 2.0) {
     $findings += New-Finding `
         "GAS-ARCH-06" `
@@ -502,16 +611,30 @@ if ($derived.profilerDriverFrameCount -gt 0 -and $derived.profilerDriverFrameCou
         "Prefer binary log existence/size and explicit frame window metadata in reports; do not infer full timeline coverage from first/last frame alone."
 }
 
+$splitReportDirectory = Join-Path $OutputDirectory "SubReports"
+$briefPath = Join-Path $OutputDirectory "AutoChessProfileBrief.md"
+$splitReports = [ordered]@{
+    brief = $briefPath
+    performanceBudget = Join-Path $splitReportDirectory "PerformanceBudget.md"
+    hotspotAttribution = Join-Path $splitReportDirectory "HotspotAttribution.md"
+    journalingTopN = Join-Path $splitReportDirectory "JournalingTopN.md"
+    debuggerEvidence = Join-Path $splitReportDirectory "DebuggerEvidence.md"
+    runtimeBattleLog = Join-Path $splitReportDirectory "RuntimeBattleLog.md"
+}
+
 $analysis = [ordered]@{
     source = [ordered]@{
         summaryPath = $SummaryPath
         generatedAt = (Get-Date).ToString("o")
+        briefPath = $briefPath
+        splitReports = $splitReports
     }
     performance = $performance
     timing = $timing
     debugger = $debugger
     diagnostic = $diagnostic
     logicBudget = $logicBudget
+    validation = $validation
     hotspots = $hotspots
     scorecard = $scorecard
     officialToolDiff = $official
@@ -522,6 +645,7 @@ $analysis = [ordered]@{
         systems = $systemTopN
         components = $componentTopN
     }
+    hotspotAttribution = $hotspotAttributions
     findings = $findings
 }
 
@@ -529,7 +653,7 @@ $jsonPath = Join-Path $OutputDirectory "AutoChessProfileAnalysis.json"
 $markdownPath = Join-Path $OutputDirectory "AutoChessProfileAnalysis.md"
 
 $json = $analysis | ConvertTo-Json -Depth 12
-[System.IO.File]::WriteAllText($jsonPath, $json, [System.Text.UTF8Encoding]::new($false))
+Write-Utf8NoBom $jsonPath $json
 
 $builder = [System.Text.StringBuilder]::new()
 [void]$builder.AppendLine("# AutoChess x50 Runtime Profile Analysis")
@@ -573,6 +697,8 @@ $builder = [System.Text.StringBuilder]::new()
 [void]$builder.AppendLine(("- scorecard metric mask: {0}" -f $derived.scorecardMetricFamilyMask))
 [void]$builder.AppendLine(("- scorecard core facts / active mutations: {0:n0} / {1:n0}" -f $derived.scorecardCoreFacts, $derived.scorecardActiveMutationCommands))
 [void]$builder.AppendLine(("- scorecard owner-local fact max range: {0:n0}" -f $derived.scorecardOwnerLocalFactMaxOwnerRange))
+[void]$builder.AppendLine(("- owner-local fact dirty owners/tick: {0:n1}" -f $derived.ownerLocalFactDirtyOwnersPerTick))
+[void]$builder.AppendLine(("- owner-local fact scanned/skipped owners: {0:n0}/{1:n0} ({2})" -f $derived.ownerLocalFactScannedOwners, $derived.ownerLocalFactSkippedOwners, (Format-Percent $derived.ownerLocalFactSkipRatePct)))
 [void]$builder.AppendLine(("- events/warnings/errors: {0:n0}/{1:n0}/{2:n0}" -f (Get-MapNumber $debugger "events"), (Get-MapNumber $debugger "warnings"), (Get-MapNumber $debugger "errors")))
 [void]$builder.AppendLine(("- observation materialization: queries={0:n0}, entities={1:n0}, us={2:n0}" -f $derived.diagnosticObservationQueries, $derived.diagnosticObservationEntities, $derived.diagnosticObservationMicroseconds))
 [void]$builder.AppendLine(("- execution spec scan ratio: {0:n2}:1" -f $derived.executionSpecScansPerMatchedEffect))
@@ -596,6 +722,26 @@ foreach ($entry in ($componentTopN | Select-Object -First 12)) {
 }
 
 [void]$builder.AppendLine()
+[void]$builder.AppendLine("## Hotspot Attribution Matrix")
+[void]$builder.AppendLine()
+[void]$builder.AppendLine("| ID | Severity | GAS concept | Phase | Lane | System | Buffer | Operation | Count | DOTS risk | Next owner |")
+[void]$builder.AppendLine("|---|---|---|---|---|---|---|---|---:|---|---|")
+foreach ($entry in ($hotspotAttributions | Select-Object -First 16)) {
+    [void]$builder.AppendLine(("| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8:n0} | {9} | {10} |" -f `
+                $entry.id,
+                $entry.severity,
+                $entry.gasConcept,
+                $entry.phase,
+                $entry.lane,
+                $entry.system,
+                $entry.buffer,
+                $entry.operation,
+                $entry.count,
+                $entry.dotsRisk,
+                $entry.nextOwner))
+}
+
+[void]$builder.AppendLine()
 [void]$builder.AppendLine("## Reverse-Inferred Architecture Mistakes")
 [void]$builder.AppendLine()
 foreach ($finding in $findings) {
@@ -609,11 +755,211 @@ foreach ($finding in $findings) {
 }
 
 $markdown = $builder.ToString()
-[System.IO.File]::WriteAllText($markdownPath, $markdown, [System.Text.UTF8Encoding]::new($false))
+Write-Utf8NoBom $markdownPath $markdown
+
+New-Item -ItemType Directory -Force -Path $splitReportDirectory | Out-Null
+
+$brief = [System.Text.StringBuilder]::new()
+[void]$brief.AppendLine("# AutoChess Profile Brief")
+[void]$brief.AppendLine()
+[void]$brief.AppendLine(("Source: ``{0}``" -f $SummaryPath))
+[void]$brief.AppendLine()
+[void]$brief.AppendLine("## Decision")
+[void]$brief.AppendLine()
+[void]$brief.AppendLine(("- passed: {0}" -f (Get-MapValue $validation "passed" (Get-MapValue $performance "completed" ""))))
+[void]$brief.AppendLine(("- headless logic budget: {0}" -f (Get-MapValue $validation "headlessLogicBudgetPassed" (Get-MapValue $logicBudget "passed" ""))))
+[void]$brief.AppendLine(("- performance excellent: {0}" -f (Get-MapValue $validation "performanceExcellentPassed" $derived.performanceExcellentPassed)))
+[void]$brief.AppendLine(("- dominant risk: {0}" -f $derived.dominantRisk))
+[void]$brief.AppendLine(("- profiler state: {0}" -f (Get-MapValue $logicBudget "profilerCaptureState" (Get-MapValue $official "profilerCaptureState" ""))))
+[void]$brief.AppendLine()
+[void]$brief.AppendLine("## Budget Snapshot")
+[void]$brief.AppendLine()
+[void]$brief.AppendLine(("- avg tick: {0:n3} ms" -f (Get-MapNumber $performance "avgTickMs")))
+[void]$brief.AppendLine(("- GAS tick avg: {0:n3} ms" -f $totalAvg))
+[void]$brief.AppendLine(("- CoreSimulation avg: {0:n3} ms" -f $coreAvg))
+[void]$brief.AppendLine(("- Boundary avg: {0:n3} ms" -f $boundaryAvg))
+[void]$brief.AppendLine(("- Debugger avg: {0:n3} ms diagnostic-only" -f $debuggerOwnerAvg))
+[void]$brief.AppendLine()
+[void]$brief.AppendLine("## R3 Owner-Local Fact Lane")
+[void]$brief.AppendLine()
+[void]$brief.AppendLine(("- changed chunks / tick: {0:n1}" -f $derived.ownerLocalFactChangedChunksPerTick))
+[void]$brief.AppendLine(("- scanned owners / tick: {0:n1}" -f $derived.ownerLocalFactScannedOwnersPerTick))
+[void]$brief.AppendLine(("- dirty owners / tick: {0:n1}" -f $derived.ownerLocalFactDirtyOwnersPerTick))
+[void]$brief.AppendLine(("- skipped owners: {0:n0} ({1})" -f $derived.ownerLocalFactSkippedOwners, (Format-Percent $derived.ownerLocalFactSkipRatePct)))
+[void]$brief.AppendLine(("- facts / dirty owner: {0:n2}" -f $derived.ownerLocalFactsPerDirtyOwner))
+[void]$brief.AppendLine()
+[void]$brief.AppendLine("## Top Next Owners")
+[void]$brief.AppendLine()
+[void]$brief.AppendLine("| Next owner | Evidence |")
+[void]$brief.AppendLine("|---|---|")
+foreach ($entry in ($hotspotAttributions | Select-Object -First 8)) {
+    [void]$brief.AppendLine(("| {0} | {1} / {2} / {3:n0} / {4} |" -f `
+                $entry.nextOwner,
+                $entry.id,
+                $entry.buffer,
+                $entry.count,
+                $entry.dotsRisk))
+}
+[void]$brief.AppendLine()
+[void]$brief.AppendLine("## Sub Reports")
+[void]$brief.AppendLine()
+[void]$brief.AppendLine(("- PerformanceBudget: ``{0}``" -f $splitReports.performanceBudget))
+[void]$brief.AppendLine(("- HotspotAttribution: ``{0}``" -f $splitReports.hotspotAttribution))
+[void]$brief.AppendLine(("- JournalingTopN: ``{0}``" -f $splitReports.journalingTopN))
+[void]$brief.AppendLine(("- DebuggerEvidence: ``{0}``" -f $splitReports.debuggerEvidence))
+[void]$brief.AppendLine(("- RuntimeBattleLog: ``{0}``" -f $splitReports.runtimeBattleLog))
+
+$performanceReport = [System.Text.StringBuilder]::new()
+[void]$performanceReport.AppendLine("# Performance Budget")
+[void]$performanceReport.AppendLine()
+[void]$performanceReport.AppendLine("| Metric | Value |")
+[void]$performanceReport.AppendLine("|---|---:|")
+[void]$performanceReport.AppendLine(("| measured ticks | {0:n0} |" -f $derived.measuredTicks))
+[void]$performanceReport.AppendLine(("| avg tick ms | {0:n3} |" -f (Get-MapNumber $performance "avgTickMs")))
+[void]$performanceReport.AppendLine(("| GAS tick avg ms | {0:n3} |" -f $totalAvg))
+[void]$performanceReport.AppendLine(("| CoreRuntimeOwner avg ms | {0:n3} |" -f (Get-MapNumber $scorecard "coreRuntimeAvgMs")))
+[void]$performanceReport.AppendLine(("| CoreSimulation avg ms | {0:n3} |" -f $coreAvg))
+[void]$performanceReport.AppendLine(("| Boundary avg ms | {0:n3} |" -f $boundaryAvg))
+[void]$performanceReport.AppendLine(("| Runner avg ms | {0:n3} |" -f $runnerAvg))
+[void]$performanceReport.AppendLine(("| Debugger avg ms | {0:n3} |" -f $debuggerOwnerAvg))
+[void]$performanceReport.AppendLine(("| performance observation pollution risks | {0:n0} |" -f $performanceObservationPollutionRisks))
+[void]$performanceReport.AppendLine(("| profiler evidence passed | {0} |" -f (Get-MapValue $logicBudget "profilerEvidencePassed" "")))
+[void]$performanceReport.AppendLine()
+[void]$performanceReport.AppendLine("## Cost Split")
+[void]$performanceReport.AppendLine()
+[void]$performanceReport.AppendLine("| Group | avg ms | share |")
+[void]$performanceReport.AppendLine("|---|---:|---:|")
+[void]$performanceReport.AppendLine(("| FramePrepare | {0:n3} | {1} |" -f $prepareAvg, (Format-Percent $derived.framePrepareSharePct)))
+[void]$performanceReport.AppendLine(("| CommandResolve | {0:n3} | {1} |" -f $commandAvg, (Format-Percent $derived.commandResolveSharePct)))
+[void]$performanceReport.AppendLine(("| CoreSimulation | {0:n3} | {1} |" -f $coreAvg, (Format-Percent $derived.coreSimulationSharePct)))
+[void]$performanceReport.AppendLine(("| StructuralCommit | {0:n3} | {1} |" -f $structuralAvg, (Format-Percent $derived.structuralCommitSharePct)))
+[void]$performanceReport.AppendLine(("| BoundaryProjection | {0:n3} | {1} |" -f $boundaryAvg, (Format-Percent $derived.boundaryProjectionSharePct)))
+[void]$performanceReport.AppendLine(("| RunnerOwner | {0:n3} | {1} |" -f $runnerAvg, (Format-Percent $derived.runnerSharePct)))
+[void]$performanceReport.AppendLine(("| DebuggerOwner | {0:n3} | outside tick |" -f $debuggerOwnerAvg))
+
+$hotspotReport = [System.Text.StringBuilder]::new()
+[void]$hotspotReport.AppendLine("# Hotspot Attribution")
+[void]$hotspotReport.AppendLine()
+[void]$hotspotReport.AppendLine("| ID | Severity | Concept | Phase | Lane | System | Buffer | Operation | Count | DOTS risk | Next owner | Recommendation | Evidence |")
+[void]$hotspotReport.AppendLine("|---|---|---|---|---|---|---|---|---:|---|---|---|---|")
+foreach ($entry in $hotspotAttributions) {
+    [void]$hotspotReport.AppendLine(("| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8:n0} | {9} | {10} | {11} | {12} |" -f `
+                $entry.id,
+                $entry.severity,
+                $entry.gasConcept,
+                $entry.phase,
+                $entry.lane,
+                $entry.system,
+                $entry.buffer,
+                $entry.operation,
+                $entry.count,
+                $entry.dotsRisk,
+                $entry.nextOwner,
+                $entry.recommendation,
+                $entry.evidence))
+}
+
+$journalingReport = [System.Text.StringBuilder]::new()
+[void]$journalingReport.AppendLine("# Journaling TopN")
+[void]$journalingReport.AppendLine()
+[void]$journalingReport.AppendLine(("World records: {0:n0}" -f $worldRecords))
+[void]$journalingReport.AppendLine()
+[void]$journalingReport.AppendLine("## Record Operations")
+[void]$journalingReport.AppendLine()
+[void]$journalingReport.AppendLine("| Operation | Count | Per tick |")
+[void]$journalingReport.AppendLine("|---|---:|---:|")
+foreach ($entry in $recordTopN) {
+    [void]$journalingReport.AppendLine(("| {0} | {1:n0} | {2:n1} |" -f $entry.operation, $entry.count, ($entry.count / $measuredTicks)))
+}
+[void]$journalingReport.AppendLine()
+[void]$journalingReport.AppendLine("## Systems")
+[void]$journalingReport.AppendLine()
+[void]$journalingReport.AppendLine("| Operation | System | Count | Per tick |")
+[void]$journalingReport.AppendLine("|---|---|---:|---:|")
+foreach ($entry in $systemTopN) {
+    [void]$journalingReport.AppendLine(("| {0} | {1} | {2:n0} | {3:n1} |" -f $entry.operation, $entry.target, $entry.count, ($entry.count / $measuredTicks)))
+}
+[void]$journalingReport.AppendLine()
+[void]$journalingReport.AppendLine("## Components")
+[void]$journalingReport.AppendLine()
+[void]$journalingReport.AppendLine("| Operation | Component | Count | Per tick |")
+[void]$journalingReport.AppendLine("|---|---|---:|---:|")
+foreach ($entry in $componentTopN) {
+    [void]$journalingReport.AppendLine(("| {0} | {1} | {2:n0} | {3:n1} |" -f $entry.operation, $entry.target, $entry.count, ($entry.count / $measuredTicks)))
+}
+
+$debuggerReport = [System.Text.StringBuilder]::new()
+[void]$debuggerReport.AppendLine("# Debugger Evidence")
+[void]$debuggerReport.AppendLine()
+[void]$debuggerReport.AppendLine(("diagnostics source: {0}" -f $debugger["runtimeDiagnosticsSource"]))
+[void]$debuggerReport.AppendLine(("metric family source: {0}" -f $derived.metricFamilySource))
+[void]$debuggerReport.AppendLine(("scorecard metric mask: {0}" -f $derived.scorecardMetricFamilyMask))
+[void]$debuggerReport.AppendLine(("dominant risk: {0}" -f $derived.dominantRisk))
+[void]$debuggerReport.AppendLine()
+[void]$debuggerReport.AppendLine("| Metric | Value |")
+[void]$debuggerReport.AppendLine("|---|---:|")
+[void]$debuggerReport.AppendLine(("| events | {0:n0} |" -f (Get-MapNumber $debugger "events")))
+[void]$debuggerReport.AppendLine(("| warnings | {0:n0} |" -f (Get-MapNumber $debugger "warnings")))
+[void]$debuggerReport.AppendLine(("| errors | {0:n0} |" -f (Get-MapNumber $debugger "errors")))
+[void]$debuggerReport.AppendLine(("| blocking errors | {0:n0} |" -f (Get-MapNumber $performance "blockingDebugErrors")))
+[void]$debuggerReport.AppendLine(("| observation materialized queries | {0:n0} |" -f $derived.diagnosticObservationQueries))
+[void]$debuggerReport.AppendLine(("| observation materialized entities | {0:n0} |" -f $derived.diagnosticObservationEntities))
+[void]$debuggerReport.AppendLine(("| observation materialization us | {0:n0} |" -f $derived.diagnosticObservationMicroseconds))
+[void]$debuggerReport.AppendLine(("| performance observation pollution risks | {0:n0} |" -f $performanceObservationPollutionRisks))
+[void]$debuggerReport.AppendLine(("| owner local fact flushes | {0:n0} |" -f (Get-MapNumber $debugger "ownerLocalFactFlushes" $ownerLocalFactFlushes)))
+[void]$debuggerReport.AppendLine(("| owner local fact max range | {0:n0} |" -f (Get-MapNumber $debugger "ownerLocalFactMaxOwnerRange" $derived.scorecardOwnerLocalFactMaxOwnerRange)))
+[void]$debuggerReport.AppendLine(("| owner local fact changed chunks | {0:n0} |" -f $derived.ownerLocalFactChangedChunks))
+[void]$debuggerReport.AppendLine(("| owner local fact scanned owners | {0:n0} |" -f $derived.ownerLocalFactScannedOwners))
+[void]$debuggerReport.AppendLine(("| owner local fact dirty owners | {0:n0} |" -f $derived.ownerLocalFactDirtyOwners))
+[void]$debuggerReport.AppendLine(("| owner local fact skipped owners | {0:n0} |" -f $derived.ownerLocalFactSkippedOwners))
+[void]$debuggerReport.AppendLine(("| owner local fact cleared owners | {0:n0} |" -f $derived.ownerLocalFactClearedOwners))
+[void]$debuggerReport.AppendLine(("| owner local fact skip rate | {0} |" -f (Format-Percent $derived.ownerLocalFactSkipRatePct)))
+[void]$debuggerReport.AppendLine()
+[void]$debuggerReport.AppendLine("## Findings")
+[void]$debuggerReport.AppendLine()
+foreach ($finding in $findings) {
+    [void]$debuggerReport.AppendLine(("### {0} ({1})" -f $finding.id, $finding.severity))
+    [void]$debuggerReport.AppendLine()
+    [void]$debuggerReport.AppendLine(("- evidence: {0}" -f $finding.evidence))
+    [void]$debuggerReport.AppendLine(("- next probe: {0}" -f $finding.nextProbe))
+    [void]$debuggerReport.AppendLine()
+}
+
+$battleLogReport = [System.Text.StringBuilder]::new()
+[void]$battleLogReport.AppendLine("# Runtime Battle Log")
+[void]$battleLogReport.AppendLine()
+[void]$battleLogReport.AppendLine(("Lines: {0:n0}" -f $battleLogLines.Count))
+[void]$battleLogReport.AppendLine()
+[void]$battleLogReport.AppendLine('```text')
+foreach ($line in $battleLogLines) {
+    [void]$battleLogReport.AppendLine($line)
+}
+[void]$battleLogReport.AppendLine('```')
+
+$performanceBudgetPath = [string]$splitReports['performanceBudget']
+$hotspotAttributionPath = [string]$splitReports['hotspotAttribution']
+$journalingTopNPath = [string]$splitReports['journalingTopN']
+$debuggerEvidencePath = [string]$splitReports['debuggerEvidence']
+$runtimeBattleLogPath = [string]$splitReports['runtimeBattleLog']
+$briefContent = $brief.ToString()
+$performanceReportContent = $performanceReport.ToString()
+$hotspotReportContent = $hotspotReport.ToString()
+$journalingReportContent = $journalingReport.ToString()
+$debuggerReportContent = $debuggerReport.ToString()
+$battleLogReportContent = $battleLogReport.ToString()
+
+Write-Utf8NoBom -Path $briefPath -Content $briefContent
+Write-Utf8NoBom -Path $performanceBudgetPath -Content $performanceReportContent
+Write-Utf8NoBom -Path $hotspotAttributionPath -Content $hotspotReportContent
+Write-Utf8NoBom -Path $journalingTopNPath -Content $journalingReportContent
+Write-Utf8NoBom -Path $debuggerEvidencePath -Content $debuggerReportContent
+Write-Utf8NoBom -Path $runtimeBattleLogPath -Content $battleLogReportContent
 
 Write-Host "AutoChess profile analysis written:"
 Write-Host "JSON: $jsonPath"
 Write-Host "Markdown: $markdownPath"
+Write-Host "Brief: $briefPath"
+Write-Host "SubReports: $splitReportDirectory"
 
 if ($PrintMarkdown) {
     Write-Host ""
