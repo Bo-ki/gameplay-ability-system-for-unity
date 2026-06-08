@@ -192,10 +192,11 @@ namespace GAS.Runtime
             in GasRuntimeDataOrientedScorecard scorecard)
         {
             builder.Append("runtimeDataOrientedScorecard|source=GasRuntimeDataOrientedScorecard")
+                .Append("|readModel=PerformanceTiming+MetricFamilySnapshot")
                 .Append("|passMode=")
-                .Append(nameof(GasRuntimeDiagnosticsPassMode.PerfCounter))
+                .Append(nameof(GasRuntimeDiagnosticsPassMode.DerivedExport))
                 .Append("|costDomain=")
-                .Append(nameof(GasRuntimeDiagnosticsCostDomain.Core))
+                .Append(nameof(GasRuntimeDiagnosticsCostDomain.Debugger))
                 .Append("|evidenceTier=")
                 .Append(nameof(GasRuntimeDiagnosticsEvidenceTier.ValidationEvidence))
                 .Append("|units=")

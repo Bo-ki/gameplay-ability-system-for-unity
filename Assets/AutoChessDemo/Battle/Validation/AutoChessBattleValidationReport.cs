@@ -204,7 +204,7 @@ namespace GAS.AutoChessDemo
                    + $"failureMask=0x{budget.FailureMask:X}, "
                    + $"performanceTimingAvailable={budget.PerformanceTimingAvailable}, "
                    + $"scorecardSource=GasRuntimeDataOrientedScorecard, "
-                   + $"metricFamilySource=GasRuntimeMetricFamilySnapshot, "
+                   + $"metricFamilySource=DiagnosticPassGasData+PerformancePassOverhead, "
                    + $"metricFamilyMask=0x{((int)budget.RuntimeScorecard.MetricFamilyMask):X}, "
                    + $"dominantRisk={budget.RuntimeScorecard.DominantRisk}, "
                    + $"units={budget.UnitCount}, "

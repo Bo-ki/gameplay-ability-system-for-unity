@@ -31,6 +31,8 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 21. 2026-06-08 第三刀已新增 `Assets/GAS/Runtime/Debugger/GasRuntimeMetricFamilySnapshot.cs`：`GasRuntimeDiagnosticSnapshot` 现在在构造时生成 `MetricFamilies`，把 workload、GAS concept、data shape、API health、structural、overhead 分为只读 family snapshot；magnitude source family 口径会用 core counter 与 diagnostic event counter 取最大值，避免 performance pass 关闭 raw event 时丢 evidence，也避免 diagnostic pass 双计；`GasRuntimeDataOrientedScorecard` 改为消费该 snapshot，而不是直接读取 raw core counters / observation counters；`GasRuntimeDerivedExportSink` 新增机器可读 `runtimeMetricFamilySnapshot|source=GasRuntimeMetricFamilySnapshot` 行；AutoChess headless budget summary 新增 `metricFamilySource=GasRuntimeMetricFamilySnapshot`。这说明外部 evidence 面已经从易变内部 counter 解耦出第一层稳定合约，但 event buffer 物理形态仍是 mega-row，`DiagnosticMaterializationPass` / `RuntimeMetricSink` / `OfficialCorrelationPass` 也仍未拆出。
 22. 2026-06-08 第四刀已新增 `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticEvidenceSnapshot.cs`：`GasRuntimeDiagnosticSnapshot` 现在构造 `Evidence`，把 raw event / core counter / materialization counter 物化成 `Events`、`Workload`、`ActiveEffect`、`ActiveMutation`、`AttributeFact`、`ApiHealth`、`Structural`、`FrameBackbone`、`Observation`、`MagnitudeSource` 等稳定 read model；`GasRuntimeDerivedExportSink` 新增机器可读 `runtimeDiagnosticEvidenceSnapshot|source=GasRuntimeDiagnosticEvidenceSnapshot` 行；AutoChess validation、hotspot、runtime chain、repeat-run、presentation bridge 和 README 均已改为消费 `RuntimeDiagnostics.Evidence.*`，当前 AutoChess 代码不再直接绑定 `RuntimeDiagnostics.CoreCounters` / `FrameBackboneCounters` / `ObservationMaterializationCounters` / `MagnitudeSourceCounters` / `Events` / `Stats`。这降低了 Debugger 内部继续拆 typed buffer / SoA snapshot / pass owner 时的外部迁移成本，但不代表 `GASRuntimeDiagnosticEventBuffer` 物理拆分已完成。
 23. 2026-06-08 第五刀已新增 `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticRetentionPolicy.cs`：`GasRuntimeDebugger` 不再内联 event retention 删除策略，所有写入点改为调用 `GasRuntimeDiagnosticRetentionPolicy.Apply(...)`。这把 `MaxRetainedEvents`、`FirstRetainedSequence`、`DroppedEventCount` 和 buffer `RemoveRange` 的策略 owner 从 4k 行级 Debugger 单体中迁出，是 config / retention 拆分的第一步；但 `GASRuntimeDebuggerComponent` 仍同时承载 config、retention state 和 runtime numeric counters，尚未拆成独立 `DiagnosticsConfigOwner` / frame state / aggregate summary component。
+24. 2026-06-08 DebuggerProbe Run2 暴露 scorecard evidence source 缺陷：`AutoChessHeadlessLogicBudgetResult.Evaluate(...)` 只消费 performance pass 的 `RuntimeDiagnostics`，导致 `AutoChessDemoHeadlessLogicBudget` 中 `coreFacts=0`、`activeMutationCommands=0`、`ownerLocalFacts=0`，但同一份 diagnostic summary 已有 `facts=5200`、`activeMutationCommands=200`、`ownerLocalFactMaxOwnerRange=9`。本轮已把 scorecard 改为 `performance timing + diagnostic GAS/data/API/structural metric families + performance pass overhead gate` 的 read model，并把 `runtimeDataOrientedScorecard` 标记为 `passMode=DerivedExport` / `readModel=PerformanceTiming+MetricFamilySnapshot`。DebuggerProbe Run3 证明修复有效：`metricFamilyMask=0x7F`、`coreFacts=5200`、`activeMutationCommands=200`、`ownerLocalFacts=5200`、`performanceObservationPollutionRisks=0`。
+25. 2026-06-08 DebuggerProbe Run3 证明 Debugger 已具备定位当前 GAS/DOTS 热点的能力：Journaling TopN 指向 `GetBufferRW=67884`、`GetComponentDataRW=18892`、`EnableComponent=650`；系统热点为 `GASActiveEffectPreTickSystem=15800`、`OwnerLocalInstantCommandFramePrepareSystem=9000`、`ActiveEffectOwnerLocalMutationFramePrepareSystem=9000`、`GASAttributeModifierDeltaApplySystem=5400`、`ASCCommandBufferResolveSystem=4550`；组件热点为 `OwnerLocalGameplayFactBuffer=11250`、`GEEffectCommandStreamComponent=9237`、`AttributeValueBuffer=8250`、`GEEffectCommandBuffer=4650`。派生分析还命中 `OwnerLocalFact max owner range=9`、`ownerLocalFactFlushes=5200`、`executionSpecScans=1350` / `executionMatchedEffectSpecs=350`，说明后续性能迭代应优先领取 fact fan-in / active effect pre-tick / instant command prepare / execution spec index，而不是继续泛泛压总 ms。
 
 ## 仍成立风险
 
@@ -44,6 +46,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 8. Magnitude Source evidence 当前只把 capture miss / fallback / lookup 热点显性化；它不等于 active effect slot tick、pre-tick magnitude source、generated template capacity / spill 或完整 snapshot lane 已终局。
 9. Debugger 当前没有把 GAS 概念维度和 DOTS 数据维度建成一张统一矩阵。Ability / GE / Attribute / Tag / Cue 的业务计数已经存在，query / lookup / buffer / sync / structural / owner-local range 的 DOTS 计数也开始出现，但二者还没有统一 evidence id、cost domain、phase/lane、source component、carrier、overhead owner 和 official diff correlation。
 10. 如果继续向 `GASRuntimeDiagnosticEventBuffer` 增加字段，短期能输出更多日志，长期会把 Debugger 固化成“日志总线 + 大结构体快照”，无法支撑数据导向性能优化。第三刀 `GasRuntimeMetricFamilySnapshot` 和第四刀 `GasRuntimeDiagnosticEvidenceSnapshot` 已降低外部消费迁移成本，但仍不能替代后续物理 buffer / pass owner 拆分。
+11. DebuggerProbe Run3 的 `DebuggerOwner.avgMs=49.094` 是 diagnostic-only 一次性物化 / 导出成本，不并入 performance pass；它能帮助定位热点，但也证明 `DiagnosticMaterializationPass` 与 `DerivedExportSink` 仍需继续预算化、可采样化和按 owner 拆分。
 
 ## Debugger 模块重构事实结论
 
@@ -70,6 +73,8 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 | diagnostic evidence snapshot | `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticEvidenceSnapshot.cs` |
 | diagnostic retention policy | `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticRetentionPolicy.cs` |
 | derived export sink | `Assets/GAS/Runtime/Debugger/GasRuntimeDerivedExportSink.cs` |
+| scorecard pass-source fix | `Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationRun.cs`, `Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationReport.cs` |
+| AutoChess profile analysis | `Tools/Diagnostics/Analyze-AutoChessProfile.ps1` |
 | official diff | `Assets/GAS/Runtime/Debugger/GasRuntimeOfficialToolDiff.cs` |
 | Debugger boundary system | `Assets/GAS/Runtime/System/Event/DiagnosticsSnapshotSystem.cs` |
 | AutoChess observation gateway | `Assets/AutoChessDemo/Integration/GasCore/AutoChessGasObservationGateway.cs` |
@@ -82,6 +87,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 | magnitude source evidence | `Assets/GAS/Runtime/Effect/Component/Dynamic/GEEffectCommandSpecStream.cs`, `Assets/GAS/Runtime/System/Effect/EffectMagnitudeResolver.cs`, `Assets/GAS/Runtime/System/Effect/GEExecutionCalculationSystem.cs`, `Assets/GAS/Runtime/Debugger/GasRuntimeDebugger.cs`, `Assets/AutoChessDemo/Battle/Validation/AutoChessBattleValidationReport.cs` |
 | pass split + magnitude source x50 | `00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-PassSplitMagnitudeSource-Run1.log` |
 | tag requirement / pre-tick snapshot x50 | `00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-TagRequirementQuery-Run5.log` |
+| debugger profile probe Run3 | `00-当前架构事实/_归档/2026-06-08-DebuggerProfileProbe-Run6.md` |
 
 ## 退出条件
 

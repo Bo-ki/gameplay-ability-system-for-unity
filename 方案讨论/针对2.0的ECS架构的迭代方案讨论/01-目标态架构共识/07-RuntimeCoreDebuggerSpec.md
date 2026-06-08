@@ -68,6 +68,23 @@ Debugger 采样必须显式声明 pass mode。pass mode 是 performance 结论�
 2. Diagnostic pass 可以重，但必须输出 `overheadOwner=Debugger` / `Observation` / `OfficialTool`，并保留 materialized query/entity/time。
 3. Official capture pass 必须与 performance pass 分离，并对照 commands/facts/cues/hash，证明采样窗口业务等价。
 
+### Validation Scorecard Read Model
+
+`DataOrientedScorecard` 是 validation read model，不是单一 pass 的原始 counter。目标态必须明确分离三类输入：
+
+| 输入 | 目标来源 | 进入 scorecard 的原因 | 禁止误用 |
+|---|---|---|---|
+| performance timing | strict performance pass 的 tick / owner timing | 判定纯逻辑预算、单位成本、command/fact 归一化成本 | 不得混入 diagnostic materialization 或 official capture 开销 |
+| GAS / data / API / structural metric family | diagnostic sample pass 的 stable family snapshot，或同等低开销 runtime family aggregate | 保留 Ability / GE / Attribute / Fact / owner-local range / lookup / sync / structural 语义，不让 performance pass 关闭 Debugger 后丢失诊断上下文 | 不得直接绑定 raw event row 或过渡 counter 字段 |
+| performance overhead gate | performance pass overhead family | 判断 Debugger / observation 是否污染 performance sample | 不得用 diagnostic pass 的 observation materialization 成本打失败 strict performance budget |
+
+解释规则：
+
+1. Scorecard summary 必须声明 metric family source，例如 `PerformanceTiming + DiagnosticMetricFamilies + PerformanceOverheadGate`。
+2. `performanceObservationPollutionRisks` 只能来自 performance pass overhead gate；diagnostic pass 的 materialized query/entity/time 必须另列 `DebuggerOwner` 或 `Observation` 成本。
+3. `dominantRisk` 只能从 family snapshot / scorecard 计算，不允许由人读日志手填；当 Profiler disabled 时可以阻塞 `performanceExcellentPassed`，但不能吞掉已存在的 data shape / API health 风险。
+4. `runtimeDataOrientedScorecard` 文本行属于 `DerivedExport`，Core 不得读取它，也不得把它当成 raw perf counter。
+
 ### Metric Family
 
 目标态不再使用单个 `DiagnosticEvent` 大结构体承载全部字段。metric 必须按数据访问模式分族，便于 Burst-friendly 写入和边界导出：

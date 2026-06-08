@@ -193,6 +193,13 @@ namespace GAS.AutoChessDemo
         public static AutoChessHeadlessLogicBudgetResult Evaluate(
             in AutoChessBattleResult performanceResult)
         {
+            return Evaluate(performanceResult, performanceResult);
+        }
+
+        public static AutoChessHeadlessLogicBudgetResult Evaluate(
+            in AutoChessBattleResult performanceResult,
+            in AutoChessBattleResult diagnosticResult)
+        {
             var timing = performanceResult.RuntimeTiming;
             var performanceTimingAvailable = timing.TickTotal.Samples > 0;
             var profilerEvidencePassed =
@@ -212,9 +219,12 @@ namespace GAS.AutoChessDemo
                 timing.Boundary.AverageMilliseconds,
                 timing.Runner.AverageMilliseconds,
                 performanceResult.OfficialToolDiff.ProfilerCaptureState);
+            var metricFamilies = CreateBudgetMetricFamilies(
+                performanceResult.RuntimeDiagnostics.MetricFamilies,
+                diagnosticResult.RuntimeDiagnostics.MetricFamilies);
             var scorecard = GasRuntimeDataOrientedScorecard.Create(
                 scorecardInput,
-                performanceResult.RuntimeDiagnostics);
+                metricFamilies);
             var observationPollution = scorecard.PerformanceObservationPollutionRiskCount;
 
             var measuredAverageTickPassed =
@@ -313,6 +323,19 @@ namespace GAS.AutoChessDemo
                 scorecard.GasTickMicrosecondsPerCommand,
                 scorecard.CoreSimulationMicrosecondsPerCoreFact,
                 scorecard.ProfilerCaptureState);
+        }
+
+        private static GasRuntimeMetricFamilySnapshot CreateBudgetMetricFamilies(
+            in GasRuntimeMetricFamilySnapshot performanceMetricFamilies,
+            in GasRuntimeMetricFamilySnapshot diagnosticMetricFamilies)
+        {
+            return new GasRuntimeMetricFamilySnapshot(
+                diagnosticMetricFamilies.Workload,
+                diagnosticMetricFamilies.GasConcept,
+                diagnosticMetricFamilies.DataShape,
+                diagnosticMetricFamilies.ApiHealth,
+                diagnosticMetricFamilies.Structural,
+                performanceMetricFamilies.Overhead);
         }
     }
 
@@ -658,7 +681,9 @@ namespace GAS.AutoChessDemo
                 presentation,
                 officialDiffSeparatePass: requireOfficialToolDiff);
             var headlessLogicBudget =
-                AutoChessHeadlessLogicBudgetResult.Evaluate(performanceResult);
+                AutoChessHeadlessLogicBudgetResult.Evaluate(
+                    performanceResult,
+                    diagnosticResult);
             return new AutoChessValidationRunResult(
                 performanceResult,
                 diagnosticResult,
