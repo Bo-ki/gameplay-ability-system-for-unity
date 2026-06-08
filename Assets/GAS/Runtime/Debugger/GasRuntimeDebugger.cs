@@ -1442,7 +1442,7 @@ namespace GAS.Runtime
             AppendGroupTiming(log, ref state, frame, "Attribute", EGasRuntimeDiagnosticModule.Attribute, attributeTicks, totalTicks, stopwatchFrequency);
             AppendGroupTiming(log, ref state, frame, "Ability", EGasRuntimeDiagnosticModule.Ability, abilityTicks, totalTicks, stopwatchFrequency);
             AppendGroupTiming(log, ref state, frame, "Cue", EGasRuntimeDiagnosticModule.Cue, cueTicks, totalTicks, stopwatchFrequency);
-            ApplyRetention(log, ref state);
+            GasRuntimeDiagnosticRetentionPolicy.Apply(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
 
@@ -1480,7 +1480,7 @@ namespace GAS.Runtime
                     CallCount = callCount,
                 });
 
-            ApplyRetention(log, ref state);
+            GasRuntimeDiagnosticRetentionPolicy.Apply(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
 
@@ -1904,7 +1904,7 @@ namespace GAS.Runtime
                     Count = playbackCount,
                 });
 
-            ApplyRetention(log, ref state);
+            GasRuntimeDiagnosticRetentionPolicy.Apply(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
 
@@ -1947,7 +1947,7 @@ namespace GAS.Runtime
                     ValueB = bulkQueryCount,
                 });
 
-            ApplyRetention(log, ref state);
+            GasRuntimeDiagnosticRetentionPolicy.Apply(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
 
@@ -2025,7 +2025,7 @@ namespace GAS.Runtime
                     FrameBackboneEvidenceMask = counters.EvidenceMask,
                 });
 
-            ApplyRetention(log, ref state);
+            GasRuntimeDiagnosticRetentionPolicy.Apply(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
 
@@ -2307,7 +2307,7 @@ namespace GAS.Runtime
                     RewindableAllocatorCandidateCount = rewindableAllocatorCandidateCount,
                 });
 
-            ApplyRetention(log, ref state);
+            GasRuntimeDiagnosticRetentionPolicy.Apply(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
 
@@ -2348,7 +2348,7 @@ namespace GAS.Runtime
                     ObservationPerformancePollutionRiskCount = counters.PerformancePollutionRiskCount,
                 });
 
-            ApplyRetention(log, ref state);
+            GasRuntimeDiagnosticRetentionPolicy.Apply(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
 
@@ -2430,7 +2430,7 @@ namespace GAS.Runtime
                     ActiveEffectSlotSourceSnapshotSpillCount = counters.ActiveEffectSlotSourceSnapshotSpillCount,
                 });
 
-            ApplyRetention(log, ref state);
+            GasRuntimeDiagnosticRetentionPolicy.Apply(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
 
@@ -2452,7 +2452,7 @@ namespace GAS.Runtime
             RecordBufferPressure<CueRequestBuffer>(em, eventBusEntity, "CueRequestBuffer", frame, log, ref state);
             RecordBufferPressure<TagChangeEventBuffer>(em, eventBusEntity, "TagChangeEventBuffer", frame, log, ref state);
             RecordBufferPressure<BoundaryObservationFactBuffer>(em, eventBusEntity, "BoundaryObservationFactBuffer", frame, log, ref state);
-            ApplyRetention(log, ref state);
+            GasRuntimeDiagnosticRetentionPolicy.Apply(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
 
@@ -2489,7 +2489,7 @@ namespace GAS.Runtime
                 frame,
                 log,
                 ref state);
-            ApplyRetention(log, ref state);
+            GasRuntimeDiagnosticRetentionPolicy.Apply(log, ref state);
             em.SetComponentData(debuggerEntity, state);
         }
 
@@ -3440,19 +3440,6 @@ namespace GAS.Runtime
             evt.Sequence = state.NextSequence;
             state.NextSequence++;
             log.Add(evt);
-        }
-
-        private static void ApplyRetention(
-            DynamicBuffer<GASRuntimeDiagnosticEventBuffer> log,
-            ref GASRuntimeDebuggerComponent state)
-        {
-            if (state.MaxRetainedEvents <= 0 || log.Length <= state.MaxRetainedEvents)
-                return;
-
-            var removeCount = log.Length - state.MaxRetainedEvents;
-            log.RemoveRange(0, removeCount);
-            state.FirstRetainedSequence = log.Length > 0 ? log[0].Sequence : state.NextSequence;
-            state.DroppedEventCount += removeCount;
         }
 
         private static EGasRuntimeDiagnosticSeverity SeverityForElapsed(int elapsedMicroseconds, int warningThreshold)

@@ -30,6 +30,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 20. `GasRuntimeDataOrientedScorecard` 当前已新增 `MetricFamilyMask` 与 `DominantRisk`，AutoChess headless budget summary 和 Runtime text export 均输出 `metricFamilyMask=0x...` / `dominantRisk=...`。该字段能把 workload、GAS concept、data shape、API health、timing、overhead 聚合成机器可读风险分类；但它仍只是 scorecard 派生分类，不等于 `GASRuntimeDiagnosticEventBuffer` 已拆为 metric family buffers 或 SoA snapshot。
 21. 2026-06-08 第三刀已新增 `Assets/GAS/Runtime/Debugger/GasRuntimeMetricFamilySnapshot.cs`：`GasRuntimeDiagnosticSnapshot` 现在在构造时生成 `MetricFamilies`，把 workload、GAS concept、data shape、API health、structural、overhead 分为只读 family snapshot；magnitude source family 口径会用 core counter 与 diagnostic event counter 取最大值，避免 performance pass 关闭 raw event 时丢 evidence，也避免 diagnostic pass 双计；`GasRuntimeDataOrientedScorecard` 改为消费该 snapshot，而不是直接读取 raw core counters / observation counters；`GasRuntimeDerivedExportSink` 新增机器可读 `runtimeMetricFamilySnapshot|source=GasRuntimeMetricFamilySnapshot` 行；AutoChess headless budget summary 新增 `metricFamilySource=GasRuntimeMetricFamilySnapshot`。这说明外部 evidence 面已经从易变内部 counter 解耦出第一层稳定合约，但 event buffer 物理形态仍是 mega-row，`DiagnosticMaterializationPass` / `RuntimeMetricSink` / `OfficialCorrelationPass` 也仍未拆出。
 22. 2026-06-08 第四刀已新增 `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticEvidenceSnapshot.cs`：`GasRuntimeDiagnosticSnapshot` 现在构造 `Evidence`，把 raw event / core counter / materialization counter 物化成 `Events`、`Workload`、`ActiveEffect`、`ActiveMutation`、`AttributeFact`、`ApiHealth`、`Structural`、`FrameBackbone`、`Observation`、`MagnitudeSource` 等稳定 read model；`GasRuntimeDerivedExportSink` 新增机器可读 `runtimeDiagnosticEvidenceSnapshot|source=GasRuntimeDiagnosticEvidenceSnapshot` 行；AutoChess validation、hotspot、runtime chain、repeat-run、presentation bridge 和 README 均已改为消费 `RuntimeDiagnostics.Evidence.*`，当前 AutoChess 代码不再直接绑定 `RuntimeDiagnostics.CoreCounters` / `FrameBackboneCounters` / `ObservationMaterializationCounters` / `MagnitudeSourceCounters` / `Events` / `Stats`。这降低了 Debugger 内部继续拆 typed buffer / SoA snapshot / pass owner 时的外部迁移成本，但不代表 `GASRuntimeDiagnosticEventBuffer` 物理拆分已完成。
+23. 2026-06-08 第五刀已新增 `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticRetentionPolicy.cs`：`GasRuntimeDebugger` 不再内联 event retention 删除策略，所有写入点改为调用 `GasRuntimeDiagnosticRetentionPolicy.Apply(...)`。这把 `MaxRetainedEvents`、`FirstRetainedSequence`、`DroppedEventCount` 和 buffer `RemoveRange` 的策略 owner 从 4k 行级 Debugger 单体中迁出，是 config / retention 拆分的第一步；但 `GASRuntimeDebuggerComponent` 仍同时承载 config、retention state 和 runtime numeric counters，尚未拆成独立 `DiagnosticsConfigOwner` / frame state / aggregate summary component。
 
 ## 仍成立风险
 
@@ -51,7 +52,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 | 当前链路 | 当前 owner | 问题 | 结论 |
 |---|---|---|---|
 | singleton 解析 / cache | `GasRuntimeDebugger` static cache | 与采样、导出混在同一类 | 保留 capability，但迁出到 runtime diagnostics access / bootstrap owner |
-| config / retention | `GASRuntimeDebuggerComponent` | 与累计 counter、frame evidence 混在同一 component | 拆成 config、frame state、aggregate summary |
+| config / retention | `GASRuntimeDebuggerComponent` + `GasRuntimeDiagnosticRetentionPolicy` | retention 删除策略已迁出，但 config、retention state、累计 counter、frame evidence 仍混在同一 component | 继续拆成 config、frame state、aggregate summary |
 | runtime numeric counter | `GASRuntimeDebuggerComponent` + event buffer + `GasRuntimeMetricFamilySnapshot` + `GasRuntimeDiagnosticEvidenceSnapshot` | 外部已出现 family snapshot / evidence read model 合约，但底层仍由同一大 component / event row 汇聚 | 继续拆成按 metric family 分组的 buffer / snapshot，外部消费只面对稳定 evidence surface |
 | diagnostic materialization | `CollectRuntimeCoreCounters` / `ReadActiveEffectStoreCounters` | `CalculateEntityCount`、`ToEntityArray`、buffer 遍历集中在一个 snapshot | 只允许 diagnostic pass，输出 overhead owner |
 | official diff | `GasRuntimeOfficialToolDiff` | 字符串 TopN / dictionary / Journaling 开关有开销 | separate pass，不进入 performance pass |
@@ -67,6 +68,7 @@ Debugger 与 official diff 工具已经存在，不再是“没有证据工具�
 | data-oriented scorecard | `Assets/GAS/Runtime/Debugger/GasRuntimeDataOrientedScorecard.cs` |
 | metric family snapshot | `Assets/GAS/Runtime/Debugger/GasRuntimeMetricFamilySnapshot.cs` |
 | diagnostic evidence snapshot | `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticEvidenceSnapshot.cs` |
+| diagnostic retention policy | `Assets/GAS/Runtime/Debugger/GasRuntimeDiagnosticRetentionPolicy.cs` |
 | derived export sink | `Assets/GAS/Runtime/Debugger/GasRuntimeDerivedExportSink.cs` |
 | official diff | `Assets/GAS/Runtime/Debugger/GasRuntimeOfficialToolDiff.cs` |
 | Debugger boundary system | `Assets/GAS/Runtime/System/Event/DiagnosticsSnapshotSystem.cs` |

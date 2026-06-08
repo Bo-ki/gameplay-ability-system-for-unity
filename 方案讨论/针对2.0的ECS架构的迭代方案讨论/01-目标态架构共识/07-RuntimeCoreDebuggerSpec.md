@@ -45,6 +45,7 @@ flowchart TD
 |---|---|---|
 | `DiagnosticsConfigOwner` | 采样开关、pass mode、sampling interval、overhead budget、retention budget | 保存 runtime 业务计数、执行 query、导出字符串 |
 | `RuntimeMetricSink` | hot path 写固定宽度 numeric metric、FixedString id、sample count、min/max/total | `ToEntityArray`、`Dictionary`、托管字符串、Profiler/Journaling 开关 |
+| `DiagnosticRetentionPolicy` | event / metric retention budget、first retained sequence、dropped count、ring / compact policy | 读取 gameplay state、生成业务 counter、导出字符串 |
 | `DiagnosticMaterializationPass` | diagnostic pass 中做 query materialization、TopN、active store 深扫、observation 物化成本归因 | 被 performance pass 隐式开启，或把 materialization 成本并入 CoreSimulation |
 | `OfficialCorrelationPass` | separate pass 读取 Entities Journaling / Profiler state / official TopN，并与 metric id 对齐 | 替代 runtime counter，或在 strict performance pass 中启用 Journaling |
 | `DerivedExportSink` | 文本、Mermaid、sequence、Editor chart、中文日志、报告摘要 | 成为机器验收源，或被 Runtime Core 读取改变 gameplay |
