@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using GAS.Runtime;
 using UnityEngine;
 
 namespace GAS.AutoChessDemo
@@ -78,6 +79,12 @@ namespace GAS.AutoChessDemo
                       + AutoChessBattleValidationReport.CreateRunResultSummary(runResult));
             Debug.Log("AutoChessDemoRepeatRunEvidence: "
                       + AutoChessBattleValidationRun.CreateRepeatRunEvidenceSummary(runResult.RepeatRunEvidence));
+            Debug.Log("AutoChessDemoHeadlessLogicBudget: "
+                      + AutoChessBattleValidationReport.CreateHeadlessLogicBudgetSummary(
+                          runResult.HeadlessLogicBudget));
+            Debug.Log("AutoChessDemoRuntimeDataOrientedScorecard:\n"
+                      + GasRuntimeDebugger.ExportDataOrientedScorecardToText(
+                          runResult.HeadlessLogicBudget.RuntimeScorecard));
             Debug.Log("AutoChessDemoRuntimeHotspots: "
                       + AutoChessBattleValidationReport.CreateHotspotSummary(result, diagnosticResult));
             Debug.Log("AutoChessDemoBoundaryOwners: "
@@ -132,6 +139,13 @@ namespace GAS.AutoChessDemo
             builder.AppendLine("AutoChessDemoHeadlessRepeatRunEvidence: "
                                + AutoChessBattleValidationRun.CreateRepeatRunEvidenceSummary(
                                    runResult.RepeatRunEvidence));
+            builder.AppendLine("AutoChessDemoHeadlessLogicBudget: "
+                               + AutoChessBattleValidationReport.CreateHeadlessLogicBudgetSummary(
+                                   runResult.HeadlessLogicBudget));
+            builder.AppendLine("AutoChessDemoHeadlessRuntimeDataOrientedScorecard:");
+            builder.Append(
+                GasRuntimeDebugger.ExportDataOrientedScorecardToText(
+                    runResult.HeadlessLogicBudget.RuntimeScorecard));
             builder.AppendLine("AutoChessDemoHeadlessRuntimeHotspots: "
                                + AutoChessBattleValidationReport.CreateHotspotSummary(
                                    result,

@@ -1,8 +1,321 @@
 using System;
 using System.Collections;
+using GAS.Runtime;
 
 namespace GAS.AutoChessDemo
 {
+    internal readonly struct AutoChessHeadlessLogicBudgetResult
+    {
+        public const double MeasuredAverageTickBudgetMs = 1.50d;
+        public const double GasTickAverageBudgetMs = 1.50d;
+        public const double GasTickMaxBudgetMs = 3.00d;
+        public const double CoreRuntimeAverageBudgetMs = 1.00d;
+        public const double CoreSimulationAverageBudgetMs = 0.90d;
+        public const double BoundaryAverageBudgetMs = 0.35d;
+        public const double RunnerAverageBudgetMs = 0.15d;
+
+        private const int FailureNoPerformanceSamples = 1 << 0;
+        private const int FailureMeasuredAverageTick = 1 << 1;
+        private const int FailureGasTickAverage = 1 << 2;
+        private const int FailureGasTickMax = 1 << 3;
+        private const int FailureCoreRuntimeAverage = 1 << 4;
+        private const int FailureCoreSimulationAverage = 1 << 5;
+        private const int FailureBoundaryAverage = 1 << 6;
+        private const int FailureRunnerAverage = 1 << 7;
+        private const int FailurePerformanceObservationPollution = 1 << 8;
+
+        public readonly bool Passed;
+        public readonly bool PerformanceTimingAvailable;
+        public readonly bool MeasuredAverageTickPassed;
+        public readonly bool GasTickAveragePassed;
+        public readonly bool GasTickMaxPassed;
+        public readonly bool CoreRuntimeAveragePassed;
+        public readonly bool CoreSimulationAveragePassed;
+        public readonly bool BoundaryAveragePassed;
+        public readonly bool RunnerAveragePassed;
+        public readonly bool PerformanceObservationCleanPassed;
+        public readonly bool ProfilerEvidencePassed;
+        public readonly int FailureMask;
+        public readonly GasRuntimeDataOrientedScorecard RuntimeScorecard;
+        public readonly int UnitCount;
+        public readonly int MeasuredTicks;
+        public readonly int CommandCount;
+        public readonly int CoreFactCount;
+        public readonly int ActiveMutationCommandCount;
+        public readonly int ActiveMutationOwnerGroupCount;
+        public readonly int ActiveMutationMaxOwnerRange;
+        public readonly int ActiveMutationEstimatedRandomLookupCount;
+        public readonly int PendingAttributeDeltaCount;
+        public readonly int PendingAttributeTargetGroupCount;
+        public readonly int PendingAttributeMaxTargetRange;
+        public readonly int PendingAttributeEstimatedRandomLookupCount;
+        public readonly int OwnerLocalFactCount;
+        public readonly int OwnerLocalFactOwnerGroupCount;
+        public readonly int OwnerLocalFactMaxOwnerRange;
+        public readonly int OwnerLocalFactFlushCount;
+        public readonly int ActiveEffectSlotCount;
+        public readonly int ActiveEffectSlotCapacity;
+        public readonly int ActiveEffectChunkSkipDuePeriodSlotCount;
+        public readonly int QueryBudget;
+        public readonly int LookupUpdateBudget;
+        public readonly int RandomLookupBudget;
+        public readonly int SyncQueryBudget;
+        public readonly int DependencyWaitRiskCount;
+        public readonly int PerformanceObservationPollutionRiskCount;
+        public readonly double MeasuredAverageTickMilliseconds;
+        public readonly double GasTickAverageMilliseconds;
+        public readonly double GasTickMaxMilliseconds;
+        public readonly double CoreRuntimeAverageMilliseconds;
+        public readonly double CoreSimulationAverageMilliseconds;
+        public readonly double BoundaryAverageMilliseconds;
+        public readonly double RunnerAverageMilliseconds;
+        public readonly double CommandsPerMeasuredTick;
+        public readonly double CoreFactsPerMeasuredTick;
+        public readonly double MeasuredMicrosecondsPerUnit;
+        public readonly double GasTickMicrosecondsPerUnit;
+        public readonly double CoreSimulationMicrosecondsPerUnit;
+        public readonly double GasTickMicrosecondsPerCommand;
+        public readonly double CoreSimulationMicrosecondsPerCoreFact;
+        public readonly string ProfilerCaptureState;
+
+        public bool PerformanceExcellentPassed => Passed && ProfilerEvidencePassed;
+
+        private AutoChessHeadlessLogicBudgetResult(
+            bool passed,
+            bool performanceTimingAvailable,
+            bool measuredAverageTickPassed,
+            bool gasTickAveragePassed,
+            bool gasTickMaxPassed,
+            bool coreRuntimeAveragePassed,
+            bool coreSimulationAveragePassed,
+            bool boundaryAveragePassed,
+            bool runnerAveragePassed,
+            bool performanceObservationCleanPassed,
+            bool profilerEvidencePassed,
+            int failureMask,
+            in GasRuntimeDataOrientedScorecard runtimeScorecard,
+            int unitCount,
+            int measuredTicks,
+            int commandCount,
+            int coreFactCount,
+            int activeMutationCommandCount,
+            int activeMutationOwnerGroupCount,
+            int activeMutationMaxOwnerRange,
+            int activeMutationEstimatedRandomLookupCount,
+            int pendingAttributeDeltaCount,
+            int pendingAttributeTargetGroupCount,
+            int pendingAttributeMaxTargetRange,
+            int pendingAttributeEstimatedRandomLookupCount,
+            int ownerLocalFactCount,
+            int ownerLocalFactOwnerGroupCount,
+            int ownerLocalFactMaxOwnerRange,
+            int ownerLocalFactFlushCount,
+            int activeEffectSlotCount,
+            int activeEffectSlotCapacity,
+            int activeEffectChunkSkipDuePeriodSlotCount,
+            int queryBudget,
+            int lookupUpdateBudget,
+            int randomLookupBudget,
+            int syncQueryBudget,
+            int dependencyWaitRiskCount,
+            int performanceObservationPollutionRiskCount,
+            double measuredAverageTickMilliseconds,
+            double gasTickAverageMilliseconds,
+            double gasTickMaxMilliseconds,
+            double coreRuntimeAverageMilliseconds,
+            double coreSimulationAverageMilliseconds,
+            double boundaryAverageMilliseconds,
+            double runnerAverageMilliseconds,
+            double commandsPerMeasuredTick,
+            double coreFactsPerMeasuredTick,
+            double measuredMicrosecondsPerUnit,
+            double gasTickMicrosecondsPerUnit,
+            double coreSimulationMicrosecondsPerUnit,
+            double gasTickMicrosecondsPerCommand,
+            double coreSimulationMicrosecondsPerCoreFact,
+            string profilerCaptureState)
+        {
+            Passed = passed;
+            PerformanceTimingAvailable = performanceTimingAvailable;
+            MeasuredAverageTickPassed = measuredAverageTickPassed;
+            GasTickAveragePassed = gasTickAveragePassed;
+            GasTickMaxPassed = gasTickMaxPassed;
+            CoreRuntimeAveragePassed = coreRuntimeAveragePassed;
+            CoreSimulationAveragePassed = coreSimulationAveragePassed;
+            BoundaryAveragePassed = boundaryAveragePassed;
+            RunnerAveragePassed = runnerAveragePassed;
+            PerformanceObservationCleanPassed = performanceObservationCleanPassed;
+            ProfilerEvidencePassed = profilerEvidencePassed;
+            FailureMask = failureMask;
+            RuntimeScorecard = runtimeScorecard;
+            UnitCount = unitCount;
+            MeasuredTicks = measuredTicks;
+            CommandCount = commandCount;
+            CoreFactCount = coreFactCount;
+            ActiveMutationCommandCount = activeMutationCommandCount;
+            ActiveMutationOwnerGroupCount = activeMutationOwnerGroupCount;
+            ActiveMutationMaxOwnerRange = activeMutationMaxOwnerRange;
+            ActiveMutationEstimatedRandomLookupCount = activeMutationEstimatedRandomLookupCount;
+            PendingAttributeDeltaCount = pendingAttributeDeltaCount;
+            PendingAttributeTargetGroupCount = pendingAttributeTargetGroupCount;
+            PendingAttributeMaxTargetRange = pendingAttributeMaxTargetRange;
+            PendingAttributeEstimatedRandomLookupCount = pendingAttributeEstimatedRandomLookupCount;
+            OwnerLocalFactCount = ownerLocalFactCount;
+            OwnerLocalFactOwnerGroupCount = ownerLocalFactOwnerGroupCount;
+            OwnerLocalFactMaxOwnerRange = ownerLocalFactMaxOwnerRange;
+            OwnerLocalFactFlushCount = ownerLocalFactFlushCount;
+            ActiveEffectSlotCount = activeEffectSlotCount;
+            ActiveEffectSlotCapacity = activeEffectSlotCapacity;
+            ActiveEffectChunkSkipDuePeriodSlotCount = activeEffectChunkSkipDuePeriodSlotCount;
+            QueryBudget = queryBudget;
+            LookupUpdateBudget = lookupUpdateBudget;
+            RandomLookupBudget = randomLookupBudget;
+            SyncQueryBudget = syncQueryBudget;
+            DependencyWaitRiskCount = dependencyWaitRiskCount;
+            PerformanceObservationPollutionRiskCount = performanceObservationPollutionRiskCount;
+            MeasuredAverageTickMilliseconds = measuredAverageTickMilliseconds;
+            GasTickAverageMilliseconds = gasTickAverageMilliseconds;
+            GasTickMaxMilliseconds = gasTickMaxMilliseconds;
+            CoreRuntimeAverageMilliseconds = coreRuntimeAverageMilliseconds;
+            CoreSimulationAverageMilliseconds = coreSimulationAverageMilliseconds;
+            BoundaryAverageMilliseconds = boundaryAverageMilliseconds;
+            RunnerAverageMilliseconds = runnerAverageMilliseconds;
+            CommandsPerMeasuredTick = commandsPerMeasuredTick;
+            CoreFactsPerMeasuredTick = coreFactsPerMeasuredTick;
+            MeasuredMicrosecondsPerUnit = measuredMicrosecondsPerUnit;
+            GasTickMicrosecondsPerUnit = gasTickMicrosecondsPerUnit;
+            CoreSimulationMicrosecondsPerUnit = coreSimulationMicrosecondsPerUnit;
+            GasTickMicrosecondsPerCommand = gasTickMicrosecondsPerCommand;
+            CoreSimulationMicrosecondsPerCoreFact = coreSimulationMicrosecondsPerCoreFact;
+            ProfilerCaptureState = profilerCaptureState ?? string.Empty;
+        }
+
+        public static AutoChessHeadlessLogicBudgetResult Evaluate(
+            in AutoChessBattleResult performanceResult)
+        {
+            var timing = performanceResult.RuntimeTiming;
+            var performanceTimingAvailable = timing.TickTotal.Samples > 0;
+            var profilerEvidencePassed =
+                performanceResult.OfficialToolDiff.ProfilerAvailable
+                && performanceResult.OfficialToolDiff.ProfilerEnabled;
+            var scorecardInput = new GasRuntimeDataOrientedScorecardInput(
+                performanceResult.Units.Length,
+                performanceResult.MeasuredTicks,
+                performanceResult.DriverIssuedCommands,
+                performanceTimingAvailable,
+                profilerEvidencePassed,
+                performanceResult.AverageTickMilliseconds,
+                timing.TickTotal.AverageMilliseconds,
+                timing.TickTotal.MaxMilliseconds,
+                timing.CoreRuntime.AverageMilliseconds,
+                timing.CoreSimulation.AverageMilliseconds,
+                timing.Boundary.AverageMilliseconds,
+                timing.Runner.AverageMilliseconds,
+                performanceResult.OfficialToolDiff.ProfilerCaptureState);
+            var scorecard = GasRuntimeDataOrientedScorecard.Create(
+                scorecardInput,
+                performanceResult.RuntimeDiagnostics);
+            var observationPollution = scorecard.PerformanceObservationPollutionRiskCount;
+
+            var measuredAverageTickPassed =
+                scorecard.MeasuredAverageTickMilliseconds <= MeasuredAverageTickBudgetMs;
+            var gasTickAveragePassed =
+                performanceTimingAvailable
+                && scorecard.GasTickAverageMilliseconds <= GasTickAverageBudgetMs;
+            var gasTickMaxPassed =
+                performanceTimingAvailable
+                && scorecard.GasTickMaxMilliseconds <= GasTickMaxBudgetMs;
+            var coreRuntimeAveragePassed =
+                performanceTimingAvailable
+                && scorecard.CoreRuntimeAverageMilliseconds <= CoreRuntimeAverageBudgetMs;
+            var coreSimulationAveragePassed =
+                performanceTimingAvailable
+                && scorecard.CoreSimulationAverageMilliseconds <= CoreSimulationAverageBudgetMs;
+            var boundaryAveragePassed =
+                performanceTimingAvailable
+                && scorecard.BoundaryAverageMilliseconds <= BoundaryAverageBudgetMs;
+            var runnerAveragePassed =
+                performanceTimingAvailable
+                && scorecard.RunnerAverageMilliseconds <= RunnerAverageBudgetMs;
+            var performanceObservationCleanPassed = observationPollution == 0;
+
+            var failureMask = 0;
+            if (!performanceTimingAvailable)
+                failureMask |= FailureNoPerformanceSamples;
+            if (!measuredAverageTickPassed)
+                failureMask |= FailureMeasuredAverageTick;
+            if (!gasTickAveragePassed)
+                failureMask |= FailureGasTickAverage;
+            if (!gasTickMaxPassed)
+                failureMask |= FailureGasTickMax;
+            if (!coreRuntimeAveragePassed)
+                failureMask |= FailureCoreRuntimeAverage;
+            if (!coreSimulationAveragePassed)
+                failureMask |= FailureCoreSimulationAverage;
+            if (!boundaryAveragePassed)
+                failureMask |= FailureBoundaryAverage;
+            if (!runnerAveragePassed)
+                failureMask |= FailureRunnerAverage;
+            if (!performanceObservationCleanPassed)
+                failureMask |= FailurePerformanceObservationPollution;
+
+            return new AutoChessHeadlessLogicBudgetResult(
+                failureMask == 0,
+                performanceTimingAvailable,
+                measuredAverageTickPassed,
+                gasTickAveragePassed,
+                gasTickMaxPassed,
+                coreRuntimeAveragePassed,
+                coreSimulationAveragePassed,
+                boundaryAveragePassed,
+                runnerAveragePassed,
+                performanceObservationCleanPassed,
+                profilerEvidencePassed,
+                failureMask,
+                scorecard,
+                scorecard.UnitCount,
+                scorecard.MeasuredTicks,
+                scorecard.CommandCount,
+                scorecard.CoreFactCount,
+                scorecard.ActiveMutationCommandCount,
+                scorecard.ActiveMutationOwnerGroupCount,
+                scorecard.ActiveMutationMaxOwnerRange,
+                scorecard.ActiveMutationEstimatedRandomLookupCount,
+                scorecard.PendingAttributeDeltaCount,
+                scorecard.PendingAttributeTargetGroupCount,
+                scorecard.PendingAttributeMaxTargetRange,
+                scorecard.PendingAttributeEstimatedRandomLookupCount,
+                scorecard.OwnerLocalFactCount,
+                scorecard.OwnerLocalFactOwnerGroupCount,
+                scorecard.OwnerLocalFactMaxOwnerRange,
+                scorecard.OwnerLocalFactFlushCount,
+                scorecard.ActiveEffectSlotCount,
+                scorecard.ActiveEffectSlotCapacity,
+                scorecard.ActiveEffectChunkSkipDuePeriodSlotCount,
+                scorecard.QueryBudget,
+                scorecard.LookupUpdateBudget,
+                scorecard.RandomLookupBudget,
+                scorecard.SyncQueryBudget,
+                scorecard.DependencyWaitRiskCount,
+                scorecard.PerformanceObservationPollutionRiskCount,
+                scorecard.MeasuredAverageTickMilliseconds,
+                scorecard.GasTickAverageMilliseconds,
+                scorecard.GasTickMaxMilliseconds,
+                scorecard.CoreRuntimeAverageMilliseconds,
+                scorecard.CoreSimulationAverageMilliseconds,
+                scorecard.BoundaryAverageMilliseconds,
+                scorecard.RunnerAverageMilliseconds,
+                scorecard.CommandsPerMeasuredTick,
+                scorecard.CoreFactsPerMeasuredTick,
+                scorecard.MeasuredMicrosecondsPerUnit,
+                scorecard.GasTickMicrosecondsPerUnit,
+                scorecard.CoreSimulationMicrosecondsPerUnit,
+                scorecard.GasTickMicrosecondsPerCommand,
+                scorecard.CoreSimulationMicrosecondsPerCoreFact,
+                scorecard.ProfilerCaptureState);
+        }
+    }
+
     internal readonly struct AutoChessRepeatRunEvidence
     {
         public readonly bool Passed;
@@ -91,12 +404,14 @@ namespace GAS.AutoChessDemo
         public readonly bool HasRepeatRunEvidence;
         public readonly AutoChessPresentationSnapshot Presentation;
         public readonly AutoChessValidationEvidence Evidence;
+        public readonly AutoChessHeadlessLogicBudgetResult HeadlessLogicBudget;
         public readonly bool GeneratedThresholdsPassed;
         public readonly bool RuntimeChainPassed;
         public readonly bool RequireOfficialToolDiff;
 
         public bool Passed =>
             GeneratedThresholdsPassed
+            && HeadlessLogicBudget.Passed
             && RuntimeChainPassed
             && (!HasRepeatRunEvidence || RepeatRunEvidence.Passed);
 
@@ -107,6 +422,7 @@ namespace GAS.AutoChessDemo
             bool hasRepeatRunEvidence,
             AutoChessPresentationSnapshot presentation,
             AutoChessValidationEvidence evidence,
+            AutoChessHeadlessLogicBudgetResult headlessLogicBudget,
             bool generatedThresholdsPassed,
             bool runtimeChainPassed,
             bool requireOfficialToolDiff)
@@ -117,6 +433,7 @@ namespace GAS.AutoChessDemo
             HasRepeatRunEvidence = hasRepeatRunEvidence;
             Presentation = presentation;
             Evidence = evidence;
+            HeadlessLogicBudget = headlessLogicBudget;
             GeneratedThresholdsPassed = generatedThresholdsPassed;
             RuntimeChainPassed = runtimeChainPassed;
             RequireOfficialToolDiff = requireOfficialToolDiff;
@@ -340,6 +657,8 @@ namespace GAS.AutoChessDemo
                 diagnosticResult,
                 presentation,
                 officialDiffSeparatePass: requireOfficialToolDiff);
+            var headlessLogicBudget =
+                AutoChessHeadlessLogicBudgetResult.Evaluate(performanceResult);
             return new AutoChessValidationRunResult(
                 performanceResult,
                 diagnosticResult,
@@ -347,6 +666,7 @@ namespace GAS.AutoChessDemo
                 hasRepeatRunEvidence,
                 presentation,
                 evidence,
+                headlessLogicBudget,
                 HasGeneratedScenarioThresholds(performanceResult, diagnosticResult, scenario),
                 HasRequiredRuntimeChain(
                     performanceResult,
