@@ -65,6 +65,8 @@ namespace GAS.Runtime
                     SystemAPI.GetBufferLookup<OwnerLocalInstantPrepareDirtyOwnerBuffer>(isReadOnly: false),
                 ActiveMutationPrepareDirtyOwnerLookup =
                     SystemAPI.GetBufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer>(isReadOnly: false),
+                OwnerLocalGameplayFactDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer>(isReadOnly: false),
                 OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(),
                 Catalog = catalogComponent.Catalog,
                 StreamEntity = streamEntity,
@@ -94,6 +96,7 @@ namespace GAS.Runtime
             public BufferLookup<ActiveEffectMutationSetByCallerValueBuffer> ActiveMutationSetByCallerLookup;
             public BufferLookup<OwnerLocalInstantPrepareDirtyOwnerBuffer> OwnerLocalInstantPrepareDirtyOwnerLookup;
             public BufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer> ActiveMutationPrepareDirtyOwnerLookup;
+            public BufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer> OwnerLocalGameplayFactDirtyOwnerLookup;
             public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public Entity StreamEntity;
@@ -650,6 +653,10 @@ namespace GAS.Runtime
                 {
                     Fact = evt,
                 });
+                EffectCommandSpecStream.MarkOwnerLocalGameplayFactDirty(
+                    OwnerLocalGameplayFactDirtyOwnerLookup,
+                    StreamEntity,
+                    owner);
             }
 
         }

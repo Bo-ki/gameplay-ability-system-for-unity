@@ -49,6 +49,8 @@ namespace GAS.Runtime
                     SystemAPI.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
                 StreamEntity = streamEntity,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
+                OwnerLocalGameplayFactDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer>(isReadOnly: false),
             }.Schedule(_ownerDeltaQuery, state.Dependency);
         }
 
@@ -64,6 +66,7 @@ namespace GAS.Runtime
             public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactBufferTypeHandle;
             public Entity StreamEntity;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            public BufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer> OwnerLocalGameplayFactDirtyOwnerLookup;
 
             public void Execute(
                 in ArchetypeChunk chunk,
@@ -123,6 +126,7 @@ namespace GAS.Runtime
                     var attributes = attributeBuffers[entityIndex];
                     var ownerFacts = ownerFactBuffers[entityIndex];
                     var groupApplied = false;
+                    var groupFactDirty = false;
                     for (var deltaIndex = 0; deltaIndex < deltas.Length; deltaIndex++)
                     {
                         var delta = deltas[deltaIndex];
@@ -153,12 +157,23 @@ namespace GAS.Runtime
                         deltas[deltaIndex] = delta;
                         appliedCount++;
                         groupApplied = true;
-                        factPatchCount += UpdateLinkedExecutionFact(ownerFacts, delta.Sequence, oldValue, newValue);
+                        var patchedFacts = UpdateLinkedExecutionFact(ownerFacts, delta.Sequence, oldValue, newValue);
+                        factPatchCount += patchedFacts;
+                        if (patchedFacts > 0)
+                            groupFactDirty = true;
                         AppendAttributeChangeFact(ownerFacts, ref stream, in delta, oldValue, newValue);
+                        groupFactDirty = true;
                     }
 
                     if (groupApplied)
                         dirtyMask[entityIndex] = true;
+                    if (groupFactDirty)
+                    {
+                        EffectCommandSpecStream.MarkOwnerLocalGameplayFactDirty(
+                            OwnerLocalGameplayFactDirtyOwnerLookup,
+                            StreamEntity,
+                            owner);
+                    }
 
                     ClearOwnerPending(entityIndex, deltas, pendingOwners, pendingMask);
                 }

@@ -1,8 +1,21 @@
 # 16-03：Fan-in、Debugger Evidence 与 SourceGenerator Pure Glue
 
-> Owner：`01-目标态架构共识/16-纯ECS内核与边界重划分` | 状态：目标态 Spec 子页 | 最近拆分：2026-06-07
+> Owner：`01-目标态架构共识/16-纯ECS内核与边界重划分` | 状态：目标态 Spec 子页 | 最近校准：2026-06-08
 
 本文件只描述 Effect fan-in、Debugger evidence projection 和 SourceGenerator pure glue 的目标代码骨架。
+
+本文件不记录当前实现状态、迁移流水、文件行号、codedb 截面或完成证明；现实证据只能回写 `../00-当前架构事实/`，可执行任务只能进入 `../02-主线任务树/`。
+
+## 与 16-06 的 Owner 裁决
+
+`16-03` 是 fan-in、Debugger evidence、SourceGenerator pure glue 和 magnitude snapshot lane 的局部规则 owner；`16-06` 是完整端到端消息流代码骨架 owner。二者不得维护两份相互分叉的规则正文。
+
+裁决：
+
+1. Fan-in 的 sort key、merge evidence、capacity / spill、reselect trigger、owner group count 规则以本文件为准。
+2. Debugger evidence 的机器可读字段、BoundaryProjection 派生和 derived export 禁止方向以本文件为准。
+3. SourceGenerator 只能生成 pure glue、catalog metadata 和 validation graph 的边界以本文件为准。
+4. `16-06` 可以串起这些规则的最小端到端代码，但若完整骨架与本文件局部规则冲突，必须同步 `16-06`，不能在 `16-06` 另建第二套 fan-in / Debugger / SourceGenerator 规则。
 
 ## 目标代码骨架（续）
 
@@ -88,6 +101,8 @@ namespace GAS.Runtime
 ```
 
 解释：影响 battle hash 的 fan-in 不能依赖 worker 写入顺序。`NativeStream` 只解决并行写入，deterministic merge 才解决 GAS 时序和 replay。singleton DynamicBuffer 可以作为 proof，但目标态必须给出 sort key、merge cost、allocator owner 和 reselect trigger。
+
+Spec fan-in 的目标态默认接在 deterministic merge 之后：merge 输出必须 dispatch 到 target owner-local command/spec range，再由 `EffectSpecLane` 和 `AttributeReduceApplyLane` 在 owner chunk 内消费。全局 spec buffer 只能作为 proof carrier；若保留，必须在 evidence 中暴露 proof-only mask、peak/capacity、spill、owner group count 和退出任务。
 
 ### 4. Debugger 只消费 counters / facts
 

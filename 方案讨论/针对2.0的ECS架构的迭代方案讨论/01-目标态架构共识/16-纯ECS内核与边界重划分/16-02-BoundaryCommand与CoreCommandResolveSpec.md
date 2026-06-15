@@ -4,6 +4,16 @@
 
 本文件只描述 Boundary command record 和 Core command resolve 的目标代码骨架，用于约束 Shell intent 如何进入纯 ECS Runtime Core。
 
+## 相邻 Spec Owner 裁决
+
+`16-02` 的唯一职责是定义 Shell intent 穿过 Runtime Boundary 后的 owner-local command envelope，以及 Core 如何以 Job/query 形态消费这个 envelope。它不维护完整 Ability command normalization、Target Resolve、TargetDataBuffer 或 NativeStream fan-out 规则；这些通用规则归入 [03D Command Resolve 与 Target Resolve](../03-RuntimeCore管线/03D-CommandResolve与TargetResolveSpec.md)。
+
+裁决：
+
+1. Shell / UI / 外部业务默认只能看到业务 command port，不能看到 ECS handle、request entity 或 `TargetDataBuffer`。
+2. Boundary implementation 可以把 Shell intent 压成 owner-local command buffer；如果需要低频 request-owned 物化路径，必须引用 `03D` 的选型和退出门。
+3. `16-02` 的代码只保留边界 envelope 和 Core 消费骨架；目标解析、AoE fan-out、ability validation、deterministic merge 的完整规则不得在本文件再次展开。
+
 ## 目标代码骨架
 
 以下代码是目标态结构骨架，用于说明接口深度、owner、读写方向和 DOTS API 选型。本节只定义可作为框架设计参考的代码形态。

@@ -33,11 +33,11 @@
 
 **符号：** R = 只读、W = 只写、RW = 读写、— = 不访问
 
-> <a id="attr-footnote">(1)</a> Attribute 默认实现为 generated AttributeSet family（如 `CombatAttributeCurrentSetComponent` / `CombatAttributeBaseSetComponent`），而不是 per-attribute component。划分依据是热路径 query 共现与写入频率；独立 per-attribute component 只作为 profiler/query contract 证明后的例外。命名与物理规则见 `12-命名规范Spec.md` 和 `13-EntityComponent物理布局Spec.md`。
+> <a id="attr-footnote">(1)</a> Attribute 默认实现为 generated AttributeSet family（如 `CombatAttributeCurrentSetComponent` / `CombatAttributeBaseSetComponent`），而不是 per-attribute component。划分依据是热路径 query 共现与写入频率；独立 per-attribute component 只作为 profiler/query contract 证明后的例外。命名规则见 `12-命名规范Spec.md`，物理布局和 Archetype 审计见 `../13-EntityComponent物理布局/13-02-Archetype与Component分类Spec.md`。
 >
-> <a id="ability-footnote">(2)</a> Ability 相关跨帧 component 挂载在独立的 Ability Entity 上（非 ASC Entity），见 `13-EntityComponent物理布局Spec.md` Entity 3b。`AbilityStateComponent` 在 Boundary Command Ingest 中被读取以校验 ability 可用性，并用 `AbilityCode + AbilityDefinitionIndex` 指向只读 Definition Catalog，用 `State/Flags` 表达 granted、activating、cooldown、blocked、executable。grant/revoke 是低频生命周期变化，进入 Structural Commit 创建/销毁或更新 Ability Entity；不默认使用 enableable toggle。`AbilityExecutableTag` 只作为 profiler 证明后的 query skip cache。
+> <a id="ability-footnote">(2)</a> Ability 相关跨帧 component 挂载在独立的 Ability Entity 上（非 ASC Entity），见 `../13-EntityComponent物理布局/13-01-Entity清单与运行时布局Spec.md` 的 Ability 实体布局。`AbilityStateComponent` 在 Boundary Command Ingest 中被读取以校验 ability 可用性，并用 `AbilityCode + AbilityDefinitionIndex` 指向只读 Definition Catalog，用 `State/Flags` 表达 granted、activating、cooldown、blocked、executable。grant/revoke 是低频生命周期变化，进入 Structural Commit 创建/销毁或更新 Ability Entity；不默认使用 enableable toggle。`AbilityExecutableTag` 只作为 profiler 证明后的 query skip cache。
 >
-> <a id="request-footnote">(3)</a> `AbilityActivationRequestComponent`、`AbilityCommandComponent`、`TargetDataBuffer` 挂载在 request/command entity 上，生命周期为一次激活请求。Boundary 创建 request archetype 时必须一次性带齐这些 component/buffer，避免 Ingest/TargetResolve 热路径 AddComponent；Target Resolve 写入 request-owned `TargetDataBuffer`，Effect Fan-In 只读消费，Structural Commit 统一销毁 request entity。
+> <a id="request-footnote">(3)</a> `AbilityActivationRequestComponent`、`AbilityCommandComponent`、`TargetDataBuffer` 只属于低频 request-owned 物化路径，生命周期为一次激活请求。默认 Shell intent 入口归 `16-02` 的 owner-local Boundary command；若选择 request 物化，Boundary 创建 request archetype 时必须一次性带齐这些 component/buffer，避免 Ingest/TargetResolve 热路径 AddComponent；Target Resolve 写入 request-owned `TargetDataBuffer`，Effect Fan-In 只读消费，Structural Commit 统一销毁 request entity。
 >
 > `AbilityActivationCommandRecord` / `AbilityTargetRecord` 是 frame-local NativeContainer record，不是 `IComponentData`，因此不进入上表的 component 读写矩阵。它们是 Core 内部高频 producer 的默认载体，由 owner system 创建、传递、排序和 dispose。
 
@@ -56,7 +56,7 @@
 | `AbilityExecutableTag`（可选） | Ability entity | `GASCoreSimulationSystemGroup` 的 State lane | 只有 profiler 证明大量不可执行 ability 需要 query skip 时启用；grant/revoke 不使用它 |
 | `PeriodDueTag`（可选） | ASC entity | `GASCoreSimulationSystemGroup` 的 State lane | 只有 profiler 证明大量 idle slot 需要 enableable skip 时启用 |
 
-> **注：** Per-slot active/inhibited 标记使用 `ActiveGameplayEffectBuffer.Flags` bitmask（见 `13-EntityComponent物理布局Spec.md` 行221-223），不创建独立的 `CEffectSlotActive` enableable component。
+> **注：** Per-slot active/inhibited 标记使用 `ActiveGameplayEffectBuffer.Flags` bitmask（见 `../13-EntityComponent物理布局/13-02-Archetype与Component分类Spec.md` 的 Active Effect slot component 分类），不创建独立的 `CEffectSlotActive` enableable component。
 
 ### Chunk Component（chunk 级标记）
 

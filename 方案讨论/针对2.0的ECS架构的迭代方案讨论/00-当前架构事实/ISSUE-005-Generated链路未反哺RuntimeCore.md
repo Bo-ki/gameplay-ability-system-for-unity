@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-旧标题已经不准确：generated 链路现在已经反哺 Runtime Core，但主调度口径已经再次收窄。当前问题已经从“generated runtime 是主链 owner”转为“generated catalog / pure glue 是正向资产，generated lifecycle / query / ECB / NativeContainer owner 只能作为防回流和 companion 残留审查对象”。
+旧标题已经不准确：generated 链路现在已经反哺 Runtime Core，但主调度口径已经再次收窄。当前问题已经从“generated runtime 是主链 owner”转为“generated catalog / pure glue 是正向资产，generated lifecycle / query / ECB / NativeContainer owner 只能作为防回流审查对象”。
 
 ## 已缓解部分
 
@@ -30,7 +30,7 @@
 1. generated catalog / pure glue 可以反哺 Runtime Core，但 generated output 不得重新拥有 runtime lifecycle、query、ECB、NativeContainer 或 system registration。
 2. `Complete()` 已清零；`GASActiveEffectMutationApplySystem` 已进入 gather + ASC chunk-local apply，active store、slot、mutation、tag、attribute、modifier 与 ability buffer 在 owner chunk 内直接访问；相邻 pending AttributeDelta owner-local apply 也已进入 ASC chunk-local path，旧 stream migration fallback 已退出。剩余联动风险是 singleton command carrier、gather serial command scan、SourceAttribute 跨 owner snapshot lane 缺口，以及 instant / execution delta record 仍经 singleton stream carrier。
 3. generated active lifecycle 的 ability cancel/destroy cleanup 已通过 frame-local lifecycle request buffer 收口；active modifier present / attribute dirty 已通过 frame-local attribute owner marker request buffer 收口。当前 `ComponentLookup.SetComponentEnabled(...)` 随机 enableable 风险不再集中于这些 marker，而是需要继续扫描未来模板是否回流。
-4. hand-written active effect lifecycle 与 ExecutionCalculation / Attribute / Fact projection 的 ordering、capacity、deterministic merge 需要证据；generated companion asmdef 残留必须单独清理或降权。
+4. hand-written active effect lifecycle 与 ExecutionCalculation / Attribute / Fact projection 的 ordering、capacity、deterministic merge 需要证据；stale generated lifecycle 文件名 / 改名回流必须单独进入防回流扫描。
 5. generated catalog lookup 的 revision/lifecycle owner 仍需要明确；本轮只把 Blob materialization owner 从 generated runtime artifact 退出，尚未完成长期 `DefinitionCatalogLifetime` capability、runtime-created catalog entity、Blob dispose owner 和 catalog install/uninstall 证据闭环。
 6. codegen static validation 已有第一道 gate，并覆盖 ability lifecycle / ASC dirty-present 旧 lookup、global EntityManager facade、旧 active mutation serial apply、旧 active mutation random lookup 估算与 chunk buffer/lookup alias 回流；后续还需要继续扩展到 singleton command carrier 阈值、pending AttributeDelta owner materialization / stream fallback 回流、generated delta record carrier 证据、无 `[BurstCompile]` hot job、Temp ECB playback 和 `state.Dependency.Complete()`。
 

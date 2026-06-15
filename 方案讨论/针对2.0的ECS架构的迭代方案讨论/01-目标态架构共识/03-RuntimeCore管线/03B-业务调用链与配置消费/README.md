@@ -17,7 +17,7 @@
 |---|---|
 | [03B-01 业务调用链](03B-01-业务调用链Spec.md) | 目标态业务调用链、lane 顺序和逻辑链不变量。 |
 | [03B-02 Luban 配置生成链 Runtime 消费](03B-02-Luban配置生成链Runtime消费Spec.md) | 目标态 Definition Catalog / Blob / lookup / runtime read pattern。 |
-| [03B-03 Generated Runtime Glue 消费接口](03B-03-GeneratedRuntimeGlue消费接口Spec.md) | 目标态 generated pure glue 的业务接口、禁止事项和代码骨架。 |
+| [03B-03 Generated Runtime Glue 消费接口](03B-03-GeneratedRuntimeGlue消费接口Spec.md) | 目标态 generated pure glue 的 Runtime Core 消费接口、禁止事项和代码骨架；生成链流程、artifact 责任和 SourceGenerator 权限分别回到 `08` / `14` / `15`。 |
 
 ## 反向入口
 

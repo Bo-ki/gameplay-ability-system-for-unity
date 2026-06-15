@@ -56,6 +56,41 @@
 10. 新增 SystemGroup 只是为了业务目录清晰，而不是因为存在新的同步、结构变化、固定步或投影物理边界。
 11. Runtime Core 新增或保留 `IAspect` 包装作为目标态 API；Entities 1.4.6 下统一改为直接 component 访问和明确 query contract。
 
+## Headless Pure Logic Strict Budget
+
+无头验证只移除真实资源和画面成本，不代表游戏帧预算全部留给 Runtime Core。目标态把 AutoChess headless performance pass 作为纯逻辑硬门，预算必须显著低于 60 FPS / 30 FPS 整帧预算：
+
+| Budget 项 | 目标阈值 | 说明 |
+|---|---:|---|
+| measured average tick | <= 1.500ms | performance pass 的端到端逻辑 tick 平均值 |
+| GAS tick average | <= 1.500ms | 5 段 GAS physical group 总和平均值 |
+| GAS tick max | <= 3.000ms | 单 tick 峰值必须保留真实渲染/表现余额 |
+| CoreRuntime owner average | <= 1.000ms | FramePrepare + CommandResolve + CoreSimulation + StructuralCommit |
+| CoreSimulation average | <= 0.900ms | Ability / GE / Attribute / ActiveEffect / Fact 权威计算主预算 |
+| Boundary owner average | <= 0.350ms | Projection / Cue / Replay / Presentation outbox 不能吞掉 Core 预算 |
+| Runner owner average | <= 0.150ms | runner job drain / shell sync 只能是极小成本 |
+| performance observation pollution | 0 | performance pass 不得触发 Debugger observation materialization |
+
+验收规则：
+
+1. `headlessLogicBudgetPassed` 必须参与 AutoChess headless validation 的硬门；业务链路通过但预算失败时，结论是“功能通过 / 性能不达标”。
+2. `performanceExcellentPassed` 必须同时满足 strict budget 与 Profiler evidence；Profiler disabled、Entities profiler modules 未采集或只有字符串日志时，不得写成性能优秀。
+3. Debugger diagnostic pass 可以很重，但必须独立归因到 Debugger / Observation owner，不得并入 performance pass，也不得用 diagnostic pass 的平均耗时替代纯逻辑预算。
+4. x50 只是最低真实业务门；x100 / x1000 必须输出同构预算字段和 scale blocked reason。x10w / x100w synthetic 只能用于压力曲线，不得替代真实 x50/x100/x1000 业务链。
+5. 达不到预算时，报告必须输出 failure mask、owner split、TopN 热点和下一任务 owner；不能只输出 `passed=false`。
+
+这些阈值不是脱离 DOTS 原理的纸面数字。每次性能结论还必须给出以下 principle vector，用来解释预算为何通过或失败：
+
+| Principle vector | 必填 evidence | 优化判断 |
+|---|---|---|
+| Workload-normalized cost | units、measured ticks、commands per tick、facts per tick、us per unit / command / fact | 判断耗时是否随业务规模按预期线性增长 |
+| Chunk locality | owner group count、max owner range、chunk iteration count、enabled mask 分布 | 判断数据是否按 ASC / target owner 聚合，而不是跨 owner 随机访问 |
+| Lookup pressure | `ComponentLookup` / `BufferLookup` refresh、GetComponentDataRW / GetBufferRW TopN、random lookup counters | 判断是否需要 owner-local range、NativeStream merge 或 component layout 重选型 |
+| Buffer pressure | peak length、capacity、externalized / spill / overflow、stream carrier warning | 判断 DynamicBuffer carrier 是否还是 proof-only 或容量不足 |
+| Structural phase | ECB command count、required / recorded playback、Journaling structural records、playback ms | 判断结构变化是否集中且成本可控 |
+| Sync / materialization | dependency drain ms、`ToEntityArray` count、query materialization count、performance pollution count | 判断 Debugger / Boundary / Runner 是否污染 Core 性能 |
+| Burst / managed boundary | Burst coverage、managed allocation、SystemBase / managed callback 命中 | 判断 hot path 是否保持 Burst-friendly |
+
 ## GAS 业务链路复核
 
 | 业务链路 | 目标态承载 | 为什么这样设计 | 拒绝的旧做法 |
@@ -162,6 +197,9 @@ Debugger 目标态必须输出以下 evidence，才称得上能支撑 DOTS 性�
 | `randomLookupReadCount` / `randomLookupWriteCount` | 发现跨 entity 随机访问热点 |
 | `managedAllocationBytes` / `gcAllocCount` | 防止 Debugger / Boundary 污染 Runtime Core 性能结论 |
 | `officialDiffCoverage` | 对照 Profiler、Entities Journaling、Burst / AOT、PackageCache 规则覆盖 |
+| `dataOrientedScorecard` | 把 workload、chunk locality、lookup pressure、buffer pressure、structural phase、sync/materialization、Burst/managed boundary 和 Debugger overhead 压成同构机器证据 |
+
+Debugger 的目标态实现必须按 metric family 拆分，不允许继续用单个稀疏大事件结构体承载所有 GAS 概念和 DOTS 性能字段。Ability / GE / Attribute / Tag / Cue 是 concept id；query / lookup / buffer / structural / sync / allocator / overhead 是 DOTS data-shape id。性能结论必须同时连接二者，否则只能说明“发生了什么”，不能说明“为什么慢以及该由哪个 owner 优化”。
 
 ## 验收
 

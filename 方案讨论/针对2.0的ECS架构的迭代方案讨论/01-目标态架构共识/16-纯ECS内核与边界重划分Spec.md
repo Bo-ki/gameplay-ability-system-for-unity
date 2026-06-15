@@ -27,7 +27,7 @@
 | 3 | [16-03 Fan-in、Debugger Evidence 与 SourceGenerator Pure Glue](16-纯ECS内核与边界重划分/16-03-FanInDebuggerSourceGeneratorSpec.md) | 需要查看 deterministic merge、Debugger evidence projection 和 generated pure glue |
 | 4 | [16-04 Shell Capability Contract](16-纯ECS内核与边界重划分/16-04-ShellCapabilityContractSpec.md) | 需要审查 OOP Shell / Thin Adapter 的 capability 分级和 public seam |
 | 5 | [16-05 Snapshot、Identity、API Health 与验收](16-纯ECS内核与边界重划分/16-05-SnapshotIdentityApiHealthSpec.md) | 需要审查 snapshot、identity、report projection、API health owner model、验收和禁止方向 |
-| 6 | [16-06 端到端消息流代码骨架](16-纯ECS内核与边界重划分/16-06-端到端消息流代码骨架Spec.md) | 需要按完整消息流审查 Shell intent、Boundary command、Core lane、fan-in、Definition pure glue 和 Diagnostics evidence |
+| 6 | [16-06 端到端消息流代码骨架](16-纯ECS内核与边界重划分/16-06-端到端消息流代码骨架/README.md) | 需要按完整消息流审查 Shell intent、Boundary command、Core lane、fan-in、Definition pure glue 和 Diagnostics evidence |
 
 ## 官方依据入口
 

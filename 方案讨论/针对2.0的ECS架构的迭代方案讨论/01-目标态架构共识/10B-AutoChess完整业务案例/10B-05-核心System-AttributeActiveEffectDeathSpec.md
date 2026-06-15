@@ -3,9 +3,21 @@
 > Owner：`01-目标态架构共识/10B-AutoChess完整业务案例` | 状态：目标态子 Spec | 拆分来源：`../10B-AutoChess完整业务案例设计Spec.md` | 最近拆分：2026-06-07
 
 本文件只描述 AutoChess 完整业务案例的目标态设计。禁止写入当前代码事实、执行流水、验证数字或下一步任务；现实证据必须回到 `../../00-当前架构事实/`，任务拆分必须回到 `../../02-主线任务树/`。
+
+## 与 Runtime Core 通用 Spec 的合并裁决
+
+本文件是 AutoChess Attribute / ActiveEffect / Death 业务案例投影，不维护通用 Runtime Core 规则第二正文。出现重复或冲突时，按下表回到唯一 owner 修改，10B 只同步业务字段和案例代码。
+
+| 主题 | 唯一正文 owner | 本文件只保留 |
+|---|---|---|
+| Attribute target grouped reduce / apply、dirty mask、attribute fact | [03E-03 Attribute Reduce / Apply](../03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact/03E-03-AttributeReduceApplySpec.md) | AutoChess HP / Mana / AttackSpeed 等属性字段如何落到 lane |
+| ActiveEffect state evaluate、period due、post-apply store 边界 | [03E-02 State Evaluate / ActiveEffect Store](../03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact/03E-02-StateEvaluateActiveEffectStoreSpec.md) | AutoChess duration GE、poison / shield / buff 的 slot 样例 |
+| ActiveEffect 跨帧 store 选型、OwnerLocalStore / GlobalIndexedStore / CleanupStore | [05 ActiveEffectStoreSpec](../05-ActiveEffectStoreSpec.md) | 业务案例对 slot pressure、period command 和 cleanup intent 的消费方式 |
+| Death fact、Boundary projection、Presentation / Replay 分离 | [03E-04 Gameplay Fact](../03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact/03E-04-GameplayFactSpec.md) 与 [06 Observation / Presentation / Replay](../06-Observation-Presentation-ReplaySpec.md) | AutoChess 死亡判定、DeathVFX cue 和 battle result 样例 |
+
 ## 八、核心 System 实现（续）
 
-### 8.4 Attribute Reduce/Apply System（GASCoreSimulationSystemGroup / Attribute lane）
+### 8.4 Attribute Reduce/Apply System（AutoChess 对 03E-03 的业务投影）
 
 ```csharp
 // ============================================================
@@ -178,7 +190,7 @@ public struct ApplyAutoChessAttributeSetJob : IJobChunk
 }
 ```
 
-### 8.5 Active Effect Lifecycle System（GASCoreSimulationSystemGroup / State lane）
+### 8.5 Active Effect Lifecycle System（AutoChess 对 03E-02 / 05 的业务投影）
 
 ```csharp
 // ============================================================
@@ -464,7 +476,7 @@ public struct TickActiveSlotsJob : IJobChunk
 }
 ```
 
-### 8.6 死亡检测 System（GASCoreSimulationSystemGroup / Gameplay Fact lane）
+### 8.6 死亡检测 System（AutoChess 对 03E-04 / 06 的业务投影）
 
 ```csharp
 // ============================================================

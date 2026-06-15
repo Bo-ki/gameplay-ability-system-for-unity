@@ -84,7 +84,7 @@ flowchart TD
 | Structural cleanup | StructuralCommit | **唯一允许** | 否（默认结构提交，不用 enableable 表达生命周期） | ActiveGameplayEffectBuffer (remove), Entity (destroy) |
 | `ObservationProjectionSystem` | BoundaryProjection | 禁止 | 否 | Outbox/Replay buffer |
 
-**World Bootstrap：** 无头 AutoChess 验收的 World 创建必须通过 `ICustomBootstrap`（CASE-17）实现。`ICustomBootstrap.Initialize` + `DefaultWorldInitialization.GetAllSystems` 创建 `FixedStepTime(1.0f / 60f)` 独立 World，不隐式依赖 Editor `World.Time` 或 `VariableStepTime`。各 System 通过 `[UpdateInGroup]` 归属到上述物理执行域 SystemGroup，并在 System 内或文档表中声明 kernel lane；ICustomBootstrap 负责将 System 分发到正确的 World 和 Group。参见 `10-AutoChess无头验收Spec.md` 第 223 行、`CASE-17`、`90-目标态不变量.md` 第 31 条。
+**World Bootstrap：** 无头 AutoChess 验收的 World 创建必须通过 `ICustomBootstrap`（CASE-17）实现。`ICustomBootstrap.Initialize` + `DefaultWorldInitialization.GetAllSystems` 创建 `FixedStepTime(1.0f / 60f)` 独立 World，不隐式依赖 Editor `World.Time` 或 `VariableStepTime`。各 System 通过 `[UpdateInGroup]` 归属到上述物理执行域 SystemGroup，并在 System 内或文档表中声明 kernel lane；ICustomBootstrap 负责将 System 分发到正确的 World 和 Group。相关约束见 `10-AutoChess无头验收Spec.md`、`CASE-17` 和 `90-目标态不变量.md` 的 World / fixed-step / bootstrap 不变量。
 
 ---
 
@@ -111,6 +111,8 @@ flowchart TD
 ---
 
 ## 十二、SourceGenerator 生成物清单
+
+本节只维护 AutoChess 完整业务案例中的生成物投影：它说明这些目标态文件如何服务本案例的执行链、交互矩阵和验收配置。通用生成链路、artifact responsibility、AutoChess schema / generated artifacts 和 SourceGenerator gate 的正文 owner 分别是 `../08-Luban-SourceGenerator配置生成链路Spec.md`、`../14-DefinitionCodeGen目标链路Spec.md`、`../11-AutoChessDemo-Luban配置方案Spec.md` 和 `../15-SourceGenerator职责边界Spec.md`；本节不得复制这些通用规则表。
 
 | 生成文件 | 源配置表 | 内容 |
 |---|---|---|

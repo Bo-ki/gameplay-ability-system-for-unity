@@ -520,6 +520,7 @@ namespace GAS.Runtime
             [ReadOnly] public ComponentLookup<AbilityGrantedByEffectComponent> AbilityGrantedLookup;
             public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
             public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
+            public BufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer> OwnerLocalGameplayFactDirtyOwnerLookup;
             public EntityCommandBuffer StructuralEcb;
             public EntityArchetype GrantedAbilityArchetype;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
@@ -1723,6 +1724,10 @@ namespace GAS.Runtime
                 {
                     Fact = evt,
                 });
+                EffectCommandSpecStream.MarkOwnerLocalGameplayFactDirty(
+                    OwnerLocalGameplayFactDirtyOwnerLookup,
+                    StreamEntity,
+                    owner);
             }
 
             private void EnqueueTagChangedEvent(Entity owner, int tagIndex, bool added)
@@ -1886,6 +1891,7 @@ namespace GAS.Runtime
             public BufferLookup<ActiveEffectMutationPrepareDirtyOwnerBuffer> ActiveMutationPrepareDirtyOwnerLookup;
             public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
             public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
+            public BufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer> OwnerLocalGameplayFactDirtyOwnerLookup;
             public EntityCommandBuffer StructuralEcb;
             public EntityArchetype GrantedAbilityArchetype;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
@@ -3049,6 +3055,10 @@ namespace GAS.Runtime
                 {
                     Fact = evt,
                 });
+                EffectCommandSpecStream.MarkOwnerLocalGameplayFactDirty(
+                    OwnerLocalGameplayFactDirtyOwnerLookup,
+                    StreamEntity,
+                    owner);
             }
 
             private void EnqueueTagChangedEvent(Entity owner, int tagIndex, bool added)

@@ -26,6 +26,26 @@
 
 目标态 Spec 可以引用事实 owner，但正文只能保留目标约束、官方依据、API 选型、禁止方向和验收门槛。
 
+## 相似 Spec Owner 裁决
+
+相似主题不默认合并成一个更大的长文档；先裁决唯一正文 owner，再用引用保留相邻关系。若两个目标态 Spec 同时维护同一规则正文、生成物责任或验收口径，必须把正文合并回唯一 owner，其他文件只保留案例投影、局部约束或索引链接。
+
+| 主题 | 唯一正文 owner |
+|---|---|
+| 业务编辑对象与默认配置链 | `19-GAS业务编辑路径与配置链职责Spec.md` |
+| 策划配置横切能力、引用图、协作、平衡、场景验证与发布门禁 | `20-策划配置能力交叉审查Spec.md` |
+| 新增能力三档推进流程与程序介入门槛 | `22-新增能力业务推进流程Spec.md` |
+| 能力配置分析协议、row projection、trace、impact、scenario 与 publish snapshot | `23-能力配置链条与分析步骤Spec.md` |
+| Epic GAS 概念 guardrail、Ability lifecycle、GE spec、Tag taxonomy、Cue parameters、AbilityTask 映射和 ASC binding | `24-GAS官方概念对照复核Spec.md` |
+| Excel / Luban / SourceGenerator / Baker / Bootstrap / Runtime catalog 端到端流程 | `08-Luban-SourceGenerator配置生成链路Spec.md` |
+| AutoChessDemo schema、generated artifacts、ScaleProfile 与 ValidationExpectation | `11-AutoChessDemo-Luban配置方案Spec.md` |
+| Definition artifact responsibility、Runtime catalog / lookup / pure glue 目标链路 | `14-DefinitionCodeGen目标链路Spec.md` |
+| SourceGenerator 权限边界、允许 / 禁止生成物与 validation gate | `15-SourceGenerator职责边界Spec.md` |
+| AutoChess 完整业务案例投影、执行链矩阵与示例生成物落点 | `10B-AutoChess完整业务案例/10B-07-执行链矩阵生成物不变量Spec.md` |
+| 端到端消息流代码骨架入口、完整 C# 骨架、代码解读和完整性审查口径 | `16-纯ECS内核与边界重划分/16-06-端到端消息流代码骨架/README.md` 只维护入口；完整正文在 `16-纯ECS内核与边界重划分/16-06-端到端消息流代码骨架/16-06A-完整端到端消息流代码骨架Spec.md` |
+
+`10B` 子 Spec 可以展示完整业务案例中的具体生成物、执行链和字段落点，但不维护通用 SourceGenerator gate、Definition artifact responsibility 或端到端生成流程正文。
+
 ## Spec 索引
 
 | 文件 | 职责 |
@@ -38,17 +58,17 @@
 | [04-EffectCommand-SpecStream-AttributeDeltaSpec](04-EffectCommand-SpecStream-AttributeDeltaSpec.md) | Effect Command、Spec/Delta/Fact 语义链、目标态 fan-in 承载 |
 | [05-ActiveEffectStoreSpec](05-ActiveEffectStoreSpec.md) | Duration / Stack / Period / Granted state |
 | [06-Observation-Presentation-ReplaySpec](06-Observation-Presentation-ReplaySpec.md) | Observation、Presentation、Replay 分层 |
-| [07-RuntimeCoreDebuggerSpec](07-RuntimeCoreDebuggerSpec.md) | Runtime Core Debugger 诊断事实、ValidationEvidence 与图表 |
-| [08-Luban-SourceGenerator配置生成链路Spec](08-Luban-SourceGenerator配置生成链路Spec.md) | Luban / SourceGenerator / Definition / Bake 链路 |
+| [07-RuntimeCoreDebuggerSpec](07-RuntimeCoreDebuggerSpec.md) | Runtime Core Debugger 数据导向重构架构、GAS concept evidence、DOTS scorecard、ValidationEvidence 与图表 |
+| [08-Luban-SourceGenerator配置生成链路Spec](08-Luban-SourceGenerator配置生成链路Spec.md) | Excel / Luban / SourceGenerator / Baker / Bootstrap / Runtime catalog 端到端生成链路 owner |
 | [09-DefinitionAuthoring边界Spec](09-DefinitionAuthoring边界Spec.md) | Definition Authoring 输入面、Baker/Bootstrap 和 Runtime Core 隔离边界 |
 | [10-AutoChess无头验收Spec](10-AutoChess无头验收Spec.md) | AutoChessDemo 验收 Demo 目标态、Battle Runtime Adapter、业务链路和自动验收 |
-| [10B-AutoChess完整业务案例设计Spec](10B-AutoChess完整业务案例设计Spec.md) / [10B 子 Spec 索引](10B-AutoChess完整业务案例/README.md) | 完整 GAS 设计预演总览：具名棋子、具体 Excel 配置、羁绊机制、Runtime 基础设施、目标代码样例、业务流程走查和交互矩阵 |
+| [10B-AutoChess完整业务案例设计Spec](10B-AutoChess完整业务案例设计Spec.md) / [10B 子 Spec 索引](10B-AutoChess完整业务案例/README.md) | 完整 GAS 设计预演总览：具名棋子、具体 Excel 配置、羁绊机制、Runtime 基础设施、目标代码样例、业务流程走查和交互矩阵；通用 Runtime Core 规则回到 03 / 05 / 06 / 16 对应 owner |
 | [11-AutoChessDemo-Luban配置方案Spec](11-AutoChessDemo-Luban配置方案Spec.md) | AutoChessDemo Luban 表、SourceGenerator 输出、ScaleProfile 和自动验收配置 |
 | [12-命名规范Spec](12-命名规范Spec.md) | 四层职责命名、后缀语义、限制词和任务命名规范 |
-| [13-EntityComponent物理布局Spec](13-EntityComponent物理布局Spec.md) | Entity/Component 物理布局、Archetype 审计、Buffer 容量策略 |
-| [14-DefinitionCodeGen目标链路Spec](14-DefinitionCodeGen目标链路Spec.md) | Definition CodeGen 到 Runtime catalog / lookup / pure glue 的目标链路 |
-| [15-SourceGenerator职责边界Spec](15-SourceGenerator职责边界Spec.md) | SourceGenerator 权限边界、允许/禁止生成物、官方规则论证 |
-| [16-纯ECS内核与边界重划分Spec](16-纯ECS内核与边界重划分Spec.md) / [16 子 Spec 索引](16-纯ECS内核与边界重划分/README.md) | 纯 ECS Runtime Core、OOP Shell、Runtime Boundary、Debugger evidence、SourceGenerator pure glue、端到端消息流代码骨架的目标态总览、接口和验收门 |
+| [13-EntityComponent物理布局Spec](13-EntityComponent物理布局Spec.md) / [13 子 Spec 索引](13-EntityComponent物理布局/README.md) | Entity 清单与运行时布局、Archetype / Component 分类、Buffer 容量与 Phase 映射 |
+| [14-DefinitionCodeGen目标链路Spec](14-DefinitionCodeGen目标链路Spec.md) | Definition CodeGen artifact 责任、Runtime catalog / lookup / pure glue 的目标链路 |
+| [15-SourceGenerator职责边界Spec](15-SourceGenerator职责边界Spec.md) | SourceGenerator 权限边界、lifecycle relocation、允许/禁止生成物和 validation gate |
+| [16-纯ECS内核与边界重划分Spec](16-纯ECS内核与边界重划分Spec.md) / [16 子 Spec 索引](16-纯ECS内核与边界重划分/README.md) | 纯 ECS Runtime Core、OOP Shell、Runtime Boundary、Debugger evidence、SourceGenerator pure glue、端到端消息流代码骨架的目标态总览、接口和验收门；完整骨架正文见 [16-06A](16-纯ECS内核与边界重划分/16-06-端到端消息流代码骨架/16-06A-完整端到端消息流代码骨架Spec.md) |
 | [17-GAS业务链路破坏性重划分Spec](17-GAS业务链路破坏性重划分Spec.md) | GAS 业务链路破坏性收权、旧链路退出门槛、设计理由和目标态验收口径 |
 | [18-DOTS官方规范复核与性能红线Spec](18-DOTS官方规范复核与性能红线Spec.md) | 用 Unity DOTS 官方规则复核新划分设计，固化 Runtime Core API 选型、性能红线和验收门槛 |
 | [19-GAS业务编辑路径与配置链职责Spec](19-GAS业务编辑路径与配置链职责Spec.md) | 以真实业务场景定义更短 GAS 编辑路径，并划分 Luban、Editor、SourceGenerator 的配置链职责 |
@@ -74,7 +94,7 @@ Unity DOTS 官方依据不再维护在本目录内。所有 Runtime Core、Debug
 
 ## 整体重划分代码入口
 
-需要理解目标态 GAS 架构“应该如何重新划分、为什么这样划分更合理、完整代码骨架如何阅读”时，默认先读 [16-06 端到端消息流代码骨架](16-纯ECS内核与边界重划分/16-06-端到端消息流代码骨架Spec.md)，再回到 [16-01 目标分层、官方依据与不变量](16-纯ECS内核与边界重划分/16-01-目标分层官方依据与不变量Spec.md) 及其 [子目录](16-纯ECS内核与边界重划分/16-01-目标分层官方依据与不变量/README.md) 拆局部约束。`16-06` 串起 Shell capability、Boundary command、Core `IJobChunk`、`NativeStream` deterministic fan-in、Definition pure glue、Diagnostics evidence 和 Derived export；`16-01A-D` 分别负责目标分层、Owner Map、消息流协议和最小完整代码骨架判定门。
+需要理解目标态 GAS 架构“应该如何重新划分、为什么这样划分更合理、完整代码骨架如何阅读”时，默认先读 [16-06 子页索引](16-纯ECS内核与边界重划分/16-06-端到端消息流代码骨架/README.md) 的入口和 owner 裁决，再读 [16-06A 完整端到端消息流代码骨架](16-纯ECS内核与边界重划分/16-06-端到端消息流代码骨架/16-06A-完整端到端消息流代码骨架Spec.md) 的代码正文，随后回到 [16-01 目标分层、官方依据与不变量](16-纯ECS内核与边界重划分/16-01-目标分层官方依据与不变量Spec.md) 及其 [子目录](16-纯ECS内核与边界重划分/16-01-目标分层官方依据与不变量/README.md) 拆局部约束。`16-06A` 串起 Shell capability、Boundary command、Core `IJobChunk`、`NativeStream` deterministic fan-in、target owner-local dispatch、spec / delta / fact lane、Definition pure glue、Diagnostics evidence 和 Derived export；`16-01A-D` 分别负责目标分层、Owner Map、消息流协议和最小完整代码骨架判定门。
 
 阅读顺序：
 
@@ -82,7 +102,7 @@ Unity DOTS 官方依据不再维护在本目录内。所有 Runtime Core、Debug
 2. 再读 `目标态职责重划分验收表`，确认每个 owner 必须拥有和不得拥有的内容。
 3. 再读 `目标态消息流协议`，确认 Shell intent、Boundary command / snapshot、Core lane、Diagnostics evidence 和 Derived export 的消息边界。
 4. 再读 `16-01D` 的最小完整代码骨架判定门，确认接口为什么不能泄露 ECS handle、query、ECB、NativeContainer owner 或 generated lifecycle。
-5. 如果需要按完整消息流交还 owner / API / evidence 设计，读 `16-06` 的端到端代码骨架并逐段对照 Shell、Boundary、Core、Definition、Diagnostics 和 Derived export 的禁止方向；不要把 `16-06` 代码正文复制回 `16-01D`。
+5. 如果需要按完整消息流交还 owner / API / evidence 设计，读 `16-06` 入口和 `16-06A` 代码正文并逐段对照 Shell、Boundary、Core、Definition、Diagnostics 和 Derived export 的禁止方向；不要把 `16-06A` 代码正文复制回 `16-01D` 或 `16-02..16-05`。
 
 ## 维护规则
 

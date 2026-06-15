@@ -145,6 +145,8 @@ namespace GAS.Runtime
                 AbilityLifecycleRequestLookup =
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
                 OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
+                OwnerLocalGameplayFactDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
                 GrantedAbilityArchetype = grantedAbilityArchetype,
                 Catalog = catalogComponent.Catalog,
@@ -275,6 +277,8 @@ namespace GAS.Runtime
                 AbilityLifecycleRequestLookup =
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
                 OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
+                OwnerLocalGameplayFactDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
                 GrantedAbilityArchetype = grantedAbilityArchetype,
                 Catalog = catalogComponent.Catalog,
@@ -373,6 +377,8 @@ namespace GAS.Runtime
                 AbilityLifecycleRequestLookup =
                     SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(isReadOnly: false),
                 OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
+                OwnerLocalGameplayFactDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
                 ActiveEffectSlotSourceAttributeSnapshots = emptyActiveEffectSlotSourceAttributeSnapshots,
                 SnapshotLaneCounters = activeEffectSlotSourceSnapshotLaneCounters,

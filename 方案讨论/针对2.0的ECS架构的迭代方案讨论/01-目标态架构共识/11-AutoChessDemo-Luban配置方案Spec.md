@@ -10,6 +10,16 @@
 
 AutoChess 的策划配置验收样例见 `21-AutoChessDemo策划配置验收样例Spec.md`。`11` 负责表结构和生成物；`21` 负责把核心测试能力包映射到这些表，并定义每个样例的 row projection、trace preview、impact analysis 和 scenario validation expectation。
 
+## 相邻 Spec Owner 边界
+
+| 相邻 Spec | 唯一职责 | 本 Spec 消费方式 |
+|---|---|---|
+| `10-AutoChess无头验收Spec.md` | runner / evidence / scale gate / Goal 停止参考 | `11` 提供 ScaleProfile、DiagnosticsThreshold、ValidationExpectation schema 和 generated artifacts；不重复维护 runner pass / diagnostic pass 规则 |
+| `10B-AutoChess完整业务案例设计Spec.md` | 具名棋子、属性、技能、GE、System 链路和业务流程走查 | `11` 只把 10B 的业务样例投影成表结构和默认配置数据；不重复维护完整业务流程 |
+| `21-AutoChessDemo策划配置验收样例Spec.md` | 策划测试能力包、row projection、trace preview、impact analysis、scenario validation binding | `11` 维护表结构和生成物字段，`21` 维护样例如何消费这些字段 |
+
+重复维护规则：ScaleProfile / ValidationExpectation / DiagnosticsThreshold 的 schema 和 generated artifact 名称只在 `11` 维护；runner pass、performance / diagnostic split 和 evidence output 只在 `10` 维护；业务样例、Change Set、Impact Analysis 和 Runtime Trace Preview 只在 `21` 维护。
+
 ## 官方依据与设计论证
 
 AutoChessDemo 配置不是 demo 常量表，而是目标态 Definition & Generation 链路的业务样本。`CASE-07`、`BLOB-02`、`CONTENT-01`、`PRF-11` 要求静态 definition 进入 Baker / Blob / catalog，而不是 prefab 数量膨胀、runtime entity definition 或 managed config registry；`BUR-01` 要求 hot path 只消费 Burst-compatible lookup / evaluator。

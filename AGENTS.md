@@ -1,4 +1,4 @@
-# Repository Guidelines
+﻿# Repository Guidelines
 
 ## Project Structure & Module Organization
 This repository is a Unity project (2022.3 LTS) centered on EX-GAS 2.0.
@@ -65,3 +65,29 @@ Use a single-context domain documentation layout. Read `CONTEXT.md` and `docs/ad
 - 当需要分析文件依赖、反向依赖或跨模块关系时，优先使用 `codedb_deps`。
 - 当一次任务需要多个搜索、outline、read 或依赖查询时，优先使用 `codedb_bundle`、`codedb_query` 或工具自带的 batch 参数，减少 MCP 往返和 token 消耗。
 - 当怀疑索引不新鲜或监听未生效时，先调用 `codedb_status`、`codedb_changes` 或 `codedb_hot` 检查状态。
+
+<!-- AIBRIDGE:START {"assistant":"aibridge","templateId":"unity-integration","version":6,"target":"root-rule"} -->
+## AIBridge Bootstrap
+
+**CLI Alias**: `$CLI = ./.aibridge/cli/AIBridgeCLI.exe`
+
+**常用命令**:
+```bash
+$CLI compile unity
+$CLI get_logs --logType Error
+$CLI editor log --message "Hello" --logType Warning
+```
+
+**项目版本**:
+- 当前项目 Unity 版本：6000.3.14f1
+- 当前项目 C# 语言版本要求：兼容 C# 9.0，禁止使用更高版本语法。
+
+**路由原则**:
+- 快速任务：纯问答、代码解释、查找、显示、无代码或资源修改，直接回答或执行。
+- 开发任务：创建、修改、修复、重构 C# 代码、Unity 资源、Prefab、Editor 工具、包结构、测试、AGENTS.md 或 Skills，必须优先加载 `aibridge-development-workflow`。
+- 进入标准开发工作流后，由 `aibridge-development-workflow` 在 `【Skills 匹配模式】` 决定是否继续加载其它 Skill。
+
+**Skill 加载**:
+- 开发任务先加载 `/.codex/skills/aibridge-development-workflow/SKILL.md` 中的 `aibridge-development-workflow`。
+- AIBridge Skills 安装在 `/.codex/skills/<skill-name>/SKILL.md`；仅在工作流要求时从该目录加载同级 Skill。
+<!-- AIBRIDGE:END -->

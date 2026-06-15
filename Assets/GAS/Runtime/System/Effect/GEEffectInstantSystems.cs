@@ -427,6 +427,8 @@ namespace GAS.Runtime
                 AttributeType = SystemAPI.GetBufferTypeHandle<AttributeValueBuffer>(),
                 OwnerFactType = SystemAPI.GetBufferTypeHandle<OwnerLocalGameplayFactBuffer>(),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
+                OwnerLocalGameplayFactDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer>(isReadOnly: false),
                 Catalog = catalogComponent.Catalog,
                 StreamEntity = streamEntity,
             }.Schedule(_ownerSpecQuery, state.Dependency);
@@ -442,6 +444,7 @@ namespace GAS.Runtime
             public BufferTypeHandle<AttributeValueBuffer> AttributeType;
             public BufferTypeHandle<OwnerLocalGameplayFactBuffer> OwnerFactType;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
+            public BufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer> OwnerLocalGameplayFactDirtyOwnerLookup;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
             public Entity StreamEntity;
 
@@ -479,14 +482,22 @@ namespace GAS.Runtime
                     var attributes = attributeBuffers[entityIndex];
                     var facts = ownerFactBuffers[entityIndex];
                     for (var i = 0; i < specs.Length; i++)
-                        ApplySpec(ref stream, ref catalog, owner, specs[i], setByCallerValues, attributes, facts);
+                    {
+                        if (ApplySpec(ref stream, ref catalog, owner, specs[i], setByCallerValues, attributes, facts))
+                        {
+                            EffectCommandSpecStream.MarkOwnerLocalGameplayFactDirty(
+                                OwnerLocalGameplayFactDirtyOwnerLookup,
+                                StreamEntity,
+                                owner);
+                        }
+                    }
                 }
 
                 StreamLookup[StreamEntity] = stream;
             }
         }
 
-        private static void ApplySpec(
+        private static bool ApplySpec(
             ref GEEffectCommandStreamComponent stream,
             ref GASDefinitionCatalogBlob catalog,
             Entity owner,
@@ -502,9 +513,10 @@ namespace GAS.Runtime
                     spec.GameplayEffectCode,
                     out var gameplayEffectIndex))
             {
-                return;
+                return false;
             }
 
+            var wroteFact = false;
             ref readonly var gameplayEffect = ref GASDefinitionCatalogLookup.GetGameplayEffect(ref catalog, gameplayEffectIndex);
             for (var i = 0; i < gameplayEffect.ModifierCount; i++)
             {
@@ -567,10 +579,13 @@ namespace GAS.Runtime
                             NewValue = newValue,
                         },
                     });
+                    wroteFact = true;
                 }
 
                 attributes[attrIndex] = attribute;
             }
+
+            return wroteFact;
         }
 
         private static MagnitudeEvalContext BuildMagnitudeContext(

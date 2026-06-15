@@ -495,6 +495,7 @@ x50+ 是热点放大 gate，不是目标态完成证明。数据量必须代表�
 4. x10w / x100w 允许使用采样 presentation 和 synthetic workload，但不能绕过 GAS Runtime Core contracts。
 5. AutoChess 业务目标目录固定为 `Assets/AutoChessDemo`，命名空间为 `GAS.AutoChessDemo`；Runtime Core 包边界内不得新增 Demo 业务。
 6. “性能指标优秀”必须以 `实机性能指标参考` 的分档阈值为准，不能用单次 `avgTickMs` 或未拆分口径的总耗时替代。
+7. owner-local command/spec/fact 链路下，runtime chain gate 以 `SpecCount > 0`、`FactCount > 0`、`PendingAttributeAppliedDeltaCount > 0` 等真实消费证据为准；`coreRequests=0` 不能单独判定失败，因为 legacy request entity 已不是当前主链。
 
 ## 目标归位规则
 
@@ -508,10 +509,13 @@ x50+ 是热点放大 gate，不是目标态完成证明。数据量必须代表�
 
 本 Spec 定义 AutoChess 验收的**基础设施和门槛**，不定义具体业务内容。具体棋子、属性值、技能配置、GE 参数、System 代码、业务走查和交互矩阵见 `10B-AutoChess完整业务案例设计Spec.md`。
 
+配置 schema、ScaleProfile、DiagnosticsThreshold、ValidationExpectation 和 generated artifact 清单见 `11-AutoChessDemo-Luban配置方案Spec.md`。`10` 只消费这些配置生成物来定义 runner / evidence / scale gate，不维护第二份表结构或字段清单。
+
 策划配置能力验收样例见 `21-AutoChessDemo策划配置验收样例Spec.md`。`21` 把 `10B` 的具名业务内容拆成可发布的测试能力包，并为每个样例定义 row projection、Runtime trace preview、Scenario Validation Binding 和 AcceptanceAssertions；这些样例是 `10` 的 runner / scale / evidence model 的业务输入。
 
 10 和 10B 的关系：
 - **10（本文件）**：验收 Demo 需要什么样的目录、什么链路覆盖、什么性能门槛、什么规模验证
+- **11**：验收 Demo 的 Luban 表结构、generated artifacts、ScaleProfile / ValidationExpectation schema 和配置权威边界
 - **10B**：验收 Demo 用什么棋子、什么属性、什么技能、什么 GE、什么 System、走什么业务流程
 - **21**：验收 Demo 用哪些策划配置样例作为发布门禁，每个样例如何从业务包投影到 Luban rows、generated metadata、Runtime trace 和 scenario evidence
 

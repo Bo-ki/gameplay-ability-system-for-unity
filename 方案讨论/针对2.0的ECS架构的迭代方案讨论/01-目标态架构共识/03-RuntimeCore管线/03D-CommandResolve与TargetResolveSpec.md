@@ -6,6 +6,18 @@
 
 定位：目标态 Ability command ingest、Core Ability Producer、NativeStream command records、target resolve 和 request-owned TargetDataBuffer。
 
+## 相邻 Spec Owner 裁决
+
+`03D` 是泛化 Command Resolve / Target Resolve 的唯一正文 owner；`16-02` 只负责 Shell intent 进入 Runtime Boundary 的局部骨架；`10B-04` 只保留 AutoChess 业务案例投影。三者不得分别维护第二份通用规则。
+
+| 主题 | 唯一正文 owner | 其他文档只能做什么 |
+|---|---|---|
+| Shell intent 如何变成 ECS 可消费的 boundary command | `16-02-BoundaryCommand与CoreCommandResolveSpec.md` | 引用 owner-local boundary command，不复制完整规则 |
+| Ability command normalization、command record producer、target resolve、TargetDataBuffer 选型 | 本文件 | 消费本文件规则，并给业务字段映射 |
+| AutoChess 普攻、技能、fan-in 案例代码 | `10B-04-核心System-Command与FanInSpec.md` | 保留业务字段、棋子规则和验收样例，不定义通用 Runtime Core 规则 |
+
+默认 Shell / UI / 外部业务入口必须走 `16-02` 的 owner-local Boundary command。本文保留的 request-owned command normalization 只用于低频物化、导入、测试、复杂 target 数据携带或明确 profile 证明可接受的路径；一旦涉及每帧高频业务输入、AoE fan-out 或大批量内部触发，必须切换到本文的 NativeStream command / target record 路径。
+
 ### Ability Command Ingest：request-owned command normalization
 
 ```csharp
@@ -171,7 +183,7 @@ namespace GAS.Runtime
 
 合理性：
 
-1. Boundary 创建 request archetype 时一次性带上 `AbilityActivationRequestComponent`、`AbilityCommandComponent`、`TargetDataBuffer`，Ingest 阶段只写同 chunk 的 command component，不在热路径中 AddComponent。
+1. 当选择低频 request-owned 物化路径时，Boundary 必须一次性带上 `AbilityActivationRequestComponent`、`AbilityCommandComponent`、`TargetDataBuffer`，Ingest 阶段只写同 chunk 的 command component，不在热路径中 AddComponent；默认 Shell intent 入口仍以 `16-02` 的 owner-local Boundary command 为准。
 2. `ComponentLookup<AbilityStateComponent>` 只读访问 request 指向的 Ability Entity，符合官方 `systems-looking-up-data.md` 对 lookup 的约束：lookup 是随机访问，除非必须不要用；这里的随机读是边界 request → granted ability 的必要校验，写入仍保持 request-local。
 3. Definition Catalog singleton 只读获取 BlobRef 后传入 job；singleton API 不完成依赖的风险由“bootstrap 后无 writer”这个不变量消除，不能在 Runtime tick 中写 `GASDefinitionCatalogComponent`。
 4. Ingest 通过 `AbilityDefinitionIndex` 优先读取 `ref readonly AbilityDefinitionBlob`；index 无效才回退到 generated code -> index lookup。这样把 Luban 配置消费压缩到一次 Blob 读取，不反查 managed row / dictionary。
@@ -179,7 +191,7 @@ namespace GAS.Runtime
 
 ### Core Ability Producer：NativeStream command records
 
-`AbilityActivationRequestComponent` 是 Boundary 入口，不是 Core 内部高频 command bus。AI autocast、passive、period、reaction 这类来源应直接在 Core lane 中并行写 record，避免每次触发都创建/销毁 request entity。
+`AbilityActivationRequestComponent` 是 Boundary 低频物化入口，不是默认 Shell intent 入口，也不是 Core 内部高频 command bus。AI autocast、passive、period、reaction 这类来源应直接在 Core lane 中并行写 record，避免每次触发都创建/销毁 request entity。
 
 ```csharp
 using Unity.Burst;
@@ -512,6 +524,6 @@ namespace GAS.Runtime
 
 合理性：
 
-1. 目标解析结果写在 request/command entity 的 `TargetDataBuffer`，Effect Fan-In 顺序消费；不需要每个 target 创建 request entity，但也不把单次调用上下文写回跨帧 Ability Entity（`PRF-01`）。
+1. 低频物化路径的目标解析结果写在 request/command entity 的 `TargetDataBuffer`，Effect Fan-In 顺序消费；不需要每个 target 创建 request entity，但也不把单次调用上下文写回跨帧 Ability Entity（`PRF-01`）。
 2. Physics / Area query 可替换 `ResolveExplicitTargetsJob` 的输入，但输出仍是 deterministic `TargetDataBuffer`，符合 `PHY-02` / `MAT-05`。
 3. Target sort key 在 Target Resolve 阶段产生，后续 fan-in merge 不依赖 entity index 或 chunk 顺序。

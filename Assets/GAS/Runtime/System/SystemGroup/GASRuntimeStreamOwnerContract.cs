@@ -16,6 +16,7 @@ namespace GAS.Runtime
         OwnerLocalInstantNextFrame = 8,
         OwnerLocalInstantPrepareDirtyOwner = 9,
         ActiveEffectMutationPrepareDirtyOwner = 10,
+        OwnerLocalGameplayFactDirtyOwner = 11,
     }
 
     public enum EGasRuntimeFrameStreamAuthority
@@ -564,6 +565,19 @@ namespace GAS.Runtime
                     EGasRuntimeFrameStreamMergePolicy.StableSortByTargetThenSequence,
                     EGasRuntimeFrameStreamSortKey.TargetAscThenCommandSequence,
                     internalBufferCapacity: 64),
+                Entry(
+                    EGasRuntimeFrameStreamId.OwnerLocalGameplayFactDirtyOwner,
+                    GASRuntimeLayoutComponentSlot.OwnerLocalGameplayFactDirtyOwnerBuffer,
+                    EGasRuntimeCoreFramePhase.FramePrepare,
+                    EGasRuntimeCoreFramePhase.TypedFactProjection,
+                    EGasRuntimeCoreFramePhase.ObservationProjection,
+                    EGasRuntimeCoreFramePhase.ObservationProjection,
+                    EGasRuntimeFrameStreamAuthority.GameplayAuxiliaryDeterministic,
+                    EGasRuntimeFrameStreamCarrier.SingletonDynamicBuffer,
+                    EGasRuntimeFrameStreamCarrier.BoundaryObservationBuffer,
+                    EGasRuntimeFrameStreamMergePolicy.StableSortByTargetThenSequence,
+                    EGasRuntimeFrameStreamSortKey.TargetAscThenFactSequence,
+                    internalBufferCapacity: 128),
                 Entry(
                     EGasRuntimeFrameStreamId.AttributeDelta,
                     GASRuntimeLayoutComponentSlot.AttributeDeltaBuffer,

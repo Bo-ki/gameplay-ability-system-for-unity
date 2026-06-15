@@ -20,16 +20,16 @@ flowchart LR
 当前实际上并存两套层次：
 
 1. **Managed summary / diagnostics 层**：`GASDefinitionTable`、`GASDefinitionGeneratedAdapter`、ConfigRegistry、BakePlan/Contract/Pipeline/IntegrationPlan。
-2. **Runtime catalog blob 层**：`GASDefinitionCatalogBlob`、generated lookup/glue、generated runtime systems。
+2. **Runtime catalog blob 层**：`GASDefinitionCatalogBlob`、generated lookup/glue、hand-written Runtime consumers。
 
-第一层适合初始化、诊断、过渡期生成链规划；第二层才是当前 generated runtime hot path 读取的事实源。
+第一层适合初始化、诊断、过渡期生成链规划；第二层才是当前 Runtime hot path 读取的事实源。
 
 ## Definition 事实分层
 
 | 层级 | 当前文件/符号 | 当前状态 | 不能推出 |
 |---|---|---|---|
-| runtime-active catalog blob | `GASDefinitionCatalogComponent`、`GASDefinitionCatalogBlob`、`DefinitionCatalog.gen.cs`、`RuntimeDefinitionGlue.gen.cs` | 已进入 generated runtime 执行链 | 不能证明 runtime authoring/Baker 目标态完成 |
-| generated runtime systems | `AbilityCatalogCommitSystem`、`GEEffectCommandCatalogNormalizeSystem`、`GEEffectSpecBuildSystem`、`GASAttributeSetReduceApplySystem`、active effect systems | 已由 `GASSystemScheduleContract` 的 generated type-name 列表挂入 CommandResolve/CoreSimulation；ability commit 已用 chunk `EnabledMask`，instant spec/reduce 与 active mutation 已是 `[BurstCompile] IJob`，ability seed scratch 已退场 | 不能跳过 DOTS 热路径审查；已修复链路仍需 static validation 防回流 |
+| runtime-active catalog blob | `GASDefinitionCatalogComponent`、`GASDefinitionCatalogBlob`、`DefinitionCatalog.gen.cs`、`RuntimeDefinitionGlue.gen.cs` | 已进入 hand-written Runtime consumer / generated pure glue 执行链 | 不能证明 runtime authoring/Baker 目标态完成 |
+| generated catalog / pure glue + hand-written runtime consumers | `RuntimeDefinitionGlue.gen.cs`、`DefinitionCatalog.gen.cs`、`GEEffectCommandCatalogNormalizeSystem`、`GEEffectSpecBuildSystem`、`GASAttributeSetReduceApplySystem`、active effect runtime systems | generated type-name registry 当前为空；ability commit、instant spec/reduce、active mutation / pre-tick / remove 等主链由 hand-written Runtime 类型注册并消费 generated catalog / pure glue；ability seed scratch 已退场 | 不能跳过 DOTS 热路径审查；已修复链路仍需 static validation 防止 generated lifecycle / registration / random lookup 回流 |
 | managed diagnostics/table | `GASDefinitionTable`、`GASDefinitionGeneratedAdapter`、`ConfigRegistryDiagnostics` | 初始化、诊断、过渡层仍有效 | 不能写成 job/chunk hot path owner |
 | contract-only bake plan | `GASGeneratedDefinitionBakingPlan`、`BakeContract`、`BakePipeline`、`RuntimeIntegrationPlan` | 只表达目标约束和 materialization 计划 | 不能作为 Unity `Baker<T>` 已落地证据 |
 | editor template-only Baker | `GasGlueCodeGenPhases.cs` 模板字符串 | Editor CodeGen 可生成 Baker 文本 | 当前 Runtime/AutoChess 代码树没有实际生成物 |
@@ -42,7 +42,7 @@ flowchart LR
 | 事实层级 | 采用规则 | 当前判定 |
 |---|---|---|
 | runtime catalog blob | `BLOB-01`、`SEL-01`、`SEL-05` | 符合 runtime hot path 读取 Blob/generated lookup 的方向 |
-| generated runtime systems | `QRY-01`、`JOB-01`、`PRF-05` | 已进入主链，因此必须接受 query/job/dependency 审查 |
+| hand-written Runtime consumers / generated pure glue | `QRY-01`、`JOB-01`、`PRF-05` | 已进入主链，因此必须接受 query/job/dependency 审查；generated lifecycle 不得回流 |
 | managed diagnostics/table | `SYS-05`、`DBG-01..05` | 可作为诊断/初始化层，不作为 Core hot path owner |
 | baking plan/contract | `BAKE-01`、`BAKE-02`、`BAKE-03` | 只表达烘焙计划，不能替代实际 Baker/Baking System 产物 |
 | `Baker<T>` template | `CASE-39`、`CASE-40` | 实际 Baker 必须无状态、只添加/声明依赖；模板字符串不是验收证据 |
@@ -55,7 +55,7 @@ flowchart LR
    - `GASDefinitionCatalogComponent`
    - `GASDefinitionCatalogBlob`
    - ability / GE / modifier / requirement / tag mask / granted ability blob record
-2. generated runtime systems 已通过 `state.RequireForUpdate<GASDefinitionCatalogComponent>()` 依赖 catalog：
+2. hand-written Runtime consumers 已通过 catalog component / generated lookup / pure glue 依赖 catalog：
    - `AbilityCatalogCommitSystem`
    - `GEEffectCommandCatalogNormalizeSystem`
    - `GEEffectSpecBuildSystem`
@@ -75,7 +75,7 @@ flowchart LR
 12. `GasCodeGenManifest` 与离线 row provider 已改为可由 dotnet host 使用的 `Newtonsoft.Json` / JSON row 输入；`GasCodeGenValidationReport.md` 当前 `RowCount: 7`、`RuntimeForbiddenDependencyHits: 0`、`GeneratedHotPathRegressionHits: 0`。
 13. AutoChess 业务验证已经跑到 Runtime Core 消费端：2026-06-07 Run3 归档日志 `_归档/2026-06-07-AutoChessBattleValidation-ActiveMutationChunkApply-Run3.log` 显示 `completed=True`、`blockingDebugErrors=0`、`commands=1050`、`coreFacts=5200`、`coreDeltas=650`、`coreCues=2500`，且该轮使用 generated catalog 安装路径；这不是 R6/R8 完成证明。
 14. 本轮 sourcegen 模板修复后，generated editor asmdef 的 row source assembly 已从 CLI 宿主程序集归一化到 Unity 编译域真实 assembly，避免 `GasCodeGenCli` 泄入 Unity generated editor asmdef 引用。
-15. generated runtime 模板中 stored query 已切到 `state.GetEntityQuery(EntityQueryDesc)`；`GEEffectCommandCatalogNormalizeJob` 已按 `PRF-22` 使用 `ChunkEntityEnumerator` 处理 enabled mask。
+15. runtime 模板与 hand-written consumer 中 stored query 已切到 `state.GetEntityQuery(EntityQueryDesc)`；`GEEffectCommandCatalogNormalizeJob` 已按 `PRF-22` 使用 `ChunkEntityEnumerator` 处理 enabled mask。
 16. 本轮重新运行 `dotnet run --project .\Tools\GasCodeGenCli\GasCodeGenCli.csproj -- --mode sourcegen --projectRoot ...` 成功，输出 `Rows=7, Phases=10, OrphansDeleted=1`；未直接手改 `.gen.cs`。
 17. 本轮顺序编译 `com.exhard.exgas.runtime.csproj`、`com.exhard.exgas.generated.runtime.csproj`、`com.exhard.exgas.autochessdemo.csproj` 均 0 error；仅保留既有 `MSB3277` Unity/code coverage 引用版本冲突 warning。
 18. 本轮 runtime 泄漏扫描 `cfg.* / XLuban / SimpleJSON / Newtonsoft / DefinitionRow / Json` 在 `Assets/GAS/Generated/CodeGen/Runtime` 与 `Assets/GAS/Runtime` 无命中。
@@ -87,12 +87,12 @@ flowchart LR
 | runtime catalog singleton 已定义 | `Assets/GAS/Runtime/Definition/GASDefinitionCatalogRuntimeTypes.cs:10-16` | runtime-active |
 | generated lookup 提供 ability / GE index 和 definition 读取 | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionCatalog.gen.cs:27-72` | runtime-active |
 | generated runtime glue 读取 catalog | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeDefinitionGlue.gen.cs:16-32`、`:72-80`、`:127-131` | runtime-active |
-| generated systems require catalog | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs:26-32`、`RuntimeActiveEffect.gen.cs:22-27`、`RuntimeEffectInstant.gen.cs:20-25` | runtime-active |
-| generated systems 真实注册进 GAS groups | `Assets/GAS/Runtime/System/SystemGroup/GASSystemScheduleContract.cs:207-235`、`:323-328`、`:371-374`；`RuntimeSystemRegistration.gen.cs` 当前不在 output list | runtime-active |
+| runtime consumers require catalog / pure glue | `RuntimeDefinitionGlue.gen.cs`、`DefinitionCatalog.gen.cs`、hand-written Runtime resolver / effect systems | runtime-active |
+| generated registration 防回流 | `GASSystemScheduleContract.cs` 的 `GeneratedCommandResolveSystemTypeNames` / `GeneratedCoreSimulationSystemTypeNames` 当前为空数组；`RuntimeSystemRegistration.gen.cs` 当前不在 output list | guard-only |
 | sourcegen CLI / bat 驱动已落地 | `Tools/GasCodeGenCli/Program.cs`、`Tools/CodeGen/Generate-GAS-SourceGen.bat`、`Tools/CodeGen/README.md` | tooling-active |
 | generated hot path validation report | `Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md`、`Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs:6238-6278` | tooling-active |
 | sourcegen asmdef assembly 归一化 | `Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs`、`Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef` | tooling-active |
-| generated runtime query / enabled mask 模板已修复 | `Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs`、`Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs`、`RuntimeActiveEffect.gen.cs` | runtime-active/generated |
+| runtime query / enabled mask 模板与防回流规则已修复 | `Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs`、`RuntimeAbilityActivation.gen.cs` marker、hand-written active-effect runtime owner | runtime-active / guard |
 | managed table/adapter 仍存在 | `Assets/GAS/Runtime/Definition/GASDefinitionTable.cs:289-353`、`GASDefinitionGeneratedAdapter.cs:165-189` | diagnostics/transition |
 | config diagnostics 与 prototype cache 是 static managed 状态 | `Assets/GAS/Runtime/Effect/GameplayEffectConfigRegistry.cs:121-155`、`:491-540` | managed-init |
 | bake plan/contract/pipeline/integration 是 contract code | `Assets/GAS/Runtime/Definition/GASGeneratedDefinitionBakingPlan.cs:63`、`GASGeneratedDefinitionBakeContract.cs:131`、`GASGeneratedDefinitionBakePipeline.cs:230`、`GASGeneratedDefinitionRuntimeIntegrationPlan.cs:117` | contract-only |
@@ -105,9 +105,9 @@ flowchart LR
 
 | 文件 | 当前职责 | 风险/备注 |
 |---|---|---|
-| `Assets/GAS/Runtime/Definition/GASDefinitionCatalogRuntimeTypes.cs` | runtime catalog blob 类型 | generated runtime hot path 读取入口 |
+| `Assets/GAS/Runtime/Definition/GASDefinitionCatalogRuntimeTypes.cs` | runtime catalog blob 类型 | hand-written Runtime consumer / generated pure glue 读取入口 |
 | `Assets/GAS/Generated/CodeGen/Runtime/DefinitionCatalog.gen.cs` | generated blob lookup | 当前 lookup 需要纳入生成代码审查 |
-| `Assets/GAS/Generated/CodeGen/Runtime/RuntimeDefinitionGlue.gen.cs` | generated runtime glue | command/spec/active effect 依赖 |
+| `Assets/GAS/Generated/CodeGen/Runtime/RuntimeDefinitionGlue.gen.cs` | generated runtime pure glue | command/spec/active effect hand-written owner 可消费 |
 | `Assets/GAS/Runtime/Definition/GASDefinitionTable.cs` | managed definition summary / lookup | O(n) / managed array / diagnostics 层 |
 | `Assets/GAS/Runtime/Definition/GASDefinitionGeneratedAdapter.cs` | generated source -> table + diagnostics | 初始化/验证层，不是 hot path |
 | `Assets/GAS/Runtime/Definition/GASGeneratedDefinitionBakingPlan.cs` | baking plan contract | contract-only，当前不等于实际 Unity Baker |
@@ -135,7 +135,7 @@ flowchart LR
 
 ### DEF-01：Managed summary table 与 runtime catalog blob 并存
 
-`GASDefinitionTable` / `GASDefinitionGeneratedAdapter` 仍是有价值的诊断/过渡层，但它不是 generated runtime 的 hot path 数据结构。文档和任务拆分必须区分：
+`GASDefinitionTable` / `GASDefinitionGeneratedAdapter` 仍是有价值的诊断/过渡层，但它不是 Runtime hot path 数据结构。文档和任务拆分必须区分：
 
 - 初始化/诊断事实：managed table、registry、diagnostics、plan。
 - Runtime 执行事实：`GASDefinitionCatalogBlob` + generated lookup/glue。
@@ -156,9 +156,9 @@ BakePlan / BakeContract / BakePipeline / RuntimeIntegrationPlan 目前是 contra
 
 它的限制也同样明确：`GameRoom` 的单位阵容、Ability code 选择、ScaleProfile、ValidationExpectation 仍是代码/runner 输入；`ResolveCatalogEntity()` 仍在缓存失效时直接 `CreateEntity(ComponentType.ReadWrite<GASDefinitionCatalogComponent>())`，catalog install / dispose owner 仍需 evidence。因此本轮只能关闭“AutoChess catalog 仍手写”和“AutoChess catalog 仍临时 query singleton”的旧诊断，不能宣称 Spec 11 的 unit/scenario/scale/validation 配置链全部完成。
 
-### DEF-05：generated runtime 必须纳入同等审查
+### DEF-05：generated catalog / pure glue 必须纳入同等审查
 
-generated runtime 已读取 catalog 并修改 runtime state，因此生成代码要接受与 handwritten Runtime 一样的 DOTS 检查：
+generated catalog / pure glue 已进入 Runtime 消费链，因此生成代码要接受与 handwritten Runtime 一样的 DOTS 检查；但 generated lifecycle / system registration / query owner 不得回流：
 
 1. 主线程 `SystemAPI.Query` 是否可接受。
 2. buffer for loop 是否有规模上限和 capacity 证据。
@@ -167,14 +167,14 @@ generated runtime 已读取 catalog 并修改 runtime state，因此生成代码
 5. hot path job 是否 `[BurstCompile]`，enableable 是否优先 `EnabledRefRW` / chunk `EnabledMask`，`IJobChunk` 是否处理 enabled mask。
 6. blob lookup 是否 deterministic 且 revision/lifecycle 明确。
 
-当前已修复的 generated runtime 问题：
+当前已修复的 generated / runtime consumer 问题：
 
 - stored `EntityQuery` 不再由 `SystemAPI.QueryBuilder().Build()` 创建，模板和生成结果均改为 `state.GetEntityQuery(EntityQueryDesc)`。
 - `GEEffectCommandCatalogNormalizeJob` 不再直接 `for (0..chunk.Count)`，已使用 `ChunkEntityEnumerator`。
-- ability activation seed 构建不再要求 generated runtime 分配/持有 `NativeList<GECommandSeedRecord>`，NativeContainer ownership 回到调用 system。
+- ability activation seed 构建不再要求 generated runtime 分配/持有 `NativeList<GECommandSeedRecord>`，NativeContainer ownership 回到 hand-written calling system。
 - sourcegen asmdef 不再引用 CLI 宿主 assembly。
 
-仍需保留的审查项是 active mutation 的 singleton stream、Buffer/ComponentLookup random access store、capacity/ordering 证据，而不是继续把“generated runtime 没有反哺 Runtime Core”、“ability lifecycle 仍直接 cross-entity marker toggle”或“ASC dirty/present 仍是 random enableable”作为当前事实。
+仍需保留的审查项是 active mutation 的 singleton stream、Buffer/ComponentLookup random access store、capacity/ordering 证据、generated lifecycle 防回流和 pure glue / hand-written owner 对账，而不是继续把“generated runtime 没有反哺 Runtime Core”、“ability lifecycle 仍直接 cross-entity marker toggle”或“ASC dirty/present 仍是 random enableable”作为当前事实。
 
 ### DEF-06：sourcegen 已脱离 Unity Editor UI，但 Unity 域验证仍存在
 
@@ -200,7 +200,7 @@ generated runtime 已读取 catalog 并修改 runtime state，因此生成代码
 
 ## 当前结论
 
-Definition 层相比旧代码已经有重要进展：`GASDefinitionCatalogBlob` 和 generated runtime glue 已经进入真实执行链，Runtime 不再只能依赖 managed config/prototype 路径。
+Definition 层相比旧代码已经有重要进展：`GASDefinitionCatalogBlob` 和 generated runtime pure glue 已经进入真实消费链，Runtime 不再只能依赖 managed config/prototype 路径。
 
 但当前不能宣称 Definition / Baking / SourceGenerator 目标态已完成。实际状态是：
 

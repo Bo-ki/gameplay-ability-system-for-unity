@@ -47,9 +47,9 @@
 | command port | `ASCCommandGateway.cs` |
 | Runtime Core stored query 已迁到 SystemState owner | `ASCCommandBufferResolveSystem.cs`, `ASCDestroyFinalizeSystem.cs`, `AbilityLifecycleRequestSystem.cs`, `AbilityStateCleanupSystem.cs`, `AbilityStateTickSystem.cs`, `AbilityTryActivateSystem.cs`, `AttributeThresholdAbilityLifecycleRequestSystem.cs`, `AttributeRecalculateSystem.cs`, `GEExecutionCalculationSystem.cs`, `GEExecutionCalculationOutputModifierSystem.cs` |
 | ability commit/end enabled mask | `RuntimeAbilityActivation.gen.cs:55-58`, `:115-117`, `:136-138` |
-| active mutation gather + ASC chunk apply | `RuntimeActiveEffect.gen.cs:142-186`, `:362-700` |
-| ability lifecycle request aggregation | `AbilityLifecycleRequestBuffer`, `AbilityLifecycleRequestSystem`, `RuntimeActiveEffect.gen.cs` |
-| attribute owner marker aggregation | `AttributeOwnerMarkerRequestBuffer`, `AttributeOwnerMarkerRequestSystem`, `RuntimeActiveEffect.gen.cs`, `GEExecutionCalculationOutputModifierSystem.cs` |
+| active mutation gather + ASC chunk apply | `GEActiveEffectCommandNormalizeSystem.cs`, `GASActiveEffectRuntime.cs`, `GEActiveEffectLifecycleSystems.cs`; `RuntimeActiveEffect.gen.cs` 当前只是 12 行 marker |
+| ability lifecycle request aggregation | `AbilityLifecycleRequestBuffer`, `AbilityLifecycleRequestSystem`, `GASActiveEffectRuntime.cs`, `GEActiveEffectLifecycleSystems.cs` |
+| attribute owner marker aggregation | `AttributeOwnerMarkerRequestBuffer`, `AttributeOwnerMarkerRequestSystem`, `GASActiveEffectRuntime.cs`, `GEExecutionCalculationOutputModifierSystem.cs` |
 | execution output applied chunk applicator | `GEExecutionCalculationOutputModifierSystem.cs` |
 | generated hot path gate | `GasGlueCodeGenPhases.cs:6238-6278`, `GasCodeGenValidationReport.md` |
 | runtime helper global overload 已删除 | `AbilityRuntimeActions.cs`, `AttributeHelper.cs` |

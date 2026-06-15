@@ -87,6 +87,8 @@ namespace GAS.Runtime
                 AbilityCommitRequestLookup = SystemAPI.GetComponentLookup<AbilityCommitRequestComponent>(),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
                 AbilityLifecycleRequestLookup = SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(),
+                OwnerLocalGameplayFactDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer>(isReadOnly: false),
                 StructuralEcb = structuralEcb,
                 AbilityArchetype = abilityArchetype,
                 Catalog = catalog,
@@ -148,6 +150,7 @@ namespace GAS.Runtime
             public ComponentLookup<AbilityCommitRequestComponent> AbilityCommitRequestLookup;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
+            public BufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer> OwnerLocalGameplayFactDirtyOwnerLookup;
             public EntityCommandBuffer StructuralEcb;
             public EntityArchetype AbilityArchetype;
             [ReadOnly] public BlobAssetReference<GASDefinitionCatalogBlob> Catalog;
@@ -908,6 +911,10 @@ namespace GAS.Runtime
                 {
                     Fact = evt,
                 });
+                EffectCommandSpecStream.MarkOwnerLocalGameplayFactDirty(
+                    OwnerLocalGameplayFactDirtyOwnerLookup,
+                    StreamEntity,
+                    evt.TargetAsc != Entity.Null ? evt.TargetAsc : evt.SourceAsc);
             }
 
             private bool IsAvailableAsc(Entity asc)

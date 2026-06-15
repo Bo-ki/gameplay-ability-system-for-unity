@@ -19,13 +19,13 @@
 
 ### 2. 当前注册系统
 
-当前 `GASSystemScheduleContract.RegisterSystems()` 注册 handwritten runtime systems，并通过 `GeneratedCommandResolveSystemTypeNames` / `GeneratedCoreSimulationSystemTypeNames` 这两组手写 type-name 列表反射注册 generated runtime systems。
+当前 `GASSystemScheduleContract.RegisterSystems()` 直接注册 handwritten runtime systems；`GeneratedCommandResolveSystemTypeNames` / `GeneratedCoreSimulationSystemTypeNames` 当前都是空数组。`AddSystemsByTypeName()` 的 fail-fast 只保留为防回流机制，不能再写成当前 generated runtime 主调度来源。
 
 | 物理执行域 | 当前系统 |
 |---|---|
 | `GASFramePrepareSystemGroup` | `GameplayEventBusClearSystem`, `GASGlobalTimerSystem`, `GEEffectCommandSpecStreamFramePrepareSystem` |
-| `GASCommandResolveSystemGroup` | `ASCCommandBufferResolveSystem`, `AbilityTryActivateSystem`, generated `AbilityCatalogCommitSystem`, `AbilityCommitSystem` |
-| `GASCoreSimulationSystemGroup` | `GEExecutionCalculationSystem`, `GEExecutionCalculationExtensionSystemGroup`, `GEExecutionCalculationOutputModifierSystem`, `GASAttributeModifierDeltaApplySystem`, `AttributeOwnerMarkerRequestSystem`, `AttributeRecalculateSystem`, `GameplayTagChangeProcessSystem`, `AbilityStateTickSystem`, `AttributeThresholdAbilityLifecycleRequestSystem`, `AbilityLifecycleRequestSystem`, `AbilityStateCleanupSystem`, `GameplayFactProjectionSystem`, generated `GEEffectCommandCatalogNormalizeSystem`, `GEEffectSpecBuildSystem`, `GASActiveEffectMutationApplySystem`, `GASAttributeSetReduceApplySystem`, `GASActiveEffectPreTickSystem`, `GASActiveEffectRemoveSystem` |
+| `GASCommandResolveSystemGroup` | `ASCCommandBufferResolveSystem`, `AbilityTryActivateSystem`, `AbilityCommitSystem` |
+| `GASCoreSimulationSystemGroup` | `GASActiveEffectPreTickSystem`, `GASActiveEffectRemoveSystem`, `GEEffectCommandCatalogNormalizeSystem`, `GEEffectSpecBuildSystem`, `GASActiveEffectMutationApplySystem`, `GEExecutionCalculationSystem`, `GEExecutionCalculationExtensionSystemGroup`, `GEExecutionCalculationOutputModifierSystem`, `GASAttributeSetReduceApplySystem`, `GASAttributeModifierDeltaApplySystem`, `AttributeOwnerMarkerRequestSystem`, `AttributeRecalculateSystem`, `GameplayTagChangeProcessSystem`, `AbilityStateTickSystem`, `AttributeThresholdAbilityLifecycleRequestSystem`, `AbilityLifecycleRequestSystem`, `AbilityStateCleanupSystem`, `GameplayFactProjectionSystem` |
 | `GASStructuralCommitSystemGroup` | `BeginGASStructuralCommitECBSystem`, `EndGASStructuralCommitECBSystem` |
 | `GASBoundaryProjectionSystemGroup` | `GameplayFactBoundaryProjectionSystem`, `PresentationOutboxProjectionSystem`, `ReplayLogSystem`, `DiagnosticsSnapshotSystem`, `CueRequestBridgeSystem`, `CueManagedLifecycleSystem`, `ASCDestroyFinalizeSystem` |
 
@@ -35,7 +35,7 @@
 2. `GASManagerInputSystem : SystemBase`、`GEEffectCommandIngestSystem`、`AttributeChangeEventProjectionSystem` 均已删除；当前 Runtime 主链不再保留这些未注册残留类型。
 3. 旧 `GameplayFactEventBridgeSystem` 与 `GEInstantEffectCueRequestProjectionSystem` 已删除，不再作为未注册残留系统保留；当前 Attribute/Cue/Tag 派生职责由 `GameplayFactBoundaryProjectionSystem` 承担。
 4. `AbilityCommitSystem` 是 CommandResolve 组内的真实 fence。跨组 `[UpdateBefore(typeof(GEEffectCommandIngestSystem))]` 已从 `ASCCommandBufferResolveSystem`、`AbilityCommitSystem`、generated `AbilityCatalogCommitSystem` 及 codegen 模板移除；CommandResolve -> CoreSimulation 的先后由 physical group 顺序保证，避免 Entities 忽略无效跨组排序属性。
-5. active effect lifecycle system 当前仍注册在 generated runtime assembly：`GEEffectCommandCatalogNormalizeSystem`、`GASActiveEffectMutationApplySystem`、`GASActiveEffectPreTickSystem`、`GASActiveEffectRemoveSystem` 的源码已从 `RuntimeActiveEffect.gen.cs` 拆到 `Assets/GAS/Generated/CodeGen/Runtime/ActiveEffectLifecycleOwnerSystems.cs`；`RuntimeActiveEffect.gen.cs` 当前主要承载 generated helper / job。该拆分让 active-effect lifecycle owner 退出 SourceGenerator 输出、manifest 和 generated boundary report，但它仍是 generated runtime 物理 asmdef 内的手写 companion owner，不是手写 Runtime Core owner 接管。
+5. active effect lifecycle 主链当前由手写 Runtime 类型直接注册：`GEEffectCommandCatalogNormalizeSystem`、`GASActiveEffectMutationApplySystem`、`GASActiveEffectPreTickSystem`、`GASActiveEffectRemoveSystem` 的主调度源码位于 `Assets/GAS/Runtime/System/Effect/GEActiveEffectCommandNormalizeSystem.cs` 与 `Assets/GAS/Runtime/System/Effect/GEActiveEffectLifecycleSystems.cs`，helper / job / snapshot / mutation / tick / remove 逻辑集中到手写 `Assets/GAS/Runtime/System/Effect/GASActiveEffectRuntime.cs`。`RuntimeActiveEffect.gen.cs` 当前只是 12 行 marker；`ActiveEffectLifecycleOwnerSystems.cs` 当前磁盘缺失，manifest、validation report 和 schedule type-name 列表也未登记，后续只作为 stale generated lifecycle 防回流扫描项。
 
 ### 2.1 证据等级矩阵
 
@@ -44,7 +44,7 @@
 | `FixedStepGroupTypes` / `RegisterSystems()` | runtime-active | 当前 World 初始化真实创建和注册 |
 | `RuntimeCoreFramePhaseContracts` | contract-only | 描述 8 个逻辑 phase 的读写权限；不是 8 个物理 group |
 | `RuntimeCoreFramePhaseSystemContracts` | partial mapping | 当前只覆盖 5 个系统的 phase mapping，不能视为全系统 phase table |
-| generated registration reflection | runtime-active with fail-fast guard | `GASSystemScheduleContract` 通过手写 generated type-name 列表反射注册；当前 `Type.GetType(...) == null` 会抛 `InvalidOperationException("Generated GAS runtime system type is missing: ...")`，不再静默跳过；`RuntimeSystemRegistration.gen.cs` 当前已退场 |
+| generated registration reflection | guard-only | `GASSystemScheduleContract` 仍保留 `AddSystemsByTypeName()`，当前 `Type.GetType(...) == null` 会抛 `InvalidOperationException("Generated GAS runtime system type is missing: ...")`，不再静默跳过；但 generated type-name 列表当前为空，`RuntimeSystemRegistration.gen.cs` 已退场 |
 | AutoChess system bootstrap | demo-extension | 只为 demo world 插入 command drive / execution extension，不属于通用 Runtime 注册表 |
 
 ### 3. Command / Spec / Delta / Fact 迁移链
@@ -66,7 +66,7 @@
 - `GEEffectCommandSpecStreamFramePrepareSystem` 已从主线程 `EntityManager.GetBuffer` compact/clear 改为 scheduled `IJob`；`GameplayFactProjectionSystem` 已从主线程 projection/legacy bridge 改为 scheduled `IJob`，并且 Attribute/Cue/Tag 边界投影已移出 CoreSimulation。
 - `GEExecutionCalculationSystem`、`GEExecutionCalculationOutputModifierSystem`、`GASActiveEffectPreTickSystem`、`AbilityLifecycleRequestSystem`、`AbilityStateCleanupSystem` 已从 `Complete()` / 主线程 cleanup 消费改为 scheduled job chain；其中 output modifier 使用 `NativeStream` fan-in 后在 scheduled merge job 内排序、应用属性、写 delta，并把 ASC dirty 追加为 frame-local `AttributeOwnerMarkerRequestBuffer`。
 - `ASCCommandBufferResolveSystem`、generated `AbilityCatalogCommitSystem`、generated `GEEffectCommandCatalogNormalizeSystem`、generated `GEEffectSpecBuildSystem`、generated `GASAttributeSetReduceApplySystem`、generated `GASActiveEffectMutationApplySystem`、generated `GASActiveEffectPreTickSystem`、generated `GASActiveEffectRemoveSystem` 均已迁到 scheduled `IJob` / `IJobChunk` 路径，并且 codegen 模板已同步；ASC owner-local pending/destroying/dirty、ability commit/auto-end、explicit remove pending 和 ability cleanup current-entity marker 已使用 chunk `EnabledMask`。generated active mutation 当前仍是 singleton DynamicBuffer serial gather `IJob`，但已在 job 内按 owner range applicator 批处理，同 owner range 的 store/slot/snapshot 不再逐 command 重复获取；active mutation 跨 owner SourceAttribute 已在 gather 阶段构建只读 snapshot，apply job 不再持有 `AttributeValueBuffer` lookup alias。该 lane 仍不能写成 scale-ready 终局，因为 command carrier、serial gather、capacity/spill 和其他 generated lifecycle lookup 仍未闭合。
-- generated instant spec/reduce 路径的 ASC 可用性判断已按 `ASCDestroyingComponent` enabled bit 读取销毁态；默认 disabled 的正常 ASC 不再被 `HasComponent` 误判为 destroying。
+- hand-written instant spec/reduce 路径的 ASC 可用性判断已按 `ASCDestroyingComponent` enabled bit 读取销毁态；默认 disabled 的正常 ASC 不再被 `HasComponent` 误判为 destroying。
 - cross-entity ability lifecycle 请求已收口到 frame-local `AbilityLifecycleRequestBuffer`：ASC command、attribute threshold、generated active effect granted-ability cleanup 只追加 request record，`AbilityLifecycleRequestSystem` 再以 ability-owned `IJobChunk` + chunk `EnabledMask` 应用 cancel/end/destroy-on-cleanup marker。
 - cross-entity Attribute owner marker 请求已收口到 frame-local `AttributeOwnerMarkerRequestBuffer`：generated active effect 与 execution output modifier 只追加 request record，`AttributeOwnerMarkerRequestSystem` 再以 ASC-owned `IJobChunk` + chunk `EnabledMask` 应用 `AttributeDirtyComponent` / `AttributeActiveModifierPresentComponent`。
 - `GEExecutionCalculationOutputModifierSystem` 的 output applied marker 已改为 effect-owned `IJobChunk` + chunk `EnabledMask` 应用，不再通过 random `AppliedLookup.SetComponentEnabled` 写 arbitrary effect entity。
@@ -77,7 +77,7 @@
 ### 4. ActiveEffectStore 当前状态
 
 1. `ActiveEffectStore` 已有 `ASCActiveEffectsComponent`、`ActiveGameplayEffectBuffer`、global index owner/bucket/row 等数据结构。
-2. generated `GASActiveEffectMutationApplySystem`、`GASActiveEffectPreTickSystem`、`GASActiveEffectRemoveSystem` 已挂入 CoreSimulation；当前 lifecycle system 源码在 `ActiveEffectLifecycleOwnerSystems.cs`，helper/job 源码在 `RuntimeActiveEffect.gen.cs`。
+2. 手写 Runtime `GASActiveEffectMutationApplySystem`、`GASActiveEffectPreTickSystem`、`GASActiveEffectRemoveSystem` 已挂入 CoreSimulation；当前主调度源码在 `GEActiveEffectLifecycleSystems.cs`，helper / job / snapshot / mutation / tick / remove 逻辑在 `GASActiveEffectRuntime.cs`。`RuntimeActiveEffect.gen.cs` 当前只是 marker；`ActiveEffectLifecycleOwnerSystems.cs` 当前磁盘缺失，只保留为防回流扫描项。
 3. `GASActiveEffectPreTickSystem` 当前已不再 `SystemAPI.Query` 预扫，也不再 `NativeStream scan -> state.Dependency.Complete() -> 主线程 ApplyActiveEffectTickRecord`；旧 scan/apply helper 已从 generated 输出和模板中删除。它调度 `GEActiveEffectPreTickJob`，在 job 内处理 period command、duration expire、modifier/tag/ability cleanup、mutation/event 输出。
 4. `GASActiveEffectRemoveSystem` 当前也复用 scheduled `GEActiveEffectPreTickJob` 的 explicit remove 分支消费 ASC owner-local `GERemoveCommandBuffer`，不再使用 `SystemAPI.Query` 主线程 foreach / `EventBusHelper` / `EntityManager` remove helper。
 5. 当前 ActiveEffectStore 仍是 owner-local store + generated/runtime 混合迁移期实现，不是完全 store-driven lifecycle 终局。
@@ -115,6 +115,7 @@
 4. `GasRuntimeOfficialToolDiff` 使用 `EntitiesJournaling` 统计 create/destroy/add/remove/enable/disable/set/get 等记录，是结构变化收口的有效证据工具。
 5. `GasRuntimeDebugger` 仍有 observation-only `ToEntityArray` 和同步 query；这类成本已通过 `ObservationMaterialization` / `runtimeObservationMaterialization` / AutoChess observation evidence 单独归因，仍必须与 Core Simulation 成本拆分报告。2026-06-08 x50 日志 `_归档/2026-06-08-AutoChessBattleValidation-ObservationMaterialization-Run1.log` 显示 `runtimeObservationMaterialization|queries=12|entities=2400|elapsedUs=92|performancePollutionRisks=12`，说明旧状态只完成成本显性化。随后 `_归档/2026-06-08-AutoChessBattleValidation-PassSplitMagnitudeSource-Run1.log` 将 AutoChess headless 拆成 performance / diagnostic / official diff 三个 pass：performance summary 和 hotspot summary 均为 `performancePassObservationPollutionRisks=0`，diagnostic Debugger summary 仍保留 `observationMaterializedQueries=12`、`observationMaterializedEntities=2400`、`observationMaterializationUs=57` 和 diagnostic 口径的 `performancePassObservationPollutionRisks=12`。
 6. MagnitudeSource counter 已从 `GEEffectCommandStreamComponent`、`EffectMagnitudeResolver`、`GEExecutionCalculationSystem` 接到 `GasRuntimeDebugger` snapshot/text export 和 AutoChess validation evidence。`_归档/2026-06-08-AutoChessBattleValidation-PassSplitMagnitudeSource-Run1.log` 中 `runtimeCoreMagnitudeSource` / `runtimeMagnitudeSource` 均可导出，validation evidence 也输出 `magnitudeSource*` 字段；当前 x50 业务日志中 `magnitudeSourceCurrentValueLookups=0`、`magnitudeSourceCaptureMisses=0`、`magnitudeSourceFallbackValues=0`、`magnitudeSourceExecutionInputLookups=0`，只能证明 counters 可编译、可导出且不会破坏 AutoChess 链路；不能证明 SourceAttribute / TargetAttribute / ExecutionCalculation 的 magnitude source 语义已经由真实业务覆盖。
+7. 2026-06-08 Debugger 模块复审后，`GasRuntimeDebugger.cs` 当前应按 diagnostics proof 归类：它把 config、singleton cache、runtime aggregate、diagnostic event row、retention、snapshot、official frame backbone plan 和 text export 混在同一单体。`GASRuntimeDebuggerComponent` 与 `GASRuntimeDiagnosticEventBuffer` 都保存大量重复 metric family，且 event row 是稀疏大结构。该事实说明 Debugger 已能作为当前证据工具，但下一轮性能优化不能继续追加字段；必须把 hot-path numeric metrics、diagnostic materialization、official diff 和 derived export 拆成数据导向的独立 owner。
 
 ## 当前 DOTS 合规缺口
 

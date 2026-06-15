@@ -252,6 +252,14 @@ namespace GAS.Runtime
 4. `AttributeModifierBuffer` 是 Effect Fan-In / Magnitude Resolve 后的 target grouped 输入；MMC 读取 source / target snapshot 的随机访问发生在写属性之前，Apply lane 不再 random write 其他 ASC。
 5. `if (!useEnabledMask) for ... else ChunkEntityEnumerator` 同时保留无 enableable query 的普通 for 快路径，以及未来加入 enableable filter 时的 disabled entity 正确性。
 
+## Spec 输入 Owner Gate
+
+Attribute Reduce / Apply 可以消费 owner-local spec、target grouped modifier range 或 chunk-local scratch，但必须满足三条目标态门槛：
+
+1. spec 输入属于 target owner 或当前 chunk，不从全局 singleton spec buffer 顺序扫描。
+2. SetByCaller、magnitude context、source / target identity 和 sequence 与 spec 同生命周期、同 owner 归属；需要跨 owner source attribute 时，先由 magnitude snapshot lane 生成只读 snapshot record。
+3. spec build / reduce 的 query、type handle、lookup refresh、allocator、dependency 和 evidence counter 归手写 Core lane owner；SourceGenerator 只提供 pure evaluator / lookup / validation，不生成该 lane lifecycle。
+
 ## 与 EntityComponent 物理布局的关系
 
 1. [13 EntityComponent 物理布局](../../13-EntityComponent物理布局Spec.md) 维护 AttributeSet、buffer、dirty mask 的全局物理布局和命名约束。

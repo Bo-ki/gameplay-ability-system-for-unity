@@ -177,6 +177,8 @@ proof-only 全局 singleton DynamicBuffer 的目标态替代路径（对应 `SEL
 | Active mutation | owner-local mutation buffer | ASC `ActiveGameplayEffectBuffer` slot mutation，必要时 `NativeStream` fan-in |
 | Typed facts | local fact buffer / stream | Core reaction fact / Boundary observation fact 分流，必要时 `NativeStream` merge 或 per-owner fact buffer |
 
+Instant spec 的目标承载必须遵守 owner-local 原则：spec record 可以落在 target owner 的 bounded buffer、chunk-local scratch 或 deterministic fan-in merge 输出的 compact range 中；不得把全局 singleton spec buffer 作为 scale-ready 默认入口。SetByCaller range 必须和 command/spec 同 owner、同 sequence、同 frame 生命周期，不得成为另一个无上限全局 payload buffer。
+
 显式 target kernel skeleton 使用 `AbilityCommandIngestSystem`、`GASEffectFanInSystem`、`GASActiveEffectPreTickSystem`（或 Fan-In 内 producer job）/ `GASActiveEffectPostApplySystem`、`GASAttributeSetReduceApplySystem`、`GameplayFactProjectionSystem`，并进入 `GASSystemScheduleContract`。新任务按 `12-命名规范Spec.md` 收敛到 Effect Fan-In、Attribute Reduce/Apply、Gameplay Fact kernel；目标态业务 reaction 直接消费 GameplayFact，默认写 next-frame command seed。
 
 ## Instant Evaluation 目标验收门
@@ -189,6 +191,7 @@ Instant GE 主链的目标验收：
 4. Attribute Apply 使用 target-grouped reduce/apply，不默认 `BufferLookup` 随机写目标 ASC。
 5. TypedSimulationFact 先进入 Core reaction fact，再由 Boundary Projection 投影到 Presentation / Replay / Debugger。
 6. 若仍使用 proof-only singleton DynamicBuffer，validation evidence 必须标记 proof-only、规模上限、重选型触发条件和移除任务。
+7. Spec build 与 Attribute reduce/apply 的 owner 必须属于手写 Core lane；generated artifact 只能提供 immutable definition lookup、requirement evaluator、magnitude evaluator 和 validation metadata。
 
 ## Period / Overflow Derived Command 目标验收门
 

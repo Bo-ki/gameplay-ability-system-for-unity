@@ -4,6 +4,17 @@
 
 本文件只描述目标态 Generated Runtime Glue 的纯消费接口。它不是当前 generated artifact 清单，也不记录运行时迁移进度。
 
+## 相邻 Spec Owner 裁决
+
+`03B-03` 是 Runtime Core 如何消费 Generated Runtime Glue 的接口 owner。它只回答“手写 Runtime Core lane 调用哪些纯函数、传入哪些 immutable / owner-local / frame-local 输入、得到哪些 plan / seed / modifier record”。它不维护 Luban 生成链、SourceGenerator phase、artifact 分类表或 boundary gate 第二正文。
+
+| 主题 | 唯一正文 owner | 本文件只消费 |
+|---|---|---|
+| Excel / Luban / SourceGenerator / Baker / Bootstrap 的端到端生成链 | [08 Luban / SourceGenerator 配置生成链路](../../08-Luban-SourceGenerator配置生成链路Spec.md) | generated glue 的输入来源必须是 immutable catalog / lookup |
+| Definition CodeGen artifact 责任、Definition Manifest、Blob / lookup / pure glue 目标链路 | [14 Definition CodeGen 目标链路](../../14-DefinitionCodeGen目标链路Spec.md) | artifact 只按 `Generated Pure Glue` 形态进入 Runtime 消费 |
+| SourceGenerator 允许 / 禁止生成、lifecycle relocation、validation gate | [15 SourceGenerator 职责边界](../../15-SourceGenerator职责边界Spec.md) | 调用接口不得要求 generated lifecycle owner、hidden query、ECB 或 NativeContainer owner |
+| Runtime Core 业务调用链对 generated glue 的最短消费接口 | 本文件 | 维护具体 plan / seed / evaluator / modifier record 代码骨架 |
+
 ## Generated Runtime Glue：真实 GAS 业务消费接口
 
 Luban / SourceGenerator 进入 Runtime Core 的目标不应停留在“生成 Blob schema + code lookup”。真实 GAS 业务中，每个 Runtime lane 都需要知道“从 Ability 定义如何得到可执行计划”“从 GE 定义如何展开 modifier range”“需求失败如何给出稳定 reason”“target rule code 对应哪些 unmanaged 参数”。如果这些逻辑散落在多个 System 中，调用者会反复理解 Luban 字段语义，最终又退回 OOP manager / registry 模式。

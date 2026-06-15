@@ -87,6 +87,27 @@ EntityQuery change filter 只能作为 chunk 级优化，不能当作实体级�
 4. 大规模压测默认不输出每实体每帧观察日志；用 sampling、chunk counters 和 cursor lag 解释链路健康。
 5. weak resource 未加载时只能影响表现 marker，不影响 Core simulation 结果。
 
+## Presentation / Replay / StructuredLog Owner 验收矩阵
+
+目标态的 Observation 链路必须把机器 evidence、表现 marker、replay 样本和人读导出分成不同 owner。它们可以共享同一 BoundaryObservationFact 来源，但不能共享写 Core 权限，也不能把派生导出当成 Core 性能证据。
+
+| Owner | Interface | Implementation ownership | 禁止方向 | 验收 evidence |
+|---|---|---|---|---|
+| `BoundaryObservationFactProjector` | fact sequence、context id、source / target opaque identity、projection cursor | 从 CoreReactionFact / BoundaryObservationFact 只读投影到 read model / outbox / replay | 反向写 Core state、重新计算 gameplay 结果 | projected fact count、duplicate skip、cursor lag、projection ms |
+| `PresentationOutboxBridge` | presentation marker、resource key、headless marker、frame / sequence | UI / VFX / SFX / FloatingText / Cue marker、resource binding、headless placeholder | gameplay mutation、Core attribute/tag/effect 写入 | outbox count、resource load / missing / release count、headless marker count |
+| `ReplaySink` | replay cursor、retention policy、sample filter、dropped count | persistent / sampled ring、cursor validity、retention trimming | simulation decision、unbounded hot path log | retained count、dropped count、cursor expired、sample rate |
+| `StructuredLogExporter` | immutable snapshot、format option、derived export handle | assertion text、human log、report fact projection、diagram data source | performance pass 字符串拼接、live ECS handle public seam、validation source 反向依赖文本 | entry count、byte count、source evidence id、export pass id |
+| `DiagnosticsSink` | runtime counter snapshot、official capture state、observation overhead | counters、TopN、Profiler / Journaling state、observation materialization cost | command writer、snapshot reader、gameplay formula | evidence tier、overhead owner、disabled reason、hotspot owner |
+| `PresentationBoundaryCost` | cost domain、managed callback marker、materialization counter | managed Cue / resource / UI callback、presentation-only query materialization | CoreSimulation tick 归因、DOTS hot path 完成证明 | callback count、materialized entity count、elapsed us、performance / diagnostic pass flag |
+
+### Derived export 规则
+
+1. Structured log、Mermaid 图、中文战斗日志、battle report、validation assertion 和 UI summary 都是 derived export；它们只能消费 machine evidence，不得成为 machine evidence 的来源。
+2. Derived export 若需要解析 report key、resource key 或 display name，必须在 Boundary / diagnostic pass 中完成，并写入 cost domain；performance pass 只能消费已经冻结的 snapshot 或明确关闭 derived export。
+3. Replay sink 与 structured log 不共享无限增长 buffer。Replay 负责 retention / cursor / dropped count，structured log 负责可读导出和断言文本。
+4. Presentation outbox 可在无头场景输出 marker，但 marker 不代表资源真的加载或 VFX/SFX 真的播放；资源状态必须由 PresentationBoundaryCost 或 resource evidence 单独说明。
+5. 任何 managed callback、file IO、string formatting、report / graph export、live identity display resolve 都不得进入 Runtime Core hot path 的 DOTS 优秀结论。
+
 ## 验收
 
 1. 无头 AutoChess 仍输出 UI/VFX/SFX/FloatingText/Cue marker。

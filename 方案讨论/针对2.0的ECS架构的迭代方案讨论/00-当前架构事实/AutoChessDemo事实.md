@@ -269,6 +269,12 @@ Render
 
 因此当前 timing 证据已经可以说明 owner cost split 的结构化口径，但仍不能写成 DOTS 性能优秀：本切片没有运行 Unity headless、x100/x1000、Profiler/Journaling，也没有 physics/render 实测样本。后续交还应继续补 scale profile、Profiler enabled 数据、官方 Entities profiler / journaling 证据，并把 PlayerLoop / scene presentation 成本与 ECS runtime tick 成本保持分离。
 
+2026-06-08 追加性能口径裁决：无头测试不能按整帧预算放宽。真实游戏场景会把模型、特效、UI、动画、音频和渲染提交成本叠加到同一帧，GAS Runtime 纯逻辑必须显著低于 16.67ms / 33.33ms。上一轮 x50 / 200 units / measuredTicks=9 的 `avgTickMs=3.692`、`GASTickTotal.avgMs=3.664`、`GASTickTotal.maxMs=6.200`、`CoreRuntimeOwner.avgMs=2.540`、`GASCoreSimulationSystemGroup.avgMs=2.255`、`BoundaryOwner.avgMs=1.006` 在新严格预算下全部不达标；`RunnerOwner.avgMs=0.119` 是当前唯一通过的 owner 预算项。该日志必须降级为“业务链路通过 / 性能瘦身输入”，不能再写成 DOTS 平均水平或性能优秀。
+
+代码侧已把该裁决落为硬门：`AutoChessHeadlessLogicBudgetResult` 的预算为 measured avg tick <= 1.500ms、GAS tick avg <= 1.500ms、GAS tick max <= 3.000ms、CoreRuntime owner avg <= 1.000ms、CoreSimulation avg <= 0.900ms、Boundary owner avg <= 0.350ms、Runner owner avg <= 0.150ms，且 performance pass observation pollution 必须为 0。`AutoChessValidationRunResult.Passed` 现在必须同时满足 `GeneratedThresholdsPassed`、`HeadlessLogicBudget.Passed`、`RuntimeChainPassed` 和 repeat-run gate；`performanceExcellentPassed` 还要求 Profiler evidence enabled，因此 profiler disabled 的 x50 不能作为性能完成证明。
+
+同时，性能优化不能只看纸面 ms。`AutoChessDemoHeadlessLogicBudget` 现在还输出 units、measured ticks、commands per measured tick、facts per measured tick、measured / GAS / CoreSimulation us per unit、GAS us per command 和 CoreSimulation us per fact。后续判断必须把这些 workload-normalized 指标与 Journaling / Debugger TopN 关联：如果热点仍集中在 `GetBufferRW`、`GetComponentDataRW`、`OwnerLocalGameplayFactBuffer`、`GEEffectCommandStreamComponent` 或 active-effect pre-tick，就说明问题是 DOTS 数据布局、owner-local range、lookup pressure、buffer carrier 或 materialization，而不是单纯调低阈值。
+
 ## 与 Runtime Core 的边界
 
 | 层 | 当前 owner | 不应越界 |
@@ -291,3 +297,4 @@ AutoChessDemo 已经不是“已删除后待重构”的状态。它现在是一
 4. Demo catalog 已来自 generated builder；unit result live read 已退为 structured evidence projection；未完成的是 unit/scenario/scale/validation expectation 与 Baker/BlobAssetStore 目标态。
 5. 当前日志场景证明业务可读性，不证明资源表现、不证明高规模性能。
 6. 当前 timing summary 与 Runtime Debugger aggregate 已覆盖 core/boundary/debugger/runner/physics/render owner split 口径，但不证明 x100/x1000、Profiler enabled、physics/render 实测或 PlayerLoop 场景表现成本。
+7. 当前 x50 结果在严格 headless pure logic budget 下不达标，下一轮优先瘦身 `CoreRuntimeOwner` / `GASCoreSimulationSystemGroup`，其次治理 `BoundaryOwner`。

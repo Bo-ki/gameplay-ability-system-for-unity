@@ -50,6 +50,8 @@ namespace GAS.Runtime
                 AbilityLifecycleRequestLookup = SystemAPI.GetBufferLookup<AbilityLifecycleRequestBuffer>(),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
                 OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(),
+                OwnerLocalGameplayFactDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer>(),
                 StreamEntity = streamEntity,
                 EventBusEntity = eventBusEntity,
                 Frame = frame,
@@ -72,6 +74,7 @@ namespace GAS.Runtime
             public BufferLookup<AbilityLifecycleRequestBuffer> AbilityLifecycleRequestLookup;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
+            public BufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer> OwnerLocalGameplayFactDirtyOwnerLookup;
             public Entity StreamEntity;
             public Entity EventBusEntity;
             public int Frame;
@@ -261,6 +264,10 @@ namespace GAS.Runtime
                 {
                     Fact = fact,
                 });
+                EffectCommandSpecStream.MarkOwnerLocalGameplayFactDirty(
+                    OwnerLocalGameplayFactDirtyOwnerLookup,
+                    StreamEntity,
+                    baseInfo.Owner);
             }
 
         }

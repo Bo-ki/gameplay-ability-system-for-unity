@@ -4,6 +4,12 @@
 
 本文件只描述 Snapshot Capture、Identity Exposure、Report Projection、API Health owner model、验收和禁止方向。
 
+## 与 16-06 的 Owner 裁决
+
+`16-05` 是 Snapshot capture、Identity exposure、Report projection、API Health owner model 和验收门的局部规则 owner；`16-06` 只消费这些规则来呈现完整端到端代码骨架。若两者出现分叉，snapshot 是否 copy、identity 是否 opaque、diagnostic-only 字段如何隔离、API health 如何按 owner 归因和验收门槛以本文件为准。
+
+本文件不维护 Shell capability public seam 的完整代码，也不维护 fan-in / Debugger / SourceGenerator pure glue 的完整代码；这些分别归 `16-04` 和 `16-03`。
+
 ## Snapshot Capture Contract
 
 目标态的 read model 必须是 Runtime Boundary 的 snapshot 产物，不是 Shell 按需 live capture。Snapshot 由 BoundaryProjection、presentation outbox 或同等级只读投影阶段生产，并以 snapshot version、opaque target key 和数据副本对外发布。

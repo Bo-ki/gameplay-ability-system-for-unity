@@ -34,6 +34,55 @@ flowchart TD
 | Layer 3 | GAS 运行时核心层 | GAS 权威状态、规则计算、phase/stream、typed facts |
 | Layer 4 | 定义与生成层 | Luban、SourceGenerator、静态定义、BakePlan、validation |
 
+## 整体目标态重划分 Spec
+
+目标态 EX-GAS 2.0 不是“ECS 内核外再包一个 OOP runtime 中间层”，而是把 gameplay 权威完全压入 Pure ECS Core，把 OOP 只保留为应用壳层与运行时边界层的交互外壳。四层之间必须只传递业务 intent、opaque handle、frame-local record、immutable definition、snapshot 和 evidence，不传递 `World`、`EntityManager`、raw `Entity`、`EntityQuery`、writable buffer、NativeContainer owner 或 generated lifecycle owner。
+
+目标态责任链如下：
+
+```text
+Application Shell
+  -> Runtime Boundary Capability
+  -> Pure ECS Core Lane / Store
+  -> Boundary Projection / Diagnostics Evidence
+  -> Application Shell Derived Consumer
+
+Definition & Generation
+  -> immutable catalog / static lookup / pure evaluator
+  -> Pure ECS Core Lane / Store
+```
+
+| 目标 owner | Interface 必须足够窄 | Implementation 必须足够深 | 禁止方向 |
+|---|---|---|---|
+| `RuntimeSession` | session id、install / dispose result、fixed tick result | World lifetime、SystemGroup install、bootstrap singleton、catalog install、timing split | 向 Shell 暴露 ECS handle 或承载 gameplay formula |
+| `CommandPort` | intent、opaque target、request id、reject reason | target resolve、owner-local command append、sequence、write pressure evidence | 同步执行 damage / cooldown / requirement，或返回 writable buffer |
+| `SnapshotReadModel` | immutable snapshot、version、cursor status | BoundaryProjection、snapshot ring、copy arena、staleness / drop counter | live `DynamicBuffer` getter、runtime query scan、raw `Entity` key |
+| `GASFrameKernel` | command / target / spec / delta / fact record | `ISystem` / job、query owner、type handle、lookup refresh、allocator、dependency、carrier、structural policy、evidence counter | OOP manager、static helper、Debugger、SourceGenerator 或 Adapter 隐式代管 Runtime Core API |
+| `EffectFanInStore` | deterministic merge result、owner-local range | `NativeStream` segment、sort key、merge cost、capacity / spill、battle hash、reselect trigger | singleton DynamicBuffer 或 managed list 作为 scale-ready 默认总线 |
+| `ActiveEffectStore` | owner-local slot、period / stack / duration / granted state record | slot capacity、magnitude snapshot timing key、cleanup intent、fact evidence | generated lifecycle、static helper lifecycle、global index 反向驱动 state |
+| `StructuralCommit` | structural intent、playback result、official diff source | ECB owner、bulk query、sort key、Journaling / Profiler route | 分散 `EntityManager.Create/Destroy/Add/Remove` |
+| `DiagnosticsSink` | structured evidence snapshot、DataOrientedScorecard、official capture state、derived export handle | runtime metric families、GAS concept evidence、DOTS API health、TopN、buffer pressure、pass split、overhead owner | gameplay decision、command writer、hot path string log、单个稀疏大事件行 |
+| `DefinitionCatalogLifetime` | catalog handle、schema/version、install / release result | Blob lifetime、schema validation、Baker / Bootstrap materialization、dispose owner | managed row read、hot path BlobBuilder、generated lifecycle / registration |
+| `GeneratedDefinitionGlue` | code -> index -> immutable definition -> pure record | Blob schema、static lookup、pure evaluator、validation metadata | `ISystem`、`OnUpdate`、query、ECB、NativeContainer allocator、runtime lifecycle |
+| `PresentationBridge` | presentation outbox / cue marker / replay marker | resource binding key、headless marker、rendered profile cost | Core gameplay write、Core 直接依赖资源 |
+
+这套重划分的核心验收不是文件移动或类名更换，而是 deep interface：调用方只能知道业务意图、record、snapshot、evidence 和错误码；query、lookup、allocator、dependency、carrier、capacity、merge、structural playback 和 diagnostics owner 必须留在具体 implementation owner 内。删除任一 owner 时，复杂度应集中回一个明确 implementation，而不是扩散到 Shell、generated artifact、Debugger、Demo adapter 或多个 helper。
+
+完整代码骨架的唯一正文入口是 [16-06A 完整端到端消息流代码骨架](16-纯ECS内核与边界重划分/16-06-端到端消息流代码骨架/16-06A-完整端到端消息流代码骨架Spec.md)。该骨架用于说明目标态代码如何把 Shell intent、Boundary command、Core `IJobChunk`、`NativeStream` deterministic fan-in、owner-local dispatch、spec / delta / fact、Definition pure glue、Diagnostics evidence 和 Derived export 串成单向消息流；本总览只维护总体 owner map，不复制第二份代码。
+
+## 目标态 Owner 判定准则
+
+目标态的 owner 判定必须先回答四个问题，再决定代码应该落在哪一层：
+
+| 判定问题 | 合格答案 | 不合格答案 |
+|---|---|---|
+| 谁拥有写权限？ | 唯一 Core lane、StructuralCommit、BoundaryProjection 或 DefinitionLifetime owner | Shell、Debugger、generated artifact、helper 或多个 adapter 共同写 |
+| 数据生命周期是什么？ | frame-local、owner-local、cross-frame authoritative、Boundary snapshot、immutable definition 之一 | 一个 carrier 同时解释 command、spec、delta、fact、diagnostics 和 presentation |
+| 调用方需要知道多少实现细节？ | 调用方只知道 intent / handle / record / snapshot / evidence / reject reason | 调用方知道 query、lookup、allocator、dependency、buffer、singleton、raw entity 或 playback phase |
+| 如何证明性能和正确性？ | 通过 owner-local counter、capacity / spill、deterministic merge、official capture state、battle hash 和 validation evidence | 通过运行通过、平均耗时、日志文本、facade 命名或 generated code 存在 |
+
+任何目标态设计若不能给出上述四问的合格答案，即使使用了 `ISystem`、`IJobChunk`、`DynamicBuffer`、`NativeStream`、Blob 或 SourceGenerator，也只能判定为 proof-only 或迁移期设计，不能进入框架 Spec 的 release-ready 路线。
+
 ## Spec 纯粹性边界
 
 本目录只定义目标态，不使用实现代码作为完成证明。实现事实、`MigrationProofOnly` 实现证据、已生成文件清单、profile 结果和缺陷诊断必须写入 `../00-当前架构事实/`；任务拆分和推进顺序必须写入 `../02-主线任务树/`。
@@ -42,7 +91,7 @@ flowchart TD
 
 1. Contract 字段不是完成度；只有实现验证能进入事实目录。
 2. generated code 不是黑盒。任何 runtime-visible generated artifact 都必须接受与手写 Runtime 一致的 DOTS 规则审查。
-3. `RuntimeForbiddenDependencyHits = 0` 不是 SourceGenerator 职责边界完成证明；目标态还必须证明没有 generated lifecycle、system registration、隐藏 query、隐藏 ECB / `EntityManager` 写入和 NativeContainer owner 越权。
+3. 单一 forbidden dependency 字符串扫描不是 SourceGenerator 职责边界完成证明；目标态还必须通过职责分类 gate 证明没有 generated lifecycle、system registration、隐藏 query、隐藏 ECB / `EntityManager` 写入和 NativeContainer owner 越权。
 4. 历史方案只作为设计来源，不能成为事实目录中的完成证明。
 
 ## 目标能力闭环

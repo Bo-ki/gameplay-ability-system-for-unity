@@ -17,8 +17,10 @@
 | 7 | [06-ActiveEffectSlotMagnitudeSnapshot事实](06-ActiveEffectSlotMagnitudeSnapshot事实.md) | 读取 active effect slot tick 的 SourceAttribute snapshot lane 事实 |
 | 8 | [07-端到端重划分事实](07-端到端重划分事实.md) | 读取 Shell -> Boundary -> Core -> Debugger -> Definition 端到端重划分事实 |
 | 9 | [08-TagRequirementQueryDefinitionGlue事实](08-TagRequirementQueryDefinitionGlue事实.md) | 读取 Ability / GE tag requirement、RemoveGameplayEffect query、generated catalog / pure evaluator 和 Run5 证据边界 |
+| 10 | [09-文档矛盾与过时口径事实](09-文档矛盾与过时口径事实.md) | 读取活动文档中的矛盾、过时架构描述、相似主题合并裁决和防回流事实 |
+| 11 | [10-整体架构重审事实](10-整体架构重审事实.md) | 读取本轮整体架构事实卡、保留面 / 退出面、生成报告当前数字和后续事实验证需求 |
 
-整体架构续轮审查默认先消费 `00-总览与代码证据事实` 的保留面 / 退出面，再消费 `04-整体审查与Owner重划分事实` 的 owner map 现实错位。需要按完整业务消息流审查 Shell、Boundary、Core、Debugger 和 Definition 的职责泄露时，再读 `07`。`05` / `06` 只在任务触达 Boundary snapshot、magnitude source 或 active effect slot tick 时作为专题事实输入。`08` 是 TagRequirement query 当前事实唯一正文，其他事实页只保留摘要入口。
+整体架构续轮审查默认先消费 `10-整体架构重审事实` 的最新事实卡，再回读 `00-总览与代码证据事实` 的保留面 / 退出面和 `04-整体审查与Owner重划分事实` 的 owner map 现实错位。需要按完整业务消息流审查 Shell、Boundary、Core、Debugger 和 Definition 的职责泄露时，再读 `07`。`05` / `06` 只在任务触达 Boundary snapshot、magnitude source 或 active effect slot tick 时作为专题事实输入。`08` 是 TagRequirement query 当前事实唯一正文，其他事实页只保留摘要入口。发现文档职责混写、相似主题重复正文、旧架构口径或短窗口污染时，先读 `09` 再决定拆分、合并、降权、归档或迁出 owner。
 
 ## 写入规则
 
@@ -26,3 +28,4 @@
 2. 发现目标态设计缺口时，只在本目录记录事实和判定，目标设计正文写回 `../../01-目标态架构共识/`。
 3. 发现可执行任务时，任务正文写回 `../../02-主线任务树/`，本目录只保留事实约束。
 4. 子页超过约 300 行或开始混入第二个事实主题时，继续按同 owner 拆分或合并到已有唯一 owner。
+5. 文档矛盾和过时口径优先登记到 `09`；只有证据主题已经稳定且需要长事实正文时，才迁入具体专题事实页。

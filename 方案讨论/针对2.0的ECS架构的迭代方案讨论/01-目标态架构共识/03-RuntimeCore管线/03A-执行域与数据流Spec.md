@@ -35,9 +35,9 @@ Runtime Core 管线必须先服从 Unity Entities 的物理执行约束。`SYS-0
 | Structural Commit | grant/remove/spawn/destroy/cleanup | `GASStructuralCommitSystemGroup` | 自定义 ECB；批量同类变化优先 EntityQuery bulk / `ComponentTypeSet` | `PRF-04` `SC-03` `ECB-03` `PRF-25` |
 | Boundary Projection | ReadModel、Presentation、Replay、Debugger | `GASBoundaryProjectionSystemGroup` | 只读 projection；可以采样/截断，不反写 simulation | `SYS-05` `DBG-01` `GFX-01` |
 
-这意味着旧文档中的 `GASSpecEvaluationSystemGroup`、`GASDeltaApplySystemGroup`、`GASGameplayEventProjectionSystemGroup` 以及上一版新增的 `GASTargetResolveSystemGroup`、`GASEffectFanInSystemGroup`、`GASStateEvaluateSystemGroup` 等“每 kernel 一个 group”名称，只保留为历史 traceability；新增 Runtime Core 设计必须使用 **物理执行域 SystemGroup + lane system** 命名。`EffectCommand / Spec / Delta / Fact` 仍是语义链，但不能成为一个全局 singleton buffer 总线，也不能把所有业务都塞进 “Spec Evaluation” 这个中间层。
+目标态 Runtime Core 必须使用 **物理执行域 SystemGroup + lane system** 命名，禁止按每个概念 kernel 单独创建 SystemGroup。`EffectCommand / Spec / Delta / Fact` 是语义链，不是全局 singleton buffer 总线，也不能把所有业务都塞进 “Spec Evaluation” 这类中间层。
 
-### 为什么旧划分不够好
+### 为什么概念流不能作为物理划分
 
 1. `Command -> SpecStream -> Delta` 是概念流，不是足够好的 DOTS 物理划分；真实性能瓶颈发生在 fan-in 写竞争、target grouping、buffer spill、lookup random access、enableable wait 和 Structural Commit playback。
 2. 大 `GEStreamOwnerSingleton` 或大容量 per-ASC frame buffers 都容易走向两种极端：全局扫描/写竞争，或每个 ASC 都背负 8KB 级 inline buffer，降低 chunk occupancy。

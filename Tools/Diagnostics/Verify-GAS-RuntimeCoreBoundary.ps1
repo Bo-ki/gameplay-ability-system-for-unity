@@ -194,9 +194,17 @@ Assert-FileContains `
     -Pattern "OwnerLocalGameplayFactBuffer" `
     -Message "Runtime Core must define an owner-local gameplay fact buffer for ASC-local fact projection."
 Assert-FileContains `
+    -Path $streamPath `
+    -Pattern "public struct OwnerLocalGameplayFactDirtyOwnerBuffer\s*:\s*IBufferElementData" `
+    -Message "Runtime Core must define a producer-maintained dirty owner index for owner-local gameplay facts."
+Assert-FileContains `
     -Path $ascArchetypePath `
     -Pattern "ComponentType\.ReadWrite<OwnerLocalGameplayFactBuffer>\(\)" `
     -Message "ASC runtime archetype must own an owner-local gameplay fact buffer."
+Assert-FileContains `
+    -Path $ascArchetypePath `
+    -Pattern "EffectCommandStream\(EntityManager em\)[\s\S]*?ComponentType\.ReadWrite<OwnerLocalGameplayFactDirtyOwnerBuffer>\(\)[\s\S]*?return _effectCommandStream;" `
+    -Message "EffectCommandStream archetype must own the owner-local gameplay fact dirty owner index buffer."
 Assert-FileContains `
     -Path $deltaApplyPath `
     -Pattern "BufferTypeHandle<OwnerLocalGameplayFactBuffer>" `
@@ -295,8 +303,20 @@ Assert-FileContains `
     -Message "Runtime Core must keep an owner-local gameplay fact frame phase without returning to singleton facts."
 Assert-FileContains `
     -Path $streamPhasePath `
+    -Pattern "DirtyOwnerLookup\s*=\s*SystemAPI\.GetBufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer>\(isReadOnly:\s*false\)" `
+    -Message "Boundary fact export must consume the producer-maintained owner-local fact dirty owner index."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "CollectOwnerLocalGameplayFactsJob\s*:\s*IJob" `
+    -Message "Boundary fact export must process dirty owner indices directly instead of scanning changed owner chunks."
+Assert-FileNotContains `
+    -Path $streamPhasePath `
     -Pattern "SetChangedVersionFilter\(ComponentType\.ReadWrite<OwnerLocalGameplayFactBuffer>\(\)\)" `
-    -Message "Boundary fact export must use OwnerLocalGameplayFactBuffer changed-version filtering."
+    -Message "Boundary fact export must not regress to OwnerLocalGameplayFactBuffer changed-version chunk scanning."
+Assert-FileContains `
+    -Path $streamPhasePath `
+    -Pattern "dirtyOwners\.Clear\(\)" `
+    -Message "Boundary fact export must clear the owner-local fact dirty owner index after export."
 Assert-FileContains `
     -Path $streamPhasePath `
     -Pattern "facts\.Clear\(\)" `

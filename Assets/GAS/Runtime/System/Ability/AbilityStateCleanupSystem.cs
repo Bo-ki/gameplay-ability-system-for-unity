@@ -72,6 +72,8 @@ namespace GAS.Runtime
                 Frame = frame,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(),
                 OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(),
+                OwnerLocalGameplayFactDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer>(),
                 StructuralEcb = structuralEcb,
             }.Schedule(_cleanupQuery, state.Dependency);
         }
@@ -105,6 +107,7 @@ namespace GAS.Runtime
             public int Frame;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
+            public BufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer> OwnerLocalGameplayFactDirtyOwnerLookup;
             public EntityCommandBuffer.ParallelWriter StructuralEcb;
 
             public void Execute(
@@ -405,6 +408,10 @@ namespace GAS.Runtime
                 {
                     Fact = fact,
                 });
+                EffectCommandSpecStream.MarkOwnerLocalGameplayFactDirty(
+                    OwnerLocalGameplayFactDirtyOwnerLookup,
+                    StreamEntity,
+                    owner);
             }
 
             private static int FindSlot(DynamicBuffer<ActiveGameplayEffectBuffer> slots, Entity effect)

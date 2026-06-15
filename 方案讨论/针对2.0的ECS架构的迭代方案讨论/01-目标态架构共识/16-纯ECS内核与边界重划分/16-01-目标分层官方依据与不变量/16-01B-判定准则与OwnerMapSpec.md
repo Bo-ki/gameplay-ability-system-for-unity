@@ -34,6 +34,33 @@
 
 目标态不是在 Runtime 外再包一层更大的 OOP facade，而是把每个 capability、lane、store 和 evidence owner 切成独立 Module。每个 Module 的 Interface 必须足够深：调用方只理解业务意图、record、snapshot 或 evidence，不理解 query、lookup、allocator、dependency、capacity、merge 和 structural playback 的实现细节。
 
+### 整体责任链
+
+目标态 GAS 架构按“谁拥有权威、谁只翻译、谁只观察”划分，而不是按 OOP 类名或文件夹划分。完整责任链必须保持单向：
+
+```text
+Application Shell
+  -> Runtime Boundary Capability
+  -> Pure ECS Core Lane / Store
+  -> Boundary Projection / Diagnostics Evidence
+  -> Application Shell Derived Consumer
+
+Definition & Generation
+  -> immutable catalog / pure glue
+  -> Pure ECS Core Lane / Store
+```
+
+| 层级 / owner 类别 | Interface 应暴露 | Implementation 可以复杂化的内容 | 不得拥有 |
+|---|---|---|---|
+| Application Shell | session id、业务 intent、opaque target、snapshot、evidence、derived export handle | UI / AI / network / demo flow / editor window / resource binding policy | `World`、`EntityManager`、raw `Entity`、live buffer、gameplay formula |
+| Runtime Boundary Capability | command request、snapshot read、diagnostics capture、runner tick、catalog install / release | identity resolve、request validation、sequence、snapshot ring、official capture route、timing split | damage / heal / tag requirement / cooldown / stack / period 计算 |
+| Pure ECS Core Lane | command / target / spec / delta / fact / slot record | `ISystem`、`IJobChunk`、query、lookup refresh、frame allocator、carrier、dependency、structural intent | OOP callback、managed row lookup、Debugger 控制流、generated lifecycle owner |
+| Core Store | owner-local state、slot、range、capacity、cleanup intent | active effect slot、attribute buffer、tag snapshot、owner-local fact、fan-in merge result | global singleton bus 作为目标态默认承载 |
+| Boundary Projection / Diagnostics | immutable observation fact、snapshot version、machine evidence | presentation outbox、replay sink、Profiler / Journaling state、derived export source | 反向写 Core state、参与 gameplay decision |
+| Definition & Generation | Blob、code -> index lookup、pure evaluator、validation metadata | schema、static table、Baker / Bootstrap glue、artifact manifest、gate report | runtime `ISystem`、`OnUpdate`、query、ECB、NativeContainer owner、system registration |
+
+这条责任链的判断标准是 deletion test：删除某个 owner 时，复杂度应集中回该 owner 的 implementation，而不是散落到 Shell、Debugger、generated artifact 和 Demo adapter。若调用方必须理解 ECS handle、carrier、merge、capacity 或 structural playback 才能正确调用接口，该 owner 仍然不够深。
+
 | Owner Module | Interface | Implementation ownership | 禁止泄露 |
 |---|---|---|---|
 | `RuntimeSession` | install / dispose / fixed tick result | World、SystemGroup、catalog lifetime、tick source、dependency drain evidence | `World`、`EntityManager`、live system group |
@@ -43,6 +70,7 @@
 | `SnapshotReadModel` | immutable ASC / battle / presentation snapshot | BoundaryProjection、snapshot ring、cursor、version、compaction | live `DynamicBuffer`、`EntityQuery`、runtime singleton |
 | `GASFrameKernel` | frame-local command / target / spec / delta / fact records | lane system、query owner、lookup refresh、job chain、frame allocator | OOP manager、global facade、hidden query |
 | `EffectFanInStore` | deterministic command/spec merge result | `NativeStream` segment、sort key、merge cost、owner range | singleton DynamicBuffer as scale-ready default |
+| `EffectSpecLane` | owner-local spec / set-by-caller range / magnitude context | target owner buffer、chunk-local scratch、pure definition lookup、requirement / magnitude evaluator、spec evidence | global singleton spec buffer、generated lifecycle owner、cross-owner random write lookup |
 | `ActiveEffectStore` | owner-local slot / lifecycle record | slot capacity、period/stack/state flags、cleanup intent、skip evidence | static helper lifecycle、generated lifecycle owner |
 | `StructuralCommit` | structural intent / playback evidence | ECB owner、bulk query、sort key、Journaling / Profiler route | scattered create / destroy / add / remove |
 | `DiagnosticsSink` | evidence snapshot / official capture state | counters、TopN、buffer pressure、API health、derived export source | gameplay decision、hot path string log |
@@ -56,7 +84,7 @@
 | Lifecycle domain | 目标 owner | 允许的 generated 输入 | 禁止形态 |
 |---|---|---|---|
 | Ability activation / commit / cancel / end | `AbilityLifecycleLane` + owner-local ability slot / request buffer | ability plan record、cost / cooldown GE code、target rule lookup、pure requirement evaluator | generated `ISystem`、OOP action object、Shell 同步结算、Debugger 反写 |
-| Instant GE spec / delta / fact | `EffectSpecLane` + `AttributeDeltaLane` + `GameplayFactLane` | GE seed、modifier record、magnitude evaluator、tag requirement evaluator | runtime GE entity churn、singleton stream 终局、generated delta apply lifecycle |
+| Instant GE spec / delta / fact | `EffectSpecLane` + `AttributeDeltaLane` + `GameplayFactLane` | GE seed、modifier record、magnitude evaluator、tag requirement evaluator、owner-local set-by-caller range | runtime GE entity churn、singleton stream 终局、generated spec / delta / fact lifecycle |
 | ActiveEffect period / stack / duration / grant cleanup | `ActiveEffectStore` + `ActiveEffectLifecycleLane` | active slot seed、stack policy、duration policy、generated pure magnitude glue | static helper lifecycle、generated `OnUpdate`、global index 驱动状态 |
 | Tag / requirement / immunity | `TagStateLane` + owner-local tag snapshot / query evaluator | immutable tag taxonomy、requirement range、pure all/any/none evaluator | managed tag registry、runtime string query、per-definition entity query |
 | Cue / Presentation | `PresentationBridge` + Boundary outbox | cue code、cue parameters、presentation binding metadata | Core 直接加载资源、Cue managed lifecycle 写 gameplay state |
@@ -81,6 +109,7 @@
 14. `RunnerSync` 只处理 tick 驱动、dependency drain reason 和 timing split；它不得承载业务 command、snapshot read 或 diagnostics export public seam。
 15. `DefinitionCatalogLifetime` 只处理 immutable catalog 的 install、schema/version 校验和 dispose；它不得成为 generated lifecycle、runtime registration 或 managed row 访问通道。
 16. 目标态 dependency graph 必须能证明 Shell / Adapter、Runtime Core、Diagnostics、Presentation、Definition Glue 之间没有反向依赖环；目录名不能替代 Module owner 证明。
+17. `EffectSpecLane` 的 spec 和 SetByCaller 输入必须在 target owner / chunk-local 范围内消费；若使用全局 proof carrier，必须显式标记 proof-only、规模上限和退出门。
 
 ## 目标态职责重划分验收表
 

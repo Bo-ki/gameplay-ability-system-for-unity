@@ -4,6 +4,17 @@
 
 定义从 Excel / Luban 到 Definition & Generation Layer、Generated artifact、Bake plan、Runtime Definition Catalog / static lookup 的完整链路。
 
+## 相邻 Spec Owner 裁决
+
+`08` 是配置生成链路的端到端 owner，负责定义 Excel / Luban / SourceGenerator / Baker / Bootstrap / Runtime catalog 如何贯通。它不维护 Runtime Core 调用 generated glue 的完整接口正文，也不替 `15` 维护 SourceGenerator 权限门禁第二正文。
+
+| 主题 | 唯一正文 owner | 本文件只维护 |
+|---|---|---|
+| 生成链路总数据流、Luban 编译边界、SourceGenerator pipeline、asmdef / manifest / process gate | 本文件 | 端到端链路、层级归属、输入输出边界 |
+| Definition CodeGen artifact 责任和 Definition target chain | [14 Definition CodeGen 目标链路](14-DefinitionCodeGen目标链路Spec.md) | 链路中引用 artifact 类别，不复制完整责任表 |
+| SourceGenerator 允许 / 禁止生成、lifecycle relocation、validation gate | [15 SourceGenerator 职责边界](15-SourceGenerator职责边界Spec.md) | 链路中引用边界，不维护第二份 gate 正文 |
+| Runtime Core 对 generated glue 的纯消费接口 | [03B-03 Generated Runtime Glue 消费接口](03-RuntimeCore管线/03B-业务调用链与配置消费/03B-03-GeneratedRuntimeGlue消费接口Spec.md) | 说明 Runtime 消费入口必须存在，不展开 plan / seed / evaluator 代码 |
+
 ## 官方依据与设计论证
 
 配置生成链路的目标是把外部配置压缩成 Runtime Core 可 Burst 消费的不可变数据。`CASE-07` 支持 Baker + Blob 的 definition 承载，`BLOB-02` 要求 `BlobBuilder` 只在 Baking 或初始化期使用，`CONTENT-01` / `PRF-11` 要求静态定义优先 BlobAsset 而不是 prefab 或 runtime entity，`BUR-01` 要求 hot path system / job 无托管依赖。因此 Luban row、JSON、managed registry、`Dictionary` 和 ScriptableObject hot lookup 都不能进入 Runtime Core。
@@ -266,7 +277,7 @@ Definition & Generation Layer 的目标承载必须区分：
 | runtime integration plan | validation metadata | 不参与 gameplay 计算 |
 | Editor / CI diagnostics | Editor / test assembly | 不进入 Runtime Core |
 
-SourceGenerator 可以生成 Blob builder、lookup、Generated Runtime Glue、validation 和 Baker glue，但不能生成 ActiveEffect lifecycle system 或直接写 `EntityManager` 的 runtime 执行逻辑。Runtime-visible generated artifact 若包含 `ISystem`、system registration、`OnUpdate`、`ComponentLookup` / `BufferLookup` hot path 或 ECB owner，必须按 `15-SourceGenerator职责边界Spec.md` 归类为职责越界，而不是用 `RuntimeForbiddenDependencyHits = 0` 判定完成。
+SourceGenerator 可以生成 Blob builder、lookup、Generated Runtime Glue、validation 和 Baker glue，但不能生成 ActiveEffect lifecycle system 或直接写 `EntityManager` 的 runtime 执行逻辑。Runtime-visible generated artifact 若包含 `ISystem`、system registration、`OnUpdate`、`ComponentLookup` / `BufferLookup` hot path 或 ECB owner，必须按 `15-SourceGenerator职责边界Spec.md` 归类为职责越界，而不是用单一 forbidden dependency 字符串扫描判定完成。
 
 ## DOTS API 选型修正
 

@@ -16,15 +16,15 @@
 | 文件 | 职责 |
 |---|---|
 | [16-01 目标分层、官方依据与不变量](16-01-目标分层官方依据与不变量Spec.md) | 短索引；正文拆入 [16-01 子目录](16-01-目标分层官方依据与不变量/README.md)，分别承载目标分层、Owner Map、消息流协议和最小完整代码骨架判定门。 |
-| [16-02 Boundary Command 与 Core Command Resolve](16-02-BoundaryCommand与CoreCommandResolveSpec.md) | Boundary command record 和 Core `IJobChunk` command resolve 目标代码骨架。 |
+| [16-02 Boundary Command 与 Core Command Resolve](16-02-BoundaryCommand与CoreCommandResolveSpec.md) | Boundary command record 和 Core `IJobChunk` command resolve envelope 目标代码骨架；完整 Ability command / Target Resolve 规则回到 `03D`。 |
 | [16-03 Fan-in、Debugger Evidence 与 SourceGenerator Pure Glue](16-03-FanInDebuggerSourceGeneratorSpec.md) | `NativeStream` deterministic merge、Debugger evidence projection 和 generated pure glue 目标代码骨架。 |
 | [16-04 Shell Capability Contract](16-04-ShellCapabilityContractSpec.md) | Shell / Adapter capability 分级、public seam、opaque handle 和 internal resolver contract。 |
 | [16-05 Snapshot、Identity、API Health 与验收](16-05-SnapshotIdentityApiHealthSpec.md) | Snapshot capture、identity exposure、report projection、API health owner model、验收与禁止方向。 |
-| [16-06 端到端消息流代码骨架](16-06-端到端消息流代码骨架Spec.md) | Shell intent -> Boundary command -> Core lane -> `NativeStream` fan-in -> Definition pure glue -> Diagnostics evidence 的完整目标态代码骨架。 |
+| [16-06 子页索引](16-06-端到端消息流代码骨架/README.md) / [16-06A 完整正文](16-06-端到端消息流代码骨架/16-06A-完整端到端消息流代码骨架Spec.md) | Shell intent -> Boundary command -> Core lane -> `NativeStream` fan-in -> owner-local dispatch -> spec / delta / fact lane -> Definition pure glue -> Diagnostics evidence 的目标态代码骨架入口。 |
 
 ## 目标态代码入口
 
-需要用完整端到端代码骨架审查新架构时，先读 [16-06 端到端消息流代码骨架](16-06-端到端消息流代码骨架Spec.md)，确认 Shell intent、Boundary command、Core lane、Definition pure glue、Diagnostics evidence 和 Derived export 的单向消息流。需要拆解局部约束时，再读 `16-01` 子目录的 [16-01C 目标态消息流协议](16-01-目标分层官方依据与不变量/16-01C-目标态消息流协议Spec.md) 和 [16-01D 最小完整代码骨架判定门](16-01-目标分层官方依据与不变量/16-01D-最小完整代码骨架Spec.md)，然后按业务链路跳到 `16-02`、`16-03`、`16-04`、`16-05`。本目录的代码样例只定义目标态 Spec 和验收约束，不记录当前代码做到哪里，也不替代 `00-当前架构事实` 的证据判断。
+需要用完整端到端代码骨架审查新架构时，先读 [16-06 子页索引](16-06-端到端消息流代码骨架/README.md) 的阅读入口和 owner 裁决，再读 [16-06A 完整端到端消息流代码骨架](16-06-端到端消息流代码骨架/16-06A-完整端到端消息流代码骨架Spec.md)，确认 Shell intent、Boundary command、Core lane、owner-local dispatch、spec / delta / fact lane、Definition pure glue、Diagnostics evidence 和 Derived export 的单向消息流。需要拆解局部约束时，再读 `16-01` 子目录的 [16-01C 目标态消息流协议](16-01-目标分层官方依据与不变量/16-01C-目标态消息流协议Spec.md) 和 [16-01D 最小完整代码骨架判定门](16-01-目标分层官方依据与不变量/16-01D-最小完整代码骨架Spec.md)，然后按业务链路跳到 `16-02`、`16-03`、`16-04`、`16-05`。本目录的代码样例只定义目标态 Spec 和验收约束，不记录当前代码做到哪里，也不替代 `00-当前架构事实` 的证据判断。
 
 ## 反向入口
 

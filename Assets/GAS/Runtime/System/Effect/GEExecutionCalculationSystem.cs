@@ -73,6 +73,8 @@ namespace GAS.Runtime
                 MagnitudeSourceChunkCounters = magnitudeSourceChunkCounters,
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
+                OwnerLocalGameplayFactDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer>(isReadOnly: false),
                 StreamEntity = streamEntity,
             }.Schedule(calculationHandle);
             state.Dependency = factStream.Dispose(state.Dependency);
@@ -493,6 +495,7 @@ namespace GAS.Runtime
             [ReadOnly] public NativeArray<ExecutionMagnitudeSourceChunkCounters> MagnitudeSourceChunkCounters;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
+            public BufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer> OwnerLocalGameplayFactDirtyOwnerLookup;
             public Entity StreamEntity;
 
             public void Execute()
@@ -543,6 +546,10 @@ namespace GAS.Runtime
                             Value = record.Value,
                         },
                     });
+                    EffectCommandSpecStream.MarkOwnerLocalGameplayFactDirty(
+                        OwnerLocalGameplayFactDirtyOwnerLookup,
+                        StreamEntity,
+                        owner);
                 }
 
                 StreamLookup[StreamEntity] = stream;

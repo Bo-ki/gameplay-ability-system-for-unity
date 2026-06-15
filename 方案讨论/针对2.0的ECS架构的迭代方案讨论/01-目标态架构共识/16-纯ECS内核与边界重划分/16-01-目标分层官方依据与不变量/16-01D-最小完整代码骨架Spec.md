@@ -2,7 +2,7 @@
 
 > Owner：`01-目标态架构共识/16-纯ECS内核与边界重划分/16-01` | 状态：目标态 Spec 子页 / 判定入口 | 拆分来源：`../16-01-目标分层官方依据与不变量Spec.md` | 最近整理：2026-06-08
 
-本文件只维护“什么样的目标代码骨架才算最小完整”的判定门、阅读顺序和冲突裁决。完整端到端代码正文的唯一 owner 是 [`../16-06-端到端消息流代码骨架Spec.md`](../16-06-端到端消息流代码骨架Spec.md)。本页不再复制第二份完整代码，避免 Shell、Boundary、Core、Fan-in、Debugger 和 SourceGenerator 规则在两个文件中分叉。
+本文件只维护“什么样的目标代码骨架才算最小完整”的判定门、阅读顺序和冲突裁决。完整端到端代码正文的唯一 owner 是 [`../16-06-端到端消息流代码骨架/16-06A-完整端到端消息流代码骨架Spec.md`](../16-06-端到端消息流代码骨架/16-06A-完整端到端消息流代码骨架Spec.md)。本页不再复制第二份完整代码，避免 Shell、Boundary、Core、Fan-in、Debugger 和 SourceGenerator 规则在两个文件中分叉。
 
 ## 职责裁决
 
@@ -11,7 +11,7 @@
 | 目标分层与官方依据 | [16-01A](16-01A-目标分层与官方依据Spec.md) | 否，只引用 |
 | Owner Map 与重划分判定 | [16-01B](16-01B-判定准则与OwnerMapSpec.md) | 否，只引用 |
 | Shell / Boundary / Core 消息协议 | [16-01C](16-01C-目标态消息流协议Spec.md) | 否，只引用 |
-| 完整端到端代码骨架 | [16-06](../16-06-端到端消息流代码骨架Spec.md) | 否，只定义最小完整判定门 |
+| 完整端到端代码骨架 | [16-06A](../16-06-端到端消息流代码骨架/16-06A-完整端到端消息流代码骨架Spec.md) | 否，只定义最小完整判定门 |
 | Boundary command / Core resolve 局部骨架 | [16-02](../16-02-BoundaryCommand与CoreCommandResolveSpec.md) | 否，只检查是否被端到端链路消费 |
 | Fan-in / Debugger / SourceGenerator 局部骨架 | [16-03](../16-03-FanInDebuggerSourceGeneratorSpec.md) | 否，只检查是否被端到端链路消费 |
 | Shell capability public seam | [16-04](../16-04-ShellCapabilityContractSpec.md) | 否，只检查是否泄露 ECS handle |

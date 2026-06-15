@@ -2,7 +2,7 @@
 
 ## 目的
 
-本 Spec 从真实策划配置能力视角审查 AutoChessDemo 目标态共识，并设计一组核心测试能力作为验收测试样例。它连接：
+本 Spec 从真实策划配置能力视角定义 AutoChessDemo 的验收测试样例。它连接：
 
 1. `10-AutoChess无头验收Spec.md`：验收基础设施、规模门槛和 evidence model。
 2. `10B-AutoChess完整业务案例设计Spec.md`：具名棋子、技能、GE、业务走查和交互矩阵。
@@ -11,16 +11,16 @@
 
 本文件不新增 Runtime Core 规则；它定义 AutoChessDemo 应如何作为“策划配置能力验收场”。
 
-## 当前目标态 Spec 审查结论
+## 相邻 Spec Owner 边界
 
-| Spec | 已经覆盖 | 从策划配置能力视角的缺口 | 本文件补充 |
+| 相邻 Spec | 唯一职责 | 本文件消费方式 | 禁止重复 |
 |---|---|---|---|
-| `10-AutoChess无头验收Spec` | runner、scale gate、Debugger / Profiler / Journaling evidence、无头表现 marker、性能阈值 | 更关注“跑起来和测得准”，缺少“策划配置了哪些业务包、发布了哪些 change set” | 把测试能力包绑定到 Scenario Validation Evidence |
-| `10B-AutoChess完整业务案例设计Spec` | 具名单位、Ability / GE / Tag / Attribute、三条业务走查、System 链路 | 内容足够具体，但仍像完整设计稿；缺少可独立发布、可复用的测试能力包单位 | 把盾击、冰霜新星、毒刃、圣光治疗等拆成验收样例 |
-| `11-AutoChessDemo-Luban配置方案Spec` | 表结构、生成物、ScaleProfile、ValidationExpectation、DiagnosticsThreshold | 配置表完整，但缺少“策划编辑路径 -> row diff -> trace -> expectation”的样例化闭环 | 为每个样例列出 row projection、trace 和 expectation |
-| `20-策划配置能力交叉审查Spec` | 通用策划配置能力闭环和横切约束 | 不是 AutoChess 专用，未指定具体业务样例 | 将通用能力落到 AutoChess Acceptance Ability Sample |
+| `10-AutoChess无头验收Spec.md` | runner、scale gate、Debugger / Profiler / Journaling evidence、无头表现 marker、性能阈值 | 样例绑定到 `10` 的 Scenario Validation Evidence 和 runner / scale gate | 不重复维护 runner pass、performance / diagnostic split 或 Goal 停止阈值 |
+| `10B-AutoChess完整业务案例设计Spec.md` | 具名单位、Ability / GE / Tag / Attribute、业务走查、System 链路 | 把 10B 的具体业务内容拆成可发布、可回归的 Acceptance Ability Sample | 不重复维护完整棋子 / System 设计正文 |
+| `11-AutoChessDemo-Luban配置方案Spec.md` | Luban 表结构、生成物、ScaleProfile、ValidationExpectation、DiagnosticsThreshold | 每个样例声明 row projection、trace、expectation 和 generated metadata 消费点 | 不重复维护配置 schema、generated artifact 清单或性能阈值字段 |
+| `20-策划配置能力交叉审查Spec.md` | 通用 Business Package、Change Set、Impact Analysis、Runtime Trace Preview、Scenario Validation Binding | 将通用策划配置能力落到 AutoChess Acceptance Ability Sample | 不重复维护通用配置能力规则 |
 
-结论：AutoChessDemo 的目标态文档已经能说明“Demo 要跑什么、怎么配置表、怎么测性能”，但还需要一层“策划验收样例”。否则后续实现容易把验收退化成 runner 常量、测试脚本或单次战斗结果，而不是可审计的业务包发布链。
+本文件的目标态边界是“样例化消费”：把业务包、row projection、trace preview、scenario binding、balance preview、impact analysis 和 acceptance assertions 组织成可发布的验收样例。它不定义 Runtime Core 规则，不定义 Luban schema，也不定义 runner infrastructure。
 
 ## AutoChess Acceptance Ability Sample
 

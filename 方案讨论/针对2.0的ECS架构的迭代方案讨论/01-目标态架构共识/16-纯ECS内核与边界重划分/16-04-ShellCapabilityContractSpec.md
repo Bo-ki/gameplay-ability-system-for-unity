@@ -4,6 +4,12 @@
 
 本文件只描述目标态 Shell / Adapter capability contract、public seam 和 opaque handle 代码骨架。
 
+## 与 16-06 的 Owner 裁决
+
+`16-04` 是 Shell / Adapter capability、public seam、opaque handle 和 internal resolver contract 的局部规则 owner；`16-06` 只消费这些规则来串端到端消息流。若两者出现分叉，能力分级、public API 禁止项、opaque handle 约束和 internal resolver 限制以本文件为准，`16-06` 只同步最小完整代码骨架。
+
+本文件不维护 fan-in、Debugger evidence、SourceGenerator pure glue、Snapshot capture 或 API health 的完整规则；这些分别归 `16-03` 和 `16-05`。
+
 ## 重新划分后的主接口
 
 | Module | Interface | Implementation 可复杂化的部分 | 不允许泄露 |
@@ -43,6 +49,43 @@ Shell capability 的验收原则：
 8. Adapter topology 必须可追踪：每个 runtime-facing adapter type 要么是被 public boundary 聚合引用的 capability owner，要么是显式归档 / legacy 文件；未被消费的 shadow host、shadow gateway 或 shadow facade 不能作为目标态分层证明。
 9. Opaque handle 不得提供 public raw ECS identity 导出口。若 Boundary implementation 需要解析 `Entity`，只能通过 internal resolver 完成；Shell / Demo / UI / AI / Network 不能调用 `TryGetEntity*` 之类方法取得 raw `Entity`。
 10. Internal resolver 不是共享 access layer。它只能服务单一 capability owner 的实现细节，不能同时被 command、snapshot、diagnostics、bootstrap、report projection 复用成万能实体查询口；如果多个 capability 都需要同一 runtime identity，必须通过 opaque handle / report key / snapshot key 建立各自的稳定映射。
+
+## Capability Access Matrix
+
+目标态允许 Boundary implementation 在内部接触 ECS handle，但每个 handle 必须有单一 capability owner、单一 timing domain 和单一 evidence 字段。任何实现类即使为了工程组织聚合多个 capability，也必须在 public seam、internal resolver、timing split 和 validation evidence 上拆开证明；聚合类名、目录或 facade 名称不能作为完成证明。
+
+| Capability | Public return | Internal ECS handle scope | Timing domain | Required evidence | Forbidden reuse |
+|---|---|---|---|---|---|
+| `RuntimeSession` | session id、install / dispose result、session state | World、SystemGroup、bootstrap singleton owner、catalog bootstrap state | session / bootstrap | install result、dispose result、registered singleton count、bootstrap validation reason | command write、snapshot read、diagnostics export、runner drain |
+| `CommandPort` | request id、validation failure reason | command buffer owner、target resolver、sequence allocator | boundary command write | request count、rejected count、target resolve miss、write pressure | returning `EntityManager`、running simulation immediately、reading snapshot |
+| `SnapshotReadModel` | immutable snapshot、snapshot version、cursor status | BoundaryProjection buffer / ring、snapshot copy arena | boundary read | snapshot version, cursor lag, dropped snapshot count, copy cost | live `DynamicBuffer` read、raw `Entity` key, command write handle |
+| `DiagnosticsSink` | structured evidence snapshot、official tool state、derived export handle | Debugger singleton / evidence buffers / official capture source | diagnostics | counter source, official capture state, disabled reason, derived export source | gameplay decision, command carrier, snapshot write |
+| `RunnerSync` | tick result、drain result、timing split | fixed tick driver、dependency drain fence, measurement marker | runner / measurement | core / boundary / diagnostics / runner ticks, drain reason, drained job count | command write, catalog install, diagnostics export side effect |
+| `DefinitionCatalogLifetime` | catalog handle、catalog version、install / release result | immutable catalog Blob, schema validation, dispose owner | definition lifetime | catalog version, schema hash, install result, release result, orphan / mismatch reason | managed row read in Core hot path, generated lifecycle, system registration |
+| `PresentationBridge` | presentation binding id、presentation event cursor | presentation outbox, managed binding registry, view model cache | presentation | outbox lag, binding miss, presentation cost | Core fact carrier, command write, runtime singleton query |
+
+目标态交还包必须给出 capability access matrix 的 before / after。只要任一 public 或 adapter-facing API 仍能取得 `World`、`EntityManager`、runtime singleton、raw `Entity`、`EntityQuery`、可写 `DynamicBuffer`、dependency drain 或 live buffer read，该 capability 只能判定为 proof-only compatibility，并必须绑定退出任务。
+
+## Business Adapter Wrapper 禁止方向
+
+目标态允许业务侧为了工程组织保留一个聚合 wrapper 或 facade，但该 wrapper 只能聚合 capability 对象，不能聚合 ECS handle 解析权。聚合 implementation 的存在不构成 Thin Adapter 完成证明；完成证明来自每个 capability 的 public seam、internal resolver 范围、timing domain 和 evidence 字段都可独立追踪。
+
+| Wrapper 内部需求 | 目标态允许形态 | 禁止方向 |
+|---|---|---|
+| 启动 / 关闭 Runtime | 调用 `RuntimeSession` capability，返回 session id、install result、dispose result | 返回 `World` / `EntityManager`，让业务层自行注册或更新 SystemGroup |
+| 安装 / 释放配置 catalog | 调用 `DefinitionCatalogLifetime` capability，返回 catalog handle、version、schema hash、release result | 用 catalog wrapper 暴露 `EntityManager`、managed row reader、runtime lifecycle system 或 system registration |
+| 写入战斗 / Ability 命令 | 调用 `CommandPort` capability，返回 request id 和 validation reason | 同一个方法既返回 command port 又返回 ECS handle，或同步执行 gameplay |
+| 读取业务结果 | 调用 `SnapshotReadModel` capability，返回 snapshot version、cursor、copy cost | live 读取 `DynamicBuffer`、用 raw `Entity` 作为稳定业务 key |
+| 导出 Debugger / 日志 / Official evidence | 调用 `DiagnosticsSink` capability，返回 structured evidence、official tool state、derived export source | 复用 command write handle，或让 diagnostics 反向写 simulation |
+| 驱动固定 tick / drain jobs | 调用 `RunnerSync` capability，返回 tick result、drain reason、runner timing | 把 dependency drain 当作 command、snapshot 或 CoreSimulation hot path 的副作用 |
+
+Business Adapter 的验收规则：
+
+1. 一个 wrapper 可以持有多个 capability 引用，但每个 public 方法必须只属于一个 capability。
+2. wrapper 内部若需要共享 opaque session id、target ref 或 catalog handle，只能共享值对象，不共享 `World`、`EntityManager`、singleton、raw `Entity` 或 writable buffer。
+3. RunnerSync、DiagnosticsSink 和 SnapshotReadModel 不能互相代替：tick / drain 只产生成本证据，diagnostics 只导出证据，snapshot 只复制 BoundaryProjection 结果。
+4. 业务报告、UI、AI、Network 和 validation runner 都只能消费业务动作、opaque handle、snapshot 和 evidence；不得消费 internal resolver。
+5. 如果一个 wrapper 方法临时必须代理 ECS handle，交还报告必须把它标为 proof-only compatibility，并给出目标 capability、替代 seam、退出任务和防回流扫描。
 
 ### 目标态 Shell / Adapter Capability 代码骨架
 

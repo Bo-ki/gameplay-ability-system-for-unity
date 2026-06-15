@@ -88,6 +88,8 @@ namespace GAS.Runtime
                 AttributeLookup = SystemAPI.GetBufferLookup<AttributeValueBuffer>(isReadOnly: false),
                 StreamLookup = SystemAPI.GetComponentLookup<GEEffectCommandStreamComponent>(isReadOnly: false),
                 OwnerFactLookup = SystemAPI.GetBufferLookup<OwnerLocalGameplayFactBuffer>(isReadOnly: false),
+                OwnerLocalGameplayFactDirtyOwnerLookup =
+                    SystemAPI.GetBufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer>(isReadOnly: false),
                 StreamEntity = streamEntity,
                 Frame = frame,
             };
@@ -283,6 +285,7 @@ namespace GAS.Runtime
             public BufferLookup<AttributeValueBuffer> AttributeLookup;
             public ComponentLookup<GEEffectCommandStreamComponent> StreamLookup;
             public BufferLookup<OwnerLocalGameplayFactBuffer> OwnerFactLookup;
+            public BufferLookup<OwnerLocalGameplayFactDirtyOwnerBuffer> OwnerLocalGameplayFactDirtyOwnerLookup;
             public Entity StreamEntity;
             public int Frame;
 
@@ -392,6 +395,10 @@ namespace GAS.Runtime
                             NewValue = record.NewValue,
                         },
                     });
+                    EffectCommandSpecStream.MarkOwnerLocalGameplayFactDirty(
+                        OwnerLocalGameplayFactDirtyOwnerLookup,
+                        StreamEntity,
+                        record.TargetAsc);
                 }
                 StreamLookup[StreamEntity] = stream;
             }

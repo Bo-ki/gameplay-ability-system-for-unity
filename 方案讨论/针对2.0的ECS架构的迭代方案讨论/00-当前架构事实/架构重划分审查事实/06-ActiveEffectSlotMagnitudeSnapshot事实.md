@@ -11,24 +11,25 @@
 ```markdown
 来源类型：代码截面复核 / diagnostics 脚本审查 / AutoChess x50 batchmode 验证
 原始证据：
-  - `Assets/GAS/Editor/CodeGen/Phases/GasGlueCodeGenPhases.cs`
-  - `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs`
+  - `Assets/GAS/Runtime/System/Effect/GASActiveEffectRuntime.cs`
+  - `Assets/GAS/Runtime/System/Effect/GEActiveEffectLifecycleSystems.cs`
+  - `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` 当前仅为 marker / pure glue 对账项
   - `Tools/Diagnostics/Verify-GAS-RuntimeCoreBoundary.ps1`
   - `00-当前架构事实/_归档/2026-06-08-AutoChessBattleValidation-TagRequirementQuery-Run5.log`
 第一 owner：00
-长期有效：待复核；generated active effect runtime 仍属于 R5/R3 联动迁移面
+长期有效：待复核；hand-written active effect Runtime owner、generated marker 和 R5/R3 gate 仍需联动对账
 需要反哺：R3 magnitude snapshot lane、R5 SourceGenerator pure glue 收权、R4 Debugger evidence gate
 ```
 
 ### 正向事实
 
-1. `GASActiveEffectPreTickSystem` 现在会在 `GEActiveEffectPreTickJob` 前调度 `GEActiveEffectPreTickSourceAttributeSnapshotGatherJob`。
+1. 手写 `GASActiveEffectPreTickSystem` 现在会在 `GEActiveEffectPreTickJob` 前调度 `GASActiveEffectRuntime.GEActiveEffectPreTickSourceAttributeSnapshotGatherJob`。
 2. 新 gather job 使用 read-only `AttributeValueBuffer` lookup 预采样跨 owner `SourceAttribute`，写入 `NativeParallelHashMap<ActiveEffectSlotSourceAttributeSnapshotKey, float>.ParallelWriter ActiveEffectSlotSourceAttributeSnapshots`。
 3. Snapshot key 包含 `Owner + SlotSequence + ModifierIndex`；这是必须项，因为 active effect slot sequence 是 owner-local，不是全局唯一。
 4. `GEActiveEffectPreTickJob.BuildMagnitudeContextFromSlot(...)` 不再通过旧 `TryReadAttributeValue(ref ownerResources, slot.SourceAsc, ...)` 做跨 owner live lookup；同 owner 仍走 owner-local attributes，跨 owner 只消费 snapshot map。
 5. Snapshot 容量口径由 `ownerCount * ActiveEffectStore.InlineSlotCapacity * maxSourceAttributeModifierCount` 估算，`maxSourceAttributeModifierCount` 来自 catalog 中各 GE 的 SourceAttribute modifier 数。
 6. CodeGen 模板和当前 generated 输出已同步，避免只手改 `.gen.cs` 后下一次生成回流。
-7. `Verify-GAS-RuntimeCoreBoundary.ps1` 已加入防回流门：要求生成物和模板都有 active effect pre-tick snapshot gather，禁止 owner-local-only key，并禁止 slot SourceAttribute 退回 live owner-resource lookup。
+7. `Verify-GAS-RuntimeCoreBoundary.ps1` 已加入防回流门：要求手写 Runtime owner、generated marker 和模板口径对账，禁止 owner-local-only key，并禁止 slot SourceAttribute 退回 live owner-resource lookup。
 8. `GASActiveEffectPreTickSystem` 已把 `GASRuntimeEntityArchetypes.GrantedAbility(em)` 前移到任何 snapshot gather job schedule 之前，避免结构性 archetype 查询/创建在 `state.Dependency` 写回前触发 Unity safety 检查。
 9. `GASActiveEffectRemoveSystem` 复用 `GEActiveEffectPreTickJob` 的 explicit remove 分支时会传入 frame-local 空 snapshot map；这是 NativeContainer 调度有效性要求，不代表 remove 路径需要或读取 active effect slot SourceAttribute snapshot。
 
@@ -54,7 +55,7 @@
 ### 仍成立风险
 
 1. 该切片把 active effect slot tick 的 SourceAttribute live lookup 前移为 snapshot gather，并让 key / 容量口径对齐 owner-local slot 事实；Run5 已证明 x50 业务链路和 DOTS safety 回归通过，R4 已补 lane-specific hit / miss / fallback / capacity pressure / spill counters，但尚未新增非零 `activeEffectSlotSourceSnapshot*` 业务样本或规模 profile。
-2. gather job 仍是 generated runtime artifact 中的 lifecycle / lookup owner，按 R5 口径只能作为迁移期 generated lane proof；release-ready 形态仍需要把 Runtime Core lane owner 与 generated pure glue 继续分离。
+2. gather job 当前已在手写 Runtime owner 中；R5 口径不再把它写成 generated runtime lifecycle owner。release-ready 形态仍需要把 Runtime Core lane owner、generated marker / pure glue、防回流 gate、capacity / spill 和 scale evidence 继续分离验收。
 3. execution calculation 和 managed resolver 的 capture miss live lookup 仍只是 evidence 显性化，尚未全部替换成 owner-local snapshot record。
 4. 本切片已有 Unity batchmode x50 运行证据，但尚未新增 x100 / x1000 / Profiler enabled 运行证据，也没有触发非零 active effect slot SourceAttribute counter，不能证明 DOTS 性能优秀。
 
@@ -68,5 +69,5 @@
 
 ### 新任务输入
 
-1. R5：继续把 generated lifecycle / lookup owner 从 `RuntimeActiveEffect.gen.cs` 迁向手写 Runtime Core owner + generated pure glue。
+1. R5：继续对账 `RuntimeActiveEffect.gen.cs` marker、hand-written Runtime Core owner、manifest/report/file/schedule 和 generated lifecycle 防回流 gate。
 2. R8：用 AutoChess 规模 profile 验证 snapshot map capacity、gather cost 和 Debugger overhead 不污染 performance pass，并要求 `activeEffectSlotSourceSnapshot*` counters 出现非零业务样本。
