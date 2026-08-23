@@ -12,8 +12,8 @@ AutoChess AI/Roster
     -> OwnerPlanBuild -> TargetResolve/BoundedExpand
     -> WholeTickInfraAdmission
     -> AscOwnerCommandWave -> SourceSpecProjection
-    -> GroupByTarget -> AscTargetStateWave
-    -> Stabilize/Death -> StableFactMerge/per-BattleInstance TerminalResolve
+    -> GroupByTarget -> TargetPrepare/Stabilize/Death (shadow)
+    -> SessionFaultReduce -> TargetPublish -> StableFactMerge/per-BattleInstance TerminalResolve
     -> GroupNextTickRouteByDestination -> BoundaryProject -> Record EndFixed
  -> standard EndFixed ECB
  -> one Boundary Drain

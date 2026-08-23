@@ -37,7 +37,7 @@ Death fact 使用最后一个已提交 Health contributor/Application/Causality 
 ## 验收
 
 - 多伤害同 tick 的顺序、overkill、killer/assist 确定。
-- 若 death 已在该 ASC 的 `AscOwnerCommandWave` canonical RYW 中可见，后续 owner work 不得成功 Commit；若 death 由稍后的 `AscTargetStateWave` incoming application 产生，不逆向撤回本 tick 已 Commit work（committed-work-wins）。
+- 若 death 已在该 ASC 的 `AscOwnerCommandWave` canonical RYW 中可见，后续 owner work 不得成功 Commit；若 death 由稍后的 `TargetPrepare` incoming application 在 shadow 中产生，则 `SessionFaultReduce` 成功后随 `TargetPublish` 发布，且不逆向撤回本 tick 已 Commit work（committed-work-wins）。
 - poison period、stun/slow remove、inhibit/reactivate 精确。
 - source Commit 后死亡不撤回远端工作；首次死亡后续 AliveOnly 工作稳定拒绝。
 - corpse ASC 在 outcome 前可观测、teardown 后为零；Death/Removed/Cue facts 完整 FinalDrain。

@@ -119,7 +119,7 @@ StackCount 影响 magnitude 时，ActiveEffect runtime spec、modifier contribut
 
 `HomogeneousCount` 仅适用于所有 stack 共享 magnitude、source-sensitive inputs、duration 与 expiry 的定义。毒、充能等若每次 application 有独立 magnitude/source/expiry，必须持有逐 application ledger；否则 Definition bake fail。相同 Definition/Target/Source 的 stack key 并不能证明 payload 同质。
 
-Activation 的普通 `EmittedApplicationRefs` 只是审计引用，ActiveEffect 不因 source Activation End 自动删除。`RemoveOnActivationEnd` 必须遵守：尚未线性化时 cancel-before-apply；已线性化时按 EffectApplicationId/ContributorId/ledger entry 精确撤销；已经合并进无逐 application ledger 的 shared stack 时 Definition bake fail。
+Activation 的普通 `EmittedApplicationRefs` 是 `AuditOnly`，ActiveEffect 不因 source Activation End 自动删除；它在 target terminal ApplicationOutcome Ack 与 Boundary audit handoff watermark 均完成后释放 owner 热槽。`RemoveOnActivationEnd` ref 是独立 `CleanupRight`：尚未线性化时 cancel-before-apply；已线性化时按 EffectApplicationId/ContributorId/ledger entry 精确撤销；已经合并进无逐 application ledger 的 shared stack 时 Definition bake fail，并且直到 cleanup terminal Ack 才释放。二者都必须有 [25](25-配置语义编译契约与CapacityProof统一裁决Spec.md) 生成的 per-Activation/per-ASC retention 硬上界，禁止随长 Activation 无界保留或静默淘汰。
 
 ## Active 与 Inhibited
 
@@ -141,17 +141,17 @@ Inhibited 撤销或暂停：
 
 稳定 `Active → Inhibited` 必须结束当前 Cue active cycle 并发送一次 `Removed(CueLifecycleKey)`，但不回收 ActiveEffectSlot。稳定恢复 Active 时用同一 ActiveEffectHandle 重新提交贡献，`ActiveCycleOrdinal++`，并以新的 CueLifecycleKey 发送 OnActive + WhileActive。若 effect 在 Inhibited 状态直接 Remove，当前 cycle 已结束，不得再次发送 Removed。duration/period 在 inhibition 期间的暂停、跳过、累计或 reset 只由 StackTemporalContract 决定。
 
-### Target-local Stabilization
+### TargetPrepare Stabilization
 
 Ongoing requirements、inhibition、OwnedTag 与 modifier contribution 可能互相影响，必须在目标 ASC 内求稳定态：
 
-1. 以提交前稳定状态开始事务内迭代。
-2. 每轮计算 requirement → inhibition → contribution/tag counts。
+1. 以 OwnerWave 后 durable 稳定状态创建 target sparse overlay，不直接写 durable slab/Attribute/Tag。
+2. 每轮在 overlay 计算 requirement → inhibition → contribution/tag/ability grant/child cleanup。
 3. 使用 state hash 检测振荡，并设置最大迭代数。
-4. 无固定点时显式 deterministic failure，不发布半稳定 state。
-5. 中间试探的 Reaction/Cue 不离开事务；只发布最终稳定 transition。
+4. 无固定点时写固定 `FaultCandidate`；`SessionFaultReduce` 丢弃本 Tick 全部 target shadow/intents，v1 Session-fatal，但保留 Owner committed prefix。
+5. 中间试探的 Reaction/Cue 不离开 shadow；只在全 Session reduce 成功后的 TargetPublish 发布最终稳定 transition。
 
-静态 Definition DAG 不能证明任意运行时组合可收敛，因此 runtime cycle/iteration guard 不可省。
+静态 Definition DAG 不能证明任意运行时组合可收敛，因此 runtime cycle/iteration guard 不可省。TargetPublish 只消费 admission 预分配 range 和 `PreparedTargetDelta`，不得重做 evaluator、grow 或产生新 child。
 
 ## Period / Overflow 派生
 
@@ -180,6 +180,21 @@ ActiveEffect grant Ability 时记录得到的 GrantedAbilityHandle 与公开 rem
 
 `LeaveGranted` 不是 “DoNothing”，也不等于保留旧 Activation 后再 tombstone。`SuspendWhileInhibited` 是独立 inhibition policy，用于临时禁止/恢复激活；不得塞进 removal policy 或作为 LeaveGranted 的隐式副作用。
 
+GE-derived grant/revoke 由 target ASC 的同一个 TargetPrepare writer 在 overlay 内处理，并在 TargetPublish 写 target-owned durable slot；OwnerWave 的直接 Ability command 在更早 lane 完成，两者由 JobHandle 严格串联。依赖/cleanup 图必须包含：
+
+```text
+Effect state
+  -> GrantContribution state
+  -> GrantedAbility availability/removal policy
+  -> child Activation Cancel/End or retained-child wait
+  -> OwnedContribution + Continuation + Subscription cleanup
+  -> Grant Tombstone or Live-detached
+```
+
+`CancelImmediately` 先阻止新 Activation，再按稳定 handle 顺序结束全部 child、撤销本 ASC contribution/continuation。若 Subscription authority 在外部 observed ASC，本 target overlay 只能生成带 Generation 的 T+1 cancel intent，并把 Activation/Grant 保持 cleanup-pending tombstone；observed owner Ack 后才最终释放，禁止跨 ASC 直接写 Subscription Buffer。`RemoveWhenAllActivationsEnd` 同样等待最后 child 及其 cleanup Ack；`LeaveGranted` 不进入该 cleanup wait。
+
+[25](25-配置语义编译契约与CapacityProof统一裁决Spec.md) 必须输出 `MaxGrantedAbilitiesPerEffect`、`MaxActiveChildrenPerGrant`、`MaxGrantCleanupWork`、Continuation/Subscription cancel+Ack 上界、shadow bytes 与 durable publish bytes。WholeTick admission 在 OwnerWave 前预留；无法证明时配置 publish fail，运行时 N+1 为 Session-fatal，不能在 grant transaction 后半段失败。
+
 ### GameplayCue
 
 - 首次稳定进入 Active：`ActiveCycleOrdinal=0`，用 `CueLifecycleKey=(SimulationEpoch, ActiveEffectHandle, ActiveCycleOrdinal, CueDefinitionOrdinal)` 发送 OnActive + WhileActive。
@@ -193,18 +208,19 @@ ActiveEffect grant Ability 时记录得到的 GrantedAbilityHandle 与公开 rem
 
 ## Live Capture Dependency
 
-ActiveEffectSlot 只保存 binding/dependency identity，不复制 source accumulator 的可变引用。binding 至少区分 `CaptureOrdinal + ConsumerNodeId + ConsumerFieldId`，并保存 LastSeenRevision、SourceGonePolicy、EdgeOrdinal、CyclePolicy/PropagationBudget。完整 CaptureProjectionContract 见 [04](04-EffectCommand-SpecStream-AttributeDeltaSpec.md)。
+ActiveEffectSlot 只保存 binding/dependency identity，不保存 source accumulator 的可变引用。binding 至少区分 `CapturedAscHandle + AttributeId + ProjectionContractId + CaptureOrdinal + ConsumerNodeId + ConsumerFieldId`，并保存 LastSeenRevision、SourceGonePolicy、EdgeOrdinal、CyclePolicy/PropagationBudget。完整 CaptureProjectionContract 与 `LiveDirtyPayload` schema 见 [04](04-EffectCommand-SpecStream-AttributeDeltaSpec.md)。
 
 同 ASC Live Capture 可由 target-local revision 触发重算。Source Live Capture 跨 ASC 时必须：
 
-1. 在 captured/source ASC 登记 dependency edge。
-2. source revision 在 T 变化后产生发往 target ASC、`DeliverTick=T+1` 的 deterministic dirty command。
-3. target ASC writer 校验 binding 与 DependentActiveEffectHandle Generation；在同 tick PeriodDue 前按 consumer field 重算。
+1. 在 captured/source ASC 登记 dependency edge 与 ProjectionContract。
+2. source revision 在 T 变化的同一线性化点原子冻结 `{SourceRevision,FrozenScalarOrAggregatorSnapshot,ProjectionPayloadHash}`，产生发往 target ASC、`DeliverTick=T+1` 的 deterministic dirty command；destination 不再读取 source 当前 accumulator。
+3. target ASC writer 校验 binding、payload range 与 DependentActiveEffectHandle Generation；在同 tick PeriodDue 前按 consumer field 用冻结 payload 重算。
 4. source 消失按 SourceGonePolicy 显式 remove/freeze/fault；不得 fallback self、0 或 target 当前值。
-5. Remove/Tombstone 双向清理 dependency；晚到 dirty/Ack 只产生 stale no-op diagnostics。
-6. 静态 cycle 在 bake 拒绝；运行时重复 edge/CausalityId 或 propagation budget 超限为 deterministic fault。
+5. Remove/Tombstone 双向清理 dependency；payload range 直到 destination/cleanup Ack 后才可复用，晚到 dirty/Ack 只产生 stale no-op diagnostics。
+6. 同 DeliverTick 的 coalesce key 必须完整包含 destination/dependent handle、captured ASC/attribute、ProjectionContract、CaptureOrdinal/ConsumerNode/ConsumerField；winner 取最大 SourceRevision。同 revision 不同 payload hash 是 identity fault，禁止把新 revision 与旧 value 拼接。
+7. 静态 cycle 在 bake 拒绝；运行时重复 edge/CausalityId、identity mismatch 或 propagation proof 超限为 Session-fatal，并遵守全 target shadow discard。SourceGonePolicy 声明的 remove/freeze 仍是 typed gameplay path。
 
-若实现不提供这条跨 ASC 闭环，Definition 必须 bake fail；不得退化为悄悄的 phase scalar read 并仍命名为 Live。
+若实现不提供这条跨 ASC 闭环，Definition 必须 bake fail；不得退化为悄悄的 phase scalar read 并仍命名为 Live。[25](25-配置语义编译契约与CapacityProof统一裁决Spec.md) 还必须生成 `MaxProjectionBytes/MaxCrossAscLiveFanout/MaxLiveDirtyCommandsPerTick/MaxCoalescedDirtyPerTarget` 与 route/payload/Ack cleanup 上界，供 admission 预留 shadow 与 durable 双份 credit。
 
 ## Owner-local 承载约束
 
@@ -249,18 +265,19 @@ ActiveEffectSlot、modifier contribution 与 evaluation API 不得包含 Predict
 3. Instant application 不分配 ActiveEffect slot，但拥有 EffectApplicationId。
 4. stack merge 保持 ActiveEffectHandle，记录独立 ApplicationId，并按完整 StackTemporalContract 更新 payload/duration/period/cue。
 5. 异质 poison/charge payload 与 expiry 使用逐 application ledger；count-only 定义在 bake 被拒绝。
-6. target requirement/immunity/life/stack policy 在最终线性化点读取前序 canonical state；失败输出 typed outcome/immunity blocker 且无部分 mutation；infra capacity 失败整 Tick 零写。
-7. 普通 GE 不随 Activation End 删除；RemoveOnActivationEnd 在 apply 前 cancel、apply 后精确撤销、shared stack 无 ledger 时 bake fail。
+6. target requirement/immunity/life/stack policy 在 TargetPrepare overlay 线性化点读取前序 canonical state；typed rejection 正常 prepared，任一 fatal 则全 target shadow discard；infra capacity 失败整 Tick 零写。
+7. 普通 GE 不随 Activation End 删除；AuditOnly 经 terminal Ack + audit handoff 回收；RemoveOnActivationEnd CleanupRight 在 apply 前 cancel、apply 后精确撤销、shared stack 无 ledger 时 bake fail，并等待 cleanup terminal Ack。
 8. Duration modifier 只影响 Current/contribution；Remove 后精确恢复。
 9. Inhibit 保留 slot/time/stack/context，撤销贡献并停止 period；Removed 结束旧 Cue cycle，恢复使用同一 handle 与新 cycle。
 10. DueClaim/PeriodExecutionOrdinal 防重复；expiry/final-period/self-remove/overflow clear 不双执行或双删，动态 child 默认 T+1。
-11. Granted removal 精确区分 CancelImmediately、RemoveWhenAllActivationsEnd、LeaveGranted；SuspendWhileInhibited 独立。
+11. Granted removal 精确区分 CancelImmediately、RemoveWhenAllActivationsEnd、LeaveGranted；SuspendWhileInhibited 独立；child/Continuation/Subscription/owned cleanup 图与 N/N+1 credit 可验证。
 12. Cue lifecycle key 含 SimulationEpoch/ActiveEffectHandle/ActiveCycleOrdinal/CueDefinitionOrdinal；stack 不新 cycle，Inhibited remove 不重复 Removed，Executed 使用 application/period identity。
 13. ActiveEffect grant 的 tag/ability/cue 只清理自己的贡献。
-14. target-local stabilization 收敛；振荡显式失败且不泄漏中间 Reaction/Cue。
-15. 同 ASC Live 变更触发重算；跨 ASC Live 在 T+1 且先于 PeriodDue，或 bake fail；source gone/cycle/budget 不隐式回退。
+14. TargetPrepare stabilization 收敛；任一振荡经 deterministic `SessionFaultReduce` 使全部 target shadow/intents 丢弃，Owner committed prefix 保留且不泄漏中间 Reaction/Cue。
+15. 同 ASC Live 变更触发重算；跨 ASC Live 原子投递 `{Revision,FrozenProjection}`，按完整 consumer-field key coalesce，在 T+1 且先于 PeriodDue；source gone/cycle/budget 不隐式回退。
 16. owner destroy 前完成外部 dependency/grant/subscription cleanup。
 17. Runtime 不存在 ActiveEffect Entity authority、compact/swap-back 或 Prediction schema。
+18. `R3-STB/GRT/LIV/REF` 固定向量与 [24](24-GAS官方概念对照复核Spec.md) 同名向量逐字段对账；不同 worker/batch/route 到达顺序不得改变 durable state、FaultId 或 semantic hash。
 
 ## 历史方案定位
 

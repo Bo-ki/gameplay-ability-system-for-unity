@@ -71,14 +71,16 @@ Ability 可在 Commit 前持有只含 Definition/输入的 non-authoritative `Sp
 
 ### Per-target application 最终线性化
 
-每条 `EffectApplicationId` 只在目标 ASC single-writer 的 canonical application order 中取得一次最终线性化点：
+每条 `EffectApplicationId` 只在目标 ASC single-writer `TargetPrepare` overlay 的 canonical application order 中取得一次最终业务线性化点：
 
 1. 读取该目标此前 application 已提交的 Attribute、OwnedTag、ActiveEffect、immunity 与 lifecycle 状态。
 2. 建立 Target pre-application captured tags 与 CaptureProjection。
 3. 重新执行完整 requirement/immunity/TargetLifePolicy；precheck 命中不能跳过，precheck 失败也只能作为提前拒绝证据而不能写 gameplay state。
-4. 校验 WholeTickInfraAdmission reservation token、完成 stack business policy 决策，再原子提交 Instant、ActiveEffect create/merge/overflow 或 typed rejection；本阶段不得再因基础设施容量不足失败。
+4. 校验 WholeTickInfraAdmission 的 shadow/durable 双份 reservation token、完成 stack business policy 决策，再形成 Instant、ActiveEffect create/merge/overflow 或 typed rejection 的 `PreparedTargetDelta`；本阶段不得再因基础设施容量不足失败，也不得写 target durable state。
 
 `ApplicationOutcome` 至少区分 `AppliedInstant / CreatedActive / MergedStack / OverflowApplied / RejectedRequirement / RejectedImmunity / RejectedTargetLife / RejectedStackPolicy / RejectedStaleBinding`。Immunity rejection 必须保留 blocker Definition、ActiveEffectHandle/ContributorId 与 matched requirement/tag provenance。失败不允许暴露 Target Capture dependency、slot、stack、Attribute、Cue 或 contributor 的部分 mutation。基础设施容量不足必须在任何 Owner/Target 权威写前形成 WholeTick `InfraAdmissionFault`，不是 per-target outcome。
+
+所有 target Prepare 完成后先执行 `SessionFaultReduce`；任一 stabilization/identity/proof fatal 都丢弃本 Tick 全部 target capture/dependency/slot/Attribute/Grant/Fact/Cue/route/ECB shadow，v1 锁存 Session-fatal，但保留 OwnerWave 已提交的 cost/cooldown/activation source prefix。只有 reduce 成功后 TargetPublish 才使用预分配 range 无失败发布。requirement/immunity/life/stack typed rejection 是正常 prepared outcome，不触发跨 target rollback。
 
 AutoChess 默认 `TargetLifePolicy=AliveOnly` 时，canonical 序列中首次 Death crossing 后的后续 application typed reject；致死 application 本身完成全部节点，后续拒绝的 damage/overkill/assist 为 0。Death 数值证据见 [03E-03](03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact/03E-03-AttributeReduceApplySpec.md)。
 
@@ -121,8 +123,8 @@ CaptureDefinition =
 | CaptureSource / Mode | 正式相位 | 可见状态 |
 |---|---|---|
 | Source Snapshot | `SourceSpecProjection` | Ability source 的 per-plan shadow post-commit candidate：包含前序 CommitPlan、排除后序计划；仅在对应 Owner Commit 成功后密封。非 Ability source 使用 canonical spec-creation state |
-| Target Snapshot | `TargetPreApplicationProjection` | 当前 target application 之前、同目标前序 application 已提交后的 canonical state |
-| 同 ASC Live | `TargetLocalStabilization` | 当前 target transaction 的 read-your-writes，反复重算至稳定 |
+| Target Snapshot | `TargetPreApplicationProjection` | 当前 target application 之前、同目标前序 application 已进入同一 TargetPrepare overlay 后的 canonical state |
+| 同 ASC Live | `TargetPrepareStabilization` | 当前 target overlay 的 read-your-writes，反复重算至稳定 |
 | 跨 ASC Live | `CrossAscDirtyDelivery` | source revision 于 T 改变，destination 于 T+1 按稳定序消费；不能冒充 same-tick Live |
 | PhaseSample | Definition 声明的唯一 phase | 该 phase 当前值；不登记依赖 |
 
@@ -282,6 +284,23 @@ LiveCaptureBinding =
 
 `CaptureOrdinal + ConsumerNodeId + ConsumerFieldId` 使同一 ActiveEffect 对同一 source attribute 的多个计算字段分别可寻址；不得只按 `(AttributeId, ActiveEffectHandle)` 去重。`SourceGonePolicy` 必须是 Definition 声明的 remove-dependent、freeze-last-value、typed failure 等策略之一，禁止隐式 fallback self、0 或 target current value。
 
+跨 ASC route 传递的是冻结投影值，不是“请 destination 下 Tick 再读取 source 当前状态”的裸 dirty flag：
+
+```text
+LiveDirtyPayload =
+    SimulationEpoch + DeliverTick
+    + CapturedAscHandle + AttributeId + ProjectionContractId
+    + DestinationAscHandle + DependentActiveEffectHandle
+    + CaptureOrdinal + ConsumerNodeId + ConsumerFieldId
+    + SourceRevision
+    + FrozenProjectionKind
+    + FrozenScalarOrAggregatorSnapshotRange
+    + ProjectionPayloadHash
+    + EdgeOrdinal + CausalityId
+```
+
+source ASC 必须在同一 revision 线性化点原子建立 `{SourceRevision, FrozenProjection, ProjectionPayloadHash}`；Scalar 与 normalized AggregatorSnapshot 都必须满足对应 ProjectionContract。payload range 在 destination Ack、stale terminal 或 cleanup Ack 前不可复用，Generation/Kind/Owner 任一不匹配即拒绝。
+
 ### 同 ASC
 
 captured accumulator revision 变化后，将 dependent ActiveEffect/consumer field 标记 dirty；target ASC writer 在 `TargetLocalStabilization` 使用同一 ProjectionContract 与 canonical read-your-writes 重算 modifier magnitude，并精确替换该字段拥有的旧 contributions。
@@ -290,18 +309,22 @@ captured accumulator revision 变化后，将 dependent ActiveEffect/consumer fi
 
 Source Live Capture 可能从 source ASC 指向 target ASC 的 ActiveEffect。支持它必须具备：
 
-1. captured/source ASC 保存 dependency edge。
-2. source revision 在 T 变化后发出带稳定 CausalityId/EdgeOrdinal 的 dirty command，`DeliverTick = T + 1`。
+1. captured/source ASC 保存 dependency edge与生成期 ProjectionContract/route 上界。
+2. source revision 在 T 变化后冻结上述 `LiveDirtyPayload` 并发出 dirty command，`DeliverTick = T + 1`；destination 不跨 ASC 读取 source accumulator。
 3. target ASC writer 校验 DependentActiveEffectHandle Generation。
-4. destination 在同 tick 语义序上先消费 dirty，再 claim/execute `PeriodDue`；目标重算并更新自己的 accumulator。
+4. destination 在同 tick 语义序上先消费 dirty，再 claim/execute `PeriodDue`；目标仅用 payload 中与 revision 原子配对的冻结投影重算自己的 accumulator。
 5. source gone 按 SourceGonePolicy 处理；ActiveEffect remove/tombstone 时双向清理 edge。
-6. Ack/cleanup 晚到时校验 binding/handle Generation，不能命中新 slot。
+6. Ack/cleanup 晚到时校验 binding/handle/payload range Generation，不能命中新 slot。
+
+同一 DeliverTick 允许 coalesce，但 canonical key 必须完整为 `(DestinationAscHandle, DependentActiveEffectHandle, CapturedAscHandle, AttributeId, ProjectionContractId, CaptureOrdinal, ConsumerNodeId, ConsumerFieldId, DeliverTick)`；每个 consumer field 独立保留。winner 取最大 `SourceRevision`，同 revision 的 payload hash 不同是 deterministic identity fault；revision/hash 必须作为一个整体替换，禁止留下“新 revision + 旧 value”。低于或等于 `LastSeenRevision` 的晚到 command 只产生 stale diagnostic。
+
+[25](25-配置语义编译契约与CapacityProof统一裁决Spec.md) 必须为每个 Definition 输出 `MaxProjectionBytes`、`MaxCrossAscLiveFanout`、`MaxLiveDirtyCommandsPerTick`、`MaxCoalescedDirtyPerTarget` 与 route/payload/ack cleanup work；WholeTick admission 同时预留 shadow route 和 durable dependency/payload credit。任一证明缺失或运行时 N+1 都不得静默丢 dirty：配置 publish fail，或在 OwnerWave 前形成 Session-fatal admission failure。
 
 若任一环节未实现，Definition 必须 bake fail。仅在目标 phase 读取 source 当前 scalar 是 `PhaseSample`，不是 Live Capture。
 
 ### 环与收敛
 
-同 ASC Live dependency 纳入 target-local stabilization。跨 ASC dependency 可能形成运行时环；v1 不提供全局 same-tick wave/SCC 时，必须在 bake 拒绝静态 cycle，并在运行时检测重复 CausalityId/edge、source churn 与传播预算超限，禁止无限次 next-tick dirty ping-pong。失败只能发布 deterministic fault/typed removal，不得提交一半 consumer 字段。
+同 ASC Live dependency 纳入 target-local stabilization。跨 ASC dependency 可能形成运行时环；v1 不提供全局 same-tick wave/SCC 时，必须在 bake 拒绝静态 cycle，并在运行时检测重复 CausalityId/edge、source churn 与传播预算超限，禁止无限次 next-tick dirty ping-pong。SourceGonePolicy 可以产生声明的 typed removal/freeze；cycle、identity 或 proof budget breach 是 Session-fatal，并遵守 TargetPrepare 全 shadow discard，不能提交一半 consumer 字段。
 
 ## Attribute / Modifier 语义
 
@@ -314,7 +337,7 @@ Source Live Capture 可能从 source ASC 指向 target ASC 的 ActiveEffect。�
 
 ## Application、Execution 与 DirectEffect
 
-Application requirement、immunity、target capture、stack、modifier execution、attribute execute/clamp 与 ongoing/inhibition 稳定化属于同 tick target transaction invariant。普通 self-target GE 仍在 AscTargetStateWave 执行，不对同一 AscOwnerCommandWave 中后续 CanActivate 提供同步 read-your-writes；依赖这种反馈的 Definition 必须 bake fail，或将所需状态改写为 source-local CommitPlan/activation-owned invariant。
+Application requirement、immunity、target capture、stack、modifier execution、attribute execute/clamp 与 ongoing/inhibition 稳定化属于同 tick TargetPrepare overlay invariant。普通 self-target GE 仍在 TargetPrepare/Publish 执行，不对同一 AscOwnerCommandWave 中后续 CanActivate 提供同步 read-your-writes；依赖这种反馈的 Definition 必须 bake fail，或将所需状态改写为 source-local CommitPlan/activation-owned invariant。Cost/Cooldown 专用 owner-local contract 的支持矩阵、固定诊断码与 CapacityProof 只引用 [25](25-配置语义编译契约与CapacityProof统一裁决Spec.md)，普通 GE 字段不得在此处被再次压平为第二份矩阵。
 
 duration/period/stack 字段必须引用完整 `StackTemporalContract`：StackKey、StackPayload、DurationRefresh、PeriodReset、ExecuteOnApply、AtLimit/Overflow/Clear、Expiration、FinalPeriod、InhibitResume 与 StackCue policy。异质毒层若需要逐 application magnitude/source/expiry，必须声明并持有 per-entry ledger；只有同质 `payload × StackCount` 才能使用 count-only slot。完整生命周期 owner 见 [05](05-ActiveEffectStoreSpec.md) 与 [03E-02](03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact/03E-02-StateEvaluateActiveEffectStoreSpec.md)。
 
@@ -334,11 +357,19 @@ ExecuteOnApplyPolicy 可以让当前 application 在本 target transaction 执�
 
 ### Activation emission ownership
 
-Activation 的 `EmittedApplicationRefs` 在成功 Owner Commit时按每个 planned target写入 `TargetAscHandle + EffectApplicationId + cleanup policy`，记录 application attempt；TargetWave outcome/ActiveEffectHandle由 target ledger与 Fact关联，不要求跨 ASC回写 owner ref。普通 GE成功应用后由target application/ActiveEffect生命周期拥有，不随Activation End删除。只有 Definition明确声明 `RemoveOnActivationEnd` 时：
+Activation 的 `EmittedApplicationRefs` 在成功 Owner Commit 时按每个 planned target 写入 `TargetAscHandle + EffectApplicationId + RefKind + RetentionState + Generation`，记录 application attempt。`RefKind` 只分为 `AuditOnly` 与拥有 `RemoveOnActivationEnd` 权利的 `CleanupRight`；TargetPrepare/Publish outcome 与 ActiveEffectHandle 仍由 target ledger/Fact 关联，不允许 target Job 跨 ASC 直接回写 owner ref。普通 GE 成功应用后由 target application/ActiveEffect 生命周期拥有，不随 Activation End 删除。只有 Definition 明确声明 `RemoveOnActivationEnd` 时：
 
 - application 尚未线性化：以原 EffectApplicationId 执行 cancel-before-apply，结果仍可审计；
 - application 已线性化：只撤销该 EffectApplicationId/ContributorId 精确拥有的结果；
 - application 已合并进 shared stack：必须存在逐 application payload/contributor/removal ledger；否则 Definition bake fail。
+
+retention 与释放由 owner ASC 单 writer 处理：
+
+- `AuditOnly`：target 以 `EffectApplicationId` 经 T+1 PendingCommand 返回强类型 terminal ApplicationOutcome Ack；当 attempt/outcome 已进入 Boundary receipt 保护的 audit handoff watermark 后释放 owner 热槽。完整审计记录的后续 retention 属于 Session/Boundary，不得继续占用 Activation slab。
+- `CleanupRight`：Activation End 前保持权利；End 时生成 cancel-before-apply 或精确 remove work。只有 target 返回 cleanup terminal Ack，或以 ledger 证明 application 已 Rejected/自然 terminal 且无可撤销贡献后，才释放。
+- `ApplicationTerminalAck` 至少携带 `SimulationEpoch、OwnerRefHandle/Generation、EffectApplicationId、OutcomeKind、CleanupTerminal、TargetLedgerGeneration、AckOrdinal`。late/duplicate Ack 只可 stale no-op；不能命中复用 ref。
+- Session fatal 发生在 Owner Commit 后、TargetPublish 前时，由 fault audit 以 `CommittedPrefixHash + EffectApplicationId range/hash` 终结 AuditOnly；CleanupRight 由 Terminalizing cleanup/ack 链终结。禁止因为 target 没发布 outcome 就静默丢 ref。
+- [25](25-配置语义编译契约与CapacityProof统一裁决Spec.md) 必须提供 per Definition/Activation/ASC 的 ref、pending Ack、retention watermark/duration 与 cleanup work 上界；admission 在 Commit 前预留，N+1 为 Session-fatal，禁止静默淘汰。
 
 Activation 自身的 `OwnedContributionRanges` 是 source-local CommitPlan 产物，与上述普通 GE/application refs 分离。
 
@@ -402,13 +433,15 @@ Spec、Capture、AggregatorSnapshot、Modifier、ActiveEffect mutation 与 Fact 
 | Immunity rejection | blocker Definition/handle/contributor/匹配规则可审计 |
 | periodic 重捕 TargetTags | 当前 execute 使用最新声明 phase 的 TargetTags |
 | 同 ASC Live | revision 变化后 dependent magnitude 更新 |
-| 跨 ASC Live | T revision → T+1 destination dirty；dirty 先于 PeriodDue，或 Definition bake fail |
-| Live source gone/cycle/budget | 使用显式 policy 或 deterministic fault，不 fallback self/0/target |
+| 跨 ASC Live | T revision 与 FrozenProjection 原子配对 → T+1 destination dirty；按完整 consumer-field key coalesce，dirty 先于 PeriodDue |
+| Live source gone/cycle/budget | SourceGonePolicy 显式处理；cycle/identity/proof breach Session-fatal，不 fallback self/0/target |
 | Live effect remove | dependency 双向清理，晚到 dirty 不命中新 slot |
 | 同一 Spec 多目标 | target captures/requirements/stack 互不污染 |
 | Instant/stack/reject | 均有独立 EffectApplicationId |
 | 异质毒 stack | 逐 application magnitude/source/expiry ledger；count-only 定义 bake fail |
 | RemoveOnActivationEnd | 未 apply 则 cancel；已 apply 精确撤销；shared stack 无 ledger bake fail |
+| EmittedRef retention | AuditOnly 在 terminal Ack + audit handoff 后释放；CleanupRight 在 cleanup terminal Ack 后释放；N+1 admission fault，不静默淘汰 |
+| TargetPrepare fatal | 任一 target fatal 时全部 target shadow/intents 丢弃，Owner committed prefix 保留；TargetPublish 不运行 |
 | Duration modifier remove | 仅撤销对应 ContributorId，Current 恢复 |
 | Death 后 AliveOnly application | typed reject，damage/overkill/assist 为 0；致死 application 自身完整完成 |
 | DirectEffect DAG | 同 tick 固定拓扑执行；非闭合、非静态有界、环/动态边或 post-apply feedback 被拒绝 |
@@ -424,9 +457,11 @@ Spec、Capture、AggregatorSnapshot、Modifier、ActiveEffect mutation 与 Fact 
 5. AggregatorSnapshot 只裁剪未声明能力，不能丢失未来评估所需 qualifier/provenance/order。
 6. PhaseSample 不得标记为 Live。
 7. Source Snapshot 在成功 Commit 后创建；Target Snapshot 在每条 application 的最终 pre-application 线性化点创建。
-8. TargetResolve 不拥有 application outcome；target writer 的完整 requirement/immunity/capture/stack/life 评估才是最终结果。
-9. 跨 ASC Live 要么以 T+1 dirty、generation、cleanup、source-gone/cycle/budget 闭环支持，要么 bake fail。
-10. StackTemporalContract 必须完整；异质 payload/expiry 与 RemoveOnActivationEnd shared stack 必须有逐 application ledger。
-11. Attribute Base/Current、unclamped/effective delta、首次 Death crossing 与 contributor 精确撤销语义必须保留。
-12. Public reaction 默认下一 tick；kernel invariant/DirectEffect 才可 same-tick。
-13. v1 schema 不包含 Prediction 占位。
+8. TargetResolve 不拥有 application outcome；TargetPrepare writer 的完整 requirement/immunity/capture/stack/life 评估形成 prepared result，`SessionFaultReduce` 成功后才发布。
+9. 任一 target fatal 必须丢弃全部 target shadow/intents；OwnerWave committed prefix 不回滚，FaultCandidate/CommittedPrefixHash 不随 worker/batch 变化。
+10. 跨 ASC Live 要么以原子 `{Revision,FrozenProjection}`、完整 consumer-field coalesce key、generation、cleanup、source-gone/cycle/budget 闭环支持，要么 bake fail。
+11. EmittedRef 必须区分 AuditOnly/CleanupRight，具有 terminal Ack、handoff watermark 与硬上界；不得绑定 Activation 寿命无界保留。
+12. StackTemporalContract 必须完整；异质 payload/expiry 与 RemoveOnActivationEnd shared stack 必须有逐 application ledger。
+13. Attribute Base/Current、unclamped/effective delta、首次 Death crossing 与 contributor 精确撤销语义必须保留。
+14. Public reaction 默认下一 tick；kernel invariant/DirectEffect 才可 same-tick。
+15. v1 schema 不包含 Prediction 占位。

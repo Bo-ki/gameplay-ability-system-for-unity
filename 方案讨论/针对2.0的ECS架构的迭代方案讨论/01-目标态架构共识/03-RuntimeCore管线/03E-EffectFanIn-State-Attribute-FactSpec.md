@@ -38,5 +38,5 @@ Attribute 阈值导致“不能再行动/必须终止”的规则若属于 gamep
 
 - Definition 无效、projection 不闭合、跨 ASC Live 不受支持：bake fail。
 - stale handle、重复 remove/commit、count underflow/overflow：确定性 runtime fault 或显式 reject，不静默修正。
-- stabilization 重复状态或超出安全预算：`StabilizationFault`，终止 battle/session，禁止半状态继续。
+- stabilization 重复状态或超出安全预算：`StabilizationFault`，v1 锁存 Session-fatal并关闭 Session ingress，禁止半状态继续或降格为 Battle-local fault。
 - capacity/outbox overflow：按配置显式失败或 reconcile，永不静默 drop。

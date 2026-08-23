@@ -2,7 +2,7 @@
 
 ## 结论
 
-ActiveEffect 是目标 ASC 的非压缩 slab 槽。Apply、stack、tag grant、ongoing requirement、inhibition、contribution 和 removal 必须在该目标的单 writer transaction 内达到稳定点，再提交 Attribute 与最终事实。
+ActiveEffect 是目标 ASC 的非压缩 slab 槽。Apply、stack、tag/ability grant、ongoing requirement、inhibition、contribution、grant-child cleanup 和 removal 必须在该目标的单 writer `TargetPrepare` shadow 内达到稳定点；只有 `SessionFaultReduce` 证明全部 target 无 fatal 后，`TargetPublish` 才无失败提交 durable state 与最终事实。
 
 ## ActiveEffect 状态
 
@@ -21,21 +21,21 @@ Empty -> Active -> Inhibited -> Active
 
 ## Application 决策顺序
 
-`TargetResolve` 只产生稳定 target binding、TargetData 与可诊断 precheck evidence；它不是 application result 的 owner，也不得提前写 requirement、immunity、capture、stack、damage 或 Cue 结果。每条 `EffectApplicationId` 的最终线性化点在目标 ASC single-writer transaction 内，并按 canonical application order 执行：
+`TargetResolve` 只产生稳定 target binding、TargetData 与可诊断 precheck evidence；它不是 application result 的 owner，也不得提前写 requirement、immunity、capture、stack、damage 或 Cue 结果。每条 `EffectApplicationId` 的最终业务线性化点在目标 ASC single-writer `TargetPrepare` overlay 内，并按 canonical application order 执行：
 
 1. 校验 target epoch/binding、definition/spec/handle 与 `TargetLifePolicy`。
 2. 在此线性化点建立 Target pre-application capture；它读取该目标此前 canonical application 已提交的 Attribute/Tag/ActiveEffect 状态。
 3. 以同一份前序可见状态重新评估完整 application requirements 与 immunity；precheck 只能优化，不能替代最终评估。
-4. 选择 stack key（source/target policy）和既有槽，校验 WholeTickInfraAdmission 已授予的 reservation token，并评估业务 AtLimit/Overflow policy；本阶段不得再发生基础设施容量失败。
+4. 选择 stack key（source/target policy）和既有槽，校验 WholeTickInfraAdmission 已授予的 shadow/durable 双份 reservation token，并评估业务 AtLimit/Overflow policy；本阶段不得再发生基础设施容量失败。
 5. 按 `StackTemporalContract` 处理 stack limit、payload、refresh、overflow、clear、period 与 expiry。
 6. Instant：直接执行 Base mutation/Executed Cue，不创建槽。
 7. Duration/Infinite：分配或更新 ActiveEffectSlot。
-8. 应用/撤销 tag、ability grant、block 与 aggregator contribution。
-9. 进入 target-local stabilization，并只在稳定提交后发布 application outcome/facts。
+8. 在同一 target overlay 应用/撤销 tag、ability grant、block、aggregator contribution，以及该 grant policy 触发的 Activation/Continuation/Subscription/owned contribution cleanup。
+9. 进入 target-local stabilization，并只形成 prepared application outcome/facts；此时尚未发布 durable state。
 
-最终结果必须是强类型 `ApplicationOutcome`，至少区分 `AppliedInstant / CreatedActive / MergedStack / OverflowApplied / RejectedRequirement / RejectedImmunity / RejectedTargetLife / RejectedStackPolicy / RejectedStaleBinding`。`RejectedImmunity` 必须冻结 blocker Definition、ActiveEffectHandle/ContributorId 与匹配 requirement/tag provenance；不能只输出布尔值。失败路径不得暴露 capture、slot、stack、Attribute 或 Cue 的部分 mutation。基础设施容量不足不是 ApplicationOutcome：它必须由 WholeTickInfraAdmission 在任何 owner/target 权威写前锁存 `InfraAdmissionFault`，并使本 tick gameplay 零写。
+最终结果必须是强类型 `ApplicationOutcome`，至少区分 `AppliedInstant / CreatedActive / MergedStack / OverflowApplied / RejectedRequirement / RejectedImmunity / RejectedTargetLife / RejectedStackPolicy / RejectedStaleBinding`。`RejectedImmunity` 必须冻结 blocker Definition、ActiveEffectHandle/ContributorId 与匹配 requirement/tag provenance；不能只输出布尔值。业务失败路径不得暴露 capture、slot、stack、Attribute 或 Cue 的部分 mutation。基础设施容量不足不是 ApplicationOutcome：它必须由 WholeTickInfraAdmission 在任何 owner/target 权威写前锁存 `InfraAdmissionFault`，并使本 tick gameplay 零写；Prepare 中的 stabilization/identity/proof fatal 则由 `SessionFaultReduce` 丢弃全部 target shadow，但保留 OwnerWave committed prefix。
 
-同一目标的 canonical 序列提供 read-your-writes：先前 application 若造成首次死亡 crossing，后续 `TargetLifePolicy=AliveOnly` application 在本 tick 以 `RejectedTargetLife` 结束，且不得产生 damage、overkill 或 assist。致死 application 自身仍完成其已经线性化的全部 modifier/execution/clamp/fact 节点；具体 Death 契约见 [03E-03](03E-03-AttributeReduceApplySpec.md)。
+同一目标的 canonical overlay 序列提供 read-your-writes：先前 prepared application 若造成首次死亡 crossing，后续 `TargetLifePolicy=AliveOnly` application 在本 tick 以 `RejectedTargetLife` 结束，且不得产生 damage、overkill 或 assist。致死 application 自身仍完成其全部 modifier/execution/clamp/fact 节点；具体 Death 契约见 [03E-03](03E-03-AttributeReduceApplySpec.md)。
 
 多个目标不是分布式事务；每个目标独立给出 Applied/Rejected/Overflow 等结果，但使用同一 parent causality 关联。
 
@@ -51,12 +51,43 @@ repeat in stable SlotIndex order
 until no state transition
 
 recompute dirty aggregators
-emit final facts only
+form prepared final facts only
 ```
 
-实现可以先用 dirty flags + 稳定顺序重复扫描；不能用固定 pass 到点后静默截断。生成期根据 granted tags、ongoing/removal requirements 和 inhibition 构建有符号依赖图，保守拒绝含非单调负边的循环 SCC。运行时仍必须做重复 state hash 或 transition safety budget；无固定点触发 fatal `StabilizationFault`。
+实现可以先用 dirty flags + 稳定顺序重复扫描；不能用固定 pass 到点后静默截断。生成期必须根据 granted tags/abilities、ongoing/removal requirements、inhibition、GrantRemovalPolicy、child Activation End 与 activation-owned cleanup 构建完整有符号依赖图，保守拒绝含非单调负边的循环 SCC，并由 [25](../../25-配置语义编译契约与CapacityProof统一裁决Spec.md) 输出最大 transition/work。运行时仍必须做重复 state hash 或 transition safety budget；无固定点触发 fatal `StabilizationFault`。
 
 稳定化内部试探 transition 不生成 Cue/fact；显式且已经提交的 Add→Remove 生命周期是否保留 OnActive/Removed，由 Cue Spec 明确定义，不能与试探态混淆。
+
+## Target shadow 与 Session fault
+
+`TargetPrepare` 只能消费 admission 分配的 shadow slot image、sparse Attribute/Tag overlay、payload/capture range 与 fact/cue/route/ECB intent partition。它不得更改 durable high-water/free-list、live bit、Generation、Attribute/Tag 权威值或 Boundary watermark。每个 target 产出一个固定大小 `PreparedTargetRecord`，其状态为 `Ready` 或携带 [03A](../03A-执行域与数据流Spec.md) 所定义 `FaultCandidateKey` 的 `Fatal`。
+
+所有 target record 完成后统一执行 `SessionFaultReduce`。任一 fatal 都使本 Tick 全部 target shadow/intents 作废；v1 不将 stabilization、identity collision/overflow、CapacityProof breach 降格为 Battle-local 失败。OwnerWave 已提交的 Activation/cost/cooldown/source work 保留并进入 `CommittedPrefixHash`。只有 reduce 成功后，TargetPublish 才把预先分配的 slot/range、free-list delta 与最终 facts 无失败写入；Publish 不再运行 evaluator、stabilization 或任何可能失败的业务判断。
+
+typed requirement/immunity/life/stack rejection 不是 fatal。它是正常 prepared `ApplicationOutcome`，因此不阻止其他 target 发布，也不改变“多目标不是分布式业务事务”的裁决。
+
+## Granted Ability target-writer 与 cleanup 图
+
+GE-derived grant/revoke 的权威目标是被施加 Effect 的 target ASC。OwnerWave 可以在更早 lane 写该 ASC 的直接 ability command；其后只有该 ASC 的 `TargetPrepare`/`TargetPublish` writer 可以处理本 Tick GE-derived `GrantedAbilitySlot` 与受影响的 Activation cleanup，两个 lane 由 JobHandle 串联。禁止 TargetPrepare 跨 ASC 回写 source owner，也禁止另起 grant Job 与同一 target Buffer 随机并发写。
+
+生成期依赖图和运行时 overlay 必须表达完整链：
+
+```text
+Effect Active/Inhibited/Removing
+  -> GrantContribution Active/Suspended/Removing
+  -> GrantedAbility availability/removal policy
+  -> 0..N child Activation Cancel/End or retained-child wait
+  -> Activation-owned Contribution + Continuation local cleanup
+  -> external Subscription cancel intent / Ack wait
+  -> GrantedAbility Tombstone/Live-detached
+```
+
+- `CancelImmediately`：在同一 target overlay 先阻止新 Activation，再按稳定 ActivationHandle 顺序 End 全部 child并清理各自本地 contribution/continuation；外部 observed ASC 的 Subscription 只生成带 Generation 的 T+1 cancel intent，Ack 前 grant 保持 cleanup-pending，不能跨 ASC 直接写。
+- `RemoveWhenAllActivationsEnd`：先阻止新 Activation；现有 child 与 cleanup 状态保持 durable，最后一个 child 的后续 owner transaction 完成后才 tombstone。
+- `LeaveGranted`：detach 原 Effect cleanup ownership 并冻结 provenance，grant 保持 Live/可激活，不保留必须解引用的 ActiveEffectHandle。
+- `SuspendWhileInhibited`：只改变 availability，不执行 removal policy；reactivate 恢复同一 grant identity。
+
+WholeTickInfraAdmission 必须消费 [25](../../25-配置语义编译契约与CapacityProof统一裁决Spec.md) 给出的 `MaxGrantedAbilitiesPerEffect`、`MaxActiveChildrenPerGrant`、`MaxGrantCleanupWork`、`MaxContinuationCleanup`、`MaxSubscriptionCleanup` 与对应 shadow/durable bytes。任何上界不可证明都在配置发布失败；运行时 N+1 必须在 OwnerWave 前成为 Session-fatal admission failure，不能在 cleanup 链中途留下半 grant。
 
 ## StackTemporalContract
 
@@ -102,3 +133,5 @@ emit final facts only
 - inhibit/reactivate 保留槽身份且贡献精确恢复。
 - remove 后 stale handle 必定失败，slot churn 不改变其他句柄。
 - 振荡配置在 bake 或 runtime 明确失败，绝不输出半稳定状态。
+- `R3-STB`：任一 target fatal 时全部 target shadow/fact/cue/route/ECB intent 丢弃，durable target state 保持 tick-start/OwnerWave 后前缀；FaultCandidate 与 worker/batch 切分无关。
+- `R3-GRT`：CancelImmediately、RemoveWhenAllActivationsEnd、LeaveGranted 与 SuspendWhileInhibited 覆盖多 child、Continuation/Subscription/owned contribution cleanup，并验证 work N/N+1 门禁。

@@ -40,8 +40,8 @@ Backbone 必须先完成以下纵向切片：
 2. ASC spawn 显式建立所有固定 Buffer 和 cleanup outbox。
 3. ingress 冻结一批 Command，并赋稳定 source sequence。
 4. Kernel 建立单 Job DAG，解析到 target bucket。
-5. target-local 写 Attribute/Tag/Effect slab 并求稳定态。
-6. stable merge Core Fact，写 Boundary Fact。
+5. `TargetPrepare` 在 target-local shadow 中求稳定态；`SessionFaultReduce` 成功后由 `TargetPublish` 无失败写 Attribute/Tag/Effect slab 与最终 intent。
+6. stable merge 已发布 Core Fact，写 Boundary Fact。
 7. 真实结构变化由标准 EndFixed playback。
 8. 单 managed drain 读取 live/shell outbox 并完成清理。
 9. 独立/manual World 通过完整 FixedStep 父链复现相同结果。
@@ -118,7 +118,7 @@ Spec 不硬编码实体数、毫秒、Buffer 容量或 chunk overflow 百分比�
 | 0/1/N Tick 帧 | 结果只依 Command 与 SimulationTick，不依渲染帧 |
 | 多 ASC 同 target | canonical order、单 target writer、结果可复现 |
 | Activate 后 Commit/Cancel | 同 Tick 槽状态正确，不依赖 ECB 新结构 |
-| Effect inhibition/stack/period | target-local stabilization 收敛且 Fact 在稳定后发布 |
+| Effect inhibition/stack/period | TargetPrepare 在 shadow 中收敛，SessionFaultReduce 成功后 TargetPublish durable state/Fact |
 | ASC 同 Tick 销毁 | Boundary Fact 从 cleanup shell 不重不漏 drain |
 | manual World | 完整 FixedStep 父链、Physics/GAS/EndFixed/allocator 顺序一致 |
 | 定义故障 | 环/无有限界在 build 阶段拒绝；运行时越界 fatal |

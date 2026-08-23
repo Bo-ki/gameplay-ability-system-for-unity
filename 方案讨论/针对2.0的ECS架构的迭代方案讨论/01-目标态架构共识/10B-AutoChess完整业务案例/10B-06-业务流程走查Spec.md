@@ -7,7 +7,8 @@ SpawnBatch Pending -> Initialize/Grant -> Ready
 BattleLocalTick: AI priority ActiveDue > Finisher > Primary
 Target: same BattleInstance enemy, stable ScenarioUnitId tie-break
 AscOwnerCommandWave: Activate -> Commit second check -> atomic CommitPlan
-AscTargetStateWave: Frozen ASC + AliveOnly -> application/result/facts
+TargetPrepare: Frozen ASC + AliveOnly -> shadow application/result/facts
+SessionFaultReduce -> TargetPublish: all targets ready -> durable state/facts
 EndFixed -> one Boundary Drain -> immutable report/replay input
 ```
 
@@ -50,7 +51,7 @@ Owner-local PeriodDue 在 due tick 同 tick；post-apply overflow/reaction/cross
 ## D. Tier C 扩展走查
 
 - 盾击：静态闭合 `{Damage, Stun}` program，Stun Tag count 与 Cue 四阶段成对。
-- 冰霜新星：稳定选取最多 3 个 target，三个 target transaction 独立成功/失败，不做跨 ASC 回滚。
+- 冰霜新星：稳定选取最多 3 个 target，三个 application 各自产生独立 typed业务 outcome，不做跨 ASC 业务回滚；任一 stabilization/identity/proof fatal则由 SessionFaultReduce 丢弃本 Tick全部 target shadow。
 - 羁绊：roster diff 只产生 Shell intent，后续 tick 进入通用 pipeline。
 
 这些样例不得冒充当前 AutoChess 真实覆盖；必须在 Tier A/B 验收完成后单独报告。

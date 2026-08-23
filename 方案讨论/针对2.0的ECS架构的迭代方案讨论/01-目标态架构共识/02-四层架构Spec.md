@@ -34,7 +34,7 @@ Layer 3 Core ──cleanup outbox──► Layer 2 Boundary ──immutable batc
 
 ### 入站 owner
 
-`CommandPort` 在唯一 `SessionIngressGate` 上线性化 accept，把外部意图先复制到 Runtime Boundary 跨渲染帧持久 `BoundaryIngressJournal`；只有 pre-Fixed `GasCommandIngressSystem` 能在 Kernel 读 Job 之前搬入 ECS `BoundaryCommandInbox`。FixedStep 为 0 次时不得丢失；catch-up 为 N 次时每条命令只能被一个 `SimulationTick` 消费一次。命令携带 session/target identity、request id、payload 与明确的 stale/reject 规则，不保存 tick 临时内存引用。Kernel 读 inbox 期间禁止并发 append 同一 DynamicBuffer。
+`CommandPort` 在唯一 `SessionIngressGate` 上线性化 accept，把外部意图先复制到 Runtime Boundary 跨渲染帧持久 `BoundaryIngressJournal`；只有 pre-Fixed `GasCommandIngressSystem` 能在 Kernel 读 Job 之前搬入 ECS `BoundaryCommandInbox`。Accepted时冻结`RequestKey/PayloadHash/RequestSequence/ProducerSourceSequence/AssignedAvailableTick`；FixedStep为0次时不得丢失，catch-up为N次时每个RequestKey只能被一个`SimulationTick`消费一次。命令还携带session/target identity与明确的stale/reject规则，不保存tick临时内存引用。Kernel读inbox期间禁止并发append同一DynamicBuffer。
 
 ### 出站 owner
 
@@ -98,7 +98,7 @@ Generated Runtime Glue 只能是 Burst-compatible 的静态 lookup/evaluator/rec
 
 | 方向 | 允许 | 禁止 |
 |---|---|---|
-| Shell → Boundary | intent、stable id、request id、冻结 payload | raw Entity、callback 闭包、同步 gameplay 返回值 |
+| Shell → Boundary | intent、stable id、RequestKey/PayloadHash、ProducerSourceSequence、冻结payload；Boundary在Accepted时回执RequestSequence/AssignedAvailableTick | raw Entity、callback闭包、同步gameplay返回值 |
 | Boundary → Core | persistent inbox record、immutable session config | managed object、consumer cursor、资源引用 |
 | Core → Boundary | final fact、stable provenance、snapshot/evidence | writable buffer、CoreReaction 中间态、临时 NativeContainer |
 | Definition → Core | Blob、index/range、pure evaluator、validation metadata | lifecycle System、运行时 Dictionary、可变 row |

@@ -22,7 +22,7 @@
 | V2 | [ASC 稳定 Slab 与 Handle](RuntimeV1不可兼容迁移/V2-ASC稳定Slab与Handle.md) | V1 后 | Ability/Activation/Continuation/Effect 单一 ASC authority |
 | V3 | [单 TickKernel 与 Ability Commit](RuntimeV1不可兼容迁移/V3-单TickKernel与AbilityCommit.md) | V2 后 | 单 writer、标准 EndFixed、Activate/Commit/Cancel |
 | V4 | [Effect / Attribute / Tag 语义闭合](RuntimeV1不可兼容迁移/V4-EffectAttributeTag语义闭合.md) | V3 后 | capture/inhibition/stack/period/aggregator/tag count |
-| V5 | [Boundary Drain / Cue / 销毁交接](RuntimeV1不可兼容迁移/V5-BoundaryDrainCue与销毁交接.md) | V3/V4 后 | 单 Drain、immutable ring、Cue 四阶段、两阶段 destroy |
+| V5 | [Boundary Drain / Cue / 销毁交接](RuntimeV1不可兼容迁移/V5-BoundaryDrainCue与销毁交接.md) | V3/V4 后 | Accepted ledger、per-Battle seal、单 Drain、Snapshot/Cue、Disposed/ValidationResultSeal |
 | V6 | [AutoChess 迁移与旧链删除](RuntimeV1不可兼容迁移/V6-AutoChess迁移与旧链删除.md) | V3-V5 后 | runner/evaluator/report迁移、删除门 |
 | V7 | [确定性、规模与 Profiler 门](RuntimeV1不可兼容迁移/V7-确定性规模与Profiler门.md) | V6 后 | release evidence |
 

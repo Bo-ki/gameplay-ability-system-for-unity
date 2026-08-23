@@ -2,9 +2,9 @@
 
 ## 结论
 
-第二轮审查已把 AutoChess 从“展示 GAS 机制的示例集合”收敛为一条可实现、可迁移、可验收的真实业务链。最终方案保留 UE GAS 的领域含义，但有意放弃同步可重入调用栈：Runtime v1 使用同一 Kernel DAG 内的 ASC owner plan/commit 与 target state 两段 mutation wave，所有普通公开 reaction 和跨 ASC maintenance 最早下一 tick。
+第二轮审查已把 AutoChess 从“展示 GAS 机制的示例集合”收敛为一条可实现、可迁移、可验收的真实业务链。第三轮在此基础上保留 UE GAS 的领域含义，但有意放弃同步可重入调用栈：Runtime v1 使用同一 Kernel DAG 内的 ASC owner plan/commit 与 `TargetPrepare -> SessionFaultReduce -> TargetPublish`，所有普通公开 reaction 和跨 ASC maintenance 最早下一 tick。
 
-本轮最终交叉回归在限定设计范围内为 `P0=0、P1=0`。尚未完成的是代码、Unity 测试、Profiler 与真实运行证据，不能把本文件当作实现完成证明。
+第二轮在当时限定设计范围内完成了交叉回归；第三轮以 `b12889eb` 重新基线后，又发现 Target transaction、Request/per-Battle Boundary、配置原子发布、ValidationResultSeal和真实证据链缺口。当前增量事实见[第三轮多 Agent 架构与性能审查事实](../../00-当前架构事实/RuntimeV1第三轮多Agent架构与性能审查事实.md)；不能再从第二轮结论推导当前 `P0=0、P1=0`，也不能把本文件当作实现完成证明。
 
 ## 审查方法
 
@@ -43,8 +43,9 @@ Session Install
  -> WholeTickInfraAdmission（失败时权威零写并 Fault）
  -> AscOwnerCommandWave（no-fail CommitPlan）
  -> SourceSpecProjection
- -> GroupByTarget / AscTargetStateWave（application / stack / period / attribute / death）
- -> target-local stabilization
+ -> GroupByTarget / TargetPrepare（target-local shadow application / stack / period / attribute / death）
+ -> SessionFaultReduce（fatal时丢弃全部target shadow并保留Owner committed prefix）
+ -> TargetPublish（success时no-fail写durable）
  -> StableFactMerge / per-BattleInstance TerminalResolve
  -> destination-grouped T+1 route
  -> BoundaryProject / Record standard EndFixed
@@ -53,7 +54,7 @@ Session Install
  -> Session teardown audit / ValidationResult
 ```
 
-两个 mutation wave 由 JobHandle 依赖连接，不使用 phase `Complete()`。不同 ASC 可并行，同一 ASC 在每个 wave 内按 canonical key 串行。
+Owner mutation与target prepare/publish由JobHandle依赖连接，不使用phase `Complete()`。不同ASC可并行，同一ASC在每个lane内按canonical key串行；Stabilization fatal前不得写target durable authority。
 
 `SpawnFinalize` 是 Session=`SpawnPending` 时替代整条 gameplay DAG 的 Kernel maintenance mode，不是新增 System：它全量校验 EndFixed 已创建的 Pending batch，再一次 no-fail发布 Session `AscRegistrySlot[]` 与所有 ASC Ready；失败则 Faulted并记录整批销毁。ASC自身不承载 Physics/Transform，Pending batch不得提前创建可参与 Physics的派生 gameplay Entity；setup fixed update不进入 SimulationTick、BattleLocalTick、业务 hash或计数。Drain、runner与 post-EndFixed系统都没有 Ready写权。
 
@@ -64,12 +65,12 @@ Session Install
 - `OwnerPlanBuild` 在 scratch 中按 ASC 模拟前序成功计划；后请求可读前序计划的 cost、cooldown、Committed 与 activation-owned contribution。
 - Gather 先以 sealed/due count、tick-start Definition lookup 与 Catalog bake maxima checked 计算 `PlanExpandScratchEnvelopeToken`，在 OwnerPlanBuild/TargetResolve 写前 provision 定长 scratch；逻辑超限使两者 no-op，并由后续唯一 `WholeTickInfraAdmission` 提升为失败。
 - `WholeTickInfraAdmission` 验证 envelope token，在任何权威写之前只为实际展开后的 downstream scratch、slab、payload、pending、fact/outbox 预留逻辑/物理容量；失败使本 tick进入确定性 fault，权威状态零写。
-- 所有下游 Job 预排在同一 DAG并读取 tick-local `AdmissionResult`；失败时 Owner/Target/Fact/Structural分支统一 no-op，DAG 内只有 FaultLatch写固定大小 `SessionFaultLatch=Detected` 与 sealed subset 证据，禁止为决定是否调度而中途 `Complete()`。失败 Tick 不写逐 request Boundary fact；outer completion 后 `FaultCloseHandshake` 与 CommandPort accept 在同一 gate 线性化，按全程透传的 `RequestSequence` 将关闭前全部 accepted-outstanding（含 unsealed/future tail）的 first/last/count/hash 写入 IngressClosed latch，由同一 FaultId 统一终结；关闭后请求同步拒绝，原 inbox/接收 journal 仅留诊断审计且不重放。
+- 所有下游 Job 预排在同一 DAG并读取 tick-local `AdmissionResult`；失败时 Owner/Target/Fact/Structural分支统一 no-op，DAG 内只有 FaultLatch写固定大小证据，禁止为决定是否调度而中途 `Complete()`。`first/last/count/hash`只作摘要；`SessionIngressGate`的exact ledger只把尚无`RequestTerminalOutcome`的成员归入FaultId，已产生但尚未staging Accepted的结果保留原BatchId/watermark重试，关闭后请求同步拒绝。
 - 标准 EndFixed ECB没有公开 command reserve API；structural intent只做逻辑 count/token budget。宿主 allocator/OOM是 fatal environment failure，不能伪装成可恢复 `InfraAdmissionFault`。
 - `AscOwnerCommandWave` 只执行已经 admission 的 no-fail CommitPlan。
 - CommitPlan 原子提交 `Committed state + CostMutationContract + CooldownGateContract + activation-owned contribution`，成功后才产生 Effect operation。Cost 直接更新同一 `AttributeValueSlot`；Cooldown 创建独立于 Activation/ActiveEffect 的 ASC-owned `CooldownGateSlot`。
 - TargetResolve 位于 Commit前，只能携带 tick-local `SpecDraftToken` 和 generated canonical `ProgramNodeOrdinal/SpecOrdinal/PlannedApplicationOrdinal`；成功 Owner Commit的同一线性化点仅以 `(Epoch, SourceAscHandle, canonical CommitSequence, ProgramNodeOrdinal, SpecOrdinal[, PlannedApplicationOrdinal])` 提升正式EffectSpecId/ApplicationId并写owner EmittedApplicationRef，`SourceSpecProjection`随后密封Spec/Capture。SpecDraftToken/scratch/worker 序不进入正式 ID 或 hash；失败plan不得留下权威身份或审计ref。
-- 普通 self-target GameplayEffect 也在 `AscTargetStateWave` 应用，因此不对本 tick `AscOwnerCommandWave` 后续 CanActivate 可见。确需该可见性的内容必须建成显式 Cost/Cooldown owner commit contract 或真正 activation-owned contribution；否则 Definition bake fail。
+- 普通 self-target GameplayEffect 也在 `TargetPrepare` 的 shadow 中应用，并仅在 `SessionFaultReduce` 成功后由 `TargetPublish` 发布，因此不对本 tick `AscOwnerCommandWave` 后续 CanActivate 可见。确需该可见性的内容必须建成显式 Cost/Cooldown owner commit contract 或真正 activation-owned contribution；否则 Definition bake fail。
 - OwnerPlanBuild 先在 shadow 释放 `EndTick <= CurrentTick` 的 gate，OwnerWave 再先提交 gate/Tag cleanup、后提交新 Commit。v1 gate 只支持 `RejectWhileActive + ExpireOnly`；无法无损编译的 GE stack/refresh/period/dispel 字段 bake fail。
 - Commit 先于 Cancel：保留已提交 cost/cooldown/work；Cancel 只终止剩余生命周期。Cancel/End 先于 Commit：后续 Commit 返回 `Rejected.OwnerEnding`。
 
@@ -78,7 +79,7 @@ Session Install
 ### 2. Committed-work-wins 与目标生命策略
 
 - Effect operation 在成功 Commit/SpecCreation 后自包含 Definition、Context、Source capture 与 provenance。
-- source 在稍后的 target wave 死亡、取消或销毁，不撤回已 Commit 的远端工作。
+- source 在稍后的 TargetPrepare 中死亡、取消或销毁，不撤回已 Commit 的远端工作；该 target delta 仍须经过 SessionFaultReduce 和 TargetPublish。
 - 是否应用仍由目标线性化点决定；`TargetLifePolicy` 至少支持 `AliveOnly / RequireDead / AnyLifeState`。
 - AutoChess damage、execute 与 poison 固定为 `AliveOnly`。首次 Death latch 后，同 canonical range 的后续 AliveOnly application 产生 typed reject，不回滚 source cost/cooldown。
 - 致死 application 完成自己的全部节点；其 unclamped 结果产生 overkill。后续 reject 的 AppliedDamage、Overkill 与 AssistContribution 均为 0。
@@ -101,7 +102,7 @@ Session Install
 - `EmittedApplicationRefs` 只作因果和审计，不拥有普通 cost/cooldown/damage/duration effect。
 - 只有显式 `RemoveOnActivationEnd` 的 application 才随 End 撤销；未落地时 cancel-before-apply，已落地时只撤精确 application/contributor。
 - `RemoveOnActivationEnd` 与聚合 stack 组合若没有逐 application ledger，Definition bake fail；禁止删除整个共享 ActiveEffectSlot。
-- Death 在 target wave 才要求跨 ASC remove 时，默认生成 T+1 destination command。
+- Death 在 TargetPrepare 才要求跨 ASC remove 时，默认生成 T+1 destination command；它只在 SessionFaultReduce 成功后随 published intent 生效。
 
 ### 5. Wait 注册没有 lost wakeup
 
@@ -115,7 +116,7 @@ Session Install
 
 ### 6. Capture phase 与 Live 时延
 
-- Source Snapshot：`OwnerPlanBuild` 在 shadow 中为每个计划计算“该计划成功 Commit 后”的 capture candidate；它可见本 owner 前序 CommitPlan、排除后序计划与本 tick incoming target Effect。candidate 在 admission 前不具权威身份，只有对应 CommitPlan 成功后才由 `AscTargetStateWave` 前的 `SourceSpecProjection` 密封。
+- Source Snapshot：`OwnerPlanBuild` 在 shadow 中为每个计划计算“该计划成功 Commit 后”的 capture candidate；它可见本 owner 前序 CommitPlan、排除后序计划与本 tick incoming target Effect。candidate 在 admission 前不具权威身份，只有对应 CommitPlan 成功后才由 `TargetPrepare` 前的 `SourceSpecProjection` 密封。
 - Target Snapshot、application requirement 与 immunity：每条 target application 的线性化点读取，可见同目标前序 canonical application 已提交状态。
 - 同 ASC Live：纳入 target-local stabilization。
 - 跨 ASC Live：source revision 在 T 产生 destination-grouped dirty command，T+1 由目标 writer更新；T+1 maintenance 在 PeriodDue 前执行。
@@ -158,7 +159,7 @@ MissedPeriodPolicy      = SkipNoCatchUp
 必须区分：
 
 - Unit Death：首次 `old Health > 0 && unclamped result <= 0`，在当前 target transaction 写不可逆 Dead latch并冻结 killer/provenance；其后的 target work按 TargetLifePolicy 裁决。该 latch 不逆向撤回此前 Owner Commit，下一 tick owner work则由 Dead 状态拒绝。
-- BattleInstance Terminal：完整 `AscTargetStateWave/StableFactMerge` 后，由唯一 `TerminalResolve` 处理双杀、平局和 winner；只关闭该 BattleInstance ingress。
+- BattleInstance Terminal：完整 `TargetPrepare/SessionFaultReduce/TargetPublish/StableFactMerge` 后，由唯一 `TerminalResolve` 处理双杀、平局和 winner；只关闭该 BattleInstance ingress。
 - GAS Session Terminalizing：全部 BattleInstance 终局或显式 shutdown 后进入。
 
 因此 replicated groups 可以共享一个 Session，单组胜负不会停止其他组。AutoChess corpse ASC 保留到 Battle outcome snapshot 与 gameplay FinalDrain；死亡时移除/取消其 Ability、ActiveEffect 与 Cue，Session teardown 才销毁 ASC。
@@ -182,8 +183,8 @@ staging 失败时 outbox 原样保留；catch-up 后续事实若晚于冻结 InF
 
 结果分两层：
 
-1. `BattleOutcomeSnapshot`：该 BattleInstance 的 `FactPlane=Gameplay` facts 已被 staging 接管后冻结；winner 与 `BattleHash` 只含 Gameplay plane。
-2. `ValidationResult`：Session teardown audit完成后返回；包含 cleanup receipt、shell/outbox 零遗留和 `FactPlane=TeardownAudit` facts。
+1. `BattleOutcomeSeal`：该 BattleInstance 的 `CoreOutboxCut + GateRequestCut`对应range均已被managed staging Accepted，且ReadModel推进到同identity的`SnapshotCut`后冻结；`ManagedBoundaryBatchSequence`只作cut接管证据。winner与`BattleHash`只含Gameplay plane，不等待其他Battle终局。
+2. `ValidationResultSeal`：Session FinalDrain、cleanup/resource释放、DisposedReceipt均完成后返回；包含shell/outbox/job/producer零遗留和`TeardownAuditHash`。
 
 Teardown fact 仍交付 Cue/Replay/Validation，但不得改变 winner 或 BattleHash。Result 返回后禁止产生新事实。
 
@@ -253,7 +254,9 @@ Gameplay semantic hash 至少包含：
 
 每个 Profile 显式配置 `MaxFixedTicksPerBatch`、`World.MaximumDeltaTime`、logical capacity 与双 rewind allocator高水位。Headless 长战斗必须分有界 TickBatch；batch 分割不得改变 semantic hash。
 
-## Tier B 最低固定向量
+## Tier B 业务向量来源
+
+以下17项保留为业务场景定义；稳定VectorId、版本、test source、owner、required pass与red/green状态的唯一清单由`../10-AutoChess无头验收Spec.md`中的`ValidationVectorManifest`维护。本页不得再用“17项存在”推导测试已实现或已运行。
 
 1. 两个 Activation 争抢同一 cost/cooldown。
 2. Commit→Cancel 与 Cancel→Commit。
@@ -269,7 +272,7 @@ Gameplay semantic hash 至少包含：
 12. Avatar rebind projectile与 FrozenSpatial。
 13. replicated group双杀/平局与独立终局。
 14. SpawnBatch EndFixed后由下一 Kernel完成 `SpawnInitializationTransaction`再整批 Ready；任一 identity/layout/Attribute/Tag/Grant/initial-effect/outbox 失败零成员可见，initial duration/period 以下一 gameplay Tick 为 ReadyTick。
-15. admission failure下游预排 Job全部 no-op、gameplay零写，只有 SessionFaultLatch 从 Detected 终结为 IngressClosed；accepted-outstanding RequestSequence first/last/count/hash 精确覆盖 fault close 前未终结请求（含 unsealed/future tail），close 后同步拒绝，无逐 request outbox 写入且不重放。
+15. admission failure下游预排 Job全部 no-op、gameplay零写，只有 SessionFaultLatch 从 Detected 终结为 IngressClosed；accepted-outstanding RequestSequence first/last/count/hash只作摘要对账，fault close前未终结请求（含 unsealed/future tail）的精确集合由 exact sparse ledger membership决定，close 后同步拒绝，无逐 request gameplay outbox写入且不重放。
 16. scoped outbox重试、late tail、空 shell NoFactReceipt、零 ASC Session terminal与无下一 tick teardown。
 17. Result 后零事实；相同输入采用不同 TickBatch切分仍得到相同 semantic hash。
 

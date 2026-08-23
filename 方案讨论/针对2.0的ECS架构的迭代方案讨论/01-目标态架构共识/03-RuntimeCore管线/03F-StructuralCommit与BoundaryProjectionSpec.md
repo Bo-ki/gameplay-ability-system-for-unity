@@ -108,7 +108,7 @@ public struct BoundaryDrainState : ICleanupComponentData
 - fact 的 Epoch 只存在 `EventId.SimulationEpoch`，禁止再放一份顶层 Epoch 导致排序/去重分裂。drain 使用 `EventId.SimulationEpoch + SimulationTick + FactPlane + ScopeKind + ScopeStableId + ScopeGeneration + SemanticPhaseOrdinal + WorkClassOrdinal + EventId` 得到全局稳定顺序，不能依赖 chunk/query 遍历顺序。两个 ordinal 来自 schema/catalog hash，不是 Job lane。
 - `BoundaryDrainState` 只冻结物理 owner key：Session owner 没有唯一 Battle identity，ASC owner 的 Battle membership 也仅供 fact/诊断。真实 Battle identity 由每个 fact 自带；NoFactReceipt 仅确认某 physical owner/range 无事实，不伪造 semantic Battle scope。
 - `BoundaryFactPayload` 表示由边界 schema 生成的 unmanaged、版本化 tagged payload；其物理大小由 ScaleProfile 复核，本 Spec 不写固定字节预算。UnityEngine.Object、委托与托管字符串只存在于 drain 之后。
-- `BoundaryProject` 先按唯一物理 owner 分区：ASC partitions 可跨 ASC 并行，Session partition 由唯一 writer 合并 Battle/Session facts。Owner/Target wave 只写 fact partition，不随机 append outbox。
+- `BoundaryProject` 先按唯一物理 owner 分区：ASC partitions 可跨 ASC 并行，Session partition 由唯一 writer 合并 Battle/Session facts。OwnerWave 只写 owner fact intent，TargetPrepare 只写 shadow intent，TargetPublish 才发布 target fact partition；各 lane 都不得随机 append outbox。
 
 Cleanup Buffer 不应假设会从 prefab/原型实例化中自动复制。Session 与 ASC spawn 路径都必须显式添加 `BoundaryFactBuffer` 与 `BoundaryDrainState` 并纳入结构验收；Session outbox 保证零 ASC、全部 ASC 已销毁或显式 stop 时仍可交付 Battle/Session 终局事实。
 
@@ -150,17 +150,32 @@ Post-Fixed drain 禁止创建“等下一批 playback”的 ECB，也禁止保�
 
 ### 5.3 World shutdown
 
-一个 World 同时只有一个 active GasSession Tick domain。Session 状态为 `Install -> SpawnPending -> Ready -> Running -> Terminalizing -> FinalDrain -> Disposing -> Disposed`，并允许错误进入 `Faulted` 后转 `FinalDrain/Disposing`。`SpawnBatch` 是操作名，不是 lifecycle枚举。World/Session 停止必须按以下顺序：
+本节是 Session shutdown 物理顺序、`DisposedReceipt` 与最终 validation 封印的唯一 owner；公开方法只由 [16-04 Shell Capability Contract](../16-纯ECS内核与边界重划分/16-04-ShellCapabilityContractSpec.md) 暴露。一个 World 同时只有一个 active GasSession Tick domain，关闭路径固定为：
 
-1. 关闭新的 gameplay ingress，让当前事务完成并使当前 TickBatch 完整经过标准 EndFixed；
-2. 完成 Kernel、outbox 与 ECB producer 依赖；
-3. 执行 FinalDrain，并等待 managed staging 对所有 Batch 返回 receipt；
-4. 直接清理 `Accepted` cleanup shell；
-5. 再释放 Definition Blob、托管 Cue/Presentation 注册表并进入 `Disposed`。
+```text
+Running
+  --BeginClose--> Terminalizing
+  -> FinalDrain
+  --staging failure--> FinalDrainBlocked --PumpShutdown/retry same Batch--> FinalDrain
+  --all receipts accepted--> CleanupAudited
+  -> Disposing
+  -> Disposed
+  -> DisposedReceipt
+  -> ValidationResultSeal
+```
+
+`Faulted` 只改变 close reason 与 terminal semantics，不提供跳过上述路径的捷径。`SpawnBatch` 是操作名，不是 lifecycle 枚举。World/Session 停止必须按以下顺序：
+
+1. `BeginClose` 在 `SessionIngressGate` 上幂等关闭新的 gameplay ingress；已 sealed 的当前事务完成，已 Accepted 但尚无 terminal outcome 的 tail 按 [16-02 Request ledger](../16-纯ECS内核与边界重划分/16-02-BoundaryCommand与CoreCommandResolveSpec.md) 逐项终结。关闭线性化点后不再运行新的 gameplay Kernel。
+2. 让已经开始的 TickBatch 完整经过标准 EndFixed，并只在 [18](../18-DOTS官方规范复核与性能红线Spec.md) 冻结的 `EndFixedPlayback/OuterBatchToDrain/TerminalFinalDrain/DiagnosticsCaptureOnly` fence 完成 Kernel、outbox 与 ECB producer 依赖；禁止在 Kernel lane 内或通过隐式 `EntityManager` sync 补做完成。
+3. `PumpShutdown` 执行/重入 FinalDrain：若存在 InFlight，必须先以相同 `BatchId/InFlightWatermark` 重试；它不推进 FixedStep、Kernel 或 `SimulationTick`。先让所有 gameplay terminal、Request terminal 与此时已产生的 teardown audit range 取得 managed staging receipt。
+4. 上述 receipt 完整后直接清理 `Accepted` cleanup shell，关闭 managed Cue/Presentation/resource owner，并产生最后的 cleanup audit；`PumpShutdown` 继续以相同 accept-before-clear 协议接管这些新 audit。只有全部可审计清理完成且最后 audit receipt 已接受，才进入 `CleanupAudited`，进入下一步后禁止再产生 Boundary audit。
+5. `Disposing` 才释放 runtime-created Definition Blob 与 World，使 Epoch 失效；完成后进入 `Disposed`，生成不属于 Boundary fact stream 的 managed `DisposedReceipt`。
+6. `ValidationResultSeal` 最后冻结 Battle outcome seal 引用、Boundary/teardown hash、`DisposedReceipt` digest 与验证状态。seal 之后不得新增 gameplay、Boundary 或 teardown fact，也不得改写既有 outcome。
 
 headless 模式也必须安装同一个 drain 合约，可以接到日志/网络/丢弃 sink；“没有画面”不等于可以遗留 cleanup shell。
 
-staging 接管失败不回滚已经提交的 gameplay，也不能清 outbox；Session 保持 `Terminalizing/FinalDrain`（或显式 `Faulted`）并阻止 `Disposed`，直到重试成功或产品策略记录可审计的 fatal evidence。禁止用 shutdown 强清掩盖事实丢失。
+staging 接管失败不回滚已经提交的 gameplay，也不能清 outbox；Session 必须进入 `FinalDrainBlocked` 并阻止 `CleanupAudited/Disposing/Disposed`，直到 `PumpShutdown` 对同一 InFlight identity 重试成功。不存在“记录 fatal evidence 后强制 Disposed”的产品策略逃生口；运维若放弃，只能报告未完成 shutdown，不能产出 `DisposedReceipt/ValidationResultSeal`。
 
 ## 6. 为什么 v1 选择 scoped cleanup outbox
 
@@ -216,5 +231,6 @@ Cleanup/Live Outbox -> Single Drain -> Managed Dispatch Queue -> Cue | UI | Audi
 - `BatchId/InFlightWatermark` 重试不会重复分发；staging receipt 之前绝不清 outbox。
 - ASC 在事实写入同 Tick 被销毁时，cleanup shell 仍可输出事实，并由下一 Kernel prepass + 同 Tick EndFixed 最终消失。
 - Session/ASC spawn 测试确认 cleanup buffer 与 drain state 被显式添加；零 ASC Session stop 仍产生并交付 Session terminal fact。
-- headless shutdown 在最后完整 EndFixed 后 FinalDrain，成功时无遗留 cleanup shell；staging 失败时阻止 Disposed。
+- headless shutdown 在最后完整 EndFixed 后 FinalDrain；失败保持同一 InFlight 并阻止 Disposed，成功时 cleanup audit 已接管、无遗留 shell，且只在 World/Blob/managed resource 释放后生成 `DisposedReceipt/ValidationResultSeal`。
+- `BeginClose/PumpShutdown` 路径不再运行 Kernel或增加 SimulationTick；最终 seal 后尝试新增任意 gameplay/Boundary/teardown fact 必须失败。
 - ECB 只有标准 EndFixed playback；Kernel 内没有依赖 playback 的 same-tick读取。

@@ -164,15 +164,46 @@ public struct BoundaryTargetRef
 }
 
 /// <summary>
+/// 冻结 producer incarnation 内的幂等请求身份；同 key 只能对应一个 canonical payload。
+/// </summary>
+public struct BoundaryRequestKey
+{
+    public ulong SimulationEpoch;
+    public ulong ProducerId;
+    public uint ProducerGeneration;
+    public ulong ProducerLocalRequestSequence;
+}
+
+/// <summary>
+/// 冻结 producer-scoped 业务源顺序；裸序号禁止跨 producer 比较。
+/// </summary>
+public struct BoundaryProducerSequence
+{
+    public ulong ProducerId;
+    public uint ProducerGeneration;
+    public ulong ProducerLocalSourceSequence;
+}
+
+/// <summary>
+/// 保存 canonical payload 的稳定摘要，用于幂等冲突检测而非 transport 排序。
+/// </summary>
+public struct BoundaryPayloadHash
+{
+    public ulong High;
+    public ulong Low;
+}
+
+/// <summary>
 /// 表达跨渲染帧持久的外部意图；payload 已冻结且不引用临时内存。
 /// </summary>
 public struct BoundaryCommandRecord
 {
-    public ulong Epoch;
-    public ulong RequestId;
+    public BoundaryRequestKey RequestKey;
+    public ulong CorrelationRequestId;
     public ulong RequestSequence;
-    public ulong SourceSequence;
-    public ulong AvailableTick;
+    public BoundaryProducerSequence SourceSequence;
+    public ulong AssignedAvailableTick;
+    public BoundaryPayloadHash PayloadHash;
     public ulong BattleInstanceId;
     public uint BattleInstanceGeneration;
     public ulong SourceAscId;
@@ -180,6 +211,35 @@ public struct BoundaryCommandRecord
     public BoundaryTargetRef Target;
     public int CommandKind;
     public BoundaryCommandPayload Payload;
+}
+
+/// <summary>
+/// 区分首次接收、幂等重送与所有同步拒绝；拒绝项不创建 Accepted ledger record。
+/// </summary>
+public enum GasRequestStatus
+{
+    Accepted,
+    DuplicateAccepted,
+    IdempotencyConflict,
+    IdempotencyHistoryExpired,
+    InvalidProducerSequence,
+    InboxFull,
+    BattleClosed,
+    SessionClosing,
+    SessionFaulted,
+    SessionMismatch
+}
+
+/// <summary>
+/// 返回 CommandPort 接收线性化结果；Accepted/duplicate 都回显首次冻结的 ledger 分配。
+/// </summary>
+public struct GasRequestResult
+{
+    public GasRequestStatus Status;
+    public BoundaryRequestKey RequestKey;
+    public ulong RequestSequence;
+    public ulong AssignedAvailableTick;
+    public BoundaryPayloadHash PayloadHash;
 }
 
 /// <summary>
@@ -191,18 +251,21 @@ public interface IGasCommandPort
     /// 请求激活已授予 Ability；返回值只表示入站是否被接收。
     /// </summary>
     GasRequestResult RequestActivate(
-        ulong requestId,
-        ulong sourceSequence,
+        ulong producerId,
+        uint producerGeneration,
+        ulong producerLocalRequestSequence,
+        ulong producerLocalSourceSequence,
         ulong battleInstanceId,
         uint battleInstanceGeneration,
         ulong ownerAscId,
         uint ownerAscGeneration,
         int grantedSlotIndex,
-        uint grantedGeneration);
+        uint grantedGeneration,
+        ulong correlationRequestId);
 }
 ```
 
-`BoundaryCommandPayload` 是 schema generated、版本化、固定上界的 unmanaged tagged payload；超出上界在 CommandPort拒绝，不使用跨 tick裸 index。CommandPort 在 `SessionIngressGate` 上分配 transport-only `RequestSequence`，把完整 `BoundaryCommandRecord` append 到跨渲染帧持久 `BoundaryIngressJournal` 后才返回 Accepted；调用方提供/协议冻结的 `SourceSequence` 才进入 gameplay canonical order。必装的 pre-Fixed `GasCommandIngressSystem` 是唯一 ECS inbox writer，原样把 journal record 搬入 `BoundaryCommandInbox`。CommandPort 不直写 DynamicBuffer，也不执行 `CanActivate`、target resolve 或 Effect。0 次 FixedStep 时 journal/inbox 都不清理；Kernel seal之后到达的命令最早下一 ingress window/合法 tick消费。
+`BoundaryCommandPayload` 是 schema generated、版本化、固定上界的 unmanaged tagged payload；超出上界在 CommandPort 拒绝，不使用跨 tick 裸 index。CommandPort 在 `SessionIngressGate` 上冻结 `RequestKey/PayloadHash/RequestSequence/AssignedAvailableTick` 并把完整 record append 到持久 `BoundaryIngressJournal` 后才返回 Accepted；同 key 同 hash 复用首次分配，同 key 异 hash typed reject。producer-scoped `SourceSequence` 才进入 gameplay canonical order。必装的 pre-Fixed `GasCommandIngressSystem` 先冻结 transfer membership，再通过显式 dependency/single-writer 路径原样搬入 `BoundaryCommandInbox`；CommandPort 不直写 DynamicBuffer，也不执行 `CanActivate`、target resolve 或 Effect。0 次 FixedStep 时 journal/inbox/assigned tick 都不清理；Kernel seal 后到达的命令最早下一 ingress window/合法 tick 消费。完整 ledger、retire 与 per-Battle gate 协议只见 [16-02](../16-02-BoundaryCommand与CoreCommandResolveSpec.md)。
 
 ## 4. 单固定步内核
 
@@ -245,8 +308,8 @@ public partial struct GasTickKernelSystem : ISystem
         // 1. Gather/TickStartSnapshot + PlanExpandScratchProvision creates/validates the envelope token.
         // 2. OwnerPlanBuild -> TargetResolve/Expand writes only provisioned scratch.
         // 3. WholeTickInfraAdmission validates the envelope and reserves downstream/durable capacity.
-        // 4. AscOwnerCommandWave -> SourceSpecProjection -> GroupByTarget -> AscTargetStateWave.
-        // 5. Stabilize/Death -> StableFactMerge/TerminalResolve -> GroupNextTickRouteByDestination.
+        // 4. AscOwnerCommandWave -> SourceSpecProjection -> GroupByTarget -> TargetPrepare/Stabilize/Death.
+        // 5. SessionFaultReduce -> TargetPublish -> StableFactMerge/TerminalResolve -> GroupNextTickRouteByDestination.
         // 6. BoundaryProject -> Record EndFixed; admission failure makes these branches no-op except FaultLatch.
         // state.Dependency = finalKernelHandle;
     }
@@ -258,7 +321,7 @@ public partial struct GasTickKernelSystem : ISystem
 ## 5. Effect 应用与稳定化
 
 ```text
-AscTargetStateWave(targetRange)
+TargetPrepare(targetRange, targetShadow)
   validate application requirements / immunity
   resolve stack policy
   apply slot/contributor/tag mutations
@@ -269,7 +332,15 @@ AscTargetStateWave(targetRange)
   until no transition
   recompute dirty aggregators and Attribute Current
   enforce current-tick invariants
-  emit final facts only
+  emit prepared facts/cues/routes/ECB intents into shadow only
+
+SessionFaultReduce(allPreparedTargets)
+  choose canonical first fatal, if any
+  fatal -> discard every target shadow and latch Session fault
+  ready -> issue publish token
+
+TargetPublish(publishToken, allPreparedTargets)
+  no-fail write pre-reserved durable state and final intents
 ```
 
 重复 state hash 或 safety budget 命中时产生 fatal `StabilizationFault`；不能把中间 Cue/fact 输出，也不能携带半稳定状态继续。
@@ -334,6 +405,17 @@ public struct BoundaryDrainState : ICleanupComponentData
 }
 
 /// <summary>
+/// 标识 managed ReadModel 已原子应用到的不可变观察切面；不提供 live ECS 访问。
+/// </summary>
+public struct SnapshotCut
+{
+    public ulong SimulationEpoch;
+    public ulong SimulationTick;
+    public ulong ProjectionVersion;
+    public ulong ManagedBoundarySequence;
+}
+
+/// <summary>
 /// 在固定步 catch-up 后唯一收集、排序，并在 managed staging接管后确认清理事实。
 /// </summary>
 [UpdateInGroup(typeof(SimulationSystemGroup))]
@@ -345,8 +427,11 @@ public partial class GasBoundaryDrainSystem : SystemBase
     /// </summary>
     protected override void OnUpdate()
     {
+        // This system updates once per outer Simulation update even when FixedStep ran zero times.
+        // Retry an existing InFlight range first with the same BatchId; retry never runs Kernel or increments SimulationTick.
         // Query three disjoint sets: live ASC, live Session, and cleanup shells with neither live identity.
         // Freeze BatchId/per-owner InFlightWatermark, then stable-sort by epoch/tick/fact plane/scope/semantic/work/event id.
+        // On staging acceptance, atomically advance the immutable SnapshotCut cache before exposing the lossy ring cursor.
         // After accepted receipt, clear only records whose EventId.OwnerSequence <= InFlightWatermark; retain any later live tail.
         // An empty shell uses only BoundaryDrainState's physical owner key/range for NoFactReceipt; Session has no single Battle identity.
         // The next Kernel cleanup prepass records removal into that tick's standard EndFixed.
@@ -354,21 +439,29 @@ public partial class GasBoundaryDrainSystem : SystemBase
 }
 ```
 
-`BoundaryFactPayload` 是 inline、自包含、版本化 unmanaged tagged payload；不引用随 owner销毁的外部 store。`BoundaryEventId=(Epoch, PhysicalOwnerKind/Id/Generation, OwnerSequence)` 是交付去重键，也是 fact 唯一 Epoch 存储；`NextOwnerSequence` 在 Accepted/Idle 后仍持久递增。Cue lifecycle key由 SimulationEpoch、ActiveEffectHandle、ActiveCycleOrdinal与 CueDefinitionOrdinal组成。`ScopeKind=Asc/BattleInstance/Session` 是 identity/outbox route，`FactPlane=Gameplay/TeardownAudit` 是结果分层，两者正交。scope/Battle/ASC id + generation、ScenarioUnitId与语义 ordinal在事实产生时冻结，cleanup shell不依赖已移除 membership。所有消费者只读同一个 batch；Core不维护 per-consumer cursor。
+`BoundaryFactPayload` 是 inline、自包含、版本化 unmanaged tagged payload；不引用随 owner销毁的外部 store。`BoundaryEventId=(Epoch, PhysicalOwnerKind/Id/Generation, OwnerSequence)` 是交付去重键，也是 fact 唯一 Epoch 存储；`NextOwnerSequence` 在 Accepted/Idle 后仍持久递增。Cue lifecycle key由 SimulationEpoch、ActiveEffectHandle、ActiveCycleOrdinal与 CueDefinitionOrdinal组成。`ScopeKind=Asc/BattleInstance/Session` 是 identity/outbox route，`FactPlane=Gameplay/TeardownAudit` 是结果分层，两者正交。scope/Battle/ASC id + generation、ScenarioUnitId与语义 ordinal在事实产生时冻结，cleanup shell不依赖已移除 membership。所有消费者只读同一个 batch；Core不维护 per-consumer cursor。Snapshot API 字段与 cut 语义只见 [16-05](../16-05-SnapshotIdentityApiHealthSpec.md)；per-Battle 双切面、Cue async stale 校验与 Result seals 只见 [06](../../06-Observation-Presentation-ReplaySpec.md)，本骨架不复制其状态机。
 
 ## 7. Session runner
 
 ```text
-TickBatch(elapsedTime, MaxFixedTicksPerBatch)
+TickBatch(absoluteElapsedTime, maxGameplayTicks)
   -> update complete Simulation/FixedStep parent chain
   -> Physics
   -> GasFixedTick 0..N times
   -> standard EndFixed playback each fixed update
-  -> BoundaryDrain once after catch-up batch
+  -> BoundaryDrain exactly once after FixedStep (also when N == 0)
+       -> retry same InFlight first; no Kernel/SimulationTick advance for retry
   -> return immutable batch metadata + diagnostics snapshot
+
+BeginClose(reason)
+  -> close ingress; do not start another gameplay Kernel
+PumpShutdown()
+  -> terminal/final-drain/cleanup state machine only
+Dispose()
+  -> only after final drain/cleanup are accepted; return DisposedReceipt + ValidationResultSeal
 ```
 
-独立 World 必须显式安装标准 Begin/End FixedStep ECB。AutoChess、Scene 与 Headless 不得直接缓存或 `Update()` Kernel/Group。
+独立 World 必须显式安装标准 Begin/End FixedStep ECB。AutoChess、Scene 与 Headless 不得直接缓存或 `Update()` Kernel/Group。Session API 只见 [16-04](../16-04-ShellCapabilityContractSpec.md)，shutdown 物理顺序与 `ValidationResultSeal` 只见 [03F](../../03-RuntimeCore管线/03F-StructuralCommit与BoundaryProjectionSpec.md)。
 
 ## 8. 骨架验收
 
@@ -376,5 +469,7 @@ TickBatch(elapsedTime, MaxFixedTicksPerBatch)
 - Kernel 独占 tick scratch，public interface 无 ECS handle。
 - 同目标单 writer、跨目标 canonical fan-in、无 phase sync fence。
 - EndFixed Destroy 后 terminal facts 可 Drain，dead shell 最终释放。
+- 0 FixedStep 仍执行一次 Drain；Boundary retry 复用 InFlight identity 且不推进 Kernel/tick。
+- SnapshotCut cache 先于 lossy ring cursor 发布；Cue stale callback 与 per-Battle双 cut 由其 owner Spec验收。
 - generated code 只能被 Kernel 作为 pure lookup/evaluator 调用。
 - v1 类型中没有 PredictionKey、predictive flags、rollback/ack 字段。

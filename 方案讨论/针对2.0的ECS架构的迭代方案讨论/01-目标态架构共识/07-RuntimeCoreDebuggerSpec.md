@@ -41,7 +41,7 @@ RenderFrame 汇总可以列出 0..N ticks，但不得把它当权威时序。
 
 ## Stabilization 诊断
 
-记录 target、initial dirty set、transition count、max iterations、dependency ids、final state hash 与 fault reason。中间试探 fact/Cue 不进入普通 Boundary；fault capture 可以保存有界诊断 trace，并终止当前 battle/session。
+记录 target、initial dirty set、transition count、max iterations、dependency ids、final state hash 与 fault reason。中间试探 fact/Cue 不进入普通 Boundary；fault capture 可以保存有界诊断 trace，并锁存 Session-fatal、关闭 Session ingress；不得降格为仅终止当前 Battle。
 
 ## Reaction 诊断
 

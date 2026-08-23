@@ -146,9 +146,10 @@ same-tick 只允许两类闭包内路径：
 4. WholeTickInfrastructureAdmission
 5. AscOwnerCommandWave（no-fail CommitPlan）
 6. SourceSpecProjection / target bucket build
-7. AscTargetStateWave / stabilization / Death
-8. Core Fact stable merge / BattleInstance TerminalResolve
-9. destination-grouped T+1 route / Boundary projection
+7. TargetPrepare / stabilization / Death（tick-local shadow）
+8. SessionFaultReduce / TargetPublish（no-fail durable publish）
+9. Core Fact stable merge / BattleInstance TerminalResolve
+10. destination-grouped T+1 route / Boundary projection
 10. ECB record / diagnostics
 
 这些是可采样、可测试的 lane，不是十个 SystemGroup。Debug Trace 至少记录 `Tick、Lane、ASC stable id、Command/Fact stable id、拒绝/故障码`，从而在单 Kernel 下仍可定位。
