@@ -1,258 +1,87 @@
-# DynamicBuffer-Chunk-Archetype: API 与 EX-GAS 解读
+# DynamicBuffer-Chunk-Archetype：API 与 EX-GAS 解读
 
-## 核心概念
+**适用版本**：Unity `6000.3.14f1`；Entities `1.4.6`
 
-### Archetype 本质
+## Archetype 与 chunk
 
-Archetype 是同一 world 内具有相同 component type 组合的所有 entity 的唯一标识符。Archetype 决定 entity 存储在哪些 chunk 中。
+同一 World 中组件类型组合完全相同的 entity 共享一个 archetype。Archetype 在 World 销毁时才销毁；其 chunk 按需创建，并在最后一个 entity 离开后销毁。
 
-```
-世界中所有 entity 的 component type 组合相同的 -> 属于同一 Archetype
-不同 component 组合 = 不同 Archetype = 不同 chunk 集合
-```
+Entities 1.4.6 的普通 archetype chunk 为 16 KiB，每个 chunk 最多 128 个 entity，实际容量由 Entity ID、各组件数组、buffer header/inline data 和 chunk 元数据共同决定。entity 离开 chunk 时，最后一个 entity 会被移动来填补空位，因此不能依赖 chunk 内 index 持久稳定。
 
-Archetype 仅在 World 销毁时被销毁（不会在 entity 全部移除后销毁）。
+碎片化需要通过 Archetypes Window/Profiler 判断，常见来源是：
 
-### 16 KiB Chunk 的内部布局
+- 大型 entity 导致 chunk capacity 很低；
+- shared component 值过多，把同 archetype entity 分散到许多 chunk；
+- 临时 Add/Remove 或大量 tag 组合制造过多 archetype；
+- 加载大量不同 archetype 的 prefab，每个 prefab archetype 可能占据自己的 16 KiB chunk。
 
-每个 chunk 固定 16 KiB（16384 字节），内部结构：
+“100,000 个 entity 各有唯一 archetype会超过 1.5 GB”是官方用于说明极端碎片化的例子，不能拿来证明所有 transient entity 都会创建独立 archetype。
 
-```
-[Chunk Header]
-[Entity ID Array]          -- 按 index 存储 entity ID
-[Component A Array]        -- 所有 entity 的 Component A 值连续存储
-[Component B Array]        -- 所有 entity 的 Component B 值连续存储
-[Buffer Data (inline)]     -- DynamicBuffer 内联数据
-[... padding ...]
-```
+## DynamicBuffer 容量
 
-**关键特征：**
-- 每个 chunk 最多 128 个 entity（由 chunk 大小和组件大小决定）
-- 数组紧密打包：entity[i] 在各数组的 index=i
-- entity 移除时，最后一个 entity 移动到空缺位置（swap-remove）
-- 最后一个 entity 从 chunk 移除后，chunk 被销毁
-- Archetype 在 World 销毁前持续存在
+DynamicBuffer 的默认内部容量是能放入 128 字节的元素数量；`[InternalBufferCapacity(N)]` 用于覆盖默认值。默认策略本身合法，不要求每个 `IBufferElementData` 都机械添加属性。
 
-### 三种 Chunk 碎片化类型
+当 Length 超过内部容量时，Unity 在 chunk 外分配数组并复制数据。此后即使 Length 缩小，数据也不会自动迁回 chunk；`TrimExcess` 可以缩减外部 capacity，但不会恢复 inline 存储。容量频繁剧烈变化时，官方建议考虑 `InternalBufferCapacity(0)`，避免为很少使用的 inline 区域降低 chunk capacity。
 
-| 类型 | 特征 | 根因 | 后果 |
-|---|---|---|---|
-| 大型 Entity | unused entity 少 + chunk capacity 低 | entity component 过大 | 每 chunk 容纳 entity 少 -> 更多 chunk -> 更多 cache miss |
-| SharedComponent 误用 | unused entity 多 + chunk capacity 高 | 不同的 SharedComponent 值强制 entity 分到不同 chunk | 能塞一起的 entity 被碎片化 |
-| 过多 Archetype | 大量 archetype + 每个 chunk 数少 | entity 有太多不同 component 集合 | 100K entity 各有独特 archetype = >1.5 GB 浪费 |
+容量决策需要同时权衡：
 
-**Archetype 过多的三大根因：**
+- 内联命中率与外部间接访问；
+- 为所有 entity 预留 inline bytes 导致的 chunk capacity 降低；
+- 典型/峰值长度、增长频率和访问热度。
 
-| 根因 | 官方建议 |
-|---|---|
-| 过多 tag component | 每个 tag 翻倍 archetype 排列 -> 改用 enableable component |
-| 临时 Add/Remove component | 临时数据存 DynamicBuffer 而非 Add/Remove |
-| 大型 entity | 按使用频率拆分 entity（AI/physics/animation/render 分开） |
+不存在官方“externalized ratio 超过 30% 必须告警”的阈值。EX-GAS 可以设置项目告警，但必须由具体 buffer、平台和规模基准校准。
 
-### DynamicBuffer
+## 结构变化后的失效范围
 
-DynamicBuffer 是 entity 上的动态数组，优先内联存储在 chunk 中（避免额外内存跳转），溢出时外部化。
+官方明确要求：任何结构变化后，先前取得的 `DynamicBuffer<T>` 以及由它取得的 ref/pointer 都可能失效，必须重新获取。
 
-```csharp
-[InternalBufferCapacity(8)]
-public struct BActiveModifier : IBufferElementData
-{
-    public int AttributeCode;
-    public float Magnitude;
-    public int SourceEffectCode;
-}
+`BufferLookup<T>` 和 `BufferTypeHandle<T>` 是不同层次的缓存对象：可以存为 system 字段，并在调度前调用 `.Update(ref state)` 刷新。不要把它们写成“每次结构变化都必须 new/重新 Get”；也不要继续使用结构变化前已经从 lookup/accessor 取出的 `DynamicBuffer<T>`。
 
-var buffer = SystemAPI.GetBuffer<BActiveModifier>(entity);
-buffer.Add(new BActiveModifier { ... });
-buffer.RemoveAt(0);
-```
+## Job 访问
 
-**InternalBufferCapacity 语义：**
-- 默认值：sizeof(element) 能塞进 128 字节的最大数量
-- 自定义值：`[InternalBufferCapacity(N)]` 指定初始内联容量
-- 溢出条件：buffer Length > InternalBufferCapacity 时，数据移到 chunk 外独立分配
+DynamicBuffer 由 ECS safety/dependency 系统管理，不需要像独立 NativeContainer 那样由业务代码 Dispose。但它仍受读写依赖、并行写限制和结构变化失效规则约束，并非“没有 NativeContainer 的任何 job 限制”。
 
-**溢出代价：**
-- 每次 buffer 访问多一次间接内存跳转
-- 外部数组不在 chunk 中 -> 失去 cache locality
-- 大量 entity 的 buffer 同时溢出 -> 内存碎片化
+`IJobChunk` 通过 `BufferTypeHandle<T>` 和 `ArchetypeChunk.GetBufferAccessorRO/RW` 批量访问本 chunk 的 buffers；跨 entity 随机访问使用 `BufferLookup<T>`。
 
-**关键限制（来自官方文档）：** 如果 Unity 将 DynamicBuffer 数据移出 chunk，数据永远不会自动移回。即使后续 buffer 缩容到 capacity 以内，数据也不会迁回 chunk。浪费的 inline 空间在该 entity 生命周期内永久存在。可通过 `InternalBufferCapacity = 0` 始终外部化以避免迁移开销；`TrimExcess` 可减少 padded capacity 但不恢复 inline 存储。
+## Chunk Component
 
-**结构变化导致 handle 失效：** 任何结构变化（AddComponent / RemoveComponent / CreateEntity / DestroyEntity）会使之前获取的 `BufferHandle` / `BufferLookup` 失效。结构变化后必须重新获取 buffer handle，否则 ECS 安全系统抛出异常。
+Chunk component 每个 chunk 存一份值。**设置已有 chunk component 的值**不移动普通 entity；但**添加或移除 chunk component**会改变 entity archetype，是结构变化。它不会像 shared component 那样因每个不同值自动拆分 chunk，但 component 类型组合仍参与 archetype/查询设计，不能说“永远不增加 archetype 排列”。
 
-### DynamicBuffer 的 Job 调度优势（对比 NativeContainer）
+Chunk component 的值跟随物理 chunk，不适合保存需要跨 chunk 重排稳定、逐 entity 精确归属或参与跨运行 battle hash 的状态。
 
-- `NativeList` / `NativeArray` 在 component 上有 job 调度限制（同一帧内不能多 job 写）
-- `DynamicBuffer` 没有这些限制 —— ECS 安全系统原生管理
-- 所以：当有多个 entity 各自需要一个集合时，使用 DynamicBuffer
+## ComponentTypeSet 与批量创建
 
-### Chunk Component
-
-Chunk Component 是**每个 chunk 存储一份**的 component，极低存储成本。
+已知最终组件集合时，创建 archetype 后批量 `CreateEntity`，避免逐 entity、逐 component 经过多个中间 archetype。运行时需要同时 Add/Remove 多个组件时，`ComponentTypeSet` 可在一次 API 调用中处理多个类型，减少结构变化和冗余 archetype。
 
 ```csharp
-public struct ChunkAllDead : IComponentData { }
+var types = new ComponentTypeSet(typeof(A), typeof(B), typeof(C));
+entityManager.AddComponent(entity, types);
 ```
 
-**Chunk Component vs SharedComponent：**
+是否用 EntityManager、query bulk API 或 ECB，仍取决于是否需要立即生效、调用线程和现有 sync point。
 
-| | Chunk Component | SharedComponent |
-|---|---|---|
-| 创建新 chunk | 手动添加时 | 每次值改变强制 entity 移动 |
-| 存储 | 每个 chunk 一份 | 每个 chunk 一份 |
-| 适用 | 同 chunk entity 的 "标签" | 分组 + 跨 chunk 相同值共享 |
-| Chunk 分裂 | 不会 | 值改变时强制分裂 |
+## DynamicBuffer.Reinterpret
 
-Chunk Component 的修改不触发结构变化、不移动 entity、不翻倍 archetype 排列。
+`Reinterpret<U>()` 只检查源/目标元素大小相同，不检查语义兼容。不同大小不是“编译失败”，而是在运行时检查中失败。reinterpret 后的 buffer 与原 buffer 别名同一内存并共享 safety handle。
 
-### Prefab 的 Chunk 内存问题
+不要把 `DynamicBuffer<byte>` 随意 reinterpret 为多字节 struct；元素大小必须相同。若要把 byte 序列解析成 struct，需要另一套明确对齐、边界和序列化方案。
 
-> Prefabs have a different archetype to the entities they instantiate... each prefab occupies its own 16 KiB chunk.
+## EX-GAS 项目策略
 
-- Prefab entity 有 `Prefab` component -> 单独 archetype
-- 每个 prefab archetype 至少 1 个 chunk（16 KiB），即使只有 1 个 entity
-- 100 个不同 prefab = 至少 1.6 MB chunk 内存，大部分为空
-- Instantiation 时 `Prefab` component 被剥离 -> 实例 entity 使用不同 archetype
-
-### ComponentTypeSet 批量操作
-
-使用 `ComponentTypeSet` 可在一次结构变化中添加/移除多个组件，最小化 archetype 中间态：
-
-```csharp
-var typeSet = new ComponentTypeSet(typeof(A), typeof(B), typeof(C));
-EntityManager.AddComponent(entity, typeSet);  // 一次结构变化
-```
-
-### DynamicBuffer.Reinterpret
-
-同 sizeof 的不同类型可重解释到同一块内存，共享安全句柄：
-
-```csharp
-myBuffer.Reinterpret<int>();  // 当 sizeof(T) == sizeof(int) 时
-```
-
-修改 `intBuffer[i]` 等价于修改 `myBuffer[i]` 的对应字节。跨大小类型编译失败。
-
-### BufferAccessor
-
-IJobChunk 中可使用 `BufferAccessor<T>` 批量访问 chunk 内所有 entity 的 buffer：
-
-```csharp
-var accessor = chunk.GetBufferAccessorRO<BMyData>(ref bufferHandle);
-for (int i = 0; i < chunk.Count; i++)
-{
-    var buffer = accessor[i];
-    // 操作该 entity 的 buffer
-}
-```
-
-`BufferTypeHandle<T>` 与 `BufferLookup<T>` 不同，专门用于 IJobChunk 的 chunk 级批量访问。
-
----
-
-## EX-GAS 项目解读
-
-### ActiveEffectStore 的目标物理形态
-
-ActiveEffectStore 不应是 "GE entity 镜像到 owner buffer"。正确的物理形态：
-
-```
-ASC Entity
-  +-- BActiveEffectSlot[N]    (DynamicBuffer, InternalBufferCapacity=16)
-  |    每个 slot: EffectCode, StackCount, RemainingDuration, PeriodTimer, Flags
-  +-- TagMaskComponent         (IComponentData bitmask)
-  +-- TagStatusFlagsComponent  (可选派生 cache，同 archetype)
-  +-- PeriodDueTag / ChunkComponent（可选 skip cache，必须有 profiler 证据）
-```
-
-- 每个 ASC entity 持有一个固定容量的 `BActiveEffectSlot` buffer
-- 不创建独立的 GE runtime entity
-- `IEnableableComponent` 不是 buffer slot 的默认开关；slot 内 active、inhibited、expired、period due 默认使用 enum / bit flags
-- 只有当大量 ASC / ability / active-effect slot 长期 idle，且 profiler 证明 query skip 收益大于 enableable 同步等待和额外 component 成本时，才把派生状态升格为 `PeriodDueTag` 或 Chunk Component
-
-### EffectCommand fan-in 的数据流
-
-```csharp
-// 并行收集阶段 —— NativeStream 而非全局 buffer
-ParallelWriter writer = commandStream.AsWriter();
-
-// Merge 阶段 —— 必须 deterministic
-for (int i = 0; i < commandStream.ForEachCount; i++)
-{
-    var segment = commandStream[i];
-    for (int j = 0; j < segment.Length; j++)
-    {
-        sortedCommands.Add(segment[j]);  // 按 target ASC 排序
-    }
-}
-// 排序后按 target 分发到 per-owner buffer
-```
-
-### Debugger 的 Buffer Pressure 指标
-
-每个关键 buffer 类型必须报告：
-- `bufferLength` / `bufferCapacity` / `externalizedCount`
-- `spillRate`（溢出比例）
-- `peakUsage` / `avgUsage`
-- `per-archetype` chunk count、entity count、unused capacity
-
-这些是架构健康指标，非 "nice to have"。
-
-### Archetype 审计
-
-Debugger 应定期输出：
-- 当前 active archetype 总数
-- 每个 archetype 的 chunk count 和 entity count
-- **只有 1 个 entity 的 archetype 列表**（最可疑的碎片化信号）
-- Prefab archetype 数量和总 chunk 内存
-
-### 避免 Prefab Chunk 内存爆炸
-
-```
-当前（有风险）：
-  - 100 个不同 GE prefab -> 100 个 prefab archetype -> 至少 1.6 MB 空 chunk
-  - 1000 个 -> 16 MB 空 chunk
-
-目标态：
-  - GE 定义 -> BlobAsset 或 generated static table
-  - 运行时 GE -> EffectCommand stream（本帧），ActiveEffectStore slot（跨帧）
-  - 仅少量 "原型 entity" 使用 prefab
-```
-
-### Instant GE 的无 entity 路径
-
-```
-Instant GE -> EffectCommand -> InstantEffectSpec -> AttributeDelta -> TypedFact
-（全程无 entity 创建）
-```
-
----
-
-## 常见陷阱
-
-1. **Buffer 溢出无声**：默认 128 字节容量很容易溢出，看不出来但每次访问多一次间接跳转。数据永不自动迁回。
-2. **Prefab 内存静默消耗**：每个 prefab 占用 16 KiB chunk，大量不同 prefab -> 显著内存浪费。
-3. **Archetype 数量失控**：100 entity 有 100 个不同 archetype = 1.6 MB（仅 chunk 结构，不算数据）。
-4. **Tag Component 排列爆炸**：N 个 tag = 2^N 个潜在 archetype 排列。10 个 tag = 最多 1024 种。
-5. **`ISharedComponent` 值改变**：触发 entity 移动到新 chunk，成本很高（结构变化）。
-6. **CleanupComponent 不被 destroy 清理**：手动 destroy 后 cleanup component 仍在，需要专门的 cleanup system。
-7. **结构变化使 handle 失效**：GetBuffer 后任何结构变化使 buffer 引用失效，再读时抛异常。
-8. **Buffer 内联空间永久浪费**：缩容不恢复 inline —— `TrimExcess` 减少外部数组 padding 但不迁回 chunk。
+- ActiveEffect slot 作为 owner-local DynamicBuffer 是候选物理形态，最终 `InternalBufferCapacity` 由实测长度分布与 chunk capacity 决定，不预设 16/64 为官方值。
+- 高并发 fan-in 不直接并行写同一个 singleton DynamicBuffer；使用 NativeStream、可并行容器后确定性 merge，或单 writer 分发。
+- Instant GE 仅在没有独立 identity/跨帧 lifecycle/query 需求时走 command/value 路径；不能把“entity 表示瞬时状态”一概判错。
+- Debugger 观察关键 buffer 的 Length/Capacity 分布、外部化估计、chunk capacity/unused bytes；告警阈值全部标注为项目基准。
 
 ## 官方证据
 
-| 官方文档文件 | 关键结论 | 关联规则 |
-|---|---|---|
-| `concepts-archetypes.html` | Archetype = 相同 component 组合的 entity；每个 chunk 16 KiB，最多 128 entity；world 生命周期内 archetype 不销毁 | PRF-01, PRF-14 |
-| `performance-chunk-allocations.html` | 三种碎片化类型；100K entity 各有独特 archetype = >1.5 GB 浪费 | PRF-01, PRF-24, PRF-14 |
-| `performance-chunk-allocations.html` (prefabs) | 每个 prefab 占 16 KiB chunk；大量不同 prefab -> 内存爆炸 | PRF-01 |
-| `performance-chunk-allocations.html` (tag) | "Each tag component multiplies the number of archetypes permutations by two" | PRF-01 |
-| `performance-chunk-allocations.html` (temp data) | "Temporary addition and removal of components... store it in a dynamic buffer" | PRF-01 |
-| `components-buffer-introducing.html` | Buffer 内联在 chunk 中；溢出外部化；结构变化使 handle 失效；无 NativeContainer 调度限制 | BUF-01, BUF-02, BUF-03 |
-| `components-buffer-set-capacity.md` | InternalBufferCapacity 控制初始容量；溢出后永不迁回；TrimExcess 不恢复 inline | BUF-01, BUF-04, PRF-10 |
-| `components-buffer-reinterpret.md` | Buffer.Reinterpret 同大小类型重解释共享安全句柄 | CASE-36 |
-| `optimize-structural-changes.md` | 禁止逐 component 构建 entity；使用 CreateArchetype + 批量 CreateEntity；ComponentTypeSet | PRF-14, PRF-24, CASE-33 |
-| `components-chunk-use.md` / `ChunkComponentExamples.cs` | Chunk Component 用法，每 chunk 一份，不触发 chunk 分裂 | CASE-28 |
-| `iterating-data-ijobchunk.md` / `chunk.GetBufferAccessorRO` | BufferAccessor 批量 chunk 级 buffer 访问 | CASE-23 |
-| `components-enableable-use.html` | Enableable 替代 tag component | PRF-01 |
+| 官方文档（Entities 1.4.6） | 可裁决结论 |
+|---|---|
+| `concepts-archetypes.md` | archetype/chunk 生命周期、16 KiB、数组布局、swap-back |
+| `performance-chunk-allocations.md` | 最大 128 entity、三类碎片化、prefab/tag/临时 Add-Remove 风险 |
+| `components-buffer-introducing.md` | 默认内部容量、DynamicBuffer 引用在结构变化后失效 |
+| `components-buffer-set-capacity.md` | 外部化不自动迁回、`InternalBufferCapacity(0)` 场景 |
+| `components-buffer-jobs.md` | BufferLookup 缓存与每次更新前 `.Update` |
+| `components-chunk-use.md` | 添加/移除 chunk component 是结构变化；值读写 API |
+| `components-buffer-reinterpret.md` | 仅按元素大小检查、内存别名和共享 safety handle |
+| `optimize-structural-changes.md` | archetype 批量创建、ComponentTypeSet 与 Profiler 决策 |

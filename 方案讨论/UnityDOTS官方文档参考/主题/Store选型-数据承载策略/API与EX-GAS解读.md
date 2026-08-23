@@ -1,229 +1,103 @@
-# Store 选型 / 数据承载策略: API 与 EX-GAS 解读
+# Store 选型 / 数据承载策略：API 与 EX-GAS 解读
 
-## 核心概念
+**适用版本**：Unity `6000.3.14f1`；Entities `1.4.6`；Collections `2.6.6`
 
-### 数据性质分类框架
+## 定位
 
-EX-GAS 中所有运行时数据按性质分为四大类别。这是 Store 选型的第一原则 —— 承载方式由数据性质决定，而非由实现便利决定。
+Gameplay / transient / telemetry / presentation 是 **EX-GAS 的数据分类框架**，不是 Unity 官方定义的四种 Store。Unity 官方文档只裁决各容器、组件和生命周期机制；项目必须根据 owner、生命周期、并发模型、顺序语义和访问方式完成选型。
 
-#### 1. Gameplay Data（玩法核心数据）
+## 分类框架
 
-**特征**：跨帧持久、影响 gameplay 逻辑、需要 deterministic 处理、参与 battle hash。
+### Gameplay state
 
-**典型数据**：
-- ActiveEffect slot（当前生效的 gameplay effect）
-- 属性值（Attribute 当前值 / base value / modifier）
-- 已授予的 tag（GrantedTag mask）
-- Ability cooldown 状态
-- 技能/效果堆叠计数
+跨帧、影响 gameplay/replay 的可变权威状态。常见承载是 per-entity `IComponentData`、owner-local DynamicBuffer、singleton component/buffer，或有明确 Persistent owner 的 NativeContainer。不是“必须直接在 chunk 内”；选择取决于访问模式和生命周期。
 
-**承载要求**：
-- 必须使用 `DynamicBuffer` 或 `IComponentData` 直接存在于 entity chunk 内
-- 不能是 transient 或 Temp allocator
-- 读写必须通过 ECS system（gameplay system group）
-- 确定性：生产顺序必须在相同输入下完全可复现
+### Gameplay transient
 
-#### 2. Transient Data（帧内临时数据）
+帧内或 phase 内生产/消费、但会影响 gameplay 结算的记录，例如 EffectCommand、AttributeDelta。它们虽然短命，仍必须满足确定性、依赖和丢失策略，不能写成“不需要确定性”。
 
-**特征**：单帧生命周期、同一帧内消费即弃、不需要跨帧持久、不需要确定性（除非用于 debug）。
+并行 fan-in 可使用 NativeStream 或其他并行容器；单 writer 可使用 DynamicBuffer/NativeList。容器不自动赋予确定性，消费顺序必须由稳定逻辑 buffer 映射、stable ranges 或 total-key sort 定义。
 
-**典型数据**：
-- EffectCommand（每帧的 GE 请求流）
-- AttributeDelta（属性变更汇总）
-- TypedSimulationFact（系统内事件/事实）
-- CueRequest（表现事件请求）
+### Telemetry
 
-**承载要求**：
-- 首选 `NativeStream`（并行 fan-in + 确定性 merge）
-- 备选 per-thread ECB（EntityCommandBuffer 统一 playback）
-- 帧末必须 drain / clear
-- 不写入持久化 buffer
-- 确定性：EffectCommand 等用于 gameplay 结算的 transient 数据需要确定性 merge 顺序；Presentation outbox 不需要确定性
+不反馈 gameplay 的诊断/统计。可使用有容量上限的 NativeContainer 或 managed storage；allocator 由真实生命周期决定，不强制所有 telemetry 都使用 Persistent NativeList。采样和导出不能给热路径引入不可接受的同步。
 
-#### 3. Telemetry Data（诊断/调试/统计）
+### Presentation
 
-**特征**：采样频率低于 gameplay tick、容量上限可控、不需要实时性、不需要确定性。
+只从 gameplay 向表现层输出、不会反向影响权威状态的请求。可以丢弃/合并/降频到什么程度必须由具体产品语义声明，不能一概写“允许丢一帧”。承载可为 DynamicBuffer、NativeStream、ECB 命令或边界 managed queue。
 
-**典型数据**：
-- Frame time breakdown
-- Buffer spill rates
-- Entity create/destroy 计数
-- Archetype 统计快照
-- Per-system 性能指标
+只读定义数据（BlobAssetReference/generated table）是横跨上述分类的共享输入，不应硬塞入某个运行时 Store 类别。Blob lifetime 由创建/烘焙方式与 owner 管理，不统一等于 World 生命周期。
 
-**承载要求**：
-- `NativeList`（Persistent allocator） + periodic export
-- 固定容量截断（环形 buffer 或采样窗口）
-- 不阻塞 gameplay hot path
-- Debugger 输出层与 gameplay layer 隔离
+## 选型维度
 
-#### 4. Presentation Data（表现层数据）
+选型必须依次回答：
 
-**特征**：从 gameplay 层单向流入、不需要确定性、丢失一帧不影响正确性、可能存在多平台差异。
+1. 谁拥有数据，谁负责 Dispose/Clear/Destroy？
+2. 数据有效到何时：job、phase、frame、entity、World 还是进程？
+3. 单 writer、多个独立 writer，还是共享并行 append？
+4. 按 owner 连续访问、按 Entity 随机查找、按 key 索引，还是全量扫描？
+5. 输出顺序是否影响 gameplay/replay？若影响，稳定全序键是什么？
+6. 数据是否需要结构变化、是否必须本帧立即可见？
 
-**典型数据**：
-- CueRequest（VFX/SFX 触发信号）
-- 位置同步修正
-- HP bar 更新
-- 状态变化通知
+| 承载方式 | 主要生命周期 | 典型访问 | 关键限制 |
+|---|---|---|---|
+| `IComponentData` | entity | query/chunk、lookup | 组件类型变化是结构变化 |
+| `DynamicBuffer<T>` | entity | owner-local 变长集合 | 容量外部化；具体引用在结构变化后失效 |
+| `NativeStream` | 显式 allocator | 多逻辑 buffer append/read | 固定 ForEachCount；一 buffer 一 writer；先写后读 |
+| `NativeList/Map` | 显式 allocator | 临时集合/索引 | ParallelWriter 不保证物理写入顺序 |
+| ECB | playback 前 | 延迟实体命令 | 不是通用数据 Store；sort key 只定义 playback 排序 |
+| BlobAssetReference | 由创建/烘焙 owner 决定 | 只读共享 | 不承载可变 gameplay state |
+| Chunk component | chunk | per-chunk 元数据 | 添加/移除是结构变化；chunk identity 不稳定 |
 
-**承载要求**：
-- `NativeStream`（无需确定性）或边界 managed queue
-- 帧末 drain 到 presentation layer
-- 不反向影响 gameplay
-- 允许降频/丢帧
+## 确定性 merge
 
-### 数据承载方式对照表
+影响 battle hash/replay 的顺序敏感输出必须建立稳定全序，不能只按 target 排序。
 
-| 承载方式 | 存储位置 | 生命周期 | 确定性 | 适用场景 |
-|---|---|---|---|---|
-| `DynamicBuffer<T>` | Chunk 内（内联/外部化） | entity 生命周期 | 取决于写入顺序 | Owner-local gameplay data |
-| `IComponentData` | Chunk 内 per-entity | entity 生命周期 | 是 | 单值 gameplay state |
-| `NativeStream` | 临时分配 | 帧内 | 可选（排序后确定） | 并行 fan-in |
-| `NativeList` | 自定义 (Temp/TempJob/Persistent) | 按 allocator | 不保证 | Telemetry / 临时统计 |
-| `ECB` (EntityCommandBuffer) | 延迟结构变化队列 | 帧内 | 取决于 sortKey | 结构变化统一提交 |
-| `BlobAssetReference<T>` | 只读共享内存 | World 生命周期 | 只读 | 静态定义数据 |
-| `ChunkComponentData` | Chunk 内每 chunk 一份 | chunk 生命周期 | 是 | Chunk 级元数据 |
-
-### 数据承载选型决策流
-
-```
-数据需要跨帧持久？
-  |-- 是 -+-> 数据是所有 entity 各自一份？
-  |       |   |-- 是 -> DynamicBuffer（集合）或 IComponentData（单值）
-  |       |   +-- 否 -> Chunk Component（chunk 级）或 Singleton（全局）
-  |       +-> 数据是只读共享定义？
-  |               -> BlobAssetReference<T> 或 generated static array
-  |
-  +-- 否（帧内临时）-+-> 需要确定性 merge？
-                      |   |-- 是 -> NativeStream + sorted merge
-                      |   +-- 否 -> NativeStream（无需排序）或 managed queue
-                      |
-                      +-> 是结构变化？
-                              -> ECB（EntityCommandBuffer）
-
-数据影响 battle hash？
-  |-- 是 -> gameplay 分类 -> 确定性承载（DynamicBuffer / IComponentData）
-  +-- 否 -> 检查数据性质
-              |-- telemetry -> NativeList + 容量截断
-              +-- presentation -> NativeStream 或 boundary queue
+```text
+(Phase,
+ TargetStableId,
+ SourceStableId,
+ CommandKind,
+ ProducerSequence)
 ```
 
-### Singleton vs DynamicBuffer 选型
+键必须唯一或定义所有相等项的 tie-breaker。`Entity.Index`、chunk index、worker index 和 NativeStream buffer index 不是天然的跨运行业务稳定 ID。若操作可交换且可结合，也可以通过数学证明消除排序；浮点加法通常不能直接满足该条件。
 
-| 条件 | 推荐方式 |
-|---|---|
-| 全局唯一 + 低频写入 | Singleton component + native container |
-| 全局唯一 + 单 writer | Singleton DynamicBuffer |
-| 全局唯一 + 多 writer 并行 | NativeStream（每线程独立段） |
-| per-owner 数据 | Owner entity 上的 DynamicBuffer |
-
----
-
-## EX-GAS 项目解读
-
-### 数据分类映射
-
-EX-GAS 的完整数据分类映射：
-
-```
-Gameplay（参与 battle hash）：
-  - ActiveGameplayEffectBuffer DynamicBuffer slot, per-ASC
-  - AttributeSet current/base   IComponentData, per-ASC
-  - TagMaskComponent            IComponentData bitmask, per-ASC
-  - AbilityStateComponent       IComponentData state/flags, per-ability entity
-  - PeriodDueTag / ChunkComponent optional skip cache, only after profiler proof
-
-Transient（帧内，用于 gameplay 但不跨帧持久）：
-  - GEEffectCommandRecord       NativeStream segment -> deterministic merge
-  - AttributeModifierRecord     NativeStream / target grouped range
-  - GameplayFactRecord          NativeStream / owner-local fact range
-  - EffectCommand merge result  NativeList, sorted by target/sequence
-
-Telemetry（诊断，不参与 gameplay）：
-  - Debug frame metrics         NativeList(Allocator.Persistent), sampled
-  - Buffer pressure snapshot    NativeArray, periodic export
-  - System profiling data       Managed buffer, capped
-
-Presentation（表现层，单向输出）：
-  - CueRequest                  NativeStream -> presentation system
-  - Visual state change          Boundary managed queue
-  - UI update event              Presentation outbox
-```
-
-### 每帧 Clear vs 跨帧持久决策
-
-Transient 数据（EffectCommand、AttributeDelta、TypedFact）每帧 clear。关键设计约束：
+## NativeStream 消费示例
 
 ```csharp
-// 帧末 clear
-var buffer = SystemAPI.GetSingletonBuffer<BAttributeDelta>();
-buffer.Clear();
-
-// 注意：Clear 不重置 InternalBufferCapacity
-// 外部化数据不会因 Clear 迁回 chunk
-// Clear 后 Capacity 保持，Length 归零
-```
-
-### Deterministic Merge 实现
-
-```csharp
-// EffectCommand deterministic merge 模式的规范实现
-// 1. 并行收集：NativeStream ParallelWriter
-// 2. 合并排序：按 target ASC entity 排序
-// 3. 分发：写入 per-target BAttributeDelta buffer
-
-struct EffectCommandMergeJob : IJob
+NativeStream.Reader reader = commandStream.AsReader();
+for (int bufferIndex = 0; bufferIndex < reader.ForEachCount; bufferIndex++)
 {
-    [ReadOnly] public NativeStream CommandStream;
-    public NativeList<EffectCommand> SortedCommands;
-
-    public void Execute()
+    int itemCount = reader.BeginForEachIndex(bufferIndex);
+    for (int itemIndex = 0; itemIndex < itemCount; itemIndex++)
     {
-        SortedCommands.Clear();
-        // ForEachCount 和 segment 遍历顺序在相同 job 调度下可复现
-        for (int i = 0; i < CommandStream.ForEachCount; i++)
-        {
-            var reader = CommandStream.AsReader(i);
-            for (int j = 0; j < reader.Length; j++)
-            {
-                SortedCommands.Add(reader.Read<EffectCommand>());
-            }
-        }
-        // 排序保证确定性
-        SortedCommands.Sort(new EffectCommandByTargetComparer());
+        sortedCommands.Add(reader.Read<EffectCommand>());
     }
+    reader.EndForEachIndex();
 }
+
+sortedCommands.Sort(new EffectCommandTotalOrderComparer());
 ```
 
-### Debugger 的 Store 健康指标
+旧示例中的 `NativeStream ParallelWriter` 与 `commandStream.AsReader(i)` 不是 Collections 2.6.6 API。NativeStream 使用 `Writer`/`Reader`，并通过 `BeginForEachIndex` 选择逻辑 buffer。
 
-Debugger 应输出每种 Store 的健康状态：
-- Store 类型和分类（gameplay/transient/telemetry/presentation）
-- 当前容量和使用率
-- 是否参与 battle hash
-- 生命周期（帧内 clear / 跨帧持久）
-- 当前 Entity 数量、chunk 数量、unused capacity
+## EX-GAS 当前方向
 
----
+- ActiveEffect：owner-local 跨帧状态，可用 DynamicBuffer slot；容量由数据分布决定。
+- EffectCommand/AttributeDelta/Fact：gameplay transient；并行生产时使用稳定 NativeStream 映射或并行容器，消费前建立业务顺序。
+- Telemetry：与 gameplay 隔离、有明确容量/采样预算，不写入 battle hash。
+- Cue/Presentation：单向输出；丢弃、合并和时延策略由具体 cue 语义声明。
+- 所有 Store 在类型文档或邻近 owner 文档中声明 owner、lifetime、access path、ordering 和 teardown；不要求把全部信息硬塞进类型名。
 
-## 常见陷阱
+## 官方证据边界
 
-1. **数据分类混淆**：将 presentation 数据（如 cue request）放入 gameplay buffer，增加不必要的确定性开销，且可能污染 battle hash。
-2. **Transient 数据误用跨帧持久承载**：EffectCommand 如果不小心写入 DynamicBuffer 且未在帧末 clear，跨帧积累导致内存膨胀和状态不一致。
-3. **Telemetry 数据影响 gameplay hot path**：在 gameplay system 中直接采集 telemetry（如 `Time.realtimeSinceStartup`），增加非必要分支和性能开销。应通过 TelemetrySystem 异步采样。
-4. **Store 命名模糊**：`DataStore` / `EffectStore` 等命名不表达 owner 和生命周期，导致新成员不清楚谁持有数据、何时有效。
-5. **非确定性 merge 隐含的 battle hash 风险**：在 CPU 多线程环境下，非排序的并行写入自然产生不可预测的顺序。任何参与 battle hash 的数据必须确定性排序。
-6. **Presentation outbox 阻塞 gameplay**：如果 Presentation outbox 是同步 drain 且目标系统响应慢，会拖慢 gameplay 帧。应使用异步/批处理方案。
+| 官方文档 | 能支持的结论 |
+|---|---|
+| Entities `components-buffer-introducing.md` | DynamicBuffer 的 entity 归属、容量和结构变化失效 |
+| Entities `components-nativecontainers.md` | component 嵌套 NativeContainer 的 job 调度限制 |
+| Entities `systems-entity-command-buffer-playback.md` | ECB sort key 定义 playback 顺序；并行录制需 ParallelWriter |
+| Entities `performance-chunk-allocations.md` | 临时 Add/Remove、archetype/chunk 碎片化风险 |
+| Collections `parallel-readers.md` | 普通 ParallelWriter 顺序不确定；NativeStream 可隔离并行 buffer |
 
-## 官方证据
-
-| 官方文档文件 | 关键结论 | 关联规则 |
-|---|---|---|
-| `components-buffer-introducing.html` | DynamicBuffer 无 NativeContainer 调度限制，适合 per-owner 集合 | STORE-01, STORE-03 |
-| `systems-entity-command-buffer-playback.md` | sortKey + ChunkIndexInQuery 实现确定性 ECB 回放 | STORE-02 |
-| `performance-chunk-allocations.html` | 临时数据用 DynamicBuffer 而非 Add/Remove Component | STORE-03 |
-| `components-nativecontainers.md` | NativeContainer 在 component 上时禁止调度 IJobChunk/IJobEntity | STORE-03 |
-| `systems-entity-command-buffers.md` | ECB 最佳实践、独立 ECB per job | STORE-03 |
-| `systems-systemapi.md` | SystemAPI.GetSingleton 不触发 sync point vs EntityManager.GetComponentData 触发 | STORE-02 |
-| `systems-data.md` | 系统级数据存为 component 而非 system 字段（CASE-45） | STORE-01 |
+数据四分类、battle total key、Store 命名和具体容器映射均为 EX-GAS 设计规范。

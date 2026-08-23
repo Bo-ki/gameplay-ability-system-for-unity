@@ -1,114 +1,99 @@
-# Prefab-Content管理: API 与 EX-GAS 解读
+# Prefab-Content 管理：API 与 EX-GAS 解读
 
-## 核心概念
+## 结论
 
-### ECS Prefab 与 BlobAsset 的边界
+Entity Prefab 适合复用完整实体结构，BlobAsset 适合共享不可变数据，但 Unity 没有规定“一个 prefab 必然对应一个独立 archetype/独占 16 KiB chunk”。内存风险来自不同 archetype、shared-component 分区和低占用 chunk 的组合，必须用 Archetypes window/Profiler 实测。`UnityObjectRef<T>` 与 `WeakObjectReference<T>` 是两种不同的资产引用模型，也都不是“跨 World entity 引用”。
 
-在 ECS 中，Prefab 是包含完整 archetype 的 entity 模板，每个 prefab 有独立的 archetype（因为 `Prefab` component）。BlobAsset 是共享的只读数据块。两者用途不同：
+**适用版本**：Entities 1.4.6（项目安装版本）
 
-| 特性 | Prefab | BlobAsset |
-|---|---|---|
-| 内存占用 | 至少 16 KiB chunk（独立 archetype） | 共享引用，无独立 chunk |
-| 可变性 | Instantiate 后可修改 | 完全不可变 |
-| 适用场景 | 实体原型（角色模型、特效实体） | 静态定义（配置表、查找表） |
-| 数量限制 | 受控，大量不同 prefab 导致内存浪费 | 几乎无限（共享存储） |
+## Entity Prefab
 
-### EntityPrefabReference / Content Loading
+Baking 生成的 entity prefab root 带：
+
+- `Prefab` tag：默认查询排除 prefab。
+- `LinkedEntityGroup`：扁平记录 prefab hierarchy，支持整体 instantiate/destroy/enable。
+
+实例化时 `Prefab` tag 会从副本移除。多个 prefab 只有在组件类型集合、shared component 分区等条件不同而落入不同 chunk 时才会增加碎片；仅凭“prefab 数量”不能推出 `N × 16 KiB`。
+
+官方建议：
+
+- 需要完整实体原型时使用 entity prefab。
+- 需要在多个 SubScene 复用且避免把内容复制进每个 entity scene 时，使用 `EntityPrefabReference`。
+- 共享、不可变、无需独立实体身份的数据可考虑 BlobAsset。
+- 用 Archetypes window 检查 allocated/unused memory、archetype 和 chunk 数量。
+
+来源：`baking-prefabs.md`、`linked-entity-group.md`、`performance-chunk-allocations.md`。
+
+### EntityPrefabReference 加载流程
+
+`EntityPrefabReference` 指向独立 entity scene 文件；它不是可直接传给 `Instantiate` 的 `Entity`。运行时必须先请求加载，再使用 `PrefabLoadResult.PrefabRoot`：
 
 ```csharp
-// Authoring 端：声明 prefab 引用
-public struct CEffectVfxPrefab : IComponentData
+// Baker：把 GameObject prefab 转成 EntityPrefabReference。
+var prefabReference = new EntityPrefabReference(authoring.Prefab);
+AddComponent(entity, new CPrefabReference { Value = prefabReference });
+
+// Runtime：请求异步加载。
+entityManager.AddComponentData(requestEntity, new RequestEntityPrefabLoaded
 {
-    public EntityPrefabReference VfxPrefab;
-}
+    Prefab = prefabReference
+});
 
-// Runtime 端：加载 prefab（Burst-compatible）
-public struct PresentationBinding : IComponentData
-{
-    public EntityPrefabReference PrefabRef;
-}
+// PrefabLoadResult 出现后才能实例化。
+var instance = ecb.Instantiate(prefabLoadResult.PrefabRoot);
 ```
 
-无头 Demo 中可用 log marker 占位，保留完整的 Presentation outbox → binding → log marker 链路。
+来源：`baking-prefabs.md` > `Create and register an Entity prefab`、`Instantiate prefabs`。
 
-### WeakObjectReference / UnityObjectRef
+## UnityObjectRef 与 WeakObjectReference
 
-`UnityObjectRef<T>`（继承自 `WeakObjectReference` 概念）用于跨 World 的托管资源引用，Burst-compatible。适用于引用场景中的 MonoBehaviour、Texture、Mesh 等 Unity 对象，不适用于 ECS entity 引用。
+| 类型 | 引用/加载语义 | 生命周期 | 关键限制 |
+|---|---|---|---|
+| `UnityObjectRef<T>` | 在 unmanaged component 中保存 UnityEngine.Object 的直接引用（内部为 instance ID） | 随 entity scene/直接引用自动加载；引用会阻止 `Resources.UnloadUnusedAssets` 回收资产 | component 仍是 unmanaged，但读取 `Value` 得到 managed object，不可据此声称解引用可在 Burst job 中执行 |
+| `WeakObjectReference<T>` | 包装 `UntypedWeakReferenceId` 的 content-archive 弱引用 | 调用者显式 `LoadAsync`，每次 Load 对应一次 `Release`；引用计数归零后 archive 才可卸载 | 使用前检查 loading status/结果；同步等待可能造成性能问题 |
 
-### Scene Section 与场景流式加载
+两者都可用于资产引用，而不是 World 间的 `Entity` 引用。`Entity` 只在所属 World 的 entity store 中有意义；不能用这两个资产引用类型解决跨 World entity 身份问题。
 
-SubScene 可以被划分为多个 Scene Section，每个 section 独立流式加载。ECS component 的 `Entity` 字段只能引用同一 section 或 section 0 的 entity，跨 section 引用在加载时静默变为 `Entity.Null`。
+来源：`reference-unity-objects.md`、`content-management-intro.md`、`content-management-get-a-weak-reference.md`、`content-management-load-an-object.md`，以及 `UnityObjectRef<T>` API remarks。
 
----
+## Scene Section
 
-## EX-GAS 项目解读
+SubScene 中的 `Entity` 字段只能引用：
 
-### Prefab 用途边界
+- 同一 section 的 entity；
+- section 0 的 entity。
 
-EX-GAS 中 Prefab 仅用于以下场景：
-- **角色／单位实体原型**：AutoChess 中的棋子模型 entity
-- **VFX／SFX 实体模板**：技能特效、音效的实体原型
-- **UI 控件实体**：HUD、血条等 UI 元素的实体模板
+指向其他非零 section 的引用加载时变为 `Entity.Null`。Entity prefab 实例带 `SceneSection` 时，卸载对应 section 会一起销毁实例；如果不希望绑定该生命周期，应在实例上移除 `SceneSection`。
 
-以下场景 **禁止** 使用 Prefab：
-- GE 定义：必须使用 `GameplayEffectDefinitionBlob`（BlobAsset）
-- Ability 定义：必须使用 `AbilityDefinitionBlob`（BlobAsset）
-- Tag 配置：必须使用 `TagDefinitionBlob`（BlobAsset）或 generated static table
-- Buff 定义：必须使用 `BuffDefinitionBlob`（BlobAsset）
+来源：`streaming-scene-sections.md`。
 
-### Scene Section 策略
+## EX-GAS 项目策略
 
-EX-GAS AutoChess 场景的 Section 策略：
-- **Section 0**：所有 ASC entity、Ability entity、全局 GameState entity —— 常驻
-- **Section 1..N**：空间分区的战斗区域
-- 跨 section 引用统一指向 section 0，避免静默 null
+以下不是 Unity 官方硬规则：
 
-### LinkedEntityGroup 生命周期绑定链
+1. Ability、GameplayEffect、Tag 等不可变定义优先使用 BlobAsset/generated table。
+2. Entity Prefab 只用于确有实体身份、组件集合和实例生命周期的对象。
+3. Prefab 数量不设置脱离数据的固定阈值；以 archetype/chunk/unused memory 预算和 Profile 结果裁决。
+4. 直接常驻资源用 `UnityObjectRef<T>`；需要显式异步加载/卸载的 Presentation 资源用 `WeakObjectReference<T>`。
+5. 跨 section 共享 ECS 实体放在 section 0 只是项目布局方案，需结合实际流式加载生命周期验证。
 
-```
-ASC Entity (root)
-  ├── DynamicBuffer<LinkedEntityGroup> [0] = ASC Entity (self)
-  ├── DynamicBuffer<LinkedEntityGroup> [1] = Granted Ability Entity A
-  ├── DynamicBuffer<LinkedEntityGroup> [2] = Granted Ability Entity B
-  └── DynamicBuffer<LinkedEntityGroup> [N] = Active Effect Entity Z
-```
+## 常见错误
 
-`DestroyEntity(ascEntity)` → 自动销毁 ASC + 所有 granted ability + 所有 active effect entity。
-
-### 无头 Demo Content Loading
-
-- AutoChess 无头 Demo 不用真实画面资源，但保留 Presentation outbox → binding → log marker 的完整链路
-- `PresentationBinding` component 中使用 `EntityPrefabReference` 声明依赖，但 `UseLogMarker` 为 true 时跳过实例化
-
-### 代码目录映射
-
-| 机制 | 主要代码目录 | 文档关联 |
-|---|---|---|
-| Prefab 定义 | `Assets/GAS/Runtime/Ability/`、`Assets/GAS/Runtime/Effect/` | CONTENT-01, PRF-11 |
-| Content Loading | `Assets/GAS/Runtime/System/Event/SPresentationOutboxProjection.cs` | CONTENT-02 |
-| LinkedEntityGroup | `Assets/GAS/Runtime/Effect/Component/Dynamic/CActiveEffectStore.cs` | CASE-37 |
-| Scene Section | `Assets/GAS/Runtime/System/SystemGroup/` | CASE-42, CASE-43, CASE-44 |
-| WeakObjectReference | Asset reference component 定义 | CONTENT-02 |
-
----
-
-## 常见陷阱
-
-1. **Prefab 当作配置数据**：每个 GE／Ability 定义做一个 prefab，消耗大量 chunk 内存（16 KiB × N）。
-2. **Scene Section 跨引用无声失效**：ECS component 中 `Entity` 字段跨 section 引用在加载时被静默设为 `Entity.Null`。
-3. **Prefab 实例继承 SceneSection**：加载在 section N 的 prefab 实例自动获得 `SceneSection` component，卸载 section N 时所有实例被销毁。
-4. **LinkedEntityGroup 嵌套不生效**：LinkedEntityGroup 不支持递归嵌套。
-5. **托管引用在 IComponentData 中**：在 component 中使用 `Object` 字段导致 archetype 包含托管类型。
-6. **ProcessAfterLoadGroup 在错误 World 中运行**：PostLoadCommandBuffer 的 ECB playback 和 `ProcessAfterLoadGroup` 在 streaming world 中运行。
+1. 把 `EntityPrefabReference` 当成可直接实例化的 `Entity`。
+2. 声称每个 prefab 天生拥有唯一 archetype 和专属 chunk。
+3. 声称 `UnityObjectRef<T>` 内部使用 `WeakObjectReference<T>` 或不会阻止卸载。
+4. 把 asset reference 描述为跨 World entity reference。
+5. 忘记 `LinkedEntityGroup` 不递归且只能包含有效 entity。
+6. 保存 `PostLoadCommandBuffer` 后立即 dispose 其中 ECB；官方流程要求把所有权交给 streaming system。
 
 ## 官方证据
 
-| 官方文档文件 | 关键结论 | 关联规则编号 |
-|---|---|---|
-| `performance-chunk-allocations.html` | 每个 prefab 至少 16 KiB chunk；静态数据用 BlobAsset | CONTENT-01, PRF-11 |
-| `baking-prefabs.md` | Prefab 需 Baker 注册；runtime 通过 EntityPrefabReference 加载 | CONTENT-01 |
-| `systems-data.md` | UnityObjectRef<T> Burst-compatible 托管引用 | CONTENT-02, CASE-45 |
-| `linked-entity-group.md` | LinkedEntityGroup 批量生命周期管理 | CASE-37 |
-| `streaming-scene-sections.md` | Scene Section 跨引用限制 | CASE-42 |
-| `streaming-scene-instancing.md` | PostLoadCommandBuffer + ProcessAfterLoadGroup | CASE-43 |
-| `streaming-meta-entities.md` | Section meta entity 自定义元数据 | CASE-44 |
+| 官方文档 | 可裁决结论 |
+|---|---|
+| `baking-prefabs.md` | Prefab 组成、注册、EntityPrefabReference 加载和实例化 |
+| `performance-chunk-allocations.md` | 16 KiB chunk、prefab fragmentation 的成立条件和测量方式 |
+| `linked-entity-group.md` | 整组操作、首元素、有效 entity 与非递归语义 |
+| `reference-unity-objects.md` | UnityObjectRef 直接引用 |
+| `content-management-intro.md` | strong/weak content 生命周期差异 |
+| `streaming-scene-sections.md` | section 引用和 prefab instance 生命周期 |
+| `streaming-scene-instancing.md` | PostLoadCommandBuffer 与 ProcessAfterLoadGroup |

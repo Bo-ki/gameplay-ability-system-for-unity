@@ -2,23 +2,25 @@
 
 ## 核心概念
 
-### 三层诊断体系
+### 三层诊断体系（EX-GAS 项目模型）
+
+下表是 EX-GAS 对官方工具和项目计数器的职责划分，不是 Unity 规定的唯一诊断架构。
 
 | 层级 | 工具 | 使用场景 | 对 Runtime 的影响 |
 |---|---|---|---|
 | **ECS 内置** | Entities Journaling | 排查 entity/chunk/component 生命周期 bug | 有开销，默认关闭 |
 | **Unity Profiler** | Structural Changes Profiler module | 定位结构变化热点 | Profiler 开销，应在 profile build 中 |
-| **手写 Debugger** | Runtime Core counters + structured log | 架构级性能监控和自动验收 | 极低（只记录计数） |
+| **手写 Debugger** | Runtime Core counters + structured log | 架构级性能监控和自动验收 | 取决于采样、存储和同步方式，必须单独测量 |
 
 ### Entities Journaling
 
-记录 ECS 操作流水，用于回放排查 bug：
+记录 ECS 操作流水，用于检查和关联 ECS 变更；它不是确定性 simulation replay：
 - 记录内容：world/entity create/destroy、system add/remove、component add/remove、`GetComponentDataRW` / `GetBufferRW` 等 RW access
 - 输出：Journaling window 或 `Unity.Entities.EntitiesJournaling` API
 - 记录使用 FIFO 内存，Preferences > Entities > Journaling 的 Total Memory MB 决定保留窗口
 - 记录包含执行 system、ECB origin system、frame index、record index、record type、world、entity、component type 和关联数据
 - RW access 不是字段级 diff；官方窗口会根据相邻 RW 记录推断可能的 set 来源
-- **有显著的运行时开销，不应在性能测试中开启**
+- 会引入额外运行时和内存开销；若 benchmark 目标是测量未插桩成本，应关闭或分别报告开启/关闭口径
 - 与手写 Debugger counters 互补：Journaling 用于深度排查，counters 用于日常监控
 
 ### Structural Changes Profiler Module
@@ -29,7 +31,9 @@
 - 按 system 归类结构变化来源
 - Profiler module 未启用时不采集数据；profiling 后再启用 module 不会回填历史帧
 
-### 手写 Runtime Core Debugger 的最小指标集
+### 手写 Runtime Core Debugger 的建议指标集
+
+以下字段是项目候选设计，不是 Unity 官方 API 或固定最小集合；最终保留项由可观测性收益和自身开销共同决定。
 
 ```
 System 层级:     SystemTimingMs, SystemEntityCount
@@ -127,7 +131,7 @@ public struct RuntimeDiagnostics : IComponentData
 1. **Debugger 自身成为性能问题**：手写 Debugger 只能记录计数，不做字符串拼接、不分配托管内存
 2. **Journaling 开启时跑性能测试**：Journaling 有巨大开销，性能数据无意义
 3. **`avgTickMs` 掩盖问题**：单帧 spike（如 ECB playback）被平均后看不出
-4. **Burst warmup 污染首帧数据**：Player 性能报告必须排除前 N 帧
+4. **冷启动污染稳态数据**：Player 使用 Burst AOT，但初始化、缓存和首次路径仍可能影响冷启动；报告必须分别记录冷启动和达到稳定条件后的稳态窗口，不使用无证据的固定 N 帧
 5. **用 Journaling 替代 Debugger counters**：职责混淆，Journaling 只能用于深度排查
 6. **Debugger 输出影响 simulation**：如 Debugger 触发 sync point
 7. **在 hot path 拼接人读日志字符串**：GC 压力和非确定性暂停

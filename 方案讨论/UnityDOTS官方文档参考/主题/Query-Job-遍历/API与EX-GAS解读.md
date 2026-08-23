@@ -4,20 +4,20 @@
 
 ### 三种遍历方式对比
 
-| 方式 | 执行线程 | Burst | 适用规模 | Sync Point | EX-GAS 推荐场景 |
-|------|----------|-------|----------|------------|----------------|
-| `SystemAPI.Query` (idiomatic foreach) | 主线程 | 可（受 `ISystem` / Burst 上下文约束） | 小规模（<100 实体） | **是** | Debugger 快照、Editor 工具、proof 验证 |
-| `IJobEntity` | Worker 线程 | 是 | 中大规模（100-10K） | 否 | 简单 per-entity 变换、stateless 计算 |
-| `IJobChunk` | Worker 线程 | 是 | 大规模（>10K） | 否 | chunk skip/mask/optional、批量统计、复杂循环 |
+| 方式 | 执行位置 | Burst | 依赖行为 | EX-GAS 推荐场景 |
+|------|----------|-------|----------|----------------|
+| `SystemAPI.Query` (idiomatic foreach) | 主线程 | 可（受 `ISystem` / Burst 上下文约束） | foreach 前自动完成必要依赖 | 简单主线程遍历、立即消费结果、Debugger/Editor |
+| `IJobEntity` | `Run` 时主线程；`Schedule*` 时 job system | job 可 Burst | 通过 `JobHandle` 传递 | 常规 per-entity 变换 |
+| `IJobChunk` | `Run` 时主线程；`Schedule*` 时 job system | job 可 Burst | 通过 `JobHandle` 传递 | chunk skip/mask/optional、批量统计、复杂循环 |
 
-**核心规则：Runtime Core hot path 默认优先 IJobEntity 或 IJobChunk。`SystemAPI.Query` 的主线程串行遍历和自动 dependency completion 在高频场景下不可接受。**
+**核心规则：Runtime Core hot path 默认评估 IJobEntity / IJobChunk 调度，但最终选择由数据访问形态、依赖等待、可并行工作量和目标设备 Profiler 决定；Unity 没有提供按实体数量划分的固定阈值。**
 
 ### SystemAPI.Query（主线程遍历）
 
 ```csharp
 // 底层机制：source generator 创建并缓存 EntityQuery
 // foreach 前 source generator 会完成必要依赖；相关 job 未完成时主线程等待
-// 适用于 proof、debug、Editor，不适用于 hot path
+// 主线程遍历；是否适合 hot path 由实际工作量和 Profiler 决定
 foreach (var (health, translation) in SystemAPI.Query<RefRO<Health>, RefRW<Translation>>())
 {
     translation.ValueRW.Value += health.ValueRO.Value;
@@ -27,9 +27,9 @@ foreach (var (health, translation) in SystemAPI.Query<RefRO<Health>, RefRW<Trans
 **关键事实：**
 - Source generator 为每个 `SystemAPI.Query` 调用自动创建并缓存 `EntityQuery`
 - `foreach` 前会自动完成必要 read/write 依赖；若相关 job 未完成，会表现为主线程等待
-- 主线程遍历导致所有 worker 线程闲置等待
-- `upgrade-guide.md` 说明 `SystemAPI.Query` 可在合适上下文 Burst 编译；hot path 禁用原因是主线程串行 + dependency completion + 无 worker 并行，而不是“绝对不能 Burst”
-- **CASE-01**：`SystemAPI.Query` 仅用于 Debugger 快照、Editor 工具、<100 entity 的 proof。任何 >100 entity 的 hot path 拒绝使用。
+- 只有必要依赖尚未完成时才会发生主线程等待；无关 job 不会因此全部停止
+- `SystemAPI.Query` 可在合适上下文 Burst 编译，但遍历本身仍在主线程，不提供 worker 并行
+- **CASE-01**：用于逻辑简单、需要立即消费结果或不值得调度 job 的主线程遍历；hot path 需要 Profiler 证据
 
 ### IJobEntity（per-entity 并行 job）
 
@@ -59,13 +59,13 @@ state.Dependency = job.ScheduleParallel(state.Dependency);
 |----------|----------|------|
 | `IComponentData` | `ref` = 读写, `in` = 只读 | 构成 query 条件 |
 | `ICleanupComponentData` | `ref` / `in` | cleanup 组件 |
-| `ISharedComponent` | `in` 只读 | 托管类型时 **不能 Burst** |
+| `ISharedComponent` | `in` 只读 | managed shared component 不能 Burst 或 schedule，只能 `.Run()`；unmanaged 版本可使用对应 job/Burst API |
 | `DynamicBuffer<T>` | `ref` / `in` | Buffer 访问 |
 | `Entity` | 值拷贝 | 当前 entity ID |
 | `IAspect` | — | **已废弃（deprecated since 1.4.6），禁止新代码使用** |
 | `int` + `[ChunkIndexInQuery]` | 值拷贝 | chunk 索引 |
 | `int` + `[EntityIndexInChunk]` | 值拷贝 | chunk 内 entity 索引 |
-| `int` + `[EntityIndexInQuery]` | 值拷贝 | **性能差，内部调用 `CalculateBaseEntityIndexArray`** |
+| `int` + `[EntityIndexInQuery]` | 值拷贝 | 调度时需 `CalculateBaseEntityIndexArray[Async]` 准备 chunk offset；只在需要 packed index 时使用 |
 
 **IJobEntity 的 query 定制属性：**
 
@@ -162,7 +162,7 @@ public partial struct MySystem : ISystem
 | `ScheduleParallel` | 多 worker 线程并行 | 无 entity 间依赖的遍历 | 默认模式，首选 |
 | `ScheduleSingle` | 单 worker 线程 | 需要顺序处理、全局状态 | 不阻塞主线程，但并行度低 |
 | `Schedule`（按 chunk） | 每个 chunk 一个 job | chunk 间无依赖的批处理 | 注意 chunk count 与 job count 的关系 |
-| `Run` | 主线程同步 | proof/debug 小规模 | 触发 sync point，不推荐 hot path |
+| `Run` | 主线程同步 | 需要立即得到结果或不值得调度 | 完成必要输入依赖；等待成本取决于依赖是否已完成 |
 
 ### EntityQuery 与 Query Filter
 
@@ -175,15 +175,15 @@ var query = new EntityQueryBuilder(Allocator.Temp)
 ```
 
 **EntityQueryOptions 关键选项：**
-- `IgnoreComponentEnabledState`：忽略 enableable 状态。**不需要 sync point**，效率更高
-- 默认（无此选项）：遵守 enableable 过滤，**每次同步查询触发 sync point**
+- `IgnoreComponentEnabledState`：忽略 enableable 状态；不会为 enabled 状态写 job 等待，但会改变匹配语义
+- 默认（无此选项）：遵守 enableable 过滤；同步 Query 操作仅在相关 enableable 写 job 尚未完成时等待
 
 **同步 vs 异步 Query 操作：**
 
 | 方法类型 | Sync Point | 返回值 | 说明 |
 |----------|------------|--------|------|
-| 同步（`ToEntityArray`） | 是 | `NativeArray` | 等待所有相关 job 完成 |
-| 异步（`ToEntityArrayAsync`） | 否 | `NativeList` | 调度 job 完成操作 |
+| 同步（`ToEntityArray`） | 依赖未完成时等待 | `NativeArray` | 立即返回可读结果 |
+| 异步（`ToEntityArrayAsync`） | 调用点不等待 | `NativeList` | 调度收集 job；完成前不能访问列表 |
 
 **ChangeFilter 与 chunk.DidChange：**
 
@@ -195,7 +195,7 @@ var query = new EntityQueryBuilder(Allocator.Temp)
 
 ### ComponentLookup / BufferLookup
 
-随机访问 component 数据的工具，但每次 lookup 只有 entity 级别精度，无法批量优化。
+随机访问任意 entity 组件数据的官方工具；适合跨实体依赖，但局部性通常弱于 query/chunk 顺序访问。
 
 ```csharp
 var healthLookup = state.GetComponentLookup<BAttribute>(isReadOnly: true);
@@ -208,16 +208,16 @@ public struct MyJob : IJobEntity
     {
         if (AttributeLookup.TryGetComponent(source, out var attr))
         {
-            // 单 entity 随机访问 —— 高频场景下成本显著
+            // 单 entity 随机访问；是否为瓶颈需要基于目标平台测量
         }
     }
 }
 ```
 
 **关键事实：**
-- Lookup 在结构变化后失效，必须重取
-- 高频 random lookup 成本远高于顺序遍历
-- 优先考虑 owner-local buffer 替代跨 entity random lookup
+- 缓存的 Lookup 在使用/调度前调用 `.Update(ref state)` 刷新；无需在每次结构变化后销毁并重新创建字段
+- Unity 定性说明 random access 是最低效的数据访问方式之一，但没有给出固定倍率
+- 热点成立时再评估 owner-local、分组或 chunk 顺序布局，并同时考虑复制与同步成本
 
 ### IJobEntity Execute 参数语义
 
@@ -225,7 +225,9 @@ public struct MyJob : IJobEntity
 |--------|------|------------|----------|------|
 | `ref` | 读写 | 必需存在（WithAll） | 自动建立写依赖 | 修改影响其他 system |
 | `in` | 只读 | 必需存在（WithAll） | 只读依赖 | ECS 安全系统保证不被写 |
-| 值类型（无修饰符） | 值拷贝 | 不构成 query 条件 | 无依赖 | Entity/chunkIndex 等元数据 |
+| `Entity` / 带索引特性的 `int` | 值拷贝 | 不额外增加组件条件 | 元数据，无组件依赖 | 当前 entity、chunk/entity index；普通 `IComponentData` 必须用 `ref` 或 `in` |
+| `DynamicBuffer<T>` | `ref` 读写 / `in` 只读 | 必需存在 | 按修饰符建立依赖 | 只读路径必须显式使用 `in` |
+| Managed component | 值拷贝读写 / `in` 只读 | 必需存在 | 托管访问 | 不能 Burst 或 schedule，只能 `.Run()` |
 | `EnabledRefRW<T>` | 读写 enable 状态 | 必需存在 | 写依赖 | 只操作 enable 位 |
 | `EnabledRefRO<T>` | 只读 enable 状态 | 必需存在 | 只读依赖 | 查询 enable 位 |
 
@@ -252,34 +254,34 @@ public struct OptionalComponentJob : IJobChunk
 
 ### EffectCommand 批处理
 
-使用 IJobChunk + chunk 级效果分类。同类 GE 效果（如所有即时伤害）聚合同一 chunk，减少 query 次数。EffectCommand 使用 IJobChunk 的 optional component 模式处理不同类型的效果参数。
+当 EffectCommand 的 archetype 布局已使同类数据落在相同 chunk 时，可用 `IJobChunk` 按 chunk 读取共享字段与可选参数。是否合并不同效果类型，取决于实际 chunk 分布、无用数据抓取、分支成本和 Profiler，不能假设业务类型会自动聚集到同一 chunk。
 
 ### Attribute Delta 归并
 
-优先按 target ASC 分组后顺序 apply，避免 random lookup 散落。DeltaMap 使用 `NativeHashMap<int, float>` 通过 IJobEntity 传入，实现 per-entity 的批量 delta 应用。
+属性 delta 先按稳定 target/attribute key 归并，再由拥有目标数据的阶段批量应用，避免多个并行写入者随机修改同一 owner。承载结构可在 owner-local buffer、稳定分区 stream 与排序数组之间选择；不能在没有并发、容量和确定性证明时固定为某一种 HashMap。
 
 ### ActiveEffectStore 周期 tick
 
-使用 enableable 标记 active/inactive，IJobEntity 只遍历 active slot。禁止用 `ToEntityArray` 全量扫。参考 CASE-06（Enableable toggle）和 CASE-20（EnabledMask 批量操作）。
+`ActiveGameplayEffectBuffer` 的 slot 通过状态字段和辅助索引表达 active/inactive；buffer element 不能作为 enableable component 单独开关。只有 Profiler 证明 owner entity 级过滤有收益时，才评估额外的 enableable 标记；遍历策略同时参考 slot 分布、chunk early-out 和索引维护成本。
 
 ### Tag Query / 目标扫描
 
-使用 `WithChangeFilter` + cached query result 减少重复扫描。对实时性要求高的目标列表，使用只读 `ComponentLookup` 增量更新。参考 CASE-18（`chunk.DidChange`）做精细变更检测。
+`WithChangeFilter` 或 `chunk.DidChange` 只能把发生过相关写入的 chunk 作为候选，不能给出 entity 级精确变更，也不会自动维护缓存列表。需要持久目标索引时，应声明其 owner、更新与失效时机；`ComponentLookup` 只是随机访问工具，不等于增量索引。查询收集、显式索引和按需 lookup 由一致性要求与 Profiler 决定。
 
 ### 事件总线与观察者解耦
 
-`CGameplayEventBus` 应避免在 event handling 中做同步 query 操作。Event handler 只做 fan-in 收集，不触发 query sync point。参考 CASE-12（NativeStream 并行 fan-in + deterministic merge）。
+Gameplay fact/event 生产阶段应避免为了立即消费而同步物化任意 query。生产者写入 owner-local fact buffer 或声明过的 fan-in 容器，消费者再按 system 依赖读取；若业务确需同阶段立即查询，必须显式记录可见性与等待成本。参考 CASE-12（NativeStream 并行 fan-in + deterministic merge）。
 
 ### 关于当前实现的诊断
 
-- 当前 `SHeadlessAutoChessDriver` 使用 `ToEntityArray` 全量扫描 + 大 `UnitSnapshot` 构造 → 违反 PRF-05（Hot Path 禁止主线程遍历）。
+- 当前 `AutoChessGasBattleUnitSnapshotProjector` 从结构化日志投影托管快照，属于边界层数组处理而非 ECS Query；其成本与 Runtime Core query/job 成本必须分开记录。
 - Effect application 路径中的 `ComponentLookup<BAttribute>` 跨 entity 读取 → 注意 PRF-19 竞态风险。
 - EventBus 中同步 query 操作 → 注意 PRF-09 sync 触发。
 - 各 IJobEntity 缺少 EntityQuery 注释 → 增加 PRF-20 风险。
 
 ### 相关 CASE 模式
 
-- **CASE-01 (SystemAPI.Query)**：仅用于 Debugger 快照、Editor 工具、<100 entity 的 proof。任何 >100 entity 的 hot path 拒绝使用。
+- **CASE-01 (SystemAPI.Query)**：主线程直接遍历；hot path 以依赖等待、工作量和 Profiler 决定是否 job 化。
 - **CASE-02 (IJobEntity)**：Runtime Core hot path 主力。简单 per-entity 变换首选。
 - **CASE-03 (IJobChunk)**：批量统计、enableable 过滤、非标准遍历。简单 per-entity 变换用 IJobEntity。
 - **CASE-18 (chunk.DidChange)**：在 IJobChunk 内按 component type 逐一检查 chunk 是否变更，比 query 级 filter 更灵活。属性脏标记检测、effect 重评估跳过。
@@ -290,15 +292,15 @@ public struct OptionalComponentJob : IJobChunk
 
 1. **`query.CalculateEntityCount()` 触发 sync point**：enableable 过滤下会等待所有写 job。使用 `IgnoreFilter` 变体或异步变体。
 2. **ChangeFilter 是 chunk 级不是 entity 级**：不能用于精确单 entity 变更检测。整个 chunk 中只要有一个 entity 变更，所有 entity 都被处理。
-3. **`EntityIndexInQuery` 性能差**：内部依赖 `CalculateBaseEntityIndexArray`，不是 O(1) 索引。避免在高频路径使用。
-4. **结构变化后 lookup/handle 失效**：任何 `CreateEntity`/`AddComponent` 后必须重取 TypeHandle 和 ComponentLookup。
+3. **`EntityIndexInQuery` 有准备成本**：调度时依赖 `CalculateBaseEntityIndexArray[Async]`；仅在需要 packed index 时使用。
+4. **直接数据引用与缓存 handle 不同**：结构变化后重新获取 `DynamicBuffer`/chunk array/ref 等直接引用；缓存 TypeHandle/Lookup 在下一次使用前 `.Update(ref state)`。
 5. **`ScheduleParallel` 并行度由 chunk 数量决定**：chunk 太少时并行度不足。需要评估 entity 分布对 chunk packing 的影响。
 6. **`ref` 参数标记 chunk 为已变更**：即使未实际修改数据，`ref` 也触发 chunk 写标记。`in` 只读参数不触发。
 7. **异步 query 返回 `NativeList` 不是 `NativeArray`**：因为最终匹配量在 job 运行时才知道。需要考虑 `NativeList` 的内存管理。
-8. **`IJobEntity` 参数比 query 多 → job 不调度任何 entity**：查不出问题，纯静默。重构后必须交叉验证。
+8. **显式 query 校验有边界**：Entities 1.4.6 会检查显式 query 是否包含 `Execute` 所需组件和权限，但不覆盖所有 filter/enableable 语义组合；重构后仍需交叉验证。
 9. **Enableable component 在 `SimulationSystemGroup` 中的 `LocalToWorld` 可能过期**：不是本领域的直接陷阱，但与 query 条件组合时可能误判 entity 位置。
 10. **`GetSingletonRW` 不等待 job 完成**：当 IJobEntity 还在写入被访问的 singleton 时，使用 `GetSingletonRW` 读取可能导致竞态。
-11. **IJobEntity 中 `DynamicBuffer<T>` 在 `SystemAPI.Query` 内默认可读写**：只读场景需自定义实现避免不必要 sync point。
+11. **Buffer 访问权限必须按 API 分清**：`IJobEntity.Execute` 中用 `in DynamicBuffer<T>` 表达只读、`ref` 表达读写；`SystemAPI.Query<DynamicBuffer<T>>` 暴露读写访问，不能把两种 API 的权限语义混为一谈。
 12. **ECB 复用导致命令交错**：多个 job 复用同一个 ECB 且使用相同 sortKey → 命令交错，确定性回放被破坏。
 
 ---
@@ -307,13 +309,13 @@ public struct OptionalComponentJob : IJobChunk
 
 | 官方文档 | 关键结论 | 关联规则 |
 |----------|----------|----------|
-| `iterating-data-ijobentity.html` | IJobEntity 自动生成 IJobChunk；支持 WithAll/Any/None/ChangeFilter | QRY-01, QRY-02, CASE-02 |
-| `iterating-data-ijobchunk.html` | IJobChunk 用于 chunk 级操作和非标准遍历；chunk.Has() 判断 optional | QRY-03, CASE-03 |
+| `iterating-data-ijobentity.md` | IJobEntity 自动生成 IJobChunk；支持 WithAll/Any/None/ChangeFilter | QRY-01, QRY-02, CASE-02 |
+| `iterating-data-ijobchunk-implement.md` | IJobChunk 用于 chunk 级操作和非标准遍历；chunk.Has() 判断 optional | QRY-03, CASE-03 |
 | `systems-systemapi-query.md` | SystemAPI.Query 是主线程 foreach；source generator 自动创建 query | PRF-05, CASE-01 |
 | `performance-sync-points.md` | `Run` 和 idiomatic foreach 导致主线程同步阻塞；sync point 成因详解 | PRF-05, PRF-09 |
-| `systems-optimizing.html` | 每个 system 有 TypeHandle 刷新、Lookup 创建、Dependency 链三种固定开销 | JOB-02 (跨文档) |
-| `components-enableable-use.html` | Random-access 方法额外开销；enableable 查询成本；IgnoreFilter 无 sync 成本 | PRF-06, PRF-09 |
-| `systems-looking-up-data.md` | ComponentLookup 随机访问竞态条件；NativeDisableParallelForRestriction | PRF-19 |
+| `systems-optimizing.md` | 每个 system 有 TypeHandle 刷新、Lookup 创建、Dependency 链三种固定开销 | JOB-02 (跨文档) |
+| `components-enableable-use.md` | Random-access 方法额外开销；enableable 查询成本；IgnoreFilter 不等待 enabled 写 job | PRF-06, PRF-09 |
+| `iterating-data-ijobchunk-implement.md`、`common-errors.md` | ComponentLookup 随机访问竞态条件；NativeDisableParallelForRestriction 仅关闭检查 | PRF-19 |
 | `concepts-safety.md` | `ExclusiveEntityTransaction` 主要服务 secondary/streaming World，不是通用 worker-thread `EntityManager` 替代 | PRF-21 |
 | `common-errors.md` | IJobEntity 参数不匹配问题 | PRF-20 |
 | `common-errors.md` | 嵌套 job 的 safety handle 不正确；IJobEntity 参数不匹配问题 | PRF-23 |

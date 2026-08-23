@@ -1,128 +1,133 @@
-# Burst-AOT: API 与 EX-GAS 解读
+# Burst-AOT：API 与 EX-GAS 解读
 
-## 核心概念
+**适用版本**：Unity `6000.3.14f1`；Burst `1.8.29`
 
-### Burst 编译器原理
+## 结论
 
-Burst 是 LLVM-based 的 C# 子集编译器，将 HPC#（High Performance C#）代码编译为高度优化的原生代码。
+- Editor Play Mode 中 Burst 使用 JIT 编译；Player 中 Burst 支持的入口由构建流程 AOT 编译为原生库，桌面 Player 也不是“默认 JIT”。
+- `FunctionPointer<T>` 的 `T` 必须是 delegate 类型。它不是动态算法选择的唯一方案；数据分组、`switch` 和不同 job 往往更简单、更快。
+- job struct 与其中的 NativeContainer 字段通常已由 Burst/Job System 推断 no-alias 信息。`[NoAlias]` 只用于编译器无法推断且调用方确实满足契约的复杂指针或 struct；错误标注可能产生未定义行为。
+- `[BurstCompile]` 不是“尽力解释执行”的开关。Burst 不支持的代码应以编译诊断、Burst Inspector 和目标 Player 构建结果处理，不能假设会静默降级为解释模式。
 
-**Burst 能编译什么：**
-- `struct` 类型的 job（`IJobEntity`、`IJobChunk`、`IJob`）
-- unmanaged `ISystem` 的 `OnCreate`/`OnUpdate`/`OnDestroy`
-- 使用 `FunctionPointer<T>` 的特定静态方法
+## Burst 编译边界
 
-**Burst 不能编译什么：**
-- 任何引用类型（class、delegate、managed array）
-- 托管对象访问（`GameObject`、`MonoBehaviour`）
-- `SystemBase` 的回调方法
-- 虚方法调用
+Burst 编译 HPC# 子集。常见入口包括 job、unmanaged `ISystem` 回调，以及通过 `BurstCompiler.CompileFunctionPointer<T>()` 编译的静态方法。Burst 编译后的代码不能直接操作托管对象；`SystemBase` 自身的回调在托管侧运行，但它调度的 job 仍可由 Burst 编译。
 
-### FunctionPointer
+Editor 默认可异步编译 Burst 入口：等待编译期间，入口可能暂时运行托管的 .NET JIT 版本。Player 构建则把支持的 Burst 入口 AOT 编译并随应用发布。
 
-`FunctionPointer<T>` 是 Burst 中实现动态算法选择的唯一方式。
+## FunctionPointer 的正确类型和批处理方式
+
+下面示例展示 FunctionPointer 的关键编译边界。delegate 是编译期签名；Burst job 中保存和调用的是 `FunctionPointer<ExecutionCalculationDelegate>`，不是托管 delegate 实例。
 
 ```csharp
-// 注册
-var fnPtr = BurstCompiler.CompileFunctionPointer<ExecutionCalculationFunction>(CalculateDamage);
+using System.Runtime.InteropServices;
+using AOT;
+using Unity.Burst;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Jobs;
 
-// 在 job 中使用
+/// <summary>
+/// 定义批量数值计算的非托管函数签名。
+/// </summary>
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public unsafe delegate void ExecutionCalculationDelegate(float* values, int count);
+
+/// <summary>
+/// 提供可由 Burst 编译并通过函数指针调用的静态算法。
+/// </summary>
 [BurstCompile]
-public struct ExecutionJob : IJobEntity
+public static class ExecutionCalculationFunctions
 {
-    public FunctionPointer<ExecutionCalculationFunction> Calculate;
-    public void Execute(ref BAttribute attr, in CEffectContext ctx)
+    /// <summary>
+    /// 对一段连续数据执行批量计算。
+    /// </summary>
+    [BurstCompile]
+    [MonoPInvokeCallback(typeof(ExecutionCalculationDelegate))]
+    public static unsafe void Scale(float* values, int count)
     {
-        var resultCtx = new ExecutionContext { ... };
-        attr.CurrentValue += Calculate.Invoke(ref resultCtx);
+        for (int i = 0; i < count; i++)
+        {
+            values[i] *= 2f;
+        }
+    }
+}
+
+/// <summary>
+/// 以批次为粒度调用动态选择的 Burst 算法。
+/// </summary>
+[BurstCompile]
+public unsafe struct ExecutionBatchJob : IJobParallelForBatch
+{
+    public NativeArray<float> Values;
+    public FunctionPointer<ExecutionCalculationDelegate> Calculate;
+
+    /// <summary>
+    /// 将当前批次的连续内存交给函数指针处理。
+    /// </summary>
+    public void Execute(int startIndex, int count)
+    {
+        float* values = (float*)Values.GetUnsafePtr() + startIndex;
+        Calculate.Invoke(values, count);
+    }
+}
+
+/// <summary>
+/// 在托管初始化边界创建并缓存函数指针。
+/// </summary>
+public static class ExecutionCalculationBootstrap
+{
+    /// <summary>
+    /// 编译并返回批量计算函数指针。
+    /// </summary>
+    public static FunctionPointer<ExecutionCalculationDelegate> Create()
+    {
+        return BurstCompiler.CompileFunctionPointer<ExecutionCalculationDelegate>(
+            ExecutionCalculationFunctions.Scale);
     }
 }
 ```
 
-**FunctionPointer 的代价：**
-- 标量调用（per-entity invoke）可能失去自动向量化
-- 批处理 job 往往比 FunctionPointer 更简单更快
-- 只适用于需要动态算法选择 + 批处理粒度足够大的场景
+官方要求包含：静态方法和包含类型标注 `[BurstCompile]`、用 delegate 声明签名，以及 IL2CPP 回调所需的 `MonoPInvokeCallback`。`CompileFunctionPointer` 会为 delegate 补充 Cdecl 互操作属性；示例显式标出该约束以便审查。
 
-### Burst AOT 与 Player
+FunctionPointer 有间接调用、P/Invoke 边界和较弱别名分析成本。不要逐 entity 调用很小的函数；先尝试数据驱动 `switch`、按算法分组后分别调度 job，确需运行时函数指针时再批处理调用，并用 Profiler/Burst Inspector 验证。
 
-Player build 的 Burst 设置独立于 Editor：
+## Player AOT 与性能报告
 
-| 设置 | 说明 |
-|---|---|
-| `OptimizeFor` | `Performance`（默认）/ `Size` / `FastCompilation` |
-| `Safety Checks` | Editor 可开启；Player 应关闭（性能） |
-| AOT compilation | iOS/consoles 需要 AOT；desktop 默认 JIT |
+Burst 1.8.29 的 `Optimize For` 包括 `Balanced`（默认）、`Performance`、`Size` 和 `Fast Compilation`。Player 性能报告至少记录：
 
-**Player 性能报告必须记录：**
-- Burst AOT 是否启用
-- `OptimizeFor` 设置
-- Safety Checks 状态
-- CPU 架构（x64/ARM64）
-- Burst warmup 帧数
+- Unity、Entities、Burst 的精确版本；
+- 目标平台、构建后端、Development/Release、CPU 架构；
+- Burst AOT 是否启用、`Optimize For`、优化和安全检查相关配置；
+- 采样场景、实体规模、采样帧范围，以及为排除场景加载、缓存填充等一次性成本而丢弃的预热帧。
 
-### 向量化与别名分析
+Player 中不存在“首帧 Burst JIT warmup”。预热帧仍可用于排除场景初始化、资源加载和缓存冷启动，但必须称为工作负载预热，而不是 Burst JIT。Editor 若要控制首次 Burst 编译时机，可对确有必要的入口使用同步编译配置；Burst 1.8.29 没有通用 `Warmup` API。
 
-Burst 的自动向量化需要编译器能证明代码无别名冲突。使用 `[NoAlias]` 标记无别名关系，帮助编译器向量化：
+## `[NoAlias]` 的安全边界
 
-```csharp
-[BurstCompile]
-public struct VectorizedJob : IJobEntity
-{
-    [NoAlias] public NativeArray<float> Results;
-    public void Execute([NoAlias] ref BAttribute attr, [NoAlias] in CModifier mod)
-    {
-        attr.CurrentValue += mod.Value;  // Burst 能向量化此循环
-    }
-}
-```
+大多数 job/NativeContainer 场景不需要手写 `[NoAlias]`。只有同时满足以下条件才评估使用：
 
----
+1. Burst Inspector 显示别名阻止了目标优化；
+2. Job System/NativeContainer 规则没有自动提供等价信息；
+3. 能证明相关指针、引用或 struct 在所有调用路径上绝不别名；
+4. 有覆盖别名契约的测试和目标平台性能数据。
 
-## EX-GAS 项目解读
+不能把 `[NoAlias]` 当作普通“优化提示”。它是正确性契约；若实际内存存在别名，Burst 可基于错误前提重排读写，结果属于未定义行为。
 
-### 目标态 Ability/Effect 逻辑的 Burst 约束
+## EX-GAS 项目策略
 
-| 旧模式 | 目标态替代 |
-|---|---|
-| `AbilityLogicBase` 虚方法 | 数据驱动规则 + Blob config + job 批处理 |
-| `MMC` 虚方法计算 | generated static function table + FunctionPointer（批处理粒度） |
-| managed delegate 回调 | ECS command/event stream |
-| `Activator.CreateInstance` 动态创建 | config-driven + Blob definition |
-
-### FunctionPointer 在 ExecutionCalculation 的定位
-
-```
-不要：每个 Ability 一个 FunctionPointer，per-entity invoke
-应该：一类计算方式一个 FunctionPointer，同类的 entity chunk 批处理
-```
-
-### Player 性能报告的 Burst 上下文
-
-Player 性能报告必须自动附加 Burst 上下文：
-- Burst AOT enabled
-- OptimizeFor = Performance
-- Safety Checks = Disabled
-- CPU arch: x64 / ARM64
-- Warmup frames: N frames excluded
-
----
-
-## 常见陷阱
-
-1. **FunctionPointer 的 per-entity invoke**：和虚方法调用一样糟，会丢失向量化
-2. **Editor Burst 通过不等于 Player Burst 通过**：AOT 平台的限制更多
-3. **`[BurstCompile]` 标记了但内部调用托管方法**：编译静默降级为解释模式
-4. **Burst warmup 误解**：首帧执行时 JIT 编译，成本极高。延迟初始化或用 `Warmup` API 控制时机
-5. **把 FunctionPointer 当 OOP 虚方法链替代品**：逐 entity invoke 失去批处理意义
-6. **Managed component 替代 Blob/struct config**：Burst 无法编译托管对象
-7. **用 Burst 通过率证明架构正确**：Burst 不覆盖 query/allocator/structure 问题
+- Runtime Core 的热路径优先保持 unmanaged、可 Burst 编译；托管边界放在初始化、配置加载和 Presentation。
+- ExecutionCalculation 默认使用数据分组或明确 `switch`；FunctionPointer 仅用于算法需运行时选择、同算法数据可成批处理且基准证明有价值的路径。
+- 每个 FunctionPointer 在初始化阶段注册并缓存，禁止每帧或逐 entity 调用 `CompileFunctionPointer`。
+- 性能结论必须来自目标 Player，不用 Editor 结果替代 AOT 构建验证。
 
 ## 官方证据
 
-| 官方文档文件 | 关键结论 | 关联规则编号 |
-|---|---|---|
-| `burst/building-aot-settings.md` | Player/AOT 有独立 Burst 设置；OptimizeFor/Safety Checks 差异 | BUR-03, BUR-05 |
-| `burst/csharp-function-pointers.md` | FunctionPointer 标量调用可能失去向量化；批处理 job 优先 | BUR-02 |
-| `burst/optimization-loop-vectorization.md` | loop vectorization 需要可分析循环和明确数据布局 | BUR-04 |
-| `burst/aliasing.md` | aliasing 影响 Burst 优化和正确性；[NoAlias] 辅助 | BUR-04 |
-| DocCodeSamples (CASE-11) | FunctionPointer + BurstCompiler.CompileFunctionPointer 动态算法选择 | BUR-02 |
+| 官方文档（Burst 1.8.29） | 可裁决结论 |
+|---|---|
+| `getting-started.md` | Editor Play Mode 使用 JIT；Player 使用 AOT |
+| `compilation-synchronous.md` | Editor 可异步或同步编译；Player 构建 AOT 编译支持的代码 |
+| `building-aot-settings.md` | Player AOT 设置、目标架构和 `Optimize For` 选项 |
+| `csharp-function-pointers.md` | `T` 是 delegate；静态方法/包含类型标注；IL2CPP 回调约束；job 和批处理通常优先 |
+| `aliasing-job-system.md` | job 和 NativeContainer 常见场景会自动获得 no-alias 信息 |
+| `aliasing-noalias.md` | 多数场景无需 `[NoAlias]`；错误标注可能导致未定义行为 |

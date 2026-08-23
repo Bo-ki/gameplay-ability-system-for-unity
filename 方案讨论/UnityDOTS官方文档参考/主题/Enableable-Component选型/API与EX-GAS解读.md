@@ -4,7 +4,7 @@
 
 ### 什么是 Enableable Component
 
-`IEnableableComponent` 是 Unity ECS 提供的标记接口，继承自 `IComponentData`。实现此接口的 component 可以在不改变 entity archetype 的前提下被启用或禁用，从而控制 entity 在 EntityQuery 中的可见性。
+`IEnableableComponent` 是 Unity ECS 提供的独立标记接口，并不继承 `IComponentData`。只有同时实现 `IComponentData` 或 `IBufferElementData` 的 component 才能再实现该接口，从而在不改变 entity archetype 的前提下被启用或禁用。
 
 ```csharp
 public struct PeriodDueTag : IComponentData, IEnableableComponent
@@ -18,10 +18,10 @@ public struct PeriodDueTag : IComponentData, IEnableableComponent
 
 | 方式 | 上下文 | 性能 | 说明 |
 |---|---|---|---|
-| `EnabledRefRW<T>.ValueRW` | IJobEntity / idiomatic foreach | **最快** | 利用线性遍历的可预测访问模式 |
+| `EnabledRefRW<T>.ValueRW` | IJobEntity / idiomatic foreach | **最高效的迭代式方式** | 利用线性遍历的可预测访问模式 |
 | `EnabledMask[index]` | IJobChunk | 快 | chunk 级 enabled bit 数组索引 |
 | `ComponentLookup.SetComponentEnabled` | 随机访问 | **有额外开销** | 需定位 entity 数据，高频场景避免 |
-| `EntityManager.SetComponentEnabled` | 主线程 | 有额外开销 + 可能触发 sync point | 仅用于调试 / 低频操作 |
+| `EntityManager.SetComponentEnabled` | 主线程随机访问 | 有额外开销 + 可能等待依赖 | 适用于确需主线程直接访问的路径 |
 
 #### 方式一：EnabledRefRW（IJobEntity 推荐）
 
@@ -36,7 +36,7 @@ public partial struct MarkDuePeriodJob : IJobEntity
 }
 ```
 
-`EnabledRefRW<T>` 是 IJobEntity 中最直接的 enableable 操作方式。编译器将其编译为 chunk 内 enabled mask 的批量位操作，访问模式完全可预测。
+`EnabledRefRW<T>` 可用于 IJobEntity 和 idiomatic foreach，是访问当前迭代 entity 的 enable bit 的直接方式。官方将其列为最高效的方式，因为它利用线性访问模式。
 
 #### 方式二：EnabledMask（IJobChunk 批量操作）
 
@@ -49,7 +49,7 @@ for (int i = 0; i < chunk.Count; i++)
 }
 ```
 
-`EnabledMask` 提供 chunk 级 enabled bit 数组的直接索引。适用于批量激活/禁用场景（如批量复活、批量击杀），比逐个 `SetComponentEnabled` 快 10-100x。
+`EnabledMask` 提供 chunk 级 enabled bit 的直接索引，适用于批量激活/禁用场景。它通常比任意 entity 的 random-access 更有局部性，但收益没有固定倍率，需由目标设备 Profiler 验证。
 
 参考 `CASE-20.md`。
 
@@ -60,25 +60,25 @@ ComponentLookup<CAbilityActive> lookup = ...;
 lookup.SetComponentEnabled(targetEntity, false);  // 随机访问
 ```
 
-有额外的 entity 定位开销（内部哈希查找 + 随机内存访问）。适用于低频、非批量场景。
+有额外的目标 entity 数据定位开销，且访问局部性取决于调用顺序。它是受支持的随机访问 API，不应假定内部哈希实现或固定性能倍率。
 
 #### 方式四：EntityManager.SetComponentEnabled（主线程）
 
-在主线程使用 `EntityManager.SetComponentEnabled` 修改 enableable 状态。如果存在写 job 未完成，可能触发 sync point。仅建议在调试、初始化、拆解阶段使用。
+在主线程使用 `EntityManager.SetComponentEnabled` 修改 enableable 状态。如果存在冲突 job，主线程访问可能等待依赖。它可用于生产代码中确需主线程随机访问的路径；hot path 是否保留应由依赖图和 Profiler 决定。
 
 #### Enableable 查询的三种变体
 
 | 方法 | 语义 | Sync Point 风险 |
 |---|---|---|
-| `.CalculateEntityCount()` | 仅统计 enabled entity | 有写 job 未完成时触发 sync point |
-| `.CalculateEntityCountIgnoreFilter()` | 统计全部 entity（忽略 enabled） | 无 sync point |
-| `.ToEntityArrayAsync()` | 异步获取 entity 数组 | 不阻塞主线程，返回 NativeList |
+| `.CalculateEntityCount()` | 按完整 query 语义统计 | 相关 enableable 写 job 未完成时会等待 |
+| `.CalculateEntityCountIgnoreFilter()` | 忽略 chunk filter 与 enabled 状态 | 不因 enableable 写入而等待 |
+| `.ToEntityArrayAsync()` | 异步获取匹配 entity | 把相关依赖加入异步操作，返回 `NativeList<Entity>` |
 
 ### Enableable vs Add/Remove Component 选型对照
 
 | 场景 | 推荐 | 原因 |
 |---|---|---|
-| 高频状态开关（每帧可能多次） | Enableable | 无结构变化，无 sync point，无 archetype 迁移 |
+| 高频状态开关（每帧可能多次） | Enableable | 无结构变化、无 archetype 迁移；仍受普通 job 依赖约束 |
 | 低频生命周期（创建/销毁时一次） | Add/Remove Component | 语义更明确，减少 enableable 查询复杂度 |
 | 高频且不可预测的 query 可见性开关 | Enableable | 无结构变化，适合高排列状态和 chunk/entity skip |
 | 低频且持续多帧的 active/granted 生命周期 | Add/Remove 或状态字段 | 官方建议低频状态变化优先 add/remove；GAS grant/revoke 也需要明确生命周期语义 |
@@ -101,7 +101,7 @@ lookup.SetComponentEnabled(targetEntity, false);  // 随机访问
 
 ### EntityQueryMask（CASE-22）
 
-`EntityQueryMask` 提供 O(1) 实体-query 匹配检查：`query.GetEntityQueryMask()` + `mask.MatchesIgnoreFilter(entity)`。用于 entity 分类过滤、archetype 分组路由。构建 mask 有初始开销，高频时才值得。
+`EntityQueryMask` 通过 `query.GetEntityQueryMask()` + `mask.MatchesIgnoreFilter(entity)` 快速检查 archetype 是否匹配。它忽略 chunk filter 和 enableable 状态，只适用于接受该粗粒度语义的分类；完整匹配使用 `query.Matches(entity)`。
 
 ### ChunkEntityEnumerator（CASE-26）
 
@@ -143,10 +143,10 @@ EX-GAS 2.0 中 Enableable Component 只承担“高频、不可预测、需要 q
 
 | 代码位置 | 当前状态 | 目标态 |
 |---|---|---|
-| `CActiveEffectStore.cs` | 可能使用 entity 表示 active effect | `ActiveGameplayEffectBuffer` + slot flags；可选 `PeriodDueTag` / Chunk Component 做 skip |
-| `SEffectRemove.cs` | entity destroy 移除 effect | slot expired flag + Structural Commit cleanup |
-| `SAbilityCommit.cs` | 可能使用 enableable 表达 grant/cooldown | `AbilityStateComponent` enum/flags + `AbilitySlotBuffer`；低频 revoke 走 Structural Commit |
-| `SAbilityStateCleanup.cs` | entity cleanup | 状态字段复位或 ability entity 销毁；不默认 toggle enableable |
+| `Assets/GAS/Runtime/Effect/Component/Dynamic/ActiveEffectStore.cs` | `ActiveGameplayEffectBuffer` 保存 owner-local slot，并维护辅助索引 | 默认用 slot flags；只有测量证明查询过滤收益时才引入 enableable |
+| `Assets/GAS/Runtime/System/Effect/GEActiveEffectLifecycleSystems.cs` | active effect 的 mutation、tick 与 remove 生命周期 | 过期状态进入集中清理流程，避免用高频结构变化表达普通状态切换 |
+| `Assets/GAS/Runtime/System/Ability/AbilityCommitSystem.cs` | 提交 ability runtime state | `AbilityStateComponent` 与 `AbilitySlotBuffer` 表达状态；低频结构变化进入提交阶段 |
+| `Assets/GAS/Runtime/System/Ability/AbilityStateCleanupSystem.cs` | 清理 ability 生命周期状态并录制必要的结构操作 | 状态字段复位优先；不默认用 enableable 代替全部生命周期状态 |
 
 ### 选型决策树
 
@@ -176,17 +176,17 @@ EX-GAS 2.0 中 Enableable Component 只承担“高频、不可预测、需要 q
 
 6. **"所有 ComponentData 都应声明为 IEnableableComponent"** — 不是。IEnableableComponent 会增加 enabled mask 的开销（每个 chunk 多一个 bit array）。只在需要 toggle 的 component 上声明。
 
-7. **`MatchesIgnoreFilter` vs `Matches`** — `EntityQueryMask.MatchesIgnoreFilter(entity)` 忽略 enableable 过滤返回 true 即使 component disabled。需要精确匹配时用 `Matches(entity)`。
+7. **`MatchesIgnoreFilter` vs `Matches`** — `EntityQueryMask.MatchesIgnoreFilter(entity)` 忽略 chunk filter 与 enableable 状态。`EntityQueryMask.Matches(entity)` 在 Entities 1.4.6 已禁止使用；需要完整语义时调用 `EntityQuery.Matches(entity)`，并接受其可能等待相关写 job。
 
 ## 官方证据
 
 | 官方文档文件 | 关键结论 | 关联规则 |
 |---|---|---|
-| `components-enableable-use.html` | Enableable 无 archetype 迁移；worker thread 可通过 `ComponentLookup.SetComponentEnabled` 安全修改；迭代优先于 random-access | EN-01, EN-03 |
-| `performance-chunk-allocations.html` | 每个 tag component 使 archetype 排列数翻倍；临时数据应存 DynamicBuffer | PRF-03 |
-| `concepts-archetypes.html` | 每次 Add/Remove Component 触发 archetype 迁移 | EN-01 |
+| `components-enableable-use.md` | Enableable 无 archetype 迁移；worker thread 可通过 `ComponentLookup.SetComponentEnabled` 修改；迭代优先于 random-access | EN-01, EN-03 |
+| `performance-chunk-allocations.md` | archetype/chunk 分配与数据布局成本 | PRF-03 |
+| `concepts-archetypes.md` | Add/Remove Component 改变 archetype | EN-01 |
 | `performance-sync-points.md` | 同步 query 操作在 enableable 写 job 未完成时触发 sync point | EN-02 |
 | `state-machine.md` | 官方 FSM 模式使用 enableable 组件结合 DynamicBuffer 存储状态数据 | FSM-01..06 |
-| `components-buffer-introducing.html` | DynamicBuffer 作为 owner-local 可变数组 | CASE-04 |
+| `components-buffer-introducing.md` | DynamicBuffer 作为 owner-local 可变数组 | CASE-04 |
 | `systems-looking-up-data.md` | `ComponentLookup` 随机访问竞态 | P1-11 |
 | `iterating-data-ijobchunk.md` | `ChunkEntityEnumerator` 标准 enableable 感知迭代 | CASE-26 |

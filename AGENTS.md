@@ -1,7 +1,7 @@
 ﻿# Repository Guidelines
 
 ## Project Structure & Module Organization
-This repository is a Unity project (2022.3 LTS) centered on EX-GAS 2.0.
+This repository is a Unity 6 project centered on EX-GAS 2.0. The authoritative editor version is recorded in `ProjectSettings/ProjectVersion.txt`.
 
 - `Assets/GAS/Runtime`: core gameplay ability system runtime (ECS/DOTS, tags, effects, abilities).
 - `Assets/GAS/Editor`: custom tools (GAS Center, timeline editor, web editors).
@@ -27,7 +27,7 @@ Use the default mattpocock/skills triage label vocabulary (`needs-triage`, `need
 Use a single-context domain documentation layout. Read `CONTEXT.md` and `docs/adr/` when present; also treat the existing `方案讨论/针对2.0的ECS架构的迭代方案讨论/当前路线/` docs as supporting architecture context. See `docs/agents/domain.md`.
 
 ## Build, Test, and Development Commands
-- Open project with Unity `2022.3.62f3` (see `ProjectSettings/ProjectVersion.txt`).
+- Open project with Unity `6000.3.14f1` (see `ProjectSettings/ProjectVersion.txt`).
 - Regenerate config JSON from Excel:
   - Windows: `EX_GAS_Config\ProjectConfigTable\exgas_config\gen.bat`
   - macOS/Linux: `bash EX_GAS_Config/ProjectConfigTable/exgas_config/gen.sh`

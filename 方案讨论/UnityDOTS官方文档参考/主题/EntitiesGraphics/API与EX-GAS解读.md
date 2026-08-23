@@ -1,108 +1,86 @@
-# EntitiesGraphics: API 与 EX-GAS 解读
+# EntitiesGraphics：API 与 EX-GAS 解读
 
-## 核心概念
+## 结论
 
-### Entities Graphics 的定位
+Entities Graphics 是 ECS 到 SRP 渲染的桥接层。运行时创建渲染实体有两条官方路径：复杂或批量对象优先烘焙 Prefab 后 `Instantiate`；确需从 C# 从零创建时，在主线程使用 `RenderMeshUtility.AddComponents` 建立原型，再批量实例化。表现层与 Core simulation 隔离属于 EX-GAS 架构策略，不是 Entities Graphics 的通用强制规则。
 
-Entities Graphics 是 ECS 到 Unity 渲染管线的桥接层，通过 `BatchRendererGroup`（BRG）和 `DOTS Instancing` 实现高数量渲染。
+**适用版本**：Entities Graphics 1.4.19（项目安装版本）
 
-**关键约束：**
-- URP 仅支持 Forward+（2022.3+）
-- 不支持多个 render World
-- Runtime 创建渲染 entity 必须用 `RenderMeshUtility.AddComponents` 或 baked prefab
-- Presentation group 有结构变化限制
+## 官方机制
 
-### Runtime 渲染 Entity 创建
+### 运行环境
 
-```csharp
-// 正确方式：使用官方 API
-var renderEntity = ecb.CreateEntity();
-RenderMeshUtility.AddComponents(renderEntity, ecb,
-    new RenderMeshDescription(renderMeshArray, materialMeshInfo));
+- Entities Graphics 依赖 SRP；URP 仅支持 Forward+。
+- 1.4.19 不支持同时渲染多个 World。
+- 运行时不应手工拼装内部 Graphics 组件，因为必需组件集合可能随渲染管线和包版本变化。
 
-// 错误方式：手动拼装内部组件
-// ecb.AddComponent<RenderMeshArray>(...);  // 缺少必需的内部组件
-```
+来源：`requirements-and-compatibility.md`、`overview.md`。
 
-`RenderMeshUtility.AddComponents` 自动添加所有必要的内部组件（`RenderMesh`、`RenderBounds`、`RenderFilterSettings`、`ChunkWorldRenderBounds` 等）。手动拼装遗漏任何必需组件导致渲染异常且无明确报错。
+### 运行时创建路径
 
-### RenderMeshArray / MaterialMeshInfo
+`RenderMeshUtility.AddComponents` 只有 `EntityManager` 重载，是主线程 API，会产生结构变化。运行时必须使用接收 `RenderMeshArray` 的重载；接收 `RenderMesh` 的重载仅供 GameObject Baking 使用，在运行时不会产出可渲染实体。
 
 ```csharp
-// RenderMeshArray：共享的 mesh + material 集合
-// MaterialMeshInfo：选择 RenderMeshArray 中的哪个 mesh 和 material
-// 支持 Burst-compatible 选择，不依赖托管对象
+var description = new RenderMeshDescription(
+    shadowCastingMode: ShadowCastingMode.Off,
+    receiveShadows: false);
+var renderMeshArray = new RenderMeshArray(
+    new[] { material },
+    new[] { mesh });
+
+var prototype = entityManager.CreateEntity();
+RenderMeshUtility.AddComponents(
+    prototype,
+    entityManager,
+    description,
+    renderMeshArray,
+    MaterialMeshInfo.FromRenderMeshArrayIndices(0, 0));
+entityManager.AddComponentData(prototype, new LocalToWorld { Value = float4x4.identity });
 ```
 
-### 无头与有头 Demo 的等价性
+大量实例不应逐个调用 `AddComponents`。先准备一个已包含完整 Graphics 组件集的 baked prefab 或 runtime prototype，再用 `EntityManager.Instantiate` 或 `EntityCommandBuffer.ParallelWriter.Instantiate` 克隆，并仅设置实例差异数据。
 
-```
-Core Simulation 产出 Presentation Outbox
-    |
-    ├── 无头模式：Outbox -> Log Marker -> validation check
-    |
-    └── 有头模式：Outbox -> Entities Graphics binding -> 真实渲染
-```
+来源：`runtime-entity-creation.md` > `RenderMeshUtility - AddComponents`、`Usage instructions`。
 
-两种模式的 Core simulation hash 相同，只替换 Presentation binding 层。
+### PresentationSystemGroup 写入窗口
 
----
+官方约束不是“整个 PresentationSystemGroup 一律禁止修改”，而是：
 
-## EX-GAS 项目解读
+- 普通 Presentation 系统不允许修改 ECS 数据。
+- `UpdatePresentationSystemGroup` 可以修改组件数据，但不能做结构变化。
+- `StructuralChangePresentationSystemGroup` 可以修改组件数据并执行结构变化。
+- Presentation 结束后不能再修改 ECS 数据；后续 culling jobs 依赖该状态。若要延迟到帧末，应改到下一帧开始执行。
 
-### 有头/无头 Demo 等价性
+来源：`overview.md` > `Runtime functionality` 的 NOTE。
 
-```csharp
-public struct PresentationOutbox : IComponentData
-{
-    public DynamicBuffer<CCueRequest> CueRequests;
-    public DynamicBuffer<CVFXRequest> VFXRequests;
-    public DynamicBuffer<CUIRequest> UIRequests;
-}
+## EX-GAS 项目策略
 
-// 验证：两组模式产生相同 Core simulation hash
-uint coreHash = ComputeCoreSimulationHash(...);
-// coreHash 在 Graphics enabled/disabled 间一致
-```
+以下是项目边界，不应表述为 Unity 官方通用规范：
 
-### AutoChess 的 Graphics 策略
+1. Runtime Core 不引用 `Unity.Rendering` 类型，只向 Presentation Outbox 写表现请求。
+2. 有头模式由 Presentation binding 消费 Outbox；无头模式由 log marker 消费同一请求。
+3. 表现系统不得反向修改影响 battle hash 的 Core state。
+4. `coreTickMs` 与渲染成本分开统计；渲染侧同时记录 CPU/GPU 时间、draw command、instance 和 batch 证据。
 
-- 无头验证默认不启用 Entities Graphics
-- 所有 UI/VFX/SFX/Cue marker 逻辑保留，通过 outbox -> log 验证
-- Scale gates 可在无头模式下直接测量 Core 热路径
-- Rendered profile 作为可选 profile，额外输出渲染指标
-
-### Presentation Outbox 链路
-
-```
-Core System 产出 PresentationOutbox buffer
-    |
-    v
-PresentationBindingSystem（仅在有头模式注册）
-    |-- 读取 outbox buffer
-    |-- 调用 RenderMeshUtility.AddComponents（需新渲染 entity）
-    |-- 更新已有 entity 的 MaterialMeshInfo（需切换材质）
-    |
-    v
-PresentationOutbox 清空（Clear）或标记已消费
+```text
+Core Simulation -> Presentation Outbox
+    |-> Headless: Log Marker
+    `-> Rendered: Presentation Binding -> baked prefab/prototype Instantiate
 ```
 
----
+## 常见错误
 
-## 常见陷阱
-
-1. **手动添加 graphics component**：缺少必需内部组件导致 entity 存在但不渲染
-2. **Presentation group 内结构变化**：BRG 内部缓冲区引用在结构变化时失效
-3. **Core simulation 修改表现状态**：Core system 不应知道 graphics 组件的存在
-4. **多 render World 假设**：Entities Graphics 1.4.19 不支持多个 render World
-5. **"无头模式不需要 outbox"**：无头模式也需要 outbox 链路以验证表现正确性
+1. 把 `RenderMeshDescription` 误写成同时承载 mesh/material 的类型。
+2. 给 `RenderMeshUtility.AddComponents` 传入 ECB；1.4.19 API 只接收 `EntityManager`。
+3. 运行时调用接收 `RenderMesh` 的 Baking 专用重载。
+4. 为每个实例重复 `AddComponents`，而不是创建一次原型后 `Instantiate`。
+5. 把 `PresentationSystemGroup` 的两个例外组遗漏，形成过度禁止。
 
 ## 官方证据
 
-| 官方文档文件 | 关键结论 | 关联规则编号 |
-|---|---|---|
-| `requirements-and-compatibility.md` | URP Forward+；不支持多 render World；Presentation group 有结构变化限制 | GFX-01, GFX-03 |
-| `overview.md` | Runtime 创建用 prefab 或 `RenderMeshUtility.AddComponents` | GFX-02 |
-| `runtime-entity-creation.md` | `RenderMeshArray` + `MaterialMeshInfo` 选择 mesh/material | GFX-02 |
-| `entities-graphics-performance.md` | BRG 和 DOTS Instancing 是高数量渲染路径 | GFX-05 |
-| 官方案例模式 CASE-10 | Graphics runtime create 限于 Presentation 层 | GFX-01, GFX-02 |
+| 官方文档 | 可裁决结论 |
+|---|---|
+| `overview.md` | Prefab 与 `RenderMeshUtility.AddComponents` 是两条运行时路径；Presentation 有两个例外组 |
+| `runtime-entity-creation.md` | 运行时使用 `RenderMeshArray` 重载；API 仅主线程；批量实例优先 `Instantiate` |
+| `requirements-and-compatibility.md` | SRP/URP Forward+ 与多 World 限制 |
+| `entities-graphics-performance.md` | BRG/DOTS Instancing 的分析指标与 Profiler marker |

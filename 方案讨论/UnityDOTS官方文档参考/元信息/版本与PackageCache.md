@@ -2,7 +2,9 @@
 
 ## 职责
 
-本文件维护 Unity DOTS 官方依据的版本口径、本地证据路径和查找方法。回答"当前项目实际使用哪一版"以及"怎么在 PackageCache 中找到对应的官方文档"。
+本文件维护 Unity DOTS 官方依据的版本口径、本地证据路径、离线快照状态和查找方法。回答“当前项目实际使用哪一版”以及“怎么在 PackageCache 中找到对应的官方文档”。
+
+当前 Unity Editor：`6000.3.14f1`（以 `ProjectSettings/ProjectVersion.txt` 为准）。Job System 随 Unity Editor 提供，本项目没有独立的 `com.unity.jobs` 包版本。
 
 ## 当前版本表
 
@@ -16,6 +18,10 @@
 | Mathematics | `1.3.3` | `com.unity.mathematics@19a9377c4ffa` | `Library/PackageCache/com.unity.mathematics@19a9377c4ffa/Documentation~` | https://docs.unity3d.com/Packages/com.unity.mathematics@1.3/manual/ |
 
 **禁止修改 `Library/PackageCache` 中的任何文件。** 该目录变更会被 Unity 自动还原。
+
+## 官方原件快照状态
+
+`官方文档原件/` 当前保存上述六个包的 `Documentation~` 快照。维护时必须逐文件比较相对路径和 SHA-256；只有文件数、路径和内容全部一致，才能标记为完整。在线 `@major.minor` 页面可能滚动到更新 patch，不能代替本表中的精确 PackageCache。
 
 ## 如何查找官方文档
 
@@ -37,32 +43,32 @@
 | World 概念 | `concepts-worlds.md` | `manual/concepts-worlds.html` |
 | System 介绍 | `systems-intro.md` | `manual/systems-intro.html` |
 | ISystem | `systems-isystem.md` | `manual/systems-isystem.html` |
-| SystemGroup/UpdateOrder | `systems-update-order.html` | `manual/systems-update-order.html` |
-| System 优化 | `systems-optimizing.html` | `manual/systems-optimizing.html` |
-| IJobEntity | `iterating-data-ijobentity.html` | `manual/iterating-data-ijobentity.html` |
-| IJobChunk | `iterating-data-ijobchunk.html` | `manual/iterating-data-ijobchunk.html` |
+| SystemGroup/UpdateOrder | `systems-update-order.md` | `manual/systems-update-order.html` |
+| System 优化 | `systems-optimizing.md` | `manual/systems-optimizing.html` |
+| IJobEntity | `iterating-data-ijobentity.md` | `manual/iterating-data-ijobentity.html` |
+| IJobChunk | `iterating-data-ijobchunk.md`、`iterating-data-ijobchunk-implement.md` | `manual/iterating-data-ijobchunk.html` |
 | SystemAPI.Query | `systems-systemapi-query.md` | `manual/systems-systemapi-query.html` |
-| Archetype 概念 | `concepts-archetypes.html` | `manual/concepts-archetypes.html` |
-| Chunk 分配 | `performance-chunk-allocations.html` | `manual/performance-chunk-allocations.html` |
+| Archetype 概念 | `concepts-archetypes.md` | `manual/concepts-archetypes.html` |
+| Chunk 分配 | `performance-chunk-allocations.md` | `manual/performance-chunk-allocations.html` |
 | Sync Points | `performance-sync-points.md` | `manual/performance-sync-points.html` |
 | ECB | `systems-entity-command-buffers.md` | `manual/systems-entity-command-buffers.html` |
-| Enableable | `components-enableable-use.html` | `manual/components-enableable-use.html` |
-| DynamicBuffer | `components-buffer-introducing.html` | `manual/components-buffer-introducing.html` |
-| Baking | `baking-overview.html` | `manual/baking-overview.html` |
-| BlobAsset | `components-blobasset.html` | `manual/components-blobasset.html` |
+| Enableable | `components-enableable-use.md` | `manual/components-enableable-use.html` |
+| DynamicBuffer | `components-buffer-introducing.md` | `manual/components-buffer-introducing.html` |
+| Baking | `baking-overview.md`、`baking-baker-overview.md` | `manual/baking-overview.html` |
+| BlobAsset | `blob-assets-intro.md`、`blob-assets-create.md` | `manual/blob-assets-intro.html` |
 | Transform | `transforms-concepts.md` | `manual/transforms-concepts.html` |
-| Physics | `physics-concepts.html` | `manual/physics-concepts.html` |
-| Entities Graphics | `entities-graphics.html` | `manual/entities-graphics.html` |
-| Burst | `burst-overview.html` | `manual/burst-overview.html` |
-| Collections | `collections-overview.html` | `manual/collections-overview.html` |
-| Mathematics | `mathematics-overview.html` | `manual/mathematics-overview.html` |
+| Physics | `physics-data-types.md`、`physics-pipeline.md` | `manual/physics-data-types.html` |
+| Entities Graphics | `overview.md`、`runtime-entity-creation.md` | `manual/overview.html` |
+| Burst | `getting-started.md`、`compilation-burstcompile.md` | `manual/getting-started.html` |
+| Collections | `collections-overview.md`、`parallel-readers.md`、`allocator-overview.md` | `manual/collections-overview.html` |
+| Mathematics | `random-numbers.md`、`compatibility.md` | `manual/random-numbers.html` |
 | Safety | `concepts-safety.md` | `manual/concepts-safety.html` |
 | Common Errors | `common-errors.md` | `manual/common-errors.html` |
 | 结构变化优化 | `optimize-structural-changes.md` | `manual/optimize-structural-changes.html` |
-| 状态机 | `state-machine.md` | `manual/state-machine.html` |
 
 ## 维护规则
 
-1. PackageCache hash 变化时立即更新版本表
-2. 版本变更后，记录受影响的领域文档列表
-3. 不修改 `Library/PackageCache` 中的任何文件
+1. PackageCache hash 变化时立即更新版本表，并重建对应官方原件快照。
+2. 版本变更后，记录受影响的领域文档列表并重新核验规则证据等级。
+3. 在线 `@major.minor` 只用于差异观察；精确结论以本地 PackageCache 为准。
+4. 不修改 `Library/PackageCache` 中的任何文件。

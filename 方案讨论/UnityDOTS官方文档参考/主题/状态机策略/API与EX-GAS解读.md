@@ -1,102 +1,67 @@
-# 状态机策略: API 与 EX-GAS 解读
+# 状态机策略：API 与 EX-GAS 解读
 
-## 核心概念
+**适用版本**：Unity `6000.3.14f1`；Entities `1.4.6`
 
-### 三种实现策略
+## 官方三种实现方法
 
-官方 `state-machine.md` 定义了三种在 ECS 中实现 FSM 的方法，按"状态切换频率"和"状态间数据差异度"区分：
-
-| 策略 | 机制 | ECS 承载方式 | 适用场景 |
+| 方法 | 官方定义 | 常见实现 | 主要代价 |
 |---|---|---|---|
-| **Per-State Data Clustering** | 按状态将 entity 分入不同 archetype | Tag Component / Shared Component | 低频状态切换（创建/销毁级别）、状态间数据差异大 |
-| **Per-State Data Branching** | 同 archetype 内按状态过滤 | Enableable Component / Job per state | 高频状态开关、大量 idle entity 需要整 chunk 跳过 |
-| **Per-FSM Data Branching** | 同 archetype 内单 job 内分支 | enum/bit field in single job | 状态数少（<= 5）、每个状态工作量轻 |
+| Per-state data clustering | 按状态把 entity 数据聚集到不同 archetype/chunk | tag component、shared component | 状态切换结构变化、碎片化、archetype/chunk 数 |
+| Per-state data branching | 不按状态改变 archetype，通过状态过滤每个状态要处理的 entity | enableable component、每状态一个 job 并在 job 中过滤 | 重复遍历、job 调度、稀疏匹配的数据抓取 |
+| Per-FSM data branching | 不同状态留在同一 archetype，一个 job 内按值分支 | enum/switch | idle 数据抓取、复杂分支、较宽读写依赖 |
 
-### 策略选择决策树
+Unity 官方没有给出“状态数 <= 5”“body < 20 行”“bool > 3”“耗时占比 5%”等阈值。官方结论是根据结构变化、chunk 使用、数据抓取、job overhead 和依赖用 Profiler 选择。
 
-```
-状态切换频率？
-  低频（创建/销毁级别）→ Per-State Data Clustering
-  高频（每帧可能切换）→ 看 entity 数量
-    大量 entity 长期 idle → Per-State Data Branching (Enableable 整 chunk 跳过)
-    状态数 ≤ 4 且每状态工作轻 → Per-FSM Data Branching (单 job enum switch)
-```
+## 选择原则
 
-### 性能影响矩阵
+### Per-FSM data branching
 
-| 实现问题 | 影响策略 | 监控工具 |
-|---|---|---|
-| 结构变化 | Per-State Clustering（高频切换时） | CPU Profiler / Structural Changes Profiler |
-| 数据碎片化 | Per-State Clustering（状态多、entity 少时） | Archetype Window |
-| 不必要的数据获取 | 全部策略（idle entity 多时） | VTune / Instruments cache miss |
-| 重复数据获取 | Per-State Branching（多状态时） | VTune / Instruments cache miss |
-| Job 开销 | Per-State Clustering + Branching（多状态时） | Profiler job scheduling |
-| 复杂依赖 | 全部策略（跨状态访问时） | Profiler job dependencies |
-| 触发响应式系统 | Per-State Branching + Per-FSM Branching | Systems Window / Journaling |
+通常是实现最简单、job 数最少的起点，适合状态逻辑共享大部分数据、所有状态都需经常处理的场景。但不是所有 FSM 的强制默认；大量 idle entity 会让无效数据抓取显著。
 
----
+### Enableable / per-state branching
 
-## EX-GAS 项目解读
+Enableable component 的切换不改变 archetype，可从 worker thread 安全切换。查询会跳过 disabled entity；若一个 chunk 中没有匹配 entity，可以跳过整个 chunk。它仍有 mask/filter 成本，主线程同步查询还可能等待写 enable-state 的 job。
 
-### 当前 GAS 状态机对应关系
+不要为了 Enableable 又在非 Idle 时 Add/Remove 一个普通 tag；这会重新引入结构变化。需要查询过滤的状态直接用 enableable component，互斥状态也可以用 enum 加按需查询策略。
 
-| GAS 状态机 | 当前表达 | 推荐目标态 | 理由 |
-|---|---|---|---|
-| ActiveEffect 生命周期 (5 states) | `BActiveEffectSlot.State` enum | 保持 enum + 单 job switch | 已是最佳实践，符合 FSM-02 |
-| Ability 激活/冷却 | 独立 component + manual tracking | `IEnableableComponent` | 大量 idle，需整 chunk 跳过，符合 FSM-03 |
-| Unit Alive/Dead | 未统一 | `IEnableableComponent` | 大量可能同时死亡，符合 FSM-03 |
-| Status Effect 标记 | 各自独立 component | bit field in `CStatusFlags` | 避免 archetype 爆炸，符合 FSM-05 |
-| Tag granted by effect | 各自独立 tag | 评估 bit field 或 Chunk Component | 取决于查询模式 |
+### Tag/shared clustering
 
-### 推荐模式
+适合切换很少、同状态 entity 足够多、且聚集后能显著改善数据局部性的情况。Tag Add/Remove 是结构变化；shared component 值改变也会把 entity 移到不同 chunk。不能只因为“ECS 原生”就选聚类。
 
-**模式 A：ActiveEffect 生命周期（Per-FSM Data Branching）**
-```
-BActiveEffectSlot.State: enum { PendingApply, Active, Inhibited, PendingRemove, Removed }
-单 job 内 switch(State) { case Active: ... case Inhibited: ... }
-```
+### Bit field
 
-**模式 B：Ability 激活（Per-State Branching via IEnableableComponent）**
-```
-CAbilityActive : IEnableableComponent  // enabled = 正在激活/冷却
-CActivatedAbilityTag : IComponentData  // 只在非 Idle 时存在
-```
+bit field 能避免多个 tag 类型组合和结构变化，适合一起读取、一起更新的标记。但它不能让 EntityQuery 原生过滤某一 bit，会让所有消费者依赖同一 component，可能增加无效数据抓取和写冲突。独立查询频繁的标记可能更适合 enableable component。
 
-**模式 C：Buff/Debuff 标记（Bit Field 变体）**
-```
-struct CStatusFlags : IComponentData {
-    BitField32 flags;  // Stunned=1, Silenced=2, Disarmed=4, Slowed=8, Burning=16
-}
-```
+## 多 FSM
 
-### 反模式
+多个 FSM 放在同一 entity 上并不必然使 archetype 组合相乘：只有状态通过 tag/shared/component 类型组合表达时才产生相应 archetype/chunk 组合。若使用 enum/bit field，主要风险是 entity 变大、重复抓取、复杂依赖和状态语义耦合。
 
-- **反模式 A**：为每个状态创建独立 System（5 个状态 = 5 个 System 固定开销）
-- **反模式 B**：用 Tag Component 做高频状态标记（每次切换 = archetype 迁移）
-- **反模式 C**：盲目使用 Enableable 替代 Add/Remove（低频且数据差异大时反而更差）
-- **反模式 D**：不考虑 Enableable 查询成本（全部 entity 均 enabled 时纯开销）
+拆分 entity 也有 Entity/lookup 间接访问与生命周期协调成本。因此“状态 component 数 > 3 就拆”不是官方规则；应按访问共现性和 Profiler 数据决定。
 
-### 多 FSM 叠加处理方针
+## EX-GAS 当前策略
 
-- ASC entity 只承载少量核心 FSM（ActiveEffect life cycle、Ability commit）
-- 大量临时状态标记（buff/debuff）统一用 bit field 表达
-- 拆分的 entity 通过 owner reference 关联，互不重叠
+- ActiveEffect lifecycle：先保留 slot enum + 单 job 分支；若大量 idle slot 或某状态逻辑独立成为瓶颈，再评估布局/作业拆分。
+- Ability active/cooldown：enableable component 是候选，而非无条件迁移结论；需要先确认 query 过滤、写 enable-state 依赖和数据布局收益。
+- Status flags：经常一起读取、无需 query 单独过滤的标记可合并 bit field；频繁独立查询的状态保留 enableable 候选。
+- 高频状态切换不使用普通 tag Add/Remove，除非 Profiler/结构语义给出明确例外。
+- Chunk component 不用于逐 entity 状态；它属于物理 chunk 元数据。
 
----
+## 监控与验收
 
-## 常见陷阱
+- Structural Changes Profiler：切换导致的结构变化与 sync point；
+- Archetypes Window：archetype 数、chunk 使用和碎片化；
+- CPU Profiler/Jobs：job 数、调度开销、依赖空洞；
+- 原生 Profiler：cache miss、无效/重复数据抓取；
+- Systems Window/Journaling：写版本变化与 reactive system 触发。
 
-1. **"我这个状态机只有两个状态，用 bool Tag Component 没事"** — 高频 toggle 每次仍是结构变化
-2. **"Enableable Component 可以不加区分地替代所有 Tag Component"** — 全部 enabled 时过滤成本是纯开销
-3. **"Per-FSM Data Branching 就是普通 switch，不够 ECS 原生"** — 官方将其列为三种正式策略之一
-4. **"我把所有状态标记合并到一个巨大的 bit field 里"** — 超过 64 标记或分组语义差异大时应拆分
-5. **"多 FSM 放在同一 entity 上方便管理"** — 多 FSM 叠加使 archetype 排列数相乘增长
+所有数值阈值必须标注为“EX-GAS 待基准策略”，附场景、平台、实体规模与版本；未经基准不得作为硬性审查门槛。
 
 ## 官方证据
 
-| 官方文档文件 | 关键结论 | 关联规则编号 |
-|---|---|---|
-| `state-machine.md` | 三种 FSM 策略完整论述、问题矩阵、监控工具 | FSM-01, FSM-02, FSM-03, FSM-04, FSM-06 |
-| `performance-chunk-allocations.md` | Archetype 爆炸和数据碎片化详解 | FSM-05 |
-| `optimize-structural-changes.md` | 结构变化性能对比表（enableable 0.03ms vs IJobEntity 170ms） | FSM-01 |
-| `components-enableable-use.md` | Enableable 查询 cost 和 sync point 风险 | FSM-01, FSM-03 |
+| 官方文档（Entities 1.4.6） | 可裁决结论 |
+|---|---|
+| `state-machine.md` | 三种 FSM 方法、七类问题、监控工具、复杂方案需 profile |
+| `structural-changes-enableable-components.md` | enableable 切换不产生结构变化 |
+| `components-enableable-use.md` | query filtering、worker thread 切换和同步注意事项 |
+| `performance-chunk-allocations.md` | tag/archetype 组合和 chunk 碎片化 |
+| `optimize-structural-changes.md` | 结构变化方式与 Profiler；示例数字不是跨项目阈值 |

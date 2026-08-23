@@ -1,115 +1,79 @@
-# Mathematics 确定性: API 与 EX-GAS 解读
+# Mathematics 确定性：API 与 EX-GAS 解读
 
-## 核心概念
+**适用版本**：Unity `6000.3.14f1`；Mathematics `1.3.3`；Burst `1.8.29`
 
-### Unity.Mathematics.Random vs UnityEngine.Random
+## 结论
 
-```csharp
-// Unity.Mathematics.Random —— 显式 state，可序列化，Burst 兼容，确定性
-var random = new Unity.Mathematics.Random((uint)seed);
-float value = random.NextFloat();       // [0, 1] 闭合区间
-int roll = random.NextInt(1, 101);      // 1 到 100
+- `Unity.Mathematics.Random` 是**有可变状态的 struct**，不是无状态纯函数。相同非零 seed、相同 Mathematics 版本和相同调用序列会产生相同伪随机序列。
+- `Random.NextFloat()` 返回 `[0, 1)`，上界不包含；当前旧文档中的 `[0, 1]` 表述相反。
+- `UnityEngine.Random` 可以用 `InitState` 或 `state` 控制/保存状态，但它是进程级共享静态状态，调用顺序容易被无关消费者污染，也不适合 Burst job。EX-GAS 只在确定性 Runtime Core 中禁用它，不把“无法设 seed”当作理由。
+- 角度单位由具体 API 决定。`math.sin/cos/tan` 与 `Mathf.Sin/Cos/Tan` 都接收弧度；常见差异是 `UnityEngine.Quaternion.Euler` 接收角度，而 `Unity.Mathematics.quaternion.Euler/AxisAngle` 接收弧度。
+- 排序只有在使用**稳定、唯一的全序键**时才建立确定性。只按 target 或 `ChunkIndexInQuery` 排序不能处理同键项，也不能保证跨 World 重建/回放稳定。
 
-// UnityEngine.Random —— 全局静态 state，不可序列化，非确定性
-float value = UnityEngine.Random.value; // 禁止在 Runtime Core 中使用
-```
-
-**核心规则：Runtime Core 全部使用 `Unity.Mathematics.Random`，零 `UnityEngine.Random` 使用。**
-
-`Unity.Mathematics.Random` 是无状态纯函数：给定相同 seed 和相同消耗顺序，产出完全相同序列。`UnityEngine.Random` 是全局非确定性状态，任何位置的调用都会影响全局序列。
-
-### Random State 的显式归属
-
-Random state 必须有明确 owner（battle / entity / frame / system），不能使用全局或隐式状态。
+## Random 的状态与边界
 
 ```csharp
-// 正确：每个 battle 独立 seed，随机消耗从同一个 stream 派生
-public struct CBattleRandomState : IComponentData
-{
-    public Unity.Mathematics.Random State;
-    public int ConsumptionCount;  // Debugger 可追踪
-}
+uint seed = 1; // Unity.Mathematics.Random 的构造 seed 必须非零。
+var random = new Unity.Mathematics.Random(seed);
 
-// 使用
-var state = SystemAPI.GetSingletonRW<CBattleRandomState>();
-float critRoll = state.ValueRW.State.NextFloat();
-state.ValueRW.ConsumptionCount++;
+float unit = random.NextFloat();  // [0, 1)
+int roll = random.NextInt(1, 101); // [1, 101)，即 1..100
 ```
 
-### 角度单位：Radians 必须显式
+每次 `Next*` 调用都会推进实例内部状态。调用者必须把更新后的 struct 写回其 owner；从组件或容器按值取出后只修改副本、但不写回，会重复生成同一段序列。
 
-- Unity.Mathematics 期望 radians
-- UnityEngine.Mathf 使用 degrees
-- 混用是常见 bug 来源
+并行场景不得让多个 worker 同时修改同一个 Random 实例。常见方案是按 battle/entity/逻辑分区保存独立 state，或用稳定业务 ID 从基础 seed 派生独立 stream。派生键不能使用线程索引、chunk 顺序或本次调度的 worker 数。
+
+## EX-GAS 的 Random owner
+
+Random state 可以归属于：
+
+- battle singleton/component（单 writer 串行消费）；
+- per-entity component（每个实体独立序列）；
+- system-owned NativeContainer（每个稳定逻辑分区一个 state）；
+- 明确传入单次 job 的局部 state，并由结果写回其 owner。
+
+不要求所有 Random 都必须存进 `IComponentData`，但禁止隐藏在静态字段或无法追踪的共享可变状态中。Debugger 的 seed、owner、逻辑 stream ID 和消费计数属于 EX-GAS 诊断策略，不是 Mathematics API 的强制字段。
+
+## 角度单位
 
 ```csharp
-// 正确：显式转换
-float angleRad = math.radians(45f);      // degrees -> radians
-float angleDeg = math.degrees(angleRad); // radians -> degrees
-
-// 错误：隐式假设角度单位
-float sinVal = math.sin(45f);  // 如果意图是 degrees 但传入 radians，结果错误
+float angleRadians = math.radians(45f);
+float sine = math.sin(angleRadians);
+quaternion rotation = quaternion.AxisAngle(math.up(), angleRadians);
+float angleDegrees = math.degrees(angleRadians);
 ```
 
-### 矩阵与四元数乘法
+变量、字段或类型命名应携带 `Degrees`/`Radians` 语义。边界处转换一次，不要笼统写“UnityEngine.Mathf 使用 degrees”。
+
+## 矩阵与四元数乘法
+
+`float4x4 * float4x4` 在 Unity.Mathematics 中是逐分量乘法；矩阵乘法应使用 `math.mul`。四元数复合/旋转同样使用 `math.mul`，并按 API 定义确认左右操作数顺序。
 
 ```csharp
-// 使用 math.mul，不依赖 C# 的 * 操作符（* 不保证矩阵乘法语义）
-float4x4 result = math.mul(matrixA, matrixB);
-quaternion combined = math.mul(quatA, quatB);
-float3 rotated = math.mul(quaternion, vector);
+float4x4 matrixProduct = math.mul(matrixA, matrixB);
+quaternion combined = math.mul(rotationA, rotationB);
+float3 rotated = math.mul(combined, direction);
 ```
 
----
+这与 Burst/非 Burst 路径无关，是 Unity.Mathematics API 本身的运算语义。
 
-## EX-GAS 项目解读
+## Battle 确定性
 
-### AutoChess 的确定性验收
+影响 battle hash 或 replay 的 fan-in 应满足以下之一：
 
-```csharp
-// Battle hash 验证
-uint battleHash = ComputeBattleHash(outcomes);
-// 相同 seed + 相同 config -> 相同 battleHash
-// Scale 放大不能改变随机结果
-```
+1. 操作在数学和表示层面可交换、可结合，结果与执行顺序无关；或
+2. 消费前按稳定全序键排序，例如 `(Phase, TargetStableId, SourceStableId, CommandKind, ProducerSequence)`，并明确所有 tie-breaker。
 
-**确定性验收清单：**
-- 相同输入 -> 相同输出（battle hash 稳定）
-- 增加实体数量不改变已有实体的计算结果
-- 并行执行不引入顺序不确定性（MAT-05）
-- Unity Editor / Player 结果一致（排除浮点精度差异）
-
-### 随机消耗追踪
-
-Debugger 应记录：
-- 初始 seed
-- 每帧 random consumption count
-- 每次 Ability/Effect 触发消耗的随机数（与哪个 MMC 关联）
-- Replay 时按相同 seed 重放，比对 consumption sequence
-
-### BattleRandomState 生命周期
-
-- `CBattleRandomState` 在 battle 初始化时创建，seed 从外部配置传入
-- 每帧 OnUpdate 中唯一 system 持有写访问
-- Battle 结束时销毁，consumption log 持久化用于验证
-
----
-
-## 常见陷阱
-
-1. **`UnityEngine.Random` 全局污染**：任何地方调用都会影响全局 state，即使在使用 `Mathematics.Random` 的项目中，混合使用导致确定性丧失
-2. **`Mathematics.Random.NextFloat` 包含 0 和 1**：`[0, 1]` 闭合区间，与 `UnityEngine.Random` 的 `[0, 1)` 不同，需要 `NextFloat(0f, 1f)` 获得半开区间
-3. **浮点精度差异**：Editor 和 Player、不同 CPU 架构（x86 vs ARM）可能有微小差异，battle hash 比应对容忍 epsilon
-4. **Degrees vs Radians 混用**：`math.sin` / `math.cos` 期望弧度，误传 degrees 不会报错但计算结果错误
-5. **复用 seed 导致随机序列相同**：同一随机流的不同消费者应使用 stream offset 或派生 seed（如 `Random.CreateFromIndex(baseSeed ^ consumerId)`）
+`Entity.Index`、chunk index、线程索引和 NativeStream buffer index 只在特定 World/调度映射内有意义，不应直接充当跨运行 replay 的业务稳定 ID。浮点加法不满足结合律；若 hash 要跨 CPU/编译配置逐 bit 一致，还必须定义 Burst 浮点模式、NaN/负零规范化和必要的定点/量化策略。“epsilon 比较”适合近似验证，不等于确定性 hash。
 
 ## 官方证据
 
-| 官方文档文件 | 关键结论 | 关联规则编号 |
-|---|---|---|
-| `compatibility.md` | UnityEngine 与 Mathematics 在角度/Random 上存在差异 | MAT-01, MAT-03 |
-| `random-numbers.md` | Mathematics.Random 是显式 state，可序列化，Burst 兼容 | MAT-01, MAT-02 |
-| `quaternion-multiplication.md` | 使用 radians 和 math.mul | MAT-03, MAT-04 |
-| `4x4-matrices.md` | 矩阵乘法用 math.mul，不依赖运算符 | MAT-04 |
-| `15-数据流-系统生命周期规范.md` P2-01 | 确定性输出不得依赖无序写入 | MAT-05 |
-| `15-数据流-系统生命周期规范.md` P2-03 | Mathematics.Random state 必须显式归属 | MAT-02 |
+| 官方文档（Mathematics 1.3.3） | 可裁决结论 |
+|---|---|
+| `random-numbers.md` | Random state 由调用者创建和管理；`NextFloat()` 为 `[0,1)` |
+| `compatibility.md` | Mathematics.Random 是实例状态、上界排除；矩阵 `*` 是逐分量乘法 |
+| `quaternion-multiplication.md` | quaternion 角度使用 radians；复合使用 `math.mul` |
+| `4x4-matrices.md` | 矩阵乘法使用 `math.mul` |
+
+排序键、battle hash、跨平台位级确定性和 Runtime Core 禁用 `UnityEngine.Random` 均为 EX-GAS 项目规范，不是 Mathematics 官方保证。

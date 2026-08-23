@@ -97,13 +97,13 @@ public partial class GASCommandResolveSystemGroup : ComponentSystemGroup { }
 **排序控制优先级：**
 1. `OrderFirst` / `OrderLast`（最高优先级）
 2. `UpdateBefore` / `UpdateAfter`（同级 Group 内）
-3. 默认按创建顺序
+3. 未受约束的同级顺序不作为业务 contract；需要先后的 system 必须显式声明约束
 
 ### 系统数量成本
 
 每个活跃 System 的固定开销来自三处：
 
-1. **TypeHandle 刷新**：每个 System 在 `OnUpdate` 前获取自己的 `ComponentTypeHandle`/`EntityTypeHandle` 副本。结构变化使其失效，必须每帧重取。N 个 system = N 次 type handle 操作。
+1. **Handle 更新**：每个 system 有自己的 handle/query 缓存；显式缓存的 `ComponentTypeHandle` / Lookup 在使用前更新，source-generated `SystemAPI` 缓存由生成代码更新。结构变化不会要求每帧重新创建 EntityQuery。
 2. **Lookup 重复创建**：不同 System 可能创建相同的 `ComponentLookup<T>`，每帧各自更新。
 3. **Dependency 链**：每个 System 通过 `Dependency` JobHandle 传递依赖。N 个 system = N 个 JobHandle 链接点。
 
@@ -120,7 +120,7 @@ public partial class GASCommandResolveSystemGroup : ComponentSystemGroup { }
 | `GASFramePrepareSystemGroup` | `FixedStepSimulationSystemGroup` 最前 | frame clock、allocator / budget、debug counters；query 由 owner system 创建 | 禁止 |
 | `GASCommandResolveSystemGroup` | FramePrepare 之后 | Boundary Command Ingest、Target Resolve | 禁止 |
 | `GASCoreSimulationSystemGroup` | CommandResolve 之后 | Effect Fan-In、State Evaluate、Attribute Reduce/Apply、Gameplay Fact | 禁止直接结构变化 |
-| `GASStructuralCommitSystemGroup` | CoreSimulation 之后 | grant/remove/spawn/destroy/cleanup 的 ECB playback 或 EntityQuery bulk | **唯一 hot path 结构变化点** |
+| `GASStructuralCommitSystemGroup` | CoreSimulation 之后 | grant/remove/spawn/destroy/cleanup 的 ECB playback 或 EntityQuery bulk | EX-GAS 默认集中提交 phase；例外需正确性与 Profiler 证据 |
 | `GASBoundaryProjectionSystemGroup` | StructuralCommit 之后 | ReadModel、Presentation outbox、Replay、Debugger | 只读 |
 
 旧 `SpecEvaluation / DeltaApply / TypedFactProjection` 是 GAS 语义链，不是 DOTS 物理边界。只有新边界对应独立同步点、结构变化点、固定步策略或投影边界时，才允许新增 `ComponentSystemGroup`。
@@ -146,12 +146,12 @@ AutoChess 无头验收 Demo 如果使用隔离 World，必须通过 `ICustomBoot
 
 1. **在 `OnCreate` 中访问未创建的系统**：使用 `CreateAfter` 确保依赖系统已存在
 2. **System 数量膨胀**：每个 system 都有 type handle + lookup + dependency 成本
-3. **忘记 `ref` 关键字**：ISystem 回调参数 `ref SystemState state` 是 ref 传递，漏掉编译不报错但语义错误
+3. **忘记 `ref` 关键字**：正确签名是 `OnUpdate(ref SystemState state)`；签名不匹配时不会实现 `ISystem` 接口并产生编译错误
 4. **World 生命周期**：`World.Dispose()` 后所有 entity/component 失效，无自动恢复
 5. **多 World 混用**：entity ID 只在 World 内唯一，跨 World 传递需用 entity mapping
-6. **ISystem 中意外使用托管对象**：Burst 编译时如果字段有托管对象会静默退化为非 Burst
+6. **ISystem 中意外使用托管 API**：可能导致 Burst 编译诊断或该调用路径无法 Burst；检查 Burst Inspector/编译日志，不把它描述成必然“静默退化”
 7. **`[RequireMatchingQueriesForUpdate]` 的误用**：始终有 entity 匹配的 system 加此属性反而增加检查开销
-8. **SystemGroup 嵌套过深**：一般不超过 3 层嵌套
+8. **SystemGroup 嵌套过深**：没有官方“三层”上限；只为真实物理边界增加 group，并用 Systems 窗口检查可理解性与排序
 9. **手动调用其他 System 的 Update()**：破坏 EntityQuery 变更版本号
 
 ## 官方证据
@@ -160,8 +160,9 @@ AutoChess 无头验收 Demo 如果使用隔离 World，必须通过 `ICustomBoot
 |----------|----------|----------|
 | `concepts-worlds.md` | World 是 entity ID 唯一性和系统调度边界 | SYS-01, SYS-05 |
 | `systems-intro.md` | ISystem 是 unmanaged 首选，SystemBase 退居 managed 场景 | SYS-01, PRF-16 |
-| `systems-update-order.html` | SystemGroup 提供分层排序；三层根 Group 对应 PlayerLoop | SYS-02 |
-| `systems-optimizing.html` | 每个 system 的 type handle + lookup + dependency 产生线性 CPU 开销 | SYS-03, SYS-04, PRF-07 |
-| `systems-isystem.html` | ISystem 回调签名使用 `ref SystemState`；Burst 友好 | PRF-16 |
+| `systems-update-order.md` | SystemGroup 提供分层排序；创建顺序与更新顺序是不同约束 | SYS-02, PRF-16 |
+| `systems-optimizing.md` | 每个 system 有固定 overhead；用 Profiler 决定是否合并 | SYS-03, SYS-04, PRF-07 |
+| `systems-isystem.md` | ISystem 回调签名使用 `ref SystemState`；回调可 Burst 编译 | PRF-16 |
+| `allocators-system-group.md` | `SetRateManagerCreateAllocator` 与 double rewindable group allocator 生命周期 | CASE-16 |
 | `systems-version-numbers.md` | 手动调用其他 System Update() 破坏变更版本号 | SYS-02 |
 | `systems-entity-command-buffers.md` | ECB 最佳实践、独立 ECB per job | SYS-02 |
