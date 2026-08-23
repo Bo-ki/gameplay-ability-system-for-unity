@@ -13,6 +13,7 @@
 | 主题 | 唯一正文 owner | 本文件只维护 |
 |---|---|---|
 | Excel / Luban / SourceGenerator / Baker / Bootstrap 端到端流程 | [08 Luban / SourceGenerator 配置生成链路](08-Luban-SourceGenerator配置生成链路Spec.md) | Definition CodeGen 在该流程中的 artifact 责任 |
+| canonical semantic graph、typed contract、layout/dependency/CapacityProof schema | [25 配置语义编译契约与 CapacityProof](25-配置语义编译契约与CapacityProof统一裁决Spec.md) | 只分类这些 artifact，不复制字段矩阵和 proof 推导 |
 | Definition manifest、Blob、lookup、pure glue、validation artifact 的目标链路 | 本文件 | artifact 责任边界、Runtime 消费契约和验收 |
 | SourceGenerator 权限边界、lifecycle relocation、validation gate 字段 | [15 SourceGenerator 职责边界](15-SourceGenerator职责边界Spec.md) | 引用边界，避免把权限门禁扩成第二正文 |
 | Runtime Core lane 调用 generated glue 的具体 plan / seed / modifier record 代码 | [03B-03 Generated Runtime Glue 消费接口](03-RuntimeCore管线/03B-业务调用链与配置消费/03B-03-GeneratedRuntimeGlue消费接口Spec.md) | 只定义消费契约，不维护完整调用代码 |
@@ -28,11 +29,12 @@
 
 ```mermaid
 flowchart LR
-    Excel["Luban Excel / schema"] --> Rows["Normalized Definition Rows"]
-    Rows --> Manifest["Definition Manifest\nschema hash / content hash / phase manifest"]
-    Rows --> BlobBuild["Generated Blob Builder\nBaker or Bootstrap only"]
-    Rows --> Lookup["Generated code -> index lookup"]
-    Rows --> Glue["Generated Pure Glue\nplan / seed / evaluator"]
+    Excel["Luban Excel / schema"] --> Graph["CanonicalNormalizedSemanticGraph\nRuleId / provenance"]
+    Graph --> Contracts["Typed contracts / programs\nlayout + CapacityProof"]
+    Graph --> Manifest["Candidate Manifest\nfour hashes / artifact byte hashes"]
+    Contracts --> BlobBuild["Generated Blob Builder\nBaker or Bootstrap only"]
+    Contracts --> Lookup["Generated code -> index lookup"]
+    Contracts --> Glue["Generated Pure Glue\nplan / program / evaluator"]
     BlobBuild --> Catalog["GASDefinitionCatalogBlob"]
     Lookup --> Core["Handwritten ECS Runtime Core Systems"]
     Glue --> Core
@@ -54,12 +56,14 @@ flowchart LR
 
 | Artifact | 允许职责 | 禁止职责 |
 |---|---|---|
-| Normalized Definition Row | 承载配置输入、schema/content hash 输入 | 进入 Runtime hot path |
-| Definition Manifest | 输出 schema hash、content hash、phase manifest、orphan cleanup 规则 | 表达 gameplay schedule |
+| Canonical Semantic Graph | 单次从 Luban schema/rows 构建，承载 canonical field ordinal、RuleId/provenance 和 typed compile 输入 | generated C# factory、reflection/AppDomain snapshot 成为 graph 权威；进入 Runtime hot path |
+| Definition Manifest | 输出四元 install identity、每 artifact canonical path/kind/owner/byte hash、candidate/promotion eligibility 与 orphan generation 规则 | 表达 gameplay schedule；在 candidate 成功前修改 active generation |
 | Catalog Blob Builder | 在 Baker / Bootstrap 阶段构建不可变 Blob | 每 tick 创建 Blob、隐藏 Dispose owner |
 | Generated Lookup | code -> index、index -> ref readonly definition、range lookup | Runtime random write、跨 entity state lookup |
 | Generated Pure Glue | Ability contract、EffectApplicationSpec builder、requirement evaluator、magnitude program、target rule pure evaluator | `ISystem`、`OnUpdate`、system registration、ECB owner、EntityManager write、NativeContainer owner |
 | Validation Gate | 扫描职责越界、API 选型、依赖边界、hash、orphan artifact | 把实现状态写成完成证明 |
+| Typed Contract / Program | 输出 Cost/Cooldown/Capture/Stack/DirectEffect/Spawn 的 versioned schema、id/range 与 pure accessor | 普通 GE 压平、动态 child、Runtime lifecycle |
+| LayoutProof / CapacityProof | 输出 layout hash/subhash、expansion/touched slots/overlay/projection/cleanup/intent 上界与 consumer map | capacity hint、平均值或只生成不消费的 report |
 
 ## Generation Artifact Responsibility Matrix
 
@@ -75,6 +79,9 @@ flowchart LR
 | `PureRuntimeGlue` | Definition CodeGen + Runtime Core caller | 是 | static pure function、unmanaged record、catalog ref、snapshot input | `ISystem`、`OnUpdate`、query、ECB、NativeContainer owner | caller lane owns query / writer / allocator；glue boundary gate 为 0 |
 | `BakerGlue` | Baking | 否 | stateless `Baker<T>`、`DependsOn()`、`AddBlobAsset()`、BakingOnly / TemporaryBaking data | Baker instance cache、读其他 Baker output、runtime lifecycle | Baker rule scan、incremental baking dependency report |
 | `ValidationArtifact` | Editor / CI | 否 | manifest、rule hit、API health、query/capacity hint、DOTS coverage | gameplay 决策输入、runtime mutable state | validation report、official rule coverage、failure mode |
+| `TypedContract` | Definition CodeGen | 是 | versioned contract/program id、range、pure accessor、RuleId | lifecycle、dynamic graph、managed policy object | contract matrix hash、round-trip、negative rule |
+| `LayoutProof` | Definition CodeGen | 是 | AttributeLayout/TagCatalog/Blob range metadata、layout hash | runtime layout 推断、silent truncation | layout hash/subhash、257 Tag 负例 |
+| `CapacityProof` | Definition CodeGen + admission consumer | 是 | immutable bounds、derivation、consumer map | hint/average/high-water 代替 proof | proof hash、逐字段 consumer evidence |
 | `RuntimeLifecycle` | Hand-written Runtime Core | 否，由生成器禁止 | 只能由手写 `ISystem` / Job 拥有 | SourceGenerator 输出 lifecycle、system registration、hidden query / ECB | generated lifecycle gate 为 0，Runtime lane API 选型表 |
 
 `MigrationProofOnly` 不是目标态 artifact kind。它只能作为实现阶段的临时报告 disposition；release-ready 验收时不允许用 migration category、helper wrapper、generated assembly 或目录迁移替代 owner 接管。
@@ -94,6 +101,9 @@ namespace GAS.Generation
         DefinitionCatalog,
         StaticLookup,
         PureRuntimeGlue,
+        TypedContract,
+        LayoutProof,
+        CapacityProof,
         BakerGlue,
         ValidationArtifact,
     }
@@ -117,6 +127,8 @@ namespace GAS.Generation
         public readonly bool MayOwnLifecycle;
         public readonly bool MayOwnStructuralChange;
         public readonly bool MayOwnNativeContainer;
+        public readonly string CanonicalPath;
+        public readonly string ArtifactByteHash;
 
         public GeneratedArtifactManifestEntry(
             GeneratedArtifactKind kind,
@@ -125,7 +137,9 @@ namespace GAS.Generation
             bool mayAllocate,
             bool mayOwnLifecycle,
             bool mayOwnStructuralChange,
-            bool mayOwnNativeContainer)
+            bool mayOwnNativeContainer,
+            string canonicalPath,
+            string artifactByteHash)
         {
             Kind = kind;
             Owner = owner;
@@ -134,6 +148,8 @@ namespace GAS.Generation
             MayOwnLifecycle = mayOwnLifecycle;
             MayOwnStructuralChange = mayOwnStructuralChange;
             MayOwnNativeContainer = mayOwnNativeContainer;
+            CanonicalPath = canonicalPath;
+            ArtifactByteHash = artifactByteHash;
         }
 
         public bool IsRuntimePureGlue =>
@@ -154,6 +170,7 @@ namespace GAS.Generation
 3. Blob builder 可以分配，但 owner 只能是 Baking / Bootstrap / DefinitionCatalogLifetime，不能由 Core tick 调用。
 4. Validation artifact 可以描述失败原因，但不能参与 gameplay 决策。
 5. 如果某类 artifact 无法填出 owner 和禁止项，它不能进入 Runtime-visible 层。
+6. 每个 candidate artifact 必须有 canonical path 与完整 byte hash；manifest 缺项、重复 path、owner 不一致或 byte mismatch 时不能进入原子 promotion。
 
 ## Runtime 消费契约
 
@@ -163,6 +180,8 @@ namespace GAS.Generation
 4. Magnitude / requirement / target rule 的 generated evaluator 必须是 Burst 可用的 static switch、function id 或 batch FunctionPointer 候选。
 5. 所有 tick-local record 的 NativeContainer owner 属于手写 `GasTickKernelSystem`；generated code 只能填充 record。
 6. GE command seed 的 lane 分类必须按业务语义判定：duration、period、stack、granted tags、remove query、granted ability 等跨帧/状态语义进入 `ActiveMutation`；execution-only / cue-only / instant delta GE 进入 instant spec 链。`ModifierCount == 0` 不能推断 `ActiveMutation`。
+7. Runtime 只按 promoted manifest 的四元 install identity 安装同代 Catalog/contract/layout/proof；整数 version、revision 或单个 InputHash 不构成兼容证明。
+8. `WholeTickInfraAdmission` 必须读取 generated `CapacityProof` 的实际字段；只在 validation report 中展示 proof 不算 Runtime 消费闭合。
 
 ## 禁止方向
 
@@ -181,3 +200,6 @@ namespace GAS.Generation
 3. 每个 Runtime Core 消费点都有 API 选型表，说明采用 Blob / lookup / record / NativeStream / owner-local buffer 的理由和拒绝项。
 4. Validation evidence 包含 schema hash、content hash、orphan artifact、generated boundary gate、Burst/API health。
 5. 目标态文档不得引用现实 `.gen.cs` 文件作为完成证明；实现事实只能进入 `00-当前架构事实/`。
+6. Candidate manifest 对每个 artifact 输出 canonical path、kind、owner、runtime visibility 与 byte hash，并能计算唯一 `ArtifactManifestHash`。
+7. TypedContract、LayoutProof、CapacityProof 均有 manifest category、第一 consumer、版本/hash 与负例；不得落入空 `ArtifactCategory`。
+8. 删除一条 definition 后，orphan cleanup 只清理不再被 active/LKG manifest 引用的历史 generation，不得在 candidate gate 前删除 active 文件。

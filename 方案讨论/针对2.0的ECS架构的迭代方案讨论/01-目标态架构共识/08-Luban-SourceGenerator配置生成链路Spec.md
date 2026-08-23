@@ -6,11 +6,12 @@
 
 ## 相邻 Spec Owner 裁决
 
-`08` 是配置生成链路的端到端 owner，负责定义 Excel / Luban / SourceGenerator / Baker / Bootstrap / Runtime catalog 如何贯通。它不维护 Runtime Core 调用 generated glue 的完整接口正文，也不替 `15` 维护 SourceGenerator 权限门禁第二正文。
+`08` 是配置生成与发布链路的端到端 owner，负责定义 Excel / Luban / SourceGenerator / Baker / Bootstrap / Runtime catalog 如何贯通，以及 candidate、四 hash、CI validation、原子 promotion 与 LKG 如何形成唯一发布事务。它不维护 Runtime Core 调用 generated glue 的完整接口正文，也不替 `15` 维护 SourceGenerator 权限门禁第二正文。
 
 | 主题 | 唯一正文 owner | 本文件只维护 |
 |---|---|---|
 | 生成链路总数据流、Luban 编译边界、SourceGenerator pipeline、asmdef / manifest / process gate | 本文件 | 端到端链路、层级归属、输入输出边界 |
+| canonical semantic graph、typed support matrix、RuleId/provenance、CapacityProof | [25 配置语义编译契约与 CapacityProof](25-配置语义编译契约与CapacityProof统一裁决Spec.md) | 只定义这些产物如何进入 candidate/hash/promotion，不复制字段矩阵 |
 | Definition CodeGen artifact 责任和 Definition target chain | [14 Definition CodeGen 目标链路](14-DefinitionCodeGen目标链路Spec.md) | 链路中引用 artifact 类别，不复制完整责任表 |
 | SourceGenerator 允许 / 禁止生成、lifecycle relocation、validation gate | [15 SourceGenerator 职责边界](15-SourceGenerator职责边界Spec.md) | 链路中引用边界，不维护第二份 gate 正文 |
 | Runtime Core 对 generated glue 的纯消费接口 | [03B-03 Generated Runtime Glue 消费接口](03-RuntimeCore管线/03B-业务调用链与配置消费/03B-03-GeneratedRuntimeGlue消费接口Spec.md) | 说明 Runtime 消费入口必须存在，不展开 plan / seed / evaluator 代码 |
@@ -27,19 +28,22 @@ SourceGenerator 必须收权而不是扩权。`SYS-01` 要求 gameplay 权威计
 
 ```mermaid
 flowchart LR
-    Excel["Excel / Bean Schema"] --> Luban["Luban CLI\njson + gen.cs"]
-    Luban --> Rows["Definition rows / schema / process gate"]
-    Rows --> Pipeline["GasCodeGenPipeline\nContext / RowMetadata / Phases"]
-    Pipeline --> RuntimeArtifacts["Runtime artifacts\nids / blob schema / lookup / calculation switch"]
-    Pipeline --> BakingArtifacts["Baking artifacts\nBaker glue / bake plan"]
-    Pipeline --> Reports["Editor/CI artifacts\nmanifest / validation / query layout"]
+    Excel["Excel / Bean Schema"] --> Luban["Luban CLI\ntyped rows + schema"]
+    Luban --> Graph["CanonicalNormalizedSemanticGraph\nRuleId + provenance"]
+    Graph --> Pipeline["Semantic compiler\ncontracts / layout / CapacityProof"]
+    Pipeline --> Candidate["Content-addressed CandidateRoot\nfour hashes + artifact byte hashes"]
+    Candidate --> RuntimeArtifacts["Runtime artifacts\nids / Blob / lookup / pure evaluator"]
+    Candidate --> BakingArtifacts["Baking artifacts\nBaker glue / install plan"]
+    Candidate --> Reports["Editor/CI artifacts\nmanifest / validation / consumer map"]
+    Reports --> Gate["Compile / AOT / negative / scenario gate"]
+    Gate --> Promote["Atomic ActiveGenerationRef promotion"]
     RuntimeArtifacts --> Catalog["GASDefinitionCatalogBlob\nsorted ids / definitions / schema hash"]
     RuntimeArtifacts --> Lookup["GASGeneratedDefinitionLookup\ncode -> index / static switch"]
     BakingArtifacts --> BakePipeline["GASGeneratedDefinitionBakePipeline"]
     Catalog --> Integration["RuntimeIntegrationPlan"]
     Lookup --> Integration
     BakePipeline --> Integration
-    Reports --> Integration
+    Promote --> Integration
 ```
 
 ## UML 类图
@@ -72,8 +76,12 @@ classDiagram
     }
     class GasCodeGenManifest {
         outputs
-        inputHash
-        clean
+        sourceInputHash
+        schemaHash
+        contentHash
+        layoutHash
+        artifactManifestHash
+        candidateId
     }
     class GASDefinitionCatalogBlob {
         Abilities
@@ -111,7 +119,7 @@ classDiagram
     GASGeneratedDefinitionBakingPlan --> GASGeneratedDefinitionIntegrationPlan
 ```
 
-## 时序图：真实 Luban gate
+## 时序图：真实 Luban gate 与原子 promotion
 
 ```mermaid
 sequenceDiagram
@@ -119,14 +127,19 @@ sequenceDiagram
     participant Luban
     participant SourceGenerator
     participant Definition
+    participant CI
+    participant Promotion
     participant Bake
     participant Runtime
 
     Config->>Luban: Run Luban CLI
-    Luban->>SourceGenerator: Emit source / manifest
-    SourceGenerator->>Definition: Build generated ids / blob schema / lookup source
-    Definition->>Bake: Build stateless Baker glue / catalog bake contract
-    Bake->>Runtime: Load immutable Definition Catalog Blob
+    Luban->>SourceGenerator: Typed rows + schema
+    SourceGenerator->>Definition: Build canonical graph/contracts/proofs in memory
+    Definition->>CI: Materialize content-addressed candidate + four hashes
+    CI->>CI: Validate bytes/compile/AOT/negative/scenario evidence
+    CI->>Promotion: Atomic swap ActiveGenerationRef
+    Promotion->>Bake: Install exact promoted artifact manifest
+    Bake->>Runtime: Load immutable Catalog with exact install identity
     Runtime->>Runtime: Core lanes read catalog blob + generated code->index lookup
 ```
 
@@ -151,6 +164,10 @@ sequenceDiagram
 17. 每个进入 Catalog 的语义字段都必须保留 provenance，至少包含 authoring table/file、row stable id、field path、normalized value 和 generator version。
 18. 同一语义字段出现重复 owner、override/append 企图、非法 enum、越界 range、缺失引用或无法解析的 policy 时，bake 必须失败并输出 provenance；禁止 clamp、fallback 或保留旧值继续运行。
 19. Catalog 的 schema/content hash 基于验证后的 normalized semantic graph；Session 启动后只持有该不可变快照，不在 Runtime 重新合并 authoring/sidecar。
+20. normalized semantic graph 必须在单次调用内直接从 Luban schema/rows 构建；禁止先写 generated row C#，再扫描尚未重编译的 AppDomain factory。
+21. candidate 必须在独立 content-addressed root 完整生成并通过 validation 后，才允许以单一 `ActiveGenerationRef` 线性化；phase 不得逐个直写 active root。
+22. Runtime install identity 固定为 `{SchemaHash, ContentHash, LayoutHash, ArtifactManifestHash}`；`SourceInputHash` 只用于复现/provenance，不能单独判定兼容。
+23. candidate 或 promotion 失败时 active generation 不变；回滚是显式重新 promotion 某个历史成功 manifest，不是 Runtime fallback。
 
 ## Luban 与 SourceGenerator 职责边界
 
@@ -176,6 +193,23 @@ Luban authoring semantic row
 - 同一 GE 的 stack type、stack code、duration refresh、period reset、expiration 与 modifier list 必须来自同一受验证 authoring graph。
 - Validation report 必须能从 Catalog 字段反查到唯一 row/field provenance；存在两个来源时是生成失败，不是后写覆盖。
 - 当前 9203 `StackingType=9203` 与 sourcegen sidecar 修改 modifier/refresh/expiration 的代码事实见 [AutoChess 真实业务链二轮审查事实](../00-当前架构事实/AutoChess真实业务链二轮审查事实.md)；目标链对此必须 bake fail，不保留兼容合并支路。
+
+### Canonical graph 与 single-run consistency
+
+`CanonicalNormalizedSemanticGraph` 的字段、canonical ordinal、typed contract、RuleId/provenance、Live/Grant dependency 与 CapacityProof 由 [25](25-配置语义编译契约与CapacityProof统一裁决Spec.md) 定义。本链路只接受该 graph 的 immutable bytes，不接受 reflection 扫描顺序、generated row factory 或已编译程序集快照。
+
+一次运行必须同时完成：读取 Luban 输入、构图、验证、生成 candidate、计算 hash 与输出 artifact。若生成某个 C# 文件后必须等待 Unity compilation 才能继续，则本次调用必须停在未发布 candidate，待带同一 candidate token 的后续编译 gate 完成；禁止继续读取旧程序集并宣称成功。
+
+### 四 hash 与 artifact bytes
+
+| 身份 | canonical 输入 | 用途 |
+|---|---|---|
+| `SchemaHash` | schema、FieldOrdinal、typed contract ABI、RuleId domain | 判定 schema/contract 兼容 |
+| `ContentHash` | 通过验证的 gameplay semantic graph、program/dependency ordinal | 判定 gameplay 内容身份 |
+| `LayoutHash` | Blob/range、AttributeLayout、TagCatalog、slot/payload/CapacityProof schema | 判定物理布局与 admission proof 兼容 |
+| `ArtifactManifestHash` | 按 canonical path/kind/owner 排序的每个 artifact byte hash | 判定本次安装是否为完整同代集合 |
+
+`SourceInputHash` 还应覆盖稳定 source identity、Luban/toolchain version 与 provenance 输入，但只用于复现。本链路的 hash 编码固定为版本化 canonical bytes 与完整 cryptographic digest；禁止使用当前 culture 字符串化、`AssemblyQualifiedName`、reflection 自然序或 32-bit 名称 hash 冒充上述身份。
 
 ### Luban Unity 编译边界
 
@@ -227,6 +261,8 @@ Excel / Luban row
 | `GASGeneratedMagnitudeEvaluator` | 生成 MMC / modifier magnitude static switch；同 evaluator 大批量时可生成 FunctionPointer batch 候选 | Magnitude Resolve 遍历 modifier range 时调用；默认 per modifier static switch | 托管 delegate、虚函数策略对象、可变注册表、per-entity FunctionPointer invoke |
 | `GASGeneratedTargetRuleTable` | target rule code -> unmanaged target params / sort policy / query hint | Target Resolve 读取 params 后基于 physics snapshot / explicit target 生成 `AbilityTargetRecord` | target strategy class、ScriptableObject target rule、Runtime Core 反查资源 |
 | `GASGeneratedRuntimeGlueValidation` | 生成 config -> Runtime glue 的离线报告：缺失 GE、无效 range、orphan tag、Burst evaluator 覆盖 | Editor/CI 诊断；Runtime Core 只消费通过校验后的常量和 Blob | 把诊断结果作为 gameplay 决策输入 |
+| Typed Contract / Program | `CostMutationContract`、`CooldownGateContract`、`CaptureProjectionContract`、`StackTemporalContract`、`DirectEffectProgram`、`SpawnInitializationProgram` | Runtime 按 contract/program id 与 pre-resolved range 调用手写 owner | 普通 GE 压平、动态 child、隐藏 lifecycle |
+| `CapacityProof` / ConsumerMap | 每 Definition/target/profile 的 expansion、overlay、slot、projection、cleanup、fact/Cue/ECB intent 上界 | `WholeTickInfraAdmission` 与 V7 evidence 逐字段消费 | capacity hint、平均值、只生成不消费的 report |
 
 **生成 glue 的硬约束：**
 
@@ -238,7 +274,7 @@ Excel / Luban row
 6. Glue 不保存 per-tick state，不缓存上次 plan，不维护可变静态 registry；同一 SimulationTick 的 command / target / modifier 都是 Kernel 的 tick-local record。
 7. Glue 不引用 `cfg.*`、`XLuban`、`SimpleJSON`、managed Luban row、JSON table reader 或 Editor-only assembly。
 
-离线 publish/bake validation 只证明定义图、引用和静态 carrier 合法，不能替代运行时检查。Cost/Cooldown 即使由 GE-like row authoring，也只生成 owner-local invariant seed：`OwnerPlanBuild` 必须在 canonical shadow 上重检，`AscOwnerCommandWave` 才做 no-fail 原子 mutation；禁止把它们降成普通 self GE 投递到 TargetWave。
+离线 publish/bake validation 只证明定义图、引用和静态 carrier 合法，不能替代运行时检查。Cost/Cooldown 即使由 GE-like row authoring，也只生成 owner-local invariant seed：`OwnerPlanBuild` 必须在 canonical shadow 上重检，`AscOwnerCommandWave` 才做 no-fail 原子 mutation；禁止把它们降成普通 self GE 投递到 `TargetPrepare/TargetPublish`。
 
 ### 为什么必须让 SourceGenerator 收权
 
@@ -383,6 +419,25 @@ generated asmdef 也属于 SourceGenerator 输出，不手写维护依赖漂移�
 3. row source assembly 引用必须从 `GasCodeGenContext.Rows` 推导，禁止在生成器代码中硬编码 `HeadlessAutoChess` 或其他项目名前缀。
 4. asmdef 必须进入 manifest，且 Runtime asmdef 标记为 Runtime，Editor/Baking asmdef 标记为非 runtime-visible。
 
+## Candidate、Promotion 与 LKG
+
+### CandidateRoot
+
+每次 publish 生成新的 content-addressed `CandidateRoot`。所有 `.gen.cs`、Blob/catalog bytes、asmdef、Editor Binding、validation report、`CapacityProof` 与 manifest 只写入该 candidate；不得覆盖当前 active root，也不得在 candidate validation 前删除 active generation 的 orphan。
+
+Candidate manifest 至少记录：CandidateId、SourceInputHash、四元 install identity、生成器版本、每个 artifact 的 canonical path/kind/owner/byte hash、RuleId summary、CapacityProofHash 和 required evidence id。
+
+### Promotion 线性化点
+
+CI 必须先完成 semantic/layout/capacity validation、artifact byte 对账、隔离 compilation、Burst/AOT、固定负例和所需 scenario，再以一次原子操作切换 `ActiveGenerationRef`。这一步是唯一 promotion 线性化点：
+
+1. 任一 gate 失败：candidate 失败，active generation 与 LKG 历史不变。
+2. promotion 自身失败：active ref 保持旧值，不允许一部分 active 文件来自 candidate。
+3. 成功后 orphan cleanup 只作用于已不再被任何 active/LKG manifest 引用的 generation。
+4. 回滚必须选择一个精确历史 `ArtifactManifestHash` 并执行新的原子 promotion，产生新的 PromotionId/audit record。
+
+LKG 只属于发布控制面。运行中的 Session 固定其已安装 Catalog；新 Session 只安装当前 active generation。四元 identity 不匹配直接启动失败，Runtime 不读取旧 schema、managed row、sidecar、ScriptableObject 或历史 Catalog 做自动 fallback。
+
 ## 禁止方向
 
 1. SourceGenerator 生成 Ability / GE active lifecycle。
@@ -398,6 +453,10 @@ generated asmdef 也属于 SourceGenerator 输出，不手写维护依赖漂移�
 11. 把 `GASGeneratedDefinitionBlobComponent<T>` 的 per-definition entity query 当作 Runtime hot path lookup。
 12. 使用 sourcegen sidecar override/append 修改 Luban gameplay 语义，或以“生成方便”为由在 glue 中注入 dummy modifier。
 13. 对非法 enum/range 执行 clamp/default/fallback，或在 provenance 冲突时使用 last-writer-wins。
+14. 先直写 active `.gen.cs` / manifest，phase 失败后继续保存或删除 orphan。
+15. 用一次生成写出的 row C# 配合当前 AppDomain 中旧 factory 继续生成 Catalog/hash。
+16. 把 `InputHash`、整数 `SchemaVersion` 或 revision 当作完整 install identity。
+17. 在 Runtime 保留旧 Catalog、managed row 或 sidecar 自动 fallback。
 
 ## 验收
 
@@ -413,23 +472,28 @@ generated asmdef 也属于 SourceGenerator 输出，不手写维护依赖漂移�
 8. Core generated 命名必须对齐 `12-命名规范Spec.md`：Blob 根类型使用 `{Domain}DefinitionBlob`，lookup 使用 `{Domain}DefinitionLookup`，lookup builder 使用 `GASGeneratedDefinitionLookupBuilder`，框架产物使用 `GASGenerated*` 前缀，通用 component 使用 `GASGeneratedDefinitionBlobComponent<T>` / `GASDefinitionCodeComponent`。
 9. 生成报告必须输出 `BAKE-*`、`BLOB-*`、`QRY-*`、`JOB-*`、`SC-*`、`BUR-*`、`PRF-*`、`ODF-*` 规则对照：采用、拒绝、暂缓理由必须明确。
 10. Baker 生成物必须能映射到 `Baker<TAuthoring>`、`DependsOn()`、`AddBlobAsset()` / custom hash、Baking System dependency report 中的至少一种官方 baking 模式。
-11. Static lookup 必须是 O(1) 或 O(log n) 的 unmanaged / Blob lookup 形态；线性 `GASDefinitionTable` 只能作为 Editor/CI 或非目标态 fallback。
+11. Static lookup 必须是 O(1) 或 O(log n) 的 unmanaged / Blob lookup 形态；线性 `GASDefinitionTable` 只允许作为 Editor/CI inspection artifact，任何 Runtime 消费都阻断 candidate，不能作为 fallback。
 12. 至少一条 Runtime 消费链必须证明：`AbilityCode -> AbilityDefinitionIndex -> ref readonly AbilityDefinitionBlob -> GameplayEffectDefinitionIndex -> ref readonly GameplayEffectDefinitionBlob -> modifier/evaluator static switch` 全程无 managed row / JSON / `Dictionary`。
 13. 至少一条 Runtime glue 消费链必须证明：`AbilityDefinitionIndex -> AbilityActivationCommand -> EffectApplicationSpec -> ModifierContribution/AttributeDelta` 全程由 generated static pure functions + tick-local record 承载，不生成 lifecycle system、不隐藏结构变化。
 14. Runtime-visible generated hard gate 必须扫描并默认阻断以下 token：`: ISystem`、`OnUpdate(ref SystemState`、`CreateSystem(`、`AddSystemToUpdateList(`、`state.EntityManager`、`EntityManager.Create`、`EntityManager.Destroy`、`EntityManager.AddComponent`、`EntityManager.RemoveComponent`、`SystemAPI.Query`、`SystemAPI.GetComponentLookup`、`SystemAPI.GetBufferLookup`、`ComponentLookup<`、`BufferLookup<`、`EntityCommandBuffer`、`NativeList<`、`NativeStream`。
-15. 上述 token 只有在 artifact 明确标记 `MigrationProofOnly`、validation report 写出 DOTS 规则违约原因、任务树包含移除计划时才允许临时存在；不得被计入目标态完成度。
+15. 上述 token 在任何可 promotion Runtime candidate 中命中都必须失败；迁移期 proof 只能留在不可 promotion 的事实/任务证据中，不能进入 active manifest。
 16. `GASGeneratedDefinitionCatalogBuilder.BuildCatalog()` 或等价 `BlobBuilder` 入口必须归属 Baking / Bootstrap / initialization owner；Runtime Core hot path 只读 catalog，不调用 builder。
 17. system registration、ability activation、instant effect、active effect runtime 这类 generated lifecycle artifact 在目标态验收中默认失败；若短期以 proof-only 形式保留，必须进入 P0 收权清单。
-18. Runtime-visible generated artifact 必须输出职责边界 gate：`GeneratedRuntimeLifecycleHits`、`GeneratedRuntimeSystemRegistrationHits`、`GeneratedRuntimeStructuralChangeHits`、`GeneratedRuntimeOwnershipHits`、`GeneratedRuntimeRandomWriteLookupHits`、`GeneratedRuntimeManagedConfigHits`。这些指标为 0 或被明确标记为 `MigrationProofOnly` 前，不得宣称 CodeGen 到 Runtime 链路完成。
+18. Runtime-visible generated artifact 必须输出职责边界 gate：`GeneratedRuntimeLifecycleHits`、`GeneratedRuntimeSystemRegistrationHits`、`GeneratedRuntimeStructuralChangeHits`、`GeneratedRuntimeOwnershipHits`、`GeneratedRuntimeRandomWriteLookupHits`、`GeneratedRuntimeManagedConfigHits`。可 promotion candidate 中这些指标必须全部为 0。
 19. 配置验证必须包含 enum domain、Start/Count range、引用图、唯一字段 owner 与 provenance 负例；任一失败时不产生可安装 Catalog。
 20. 需有一条自动化负例重现“非法 `StackingType=9203`”与“同 GE 被 sidecar override/append”，并断言错误同时报告 effect id、field path、raw value 和来源文件。
+21. 相同输入第一次运行、第二次运行、不同 project absolute path 与不同 culture 的 graph bytes、四 hash、artifact byte hash 必须一致。
+22. manifest 的每个 runtime-visible artifact 必须有 kind、owner、canonical path、byte hash；任一缺失或 byte mismatch 时 candidate 不可 promotion。
+23. 模拟任意中间 phase、isolated compile、AOT、scenario 与 promotion 失败时，active generation byte-for-byte 不变，且没有 orphan cleanup 先行。
+24. rollback 必须通过精确历史 `ArtifactManifestHash` 的新 promotion 完成；验证 Runtime 没有自动 fallback 分支。
+25. `CapacityProof`、typed contract support result 与固定 RuleId 必须进入 candidate validation snapshot，并能反查到唯一 provenance。
 
 ### AutoChess 业务链路后置验收
 
 1. AutoChess generated source 可进入 Definition Catalog 构建链，而不是只进入线性 DefinitionTable。
 2. 至少一条 AutoChess Ability / GE 链路证明 Runtime Core 消费 generated `GASDefinitionCatalogBlob` / static lookup，而不是运行时反查 managed config。
 3. AutoChessDemo 的 Luban 配置链证明至少一条业务链路能从 generated definition 进入 Blob / Baker / catalog / static lookup，并在 Boundary 层用 WeakObjectReference / UnityObjectRef 或日志占位表现资源。
-4. 生成报告补齐 query layout hint、buffer capacity hint、TransformUsageFlags、WeakObjectReference load plan 和 Baking dependency summary。
+4. 生成报告补齐 query layout、CapacityProof/consumer summary、TransformUsageFlags、WeakObjectReference load plan 和 Baking dependency summary；capacity hint 只能作为 proof 的派生展示。
 5. 生成报告补齐 Baking world / phase report、EntityPrefabReference load plan、IncludePrefab query policy、Burst AOT / Player evidence plan 和 allocator / aliasing 不相关或采用理由。
 6. 生成报告补齐 Physics profile 和 Render binding profile：是否启用 Unity Physics / Entities Graphics、使用哪些 PackageCache 官方依据、哪些字段只属于 Boundary / Presentation、哪些字段禁止进入 Core。
 

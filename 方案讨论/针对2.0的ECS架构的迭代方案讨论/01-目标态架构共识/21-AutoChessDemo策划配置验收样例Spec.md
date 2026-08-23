@@ -19,6 +19,8 @@
 | `10B-AutoChess完整业务案例设计Spec.md` | 具名单位、Ability / GE / Tag / Attribute、业务走查、System 链路 | 把 10B 的具体业务内容拆成可发布、可回归的 Acceptance Ability Sample | 不重复维护完整棋子 / System 设计正文 |
 | `11-AutoChessDemo-Luban配置方案Spec.md` | Luban 表结构、生成物、ScaleProfile、ValidationExpectation、DiagnosticsThreshold | 每个样例声明 row projection、trace、expectation 和 generated metadata 消费点 | 不重复维护配置 schema、generated artifact 清单或性能阈值字段 |
 | `20-策划配置能力交叉审查Spec.md` | 通用 Business Package、Change Set、Impact Analysis、Runtime Trace Preview、Scenario Validation Binding | 将通用策划配置能力落到 AutoChess Acceptance Ability Sample | 不重复维护通用配置能力规则 |
+| `25-配置语义编译契约与CapacityProof统一裁决Spec.md` | canonical graph、typed support/RuleId、Live/Grant/EmittedRef、CapacityProof、Target program | 样例只断言 contract/proof id、RuleId/provenance 和 consumer evidence | 不复制通用 allow/deny matrix 或 CapacityProof 字段 |
+| `08-Luban-SourceGenerator配置生成链路Spec.md` | candidate、四 hash、artifact bytes、原子 promotion/LKG | 样例记录 candidate/promotion evidence | 不定义第二套 publish 事务 |
 
 本文件的目标态边界是“样例化消费”：把业务包、row projection、trace preview、scenario binding、balance preview、impact analysis 和 acceptance assertions 组织成可发布的验收样例。它不定义 Runtime Core 规则，不定义 Luban schema，也不定义 runner infrastructure。
 
@@ -40,6 +42,9 @@ AutoChess 验收测试样例的最小单位不是单个 C# test，也不是单�
 | `BalancePreview` | 关键公式、tick、stack、cooldown、cost 和异常曲线 |
 | `AcceptanceAssertions` | 机器可读断言 |
 | `ImpactAnalysis` | 修改该样例核心 GE / Tag / Cue / Formula 时应影响的对象 |
+| `ContractSupportEvidence` | typed contract id、support result、RuleId/provenance、ContractMatrixHash |
+| `CapacityProofEvidence` | CapacityProofHash、关键上界及 admission consumer status |
+| `CandidatePromotionEvidence` | CandidateId、四元 install identity、artifact bytes、PromotionId/active ref |
 
 ## 核心测试能力样例
 
@@ -55,7 +60,7 @@ AutoChess 验收测试样例的最小单位不是单个 C# test，也不是单�
 | Template | `SingleTargetDamageAbility` + `InstantDamageEffect` |
 | RowProjection | Ability 9101/9102；Instant GE 9201/9202；ValidationExpectation 标记 `LegacyCharacterization` |
 | ConfigReferenceGraph | Unit -> 9101/9102 -> 9201/9202 -> fixed Health delta -> semantic_x1 / replicated_groups_50 |
-| RuntimeTracePreview | `RequestActivate -> AscOwnerCommandWave Commit -> AscTargetStateWave -> Health Base Delta(-12/-8) -> typed outcome/fact` |
+| RuntimeTracePreview | `RequestActivate -> AscOwnerCommandWave Commit -> TargetPrepare -> SessionFaultReduce -> TargetPublish -> Health Base Delta(-12/-8) -> typed outcome/fact` |
 | ScenarioValidationBinding | `semantic_x1`；legacy `x50` 只能映射 50 个隔离 4 单位 `replicated_groups_50` |
 | AcceptanceAssertions | winner/count/finish tick、BattleLocalTick、ability priority 与 ScenarioUnitId target order 稳定；不得据此宣称 cost/cooldown、wait、immunity 或 Cue 四阶段已通过 |
 | ImpactAnalysis | 修改 9201/9202 时影响 9101/9102、Tier A baseline 与 replicated-groups expectation |
@@ -157,8 +162,8 @@ AutoChess 验收测试样例的最小单位不是单个 C# test，也不是单�
 | 样例 | 必改表 | 必查生成物 | 必查 expectation |
 |---|---|---|---|
 | ACCEPT-AC-001 | ability、gameplay_effect、cue、validation_expectation | Ability lookup、GE blob、MmcEvaluator、Cue marker | DamageResolved、DamageText |
-| ACCEPT-AC-002 | ability、gameplay_effect、tag、cue、validation_expectation | Tag mask、GE active mutation seed、requirement evaluator | EffectApplied、EffectExpired、StunnedBlock |
-| ACCEPT-AC-003 | ability、gameplay_effect、tag、cue、scale_profile、validation_expectation | ActiveEffectStore data、stack policy、period tick evaluator | StackChanged、PeriodTick、BufferPressure |
+| ACCEPT-AC-002 | ability、gameplay_effect、tag、cue、validation_expectation | `TagRequirementId -> TagQueryProgram`、duration application program、requirement evaluator | EffectApplied、EffectExpired、StunnedBlock |
+| ACCEPT-AC-003 | ability、gameplay_effect、tag、cue、scale_profile、validation_expectation | CaptureProjectionContract、StackTemporalContract、period evaluator、CapacityProof | StackChanged、PeriodTick、BufferPressure |
 | ACCEPT-AC-004 | ability、gameplay_effect、tag、cue、scenario、validation_expectation | TargetRule table、multi-target seed range、Cue fan-out | TargetCount、SlowedExpire、IceNovaCue |
 | ACCEPT-AC-005 | ability、gameplay_effect、tag、scenario、validation_expectation | Heal evaluator、synergy requirement evaluator、target rule table | HealResolved、SynergyActivated |
 | ACCEPT-AC-006 | gameplay_effect、validation_expectation | MmcEvaluator diff、content hash、impact graph | ImpactAnalysis、PublishValidationSnapshot |
@@ -169,9 +174,10 @@ AutoChess 验收测试样例的最小单位不是单个 C# test，也不是单�
 
 | 测试层 | 输入 | 输出 | 失败条件 |
 |---|---|---|---|
-| Config Review Test | Luban Business Package Change Set | Config Review Gate summary | 缺 row projection/provenance、非法 enum/range、同字段 overlay、SourceGenerator 注入语义、缺 DOTS carrier hint |
+| Config Review Test | Luban Business Package Change Set | Config Review Gate summary | 缺 row projection/provenance、非法 enum/range、同字段 overlay、SourceGenerator 注入语义、typed support RuleId、Layout/CapacityProof 或 consumer map |
 | Runtime Trace Test | generated catalog metadata + pure glue | Runtime Trace Preview | plan / seed / modifier / fact / cue 链不完整，或读取 Runtime World active state |
-| Scenario Validation Test | Publish Validation Snapshot + Scenario Validation Binding | AutoChessValidationEvidence | RequiredFact / RequiredCue / summary hash / threshold 失败 |
+| Candidate/Promotion Test | candidate manifest + CI evidence | Publish Validation Snapshot + PromotionRecord | 四 hash/artifact bytes 不同代、单遍陈旧、active 先写、gate 失败仍 promotion |
+| Scenario Validation Test | promoted Publish Validation Snapshot + Scenario Validation Binding | AutoChessValidationEvidence | RequiredFact / RequiredCue / summary hash / CapacityProof consumer / threshold 失败 |
 
 默认顺序：
 
@@ -202,6 +208,12 @@ Config Review Test
 | `ScaleProfileIds` | `semantic_x1`, `period_burst` |
 | `LubanBakeProvenance` | workbook/table/row/column/raw/normalized 均可追溯 |
 | `SourceGeneratorGateSummary` | pure glue / no field override / no dummy modifier / no lifecycle / evaluator dispatch generated |
+| `ContractMatrixHash / RuleIdSummary` | 9203 Capture/Stack/DirectEffect 字段均 allowed；非法 legacy/sidecar 负例为 `CFG1001/CFG1002` |
+| `CapacityProofHash` | target/program expansion、overlay/publish bytes、period work、projection、fact/Cue/ECB intent 上界 |
+| `CandidateId` | content-addressed candidate；第一次与第二次生成 bytes 相同 |
+| `SchemaHash / ContentHash / LayoutHash / ArtifactManifestHash` | 与实际 promotion manifest 精确一致 |
+| `CandidateArtifactByteHashes` | Catalog、typed contract、proof、Editor Binding、validation artifact 完整列表 |
+| `PromotionId / ActiveGenerationRef` | 仅 candidate gate 全绿后存在；失败负例中 active ref 不变 |
 | `SemanticHashContract` | include stable identity/tick/order/outcome/state；exclude batch/raw Entity/wall-clock/profiler/allocator/teardown |
 | `DotsCoverageSummary` | `BLOB-01`, `BUR-01`, `NAT-03`, `BUF-01`, `SYS-05`, `ODF-*` |
 
@@ -214,3 +226,6 @@ Config Review Test
 5. 不为了样例快速通过而绕过 Cue / Presentation marker；无头也必须输出 marker evidence。
 6. 不让 SourceGenerator sidecar 覆盖 Luban 语义；同字段冲突、非法 enum/range 与缺失 ValueView 必须携 provenance bake fail。
 7. 不用 legacy count/hash、x50 replicated groups 或 Tier C 展示样例替代 Tier B semantic conformance。
+8. 不把 capacity hint、period-burst high-water 或“未溢出”当作 CapacityProof；样例必须验证 admission 实际消费 proof 字段。
+9. 不允许第一次生成依赖 generated row C# 再编译；单遍陈旧负例必须失败且 active generation 不变。
+10. 不用旧 Catalog/managed row/sidecar/ScriptableObject Runtime fallback 掩盖 candidate、promotion 或 install identity 失败。

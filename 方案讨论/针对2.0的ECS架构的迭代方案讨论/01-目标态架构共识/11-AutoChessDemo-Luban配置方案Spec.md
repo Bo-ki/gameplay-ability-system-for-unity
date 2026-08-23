@@ -17,6 +17,7 @@ AutoChess 的策划配置验收样例见 `21-AutoChessDemo策划配置验收样�
 | `10-AutoChess无头验收Spec.md` | runner / evidence / scale gate / Goal 停止参考 | `11` 提供 ScaleProfile、DiagnosticsThreshold、ValidationExpectation schema 和 generated artifacts；不重复维护 runner pass / diagnostic pass 规则 |
 | `10B-AutoChess完整业务案例设计Spec.md` | 具名棋子、属性、技能、GE、System 链路和业务流程走查 | `11` 只把 10B 的业务样例投影成表结构和默认配置数据；不重复维护完整业务流程 |
 | `21-AutoChessDemo策划配置验收样例Spec.md` | 策划测试能力包、row projection、trace preview、impact analysis、scenario validation binding | `11` 维护表结构和生成物字段，`21` 维护样例如何消费这些字段 |
+| `25-配置语义编译契约与CapacityProof统一裁决Spec.md` | canonical graph、typed support matrix、RuleId/provenance、Live/Grant/EmittedRef、CapacityProof | `11` 只实例化 AutoChess 表字段、program/proof id 和 ScaleProfile 消费，不复制通用矩阵 |
 
 重复维护规则：ScaleProfile / ValidationExpectation / DiagnosticsThreshold 的 schema 和 generated artifact 名称只在 `11` 维护；runner pass、performance / diagnostic split 和 evidence output 只在 `10` 维护；业务样例、Change Set、Impact Analysis 和 Runtime Trace Preview 只在 `21` 维护。
 
@@ -231,7 +232,7 @@ Luban row/schema 是 AutoChess authoring 语义唯一权威。SourceGenerator �
 | 2005 | 重装剑士 | Swordsman | — | 2 | 1800 | 100 | 100 | 90 | 40 | 5 | 3001 | — |
 | 2006 | 烈焰法师 | Mage | — | 3 | 850 | 90 | 25 | 100 | 80 | 12 | 0 | — |
 
-**生成物**：`UnitConfigBlob` BlobAsset（含 `BlobAssetReference<UnitConfigBlob>` builder），`UnitLookup[id]` static lookup table。每个单位输出按 stable `AttributeId` 排序的 `AttributeInitValue[]` 与 typed initial TagId range；`SpawnInitializationTransaction` 通过 Session `AttributeLayout` / `TagCatalog` 投影到同一 ASC 的 `AttributeValueSlot[]` / `TagCountSlot[]` shadow，禁止 suffix alias、未知 TagId或 generated per-attribute component。
+**生成物**：`UnitConfigBlob` BlobAsset（含 `BlobAssetReference<UnitConfigBlob>` builder），`UnitLookup[id]` static lookup table。每个单位输出按 stable `AttributeId` 排序的 `AttributeInitValue[]` 与 typed initial TagId range；generated `SpawnInitializationProgram` 通过 Session `AttributeLayout` / `TagCatalog` 投影到同一 ASC 的 `AttributeValueSlot[]` / `TagCountSlot[]` shadow，禁止 suffix alias、未知 TagId或 generated per-attribute component。SpawnFinalize 对该 program 做全量 admission 后才执行整批 no-fail publish；不存在可见半初始化。
 
 **关键约束**：不使用 Prefab 承载 GE/Ability 定义（不变量 13.6）。Prefab 仅限 optional Entities Graphics profile 的 render proxy entity。
 
@@ -274,6 +275,8 @@ Luban row/schema 是 AutoChess authoring 语义唯一权威。SourceGenerator �
 **列名约束**：使用 `ModifierMmc`，与 `10B-AutoChess完整业务案例设计Spec.md` 行392 对齐。Tag contribution 列只接受 typed `TagId[]` 外键，query列只接受 typed `TagRequirementId` 外键；默认示例没有值时填 "—"，禁止用 `Poisoned/Frozen` 一类 suffix alias冒充引用。
 
 **9203 必填语义列**：`StackKey=(Definition,TargetASC,SourceASC)`、`StackPayloadPolicy=ReplaceLatest`、Source Attack `CapturePhase=SourceSpecProjection`、`ExecuteOnApply=false`、`ReapplyRefreshDuration=false`、`ReapplyResetPeriod=true`、`DueEqualsEndOrder=PeriodThenExpiry`、`ExpiryPolicy=RemoveOneRefreshDurationResetPeriod`、`InhibitPolicy=DurationContinuesPeriodSkipNoCatchUp`、`TargetLifePolicy=AliveOnly`。每次成功 application（包括 cap reapply）用本次 `SourceSpecProjection` snapshot 替换 active payload 与 provenance；任何列缺失都 bake fail。Legacy 9204 固定 `-1` child 不进入目标 catalog。
+
+9203 必须编译为完整 `CaptureProjectionContract + StackTemporalContract + DirectEffectProgram/period evaluator`，并进入 [25](25-配置语义编译契约与CapacityProof统一裁决Spec.md) 的 support matrix、dependency graph 与 CapacityProof。任何 sidecar overlay、缺失 ValueView、动态 child、无法定界的 period/cleanup work 都必须以稳定 RuleId 携 provenance publish-fail。
 
 **9207 ValueView 契约**：`HealthBefore=Target.AttributeValueSlot[HealthLayoutIndex].Base`，`HealthMax=AttributeDefinition.MaxValue`，`MissingHealth=Max(0,HealthMax-HealthBefore)`，`Damage=Clamp(16+0.5*MissingHealth,12,42)`，写回同一 slot 的 Base 后由 Aggregator 重算/Clamp Current；缺少 layout-resolved ValueView 时 bake fail，禁止回退到 `BHealth` 一类 generated component。
 
@@ -398,6 +401,7 @@ flowchart TD
 | `AutoChessBakePlan.g.cs` | bake-time 依赖、BlobAssetStore、Baking world / phase 输出计划 | 不参与 Runtime Core tick |
 | `AutoChessScenarioBuildPlan.g.cs` | 根据 scenario 表生成 spawn plan、board plan、seed | 不直接操作 Runtime Core 私有结构 |
 | `AutoChessScaleProfile.g.cs` | typed workload profile、规模参数、warmup/measurement、采样率、Physics/Graphics disabled reason | 不把 workload、性能阈值和采样策略硬编码在 runner / scene serialized fields |
+| `AutoChessCapacityProof.g.cs` / Blob | 每 Definition/target/profile 的 expansion、overlay、slot、projection、cleanup、fact/Cue/ECB intent 上界和 consumer map | 不用 capacity hint、runner 常量或观测 high-water 代替生成期证明 |
 | `AutoChessValidationExpectations.g.cs` | expected summary、facts hash、thresholds | 不把测试结果写死为实现逻辑 |
 | `AutoChessValidationEvidence.g.cs` / runtime model | 统一 headless / scene runner evidence 字段、proof-only API、reselect trigger、world time policy、official tool diff 摘要 | 不替代 Runtime Core Debugger；不把字符串日志作为唯一机器依据 |
 | `AutoChessConfigDiagnostics.g.cs` | Editor / CI 配置诊断 | 不参与 runtime hot path |
@@ -413,7 +417,8 @@ flowchart TD
 | `BattleInstanceCount` / `UnitsPerBattle` | 明确战局复制与单战局规模，禁止只给一个 x 倍数 |
 | `MaxFixedTicksPerBatch` | runner允许的 bounded TickBatch上限；batch切分不参与语义 |
 | `MaximumDeltaTimeTicks` | `World.MaximumDeltaTime` 的整数 tick配置；安装时换算为 `MaximumDeltaTimeTicks / TickRate`，必须 `>0 && <= MaxFixedTicksPerBatch` |
-| `CommandCapacity` / `SlotCapacity` / `BoundaryCapacity` / `WaitCapacity` | profile 启动前完成 infra 容量预检 |
+| `CapacityProofId` | 引用由 canonical semantic graph 推导的 Definition/target/profile `CapacityProof` |
+| `CommandCapacity` / `SlotCapacity` / `BoundaryCapacity` / `WaitCapacity` | profile 请求/物理预算；必须不小于 `CapacityProof` 推导值，并在启动前由 admission consumer 对账 |
 | `MaxAllocatorHighWaterBytes` | allocator high-water 机器阈值 |
 | `BoardCount` | 棋盘副本数，用于横向扩展实体数量 |
 | `UnitsPerBoard` | 每棋盘单位数 |
@@ -421,8 +426,6 @@ flowchart TD
 | `PresentationSampleRate` | 表现 marker 采样率 |
 | `DebuggerSampleRate` | Debugger facts 采样率 |
 | `ExpectedEntityCount` | 期望实体数量 |
-
-`MaxFixedTicksPerBatch` 与 `MaximumDeltaTimeTicks` 都进入 ScaleProfile/content hash。前者限制一次 runner调用的工作量，后者限制 Unity fixed-rate catch-up可积累的 delta；缺少任一字段都必须 publish validation失败，禁止 runtime使用隐藏默认值。
 | `ExpectedCommandRange` | 每 tick command 数量范围 |
 | `ExpectedFactRange` | 每 tick facts 数量范围 |
 | `MaxCoreTickAvgMs` | 目标 core simulation tick 平均上限 |
@@ -432,7 +435,7 @@ flowchart TD
 | `MaxPresentationTickAvgMs` | presentation marker 生成平均上限 |
 | `MaxSingleSystemP95Ms` | 单个 Runtime Core system P95 热点阈值 |
 | `MaxGcAllocBytesPerTick` | 每 tick GC 分配上限；优秀线必须为 0 |
-| `MaxSyncPointCount` | 每 tick sync point 上限；优秀线必须为 0 |
+| `UnexpectedSyncPointCount` | 非法 sync point 上限；必须为 0。四类合法 Fence 按 `FenceKind` 分别对账，不计入该字段 |
 | `MaxHotPathStructuralChangeCount` | 热路径结构变化上限；优秀线必须为 0 |
 | `MaxGlobalBufferSpillCount` | 全局 command / fact / outbox buffer spill 上限 |
 | `MaxDynamicBufferExternalizedCount` | DynamicBuffer 外置数量或近似 pressure 上限 |
@@ -453,6 +456,8 @@ flowchart TD
 | `MeasurementTickCount` | 参考官方 PerformanceTests，正式测量 tick 数 |
 | `AllocatorCleanupPolicy` | WorldUpdateAllocator / group allocator / TempJob / Persistent 的 cleanup 策略 |
 | `PhysicsProfileId` | 可选 Unity Physics profile；默认 `disabled`，启用时必须输出 query/event counters |
+
+`MaxFixedTicksPerBatch` 与 `MaximumDeltaTimeTicks` 都进入 ScaleProfile/content hash。前者限制一次 runner调用的工作量，后者限制 Unity fixed-rate catch-up可积累的 delta；缺少任一字段都必须 publish validation失败，禁止 runtime使用隐藏默认值。`CommandCapacity` 等 profile 字段是部署请求，不是证明；只有 `CapacityProofId` 指向的 proof 被 `WholeTickInfraAdmission` 逐字段消费后，才可进入 scale run。
 | `RenderProfileId` | 可选 Entities Graphics profile；默认 `headless_log`，启用时必须输出 draw / BRG / render counters |
 | `ProofOnlyApiPolicy` | 该 profile 允许的 proof-only API 列表和解释 |
 | `ReselectTrigger` | 触发 API 重选型的 command count、fact count、lookup count、buffer pressure 或 scale gate |
@@ -485,7 +490,7 @@ flowchart TD
 | `MaxRuntimeTickAvgMs` | runtime tick 平均上限 |
 | `MaxSingleSystemP95Ms` | 单 system 热点上限 |
 | `MaxGcAllocBytesPerTick` | GC 分配上限 |
-| `MaxSyncPointCount` | sync point 上限 |
+| `UnexpectedSyncPointCount` | 非法 sync point 上限；固定为 0，合法 Fence 另按类型计数 |
 | `MaxHotPathStructuralChangeCount` | 热路径结构变化上限 |
 | `MaxGlobalBufferSpillCount` | 全局 DynamicBuffer spill 上限 |
 | `MaxDynamicBufferExternalizedCount` | DynamicBuffer 外置数量或近似 pressure 上限 |
@@ -592,6 +597,12 @@ sequenceDiagram
 17. ScaleProfile 必须按七种 `WorkloadKind` 出证据，并报告 bounded TickBatch 与 allocator/capacity high-water；不得用 x50 总量替代 workload 类型。
 18. Legacy characterization 与 target semantic conformance 使用不同 expectation；semantic hash 明确 include/exclude，BattleOutcome 冻结后 teardown 只能更新 audit，不能改写 battle hash。
 19. Unit/Ability/GE 的 Tag 字段全部为 typed `TagId[]` 或 `TagRequirementId` 外键；未知、重复、suffix alias 或未定义 requirement 必须带 provenance bake fail，默认示例本身必须完整通过引用解析。
+20. AutoChess 输入必须在一次生成调用中直接形成 canonical in-memory graph；第一次与第二次生成的四元 install identity 和 artifact bytes 相同，不依赖 generated row C# 再编译。
+21. AutoChess artifact 只进入独立 candidate；semantic/layout/capacity、artifact byte、compile/AOT/scenario gate 全部成功后才由 `08` 原子 promotion，失败时 active generation 不变。
+22. `SpawnInitializationProgram` 必须覆盖 Attribute/Tag/default grant/initial self effect，并生成 touched slots、payload、cleanup、fact/Cue/ECB intent 上界；任一 initial effect 超出闭世界即 publish-fail。
+23. Cross-ASC Live profile 必须生成 `FrozenProjectionPayload`、revision/value 原子配对、MaxProjectionBytes/fanout/coalesce 上界；缺一项不得用每 phase 采样降级。
+24. Grant cleanup 与 `EmittedApplicationRef` 必须区分 `AuditOnly/CleanupRight`，并生成 retention watermark、每 Activation/ASC 上界与 grant-child cleanup work。
+25. 257 个及以上 Tag 的 fixture 必须按 LayoutProof 合法承载或携 RuleId 显式失败；禁止截断、suffix alias 或 unknown-tag no-op。
 
 ## 历史方案定位
 

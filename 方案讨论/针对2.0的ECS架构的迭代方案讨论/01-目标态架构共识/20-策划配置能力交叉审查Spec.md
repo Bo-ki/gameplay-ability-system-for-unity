@@ -6,6 +6,8 @@
 
 本文件只定义目标态能力和验收口径。当前实现缺陷见 `../00-当前架构事实/ISSUE-012-策划配置能力缺失.md`。
 
+本文件不定义 semantic compiler 内部规则：canonical graph、typed support matrix、RuleId/provenance、Live/Grant/EmittedRef 与 CapacityProof 统一引用 [25](25-配置语义编译契约与CapacityProof统一裁决Spec.md)；candidate、四 hash、原子 promotion/LKG 统一引用 [08](08-Luban-SourceGenerator配置生成链路Spec.md)。
+
 ## 核心结论
 
 策划配置能力不是 Editor UI 功能集合，而是一条从业务意图到 Runtime Core definition catalog 的配置闭环：
@@ -16,8 +18,10 @@ Business Template
   -> Config Reference Graph
   -> Business Package Change Set
   -> Config Review Gate
+  -> Luban row projection / CanonicalNormalizedSemanticGraph
+  -> candidate contracts / catalog / proof / artifact bytes
   -> Publish Validation Snapshot
-  -> SourceGenerator normalized rows / catalog / pure glue
+  -> CI candidate gate / atomic promotion
   -> Runtime trace preview / scenario validation evidence
 ```
 
@@ -31,13 +35,13 @@ Business Template
 | 引用图 | Config Reference Graph 必须表达 Ability -> GE -> Modifier / Requirement / Cue / GrantedAbility / Unit / Scenario，并补充 Ability lifecycle、GE spec context、Tag taxonomy、Cue parameters、ASC grant 边 | GAS 配置错误大多是跨表引用错误；官方 GAS 语义还依赖 lifecycle、spec、tag query、cue route 和 ASC owner，必须在保存前发现 | 只保存裸 int ID，靠导出或运行时发现缺失引用 |
 | 影响分析 | 每个变更必须能反查受影响的业务包、单位、场景、规模配置、validation expectation 和 generated artifact | 平衡调参和复用 GE 会产生隐藏影响面；没有影响图就无法评审变更 | 只展示“本行被修改”，不展示业务影响范围 |
 | Schema 与 stable id | Luban schema 输出字段类型、引用类型、默认值、id namespace、迁移映射和 content hash 输入 | 业务包可以短路径编辑，但长期权威必须仍是可生成、可 diff、可迁移的 row | Editor 私有字段、临时 ID 或窗口状态进入发布链 |
-| 发布门禁 | Business Package Change Set 必须经过 Config Review Gate，输出 Publish Validation Snapshot | 配置发布需要可审计、可回滚、可复现；不能只看“保存成功” | 保存 Excel 就视为发布，缺少 row diff / hash / validation |
+| 发布门禁 | Business Package Change Set 必须先生成并验证完整 candidate，再输出 Publish Validation Snapshot 和原子 promotion record | 配置发布需要可审计、可回滚、可复现且无混代 artifact；不能只看“保存成功” | 保存 Excel/生成部分文件就视为发布，缺少 row diff / four-hash / artifact bytes / validation |
 | 平衡调参 | Balance Preview 聚合展示冷却、消耗、等级、公式、DOT tick、stack、overflow 和异常曲线 | GAS 内容高频调参，公式和周期/堆叠分散会让错误进入运行时 | 策划跨表心算，或在 Runtime Debugger 里事后确认数值 |
 | Runtime 轨迹 | Runtime Trace Preview 必须从 row projection + generated metadata + pure glue 推导 plan / seed / modifier / fact / cue | 策划需要保存前知道配置会进入哪条 Runtime lane；Debugger 只能事后验证 | 从 live Runtime state 反推配置正确性，或让预览反向驱动 gameplay |
 | 场景验证 | Scenario Validation Binding 把业务包关联到 Unit / Scenario / Scale profile / validation expectation | 配置变更必须能触发最小可跑业务证据，尤其是 AutoChess x1 / x50 / x100 / x1000 | Demo runner 常量、serialized fields 或手写测试替代长期配置源 |
 | 协作变更 | Business Package Change Set 是 review 单元，包含 row diff、引用影响、hash、诊断和 trace id | 多人配置时只看 Excel diff 不足以解释业务变更 | 以整张 Excel 文件冲突作为主要协作模型 |
 | 表现绑定 | Cue / UI / VFX / SFX 只进入 Boundary binding plan；无头模式生成 log marker 也必须保留表现链路 | 表现是业务体验的一部分，但不能反向影响 Core gameplay | 无头验收删除 Cue / UI / VFX / SFX 链路，或让资源加载状态参与 Core 决策 |
-| DOTS 承载证据 | 业务包 validation 必须携带 DOTS carrier hint、buffer capacity hint、Burst evaluator coverage 和 generated ownership gate | 配置不是运行时 API 选型，但会决定 Runtime lane 消费方式和规模压力 | 配置工具只校验字段合法，不校验 DOTS 承载风险 |
+| DOTS 承载证据 | 业务包 validation 必须携带 DOTS carrier、CapacityProofHash/consumer map、Burst evaluator coverage 和 generated ownership gate | 配置不是运行时 API 选型，但会决定 Runtime lane 消费方式和规模压力 | 用 capacity hint/观测 high-water 代替生成期 proof，或只校验字段合法 |
 | SourceGenerator 绑定 | Generated Editor Binding 输出模板字段、choice source、引用类型、诊断码、显示 hint、raw protocol 映射和官方 GAS 概念契约 metadata | Editor 不应复制 Luban / SourceGenerator 协议；生成链才是 schema 与官方概念映射的事实源 | UI 硬编码表头、协议 offset、引用列表和诊断文本 |
 
 ## 目标数据对象
@@ -49,7 +53,8 @@ Business Template
 | Config Reference Graph | Editor / CI diagnostics | 根据 normalized rows 构建跨表引用和反向影响关系 | 从 live Runtime World 扫描 active state 反推引用 |
 | Business Package Change Set | Editor / CI | 表达一次业务变更的 row diff、引用变更、影响范围、hash 输入和 review metadata | 只保存 Excel 文件变化，不表达业务语义 |
 | Config Review Gate | Editor / CI | 对 change set 执行 schema、引用、DOTS carrier、SourceGenerator ownership、Runtime trace 和 scenario expectation 校验 | 只调用 CodeGen report，然后把裸错误抛给策划 |
-| Publish Validation Snapshot | Editor / CI | 发布产物，记录 row diff、schema/content hash、impact id、trace id、scenario evidence id | 作为 Runtime Core 输入 |
+| Candidate Validation Snapshot | Editor / CI | 记录 candidate id、四元 install identity、artifact bytes、typed support/RuleId、CapacityProof 与 required evidence | 作为 Runtime Core 输入；在 candidate 完整前生成 |
+| Publish Validation Snapshot | Editor / CI | 只从已通过 candidate gate 的 snapshot 形成，并记录 PromotionId/active generation | 作为 Runtime Core 输入；先生成 snapshot 再生成 candidate |
 | Scenario Validation Binding | Definition & Generation / CI | 把业务包与 Unit / Scenario / Scale profile / validation expectation 关联 | 用 runner 常量替代长期权威配置 |
 | Generated Editor Binding | SourceGenerator output | 把 Luban schema / generated metadata 变成 Editor 可读字段、选项、引用、诊断和 raw protocol 映射 | 生成 Runtime lifecycle、query、ECB 或 NativeContainer owner |
 
@@ -60,13 +65,16 @@ flowchart LR
     Template["Business Template Catalog"] --> Draft["Business Package Draft"]
     Draft --> Graph["Config Reference Graph"]
     Graph --> ChangeSet["Business Package Change Set\nrow diff / refs / hash input"]
-    ChangeSet --> Gate["Config Review Gate\nschema / refs / DOTS / trace / scenario"]
+    ChangeSet --> Rows["Luban row projection\nstable ids / provenance"]
+    Rows --> Semantic["CanonicalNormalizedSemanticGraph\ntyped support / RuleId"]
+    Semantic --> SourceGen["Semantic compiler\ncontract / catalog / proof / editor binding"]
+    SourceGen --> Candidate["Content-addressed candidate\nfour hashes / artifact bytes"]
+    Candidate --> Gate["Config + CI Candidate Gate\nsemantic / layout / capacity / compile / scenario"]
     Gate --> Snapshot["Publish Validation Snapshot"]
-    Snapshot --> Rows["Luban rows\nstable id / content hash"]
-    Rows --> SourceGen["SourceGenerator\ncatalog / lookup / pure glue / editor binding"]
-    SourceGen --> Catalog["GASDefinitionCatalogBlob"]
+    Snapshot --> Promote["Atomic ActiveGenerationRef promotion"]
+    Promote --> Catalog["GASDefinitionCatalogBlob"]
     SourceGen --> Trace["Runtime Trace Preview"]
-    Snapshot --> CI["Scenario Validation Evidence"]
+    Gate --> CI["Scenario Validation Evidence"]
     Catalog --> Runtime["Runtime Core\nread-only definition input"]
 ```
 
@@ -75,7 +83,7 @@ flowchart LR
 | 层 | 允许职责 | 禁止 |
 |---|---|---|
 | Luban schema / rows | 字段、引用类型、stable id、默认值、迁移映射、content hash 输入、长期 row source | 持有 runtime state 或根据 Runtime World 生成配置 |
-| SourceGenerator | normalized rows、reference graph metadata、Editor Binding、Blob、lookup、pure glue、validation report、Baker / Bootstrap glue | generated lifecycle system、hidden query、hidden ECB、Runtime managed config lookup |
+| SourceGenerator | 从 canonical graph 生成 typed contract/program、reference metadata、Editor Binding、Blob、lookup、pure glue、Layout/CapacityProof、candidate manifest | generated lifecycle system、hidden query/ECB、Runtime managed config lookup、sidecar semantic overlay |
 | Editor Shell | Draft 编辑、模板选择、row diff、impact 展示、trace preview 展示、review gate 触发 | 直接写 Runtime catalog、保存 Runtime state、私自定义不可生成字段 |
 | Runtime Boundary / Debugger | 导出 trace 结构、validation evidence、diagnostics schema、Boundary outbox 观察 | 接收 Editor draft 作为 gameplay 输入，或让 diagnostics 反向控制 Core |
 | CI / Headless validation | 消费 Publish Validation Snapshot，执行 scenario / scale / Debugger evidence 验收 | 只比较字符串日志，或用 demo 常量替代配置源 |
@@ -103,10 +111,15 @@ flowchart LR
 | `ImpactAnalysisId` | 解释受影响的业务包、Unit、Scenario、Scale profile 和 generated artifact |
 | `OfficialConceptCoverage` | 证明 Ability lifecycle、GE spec、Tag taxonomy、Cue parameters、AbilityTask mapping 和 ASC binding 已覆盖或给出拒绝理由 |
 | `SchemaHash / ContentHash` | 对齐 Definition Catalog 的版本和缓存失效 |
+| `LayoutHash / ArtifactManifestHash` | 证明布局/proof 与安装 artifact 是完整同代集合 |
+| `CandidateId / CandidateArtifactByteHashes` | 定位隔离验证的精确候选，不把 active 目录当 staging |
+| `ContractMatrixHash / RuleIdSummary` | 证明 typed allow/deny 与诊断使用同一版本规则 |
+| `CapacityProofHash / ConsumerMapSummary` | 证明所有硬上界已生成且有 admission consumer |
 | `RuntimeTracePreviewId` | 证明配置将进入正确 Runtime record / lane |
 | `ScenarioValidationEvidenceId` | 证明最小业务场景和规模验收可执行 |
 | `SourceGeneratorGateSummary` | 证明 generated artifact 没有 lifecycle / ownership 越权 |
 | `DotsCoverageSummary` | 证明采用或拒绝的 DOTS 官方规则已记录 |
+| `PromotionId / ActiveGenerationRef` | 记录唯一原子 promotion 线性化点；失败时为空且 active 不变 |
 
 ## 官方规则对照
 
@@ -123,7 +136,7 @@ flowchart LR
 
 ## 验收
 
-1. 任意新模板进入 Business Template Catalog 前，必须声明 row projection、reference graph edges、Runtime trace preview shape、validation rules 和 raw advanced fallback。
+1. 任意新模板进入 Business Template Catalog 前，必须声明 row projection、reference graph edges、Runtime trace preview shape、validation rules 和 Raw Table Advanced Mode 映射；后者只是 authoring 入口，不是 Runtime fallback。
 2. 任意业务包保存前，必须能生成 Business Package Change Set。
 3. 任意业务包发布前，必须能生成 Publish Validation Snapshot。
 4. 任意 GE / Tag / Cue / Attribute 修改前，必须能输出 Impact Analysis。
@@ -132,6 +145,10 @@ flowchart LR
 7. 至少一条 Ability Package 必须能绑定到 AutoChess 或等价 headless scenario，并输出 scenario validation evidence。
 8. Raw Table Advanced Mode 可存在，但所有默认策划路径必须通过 Business Template / Package / Change Set / Review Gate。
 9. Config Review Gate 必须执行 `24-GAS官方概念对照复核Spec.md` 的 concept coverage 检查；只通过 DOTS 规则或 schema 校验不等于 GAS 业务语义完整。
+10. Publish Validation Snapshot 只能由完整 candidate gate 产生；其四元 identity、artifact byte hashes、ContractMatrixHash 与 CapacityProofHash 必须和被 promotion 的 manifest 精确一致。
+11. 任一 semantic/layout/capacity/compile/AOT/scenario/promotion 失败时 active generation 不变，不执行 active orphan cleanup，也不生成成功 PromotionId。
+12. 回滚必须选择历史成功 `ArtifactManifestHash` 执行新 promotion；Runtime 不自动读取旧 schema、managed row、sidecar、ScriptableObject 或历史 Catalog fallback。
+13. 一次生成与第二次生成结果一致；Config Review Gate 必须有“generated row C# 已写但 AppDomain factory 仍旧”的单遍陈旧负例。
 
 ## 禁止方向
 
