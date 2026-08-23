@@ -22,6 +22,7 @@
 
 | 文件 | 内容 |
 |---|---|
+| [Runtime v1 第三轮多 Agent 架构与性能审查事实](RuntimeV1第三轮多Agent架构与性能审查事实.md) | 2026-08-24 以 `b12889eb` 为基线的四方向独立审查、A→B→C→D→A 交叉质询和重新基线；记录配置发布、Target transaction、Request/Battle边界、Runner/Result与真实证据链剩余缺口，不冒充实现完成 |
 | [Runtime v1 不可兼容迁移基线事实](RuntimeV1不可兼容迁移基线事实.md) | 2026-08-24 当前代码基线：五段物理组、Ability Entity、legacy GE 双权威、Requirement phase flatten、Cue 断链、手工五组 tick 与真实测试缺口；目标态和任务不写在本页 |
 | [AutoChess 真实业务链二轮审查事实](AutoChess真实业务链二轮审查事实.md) | 2026-08-24 按 Spawn -> Grant -> Target -> Commit -> Effect/Period -> Death -> Cue/Report -> teardown 走查实际 AutoChess 业务、Generated Catalog 和验证；记录 9203 非法 StackType/sourcegen overlay、终局顺序和 hash 污染 |
 | [Runtime主链事实](Runtime主链事实.md) | 当前 5 段 GAS 主链、generated catalog / pure glue 接入、command/spec/delta/fact 链 |
