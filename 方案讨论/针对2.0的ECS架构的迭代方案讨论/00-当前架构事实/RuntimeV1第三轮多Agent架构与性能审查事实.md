@@ -4,11 +4,11 @@
 
 ## 结论
 
-第二轮已经闭合 Runtime v1 的单 Kernel、ASC slab、稳定身份、标准 EndFixed、单 Drain、committed-work-wins、Spawn 整批 Ready 与 Tier B 业务语义主干；第三轮不撤回这些方向。
+第二轮目标文档已经闭合 Runtime v1 的单 Kernel、ASC slab、稳定身份、标准 EndFixed、单 Drain、committed-work-wins、Spawn 整批 Ready 与 Tier B 业务语义主干；第三轮不撤回这些设计方向。这不表示 Runtime 已实现。
 
-重新读取 `b12889eb` 后，仍有七组会导致不同实现者产生不同 Runtime 的 P0 文档缺口：配置 candidate 原子发布、typed semantic graph 与 CapacityProof、target stabilization 半写、Accepted Request 终态账本、per-Battle 关闸、`0..N` Runner/Drain/fence、FinalDrain/Disposed/ValidationResult 与真实发布证据链。另有 Snapshot/Cue reconcile、managed Cue 异步资源、hot-target 容量和策划 Impact/CI orchestration 等 P1。
+重新读取 `b12889eb` 后，审查发现七组会导致不同实现者产生不同 Runtime 的 P0 文档缺口：配置 candidate 原子发布、typed semantic graph 与 CapacityProof、target stabilization 半写、Accepted Request 终态账本、per-Battle 关闸、`0..N` Runner/Drain/fence、FinalDrain/Disposed/ValidationResult 与真实发布证据链。另有 Snapshot/Cue reconcile、managed Cue 异步资源、hot-target 容量和策划 Impact/CI orchestration 等 P1。本轮已把这些缺口裁决进目标文档和任务树，但尚未实现 Runtime/生成器/测试。
 
-本页只记录审查基线、当前实现证据和目标文档冲突；唯一目标裁决仍由 `01` 目录维护，实施切片仍由 `02` 目录维护。没有实现 Runtime v1，也没有运行 Unity、Luban、SourceGenerator、Profiler 或 Journaling。
+本页只记录审查基线、当前实现证据和基线文档冲突；目标裁决见[破坏性重划分](../01-目标态架构共识/17-GAS业务链路破坏性重划分Spec.md)、[配置语义编译与 CapacityProof](../01-目标态架构共识/25-配置语义编译契约与CapacityProof统一裁决Spec.md)和[无头验收与 ValidationVectorManifest](../01-目标态架构共识/10-AutoChess无头验收Spec.md)，实施切片见[Runtime v1 不可兼容迁移任务入口](../02-主线任务树/RuntimeV1不可兼容迁移/README.md)。没有实现 Runtime v1，也没有运行 Unity、Luban、SourceGenerator、Profiler 或 Journaling。
 
 ## 审查基线与隔离
 
@@ -31,11 +31,11 @@
 ## 当前 Runtime 与 Boundary 事实
 
 1. 当前 Runtime 仍是五段 physical group、Ability Entity、owner-local/legacy GE 迁移态；`RuntimeV1不可兼容迁移基线事实.md` 已记录该差距，第三轮 Spec 不能反写成“已实现”。
-2. 目标文档仍把 `AscOwnerCommandWave`、`AscTargetStateWave`、`Stabilize/Death`写成 durable mutation；Stabilization fatal 却在这些写入后才可能发现。只丢弃未发布 Fact 不能撤销已写 Attribute/Tag/ActiveEffect/Grant 权威。
+2. `b12889eb` 基线目标文档仍把 `AscOwnerCommandWave`、`AscTargetStateWave`、`Stabilize/Death`写成 durable mutation；Stabilization fatal 却在这些写入后才可能发现。只丢弃未发布 Fact 不能撤销已写 Attribute/Tag/ActiveEffect/Grant 权威。本轮目标文档已裁决为 `TargetPrepare -> SessionFaultReduce -> TargetPublish`，但对应 Runtime 尚未实现。
 3. `SessionIngressGate` 已定义 Accept/FaultClose，但仍缺 Producer namespace、payload conflict、AssignedAvailableTick receipt、exact sparse membership、normal terminal、BoundaryAccepted、retire/GC 与 history-expired 合同。
 4. 一个 Session 可承载多个 BattleInstance，但 Boundary 只有 Session gate；Core terminal 到 Gate 关闭之间的 Accepted tail、per-Battle close cutoff 与独立 BattleOutcome seal 尚无完整载体。
 5. 目标 Runner 写 `TickBatch -> 0..N FixedStep -> Drain`，但未固定 Entities 首次 `t=0` update、absolute elapsed、debt、actual physical/gameplay count和 0 FixedStep 时 Drain 的精确位置。
-6. 当前 `10-AutoChess无头验收Spec.md` 仍写 `teardown + cleanup audit -> freeze ValidationResult -> dispose Session`；`03F/06` 又要求资源释放和 Disposed audit。最终 Result 与 Disposed 的顺序存在冲突。
+6. `b12889eb` 基线的 `10-AutoChess无头验收Spec.md` 写 `teardown + cleanup audit -> freeze ValidationResult -> dispose Session`；`03F/06` 又要求资源释放和 Disposed audit。基线的最终 Result 与 Disposed 顺序冲突。本轮已统一为 `FinalDrainAccepted -> CleanupAudited -> Disposing -> DisposedReceipt -> ValidationResultSeal`，实现与证据仍待完成。
 
 ## 当前验证链假阳性
 
@@ -56,7 +56,7 @@
 | Kernel/业务壳 | 撤回“BattleOutcome 就是最终 ValidationResult”和“单 Session watermark足以封印某 Battle” | Request ledger、per-Battle双切面、t=0/Drain/fence继续为P0；FinalDrain/Disposed升为P0 |
 | UE×DOTS | 撤回“v1 fault 域可暂不裁”和“Cue 已端到端闭合” | v1 Session-fatal；TargetPrepare/FaultReduce/Publish、Request terminal、Cue reconcile与Fault hash升级 |
 | 配置链 | 无整项撤回 | typed support matrix、dense layout、CapacityProof、Live/Grant/EmittedRef与target transaction生成物升级为P0 |
-| Headless | 撤回“Headless 可单独证明 generator/publish negative gate” | ResultSeal、同步点、0/1/N、ScaleProfile与exact package evidence继续保留并升级 |
+| Headless | 撤回“Headless 可单独证明 generator/publish negative gate” | ValidationResultSeal、同步点、0/1/N、ScaleProfile与exact package evidence继续保留并升级 |
 
 ## 重新基线后的 P0/P1
 
@@ -68,7 +68,7 @@
 | P0 | Accepted Request ledger与唯一terminal envelope | Accepted承诺可能无终态、重复终态或无法安全回收 |
 | P0 | per-Battle Gate close与双切面BattleOutcome seal | 单Battle终局会误伤其他Battle或在Result后遗留请求 |
 | P0 | t=0 prime、0..N、Drain和合法fence | Scene/Headless tick数、容量和同步证据不可复现 |
-| P0 | FinalDrain/Disposed/ResultSeal、versioned VectorManifest和六类证据pass | count、假测试或未运行证据仍可冒充发布通过 |
+| P0 | FinalDrain/Disposed/ValidationResultSeal、versioned VectorManifest和六类证据pass | count、假测试或未运行证据仍可冒充发布通过 |
 | P1 | Snapshot/ReadModel/Cue reconcile、managed资源异步生命周期 | overflow、destroy、late callback可能破坏表现闭环 |
 | P1 | hot-target work unit、durable高水位、策划Impact/CI orchestration | 规模或策划发布链仍不可复现 |
 

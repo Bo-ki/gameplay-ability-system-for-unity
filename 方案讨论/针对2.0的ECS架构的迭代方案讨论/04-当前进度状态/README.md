@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-上一轮代码提交为 `564fe711`。本轮完成了基于真实 AutoChess 业务链、UE GAS 源码语义与 DOTS 物理约束的第二轮三视角、多轮交叉审查，并将裁决同步到目标 Spec、当前事实与 V0-V7 任务树。没有实现或验证 Runtime v1；当前代码仍是五段 physical group、Ability Entity、owner-local/legacy GE 双路径与未注册 Cue bridge。
+第三轮以 `b12889eb` 为确认基线，已把多 Agent 架构与性能审查裁决同步到事实层、目标 Spec 与 V0-V7 任务树。目标文档现在统一覆盖 TargetPrepare/SessionFaultReduce/TargetPublish、Accepted Request exact ledger、per-Battle双cut+SnapshotCut封印、配置candidate原子promotion、`0..N` Runner/四类fence、ValidationVectorManifest与ValidationResultSeal。没有实现或验证 Runtime v1；当前代码仍是迁移前形态。
 
 下一可领取任务：[V0 语义冻结与真实测试基线](../02-主线任务树/RuntimeV1不可兼容迁移/V0-语义冻结与真实测试基线.md)。
 
@@ -15,14 +15,13 @@
 | [当前窗口](当前窗口.md) | 当前阶段、下一任务、阻断与注意事项 |
 | [迭代摘要](迭代摘要.md) | 本轮一手交接；旧长内容仅作历史接力 |
 | [最近验证摘要](最近验证摘要.md) | 本轮实际验证与明确未跑项 |
-| [_归档](_归档/README.md) | 已退出当前窗口的历史验证流水 |
+| 历史验证流水 | 已退出当前窗口；从 Git 历史追溯，不再设置活动入口 |
 
 ## Owner 路由
 
-- 当前事实：`../00-当前架构事实/RuntimeV1不可兼容迁移基线事实.md`
-- 真实业务事实：`../00-当前架构事实/AutoChess真实业务链二轮审查事实.md`
-- 目标规范：`../01-目标态架构共识/17-GAS业务链路破坏性重划分Spec.md`
-- 二轮裁决：`../01-目标态架构共识/10B-AutoChess完整业务案例/10B-08-真实业务链二轮审查与疑点裁决Spec.md`
-- 可领取任务：`../02-主线任务树/RuntimeV1不可兼容迁移/README.md`
+- 当前实现基线：[Runtime v1 不可兼容迁移基线事实](../00-当前架构事实/RuntimeV1不可兼容迁移基线事实.md)
+- 第三轮增量：[Runtime v1 第三轮多 Agent 架构与性能审查事实](../00-当前架构事实/RuntimeV1第三轮多Agent架构与性能审查事实.md)
+- 目标规范：[破坏性重划分](../01-目标态架构共识/17-GAS业务链路破坏性重划分Spec.md)、[配置语义编译与 CapacityProof](../01-目标态架构共识/25-配置语义编译契约与CapacityProof统一裁决Spec.md)、[Headless 与证据门](../01-目标态架构共识/10-AutoChess无头验收Spec.md)
+- 可领取任务：[Runtime v1 不可兼容迁移](../02-主线任务树/RuntimeV1不可兼容迁移/README.md)
 
 本目录不得把文档设计写成 Runtime 已完成，也不得恢复旧 R0-R8 为活动路线。

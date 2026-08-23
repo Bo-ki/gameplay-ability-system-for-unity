@@ -18,6 +18,7 @@
 10. [24 UE GAS 对照](24-GAS官方概念对照复核Spec.md)
 11. [10B-08 真实业务链二轮裁决](10B-AutoChess完整业务案例/10B-08-真实业务链二轮审查与疑点裁决Spec.md)
 12. [25 配置语义编译契约与 CapacityProof](25-配置语义编译契约与CapacityProof统一裁决Spec.md)
+13. [10 Headless、ValidationVectorManifest 与最终结果封印](10-AutoChess无头验收Spec.md)
 
 ## 专题 Owner
 
@@ -33,6 +34,7 @@
 | Definition/Luban/SourceGenerator | [08](08-Luban-SourceGenerator配置生成链路Spec.md)、[14](14-DefinitionCodeGen目标链路Spec.md)、[15](15-SourceGenerator职责边界Spec.md) |
 | 配置语义 IR / typed contract / CapacityProof | [25](25-配置语义编译契约与CapacityProof统一裁决Spec.md) |
 | AutoChess 真实业务链裁决 | [10B-08](10B-AutoChess完整业务案例/10B-08-真实业务链二轮审查与疑点裁决Spec.md) |
+| Headless / ValidationVectorManifest / 六类证据 / ValidationResultSeal | [10](10-AutoChess无头验收Spec.md) |
 
 ## 文档治理
 

@@ -6,6 +6,7 @@
 
 - [当前 AutoChess/旧链基线](../../00-当前架构事实/RuntimeV1不可兼容迁移基线事实.md)
 - [真实业务链事实](../../00-当前架构事实/AutoChess真实业务链二轮审查事实.md)
+- [第三轮架构与性能审查事实](../../00-当前架构事实/RuntimeV1第三轮多Agent架构与性能审查事实.md)
 - [目标删除门](../../01-目标态架构共识/17-GAS业务链路破坏性重划分Spec.md)
 - [AutoChess 业务 Owner](../../01-目标态架构共识/10B-AutoChess完整业务案例设计Spec.md)
 - [无头验收 Owner](../../01-目标态架构共识/10-AutoChess无头验收Spec.md)
@@ -25,7 +26,7 @@
 6. 实现一 World 一 active Session、多 BattleInstance；SpawnBatch `Pending -> Ready` 全有或全无，Initialize/Grant 失败有 request identity 与 typed outcome。
 7. AI 迁移到 `ActiveDue > Finisher > Primary`、BattleLocalTick、ScenarioUnitId tie-break；Frozen ASC + AliveOnly，删除 invalid-target self fallback。
 8. 区分 UnitDeath/BattleTerminal/SessionTerminal：单战局终局只封自身 ingress；全部战局终局/显式 stop 才 Session Terminalizing。
-9. 终局 tick 完成完整 DAG -> managed gameplay FinalDrain -> 冻结 BattleOutcome；teardown audit 后返回 ValidationResult，teardown 不改 battle hash。
+9. 每个 Battle 的终局 tick完成完整DAG后，`CoreOutboxCut + GateRequestCut`对应range均被managed staging Accepted且ReadModel达到同identity `SnapshotCut`，才冻结`BattleOutcomeSeal`；Session在全部Battle终局/显式stop后完成FinalDrain、teardown audit与资源释放，生成`DisposedReceipt`后才冻结`ValidationResultSeal`。teardown不改battle hash。
 10. 删除 gameplay warmup、固定 postVictory 四 tick flush 与 Result-before-Close/cleanup；setup warmup、FinalDrain、teardown scope 分开。
 11. 删除 sourcegen sidecar/override/append/dummy modifier、generated normalized row C# -> 当前 AppDomain factory 反扫、managed row/JSON/ScriptableObject Runtime authority。
 12. 删除 generator 逐 phase 直写 active `.gen.cs`/manifest、失败后继续保存、candidate gate 前 orphan cleanup；配置只从 content-addressed candidate 经 `08` 原子 promotion。
@@ -36,7 +37,7 @@
 
 - Tier A 9101–9104 legacy characterization 与 Tier B target semantic conformance 分开通过；有意 breaking 项使用新批准 golden。
 - Ready 前 ingress 不可见；Spawn/Grant 任一失败无半初始化单位、无部分 mutation。
-- 同 Session 多战局终局隔离、FinalDrain、BattleOutcome freeze、corpse ASC retention 与 teardown cleanup audit 全绿。
+- 同 Session多战局终局隔离：A的Core/Gate双cut managed accepted且SnapshotCut达到后独立BattleOutcomeSeal，B继续运行；Session FinalDrain、corpse ASC retention、teardown cleanup audit、DisposedReceipt与ValidationResultSeal全绿。
 - validation不再硬编码旧 system/group/data-flow 名。
 - static/runtime deletion gate逐项为零，且没有 compatibility flag/fallback。
 - AutoChess、Editor watcher、binding不取得 raw Runtime ECS capability。
