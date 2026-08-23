@@ -1,10 +1,22 @@
 # 04 整体审查与 Owner 重划分事实
 
-> Owner：00-当前架构事实/架构重划分审查事实 | 状态：当前事实子页 | 拆分来源：../架构重划分审查事实.md | 拆分时间：2026-06-08
+> Owner：00-当前架构事实/架构重划分审查事实 | 状态：当前事实子页 | 最近复核：2026-08-24 | 拆分来源：../架构重划分审查事实.md
 
 承载 2026-06-08 / 2026-06-07 整体审查、Owner 错位、重新划分事实结论和下一步事实验证需求。
 
 本文件只记录当前代码事实、证据和 DOTS 判定；目标态设计正文回到 `../../01-目标态架构共识/`，任务拆分回到 `../../02-主线任务树/`。
+
+## 2026-08-24 v1 重划分优先校准
+
+2026-06-08 章节保留为历史审查输入，但不再拥有 v1 保留/退出裁决。当前代码校准以 [Runtime v1 不可兼容迁移基线事实](../RuntimeV1不可兼容迁移基线事实.md) 为准：
+
+1. 五段 physical group 是当前调度事实，不是 v1 保留面；v1 目标是单 `GasFixedTickSystemGroup`、单 Core `GasTickKernelSystem` 与标准 EndFixed ECB。
+2. Ability Entity、`AbilitySlotBuffer<Entity>`、legacy GE entity、ActiveEffect global index/owner-local slot 双权威必须进入一次性删除门。
+3. 当前 owner-local fact 由 Boundary 的 `GameplayBoundaryFactExportSystem` 导出；代码中不存在 `GameplayOwnerLocalFactFlushSystem`。
+4. `CueRequestBridgeSystem` / `CueManagedLifecycleSystem` 没有注册到实际 Boundary 数组，且 Null CueEntity 会被 bridge 丢弃。
+5. Requirement generator 将 Application/Ongoing/Immunity 压平到同一 range，不能以字段覆盖声称经典 GAS 语义完成。
+6. AutoChess runner 当前手工更新五个 GAS group；标准 EndFixed 与单 kernel 必须连同 session tick owner 一次切换。
+7. 当前没有真实 GAS Unity Test Runner 源码，破坏性实现前必须先补 characterization/semantic tests。
 
 ## 2026-06-08 整体架构审查：最新事实截面
 
@@ -187,20 +199,20 @@
 | 当前现实 owner | 证据 | 事实判定 | 目标态差距 |
 |---|---|---|---|
 | Bootstrap / Session | `GASManager.Initialize(...)` 创建 World、5 段 group、GlobalTimer、SpecStream、ActiveEffectGlobalIndex、EventBus、Replay sink 和 Debugger singleton；`Shutdown()` reset cache / dispose world | 当前 OOP bootstrap 是 runtime session owner 的现实实现，不是 Gameplay Core 计算层 | 目标态 public session seam 只能暴露 install / fixed tick / dispose / evidence，不暴露 `World`、`EntityManager`、singleton entity |
-| Schedule backbone | `GASSystemScheduleContract` 固定 5 段 physical group；当前直接注册 hand-written Runtime system arrays，`GeneratedCommandResolveSystemTypeNames` 与 `GeneratedCoreSimulationSystemTypeNames` 均为空数组；missing generated type fail-fast 代码仍作为防回流机制存在 | Backbone 方向正确，generated type-name registry 不再是当前主调度来源；system 数量、phase budget、type mismatch / assembly unavailable 负例仍需交还 | 目标态 SourceGenerator 不应生成 lifecycle system；任何新增 generated registration helper 默认失败 |
+| Schedule backbone | `GASSystemScheduleContract` 固定 5 段 physical group；当前直接注册 hand-written Runtime system arrays，`GeneratedCommandResolveSystemTypeNames` 与 `GeneratedCoreSimulationSystemTypeNames` 均为空数组 | 五段是当前可执行事实，但跨 System scratch owner、重复 handle/dependency 与手工 runner tick 使其不能再列为 v1 保留面 | v1 由单 `GasFixedTickSystemGroup` / `GasTickKernelSystem` 拥有 tick scratch 与 Job DAG；SourceGenerator 不生成 lifecycle system |
 | Shell capability | `GASRuntimeShell` 同时解析 World、`EntityManager`、command port、read model、singleton、presentation binding 和 job drain；直接消费者含 `AutoChessGasRuntimeAccess`、Editor watcher、AbilitySystemBinding，AutoChess host / lifecycle / observation / catalog / runner sync 通过 wrapper 间接消费 | 外部 public 面已有收窄，AutoChess direct import 已集中，但 assembly 内仍是多能力 ECS 句柄 facade | 必须拆成 bootstrap、command write、snapshot read、diagnostics/export、definition/catalog、runner sync 六类 capability，并分别计时 / 授权 / 验收 |
 | Core stream / fan-in | `EffectCommandSpecStream` 当前只走 cached registered owner，不再 fallback query；但 command / set-by-caller 仍围绕 singleton DynamicBuffer owner，spec / delta / mutation / fact 已形成 owner-local 与 stream export 混合 carrier；frame counter、writer、pressure evidence 和 projection phase 仍分散在相邻 owner | fallback query 风险已退场，carrier 仍是 `MigrationProofOnly` | 按 `SEL-01/02`、`BUF-02`、`NAT-03`，不同数据性质要拆为 `NativeStream` deterministic merge、owner-local range 或 bounded buffer |
-| Owner-local spec / fact lane | `GEEffectSpecBuffer` 已退出 required singleton stream buffer；hand-written `GEEffectInstantSystems.cs` 会按 ASC owner 写 instant spec / set-by-caller，并以 owner chunk `IJobChunk` reduce/apply；`OwnerLocalGameplayFactBuffer` 纳入 ASC archetype / factory，`ASCCommandBufferResolveSystem`、`GASAttributeModifierDeltaApplySystem`、hand-written instant reduce 和 `GEExecutionCalculationOutputModifierSystem` 均可追加 owner-local fact；`GameplayOwnerLocalFactFlushSystem` 排序 flush 到现有 stream export；Debugger export owner-local spec / fact count | 这是 owner-local spec / fact 正向扩展切片，证明 spec/reduce 与多类 Attribute / ASC command fact 不必直接写 singleton carrier；但 active-effect hand-written owner、generated marker 对账和防回流仍需按 `MigrationProofOnly` 退出门审查 | 目标态还需要 command/spec/delta/fact 全链路 owner-local 或 NativeStream carrier、BoundaryObservationFact export、capacity / spill / timing split；当前 flush 回 stream 仍是迁移出口 |
+| Owner-local spec / fact lane | `GEEffectSpecBuffer` 和 `OwnerLocalGameplayFactBuffer` 已进入 ASC-local 路径；`ASCCommandBufferResolveSystem`、Attribute apply、instant reduce 与 execution output 可追加 owner-local fact；Boundary 的 `GameplayBoundaryFactExportSystem` 收集、排序并写 `BoundaryObservationFactBuffer` | owner-local 方向正向；旧 `GameplayOwnerLocalFactFlushSystem` 事实已失效，当前仍有全局 sequence/counter 与多 Boundary consumer | v1 需要单 writer、稳定 slab、single Drain、capacity/overflow 和 deterministic batch 证据 |
 | Generated runtime | generated catalog lookup / Blob builder 是正向定义链；`RuntimeAbilityActivation.gen.cs`、`RuntimeEffectInstant.gen.cs` 与 `RuntimeActiveEffect.gen.cs` 都是 `RuntimePureGlue` marker；`ActiveEffectLifecycleOwnerSystems.cs` 当前磁盘缺失 | Generated 链路已经反哺 Runtime，active-effect 主体也已转向手写 Runtime owner；当前风险不再是 manifest lifecycle artifact，而是 pure glue / hand-written resolver 对账、catalog lifetime / dispose owner 证据、system budget、release-ready gate 和 generated lifecycle 防回流 | SourceGenerator 目标只生成 immutable catalog、static lookup、pure record、validation / Editor binding；不能继续拥有 query、ECB、NativeContainer 或 lifecycle |
 | Debugger / Observation | `GasRuntimeDebugger` singleton lookup 已是 registered/cache owner；`ToEntityArray` 运行调用集中在 Debugger observation 两处与 Cue managed boundary 一处；`ExportToText` 是 derived export；observation materialization 已进入 snapshot 和 AutoChess evidence。2026-06-08 最新 x50 已拆 performance / diagnostic pass：performance summary 为 `performancePassObservationPollutionRisks=0`，diagnostic Debugger 仍显示 `observationMaterializedQueries=12` | Debugger 可作为 evidence owner；observation materialization 成本已能独立归因，performance pass 污染风险已隔离，但 Profiler enabled 与规模性能闭环未完成 | 按 `DBG-01..05`，contract counter、runtime counter、official capture、validation evidence、derived export 必须分层；不能用字符串日志或 disabled profiler 状态证明 Core 性能 |
-| Cue / Presentation | `CueManagedLifecycleSystem` 位于 `GASBoundaryProjectionSystemGroup`，使用 UnityEngine `Time.time` 和 `ToEntityArray` 处理 managed cue lifecycle | 这是 Boundary / Presentation 成本，不是 Runtime Core hot path | 目标态允许 managed boundary，但必须从 CoreSimulation timing 与 DOTS hot path 结论中拆出 |
+| Cue / Presentation | `CueManagedLifecycleSystem` 声明位于 Boundary，使用 `Time.time` / `ToEntityArray`；但它和 `CueRequestBridgeSystem` 均未进入实际注册数组，且 projection 产生的 `CueEntity` 为 Null | managed boundary 代码存在，但当前播放链断开，不能只按成本域描述为已运行 Boundary | v1 由单 Drain 输出 Cue 四阶段 immutable request，managed consumer 不读取 ECS buffer |
 | AutoChess adapter | `AutoChessGasRuntimeHost` 通过 Shell 初始化 runtime / catalog / tick group；`AutoChessGasObservationGateway` 直接 reset singleton、创建 diagnostics snapshot；`AutoChessGasBattleEntityLifecycle` 用 registry 保存 `ASCHandle` 并创建 driver / unit，driver public handle 已为 opaque id/version | AutoChess 是业务验收 Shell，当前 Thin Adapter 未完成；其 direct ECS 句柄仍是内部实现事实 | 目标态 Battle Runtime Adapter 只暴露业务动作、opaque handle、snapshot 和 evidence；driver runtime store 内部 `_driverEntity`、singleton reset、job drain 必须被 capability 分类并从 Core 性能结论中排除 |
 
 ### 官方规则判定
 
 | 规则 | 对本截面的判定 |
 |---|---|
-| `SYS-01` / `SYS-02` | 5 段 group 与多数 hot path job 化是正向事实；但 `GASManager` / `GASRuntimeShell` 仍是 bootstrap 与 boundary 句柄聚合 owner，不能写成 OOP gameplay 中间层合格。 |
+| `SYS-01` / `SYS-02` | 多数 hot path job 化是正向事实；五段 group 只证明当前可执行，不证明 scratch/dependency owner 合法或 v1 应保留。`GASManager` / `GASRuntimeShell` 仍是 bootstrap 与 boundary 句柄聚合 owner。 |
 | `QRY-01` / `PRF-05` / `PRF-33` | Runtime 可执行 `SystemAPI.Query`、`.Run()`、`EntityManager.CreateEntityQuery` 已为 0，这是静态正向截面；剩余 `ToEntityArray` 必须按 Debugger / Boundary 分类，而不是平均进 Core tick。 |
 | `SEL-01` / `SEL-02` / `BUF-02` / `NAT-03` | singleton stream fallback query 退场和 owner-local Attribute fact 切片都不等于 stream carrier 达标；command/spec/delta/fact/mutation 必须继续按数据性质拆 carrier，并给出 allocator owner、merge order、capacity / spill evidence。 |
 | `DBG-01..05` / `SYS-04` | Debugger 已能采样和导出，但必须把 observation materialization、official tool disabled reason、derived string export 与 Core counters 分层；否则 AutoChess x50 跑通不能证明 DOTS 优秀水平。 |

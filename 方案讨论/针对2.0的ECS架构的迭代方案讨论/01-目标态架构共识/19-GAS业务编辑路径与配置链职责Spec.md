@@ -30,9 +30,9 @@
 目标态编辑路径：
 
 1. 新建 `SingleTargetDamageAbility` 模板。
-2. 填写 `AbilityCode / Name / TargetRule / Cost / Cooldown / DamageFormula / CueOnApply`。
+2. 填写 `AbilityCode / Name / TargetRule / Cost / Cooldown / DamageFormula / CueOnActive/CueExecuted` 等业务字段。
 3. Editor 自动生成或更新 Ability row、Damage GE row、Cooldown GE row、Cue reference、TagRequirement row projection。
-4. 保存时执行 config graph validation，并展示 Runtime trace：`AbilityActivationPlanRecord -> GECommandSeedRecord -> ResolvedModifierRecord -> BoundaryObservationFact`。
+4. 保存时执行 config graph validation，并展示 Runtime trace：`GrantedAbilityDefinition -> AbilityActivationCommand -> OwnerPlan/Commit -> EffectApplicationSpec -> TargetStateWave -> BoundaryFactBuffer`。
 
 被拒绝的长路径：手动先建 Ability ID，再跳到 Effect 表建 Damage GE，再建 Cooldown GE，再回填 `CdEffect`，再手写 `Modifiers` 协议，再找 Cue ID，再导出 JSON。
 
@@ -58,7 +58,7 @@
 1. 新建 `AuraGrantedEffect` 模板。
 2. 填写 Aura source、target filter、granted effect、ongoing requirement、remove policy。
 3. Editor 生成 Ability / Effect / TagRequirement / OngoingRequirement / GrantedTag 或 GrantedAbility row projection。
-4. Validation 明确它属于 Duration/Granted state，不是 instant GE，不允许默认每帧创建/销毁 GE entity。
+4. Validation 明确它属于 Duration/Granted state，不是 instant GE；v1 统一进入 ASC-local ActiveEffectSlot，不创建/销毁 GE Entity。
 
 被拒绝的长路径：把光环拆成多个孤立 Effect / Tag / Ability 行，由使用者手工记忆哪一行是 grant、哪一行是 remove、哪一行是 ongoing requirement。
 
@@ -125,8 +125,8 @@ flowchart LR
 |---|---|---|---|
 | Activation policy | Ability row | Ability definition blob | Ability State Evaluate |
 | Target rule | Ability / TargetRule row | target rule index / static switch | Target Resolve |
-| Cost | Cost GE row / Ability cost ref | GE seed / requirement glue | State Evaluate / Effect Fan-In |
-| Cooldown | Cooldown GE row / cooldown frames | GE seed / active mutation flag | State Evaluate / ActiveEffectStore |
+| Cost | Cost GE row / Ability cost ref | `CostMutationContract` + requirement glue | `OwnerPlanBuild` 完整复核 + `AscOwnerCommandWave` 直接更新同一 `AttributeValueSlot` |
+| Cooldown | Cooldown GE row / cooldown frames | `CooldownGateContract` | `OwnerPlanBuild` gate/due 复核 + `AscOwnerCommandWave` 原子创建/释放 `CooldownGateSlot` |
 | Damage formula | GE modifier row | magnitude evaluator / modifier range | Spec / Attribute Apply |
 | Buff duration / stack | GE duration / stacking row | active mutation seed / stack policy | ActiveEffectStore |
 | Cue markers | Cue row / GE cue refs | boundary observation mapping | Boundary Projection |
@@ -137,6 +137,8 @@ flowchart LR
 | Cue parameters | Cue row / GE cue refs | `CueParameterContract` | Boundary Projection |
 | ASC binding | Unit / Scenario / Grant rows | `ASCBindingContract` | Bootstrap / Structural Commit |
 
+Cost/Cooldown 可以继续复用 GE 形态作为策划 authoring projection，但生成产物必须分别编译为 `CostMutationContract` 与 `CooldownGateContract`。运行时在同一 canonical owner shadow 中重新检查 requirement、资源与 cooldown gate，并在 `AscOwnerCommandWave` 一次性 no-fail 提交：Cost 写同一 Attribute 权威，Cooldown 写独立于 Activation/ActiveEffect 生命周期的 ASC-owned gate。v1 gate policy 固定为 `RejectWhileActive + ExpireOnly`；GE-like row 中的 stack/refresh/period/execution/ongoing/dispel 等无法无损编译的字段必须 bake fail，不得静默压平。如需可视、可驱散的完整 GE，另行 author 普通 self GE；它不得成为 gate 权威或 OwnerWave 同步反馈源。
+
 ## 策划配置能力验收矩阵
 
 | 能力 | 目标态验收 | 为什么必须这样设计 |
@@ -145,7 +147,7 @@ flowchart LR
 | 单页维护 Ability + GE + Cooldown + Cue | 业务能力包界面聚合相关 rows，并展示 row diff | 冷却、伤害和表现是同一业务能力的组成部分，拆散会让引用完整性靠人工记忆 |
 | 保存前发现缺失引用 | Config Graph Validation 在写回前检查 missing Ability / GE / Cue / Tag / Attribute、孤儿 row、循环引用和互斥策略 | 错误必须停在编辑期；导出后或运行时发现会放大测试成本 |
 | 影响分析 | 修改任意 GE / Tag / Cue / Attribute 时展示受影响的 Ability Package、Unit、Scenario、Scale profile 和 validation expectation | 平衡调参最怕隐藏复用；影响范围必须成为配置工具的一等能力 |
-| Runtime trace preview | Editor 生成 `Business Intent -> AbilityActivationPlanRecord -> GECommandSeedRecord -> ResolvedModifierRecord -> GameplayFact -> Boundary Cue` 预览 | Runtime Debugger 只能事后证明，配置工具要在保存前证明将进入正确 Runtime lane |
+| Runtime trace preview | Editor 生成 `Business Intent -> AbilityActivationCommand -> EffectApplicationSpec -> ModifierContribution/AttributeDelta -> BoundaryFact/Cue` 预览 | Runtime Debugger 只能事后证明，配置工具要在保存前证明将进入正确 Runtime lane |
 | 平衡预览 | 展示等级、消耗、冷却、伤害公式、DOT tick、stack limit、overflow policy 的聚合计算结果和异常标记 | 调参是高频业务动作；公式与周期/堆叠分散会让内容质量依赖人工心算 |
 | Draft / Publish 分离 | Draft 只在 Editor session 内存在；Publish 输出 row diff、schema hash、content hash、validation snapshot 和 trace preview id | Editor 状态不能成为 Runtime source；发布单元必须可审计、可回滚、可复现 |
 | Raw Table Advanced Mode | raw protocol / Excel 表格仍可维护，但默认入口隐藏在高级模式 | 框架维护需要底层入口；策划默认路径不应要求手写 serialization 协议 |

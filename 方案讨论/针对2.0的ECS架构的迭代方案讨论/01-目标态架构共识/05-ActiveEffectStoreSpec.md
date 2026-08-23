@@ -2,154 +2,268 @@
 
 ## 目的
 
-定义 duration、stack、period、granted tag、granted ability 等跨帧状态的目标存储方式。
+定义 duration、infinite、stack、period、ongoing/inhibition、granted tag/ability/cue 等跨帧 GameplayEffect 状态的唯一目标存储。v1 统一使用目标 ASC-local、非压缩 generational slab；不把每个 ActiveEffect 实体化，也不维护 Ability/Activation Entity 权威。
 
-## 状态图
+物理 phase/Job/Tick Scratch/Structural Commit 分别引用 [03A](03-RuntimeCore管线/03A-执行域与数据流Spec.md)、[03C](03-RuntimeCore管线/03C-SystemGroup合约与核心数据形态Spec.md)、[03E](03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-FactSpec.md)、[03F](03-RuntimeCore管线/03F-StructuralCommit与BoundaryProjectionSpec.md) 与 [03G](03-RuntimeCore管线/03G-Component矩阵-TickScratch-Job拓扑Spec.md)。
+
+## 领域边界
+
+```text
+GameplayEffectDefinition
+    ↓ build
+GameplayEffectApplicationSpec
+    ↓ successful duration/infinite application
+ActiveEffectSlot
+```
+
+1. Definition 是不可变配置。
+2. Application Spec 是施加前/施加中的 runtime value。
+3. ActiveEffectSlot 是目标 ASC 上已成功应用且跨帧存活的状态。
+4. Instant Effect 不创建 ActiveEffectSlot。
+5. 新 Application stack 到已有 slot 时保留新的 `EffectApplicationId`，但 ActiveEffectHandle 可以不变。
+
+## Handle 与 Slab
+
+```text
+ActiveEffectHandle =
+    (OwnerAscInstanceId, SlotIndex, Generation)
+```
+
+ActiveEffectHandle 是独立强类型，不能与 GrantedAbilityHandle、AbilityActivationHandle、ContinuationHandle 或 SubscriptionHandle 互换。
+
+### 状态图
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PendingApply
-    PendingApply --> Active
-    Active --> Inhibited: ongoing requirement failed
+    [*] --> Free
+    Free --> PendingApply: allocate current Generation
+    PendingApply --> Active: application committed
+    PendingApply --> Tombstone: rejected/aborted after allocation
+    Active --> Inhibited: ongoing requirement false
     Inhibited --> Active: requirement restored
-    Active --> PendingRemove: duration expired / remove request
+    Active --> PendingRemove: expiry/remove/owner cleanup
     Inhibited --> PendingRemove
-    PendingRemove --> Removed
-    Removed --> [*]
+    PendingRemove --> Tombstone: side effects detached
+    Tombstone --> Free: all references released; Generation++
 ```
 
-## 核心契约
+### Slab 不变量
 
-1. Active effect store 只承载跨帧状态。
-2. Period / Overflow 只派生 EffectCommand，不直接写 Attribute。
-3. Granted tag / ability 必须有明确 owner 和 cleanup path。
-4. StackCount 影响 magnitude 时，必须通过 spec/active mutation 同步。
+1. Live SlotIndex 永不改变；禁止 compact、`RemoveAtSwapBack`、swap-back free 或排序重排。
+2. free-list 只复用 `Free` slot；`PendingRemove/Tombstone` 不能提前复用。
+3. Generation 仅在 `Tombstone → Free` 时递增。
+4. Tombstone 等待 modifier/tag/grant/cue cleanup、Live dependency、queued fact/command 与外部引用全部释放。
+5. 所有访问校验 `SimulationEpoch + HandleKind + OwnerAscInstanceId + SlotIndex + Generation`。
+6. stale handle 是可诊断的确定性失败，不能解析到同 index 的新 effect。
+7. ASC destroy 前必须先关闭 store、冻结 removal facts、清理外部 dependency/subscription，再提交 Entity destroy。
 
-## 官方依据与设计论证
+## ActiveEffectSlot 必保字段
 
-| 目标态选择 | 官方规则依据 | 为什么更优秀 | 为什么有必要 |
-|---|---|---|---|
-| Active effect 默认先进入 ASC owner-local slot，而不是每个 effect 默认实体化 | `BUF-01`、`PRF-10`、`QRY-04`、`SC-01` | owner-local buffer / slot 让 duration、stack、period tick 可按 ASC 分组处理，减少跨 entity random lookup | 大量 buff/debuff 若默认独立 entity，会增加 query 数、archetype 数和 cleanup 结构变化 |
-| Inhibited / PendingRemove / PeriodDue 等轻量状态默认 enum / bit flags | `FSM-02`、`FSM-05`、`PRF-03`、`EN-01` | 状态切换不触发 archetype 迁移，多个轻量状态可在同一 job 中分支处理 | 高频状态如果通过 tag component add/remove 表达，会造成结构变化热点和 archetype 爆炸 |
-| Period / Overflow 只派生 EffectCommand，Attribute 写入仍归 Attribute Reduce/Apply | `SC-01`、`CASE-12`、`NAT-03`、`PRF-26` | store lane 只负责生命周期推进，数值修改继续走 target-grouped reduce/apply，可保持写集合清晰 | Period effect 若直接写 Attribute，会绕开 modifier merge、dirty mask 和 Debugger 归因 |
-| Granted tag / ability cleanup 进入 Structural Commit 或 CleanupStore | `ECB-03`、`SC-03`、`PRF-04`、`SYS-05` | grant/remove/destroy 的结构变化集中 playback，Profiler/Journaling 能定位来源 | owner 死亡、effect remove 和 ability revoke 需要 deterministic cleanup；散落在 tick job 中会形成隐式 sync point |
-
-## Unity Entities 存储校准
-
-ActiveEffectStore 的目标不是“把每个 active effect 都实体化”，而是用 Unity Entities 机制表达跨帧状态：
-
-| 状态类型 | 推荐承载 | 说明 |
+| 字段组 | 必保字段 | 语义 |
 |---|---|---|
-| active effect slot | ASC entity 上的 DynamicBuffer slot / stable child entity | 高频读写优先稳定布局 |
-| inhibited / ready / expired | slot enum / bit flags | 默认不为每个轻量状态建 enableable component |
-| period due | slot flag / frame command；enableable 仅作 profiler 证明后的 chunk skip 优化 | 到期时派生 `EffectCommand` |
-| stack count / remaining time | unmanaged component / buffer element | 不混入 definition |
-| granted tag / granted ability owner | owner id + cleanup command | cleanup 进入 `GASStructuralCommitSystemGroup` |
+| Identity | Handle、DefinitionId、version/hash、first/latest EffectApplicationId | 区分存活实例与每次应用 |
+| Owner | TargetAscInstanceId、SourceAscInstanceId | target ASC 是唯一 writer |
+| Provenance | source Activation/Granted handle（可 stale）、EffectContextId、Instigator、EffectCauser、SourceObject | 晚期 tick/remove/cue 仍可解释来源 |
+| Runtime Spec | level、SetByCaller snapshot、source/target capture、dynamic tags/inputs | target-local active runtime copy |
+| Time | start tick、duration/remaining、period/next due、DueClaim、PeriodExecutionOrdinal | integer-tick 生命周期与一次性 due claim |
+| Stack | stack count/limit、StackTemporalContract、可选 per-application payload/expiry ledger | 合并、刷新、溢出、逐层到期 |
+| State | PendingApply/Active/Inhibited/PendingRemove/Tombstone、首次冻结的 removal reason | inhibition 不是 removal；terminal reason 只写一次 |
+| Contributions | modifier contributor ids、owned tag contribution ids、grant handles、ActiveCycleOrdinal/CueDefinition ranges | 精确增加/撤销与 Cue lifecycle |
+| Dependencies | LiveCaptureBinding ids/consumer fields、dirty revision、source-gone/cycle/budget、external cleanup tokens | live magnitude 更新与闭环 |
+| Free-list | next free index、Generation | 稳定 slot 管理 |
 
-结构变化只允许发生在明确 lifecycle 边界，例如首次创建 owner state、最终 cleanup、grant ability 等；普通 tick / inhibited 切换 / period due 不应 add / remove component。
+UE 风格对象指针、delegate、timer handle、global handle map、PredictionKey 与复制状态都不属于目标字段。
 
-## DOTS 深读后的 Store 分层
+## EffectApplicationId 与 ContributorId
 
-ActiveEffectStore 不再讨论“buffer 还是 entity”二选一，而是拆成四个可组合存储面：
+`ActiveEffectHandle` 只标识存活 slot，不能替代应用和贡献身份：
 
-| Store 面 | 职责 | 候选 API | 适用判断 | 必须指标 |
-|---|---|---|---|---|
-| OwnerLocalStore | ASC owner 上少量 active effect slot、stack、remaining time、owner-local period | ASC `DynamicBuffer` slot、small unmanaged component、FixedList-like generated small state | 每 owner active effect 数量可控、主要按 owner 顺序处理 | slot count、capacity、spill、compact count |
-| GlobalIndexedStore | 需要跨 owner 查询、统一 period bucket、全局生命周期扫描的 active effect | stable active effect entity、chunk component bucket、shared low-frequency group | effect 数量大或跨 owner query 多，且创建/销毁是低频边界 | active entity count、archetype count、chunk utilization |
-| LifecycleCleanupStore | owner destroyed / effect removed 后仍需释放 granted tag / ability / cue / spawned bundle | Cleanup Component、Cleanup Shared Component、LinkedEntityGroup boundary | destroy 后仍需上下文；同类清理信息可共享 | cleanup retained count、cleanup latency、shared unique value |
-| ChunkSkipIndex | 大量 idle / not due / inhibited effect 的 chunk 级跳过索引 | Chunk Component、enableable mask、`IJobChunk` precheck、change version | 可按 chunk 判断整批无需处理 | matched chunks、skipped chunks、unused entities、skip reason |
+- `EffectApplicationId`：每次 apply attempt/commit 唯一；instant、rejected、stack merge 也存在。
+- `ContributorId`：至少由 ActiveEffectHandle、modifier ordinal 与稳定 application/order provenance 构成。
+- `CueLifecycleKey = (SimulationEpoch, ActiveEffectHandle, ActiveCycleOrdinal, CueDefinitionOrdinal)`：只配对同一 active cycle 的 OnActive/WhileActive/Removed。
+- `ExecutedCueKey`：使用具体 EffectApplicationId；period 使用 `(ActiveEffectHandle, PeriodExecutionOrdinal, CueDefinitionOrdinal)`，不得借用 lifecycle key。
 
-执行含义：
+精确撤销必须按 ContributorId 或 ActiveEffectHandle 所拥有的贡献集合执行。不能通过“重新查找同 Definition 的 effect”删除，因为同 Definition 可以有多个 source、stack group 或 target-local instance。
 
-1. `OwnerLocalStore` 的 DynamicBuffer 必须明确 `InternalBufferCapacity`。超过 capacity 外置后不会自动回到 chunk，若 active effect 数量波动大，应考虑 stable entity 或 `InternalBufferCapacity(0)`。**当 `InternalBufferCapacity(0)` 时**：spill 监控改为 "total external buffer element count"（非百分比），告警阈值：> 32 slots → 考虑 GlobalIndexedStore，> 64 slots → 架构告警。此约束与 [13-03 Buffer 容量与 Phase 映射](13-EntityComponent物理布局/13-03-Buffer容量与Phase映射Spec.md) 的 buffer 容量策略一致。
-2. `GlobalIndexedStore` 不是“每 tick 创建 GE entity”。它只适合生命周期稳定、需要全局 query 的 effect；period due / inhibited / ready 不通过 add/remove component 表达。
-3. `CleanupStore` 只处理 destroy 后清理，不替代 Active 生命周期状态机；cleanup component 不能 baked 到 definition。
-4. `ChunkSkipIndex` 的目标是让 idle effect 在 chunk 级跳过，而不是给每个 entity 重复写相同 fact。
-5. 状态机选择顺序：enableable 适合高频开关；enum / bit field 适合状态多且同 job 轻分支；tag / archetype 只适合低频且数据差异大的生命周期阶段。
-6. **`FSM-04`：单 entity 上多 FSM 叠加时拆分 Job，而非拆分 Entity。** ASC entity 的 `ActiveGameplayEffectBuffer` buffer 同时承载多套独立 FSM（inhibit/tick/expire、stack push/pop、grant tag/ability cleanup 等）。`FSM-04` 的官方判断标准是：**同一 entity 上 > 3 个独立的生命期决策，且各决策依赖不同的 component 读取集**。`ActiveGameplayEffectBuffer` 完全命中这个条件。
+## Apply / Stack 契约
 
-   **修正策略 —— 按 FSM 职责拆分 Job（不增加 Archetype）：**
-   ```
-   Job A: Duration lifecycle FSM（读 RemainingDuration，写 State/Flags）
-   Job B: Period cursor FSM（读 PeriodAccumulator，写 slot PeriodDue flag / 派生命令候选）
-   Job C: Stack overflow check（读 StackCount，写 ActiveEffectMutationBuffer）
-   Job D: Granted tag/ability cleanup（读 Flags.PendingRemove，写 ECB）
+Effect Fan-In 对每个 EffectApplicationId 按以下顺序处理：
 
-   Job 依赖链：
-   A → B（Inhibited 状态不应 tick period）
-   A → D（需要知道哪些 effect 进入 PendingRemove）
-   C 与 A 并行（不依赖 duration state）
-   ```
+1. 在 target writer 最终线性化点建立 Target pre-application capture，并读取同目标前序 canonical state。
+2. 重新校验完整 application requirement、immunity 与 TargetLifePolicy；TargetResolve precheck 不是结果。
+3. 解析 stacking key/payload 和完整 StackTemporalContract，校验 WholeTickInfraAdmission reservation token；基础设施容量不足不得在本阶段成为业务分支。
+4. 若命中既有 slot，按 policy 更新 stack、payload、duration、period 与 runtime magnitude；记录新的 ApplicationId fact/ledger entry。
+5. 若不命中，分配 PendingApply slot，复制 target-local Application Spec，再一次性提交 contributions。
+6. 任一业务失败均输出 typed ApplicationOutcome 且不暴露半 Active slot；已分配 slot 进入 Tombstone 后安全回收。InfraAdmissionFault 则发生在本阶段前且整 Tick gameplay 零写。
+7. overflow child effect 只派生新的 EffectCommand/ApplicationId，不直接写 Attribute。
 
-   **不拆分 Entity 的原因**：拆分为独立 Entity 会增加 archetype 数量和 entity 数量，与 Archetype < 10 目标矛盾。拆分 Job 保持同一 Entity/Archetype，仅通过 Job 依赖链管理 FSM 间的数据依赖。每个 Job 只读写自己关心的字段，依赖链清晰，可独立 Profile。
-7. ActiveEffect 的默认状态表达是 slot 内 enum / bit flags；禁止为 `PendingApply / Active / Inhibited / PendingRemove / Removed` 等轻量状态各建一个 enableable component。
-8. Status / Buff / Debuff 类标记由 granted tag / active effect store 聚合到 bitmask 或 status flags；禁止每种 status 一个 tag component 或 enableable component。
+StackCount 影响 magnitude 时，ActiveEffect runtime spec、modifier contributions 与 typed facts 必须在同一权威事务内一致更新。
 
-## ActiveEffectStore API 选型矩阵
+### StackTemporalContract
 
-ActiveEffectStore 不能预设为“每个 active effect 一个 entity”或“全部塞进 ASC buffer”。任一 ActiveEffect 小闭环前都必须按状态类型选型：
+每个 Definition 必须在生成期完整声明以下轴，Runtime 不得从 duration/period 是否为 0 或配置缺省值猜语义：
 
-| 候选承载 | 适用 | 风险 | 验收指标 |
-|---|---|---|---|
-| ASC `DynamicBuffer` slot | 每个 ASC active effect 数量有限、按 owner 顺序批处理 | buffer spill、slot compact、并行写冲突 | slot count、capacity、spill、compact count |
-| stable active effect entity | 每个 effect 状态复杂、需要独立 query / timer / stack | entity 数量增加、query 数增加、生命周期 cleanup | active entity count、archetype count、query match |
-| enableable marker（可选） | 大量 idle / not-due entity 需要整 chunk/entity skip，且 profiler 证明收益 | query enabled state 成本、同步等待、状态语义不足；禁止替代 slot enum/bit flags | enabled count、ignore-filter count、wait ms |
-| enum state / bit field | 状态很多但每状态工作轻、适合同一 job 分支 | 分支影响 vectorization、可读性下降 | branch distribution、job cost |
-| Cleanup Component | owner destroy 后仍需释放 granted tag / ability / cue | cleanup 生命周期必须明确移除 | cleanup retained count、cleanup latency |
-| Chunk Component / chunk counters | 大量 idle/no-op effect 可整体跳过 | 只适合 per-chunk 优化事实，不替代 per-entity state | chunk skip count、matched chunk reduction |
-| LinkedEntityGroup | prefab-like group、表现/authoring 组合实例化和销毁 | 不进入 Core hot path 决策 | group instantiate/destroy count |
+| 轴 | 契约 |
+|---|---|
+| StackKey | Definition/TargetASC/SourceASC/source object/显式 group 的合并键 |
+| StackPayload | 同质共享 payload × count，或逐 EffectApplication payload/source/apply tick/expiry ledger |
+| DurationRefresh | 首次、每次成功 stack、at-limit、overflow 时是否及如何刷新 |
+| PeriodReset | stack/refresh/reactivate 后 next due 保持、重置或明确对齐 |
+| ExecuteOnApply | 首次 apply、每次 stack apply 是否立即执行 period body |
+| AtLimit | deny、refresh-only、replace、overflow、clear 的确定顺序与 outcome |
+| Overflow/Clear | overflow child、deny、clear one/all 的先后与失败原子性 |
+| Expiration | 整槽移除、移除一层、按逐 application ledger entry 到期 |
+| FinalPeriod | expiry 与 due 同 tick 时 final execute 或先 remove |
+| InhibitResume | duration/period 暂停、跳过、累计、重置及 reactivate 行为 |
+| StackCue | count 变化是无 Cue、参数更新还是 Executed；不得建立新的 lifecycle cycle |
 
-### `CASE-37` LinkedEntityGroup 在 ASC→Ability Entity 生命周期中的应用
+`HomogeneousCount` 仅适用于所有 stack 共享 magnitude、source-sensitive inputs、duration 与 expiry 的定义。毒、充能等若每次 application 有独立 magnitude/source/expiry，必须持有逐 application ledger；否则 Definition bake fail。相同 Definition/Target/Source 的 stack key 并不能证明 payload 同质。
 
-**评估结论**：`LinkedEntityGroup` 适合用于 ASC → Ability Entity 的**生命周期级联销毁**，但不适合用于**迭代顺序依赖**的场景。
+Activation 的普通 `EmittedApplicationRefs` 只是审计引用，ActiveEffect 不因 source Activation End 自动删除。`RemoveOnActivationEnd` 必须遵守：尚未线性化时 cancel-before-apply；已线性化时按 EffectApplicationId/ContributorId/ledger entry 精确撤销；已经合并进无逐 application ledger 的 shared stack 时 Definition bake fail。
 
-**适用场景 —— ASC Entity 销毁时的级联清理：**
-- 当 ASC Entity 被销毁时，其所有 Ability Entity 也应当被销毁
-- 使用 `LinkedEntityGroup` 后，`GASStructuralCommitSystemGroup` 中通过 ECB / bulk destroy 销毁 `ascEntity` 时可自动级联销毁所有 Ability Entity
-- 替代全局扫描并手动查找子 Ability Entity 的 O(N_abilities_global) 清理路径
+## Active 与 Inhibited
 
-**不适用场景：**
-- 需要按特定顺序逐 Ability Entity 执行清理逻辑（如先 revoke 后 destroy）
-- `PRF-31`：Child Buffer 迭代顺序不保证确定，不应依赖 sibling index 做排序
+Inhibited 保留：
 
-目标态建议在 ASC Entity 创建时将 Ability Entity 加入 `LinkedEntityGroup`，销毁时利用级联机制减少手动清理代码。此选项应在 `GASStructuralCommitSystemGroup` 中实现，不影响 hot path 性能。
+- ActiveEffectHandle 与 Generation
+- duration/period/stack/context
+- runtime spec/capture
+- removal/refresh policy
 
-ActiveEffectStore 验收必须能证明：普通 tick、period due、inhibit 切换不触发 archetype churn；grant/remove/cleanup 进入 `GASStructuralCommitSystemGroup`；Debugger 能解释 slot pressure、optional enableable state、cleanup 和 chunk skip。
+Inhibited 撤销或暂停：
 
-## OwnerLocalStore Baseline 约束
+- persistent attribute modifiers
+- granted OwnedTags
+- block/cancel contributions
+- 按 policy 生效的 granted abilities
+- active Cue 状态
+- period execute
 
-目标态默认 baseline 是 `OwnerLocalStore`：ASC owner 持有 `ASCActiveEffectsComponent` 和 `ActiveGameplayEffectBuffer`，用 slot 承载 duration active effect 的跨帧状态。它是 baseline，不是唯一终局；当 slot pressure、跨 owner query 或 chunk skip 证据触发时，必须重新评估 `GlobalIndexedStore`、Cleanup Component 或 ChunkSkipIndex。
+稳定 `Active → Inhibited` 必须结束当前 Cue active cycle 并发送一次 `Removed(CueLifecycleKey)`，但不回收 ActiveEffectSlot。稳定恢复 Active 时用同一 ActiveEffectHandle 重新提交贡献，`ActiveCycleOrdinal++`，并以新的 CueLifecycleKey 发送 OnActive + WhileActive。若 effect 在 Inhibited 状态直接 Remove，当前 cycle 已结束，不得再次发送 Removed。duration/period 在 inhibition 期间的暂停、跳过、累计或 reset 只由 StackTemporalContract 决定。
 
-约束：
+### Target-local Stabilization
 
-1. Store 创建只发生在 ASC factory / bootstrap 等低频结构阶段；helper 在 hot path 发现缺少 store 时必须返回失败，不允许隐式 add component / add buffer。
-2. Slot 可以记录 `Active / Inhibited / PendingRemove` 等 enum state、duration、remaining、period cursor、stack count、source / target / context 和 legacy entity 引用。
-3. slot 可以保留外部 lifecycle reference 字段用于 proof 或互操作，但该字段不得成为目标态 active effect lifecycle 的权威。
-4. Slot buffer 不能把逻辑上限直接等同为 chunk 内联容量；heavy slot element 应使用小 `InternalBufferCapacity`，逻辑上限通过 store helper / validation gate 控制。
-5. period due / overflow simple instant 派生命令必须进入 EffectCommand 主链；复杂 child GE 需要明确是否仍属于 active store lifecycle 或 structural request。
-6. Debugger 必须输出 slot pressure、state distribution、externalized owner count、compact count、cleanup retained count 和 chunk skip count，避免把 slot mirror 误判为 scale-ready store。
+Ongoing requirements、inhibition、OwnedTag 与 modifier contribution 可能互相影响，必须在目标 ASC 内求稳定态：
 
-## Period / Overflow 派生输出约束
+1. 以提交前稳定状态开始事务内迭代。
+2. 每轮计算 requirement → inhibition → contribution/tag counts。
+3. 使用 state hash 检测振荡，并设置最大迭代数。
+4. 无固定点时显式 deterministic failure，不发布半稳定 state。
+5. 中间试探的 Reaction/Cue 不离开事务；只发布最终稳定 transition。
 
-period / overflow 的 simple instant child GE 必须作为 ActiveEffectStore 的派生输出进入 EffectCommand 主链：
+静态 Definition DAG 不能证明任意运行时组合可收敛，因此 runtime cycle/iteration guard 不可省。
 
-1. period due 时，simple instant child GE 不默认创建 request/runtime child entity，而是写入 `EffectCommand(Source=Period)`。
-2. stack overflow 派生 simple instant child GE 同样写入 `EffectCommand(Source=Overflow)`；复杂 child GE 必须明确 fallback 条件和重选型触发。
-3. 派生命令复制 child GE 的 SetByCaller values，保持 command/spec/delta/fact 的 magnitude 输入连续性。
-4. `GEPeriodStateComponent.StartTime` 与 owner-local `ActiveGameplayEffectBuffer.LastPeriodFrame` 必须同步刷新；store cursor 是 store-driven lifecycle 和 Debugger 证据的一部分。
-5. 若派生命令仍落在 singleton command stream，validation evidence 必须标记 proof-only、规模上限、重选型触发条件和移除任务。
+## Period / Overflow 派生
 
-## 禁止方向
+1. owner-local period 在 `DueTick` 当前 tick 由唯一 `DueClaim` claim；每次成功 claim 分配单调 `PeriodExecutionOrdinal`。重复扫描、retry 或 catch-up 不得再次执行同一 ordinal。
+2. 跨 ASC Live dirty 的 destination T+1 work 在同一目标的语义序上先于 `PeriodDue`，因此 period 读取重算后的 canonical state。
+3. claim 后、执行前校验 Handle Generation 与 `Active && !Removing`；执行后再次检查，因为 period body、execution 或 meta conversion 可能 self-remove。
+4. Inhibited effect 不执行 period；暂停/跳过/累计/reset 与恢复行为由 StackTemporalContract 固定。
+5. expiry 与 period 同 tick时，FinalPeriodPolicy 必须在 removal arbitration 中先确定，不能依赖 Job 完成顺序。
+6. 已进入 PendingRemove/Removing 的 slot 不再刷新 duration、reset next due 或 claim 新 period；contribution/cue/grant terminal cleanup 只执行一次。
+7. ExecuteOnApplyPolicy 决定当前 application 是否立即执行一次自身 period body；该 body 是当前 target transaction 的工作，可经 target single writer 写本次 Attribute delta/fact。该 body或普通 apply、period/overflow/reaction 动态派生的 child application 才生成新 EffectCommand/ApplicationId，并默认 `DueTick = CurrentTick + 1`。
+8. overflow child effect 走完整 Application Spec/target capture/requirement/immunity/stack 链，并复制 Definition/version、source/target、SetByCaller、Context、capture provenance 与 causality。
 
-1. active effect 直接持有子 effect runtime entity。
-2. 把 instant GE 和 duration GE 都塞进同一重 lifecycle。
-3. 把 definition 字段和 runtime timer / stack state 混写。
-4. 用 add / remove component 表达每帧 inhibited、period due、ready 等高频状态切换。
-5. 不定义 DynamicBuffer 容量、清空策略和 buffer pressure 计数就把 ActiveEffectStore 作为高规模目标结构。
-6. 未复核 Cleanup Component、Chunk Component、enum state、stable entity 等候选 API 就固定单一存储形态。
+## Granted Tag / Ability / Cue Ownership
+
+### Granted Tag
+
+OwnedTag 使用引用计数/贡献集合。ActiveEffect Active 时增加自己的 contribution，Inhibit/Remove 时只撤销自己的 contribution；父 tag count 与零边界由 Tag lane 统一派生。
+
+### Granted Ability
+
+ActiveEffect grant Ability 时记录得到的 GrantedAbilityHandle 与公开 removal policy。该 policy 只有三态：
+
+- `CancelImmediately`：阻止新 Activation，取消全部 child；Continuation/Subscription cleanup 完成后 tombstone Granted slot。
+- `RemoveWhenAllActivationsEnd`：立即阻止新 Activation，保留现有 child；最后一个 child 结束并 cleanup 后 tombstone Granted slot。
+- `LeaveGranted`：Granted slot 继续保持 Live 且可激活。它只 detach 原 ActiveEffect 的 cleanup ownership，冻结 granting Definition/Application/Context provenance，不保留必须解引用的 dangling ActiveEffectHandle。
+
+`LeaveGranted` 不是 “DoNothing”，也不等于保留旧 Activation 后再 tombstone。`SuspendWhileInhibited` 是独立 inhibition policy，用于临时禁止/恢复激活；不得塞进 removal policy 或作为 LeaveGranted 的隐式副作用。
+
+### GameplayCue
+
+- 首次稳定进入 Active：`ActiveCycleOrdinal=0`，用 `CueLifecycleKey=(SimulationEpoch, ActiveEffectHandle, ActiveCycleOrdinal, CueDefinitionOrdinal)` 发送 OnActive + WhileActive。
+- 从稳定 Active 进入 Inhibited：对当前 CueLifecycleKey 发送一次 Removed，结束该 cycle，但保留 ActiveEffect identity。
+- reactivate：`ActiveCycleOrdinal++`，以新 CueLifecycleKey 发送 OnActive + WhileActive；reactivate 不是旧 lifecycle 的重复投递。
+- Active 状态 Remove：对当前未结束 cycle 发送一次 Removed；Inhibited 状态 Remove 不再发送 Removed。
+- stack count 改变本身不增加 ActiveCycleOrdinal；StackCuePolicy 决定参数更新或 Executed。
+- instant/普通 execution 的 Executed 使用 EffectApplicationId；period Executed 使用 ActiveEffectHandle + PeriodExecutionOrdinal + CueDefinitionOrdinal。
+
+稳定化内部试探不发 Cue。`BoundaryEventId` 只负责交付/去重，不得代替 CueLifecycleKey、EffectApplicationId 或 PeriodExecution identity。显式已提交 Add→Remove 保留正式 lifecycle transition；未提交试探态不泄漏。
+
+## Live Capture Dependency
+
+ActiveEffectSlot 只保存 binding/dependency identity，不复制 source accumulator 的可变引用。binding 至少区分 `CaptureOrdinal + ConsumerNodeId + ConsumerFieldId`，并保存 LastSeenRevision、SourceGonePolicy、EdgeOrdinal、CyclePolicy/PropagationBudget。完整 CaptureProjectionContract 见 [04](04-EffectCommand-SpecStream-AttributeDeltaSpec.md)。
+
+同 ASC Live Capture 可由 target-local revision 触发重算。Source Live Capture 跨 ASC 时必须：
+
+1. 在 captured/source ASC 登记 dependency edge。
+2. source revision 在 T 变化后产生发往 target ASC、`DeliverTick=T+1` 的 deterministic dirty command。
+3. target ASC writer 校验 binding 与 DependentActiveEffectHandle Generation；在同 tick PeriodDue 前按 consumer field 重算。
+4. source 消失按 SourceGonePolicy 显式 remove/freeze/fault；不得 fallback self、0 或 target 当前值。
+5. Remove/Tombstone 双向清理 dependency；晚到 dirty/Ack 只产生 stale no-op diagnostics。
+6. 静态 cycle 在 bake 拒绝；运行时重复 edge/CausalityId 或 propagation budget 超限为 deterministic fault。
+
+若实现不提供这条跨 ASC 闭环，Definition 必须 bake fail；不得退化为悄悄的 phase scalar read 并仍命名为 Live。
+
+## Owner-local 承载约束
+
+v1 baseline 与权威终局都是 ASC owner-local non-compacting slab。Unity 物理上可由预安装 DynamicBuffer/owner component 组合承载，但必须保持逻辑 slot index、free-list 与 tombstone；buffer 扩容只能搬迁内存，不能改变逻辑 handle。
+
+结构 Entity 只用于 projectile、aura、zone 等需要空间查询或独立结构生命周期的派生对象。禁止：
+
+- ActiveEffect Entity authority
+- Ability/Activation Entity authority
+- 用 LinkedEntityGroup 表达 ASC→Ability/ActiveEffect 权威层级
+- 用 enableable/tag component 代替每个 slot 的 Active/Inhibited/PendingRemove 状态
+- 为便于查询复制第二份可写 ActiveEffect 状态
+
+跨 owner 索引、period bucket 或 debugger index 只能是可重建的只读派生索引，不能改变 slot authority。
+
+## Capacity 与诊断
+
+物理 buffer capacity 由 [13-03 Buffer容量与Phase映射](13-EntityComponent物理布局/13-03-Buffer容量与Phase映射Spec.md) 所有。本 Store 必须暴露：
+
+- live/free/tombstone count 与 high-water mark
+- grow count 与 externalized bytes
+- stale-handle rejection count
+- Generation wrap risk
+- Active/Inhibited/PendingRemove 分布
+- stack/period due/overflow counts
+- stabilization iteration/cycle failures
+- Live dependency local/cross-ASC edge count与dirty latency
+- grant/subscription cleanup latency
+
+`compact count` 不应存在；任何非零 compact/swap-back 指标都表示违反设计。
+
+## 非预测 v1
+
+ActiveEffectSlot、modifier contribution 与 evaluation API 不得包含 PredictionKey、IsPredicted、IncludePredictiveMods、prediction state、ack/reject/caught-up 或 predictive instant overlay。Authority 是执行域事实，不是每 slot 的 prediction mode。
+
+未来 Prediction/Replication 必须新增独立 network correlation/reconciliation 数据，不修改 ActiveEffectHandle 语义。
+
+## 验收
+
+1. slot 回收后旧 ActiveEffectHandle 被 Generation 拒绝。
+2. Live slot 在 grow、remove、stack、period 与 cleanup 后 SlotIndex 不变。
+3. Instant application 不分配 ActiveEffect slot，但拥有 EffectApplicationId。
+4. stack merge 保持 ActiveEffectHandle，记录独立 ApplicationId，并按完整 StackTemporalContract 更新 payload/duration/period/cue。
+5. 异质 poison/charge payload 与 expiry 使用逐 application ledger；count-only 定义在 bake 被拒绝。
+6. target requirement/immunity/life/stack policy 在最终线性化点读取前序 canonical state；失败输出 typed outcome/immunity blocker 且无部分 mutation；infra capacity 失败整 Tick 零写。
+7. 普通 GE 不随 Activation End 删除；RemoveOnActivationEnd 在 apply 前 cancel、apply 后精确撤销、shared stack 无 ledger 时 bake fail。
+8. Duration modifier 只影响 Current/contribution；Remove 后精确恢复。
+9. Inhibit 保留 slot/time/stack/context，撤销贡献并停止 period；Removed 结束旧 Cue cycle，恢复使用同一 handle 与新 cycle。
+10. DueClaim/PeriodExecutionOrdinal 防重复；expiry/final-period/self-remove/overflow clear 不双执行或双删，动态 child 默认 T+1。
+11. Granted removal 精确区分 CancelImmediately、RemoveWhenAllActivationsEnd、LeaveGranted；SuspendWhileInhibited 独立。
+12. Cue lifecycle key 含 SimulationEpoch/ActiveEffectHandle/ActiveCycleOrdinal/CueDefinitionOrdinal；stack 不新 cycle，Inhibited remove 不重复 Removed，Executed 使用 application/period identity。
+13. ActiveEffect grant 的 tag/ability/cue 只清理自己的贡献。
+14. target-local stabilization 收敛；振荡显式失败且不泄漏中间 Reaction/Cue。
+15. 同 ASC Live 变更触发重算；跨 ASC Live 在 T+1 且先于 PeriodDue，或 bake fail；source gone/cycle/budget 不隐式回退。
+16. owner destroy 前完成外部 dependency/grant/subscription cleanup。
+17. Runtime 不存在 ActiveEffect Entity authority、compact/swap-back 或 Prediction schema。
+
 ## 历史方案定位
 
-1. GameplayEffectConfigBlob 中 Duration / Period / Stack 字段的设计信号来自 `../历史方案参考/方案11.md:393-406`。
-2. GE Blob 构建和 `CEffectConfigRef` 参考来自 `../历史方案参考/方案11.md:510-522`。
-3. Duration GE、GrantedTags 和 modifier blob 的生成例子来自 `../历史方案参考/方案14.md:611-624`。
-4. unmanaged modifier buffer 替代托管 modifier 的信号来自 `../历史方案参考/方案15.md:451-466`。
+1. Duration/Period/Stack 与 unmanaged modifier 的历史方案只作为字段来源线索。
+2. stable active effect entity、Ability Entity、LinkedEntityGroup authority 与可 compact slot 均被 v1 裁决取代。
+3. 本文件的 generational slab、tombstone、EffectApplicationId 与稳定化契约优先。

@@ -1,347 +1,499 @@
 # GAS 业务链路破坏性重划分 Spec
 
+> Owner：`01-目标态架构共识` | 版本：Runtime v1 | 最近裁决：2026-08-24 | 状态：目标态唯一正文
+
 ## 目的
 
-本 Spec 把 GAS Runtime 概念设计审查收束为目标态约束：EX-GAS 2.0 的业务链路必须从 OOP facade、托管 TargetCatcher、singleton stream、legacy EventBus 和 generated lifecycle 中退出，改为以纯 ECS Runtime Core 为唯一 gameplay 权威的破坏性重划分。
+EX-GAS Runtime v1 采用一次性、不可兼容的权威切换：以 ASC-local 稳定 slab、单 Core tick kernel、target-owned single writer、标准 EndFixed ECB 和单 Boundary Drain 实现 GAS 语义。旧五段 physical group、Ability Entity、legacy GE entity、双 ActiveEffect store、singleton/EventBus 主链和多 Boundary ECS consumer 不进入目标态。
 
-这里不记录当前实现事实和迁移流水。现实命中、文件证据和短期任务应归入 `../00-当前架构事实/` 与 `../02-主线任务树/`。本文件只回答：
+当前代码事实只读 [Runtime v1 不可兼容迁移基线事实](../00-当前架构事实/RuntimeV1不可兼容迁移基线事实.md)；执行顺序只读 [Runtime v1 不可兼容迁移任务](../02-主线任务树/RuntimeV1不可兼容迁移/README.md)。本文件不记录当前命中、验证流水或任务状态。
 
-1. GAS 业务链路应该如何重新划分。
-2. 为什么必须这样设计。
-3. 哪些旧链路必须退出，不能兼容保留。
-4. 怎样验收目标态是否成立。
+## v1 最终裁决
 
-业务链路重划分的 DOTS 复核口径以 `18-DOTS官方规范复核与性能红线Spec.md` 为准；任何旧链路兼容诉求若命中其中的性能红线，默认不得保留到目标态。
+| 议题 | v1 裁决 |
+|---|---|
+| Gameplay authority | ASC Entity 是 Ability、Activation/Continuation、ActiveEffect、Tag、Attribute 的唯一权威 owner |
+| 物理调度 | 单 `GasFixedTickSystemGroup`；Core 只有一个 `GasTickKernelSystem` |
+| 逻辑 phase | 保留为 Kernel 内命名 Job/DAG/counter，不再拆成业务 SystemGroup |
+| 结构变化 | 使用标准 `EndFixedStepSimulationEntityCommandBufferSystem`；Core 权威状态不依赖结构变化 |
+| 长期实例 | ASC-local 非压缩 slab：slot index + generation + free-list |
+| Definition backend | 禁止按 Definition 选择 slot 或 Entity；v1 没有 per-definition Entity promotion |
+| 跨 owner 写 | ASC owner command 与 target state 分成两个依赖串联的 mutation wave；跨 ASC route 按 destination 分组 |
+| Commit | scratch plan + 全 tick infrastructure admission 后，source-local CommitPlan no-fail 原子提交 |
+| Boundary | managed staging 先接管，成功后才清 ECS outbox；单 Drain 发布 immutable batch/ring |
+| Cue | OnActive / WhileActive / Executed / Removed 四阶段 request，Core 不持有 Cue Entity |
+| 迁移 | 单次切换，无 runtime selector、feature flag、fallback 或双事实源 |
 
-## 官方依据
+## 非目标
 
-| 规则 | 本 Spec 采用结论 | 设计理由 |
-|---|---|---|
-| `SYS-01`、`SYS-05` | gameplay 权威只在 Runtime Core System / Job；Shell、Demo、Debugger、Presentation 只能通过 Boundary 观察或写 command | 如果 Shell 能拿 `EntityManager` 或 raw `Entity`，业务代码就能绕过 cost、cooldown、target、effect、fact 的时序链，目标态无法证明 gameplay 结果由 ECS 数据流唯一决定 |
-| `SYS-02` | SystemGroup 是 phase owner，禁止业务手写 tick 顺序 | GAS 的时序不是普通方法调用顺序，而是 Command Ingest、Target Resolve、Effect Fan-In、Attribute Apply、Fact、Structural Commit、Projection 的物理执行顺序 |
-| `SEL-01`、`STORE-03` | Gameplay、Transient、Telemetry、Presentation 先按数据性质选承载 | 同一个 EventBus 或 adapter 混合 gameplay reaction、UI marker、debug log 会破坏归因，让 Debugger 无法定位性能热点 |
-| `BUF-02`、`NAT-03`、`MAT-05` | singleton DynamicBuffer 只能 proof；并行 fan-in 必须 NativeStream / per-owner range + deterministic merge | Effect/spec/delta/fact 是同帧多来源 fan-in，单一全局 buffer 会把并行写竞争、排序和容量压力集中到一个热点 |
-| `QRY-04`、`PRF-06` | hot path 避免跨 entity random `ComponentLookup` / `BufferLookup` | Attribute apply 和 execution output 应按 target 分组顺序写，否则规模扩大后每个 spec 都会变成随机目标写 |
-| `SC-01`、`ECB-03`、`PRF-04` | `GASStructuralCommitSystemGroup` 是唯一 hot path 结构变化点 | 如果 BoundaryProjection 也能 record structural ECB，Projection 就不再是只读输出，结构变化也会跨帧泄漏 |
-| `DBG-01` 至 `DBG-05` | Debugger 是 evidence owner，不是 runtime 控制层 | Debugger 的价值是提供 counters、timing、stream pressure、ECB 来源和 official diff，而不是反向参与 gameplay |
-| `BLOB-01`、`BLOB-02`、`BUR-01` | Luban + SourceGenerator 只生成 Blob、lookup、pure glue 和 validation artifact | 生成器生成 `ISystem`、query、ECB 或 NativeContainer owner 后，Runtime Core 的调度 owner 会变成隐藏生成物，无法人工审查时序与性能 |
+1. v1 不实现 prediction、rollback 或网络复制分支。
+2. v1 不兼容旧 Ability Entity/legacy GE runtime handle、旧 save snapshot 或旧 EventBus consumer。
+3. v1 不为任意 managed AbilityTask 对象提供逃生口。
+4. v1 不按单个 Definition 暴露物理存储策略。
+5. v1 不把 Debugger、Replay、UI 或 Cue consumer 变成 gameplay 输入。
 
-## 目标业务链路
+## 物理调度与 tick owner
 
-目标态业务链路必须固定为下面的单向数据流：
+目标物理顺序：
 
-```mermaid
-flowchart LR
-    Shell["Application Shell\nUI / AI / Network / Demo / Battle Runner"]
-    Boundary["Runtime Boundary\nCapability API / CommandPort / Snapshot / Diagnostics"]
-    Ingest["Command Ingest\nowner-local command record"]
-    Ability["Ability State Evaluate\ncost / cooldown / requirement"]
-    Target["Target Resolve\nAbilityTargetRecord + sort key"]
-    FanIn["Effect Fan-In\nNativeStream / command seed"]
-    Spec["Spec + Magnitude Resolve\nBlob + generated pure glue"]
-    Apply["Attribute Reduce / Apply\ntarget-grouped lane"]
-    Fact["Gameplay Fact\nCoreReactionFact"]
-    Commit["Structural Commit\nsingle ECB playback"]
-    Projection["Boundary Projection\nObservationFact / Cue / Replay / Debugger"]
-
-    Shell --> Boundary
-    Boundary --> Ingest
-    Ingest --> Ability
-    Ability --> Target
-    Target --> FanIn
-    FanIn --> Spec
-    Spec --> Apply
-    Apply --> Fact
-    Fact --> Commit
-    Fact --> Projection
-    Projection --> Shell
+```text
+SimulationSystemGroup
+├─ FixedStepSimulationSystemGroup
+│  ├─ PhysicsSystemGroup
+│  ├─ GasFixedTickSystemGroup                 [UpdateAfter PhysicsSystemGroup]
+│  │  ├─ GasCommandIngressSystem              Boundary journal → ECS inbox
+│  │  └─ GasTickKernelSystem
+│  └─ EndFixedStepSimulationEntityCommandBufferSystem
+└─ GasBoundaryDrainSystem
+   └─ Managed Immutable Batch Ring
 ```
 
-这条链路的关键是“没有回边”。Shell 不回读 live ECS buffer 再做 gameplay 决策；Projection 不创建或销毁 Core entity；Debugger 不写 simulation；generated glue 不拥有 lifecycle。
+约束：
 
-## 破坏性设计决策
+1. 必装 `GasCommandIngressSystem` 只在 pre-Fixed window 把 `SessionIngressGate` 已接收的 Boundary journal records 搬入 ECS inbox，不拥有 tick scratch，也不写 gameplay 权威状态。
+2. `GasTickKernelSystem` 是唯一 gameplay state writer 与 tick scratch owner。
+3. 标准 EndFixed system 在独立 GAS World 中必须显式创建、注册和排序。
+4. PlayerLoop 场景由 `SimulationSystemGroup` 在 FixedStep catch-up 完成后调用一次 Drain。
+5. Headless/AutoChess 只能调用 session `TickBatch(...)`；不得直接更新内部 group 或 system。
+6. logical phase 名称用于 Job、Profiler marker、counter 和 semantic hash，不用于恢复多组调度。
 
-### 1. Shell 只暴露 capability，不暴露 ECS identity
+## Session、BattleInstance 与 Ready
 
-目标态的 OOP Shell 只向外暴露业务 capability：
+v1 一个 World 同时只允许一个 active GAS Session tick domain；一个 Session 可以承载多个稳定 `BattleInstanceId`，例如 replicated scale profile 中的多个隔离战局。
 
-```csharp
-public readonly struct GASRuntimeCapabilities
-{
-    public readonly GASCommandPort Command;
-    public readonly GASSnapshotReadModel Snapshot;
-    public readonly GASPresentationOutbox Presentation;
-    public readonly GASDiagnosticsSink Diagnostics;
-}
+Session 状态至少为：
+
+```text
+Install -> SpawnPending -> Ready -> Running
+        -> Faulted/Disposing
+Running -> Terminalizing -> FinalDrain -> Disposing -> Disposed
 ```
 
-禁止对业务层公开 `World`、`EntityManager`、`EntityQuery`、runtime singleton、raw `Entity` 或可写 `DynamicBuffer`。
+SpawnBatch 的原子性是 gameplay 可见性原子，而不是 ECB/OOM 的物理回滚承诺。进入 SpawnPending 前先验证 Catalog、稳定身份、初始 grant 与逻辑容量；setup update 的 EndFixed只创建 Pending Entity/Registry entry。下一 FixedStep由 Kernel `SpawnFinalize` maintenance lane全量查询校验，再 no-fail整体发布 handle并进入 Ready；该 update不递增 gameplay Tick，也不运行 gameplay lanes。失败批次从不进入 Ready lookup，Session进入 Faulted并teardown；禁止 Drain/runner在 post-EndFixed写 Ready。
 
-为什么这样设计：
+Unit Death、BattleInstance Terminal 和 Session Terminalizing 是三个层级。单 BattleInstance 终局只封闭该实例 ingress；全部实例终局或显式 shutdown 后才终止 Session。wall clock、测量 warmup 与表现等待不得改变 gameplay tick、winner 或 hash。
 
-1. `Entity` 是 Runtime Core 内部地址，不是业务稳定 identity；跨 World、headless battle、replay 和 network 场景下 raw `Entity` 不能作为业务 key。
-2. 外部如果能拿 `EntityManager`，就能直接写 Attribute、AbilitySlot、GlobalTimer 或 EventBus，CommandPort 的 cost/cooldown/requirement/target 时序约束会失效。
-3. capability API 可以按 bootstrap、command、snapshot、diagnostics 分 owner 统计成本，Debugger 能区分 Core、Boundary、Presentation、Runner 的时间和错误。
+## 单 Kernel 不是巨型单 Job
 
-必须退出的旧链路：
+`GasTickKernelSystem.OnUpdate` 只负责解析 query、申请 tick-local container、组装 Job DAG 并返回最终 dependency。推荐 DAG：
 
-1. public `TryGetRuntimeWorld` / `TryGetRuntimeEntityManager`。
-2. public `TryGetRuntimeSingleton` 类方法。
-3. public `TryGetEntityForRuntimeAdapter`。
-4. Demo / business adapter 直接 `SetComponentData`、`GetBuffer`、`SystemGroup.Update()`。
+1. `GatherTickInputJob` / `TickStartSnapshotJob` + `PlanExpandScratchProvision`：按 sealed/due count 与 bake maxima 先建立 checked envelope token和定长 Plan/Expand scratch
+2. `OwnerPlanBuildJob`：按 ASC 在 scratch 中执行 canonical read-your-writes，不写权威状态
+3. `TargetResolveExpandJob`
+4. `WholeTickInfrastructureAdmissionJob`：验证 envelope token，只预留下游 scratch/slab/payload/pending/fact/outbox
+5. `AscOwnerCommandWaveJob`：只执行已 admission 的 no-fail CommitPlan
+6. `SourceSpecProjectionJob`
+7. `GroupWorkByTargetJob`
+8. `AscTargetStateWaveJob`：application/stack/Attribute/Tag/Death
+9. `TargetLocalStabilizationJob`
+10. `StableFactMergeAndTerminalResolveJob`
+11. `GroupNextTickRouteByDestinationJob`
+12. `ProjectBoundaryAndDiagnosticsJob`
 
-### 2. Target Resolve 必须成为 ECS lane
+硬约束：
 
-目标态不再让 `TargetCatcherBase` 托管类参与 Runtime Core。配置只能描述 target policy，运行时由 Target Resolve lane 输出 `AbilityTargetRecord`：
+- tick scratch 只能由 Kernel 创建和拥有，不保存到下个 tick；其物理回收服从 World update allocator 生命周期。
+- tick scratch 统一使用 `SystemState.WorldUpdateAllocator`；跨 tick 数据必须回到 ECS 持久 buffer/component。
+- 禁止 phase 间为读取 length/结果调用 `Complete()`。
+- 禁止 static NativeContainer、跨 System scratch、unsafe system ref 或 `NativeDisableParallelForRestriction` 掩盖 owner 错误。
+- Job/evaluator 各自独立类型并可单测；“一个 System”不等于“所有业务写进一个方法”。
+- OwnerPlan/admission 失败发生在任何语义 mutation 前；infrastructure capacity 不足使本 tick 权威零写并进入确定性 fault。
+- AscOwnerCommandWave 到 AscTargetStateWave 之间是全局 JobHandle 依赖，但不调用 `Complete()`。
+- 普通 self-target GE 也进入 TargetWave；必须在同 OwnerWave 影响后续 CanActivate 的内容只能建成 activation-owned invariant，否则 Definition bake fail。
 
-```csharp
-public struct AbilityTargetRecord
-{
-    public Entity SourceAsc;
-    public Entity TargetAsc;
-    public int AbilityCode;
-    public int TargetPolicyCode;
-    public int ContextId;
-    public ulong DeterministicSortKey;
-}
+## ASC identity 与 Owner/Avatar
+
+ASC identity 必须稳定且与 raw Entity 分离：
+
+```text
+AscHandle = SessionId + AscStableId + AscGeneration
+SlotHandle = AscHandle + SlotIndex + SlotGeneration
 ```
 
-为什么这样设计：
+Actor 绑定分为：
 
-1. 目标选择是 gameplay 规则的一部分，不是 Presentation GameObject 查询的副作用。
-2. Physics 可以提供 candidate input，但不能替代 GAS 规则裁决；最终目标必须经过 tag requirement、team/faction、alive/dead、range、visibility 等 ECS 数据过滤。
-3. `AbilityTargetRecord` 让 Effect Fan-In 可以按 target/context 排序，后续 Attribute Apply 才能 target-grouped。
+- OwnerActor：控制者/所有者身份，不保存 Attribute、Tag、Ability、Effect 权威副本。
+- AvatarActor：可替换的表现、Transform、Physics 绑定。
 
-必须退出的旧链路：
+约束：
 
-1. Runtime 托管 `TargetCatcherBase` / `CatchAreaBox3D` 主链。
-2. `Physics.Overlap*` 结果直接转 `AbilitySystemBinding` raw `Entity`。
-3. ability activation 只取 requested target 或 owner fallback 的兜底逻辑。
+1. Avatar 销毁、重生或换身不销毁 ASC。
+2. Core 内可缓存 Avatar Entity，但必须同时保存 stable avatar id 与 binding generation。
+3. Cue/Boundary fact 携带 avatar binding generation 或空间快照，避免延迟消费绑定到新 Avatar。
+4. Team/Faction/Alive 等 gameplay 数据进入 ASC unmanaged snapshot，Core 不回查 managed OwnerActor。
+5. public handle、immutable batch 和 replay key 禁止携带 raw Entity。
 
-### 3. Frame Kernel 取代 singleton stream 总线
+## ASC-local 稳定 slab
 
-目标态将 command、target、spec、delta、fact 统一纳入 frame kernel，但不再用一个 singleton entity 上的多个 DynamicBuffer 表达主链。
+长期生命周期数据统一放在 ASC：
 
-```csharp
-public struct GASFrameKernelCounters
-{
-    public int CommandCount;
-    public int TargetRecordCount;
-    public int SpecCount;
-    public int AttributeDeltaCount;
-    public int CoreFactCount;
-    public int NativeStreamSegmentCount;
-    public int DeterministicMergeCostTicks;
-}
-```
+- `GrantedAbilitySlot`
+- `AbilityActivationSlot`
+- `AbilityContinuationSlot`
+- `AbilitySubscriptionSlot`
+- `ActiveEffectSlot`
+- `ActiveEffectPayloadSlot` / capture records
+- `AttributeAggregatorModifierSlot`
 
-默认承载：
+每种 slab 必须：
 
-| 数据 | 主承载 | 理由 |
----|---|---|
-| Boundary command | owner-local command buffer | 低频外部意图，按 ASC owner 清理 |
-| Target record | request-owned result buffer 或 NativeStream | 可按 context / target 排序 |
-| Effect command/spec | NativeStream + deterministic merge | 多 producer fan-in，避免全局写热点 |
-| Attribute delta | target-grouped range / per-target buffer | Reduce / apply 顺序访问 |
-| CoreReactionFact | NativeStream / compact typed stream | reaction 输入需可复现 |
-| BoundaryObservationFact | projection outbox / diagnostics sink | 只读派生，可采样和截断 |
+1. 不执行 `RemoveAt`、`RemoveAtSwapBack` 或存活期 compact。
+2. 删除时写 tombstone，并把 slot 放入 owner-local free-list。
+3. 复用时 generation 递增；generation 溢出显式失败，禁止回绕。
+4. 所有命令校验 ASC identity、slot index 和 generation。
+5. terminal fact/outbox 写入完成后才能回收。
+6. payload/capture range 不能引用会压缩的 companion buffer。
+7. DynamicBuffer 引用不得跨 Job、结构变化或 tick 保存。
 
-为什么这样设计：
+Tag count entry、临时 command 和已 drain fact 没有外部 slot handle时可按各自数据性质整理；“非压缩”专指有长期 identity/引用的生命周期 slab。
 
-1. GAS 一帧内可能由主动技能、被动触发、period tick、stack overflow、death reaction 同时产生 effect；singleton buffer 会把所有 producer 串行化。
-2. NativeStream 解决并行写竞争，但必须配 deterministic merge，否则 battle hash 不稳定。
-3. target-grouped delta 是 Attribute Apply 性能优化的前提，不能在最后一刻再通过 random lookup 写目标。
+## 禁止 Definition -> Entity promotion
 
-必须退出的旧链路：
+Ability Definition 与 GameplayEffect Definition 只能选择语义，不得选择物理 backend。
 
-1. 把 `GEEffectCommandStreamComponent` 当作 scale-ready backbone。
-2. command/spec/delta/fact 全挂单一 stream entity。
-3. 托管 `List<>` merge 作为 Runtime Core 高并发主路径。
+禁止原因：
 
-### 4. Attribute Apply 只允许 target-grouped 权威写
+- slot/entity 混用会让 stacking、inhibition、period、cleanup、hash、Debugger 和 save/replay 各有两条管线。
+- 更改 Definition 配置会改变实例物理语义。
+- 设计配置不应泄露 ECS 存储策略。
 
-目标态中 Attribute 写入集中在 Attribute Reduce / Apply lane。Effect spec 只能生成 modifier/delta record，不直接随机写目标 ASC 的 Attribute buffer。
+Projectile、Aura Volume、Zone 等具有独立 Transform/Physics 生命周期的对象可以创建派生 gameplay Entity，但：
 
-为什么这样设计：
+1. 它们不是 Ability/ActiveEffect authority。
+2. 它们只保存 stable correlation/spawn id。
+3. stack、period、inhibition、granted tag/ability 仍只存 ASC slot。
+4. 派生 Entity 销毁不能代替 slot cancel/remove。
 
-1. Attribute 是高频 gameplay 权威状态，写入必须可排序、可归因、可批量。
-2. random `BufferLookup<AttributeValueBuffer>[TargetAsc]` 在低量 proof 中可用，但规模放大后会破坏 chunk locality。
-3. target-grouped apply 可以让 Debugger 输出 target group count、random lookup count、delta reduce cost 和 dirty owner count。
+## Definition -> Spec -> Active
 
-必须退出的旧链路：
+### Definition
 
-1. instant GE 在 spec loop 内直接写 `AttributeValueBuffer`。
-2. execution output 只排序 modifier record，但仍逐 record random 写 target。
-3. Attribute delta 与 fact 投影共用同一个 singleton cursor。
+Definition 是 immutable Blob，至少独立保存：
 
-### 5. Cue 是 Boundary request，不是 Core entity 引用
+- Application requirement
+- Ongoing requirement
+- Removal rule
+- Immunity query
+- modifier/capture descriptor
+- stacking/overflow/period policy
+- granted tag/ability policy
+- Cue 四阶段 policy
 
-目标态 Cue fact 只表达表现请求：
+禁止把不同 phase 压入一个无 phase 的 requirement range。
 
-```csharp
-public struct CuePresentationRequest
-{
-    public int CueCode;
-    public Entity TargetAsc;
-    public Entity SourceAsc;
-    public int ContextId;
-    public EGameplayCueEvent Event;
-}
-```
+### Spec
 
-Boundary resolver 负责把 `CueCode` 映射到 managed cue pool、resource handle 或 presentation entity。Core fact 不提供 `CueEntity`，也不依赖表现对象存在。
+每次 application 建立 Spec，至少包含：
 
-为什么这样设计：
+- Definition index/version
+- source/target stable identity
+- source activation/effect correlation id
+- level/context/parent context
+- SetByCaller values
+- target data/hit/origin 必要快照
+- capture descriptors 与 snapshot values
+- deterministic sequence/sort key
 
-1. Cue/UI/VFX/SFX 是 Presentation，不应让 Core 等待资源加载或表现对象生命周期。
-2. `CueEntity` 是表现层 identity，不是 gameplay fact identity；Core fact 应使用 `CueCode + ContextId + TargetAsc`。
-3. Headless validation 可以完全跳过表现资源，只验证 cue request counter、sequence 和 replay text。
+Instant Spec 在 apply 后终止；Duration/Infinite Spec 的必要快照进入 ActiveEffect slot。
 
-必须退出的旧链路：
+### Active
 
-1. Core fact 创建 `CueRequestBuffer` 时要求已有 `CueEntity`。
-2. Boundary bridge 因 `CueEntity.Null` 丢弃表现请求。
-3. Runtime Core 直接创建 cue entity 或托管 cue instance。
+ActiveEffect slot 是持续实例唯一权威，至少包含：
 
-### 6. Structural Commit 是唯一结构变化点
+- effect instance id、slot generation、definition index
+- source stable id / source activation id
+- stack key/count
+- Active/Inhibited/PendingRemove flags
+- start/end/next period absolute tick
+- capture/payload range
+- granted contribution ledger
 
-目标态只有 `GASStructuralCommitSystemGroup` 可以提交 Core 结构变化。BoundaryProjection 只能读 fact、写 outbox、写 diagnostics / replay sink，不 record Core structural ECB。
+## Capture 语义
 
-为什么这样设计：
+每个 capture descriptor 显式标记：
 
-1. 结构变化是 sync point 主来源；分散到 Projection 会让性能热点归因失败。
-2. Projection 若能 destroy/spawn Core entity，就不再是只读边界，Replay 和 Debugger 也会变成 runtime 行为的一部分。
-3. 单一 Structural Commit 允许 Debugger 输出每帧 ECB command 数量、来源 lane、playback cost 和 structural hash。
+- Source 或 Target
+- Snapshot 或 Live
+- capture phase
+- source/target 消失时策略
 
-必须退出的旧链路：
+解释：
 
-1. `CueRequestBridgeSystem`、`CueManagedLifecycleSystem`、`ASCDestroyFinalizeSystem` 在 BoundaryProjection 内创建 structural ECB。
-2. 表现 outbox 创建 Core entity。
-3. finalize / cleanup / destroy 跨过 StructuralCommit 延迟到下一帧隐式播放。
+- Source Snapshot：OwnerPlanBuild 为每个计划在 shadow 中计算该计划成功 Commit 后的 capture candidate，只可见同 source 前序 CommitPlan，不可见后序计划或本 tick incoming target Effect；candidate 在 admission 前无权威身份，只有对应 Commit 成功后才由 TargetWave 前的 `SourceSpecProjection` 密封并持久化。
+- Target Snapshot、application requirement 与 immunity：在每条 target application 线性化点解析，可见同目标前序 canonical application 已提交状态。
+- 同 ASC Live：在 target-local stabilization 中以 Attribute revision 更新。
+- 跨 ASC Live：source revision 在 T 生成 destination-grouped dirty command，T+1 由目标 writer 消费；缺少 consumer identity、两端 Generation、source-gone/cycle/budget 任一闭环时 bake fail。
 
-### 7. Fact 拆成 CoreReactionFact 与 BoundaryObservationFact
+禁止把 Live 解释为任意并行 Job 随时随机读取正在写入的 component。
 
-目标态不再用单一 EventBus enum 同时承载 gameplay、AutoChess 业务、Presentation marker、Replay 和 Debugger。
+## Activate / Commit / Cancel
 
-```csharp
-public struct CoreReactionFact
-{
-    public int Sequence;
-    public int ContextId;
-    public ECoreFactKind Kind;
-    public Entity SourceAsc;
-    public Entity TargetAsc;
-    public int Code;
-}
+### Activate
 
-public struct BoundaryObservationFact
-{
-    public int Sequence;
-    public int ContextId;
-    public EObservationFactKind Kind;
-    public int PresentationCode;
-    public int ReplayCode;
-}
-```
+1. 解析 granted ability slot 与 concurrency/instancing policy。
+2. 分配 Activation/Continuation slot 和稳定 ActivationId。
+3. 执行 activation requirements 与 target resolve。
+4. Activate 成功不自动等同 Commit 成功。
 
-为什么这样设计：
+### Commit
 
-1. Core reaction 是 simulation input，必须 deterministic；Boundary observation 是输出，可采样、截断、降频。
-2. AutoChess 业务事件不应污染 GAS framework event taxonomy；业务 marker 应从 Boundary adapter 投影。
-3. Debugger 要区分 reaction count、projection count、presentation outbox count、replay count，不能只看一个 global event length。
+1. 以 ActivationId 关联，并在 Commit 时重新检查 requirement、cost affordability 和 cooldown availability。
+2. Commit 幂等；重复 Commit 返回 `AlreadyCommitted`，不得重复扣费。
+3. CommitPlan 只包含 source-local `Committed state + cost + cooldown + activation-owned contribution`；先全量预检和 infrastructure admission，再一次 no-fail 提交。
+4. 对远端多个 ASC 的 effect application 不是分布式原子事务；必须输出逐目标结果。
+5. Commit failure 输出结构化 reason fact。
+6. Commit 先于 Cancel 时 cost/cooldown 与已 Commit work 保留；Cancel/End 先于 Commit 时后者返回 `Rejected.OwnerEnding`。
 
-必须退出的旧链路：
+### Cancel / End
 
-1. `GameplayEventBusComponent` 同时塞 framework fact、AutoChess fact 和 Presentation marker。
-2. PresentationOutbox / Replay / Cue bridge 直接消费同一 raw fact buffer 且共享 cursor 语义。
-3. legacy EventBus 作为 simulation 主路由。
+1. Cancel/End 以 ActivationId 幂等。
+2. 当 tick立即把 continuation 标记 terminal；迟到 completion 因 generation/state 不匹配被拒绝。
+3. Commit 后退款只能由显式 compensation effect 定义。
+4. 派生 projectile/aura 的物理销毁可延迟，但 gameplay 失效必须立即生效。
+5. Activation 只拥有 activation-owned Tag/Block/Cue/Continuation；普通 emitted application 只作审计，不随 End 自动撤回。只有显式 `RemoveOnActivationEnd` 拥有精确 application/contributor cleanup。
 
-### 8. SourceGenerator 只能生成 pure glue
+## Continuation
 
-目标态 SourceGenerator 输出只能包括：
+Continuation 使用生成的封闭 tagged union，至少包含：
 
-1. Blob schema / catalog / index。
-2. static lookup。
-3. pure evaluator / pure record builder。
-4. baker / bootstrap glue。
-5. validation report。
+- ActivationId / AbilitySlotHandle
+- ProgramCounter / CommitState
+- WaitKind / WakeTick / CorrelationId
+- 固定大小 generated payload 或稳定 payload slot
+
+禁止 arbitrary managed task object、每个 AbilityTask 一个 Entity、无类型可无限扩张 byte blob。并行 task 可使用 child continuation slot，但仍由 owning ASC writer串行修改。
+
+## Target-owned single writer
+
+每 tick 先按 source ASC 形成 `AscOwnerCommandWave`，再按 Target AscStableId 形成 `AscTargetStateWave`。同一 ASC 在每个 wave 内按 canonical key 串行，不同 ASC 可并行；两个 wave 依赖串联。
+
+OwnerWave 只看 tick-start 状态与本 ASC 前序 CommitPlan，不看本 tick 随后到达的 target Effect。TargetWave 在每条 application 线性化点重验 target life、binding、requirement、immunity 与 capture。已 Commit operation 在 source 随后死亡时不撤回，但仍可能被目标以 typed reason 拒绝。
+
+target identity 必须正交声明逻辑 ASC、Avatar binding、空间采样与 `TargetLifePolicy`；`FrozenSpatial` 不是失效 actor 的 fallback。Self 只能来自显式 SelfTarget rule，禁止 implicit fallback-to-owner。
+
+canonical key 必须包含 schema/catalog-hashed `SemanticPhaseOrdinal/WorkClassOrdinal`，不能使用 Job/Profiler lane。通用语义顺序至少固定为 destination maintenance/live dirty → PeriodDue → Expiration → sealed remove/inhibit → committed application；其余稳定 identity/sequence 消除全部并列，相同全序 key 对应不同语义为 validation fault。
+
+禁止多个并行 Job 通过 `BufferLookup` 随机写同一 ASC。跨 ASC 的二次派生 work 默认进入下一 tick；同 ASC 的状态稳定化留在当前 invocation。
+
+## Requirement、Inhibition 与稳定化
+
+- Application requirement：apply 前检查一次。
+- Ongoing requirement：相关 Tag/Attribute version 变化后重评。
+- Removal rule：明确区分 remove request gate 与自动 removal trigger。
+- Immunity：独立 query/result，不复用普通 blocked requirement。
+- Inhibition：保留 ActiveEffect instance，但撤销其有效 modifier/tag/ability contribution。
+
+Tag、inhibition、aggregator 之间必须在同 target、同 tick稳定后才输出最终事实。使用显式 work queue、依赖 version 和 cycle/operation budget；检测到循环或预算溢出必须失败并给 evidence，禁止固定 pass 次数后静默截断。
+
+## Stack / Overflow / Period
+
+1. stacking key 显式包含 aggregate policy 所需 source/target/definition/stacking id。
+2. overflow 输出 accepted/rejected/overflow-effect 明确结果。
+3. duration、period 使用整数 absolute tick；不为所有 effect 每 tick递减剩余时间。
+4. inhibition 时 period 的 pause/continue/reset 由 Definition 指定。
+5. missed period 的 skip/single/catch-up 策略由 Definition 指定。
+6. tick-start 已到期的 owner-local PeriodDue 在 DueTick 同 tick 执行；若 DueTick 与 EndTick 相同，Definition 必须明确先 period 还是先 expiry。
+7. post-apply/overflow/reaction 动态 child 与跨 owner 派生 work 默认进入下一 tick；静态闭合有界 DirectEffectProgram 不受此规则影响。
+8. execute-on-apply、payload replacement、refresh/reset、final period、inhibit/resume、missed-period 与 self-remove guard 均为独立 policy。
+9. timing index 可以作为可重建加速结构，不能成为第二 authority。
+
+## Attribute Aggregator
+
+1. Effect apply/remove/inhibit/stack 只更新 contribution 与 dirty state。
+2. owning ASC 统一按稳定 channel/key 顺序 recompute。
+3. Add/Multiply/Divide/Override channel 顺序和 override tie-breaker 固定。
+4. 浮点 reduce 使用确定性顺序。
+5. Attribute Base/Current、Pre/Post hook、meta attribute 和最终 fact 从单一 apply lane产生。
+6. 禁止 Instant、Execution、ActiveEffect 各自直接写最终 CurrentValue。
+
+## Death crossing 与 terminal resolve
+
+Death 是 Attribute apply 的同 target invariant，不是下一 tick reaction。第一次 `old Health > 0 && unclamped result <= 0` 必须冻结 RequestedDelta、Pre/PostClamp、UnclampedResult、EffectiveDelta、KillingApplication/Contributor/Causality 与 DeathTransitionId，并写不可行动 lifecycle latch。
+
+致死 application 完成自身全部已 admission 节点；同 canonical range 后续 `AliveOnly` application typed reject，不能覆盖 killer，也不产生 applied damage、overkill 或 assist。所有 target job结束后，StableFactMerge 中的唯一 TerminalResolve 才按 BattleInstance稳定规则裁决双杀/平局；单位死亡不自动终止整个 Session。
+
+## TagCount
+
+Tag authority 是按 TagIndex 的 count，不是 presence bit：
+
+1. grant/remove 更新 tag 与预计算 ancestor chain count。
+2. `0 -> 1` 设置派生 presence mask，`1 -> 0` 清除。
+3. underflow、overflow、重复撤销显式失败。
+4. Effect contribution ledger 以 EffectInstanceId/generation保证恰好撤销一次。
+5. presence mask 只作 query cache，不是第二事实源。
+
+## tick 语义分类
+
+“reaction 默认下一 tick”不包含状态稳定化。
+
+### 当前 tick 必须完成
+
+- tick 开始前已进入 ingress 的 Activate/Commit/Cancel。
+- Commit 二次检查、owner-local cost/cooldown 和已解析 target application。
+- TagCount、ongoing requirement、inhibition、aggregator 稳定化。
+- Cancel 对 continuation 的 terminal 标记。
+- 被声明为 lifecycle safety 的 threshold cancel/end。
+- 最终 Core fact 生成。
+
+### 默认下一 tick
+
+- target-owned apply 中新产生的跨 ASC reaction。
+- post-apply/overflow/reaction 动态 child work。
+- 一般 Tag/Attribute event-triggered ability。
+- 当前 tick才授予的新 Ability 的自动激活。
+- kernel 执行中才到达的 completion。
+
+任何例外必须写进 Definition/Runtime contract 和测试，不得依赖 System 恰好排序。
+
+tick-start 已存在的 PeriodDue 是当前 tick 工作，不属于上表的动态 child。跨 ASC Wait 的 sample/register 由 observed writer 线性化；completion 可以在 emit tick 产生，但 Continuation resume 统一最早 T+1。
+
+## 标准 EndFixed 与 Entity 可见性
+
+1. ASC grant/remove ability/effect、commit/cancel、TagCount、Attribute、Aggregator、Outbox 都是非结构写。
+2. ECB 只处理 ASC、Avatar、projectile、aura 等真实 Entity 生命周期。
+3. EndFixed 创建的 Entity 不参与当前 Kernel，最早下一 simulation tick成为 Core 输入。
+4. Core 不得让 Activate/Commit 成功依赖当 tick新建 Entity可查询。
+5. Cancel 必须设置立即失效状态；如果 Physics 可能在 playback 前运行，物理系统也必须读取该状态。
+
+## ASC destroy 与 Drain 交接
+
+ASC outbox 使用 `ICleanupBufferElementData`，允许权威 ASC 在写完 terminal fact 后于同 tick EndFixed 销毁，而不丢失边界事实：
+
+1. tick N：停止接收 gameplay work，完成 slot/dependency/subscription cleanup，把 terminal fact 写入 `BoundaryFactBuffer`，并向标准 EndFixed 记录 `DestroyEntity`。
+2. EndFixed：普通 Component/Buffer 被移除；cleanup buffer 保留，Entity 变成不具备 `GasAscIdentity` 的 cleanup shell。
+3. post-Fixed Drain：collect/sort 后由 managed staging 以 BatchId/InFlightWatermark 幂等接管；接管成功只清 `<=InFlightWatermark`，late tail保留，无 tail才把 shell标记为 `BoundaryDrainState.Accepted`。
+4. 下一正常 tick 的 Kernel cleanup prepass 为 Accepted shell 记录本 tick 标准 EndFixed cleanup removal；post-Fixed Drain 不创建跨 batch 等待的 ECB。
+5. 若 shutdown 后没有下一 tick，只能在完整 Tick DAG 与 EndFixed 结束、FinalDrain 成功接管并完成全部 producer 后，由 teardown 直接移除 cleanup state。
+
+Registry/liveness 只能检查 `GasAscIdentity` 与 Generation，不能因 `EntityManager.Exists(shell)` 为真而把 shell 当成业务 ASC。
+
+## Boundary 单 Drain 与 immutable ring
+
+每条 Boundary fact 至少包含，且按 identity scope恰写一个物理 outbox owner（ASC-scope→ASC，Battle/Session-scope→Session）：
+
+- SimulationTick
+- BattleInstanceId / owner ScenarioUnitId
+- FactScopeKind / ScopeStableId / ScopeGeneration
+- `FactPlane=Gameplay/TeardownAudit`
+- SemanticPhaseOrdinal / WorkClassOrdinal
+- EventKind / semantic code
+- source/target stable id + generation
+- `BoundaryEventId=(Epoch, PhysicalOwnerKind/Id/Generation, OwnerSequence)`
+- 可选 `CueLifecycleKey=(Epoch, ActiveEffectHandle, ActiveCycleOrdinal, CueDefinitionOrdinal)` 或独立 ExecutedCueKey
+- AvatarBindingGeneration 或空间快照
+
+`GasBoundaryDrainSystem` 是唯一 ECS consumer，并执行三类互斥 query：有 `GasAscIdentity` 的 live ASC、有 `GasSessionIdentity` 的 live Session、两种 live identity都没有但保留 `BoundaryDrainState` 的 cleanup shell。禁止仅用 `WithNone<GasAscIdentity>` 判 shell：
+
+1. 在 FixedStep catch-up 完成后收集 dirty ASC/Session scoped owner。
+2. 对本次稳定 source range冻结 `BatchId/per-owner InFlightWatermark`，并按 `(EventId.Epoch, Tick, FactPlane, ScopeKind, ScopeStableId, ScopeGeneration, SemanticPhaseOrdinal, WorkClassOrdinal, EventId)` 排序。物理 owner 的 `NextOwnerSequence` 在 Accepted→Idle 后仍持久单调，不从 buffer 重建。
+3. managed staging 整 batch 预留并取得唯一所有权；失败时 ECS outbox 原样保留。
+4. Accepted 后只清各 source `EventId.OwnerSequence <= InFlightWatermark`；live tail保留并回到 Pending，空 dead shell需以 physical owner/range 显式 NoFactReceipt，不伪造 Battle scope。随后标记可清理 shell，并发布 ring或机器可读 DroppedRange/Fatal receipt。
+5. UI、Cue、Replay、Debugger、Headless validation 只消费 batch，不读取 ECS DynamicBuffer。
+
+v1 不在 Core 实现 per-consumer ack：同步 consumer 在 batch 生命周期内读；异步 consumer复制自己的队列；Replay 自行持久化；late join 通过 snapshot reconcile。
+
+Overflow：Validation/Headless 必须失败；Presentation 记录 dropped range并触发 snapshot reconcile；禁止静默丢弃或让 Core 等最慢 consumer。
+
+Battle result 分两层：`FactPlane=Gameplay` 事实已被 managed staging 接管后冻结 `BattleOutcomeSnapshot/BattleHash`；Session teardown audit 后才返回最终 ValidationResult。`FactPlane=TeardownAudit` 事实仍交付 Cue/Replay/Validation，但不改变 winner/BattleHash；它仍可按 Asc/Battle/Session identity scope 路由，不是第四种 ScopeKind。Result 返回后不得再产生事实。
+
+## Cue 四阶段
+
+Core 输出：
+
+- OnActive
+- WhileActive
+- Executed
+- Removed
+
+约束：
+
+1. `EventId` 表示一次投递；持续 Cue 使用包含 active-cycle identity 的 lifecycle key关联 OnActive/WhileActive/Removed。
+2. Cue request 使用 CueCode、stable source/target、context、parameters 与 avatar binding generation。
+3. Core 不创建/保存 Cue Entity、GameObject、resource handle 或 managed cue instance。
+4. managed consumer负责 definition resolution、pool、resource 和生命周期。
+5. Headless消费同一 batch，但不加载表现资源。
+6. Duration Cue 的 lifecycle key 包含 Epoch、ActiveEffectHandle、ActiveCycleOrdinal 与 CueDefinitionOrdinal；inhibit 撤销当前 cycle，reactivate 开启新 cycle。
+7. Executed 使用 ApplicationId 或 PeriodExecutionId；stack refresh 默认不开新 lifecycle cycle，BoundaryEventId 仅表示单条交付。
+
+## SourceGenerator 边界
+
+允许输出：
+
+- immutable Blob schema/catalog/index
+- static lookup
+- pure evaluator/record builder
+- closed tagged-union continuation payload
+- baker/bootstrap glue
+- validation artifact
 
 禁止输出：
 
-1. `ISystem`、`OnUpdate`、SystemGroup registration。
-2. `EntityManager` write。
-3. hidden query / hidden ECB。
-4. NativeContainer owner。
-5. gameplay lifecycle owner。
+- `ISystem` / `OnUpdate` / SystemGroup registration
+- query、ECB、NativeContainer owner
+- EntityManager write
+- Ability/ActiveEffect lifecycle
+- target-owned writer或 Boundary consumer
 
-为什么这样设计：
+Luban 是 authoring 语义唯一权威，编译后的 immutable Blob 是 Session 内运行快照。SourceGenerator 不得以 overlay/default 方式补写或覆盖 GE/Ability 语义；重复字段、非法 enum/range、缺失 provenance 与冲突 policy 必须 bake fail。
 
-1. 生成器适合扩大配置覆盖面，不适合隐藏 runtime 时序 owner。
-2. 纯函数生成物可被 Burst、unit test、static validation 和 code review 复核。
-3. lifecycle system 由手写 Runtime Core 拥有，才能稳定维护依赖、query、job、ECB、Debugger counter 和 profiling label。
+## 一次性切换规则
 
-必须退出的旧链路：
+1. v1 使用独立集成分支完成 V1-V4，删除门通过前不合入稳定分支。
+2. 不提供 old/new runtime selector、Definition backend flag 或兼容 fallback。
+3. 新 Catalog schema、handle 和 batch protocol一次版本提升。
+4. 旧 runtime types 可在集成分支短暂存在以支持编译迁移，但不得同时注册、同时写权威状态或进入发布构建。
+5. 任一旧权威需要暂留时，任务状态只能是 blocked，不能标记兼容完成。
 
-1. generated `AbilityCatalogCommitSystem`。
-2. generated `GEEffectSpecBuildSystem`。
-3. generated `GASAttributeSetReduceApplySystem`。
-4. generated `GASActiveEffectMutationApplySystem`。
+## 目标删除门
 
-### 9. Debugger 是证据系统
+Release candidate 必须同时满足：
 
-目标态 Debugger 必须输出证据，而不是参与 runtime 控制：
+1. 五个旧 GAS physical group与自定义 Begin/End Structural ECB 无运行注册。
+2. `GEExecutionCalculationExtensionSystemGroup` 无运行注册。
+3. Ability Entity archetype、`AbilityStateComponent`、`AbilitySlotBuffer<Entity>` 和 Ability request marker退出运行链。
+4. `LegacyGameplayEffectEntityBuffer`、legacy GE runtime entity factory与 legacy execution system退出运行链。
+5. ActiveEffect global index/bucket/stable row不再是 authority；不存在 slot/global双写。
+6. ActiveEffect/Ability/Continuation slab无 compact/remove-at。
+7. EventBus 不再混合 Core command、reaction、observation 与 presentation。
+8. Cue bridge不再要求 CueEntity。
+9. AutoChess不直接更新旧 group，不注册自定义 Core damage System。
+10. Boundary consumer不直接访问或清 ECS fact buffer。
+11. Runtime public/boundary protocol无 raw Entity、World、EntityManager、NativeContainer。
+12. SourceGenerator 无 lifecycle/query/ECB owner。
 
-| 证据 | 必须回答的问题 |
----|---|
-| capability counter | Shell / Boundary 是否越权 |
-| stream pressure | 哪个 frame-local carrier 退化 |
-| random lookup counter | 哪个 lane 仍未 owner-local / chunk-local |
-| structural counter | 哪个 lane 产生结构变化 |
-| timing split | Core / Boundary / Presentation / Runner 热点 |
-| official diff | DOTS Profiler / Entities Journaling / Burst / PackageCache 依据是否覆盖 |
+## 验收门
 
-为什么这样设计：
+### 语义
 
-1. GAS 的复杂性来自多阶段数据流，普通日志无法证明性能热点。
-2. Debugger 若和 Core 写路径混在一起，会污染性能归因。
-3. 结构化 evidence 可以驱动验收和任务拆分，而不是靠主观判断“跑通了”。
+- Activate/Commit 二次检查、Commit幂等、失败无部分 cost/cooldown。
+- Owner/Avatar rebind 不改变 ASC authority，旧 Avatar Cue 不播放到新 Avatar。
+- Source/Target × Snapshot/Live capture 四组合。
+- application/ongoing/immunity、inhibit/reactivate、cycle detection。
+- stacking by source/target、overflow、period pause/reset/catch-up。
+- TagCount 多来源 grant/remove。
+- Aggregator稳定顺序、override tie-breaker与 hook。
+- Cue 四阶段与 lifecycle key。
+- stale slot/activation/effect handle在复用后拒绝。
 
-## 破坏性迭代门槛
+### 调度与结构
 
-这些门槛按顺序成立，才认为旧链路真正退出。
+- 独立 World和 Headless runner均实际执行标准 EndFixed。
+- ECB-created Entity不参与当前 Kernel。
+- terminal fact 在 ASC destroy 前写入 cleanup outbox，并在 EndFixed 后由 live ASC 或 cleanup shell 完成 staging 接管。
+- Kernel无 phase间 `Complete()`、无跨 System scratch、无跨 ASC随机并行写。
+- 同一输入采用不同 bounded TickBatch 切分仍得到同一 semantic order/hash。
 
-| 顺序 | 门槛 | 通过条件 | 为什么排在这里 |
----|---|---|---|
-| 1 | Shell 收权 | 外部业务无法取得 `World`、`EntityManager`、raw `Entity`、runtime singleton、可写 buffer | 不先收权，后续任何 Core 规则都可能被业务层绕过 |
-| 2 | CommandPort 统一入口 | Ability / GE / Destroy / Debug toggle 等外部意图都写 command record 或 capability request | 统一入口后才能统计输入规模和 blocking reason |
-| 3 | Target Resolve lane | ability activation 输出 `AbilityTargetRecord`，不再使用托管 TargetCatcher 主链 | 没有 target record，就无法实现 target-grouped effect/apply |
-| 4 | Frame Kernel carrier 替换 | Effect command/spec/delta/fact 主链从 singleton DynamicBuffer 迁到 NativeStream / target-grouped range | 解决 fan-in 热点和确定性 merge |
-| 5 | Attribute Apply 重构 | hot path 不再逐 spec random 写 target attribute buffer | 这是主要性能收益点，也是业务数值权威点 |
-| 6 | Cue / Presentation 分离 | Core fact 只输出 cue code / marker；Boundary resolver 负责 managed cue | Headless、Replay、Presentation 解耦 |
-| 7 | StructuralCommit 唯一化 | BoundaryProjection 不再创建 structural ECB | 消除 Projection 写 Core 和跨帧 playback 泄漏 |
-| 8 | Fact 分流 | CoreReactionFact 与 BoundaryObservationFact 拆分 | 防止 UI / replay / demo marker 进入 simulation 输入 |
-| 9 | SourceGenerator 收权 | generated runtime 不含 `ISystem` / query / ECB / lifecycle owner | 保证 runtime schedule owner 可审查 |
-| 10 | Debugger evidence gate | 每个 lane 有 counter / timing / carrier pressure / structural source | 用证据驱动后续优化，而不是靠功能跑通判断 |
+### Boundary
 
-## 验收口径
+- 多 FixedStep catch-up不丢 tick。
+- 多 consumer读取同一 immutable batch。
+- ring overflow按 profile显式失败或重同步。
+- Headless无 Presentation时仍 Drain。
 
-目标态验收时，以下任一命中都视为失败：
+### 确定性与性能
 
-1. Application Shell / Demo / UI / AI / Network 可取得 `EntityManager`、`World`、raw `Entity` 或可写 `DynamicBuffer`。
-2. Target Resolve 仍依赖托管 `TargetCatcherBase` 或 `GameObject` 直接裁决 GAS 目标。
-3. Effect/spec/delta/fact 主链仍以 singleton DynamicBuffer 作为 scale-ready backbone。
-4. Attribute Apply hot path 仍逐 record 使用 random `BufferLookup` 写 target。
-5. BoundaryProjection 内 record Core structural ECB。
-6. Cue request 依赖 Core 提供表现层 `CueEntity`。
-7. CoreReactionFact、BoundaryObservationFact、Presentation marker 和 Replay log 仍共用一个业务 enum / global EventBus。
-8. SourceGenerator 输出 runtime lifecycle system、hidden query、hidden ECB、NativeContainer owner 或 `EntityManager` write。
-9. Debugger 无法按 Core / Boundary / Presentation / Runner 拆分 timing 和 counters。
-
-## 历史方案定位
-
-本 Spec 吸收“业务层（OOP Shell）/ 适配层（Thin Adapter）/ Debugger 日志系统 / ECS GamePlay 核心层 / Luban + SourceGenerator 数据配置层”的方向，但对其进行收权：
-
-1. Thin Adapter 不再是万能 ECS facade，只能是 capability implementation。
-2. Debugger 不只是日志系统，而是 evidence owner。
-3. ECS GamePlay 核心层不接受 OOP 中间层和 generated lifecycle owner。
-4. Luban + SourceGenerator 的性能价值体现在 immutable catalog、static lookup、pure glue 和 validation artifact，而不是批量生成 Runtime System。
+- 相同 seed/input重复运行 semantic hash一致；hash 排除 raw Entity、batch 切分、wall clock、Profiler/Journaling 与表现截断。
+- 输入物理顺序变化后 canonical merge结果一致。
+- replicated groups、hot-target fan-in、period burst、mass-death teardown、Boundary retry、wait fanout 与 cross-ASC live dirty profile 通过。
+- Profiler/Journaling分别归因 Kernel、EndFixed、Drain和 managed consumer。
+- 不能用旧五组 timing、字符串日志或单次 x50替代完成证明。

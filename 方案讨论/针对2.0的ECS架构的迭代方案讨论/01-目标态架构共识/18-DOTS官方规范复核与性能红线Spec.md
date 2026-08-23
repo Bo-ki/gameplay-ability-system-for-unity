@@ -1,219 +1,223 @@
-# DOTS 官方规范复核与性能红线 Spec
+# 18：DOTS 官方规范复核与性能红线 Spec
 
-## 目的
+> 精确基线：Unity 6000.3 / Entities 1.4.6（以仓库官方快照为证据）
+> 状态：v1 架构复核门
+> 重要：本文件不修改、不替代官方快照；所有 EX-GAS 选择均标明为项目裁决
 
-本 Spec 用 `../../UnityDOTS官方文档参考/主题/` 下的官方规则重新审查 EX-GAS 2.0 新划分设计。结论不是重画分层图，而是把分层图压成可执行、可审查、可拒绝的 DOTS 目标态硬约束。
+## 1. 结论
 
-本文件只讨论 GAS Runtime 架构，不讨论 Editor authoring 实现、不记录当前代码命中、不写迁移进度。
+收敛方案符合 DOTS 的数据布局、依赖、allocator、ECB 与 cleanup 生命周期机制，但“FixedStep/PostPhysics、一个 Group/Kernel、整 Tick admission、ASC slab、same-tick 边界、语义全序、scoped ASC/Session outbox、ScaleProfile”都不是 Unity 官方自动给出的 GAS 答案，而是 EX-GAS v1 的项目决策。
 
-## 复核结论
+审查时必须区分三种证据：
 
-新的四层划分方向成立，但成立条件必须收紧：
-
-1. 四层是工程职责边界，不是自定义 runtime 抽象；Layer 3 必须直接落在 Unity Entities `World / SystemGroup / ISystem / Job / EntityQuery / ECB / Blob / DynamicBuffer` 上。
-2. OOP Shell 和 Runtime Boundary 可以存在，但只能作为 capability 外壳；它们不能成为 gameplay 计算中间层，也不能暴露 `World`、`EntityManager`、`Entity`、`EntityQuery` 或可写 `DynamicBuffer`。
-3. Runtime Core 不能为了 GAS 概念完整性牺牲 DOTS 物理规则。Ability、GameplayEffect、Attribute、Tag、Cue 必须先按数据性质分类，再选择承载。
-4. Luban + SourceGenerator 的价值是生成 immutable catalog、unmanaged lookup、static pure glue 和 validation artifact；不是生成 lifecycle system、hidden query、hidden ECB 或 NativeContainer owner。
-5. Debugger 的目标是性能证据和 DOTS API 健康度归因；字符串日志只是导出格式，不能替代 Profiler / Journaling / counters / API health evidence。
-
-## 官方依据矩阵
-
-| 官方主题 | 规则族 | 对新划分的强制结论 |
+| 等级 | 含义 | 能否直接作为 EX-GAS 设计 |
 |---|---|---|
-| `01-Entities系统与World.md` | `SYS-*` | Runtime Core 权威计算必须在 ECS System / Job；SystemGroup 只表达物理 phase，不按业务目录膨胀 |
-| `02-查询遍历与Job.md` | `QRY-*` `JOB-*` | hot path 默认 `IJobEntity` / `IJobChunk`；`SystemAPI.Query` 主线程遍历只能用于 Debugger、Boundary 小规模读取或 proof-only |
-| `03-结构变化-ECB-Enableable.md` | `SC-*` `ECB-*` `EN-*` | 结构变化只进 `GASStructuralCommitSystemGroup`；Enableable 只作整 entity / chunk skip cache，不替代局部 slot 状态 |
-| `04-数据承载-Buffer-Chunk-Store.md` | `BUF-*` `STORE-*` | Buffer 必须有 owner、容量、清空 phase、pressure counter；全局 singleton buffer 只能 proof-only |
-| `05-Baking-Blob-Prefab-Content.md` | `BAKE-*` `BLOB-*` `CONTENT-*` | 静态 definition 默认 Blob / Baker / Bootstrap；Runtime hot path 不反查 managed row / JSON / ScriptableObject |
-| `06-Diagnostics-Profiler-Journaling.md` | `DBG-*` | Debugger 只能采集 evidence；不得成为 runtime 控制层或 gameplay event bus |
-| `09-Burst-编译-向量化-AOT.md` | `BUR-*` | Runtime hot path 必须能 Burst；托管 delegate、managed registry、SystemBase 中间层不进入 Core |
-| `10-Collections-Allocator-NativeStream.md` | `NAT-*` | NativeContainer owner、allocator、dispose / rewind 和 merge order 必须显式声明 |
-| `13-DOTS编写规范与性能陷阱.md` | `PRF-*` | 禁止高频结构变化、随机 lookup 写、tag component 状态爆炸、临时 query、未归因 sync point |
-| `20-GASRuntimeCore-API选型基线.md` | `SEL-*` | 每个 Runtime Core 任务必须先交 API 选型表、拒绝理由和重新选型触发条件 |
+| 官方事实 | 精确 Package 文档/源码说明的 API 行为与限制 | 只能证明机制 |
+| 项目裁决 | 本仓库针对 GAS 语义与规模的唯一选择 | v1 必须遵守 |
+| Profile 结论 | 目标硬件与代表场景的测量结果 | 决定容量、算法与数值门槛 |
 
-## 四层划分复核
+禁止把项目裁决包装成“DOTS 官方要求”，也禁止用官方 API “允许”反推某方案适合本项目。
 
-| 层级 | 复核结论 | 必须保持的 DOTS 边界 | 违规则退回 |
-|---|---|---|---|
-| Application Shell | 保留是合理的 | 只表达业务动作、UI/AI/Network/Demo 意图和观察消费 | Shell 直接持有 ECS 可写句柄、计算 damage/cooldown/requirement |
-| Runtime Boundary | 保留是必要的 | command capability、snapshot capability、diagnostics capability、bootstrap/definition capability 分离 | 万能 Adapter 混合 command、snapshot、EntityManager、Debugger、Catalog 生命周期 |
-| GAS Runtime Core | 必须是唯一 gameplay 权威 | 少量 physical SystemGroup + kernel lane；`ISystem` / Burst job / owner-local data / deterministic stream | OOP facade、SystemBase manager、每个 GAS 概念一个 group、每帧 runtime GE entity churn |
-| Definition & Generation | 必须收权 | Blob catalog、generated lookup、static pure glue、Baker / Bootstrap、validation report | generated lifecycle system、hidden query、hidden ECB、managed config lookup、runtime `BlobBuilder` |
+## 2. v1 最终裁决
 
-## Runtime Core 性能红线
-
-以下红线命中时，目标态不成立，不能用“兼容旧链路”“先跑通业务”或“后续优化”豁免：
-
-1. Runtime Core hot path 依赖 managed component、managed shared component、managed config row、JSON reader、`Dictionary`、delegate registry 或 `ScriptableObject`。
-2. Ability / GE / Cue / Tag 的瞬时状态默认创建 entity，并在本帧销毁，导致 entity churn。
-3. Target Resolve、Effect Fan-In、State Evaluate、Attribute Apply、Gameplay Fact、Boundary Projection 中直接执行 `EntityManager` 结构变化。
-4. SourceGenerator 生成 `ISystem`、`SystemBase`、`OnUpdate`、system registration、`SystemAPI.Query` owner、ECB owner、`EntityManager` write 或 NativeContainer owner。
-5. Debugger 在 Runtime hot loop 中拼字符串、装箱、写托管日志对象，或把日志总线作为 simulation 路由。
-6. 大容量 fan-in 固化为全局 singleton DynamicBuffer，且没有 `NativeStream` / per-owner range 的拒绝理由和重新选型触发条件。
-7. Attribute Apply 通过高频跨 entity `ComponentLookup` / `BufferLookup` 随机写实现，且没有唯一写证明或 target-grouped 替代方案。
-8. Enableable 被当成任意 boolean 状态开关，而不是 profiler 证明后的 query skip cache。
-9. `SystemAPI.Query` 主线程遍历被用于可规模化 Runtime Core hot path。
-10. 新增 SystemGroup 只是为了业务目录清晰，而不是因为存在新的同步、结构变化、固定步或投影物理边界。
-11. Runtime Core 新增或保留 `IAspect` 包装作为目标态 API；Entities 1.4.6 下统一改为直接 component 访问和明确 query contract。
-
-## Headless Pure Logic Strict Budget
-
-无头验证只移除真实资源和画面成本，不代表游戏帧预算全部留给 Runtime Core。目标态把 AutoChess headless performance pass 作为纯逻辑硬门，预算必须显著低于 60 FPS / 30 FPS 整帧预算：
-
-| Budget 项 | 目标阈值 | 说明 |
-|---|---:|---|
-| measured average tick | <= 1.500ms | performance pass 的端到端逻辑 tick 平均值 |
-| GAS tick average | <= 1.500ms | 5 段 GAS physical group 总和平均值 |
-| GAS tick max | <= 3.000ms | 单 tick 峰值必须保留真实渲染/表现余额 |
-| CoreRuntime owner average | <= 1.000ms | FramePrepare + CommandResolve + CoreSimulation + StructuralCommit |
-| CoreSimulation average | <= 0.900ms | Ability / GE / Attribute / ActiveEffect / Fact 权威计算主预算 |
-| Boundary owner average | <= 0.350ms | Projection / Cue / Replay / Presentation outbox 不能吞掉 Core 预算 |
-| Runner owner average | <= 0.150ms | runner job drain / shell sync 只能是极小成本 |
-| performance observation pollution | 0 | performance pass 不得触发 Debugger observation materialization |
-
-验收规则：
-
-1. `headlessLogicBudgetPassed` 必须参与 AutoChess headless validation 的硬门；业务链路通过但预算失败时，结论是“功能通过 / 性能不达标”。
-2. `performanceExcellentPassed` 必须同时满足 strict budget 与 Profiler evidence；Profiler disabled、Entities profiler modules 未采集或只有字符串日志时，不得写成性能优秀。
-3. Debugger diagnostic pass 可以很重，但必须独立归因到 Debugger / Observation owner，不得并入 performance pass，也不得用 diagnostic pass 的平均耗时替代纯逻辑预算。
-4. x50 只是最低真实业务门；x100 / x1000 必须输出同构预算字段和 scale blocked reason。x10w / x100w synthetic 只能用于压力曲线，不得替代真实 x50/x100/x1000 业务链。
-5. 达不到预算时，报告必须输出 failure mask、owner split、TopN 热点和下一任务 owner；不能只输出 `passed=false`。
-
-这些阈值不是脱离 DOTS 原理的纸面数字。每次性能结论还必须给出以下 principle vector，用来解释预算为何通过或失败：
-
-| Principle vector | 必填 evidence | 优化判断 |
+| 主题 | v1 决策 | 性质 |
 |---|---|---|
-| Workload-normalized cost | units、measured ticks、commands per tick、facts per tick、us per unit / command / fact | 判断耗时是否随业务规模按预期线性增长 |
-| Chunk locality | owner group count、max owner range、chunk iteration count、enabled mask 分布 | 判断数据是否按 ASC / target owner 聚合，而不是跨 owner 随机访问 |
-| Lookup pressure | `ComponentLookup` / `BufferLookup` refresh、GetComponentDataRW / GetBufferRW TopN、random lookup counters | 判断是否需要 owner-local range、NativeStream merge 或 component layout 重选型 |
-| Buffer pressure | peak length、capacity、externalized / spill / overflow、stream carrier warning | 判断 DynamicBuffer carrier 是否还是 proof-only 或容量不足 |
-| Structural phase | ECB command count、required / recorded playback、Journaling structural records、playback ms | 判断结构变化是否集中且成本可控 |
-| Sync / materialization | dependency drain ms、`ToEntityArray` count、query materialization count、performance pollution count | 判断 Debugger / Boundary / Runner 是否污染 Core 性能 |
-| Burst / managed boundary | Burst coverage、managed allocation、SystemBase / managed callback 命中 | 判断 hot path 是否保持 Burst-friendly |
+| 时间域 | FixedStep；一渲染帧 `0..N` Tick；整数 `SimulationTick` | 项目裁决 |
+| 位置 | `GasFixedTickSystemGroup` 是 FixedStep 直接子组，`UpdateAfter(PhysicsSystemGroup)` | 项目裁决 |
+| Physics | GAS 默认 PostPhysics；本 Tick物理结果供 GAS，本 Tick GAS 物理写影响下一 Physics Tick | 项目裁决 |
+| 多 PhysicsWorld | 不把全局 GAS 放 `AfterPhysicsSystemGroup`，避免在 custom physics group 中复制 GAS | 项目裁决，依据 Physics 组机制 |
+| 系统形态 | 一个 `GasFixedTickSystemGroup` + 必装纯 `GasCommandIngressSystem` + 一个 `GasTickKernelSystem` | 项目裁决 |
+| Job | Kernel 内一个连续 Job DAG；lane 不等于 System；所有边为 JobHandle 依赖且无 phase Complete | 项目裁决 |
+| Kernel DAG | `Gather/TickStartSnapshot + PlanExpandScratchProvision -> OwnerPlanBuild -> TargetResolve/Expand -> WholeTickInfraAdmission -> AscOwnerCommandWave -> SourceSpecProjection -> GroupByTarget -> AscTargetStateWave -> Stabilize/Death -> StableFactMerge/TerminalResolve -> GroupNextTickRouteByDestination -> BoundaryProject -> Record EndFixed` | 项目裁决 |
+| scratch | `SystemState.WorldUpdateAllocator`；项目可用期仅当前 GAS Tick | API + 更严格项目约束 |
+| 容量 | 生成上界驱动整 Tick admission；失败时 gameplay 权威零写并 Fault；IBC 不是逻辑 capacity | 项目裁决 |
+| 结构变化 | 标准 `EndFixedStepSimulationEntityCommandBufferSystem` | 项目裁决 |
+| Session | 一 World 一个 active Tick domain；Spawn Pending/Ready 只保证 gameplay 可见性原子，不承诺 ECB 回滚 | 项目裁决 |
+| ASC 状态 | Attribute/Tag 固定逻辑长度 Buffer；Ability/Activation/Continuation/Subscription/Contribution/Effect/Payload/Aggregator/LiveDependency non-compacting slab/range | 项目裁决 |
+| 稳定化 | target 间并行、target 内单写并求稳定态；不收敛 fatal | 项目裁决 |
+| 顺序 | schema/catalog-hashed SemanticPhaseOrdinal/WorkClassOrdinal；不得使用 physical Job lane | 项目裁决 |
+| source/target | committed-work-wins；`TargetLifePolicy` 在每条 application 线性化点检查 | 项目裁决 |
+| reaction | same-tick 仅 closed/finite/bounded pre-apply DAG；普通 Fact reaction 下一 Tick | 项目裁决 |
+| Boundary | scoped ASC/Session Cleanup Buffer + 每 fact唯一 owner + 两阶段 single managed drain；receipt 后只清 accepted prefix，shell 由下一 Kernel prepass清理 | 项目裁决 |
+| 数值门 | 无通用硬编码容量/耗时；由版本化 ScaleProfile 决定 | 项目裁决 |
 
-## GAS 业务链路复核
+## 3. 官方机制对照
 
-| 业务链路 | 目标态承载 | 为什么这样设计 | 拒绝的旧做法 |
-|---|---|---|---|
-| Ability 激活 | Boundary request / command record -> Core activation lane | Shell 只提交意图；cost、cooldown、tag requirement 在 Core 数据流中统一判定 | OOP Ability facade 直接调用 effect / attribute service |
-| TargetData | request-owned buffer / frame-local target record / deterministic sort key | target resolve 是可并行、可复现的 Core lane，不是托管回调 | 托管 TargetCatcher、GameObject list、delegate callback |
-| Instant GE | `GECommandSeedRecord` -> spec / modifier / attribute delta / fact | 瞬时效果不需要跨帧 identity，避免 entity churn 和结构变化 sync | instant GE runtime entity create/destroy |
-| Duration GE | owner-local active slot buffer + lifecycle flags + cleanup path | 跨帧状态属于 ASC owner，周期、堆叠、过期可线性遍历 | 每个 active effect 一个托管对象或不受控 entity |
-| Attribute Apply | target-grouped delta reduce + authority write | 写入集中到目标 ASC，减少 random lookup 和竞态 | 每个 spec 随机写目标 component |
-| Gameplay Tag / Status | bit field / enum / generated tag mask；Enableable 只作 skip cache | 高频 tag/status 不做 Add/Remove component | 每个状态一个 tag component 或 enableable component |
-| Cue / Presentation | Boundary outbox / observation fact | 表现是派生 side effect，不决定 gameplay | Cue entity 反向持有 GameObject / VFX 资源并参与 Core |
-| Debugger | sampled counters / Native evidence / official diff | 诊断输出性能热点、API health 和事实链 | Runtime 中央 Logger / EventBus |
+### 3.1 System / Group / FixedStep
 
-## API 选型门槛
+官方机制允许用 `UpdateInGroup`、`UpdateBefore`、`UpdateAfter` 表达组内顺序，固定步进组可在一次 world/render 更新中追赶多次，也可能不更新。System 有固定调度成本，因此拆分需要权衡。
 
-每个 Runtime Core 任务开始前必须交付以下表格；缺一项则不得实现：
+EX-GAS 推论：统一的整数 Tick 与一个 Kernel 可以消除渲染帧假设和过多 System 固定成本；但“一个 Kernel”仍是项目选择，不是官方上限。
 
-| 字段 | 要求 |
-|---|---|
-| 数据性质 | 明确属于 Gameplay 权威、Transient command、Telemetry、Presentation、Structural mutation、Definition 输入中的哪一类 |
-| 候选 API | 至少评估 `DynamicBuffer`、`NativeStream`、owner-local component/buffer、Blob lookup、ECB、EntityQuery bulk、Enableable / Chunk Component 中相关候选 |
-| 采用 API | 写出 owner、生命周期、读写集合、clear / dispose phase、deterministic ordering |
-| 拒绝 API | 不得只写“不需要”；必须写拒绝场景和代价 |
-| 官方依据 | 引用 `SYS/QRY/JOB/SC/ECB/EN/BUF/BLOB/NAT/BUR/PRF/SEL/CASE/ODF` 规则编号 |
-| 重选型触发 | 写出规模、buffer spill、merge cost、sync point、random lookup、enableable wait 等阈值 |
-| Proof-only 标记 | 若是 proof-only，必须写可接受范围和退出任务 |
+### 3.2 Physics group
 
-## 目标代码形态复核
+Physics 官方文档说明 custom physics group 会运行其 own PhysicsSystemGroup，并包含挂到 `BeforePhysicsSystemGroup`/`AfterPhysicsSystemGroup` 的用户系统。这意味着把全局 GAS 归入 AfterPhysics 会随 PhysicsWorld 复制。
 
-### Runtime Core System
+EX-GAS 推论：GAS 应是 FixedStep 的直接子组，通过 `UpdateAfter(PhysicsSystemGroup)` 只跟随当前主世界 Physics；真正属于某个 custom PhysicsWorld 的局部系统另行设计。
 
-目标态手写 Runtime System 必须像下面这样拥有 query、lookup、dependency 和 evidence 归因：
+### 3.3 Allocator
 
-```csharp
-[BurstCompile]
-public partial struct GASEffectFanInSystem : ISystem
-{
-    private EntityQuery _commandQuery;
-    private ComponentTypeHandle<GASAbilityActivationCommandRecord> _commandType;
-    private BufferTypeHandle<GASResolvedModifierRecord> _modifierBufferType;
+官方机制：
 
-    public void OnCreate(ref SystemState state)
-    {
-        _commandQuery = state.GetEntityQuery(ComponentType.ReadOnly<GASAbilityActivationCommandRecord>());
-        state.RequireForUpdate(_commandQuery);
-    }
+- World update allocator 是 double rewindable，官方物理生命周期跨两次 world 更新。
+- 通过 `SetRateManagerCreateAllocator` 建立的 system group allocator 也是 double rewindable，分配物理生命周期跨两次该组更新；组更新期间它会成为当前 WorldUpdateAllocator。
+- Fixed-rate catch-up 的 rate manager 在一个 outer World update 内执行 `0..N` 个固定 Tick 时，不会在每个 `SimulationTick` 之间 rewind 该 group allocator；批次结束才恢复/轮换 allocator。
+- allocator 尚未 rewind 不代表数据仍有合法业务所有权。
 
-    [BurstCompile]
-    public void OnUpdate(ref SystemState state)
-    {
-        _commandType = state.GetComponentTypeHandle<GASAbilityActivationCommandRecord>(true);
-        _modifierBufferType = state.GetBufferTypeHandle<GASResolvedModifierRecord>(false);
+EX-GAS 更严格规定：Kernel 从 `state.WorldUpdateAllocator` 分配，但所有 scratch 的项目可用期只到当前 GAS Tick Job DAG 结束；不跨 Tick/System 保存，也不手工 rewind。访问所有权按 Tick 失效并不会消除同一 catch-up outer batch 的物理累积，因此 ScaleProfile 必须限制 `MaxFixedTicksPerBatch/MaximumDeltaTime` 并预算 N×scratch/facts、burst 与 double-rewind 高水位。
 
-        var job = new FanInJob
-        {
-            CommandType = _commandType,
-            ModifierBufferType = _modifierBufferType
-        };
+### 3.4 Job 与依赖
 
-        state.Dependency = job.ScheduleParallel(_commandQuery, state.Dependency);
-    }
-}
+官方安全系统通过读写声明和 JobHandle 建立依赖；提前 `Complete` 会产生主线程同步。Lookup/TypeHandle 需要按更新周期刷新，parallel random write 必须证明不重叠。
+
+EX-GAS 推论：先按 owner 分组构建 shadow CommitPlan，admission 后 owner 单 writer no-fail 提交；再按 target 分 bucket，同 target 单 writer。整个 Tick 由一个 Kernel 以 JobHandle 串接依赖；Job 完成顺序不得成为 Command/Fact 顺序。
+
+### 3.5 ECB
+
+ECB 是延迟结构变化工具；ECB system 在自己的更新点完成 producer 并 playback。Playback 后直接数据引用可能失效，多个 playback 点会增加同步和生命周期复杂度。
+
+Package 源码还表明 ECB system 销毁时会 dispose 尚未播放的 pending buffer，而不是替调用方补做 playback。因此 World teardown 不能把 post-Fixed pending ECB 留给 `OnDestroy`。
+
+EX-GAS 推论：业务槽/Buffer 写不进 ECB，真实结构变化只用标准 EndFixed。Activate/Commit/Cancel 的 same-tick 语义不能依赖 ECB；post-Fixed Boundary drain 也不能排一个跨 batch ECB。
+
+### 3.6 Cleanup
+
+官方 cleanup 机制在 Destroy 时移除非 cleanup 组件，保留 Entity 直到所有 cleanup component 被移除；cleanup component 不会从 prefab instance 自动继承，也不会被跨 World copy。
+
+EX-GAS 推论：ASC spawn 显式添加 cleanup outbox 与 drain state；Destroy 后事实必须自包含稳定身份。managed staging 先以 `BatchId/InFlightWatermark` 幂等接管，receipt 成功后 drain 才清 outbox并标 `Accepted`；下一 Kernel cleanup prepass 把 shell removal 记录到该 Tick 标准 EndFixed。shutdown 无下一 Tick时，必须在完整 EndFixed/producer completion/FinalDrain receipt 后直接清 shell。
+
+## 4. 数据布局复核
+
+### 4.1 Attribute
+
+通过 Layout Blob 做 Id→index，ASC 上单一固定 Buffer 保存 `Base/Current/Revision`，符合 chunk 数据与 Buffer 索引访问模型。避免一属性一 Component 的 archetype 爆炸，也避免 generated component 镜像双写。Revision 为 Live capture 提供 dirty 证据，但 source 只能投递下一 Tick destination work，不能随机写 target。
+
+风险：Attribute 数量大时 Buffer 可能 overflow；是否设置 IBC、设多少只能由 ScaleProfile 决定。
+
+### 4.2 Tag
+
+Catalog-indexed count Buffer 是唯一权威；exact/inclusive count 明确父链传播。presence/ancestor bitset 只作为派生查询缓存，避免 bit 与计数分叉。
+
+风险：Catalog 很大时固定 Buffer/bitset 占用上升；不能用任意固定 Tag 上限回避，应以内容规模/目标平台建立 profile。
+
+### 4.3 长期 slab
+
+ASC-local slot+generation 支撑稳定引用、跨 Tick continuation 和 target-local effect owner；non-compacting 避免移动引发 stale 引用。统一 handle 必须包含 `Epoch + OwnerAscHandle + Slot + Generation + Kind`；variable payload/capture 使用同等受保护的 non-compacting range，live range 不移动。
+
+物理布局必须覆盖 Granted、Activation、Continuation、Subscription、OwnedContribution、EmittedApplicationRef、ActiveEffect、Payload/Capture、Aggregator 与 LiveDependency。`OwnedContribution` 与 `EmittedApplicationRef` 不可混为一个“Activation 所有 Effect”列表；全部 emitted application 都保留受 retention/watermark 约束的审计 ref，但只有显式 `RemoveOnActivationEnd` ref 拥有 cleanup 权并在 End 时生成 remove work。普通审计 ref 从不拥有或移除 Effect，可在审计水位后回收。
+
+风险：hot target 的 slab/bucket 会形成负载倾斜。v1 优先确定性与单 writer，不能为表面并行把同 target 拆成竞态写；必要优化需保留 canonical semantics。
+
+## 5. 稳定化与 same-tick 复核
+
+ongoing requirement、inhibition、tag grant/remove 会相互影响，必须在 target-local 闭包内稳定后再发布 Fact。
+
+生成期验证至少需要：
+
+- 带正负语义的依赖边，而非仅检查无向/无符号图；
+- 环、可达性、程序长度与扩展深度；
+- 每个 same-tick program 的 closed inputs 和静态上界。
+
+运行时超过证明的上界必须产生稳定 fault，并停止发布该 target 的半成品事实。禁止“固定跑若干 pass 后当作成功”。
+
+普通 Gameplay Fact reaction 默认下一 Tick；这样 Fact merge 是终点而非再入入口，单 Job DAG 有确定边界。
+
+OwnerPlanBuild 只能读取 Tick-start snapshot 与同 ASC 前序 shadow CommitPlan，不读取本 Tick incoming target effect；普通 self GE 也进入 TargetWave。必须同 Tick影响后续 CanActivate 的字段只能是 CommitPlan 中声明的 activation-owned invariant，否则 Definition bake fail。
+
+语义 work precedence 至少冻结为：
+
+```text
+DestinationMaintenance / LiveDependencyDirty
+  -> PeriodDue
+  -> Expiration
+  -> SealedRemove / Inhibit
+  -> CommittedApplication
 ```
 
-关键不是类型名，而是 owner：query 由 `ISystem.OnCreate` 创建，type handle 在 `OnUpdate` 刷新，job 由 system 调度，dependency 回写 `state.Dependency`，结构变化不在此处执行。
+`SemanticPhaseOrdinal/WorkClassOrdinal` 由版本化 schema/catalog 生成并进入 content hash，不得取 Job/worker/chunk/stream/ECB lane。完整 canonical key 冲突且语义不等价时必须 validation fault。
 
-### Generated Runtime Glue
+OwnerWave 已 Commit 的远端 work 采用 committed-work-wins；source 后续死亡不撤回。target 在每条 application 线性化点读取 `AscLifecycle` 并检查 `TargetLifePolicy`；`AliveOnly` 首次 death crossing 冻结后，后续 AliveOnly work typed reject。逻辑 ASC identity、Avatar binding、spatial sample 与 life policy 必须正交，禁止目标失效时 implicit fallback self；`FrozenSpatial` 是显式采样语义，不是 fallback。
 
-目标态 generated glue 必须是静态纯解析，不持有 ECS owner：
+## 6. 整 Tick admission 与事务边界
 
-```csharp
-public static partial class GASGeneratedRuntimeDefinitionResolver
-{
-    public static bool TryBuildEffectSeed(
-        ref readonly GASDefinitionCatalogBlob catalog,
-        AbilityDefinitionIndex abilityIndex,
-        out GECommandSeedRecord seed)
-    {
-        ref readonly var ability = ref catalog.Abilities[abilityIndex.Value];
-        seed = new GECommandSeedRecord
-        {
-            GameplayEffectIndex = ability.PrimaryGameplayEffectIndex,
-            RequirementSetIndex = ability.RequirementSetIndex,
-            MagnitudeSetIndex = ability.MagnitudeSetIndex
-        };
-        return seed.GameplayEffectIndex.IsValid;
-    }
-}
-```
+OwnerPlanBuild/TargetResolve 在准入前已需写 variable scratch。因此 Gather 先以 sealed/due count、tick-start Definition lookup 与 Catalog bake maxima 用 checked arithmetic 建立 `PlanExpandScratchEnvelopeToken`并在两个 Job 写入前 provision；超 ScaleProfile 逻辑上限时 Plan/Expand 预排 no-op，由后续 admission 提升 fault。这是 pre-admission memory envelope，不是第二 gameplay admission。
 
-generated glue 不得创建 query、写 component、写 ECB、调度 job、持有 NativeContainer 或做 runtime lifecycle 注册。
+`WholeTickInfraAdmission` 位于 TargetResolve/Expand 后、任何 gameplay 权威写前。它先验证 envelope token，再按实际生成上界覆盖 downstream scratch、slab、payload/capture、PendingCommand、fact、outbox 与 structural intent；标准 EndFixed ECB没有公开 command reserve API，因此 structural项只做逻辑 count/token budget，allocator/OOM是宿主 fatal failure而非可恢复 gameplay outcome：
 
-## Debugger 复核
+- 失败：预排的 owner/target/fact/structural jobs读取 `AdmissionResult` 后 no-op，不记录半 Tick gameplay/structural intent，只有 FaultLatch锁存确定性 Session Fault。
+- 成功：OwnerWave CommitPlan 与 TargetWave 不再允许基础设施容量分支；可预检的不足不能退化为部分 mutation。
+- 多目标：仍只逐 target application 业务原子，不提供跨 ASC rollback。
+- Boundary：staging 发生在 gameplay 提交之后，失败不回滚 gameplay；保留 outbox并阻止 FinalDrain/Disposed。
 
-Debugger 目标态必须输出以下 evidence，才称得上能支撑 DOTS 性能优化：
+## 7. 形态性能红线
 
-| Evidence | 用途 |
-|---|---|
-| `systemGroupTickMs` / `laneTickMs` / `jobScheduleCount` | 找出物理 phase 和 kernel lane 热点 |
-| `queryCount` / `typeHandleRefreshCount` / `lookupRefreshCount` | 发现 system 拆分、query 过多、lookup 滥用 |
-| `nativeStreamSegmentCount` / `bufferExternalizedRatio` | 发现 fan-in 压力和 DynamicBuffer spill |
-| `structuralChangeCount` / `ecbCommandCount` / `playbackMs` | 证明结构变化是否集中且成本可控 |
-| `enableableToggleCount` / `enableableWaitMs` | 判断 Enableable skip 是否值得 |
-| `randomLookupReadCount` / `randomLookupWriteCount` | 发现跨 entity 随机访问热点 |
-| `managedAllocationBytes` / `gcAllocCount` | 防止 Debugger / Boundary 污染 Runtime Core 性能结论 |
-| `officialDiffCoverage` | 对照 Profiler、Entities Journaling、Burst / AOT、PackageCache 规则覆盖 |
-| `dataOrientedScorecard` | 把 workload、chunk locality、lookup pressure、buffer pressure、structural phase、sync/materialization、Burst/managed boundary 和 Debugger overhead 压成同构机器证据 |
+下列任一项无需等待毫秒阈值即可判为架构失败：
 
-Debugger 的目标态实现必须按 metric family 拆分，不允许继续用单个稀疏大事件结构体承载所有 GAS 概念和 DOTS 性能字段。Ability / GE / Attribute / Tag / Cue 是 concept id；query / lookup / buffer / structural / sync / allocator / overhead 是 DOTS data-shape id。性能结论必须同时连接二者，否则只能说明“发生了什么”，不能说明“为什么慢以及该由哪个 owner 优化”。
+- 热路径 phase 级 `Complete()` 或多次 ECB playback。
+- Tick scratch 跨 System/Tick/managed/static 生存。
+- Attribute/Tag 每 Tick resize 或按定义增删 Component。
+- Attribute/Tag 双权威镜像。
+- slab 压缩 live slot、句柄无 generation。
+- 同一 target 多 writer 随机写同一 Buffer。
+- Fact/ECB 顺序依赖 worker 完成先后。
+- physical Job lane 进入 gameplay canonical key，或同 key 非等价 work 静默 tie-break。
+- stabilization 静默截断或在未稳定状态发 Fact。
+- 多个 Boundary 消费者直接清 ECS outbox。
+- staging receipt 前清 outbox、post-Fixed drain 排跨 batch ECB，或 staging 失败仍完成 FinalDrain。
+- manual runner 绕过完整 FixedStep 父链。
+- 把 IBC 当逻辑 capacity，或 admission 后才发现可预检容量不足并留下部分权威写。
+- headless 整局塞进一次 outer batch，或按“每 SimulationTick rewind”低估 allocator 高水位。
 
-## 验收
+## 8. ScaleProfile 门
 
-1. 目标态任务引用本文件时，必须同时引用 `20-GASRuntimeCore-API选型基线.md` 和 `90-规则编号索引.md`。
-2. 每个 Runtime Core System 都有 query contract、读写集合、dependency contract、structural permission 和 Debugger counters。
-3. 每个 generated runtime-visible artifact 都通过 SourceGenerator Ownership Gate，不含 lifecycle / query / ECB / EntityManager / NativeContainer owner 越权。
-4. 每个 Buffer / NativeContainer / Blob 都有 owner、生命周期、容量或 dispose 规则。
-5. 每条 GAS 业务链路都能从 Shell intent 追踪到 Core command/spec/delta/fact，再追踪到 Boundary projection；中间没有 OOP gameplay 计算层。
-6. 任意性能结论必须按 owner 分类：Runtime Core、Runtime Boundary、Debugger / Observation、Definition / Generation、Demo Adapter，不得用平均 tick 或字符串日志掩盖。
+每个 profile 必须版本化：
 
-## 禁止方向
+- Unity/Entities/Burst/Jobs 与目标硬件；
+- Tick Rate、ASC/Attribute/Tag/Ability/Effect/Command 分布；
+- 典型与压力场景生成方法；
+- chunk utilization、Buffer 内/外、高水位/扩容；
+- target bucket 偏斜、scratch 峰值；
+- `MaxFixedTicksPerBatch`、`MaximumDeltaTime`、outer batch Tick 分布、N×scratch/facts 与 double-rewind 高水位；
+- whole-tick admission 上界/实际/失败资源及 admission 后容量分支；
+- period burst、hot target、mass death/teardown、Boundary burst 与 managed staging backlog/GC；
+- stabilization 分布与 fault；
+- Job 调度/主线程 sync/EndFixed playback/drain；
+- 明确门槛、采样区间、基线 commit 与回归规则。
 
-1. 不把“纯 ECS”解释成在 OOP manager 下面包一层 entity helper。
-2. 不把“适配层”解释成可以读写任意 ECS 句柄的万能 runtime access。
-3. 不把“SourceGenerator 相性好”解释成批量生成 System 或生命周期。
-4. 不把“Debugger 包含日志”解释成 Runtime Core 需要托管 logger。
-5. 不把“兼容旧链路”作为保留 OOP facade、EventBus、SpecStream singleton、runtime GE entity churn 或 generated lifecycle 的理由。
+IBC、初始容量、batch size、排序/merge 算法、trace 采样和具体耗时报警都属于 profile 决策，不应写死到通用 Spec。
+
+## 9. Backbone 验收
+
+1. 标准 PlayerLoop 与 manual World 在相同 Tick/Command/seed 下结果一致。
+2. 每渲染帧 `0、1、N` Tick 都通过；无 `deltaTime` 业务漂移。
+3. Tick Rate/规则/Catalog/Layout hash 不一致显式拒绝。
+4. Kernel profiler 无 phase `Complete`；scratch 无越界。
+5. target-local apply/stabilize 可重放，非收敛显式 fatal。
+6. same-tick 仅来自 verified bounded program，Fact reaction 下一 Tick。
+7. 同 Tick ASC destroy 后 cleanup outbox 不重不漏；receipt 后由下一 Kernel prepass 清 shell；shutdown 无下一 Tick时显式 direct cleanup。
+8. 结构变化只有标准 EndFixed；runner 更新完整父链。
+9. admission 失败 gameplay 权威零写；成功后无容量型部分 mutation，多目标仍逐 target 业务原子。
+10. Session 一 World 一个 active domain，SpawnBatch 不部分发布 Ready；Faulted 仍完成 FinalDrain/Disposing。
+11. source death 不撤回已 Commit work，AliveOnly 首死后拒绝顺序可重放；TargetData 无 implicit self fallback。
+12. 性能结论引用含 catch-up batch 上限的 ScaleProfile，而非无环境固定数字。
+
+## 10. 不能由官方文档直接推出的项目决定
+
+以下必须保留 ADR/Spec 所有权，不能写成 Unity 建议：
+
+- GAS 使用 FixedStep 和默认 PostPhysics；
+- 采用一个 Group/Kernel 而非多个 System；
+- ASC 是 authority owner，Owner/Avatar 分离；
+- Attribute/Tag 的具体单一 Buffer 布局；
+- Ability/Continuation/Effect 的 slab 模型与 generation；
+- Subscription/Contribution/Payload/Aggregator/LiveDependency 的物理布局与完整 handle schema；
+- Activate/Commit 分离；
+- capture、requirements、inhibition、stack/period/channel 语义；
+- target-local stabilization 的 fault 策略；
+- same-tick/next-tick 分界；
+- Owner shadow RYW、整 Tick admission、committed-work-wins 与 TargetLifePolicy；
+- SemanticPhaseOrdinal/WorkClassOrdinal 的 schema 全序；
+- 一 World 一个 active Session、Spawn Pending/Ready 可见性原子；
+- scoped ASC/Session cleanup outbox、两阶段单 drain 与 shutdown direct cleanup；
+- v1 不做 prediction/rollback；
+- ScaleProfile 的场景与数值门槛。

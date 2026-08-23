@@ -146,6 +146,11 @@ sequenceDiagram
 12. Runtime Core 不直接消费 Luban row、row factory、JSON reader 或 managed registry；唯一合法入口是 generated stable id、`GASDefinitionCatalogBlob`、`GASGeneratedDefinitionLookup`、`BlobAssetReference<T>` 和 generated static switch。
 13. 生成 lookup 返回 definition index 或 `BlobAssetReference<T>`，含 `BlobArray` / `BlobString` / `BlobPtr` 的定义数据必须通过 `ref readonly` 读取；禁止把 Blob 元素按值返回给 Runtime lane。
 14. 若使用 singleton component 暴露 Definition Catalog，Catalog 在 world/bootstrap 完成后不可写；Runtime system 只能 `RequireForUpdate<GASDefinitionCatalogComponent>()` 后读取 `BlobAssetReference` 并传入 job。禁止 `GetSingletonRW` 修改配置 singleton。
+15. Luban authoring row 是 gameplay 语义字段的唯一编辑权威；Runtime compiled Blob 是已通过验证的 Session 运行快照，不是第二编辑源。
+16. SourceGenerator 只能规范化 row、生成 pure glue/evaluator/index/validation metadata；不得以 sidecar、override、append 或默认值补丁改变 duration、period、stack、modifier、requirement、capture、target、Cue 或 granted ability 语义。
+17. 每个进入 Catalog 的语义字段都必须保留 provenance，至少包含 authoring table/file、row stable id、field path、normalized value 和 generator version。
+18. 同一语义字段出现重复 owner、override/append 企图、非法 enum、越界 range、缺失引用或无法解析的 policy 时，bake 必须失败并输出 provenance；禁止 clamp、fallback 或保留旧值继续运行。
+19. Catalog 的 schema/content hash 基于验证后的 normalized semantic graph；Session 启动后只持有该不可变快照，不在 Runtime 重新合并 authoring/sidecar。
 
 ## Luban 与 SourceGenerator 职责边界
 
@@ -156,6 +161,21 @@ sequenceDiagram
 | Baking | 把 generated definition / authoring 输入转换为 `BlobAssetReference<T>`、Baker output、BakingOnly / TemporaryBaking data 和 report | 从 runtime entity 或 prototype component 反推静态定义；在 Baker 中读取其他 Baker 的输出 |
 | Runtime Core | 只读取 generated id、Blob、static lookup、generated component type 和 validation 允许的常量 | 运行时反查 JSON、managed Luban row、ScriptableObject 或 Editor-only registry |
 | Editor / CI | 输出 config diagnostics、official DOTS coverage、query layout、buffer capacity、Burst AOT / Player evidence、orphan generated file report | 把诊断结构作为 gameplay 决策输入 |
+
+### 语义唯一权威与 provenance
+
+```text
+Luban authoring semantic row
+  -> normalize + validate + provenance
+  -> immutable compiled Catalog Blob
+  -> Session read-only snapshot
+```
+
+- Authoring 字段只在 Luban schema/row 编辑；SourceGenerator 不提供 gameplay override 入口。
+- Generated evaluator 可实现 Luban row 引用的 calculation id，但 evaluator 不能暗中替换公式、capture phase 或 ValueView。
+- 同一 GE 的 stack type、stack code、duration refresh、period reset、expiration 与 modifier list 必须来自同一受验证 authoring graph。
+- Validation report 必须能从 Catalog 字段反查到唯一 row/field provenance；存在两个来源时是生成失败，不是后写覆盖。
+- 当前 9203 `StackingType=9203` 与 sourcegen sidecar 修改 modifier/refresh/expiration 的代码事实见 [AutoChess 真实业务链二轮审查事实](../00-当前架构事实/AutoChess真实业务链二轮审查事实.md)；目标链对此必须 bake fail，不保留兼容合并支路。
 
 ### Luban Unity 编译边界
 
@@ -189,21 +209,21 @@ Excel / Luban row
 | `GASDefinitionCatalogBlob` | 是 | 默认按 code 排序；含 `SchemaHash` / `ContentHash`；不保存 runtime state |
 | `GASGeneratedDefinitionLookup` | 是 | 小表可生成 static switch；中大表用 sorted array binary search；超大/热表才生成 perfect hash / range table |
 | Generated Runtime Glue | 是 | definition index/range -> activation plan / GE seed / modifier record；只生成静态纯函数 |
-| `GASGeneratedDefinitionBlobComponent<T>` | 有条件 | 只作为 baking output / bootstrap 收集入口；不作为 hot path 每帧查询表 |
+| `GASGeneratedDefinitionBlobComponent<T>` | 有条件 | 只作为 baking output / bootstrap 收集入口；不作为 hot path 每 tick 查询表 |
 | Native lookup container | 有条件 | 只能由 owner system / bootstrap 拥有并显式 Dispose；不得塞进 `IComponentData` 后由 job 随机访问 |
 
-这个链路的关键收益是把“配置查找”从运行时 OOP registry 变成 DOTS 只读数据：Ability grant 阶段可把 `AbilityCode` 解析为 `AbilityDefinitionIndex`，Ability activation / Fan-In / Magnitude Resolve 只拿 index + `ref readonly` definition，并通过 Generated Runtime Glue 得到 plan / seed / modifier record，不再每帧反查 `Dictionary`、managed row 或线性表。
+这个链路的关键收益是把“配置查找”从运行时 OOP registry 变成 DOTS 只读数据：Ability grant 阶段可把 `AbilityCode` 解析为 `AbilityDefinitionIndex`，Ability activation / Fan-In / Magnitude Resolve 只拿 index + `ref readonly` definition，并通过 Generated Runtime Glue 得到 contract / application / contribution record，不再每 tick 反查 `Dictionary`、managed row 或线性表。
 
 ### Runtime Glue 生成产物
 
-严格按 PackageCache Entities 文档校准后，Runtime 侧真正需要的生成产物不是“表访问 API”，而是一组 Burst 友好的静态 glue，把不可变 definition 变成 frame-local record。它们不拥有状态，只把 Luban 事实压缩为 DOTS lane 能直接消费的 index、range、mask 和 switch。
+严格按 PackageCache Entities 文档校准后，Runtime 侧真正需要的生成产物不是“表访问 API”，而是一组 Burst 友好的静态 glue，把不可变 definition 变成 tick-local record。它们不拥有状态，只把 Luban 事实压缩为 Kernel 能直接消费的 index、range、mask 和 switch。
 
 | Runtime-visible artifact | 真实职责 | Runtime 消费方式 | 禁止 |
 |---|---|---|---|
-| `GASDefinitionCatalogBlob` | 聚合 Ability / GE / Modifier / Requirement / TagMask / Attribute 等静态定义；按 code 排序并保存 schema/content hash | singleton component 只读取得 `BlobAssetReference<GASDefinitionCatalogBlob>`，传入 job；definition 用 index + `ref readonly` 访问 | nested runtime state、Entity 引用、timer、managed row、JSON reader |
+| `GASDefinitionCatalogBlob` | 聚合 Ability / GE / Modifier / Requirement / TagQueryProgram / AttributeLayout / TagCatalog 等静态定义；按 code 排序并保存 schema/content hash | singleton component 只读取得 `BlobAssetReference<GASDefinitionCatalogBlob>`，传入 job；definition 用 index + `ref readonly` 访问 | nested runtime state、Entity 引用、timer、managed row、JSON reader |
 | `GASGeneratedDefinitionLookup` | code -> definition index；小表 static switch，中大表 sorted BlobArray binary search，超热表 perfect hash | Ability grant / bootstrap 把 code 解析为 index；hot path 不重复按 code 查找 | 返回含 `BlobArray` 的 definition 值副本；每 domain 一个 runtime entity query |
-| `GASGeneratedRuntimeDefinitionResolver` | 从 `AbilityDefinitionIndex` 生成 `AbilityActivationPlanRecord`，从 plan + target 写 `GECommandSeedRecord`，从 GE range 写 `ResolvedModifierRecord` | Ingest / Target / Fan-In / Magnitude Resolve job 调用静态纯函数 | 调用 `EntityManager`、创建/销毁 entity、隐藏 ECB、查询 component、拥有 `NativeContainer` |
-| `GASGeneratedRequirementEvaluator` | 生成 tag mask / attribute threshold / cost precondition 的静态校验 | Ingest 读取 source snapshot 后一次性校验，输出稳定 failure reason | 反查 managed tag tree、运行时拼字符串 tag、跨 entity random lookup 写状态 |
+| `GASGeneratedRuntimeDefinitionResolver` | 从 `AbilityDefinitionIndex` 读取 Ability contract，从静态 program + target 构造 `EffectApplicationSpec`，从 GE range 计算 Modifier Contribution / AttributeDelta | Kernel 内 Activation / Target / Fan-In / TargetApply Job 调用静态纯函数 | 调用 `EntityManager`、创建/销毁 entity、隐藏 ECB、查询 component、拥有 `NativeContainer` |
+| `GASGeneratedRequirementEvaluator` | 生成 tag mask / attribute threshold / cost/cooldown precondition 的静态纯校验 | `OwnerPlanBuild` 对 tick-start snapshot 与同 ASC shadow 前序 CommitPlan 做完整 CanActivate/Commit 复核，输出 typed failure 或 owner-local CommitPlan | 只在 Ingest 校验一次、反查 managed tag tree、运行时拼字符串 tag、跨 entity random lookup 写状态 |
 | `GASGeneratedMagnitudeEvaluator` | 生成 MMC / modifier magnitude static switch；同 evaluator 大批量时可生成 FunctionPointer batch 候选 | Magnitude Resolve 遍历 modifier range 时调用；默认 per modifier static switch | 托管 delegate、虚函数策略对象、可变注册表、per-entity FunctionPointer invoke |
 | `GASGeneratedTargetRuleTable` | target rule code -> unmanaged target params / sort policy / query hint | Target Resolve 读取 params 后基于 physics snapshot / explicit target 生成 `AbilityTargetRecord` | target strategy class、ScriptableObject target rule、Runtime Core 反查资源 |
 | `GASGeneratedRuntimeGlueValidation` | 生成 config -> Runtime glue 的离线报告：缺失 GE、无效 range、orphan tag、Burst evaluator 覆盖 | Editor/CI 诊断；Runtime Core 只消费通过校验后的常量和 Blob | 把诊断结果作为 gameplay 决策输入 |
@@ -215,8 +235,10 @@ Excel / Luban row
 3. Glue 不拥有 `NativeArray` / `NativeList` / `NativeHashMap`；NativeContainer 的 owner、依赖链、dispose/rewind 由调用 System 显式管理。
 4. Glue 不把 `NativeContainer` 塞进 `IComponentData`；若存在非目标态 singleton container，job 只能在主线程提取 container 后直接对 container 调度，不对 singleton component 本身调度 `IJobChunk` / `IJobEntity`。
 5. Glue 不按值返回含 `BlobArray` / `BlobString` / `BlobPtr` 的 Blob 元素；所有变长 definition 使用 root array + `Start/Count` range + `ref readonly`。
-6. Glue 不保存 per-frame state，不缓存上次 plan，不维护可变静态 registry；同一帧的 command / target / modifier 都是 owner system 的 frame-local record。
+6. Glue 不保存 per-tick state，不缓存上次 plan，不维护可变静态 registry；同一 SimulationTick 的 command / target / modifier 都是 Kernel 的 tick-local record。
 7. Glue 不引用 `cfg.*`、`XLuban`、`SimpleJSON`、managed Luban row、JSON table reader 或 Editor-only assembly。
+
+离线 publish/bake validation 只证明定义图、引用和静态 carrier 合法，不能替代运行时检查。Cost/Cooldown 即使由 GE-like row authoring，也只生成 owner-local invariant seed：`OwnerPlanBuild` 必须在 canonical shadow 上重检，`AscOwnerCommandWave` 才做 no-fail 原子 mutation；禁止把它们降成普通 self GE 投递到 TargetWave。
 
 ### 为什么必须让 SourceGenerator 收权
 
@@ -254,8 +276,8 @@ SourceGenerator 的价值是批量生成 DOTS 友好的不可变数据、静态�
 | Phase | 输出 | Runtime 可见性 |
 |---|---|---|
 | Assembly definition phase | generated runtime/editor asmdef、row source assembly references | asmdef 可见；Runtime asmdef 不引用 row source，Editor asmdef 可引用 row source |
-| Id / Tag bit phase | `XAttr`、`XTagBit`、`XGE`、`XAbility`、`XCueCode`、`TagCheck` | 可见；必须 Burst 友好 |
-| Attribute set phase | `CombatAttributeCurrentSetComponent`、`CombatAttributeBaseSetComponent`、`ResourceAttributeCurrentSetComponent` 等 generated AttributeSet family | 可见；按热路径/变更频率生成数据类型、dirty mask 和访问器，不生成 lifecycle；per-attribute component 仅作为有审计依据的例外 |
+| Stable id / catalog phase | `XAttr`、`XTag`、`XGE`、`XAbility`、`XCueCode`，以及 `AttributeLayout` / `TagCatalog` builder | 可见；必须 Burst 友好；Tag dense index 与 ancestor chain 由 Catalog 确定，不把单个 machine word 当作容量上限 |
+| Attribute / Tag projection phase | `AttributeInitValue`、id→layout index、Tag query program、可选派生 presence-word 访问器 | 可见；只生成 metadata、初始化投影和纯访问器；运行时唯一权威仍是固定 `AttributeValueSlot[]` / `TagCountSlot[]`，不得生成 Attribute/Tag component、dirty mirror 或第二套生命周期 |
 | Blob schema / builder phase | `GameplayEffectDefinition`、`AbilityDefinition`、`BuildFromRow` / `BuildFromDefinition` | Blob 可见；builder 多数在 Baking / initialization 使用 |
 | Static lookup phase | id -> `BlobAssetReference<T>` / compact lookup | 可见；必须 unmanaged / Burst 可读 |
 | Runtime glue phase | `GASGeneratedRuntimeDefinitionResolver`、`GASGeneratedRequirementEvaluator`、`GASGeneratedMagnitudeEvaluator`、`GASGeneratedTargetRuleTable` | 可见；只输出静态纯函数和 record，不生成 lifecycle system |
@@ -374,6 +396,8 @@ generated asmdef 也属于 SourceGenerator 输出，不手写维护依赖漂移�
 9. 用托管数组 / managed dictionary 承载 Runtime Core hot path lookup。
 10. 从 prototype entity、runtime component 或 active effect slot 构建静态定义 Blob。
 11. 把 `GASGeneratedDefinitionBlobComponent<T>` 的 per-definition entity query 当作 Runtime hot path lookup。
+12. 使用 sourcegen sidecar override/append 修改 Luban gameplay 语义，或以“生成方便”为由在 glue 中注入 dummy modifier。
+13. 对非法 enum/range 执行 clamp/default/fallback，或在 provenance 冲突时使用 last-writer-wins。
 
 ## 验收
 
@@ -391,12 +415,14 @@ generated asmdef 也属于 SourceGenerator 输出，不手写维护依赖漂移�
 10. Baker 生成物必须能映射到 `Baker<TAuthoring>`、`DependsOn()`、`AddBlobAsset()` / custom hash、Baking System dependency report 中的至少一种官方 baking 模式。
 11. Static lookup 必须是 O(1) 或 O(log n) 的 unmanaged / Blob lookup 形态；线性 `GASDefinitionTable` 只能作为 Editor/CI 或非目标态 fallback。
 12. 至少一条 Runtime 消费链必须证明：`AbilityCode -> AbilityDefinitionIndex -> ref readonly AbilityDefinitionBlob -> GameplayEffectDefinitionIndex -> ref readonly GameplayEffectDefinitionBlob -> modifier/evaluator static switch` 全程无 managed row / JSON / `Dictionary`。
-13. 至少一条 Runtime glue 消费链必须证明：`AbilityDefinitionIndex -> AbilityActivationPlanRecord -> GECommandSeedRecord -> ResolvedModifierRecord` 全程由 generated static pure functions + frame-local NativeContainer record 承载，不生成 lifecycle system、不隐藏结构变化。
+13. 至少一条 Runtime glue 消费链必须证明：`AbilityDefinitionIndex -> AbilityActivationCommand -> EffectApplicationSpec -> ModifierContribution/AttributeDelta` 全程由 generated static pure functions + tick-local record 承载，不生成 lifecycle system、不隐藏结构变化。
 14. Runtime-visible generated hard gate 必须扫描并默认阻断以下 token：`: ISystem`、`OnUpdate(ref SystemState`、`CreateSystem(`、`AddSystemToUpdateList(`、`state.EntityManager`、`EntityManager.Create`、`EntityManager.Destroy`、`EntityManager.AddComponent`、`EntityManager.RemoveComponent`、`SystemAPI.Query`、`SystemAPI.GetComponentLookup`、`SystemAPI.GetBufferLookup`、`ComponentLookup<`、`BufferLookup<`、`EntityCommandBuffer`、`NativeList<`、`NativeStream`。
 15. 上述 token 只有在 artifact 明确标记 `MigrationProofOnly`、validation report 写出 DOTS 规则违约原因、任务树包含移除计划时才允许临时存在；不得被计入目标态完成度。
 16. `GASGeneratedDefinitionCatalogBuilder.BuildCatalog()` 或等价 `BlobBuilder` 入口必须归属 Baking / Bootstrap / initialization owner；Runtime Core hot path 只读 catalog，不调用 builder。
 17. system registration、ability activation、instant effect、active effect runtime 这类 generated lifecycle artifact 在目标态验收中默认失败；若短期以 proof-only 形式保留，必须进入 P0 收权清单。
 18. Runtime-visible generated artifact 必须输出职责边界 gate：`GeneratedRuntimeLifecycleHits`、`GeneratedRuntimeSystemRegistrationHits`、`GeneratedRuntimeStructuralChangeHits`、`GeneratedRuntimeOwnershipHits`、`GeneratedRuntimeRandomWriteLookupHits`、`GeneratedRuntimeManagedConfigHits`。这些指标为 0 或被明确标记为 `MigrationProofOnly` 前，不得宣称 CodeGen 到 Runtime 链路完成。
+19. 配置验证必须包含 enum domain、Start/Count range、引用图、唯一字段 owner 与 provenance 负例；任一失败时不产生可安装 Catalog。
+20. 需有一条自动化负例重现“非法 `StackingType=9203`”与“同 GE 被 sidecar override/append”，并断言错误同时报告 effect id、field path、raw value 和来源文件。
 
 ### AutoChess 业务链路后置验收
 

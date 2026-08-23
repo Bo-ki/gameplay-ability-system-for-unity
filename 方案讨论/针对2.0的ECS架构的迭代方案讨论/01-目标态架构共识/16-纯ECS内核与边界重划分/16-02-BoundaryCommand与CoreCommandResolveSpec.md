@@ -1,193 +1,61 @@
-# 16-02：Boundary Command 与 Core Command Resolve
+# Boundary Command 与 Core Resolve Spec
 
-> Owner：`01-目标态架构共识/16-纯ECS内核与边界重划分` | 状态：目标态 Spec 子页 | 最近拆分：2026-06-07
+## 结论
 
-本文件只描述 Boundary command record 和 Core command resolve 的目标代码骨架，用于约束 Shell intent 如何进入纯 ECS Runtime Core。
+Boundary 只负责可靠接收和冻结外部意图；`GasTickKernelSystem` 才负责 resolve、CanActivate、commit、target 与 gameplay mutation。CommandPort 不是同步 GAS facade。
 
-## 相邻 Spec Owner 裁决
+## CommandPort
 
-`16-02` 的唯一职责是定义 Shell intent 穿过 Runtime Boundary 后的 owner-local command envelope，以及 Core 如何以 Job/query 形态消费这个 envelope。它不维护完整 Ability command normalization、Target Resolve、TargetDataBuffer 或 NativeStream fan-out 规则；这些通用规则归入 [03D Command Resolve 与 Target Resolve](../03-RuntimeCore管线/03D-CommandResolve与TargetResolveSpec.md)。
+允许的公开操作示例：
 
-裁决：
-
-1. Shell / UI / 外部业务默认只能看到业务 command port，不能看到 ECS handle、request entity 或 `TargetDataBuffer`。
-2. Boundary implementation 可以把 Shell intent 压成 owner-local command buffer；如果需要低频 request-owned 物化路径，必须引用 `03D` 的选型和退出门。
-3. `16-02` 的代码只保留边界 envelope 和 Core 消费骨架；目标解析、AoE fan-out、ability validation、deterministic merge 的完整规则不得在本文件再次展开。
-
-## 目标代码骨架
-
-以下代码是目标态结构骨架，用于说明接口深度、owner、读写方向和 DOTS API 选型。本节只定义可作为框架设计参考的代码形态。
-
-### 1. Boundary 只写 command record
-
-```csharp
-using Unity.Collections;
-using Unity.Entities;
-
-namespace GAS.Runtime
-{
-    internal struct GASBoundaryCommandPending : IComponentData, IEnableableComponent
-    {
-    }
-
-    internal struct GASBoundaryCommand : IBufferElementData
-    {
-        public Entity SourceAsc;
-        public Entity TargetAsc;
-        public int AbilityCode;
-        public int GameplayEffectCode;
-        public int Level;
-        public GASBoundaryCommandKind Kind;
-        public int Sequence;
-    }
-
-    internal enum GASBoundaryCommandKind : byte
-    {
-        ActivateAbility = 1,
-        ApplyGameplayEffect = 2,
-        RemoveGameplayEffect = 3,
-        DestroyAsc = 4,
-    }
-
-    public readonly struct ASCTargetRef
-    {
-        internal readonly Entity RuntimeEntity;
-
-        internal ASCTargetRef(Entity runtimeEntity)
-        {
-            RuntimeEntity = runtimeEntity;
-        }
-    }
-
-    internal readonly struct GASBoundaryCommandWriter
-    {
-        private readonly EntityManager _entityManager;
-        private readonly Entity _ownerAsc;
-
-        internal GASBoundaryCommandWriter(EntityManager entityManager, Entity ownerAsc)
-        {
-            _entityManager = entityManager;
-            _ownerAsc = ownerAsc;
-        }
-
-        public bool RequestAbility(int abilityCode, ASCTargetRef target, int sequence)
-        {
-            if (!IsValid() || !_entityManager.HasBuffer<GASBoundaryCommand>(_ownerAsc))
-                return false;
-
-            var commands = _entityManager.GetBuffer<GASBoundaryCommand>(_ownerAsc);
-            commands.Add(new GASBoundaryCommand
-            {
-                SourceAsc = _ownerAsc,
-                TargetAsc = target.RuntimeEntity,
-                AbilityCode = abilityCode,
-                Kind = GASBoundaryCommandKind.ActivateAbility,
-                Sequence = sequence,
-            });
-
-            if (_entityManager.HasComponent<GASBoundaryCommandPending>(_ownerAsc))
-                _entityManager.SetComponentEnabled<GASBoundaryCommandPending>(_ownerAsc, true);
-
-            return true;
-        }
-
-        private bool IsValid()
-        {
-            return _ownerAsc != Entity.Null && _entityManager.Exists(_ownerAsc);
-        }
-    }
-}
+```text
+RequestActivateAbility(BattleInstanceHandle, AscHandle, GrantedAbilityHandle, EventPayload, RequestId)
+RequestCommitActivation(BattleInstanceHandle, AbilityActivationHandle, RequestId)
+RequestCancelActivation(BattleInstanceHandle, AbilityActivationHandle, CancelReason, RequestId)
+RequestApplyEffect(BattleInstanceHandle, SourceAscHandle?, BoundaryTargetRef, EffectDefinitionId, Payload, RequestId)
+RequestRemoveEffect(BattleInstanceHandle, ActiveEffectHandle, RemovalReason, RequestId)
 ```
 
-解释：这段代码把 `EntityManager` 限定在 Runtime Boundary implementation 内。它的职责是把 Shell 意图压成 owner-local command record，不直接执行 GameplayEffect、不写 Attribute、不读 Debugger、不创建 transient request entity。Shell 侧只能看到业务请求接口，不能看到 ECS 写句柄。
+每个请求先验证 Session/Epoch、BattleInstance handle、`BoundaryTargetRef` tag/schema、inline tagged payload size和ingress capacity，再复制到 Runtime Boundary 持久 `BoundaryIngressJournal`。source存在时必须验证其membership与显式Battle一致；source缺失的Battle/Session command仍必须显式带Battle。此时不能声称Ability已激活或Effect已应用，也不能把裸payload index或含义不明的TargetStableId留到跨tick。
 
-### 2. Core 以 IJobChunk 消费 command
+`Accepted` 必须有严格线性化点：Runtime Boundary 为每 Session 持有唯一 `SessionIngressGate { Open/Closing/FaultClosed, NextRequestSequence, AcceptedHighWatermark }` 与受其所有的持久 `BoundaryIngressJournal`，CommandPort 只能在该 gate 上序列化分配 `RequestSequence`、把该 sequence 连同完整 record 放入 journal 后才返回 Accepted。重复 `RequestId` 必须复用原 record/sequence，不得推进 `NextRequestSequence`。`RequestSequence` 是 fault-close/outstanding/交付审计顺序；业务 canonical key 使用独立、冻结的 `SourceSequence`，两者不得互相冒充。journal 不是 tick scratch，0 FixedStep 不丢失；每条记录在搬入 ECS inbox 前仍受 gate/接收审计所有。Fault close 与 accept 在同一 gate 上线性化：先于 close 的请求必定 `RequestSequence <= AcceptedHighWatermark` 并被本 FaultId 终结，后于 close 的请求同步拒绝 `SessionFaulted` 且不进 journal。禁止“已向调用者返回 Accepted，但仅存在未受 gate 管理的临时队列”。
 
-```csharp
-using Unity.Burst;
-using Unity.Collections;
-using Unity.Entities;
+## Tick seal
 
-namespace GAS.Runtime
-{
-    public struct GASEffectCommandRecord
-    {
-        public Entity SourceAsc;
-        public Entity TargetAsc;
-        public int GameplayEffectCode;
-        public int Level;
-        public int Sequence;
-        public int ProducerIndex;
-    }
+`GasCommandIngressSystem` 是 CommandPort capability 的必装配对，必须在 world-owner 主线程的 pre-Fixed ingress window 中 `OrderFirst/UpdateBefore<GasTickKernelSystem>` 运行；它是唯一能从 journal 搬运到 ECS `BoundaryCommandInbox` 的 writer，并在该 window 之后关闭 ECS append。搬运必须原样保留 `RequestSequence`、`RequestId`、`SourceSequence` 与完整身份/payload。Kernel 只消费 `AvailableTick <= CurrentTick` 且未消费的 inbox 记录。0 FixedStep 时 journal/inbox 都保留；N catch-up 时由首个合法 tick 恰好消费一次。Kernel Job 读 `BoundaryCommandInbox` 期间绝不得 append 该 DynamicBuffer；Entities safety/dependency 按整个 buffer/component 跟踪，“sealed prefix 可读且 tail 可并发写”不是合法性保证。window 后新 Accepted 请求仅留在 journal，最早下一 ingress window 搬运；不为此强制 Kernel 同步。
 
-    [BurstCompile]
-    [UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
-    public partial struct GASBoundaryCommandResolveSystem : ISystem
-    {
-        private EntityQuery _query;
+准入/稳定化 fault 的 `FaultLatchJob` 只在 gameplay DAG 内写 `SessionFaultLatch=Detected`与当 Tick sealed subset 证据，不写 fact/outbox。DAG 在既有 runner/Boundary completion fence 完成后，`FaultCloseHandshake` 在不运行 gameplay 的控制路径上原子执行 `SessionIngressGate.Open -> FaultClosed`，按 `RequestSequence` 冻结截至该关闭点全部“已 Accepted 且未终结”请求的 first/last sequence、count 与 canonical hash，并将 fixed-size latch 终结为 `IngressClosed`。这一 outstanding set 可同时包含本 Tick sealed inbox subset、ECS inbox unsealed/future records 和未搬运 journal tail；全部 carrier 都原样持有同一 sequence，全部请求由同一 FaultId 终结、保留 inbox/journal 供审计且永不重放。
 
-        public void OnCreate(ref SystemState state)
-        {
-            _query = state.GetEntityQuery(new EntityQueryDesc
-            {
-                All = new[]
-                {
-                    ComponentType.ReadOnly<GASBoundaryCommandPending>(),
-                    ComponentType.ReadWrite<GASBoundaryCommand>(),
-                },
-            });
-            state.RequireForUpdate(_query);
-        }
+## Resolve 顺序
 
-        [BurstCompile]
-        public void OnUpdate(ref SystemState state)
-        {
-            var commandType = SystemAPI.GetBufferTypeHandle<GASBoundaryCommand>(isReadOnly: false);
-            var pendingType = SystemAPI.GetComponentTypeHandle<GASBoundaryCommandPending>(isReadOnly: false);
-            var entityType = SystemAPI.GetEntityTypeHandle();
+1. Gather/seal 后解析 Session/Battle/source/handle generation，完成 command 去重、stale 与 typed reject；仍不写 gameplay authority。
+2. `OwnerPlanBuild` 在 ASC-local shadow 中执行 CanActivate、Activation lifecycle 与 CommitCheck，产生完整 CommitPlan、post-commit capture candidate、direct program和生成上界；零权威写。
+3. `TargetResolve/Expand` 对 planned token 产生稳定目标序列和全部 bounded effect ops；不写目标 ASC，也不产生正式 EffectSpec/Application身份。
+4. `WholeTickInfraAdmission` 对整 Tick可预留资源做逻辑预算/物理预留；后续 Job已在同一 DAG预排，失败时统一读取 `AdmissionResult` 后 no-op，只有 FaultLatch写 Session Faulted。
+5. `AscOwnerCommandWave` 对 admitted CommitPlan执行no-fail owner-local原子提交；cost/cooldown/Committed flag与draft→正式 EffectSpec/Application identity提升只在此处写，并同时记录owner EmittedApplicationRef；普通self GE不在此处应用。
+6. `SourceSpecProjection` 只为已 Commit且已有正式identity的计划密封source-bound Spec/Capture，随后GroupByTarget并进入canonical `AscTargetStateWave`。
 
-            state.Dependency = new ResolveBoundaryCommandsJob
-            {
-                EntityType = entityType,
-                CommandType = commandType,
-                PendingType = pendingType,
-            }.ScheduleParallel(_query, state.Dependency);
-        }
+CanActivate 成功不等于已 Commit。等待后 Commit 必须在 owner shadow重查；业务失败不产生 admitted CommitPlan，基础设施失败使整 Tick gameplay零写。成功 CommitPlan no-fail一次性写 cost/cooldown/committed flag；重复 Commit、Cancel、End 都必须有确定性幂等/拒绝语义。
 
-        [BurstCompile]
-        private struct ResolveBoundaryCommandsJob : IJobChunk
-        {
-            [ReadOnly] public EntityTypeHandle EntityType;
-            public BufferTypeHandle<GASBoundaryCommand> CommandType;
-            public ComponentTypeHandle<GASBoundaryCommandPending> PendingType;
+## Target resolve
 
-            public void Execute(
-                in ArchetypeChunk chunk,
-                int unfilteredChunkIndex,
-                bool useEnabledMask,
-                in Unity.Burst.Intrinsics.v128 chunkEnabledMask)
-            {
-                var commands = chunk.GetBufferAccessor(ref CommandType);
-                var pendingMask = chunk.GetEnabledMask(ref PendingType);
-                var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+Target输入可以来自冻结TargetData、Definition纯target rule或generated `BoundaryTargetRef`。`AscHandle` variant携带Epoch/stable id/generation并在consume时严格校验；`BattleUnitSelector/DefinitionRule` variant必须显式声明Battle scope与`ResolveAtConsume`，在TargetResolve/Admission前解析为完整`TargetAscHandle`和ordinal。输出不得把raw Entity带到Boundary或跨tick；空间查询命中Entity后立即解析/复制稳定身份与所需空间快照。
 
-                while (enumerator.NextEntityIndex(out var i))
-                {
-                    var ownerCommands = commands[i];
-                    for (var commandIndex = 0; commandIndex < ownerCommands.Length; commandIndex++)
-                    {
-                        var command = ownerCommands[commandIndex];
-                        // Target resolve / ability validation / GE seed 只写 frame-local record。
-                        // 不在这里创建 runtime GE entity，不写 Attribute，不写 Presentation。
-                    }
+## Continuation
 
-                    ownerCommands.Clear();
-                    pendingMask[i] = false;
-                }
-            }
-        }
-    }
-}
-```
+Continuation/Subscription 是独立 slots。一 Activation 可有多个并行等待；外部 ASC subscription 反向保存 Activation+Continuation handle，投递与取消双重校验 Generation。Kernel 执行期间才到达的 completion 默认下一 tick。
 
-解释：Core 的接口是 command buffer 和 job query，不是 OOP 方法调用。`SystemState.GetEntityQuery` 让 query owner 可追踪；`ChunkEntityEnumerator` 让 enableable 语义显式；job 内不执行结构变化。
+## 拒绝方向
+
+- Shell 直接向 `DynamicBuffer` append。
+- CommandPort 直接调用 magnitude/target/effect 逻辑。
+- 单个 Activation 只有一个 wait state。
+- request 保存 delegate、managed object、raw Entity 或 tick temp pointer。
+- target resolve producer 随机写目标 ASC。
+
+## 验收
+
+- 0..N FixedStep、重复 RequestId、stale Epoch/Generation、inbox overflow 测试。
+- CanActivate→等待→Commit 资源变化回归。
+- 并发 Activation、多个 Continuation、外部 subscription cancel/late event 回归。
+- command trace 与 target order 在重复运行中一致。

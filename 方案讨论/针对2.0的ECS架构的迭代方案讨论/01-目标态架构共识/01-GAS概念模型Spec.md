@@ -2,105 +2,167 @@
 
 ## 目的
 
-定义 GAS 概念在 Unity ECS 版 EX-GAS 2.0 中的目标表达。
+定义 UE GAS 领域语义在 Unity DOTS 目标态中的静态映射。本文件只裁决“概念是什么、由谁拥有、生命周期如何关联”，物理 phase、Job、Tick Scratch 与结构提交分别引用 [03A-执行域与数据流](03-RuntimeCore管线/03A-执行域与数据流Spec.md)、[03C-SystemGroup合约与核心数据形态](03-RuntimeCore管线/03C-SystemGroup合约与核心数据形态Spec.md)、[03E-EffectFanIn-State-Attribute-Fact](03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-FactSpec.md)、[03F-StructuralCommit与BoundaryProjection](03-RuntimeCore管线/03F-StructuralCommit与BoundaryProjectionSpec.md) 与 [03G-Component矩阵-TickScratch-Job拓扑](03-RuntimeCore管线/03G-Component矩阵-TickScratch-Job拓扑Spec.md)。
 
-本文件只负责概念到 ECS 目标表达的静态映射。真实业务链路中的 owner、生命周期、临时 record、Boundary 投影和 OOP Shell 边界见 [01B-GAS业务语义链路概念设计Spec](01B-GAS业务语义链路概念设计Spec.md)。
+目标态保留 UE GAS 的领域分层，不迁移其 UObject、delegate、Actor 生命周期和网络实现偶然性：
+
+```text
+AbilityDefinition → GrantedAbilitySpec → AbilityActivation → Continuation
+GameplayEffectDefinition → GameplayEffectApplicationSpec → ActiveEffect
+```
 
 ## 概念映射
 
-| GAS 概念 | Unity ECS 目标表达 | 权威边界 |
+| GAS 概念 | Unity DOTS 目标表达 | 权威边界 |
 |---|---|---|
-| ASC | Entity + ASC components / buffers | Simulation |
-| Ability | Ability entity + cross-frame runtime state；Boundary request entity 或 frame-local command record 承载单次激活上下文 | Simulation |
-| GameplayEffect | Effect fan-in command record / active effect slot / typed fact | Simulation |
-| Attribute | generated AttributeSet family + target-grouped modifier reduce/apply + dirty mask | Simulation |
-| GameplayTag | Dense tag mask / requirement query | Simulation / Definition |
-| TargetData | command record target params / `AbilityTargetRecord` NativeStream / request-owned result buffer（低量物化）/ deterministic sort key | Simulation / Boundary |
-| GameplayCue | Cue request + presentation marker | Observation / Presentation |
-| EffectContext | Runtime context metadata | Simulation |
-| Spec / Delta / Fact | 语义链路，不等同全局 stream；目标态由 Effect Fan-In、Attribute Reduce/Apply、Gameplay Fact 分段承载 | Simulation |
-| Debug / Replay | Derived facts and diagnostics | Observation |
+| ASC | ASC Entity + `AscInstanceId` + Owner/Avatar binding + Attribute/Tag 状态 + owner-local slabs | Simulation |
+| Ability Definition | immutable Blob definition + semantic version/content hash | Definition |
+| Granted Ability Spec | ASC-local `GrantedAbilitySlot`，保存 definition、level、input、grant provenance 与 removal policy | Simulation |
+| Ability Activation | ASC-local `AbilityActivationSlot`，每次激活独立保存 phase、commit、context、owned contributions 与结束原因 | Simulation |
+| AbilityTask / Continuation | ASC-local `AbilityContinuationSlot`；外部等待另有目标 ASC-local `AbilitySubscriptionSlot` | Simulation |
+| Cooldown Gate | source ASC-local `CooldownGateSlot`，保存 gate identity、Commit provenance、Start/EndTick 与可选 Tag contribution owner；不属于 Activation 或 ActiveEffect | Simulation |
+| GameplayEffect Definition | immutable Blob definition，描述 modifier、execution、duration、stack、requirement、grant 与 cue | Definition |
+| GameplayEffect Application Spec | 与 definition 分离的 runtime value，保存 source capture、SetByCaller、context；每目标产生独立 target application view | Simulation / Frame-local or continuation-owned |
+| Active GameplayEffect | ASC-local `ActiveEffectSlot`，只表示已成功应用且跨帧存活的 duration/infinite/stack/period 状态 | Simulation |
+| Instant GameplayEffect | 消费 Application Spec 后执行，不创建 ActiveEffectSlot | Simulation / Frame-local |
+| Attribute / Aggregator | Session `AttributeLayout` + 固定长度 `AttributeValueSlot { Base, Current, Revision }` + contributor accumulator；generated 代码只提供 id/index/layout/init projection 与纯访问器，snapshot 由声明式 Capture contract 投影 | Simulation |
+| GameplayTag | 层级 tag id、reference count、requirement/query 与稳定态 transition | Simulation / Definition |
+| GameplayEvent | 带冻结 payload 的瞬时消息；不增加 OwnedTag count | Simulation |
+| GameplayCue | OnActive / WhileActive / Executed / Removed 的 Boundary outbox | Observation / Presentation |
+| TargetData | activation/continuation 拥有的不可变 payload，或 tick-local target record | Simulation / Boundary |
+| EffectContext | Instigator、EffectCauser、SourceObject、origin/hit、Ability/Effect provenance 的不可变上下文 | Simulation |
+| Debug / Replay | 从相同 identity、command 与 typed fact 派生的只读证据 | Observation |
 
-## 官方依据与设计论证
+## ASC-local Handle 与 Slab 模型
 
-| 目标态选择 | 官方规则依据 | 为什么更优秀 | 为什么有必要 |
-|---|---|---|---|
-| ASC / Ability / Effect / Attribute / Tag 的权威状态只落在 Runtime Core ECS 数据上 | `SYS-01`、`SYS-02`、`QRY-01`、`JOB-01` | 让 gameplay 结果由 SystemGroup、System、Job、Component/Buffer/Blob 的显式数据流决定，Profiler/Journaling 可归因 | OOP `ASC` / Ability object 若持有权威状态，会把调度、依赖和写集合藏进托管对象，破坏 Burst 与确定性审查 |
-| 单次 Ability Activation 是 frame-local command / target / spec record，不是 Ability Entity 状态字段 | `SC-01`、`SEL-01`、`PRF-01`、`QRY-04` | 把低频外部意图和高频 target/effect fan-in 拆开，避免每个 target/effect 都创建实体或随机写跨 owner 状态 | 真实业务中 AOE、连击、被动触发会产生大量临时上下文；默认实体化会制造 archetype churn 和结构变化热点 |
-| Instant GE 默认是 EffectCommand / modifier record，Duration/Stack/Period 才进入 ActiveEffectStore | `CASE-12`、`NAT-03`、`BUF-01`、`FSM-02`、`FSM-05` | instant 路径可通过 NativeStream deterministic merge 和 target-grouped apply 批处理；跨帧 effect 则有明确 owner-local slot | 把 simple instant GE 默认做 runtime GE entity 会把瞬时计算伪装成生命周期对象，增加清理和同步成本 |
-| Attribute / GameplayTag 默认按热路径布局为 AttributeSet family、dirty mask、tag/status bitset | `PRF-03`、`PRF-10`、`PRF-26`、`QRY-04`、`EN-01` | 读写字段分离、状态 bitset 和 owner-local buffer 能减少 archetype 数、误触发和 random lookup | “一属性一 component / 一 tag 一 component”在 GAS 规模下会放大 query、archetype 和 change filter 成本 |
-| GameplayCue / Debug / Replay 只作为 Boundary 派生事实 | `SYS-05`、`DBG-01`、`ODF-07`、`ODF-18` | 表现、日志和回放可以复用同一 typed fact / diagnostics snapshot，不反向污染 simulation | UI/VFX/SFX/Debugger 若反向驱动 gameplay，会让无头验收、实机场景和 replay 的结果分叉 |
+v1 的 GrantedAbility、Activation、Continuation、Subscription 与 ActiveEffect 都使用 ASC-local、非压缩、带代数的 slot：
 
-## UML 概念图
+```text
+Handle = (OwnerAscInstanceId, SlotIndex, Generation)
+```
+
+句柄形状相同不代表类型可互换。Runtime、生成代码、命令和调试协议必须使用独立强类型：
+
+- `GrantedAbilityHandle`
+- `AbilityActivationHandle`
+- `ContinuationHandle`
+- `SubscriptionHandle`
+- `ActiveEffectHandle`
+
+若统一序列化为无类型字节布局，必须显式携带 `HandleKind`。`OwnerAscInstanceId` 必须与 `SimulationEpoch` 共同保证跨世界不复用；Generation 仅在 slot 真正回到 free-list 时递增。
+
+Slab 生命周期固定为：
+
+```text
+Free → Live → Tombstone → Free(next Generation)
+```
+
+约束：
+
+1. 禁止 compact、swap-back 或任何改变 Live SlotIndex 的整理。
+2. Tombstone 仍属于旧 Generation；只有子记录、subscription、queued command 和 cleanup 引用全部释放后才能回收。
+3. 队列必须复制所需 payload，不能长期依赖 tombstone 作为事件数据仓库。
+4. stale handle 必须确定性失败，绝不能命中复用后的新对象。
+5. Slab 是 gameplay 权威；projectile、aura 等需要空间查询或独立生命周期的派生 Entity 只能复制不可变 provenance，不反向成为 Activation/ActiveEffect authority。
+
+## Ability 领域关系与并发
 
 ```mermaid
 classDiagram
-    class AbilitySystemComponent {
-        Entity AscEntity
-        AttributeSetComponent attributes
-        TagMaskComponent tags
+    class AscRuntime {
+        AscInstanceId id
+        OwnerHandle owner
+        AvatarHandle avatar
     }
-    class AbilityRuntime {
-        AbilityStateComponent state
-        AbilitySlotBuffer slotRef
+    class GrantedAbilitySlot {
+        GrantedAbilityHandle handle
+        DefinitionId definition
+        GrantProvenance source
+        RemovalPolicy removal
     }
-    class AbilityActivationCommand {
-        AbilityActivationRequestComponent request
-        AbilityCommandComponent command
-        AbilityActivationCommandRecord commandRecord
-        TargetDataBuffer targets
+    class AbilityActivationSlot {
+        AbilityActivationHandle handle
+        ActivationPhase phase
+        bool committed
+        EndReason endReason
     }
-    class EffectFanInKernel {
-        NativeStream commands
-        CompactCommandRange ownerRange
-        ActiveEffectMutation mutation
+    class AbilityContinuationSlot {
+        ContinuationHandle handle
+        ContinuationKind kind
+        WaitState state
     }
-    class ActiveEffectStore {
-        ActiveGameplayEffectBuffer slot
-        StateFlags flags
-        PeriodCursor cursor
-    }
-    class AttributeReduceApplyKernel {
-        TargetGroupedModifierRange modifiers
-        AttributeSetComponent writes
-        AttributeDirtyMaskComponent dirtyMask
-        TagStatusFlagsComponent statusCache
-    }
-    class TargetData {
-        AbilityTargetRecord targetRecord
-        TargetMode targetMode
-        TargetSortKey sortKey
-    }
-    class Observation {
-        GameplayFact fact
-        PresentationEvent outbox
-        DebugReplayEvent replay
+    class AbilitySubscriptionSlot {
+        SubscriptionHandle handle
+        AscInstanceId observedAsc
     }
 
-    AbilitySystemComponent "1" --> "*" AbilityRuntime
-    AbilityActivationCommand --> AbilityRuntime : reads granted state
-    AbilityActivationCommand --> TargetData : resolves targets
-    TargetData --> EffectFanInKernel : writes command records
-    AbilityActivationCommand --> EffectFanInKernel : emits boundary/core intent
-    EffectFanInKernel --> ActiveEffectStore : duration/stack mutation
-    EffectFanInKernel --> AttributeReduceApplyKernel : instant modifiers
-    ActiveEffectStore --> EffectFanInKernel : period/overflow derived command
-    AttributeReduceApplyKernel --> Observation : emits typed facts
+    AscRuntime "1" --> "*" GrantedAbilitySlot
+    GrantedAbilitySlot "1" --> "*" AbilityActivationSlot
+    AbilityActivationSlot "1" --> "*" AbilityContinuationSlot
+    AbilityContinuationSlot "1" --> "0..*" AbilitySubscriptionSlot
 ```
+
+一个 GrantedAbilitySpec 可以按 activation policy 并发产生多个 Activation；一个 Activation 可以同时拥有多个 persistent/one-shot Continuation，同名 Continuation 也不得互相覆盖。外部 ASC 上的 Subscription 反向指向 `(AbilityActivationHandle, ContinuationHandle)`，投递和取消均校验两级 Generation。
+
+Activation 至少区分 `RunningUncommitted / Committed / Ending / Ended`。CanActivate 与 Commit 是两个不同检查点：Ability 可以先激活、等待目标或输入，再在 Commit 时重新检查 cost/cooldown；Commit 只能成功一次。Activation End/Cancel 必须只撤销该 Activation 自己贡献的 tags、blocks、cues、subscriptions 与 continuations。已 Commit 冷却的 owner 是 `CooldownGateSlot`，它持续到 `EndTick` 或显式的 cooldown removal policy，不随 Activation Cancel/End 清理。
+
+## GameplayEffect Spec 与 ActiveEffect 分离
+
+`GameplayEffectApplicationSpec` 不是 `ActiveEffectSlot`：
+
+1. Spec 在应用前保存 DefinitionId、Level、SetByCaller、source capture 与 EffectContext。
+2. 同一 source Spec 应用到多个目标时，每个目标建立独立 target capture/application view；target 数据不得写回并污染其他目标。
+3. Instant Effect 消费 Spec 后结束，不创建 ActiveEffectHandle，但仍必须有 `EffectApplicationId`。
+4. Duration/Infinite Effect 成功应用后才创建或合并到 ActiveEffectSlot；stack 合并时 `EffectApplicationId` 与 `ActiveEffectHandle` 仍是两个身份。
+5. 跨 tick 待应用 Spec 必须由 Continuation 拥有不可变 payload，或由专用持久 payload handle 拥有，不能引用 tick-local scratch。
+
+ActiveEffectSlot 保存 target-local runtime copy、duration/period/stack、inhibition、modifier contributor、grant/cue ownership 与 removal reason。Definition 永远不可被 runtime slot 修改。
+
+## 领域身份与 Provenance
+
+即使 v1 不做网络预测和复制，也必须保留：
+
+- `SimulationEpoch + AscInstanceId`
+- DefinitionId、semantic version/content hash
+- Granted/Activation/Continuation/Subscription/ActiveEffect typed handles
+- `EffectSpecId`、`EffectApplicationId`、`ContributorId`、`CueLifecycleKey`
+- SourceASC / TargetASC
+- Owner / Avatar 的独立身份
+- Instigator / EffectCauser / SourceObject
+- Ability/Effect definition、level、SetByCaller、TargetData、origin/hit
+- granting effect/source 与 removal policy
+- parent causality、emit tick/phase/sequence、end/removal reason
+
+`CausalityId` 只用于确定序、诊断与环检测，不表示预测确认关系。
+
+## 时序语义边界
+
+v1 采用 **stable-state deferred reaction**：GameplayEvent、OwnedTag 触发 Ability、外部 Continuation 唤醒和跨 ASC reaction 默认在下一 tick 投递。Payload/Context/TargetData 固定于发射时；投递时的 CanActivate 与当前状态检查读取下一 tick 的稳定状态。
+
+以下仍属于同 tick kernel invariant：application requirement/immunity、stack 决策、commit、attribute execute/clamp、贡献增删、ongoing/inhibition 稳定化，以及生成期证明闭合、完全展开、有限且静态有界的 definition-local DirectEffectProgram。该选择与 UE GAS 默认同步、可重入回调存在明确时序差异；完整规则见 [01B-GAS业务语义链路概念设计](01B-GAS业务语义链路概念设计Spec.md)。
+
+## 非预测 v1 边界
+
+v1 schema 与 API 不得包含占位式 Prediction 字段，包括 `PredictionKey`、Base/Scoped PredictionKey、Predicting/Confirmed/Rejected、`IsPredicted`、`IncludePredictiveMods`、prediction journal、ack/caught-up/reject delegate、预测 instant overlay 和 redo suppression。
+
+未来 Prediction/Replication 必须作为独立 correlation/reconciliation 层设计，不得复用 slot Handle 或 CausalityId。
 
 ## 不变量
 
-1. Ability Entity 保存 granted ability 的跨帧状态，不承载单次激活上下文，也不直接写 Attribute。
-2. TargetData 承载目标选择结果和确定性排序键，从 frame-local command/target record 或 request/command entity 流入 Effect Fan-In；每个 target 可以产生 command record，但不等于每个 target 创建 request/runtime entity。
-3. GameplayEffect 改变状态，但 instant effect 不应默认创建 runtime GE entity；duration/stack/period 默认进入 ASC owner-local active effect slot。
-4. Attribute / Tag 是判定和聚合结果，不是 OOP callback 入口；Attribute 默认按真实 DOTS 热路径生成 AttributeSet family，不按每个属性生成一套 component/system；高频 status 默认进入 bitmask / status flags。
-5. Spec / Delta / Fact 是语义链路，不是一个全局 bus；物理上分别归 Effect Fan-In、Attribute Reduce/Apply、Gameplay Fact kernel。
-6. Cue / Presentation 观察事实，不决定 gameplay。
-7. 任一 GAS 概念进入 Runtime Core 前，必须先分类为 ECS 权威状态、frame-local record、Boundary 投影或 Definition 输入；未分类的概念不得直接落成 component、system、adapter 或 generated artifact。
-8. OOP 类型可以表达业务入口、外部资源或只读视图，但不能成为 Ability / Effect / Attribute / Tag 的 gameplay owner。
+1. Definition、GrantedSpec、Activation、Continuation 与 Effect Application Spec/ActiveEffect 必须保持分层，不能压成同一种 row 或 slot。
+2. ASC owner-local slab 是 GrantedAbility、Activation 与 ActiveEffect 的唯一 gameplay authority；派生 Entity 只承载 projectile/aura 等结构对象。
+3. 任一贡献必须带稳定 ContributorId，并能按所属 Activation 或 ActiveEffect 精确撤销。
+4. Owner 与 Avatar、Instigator 与 EffectCauser 不得合并为单字段。
+5. Instant Effect 不创建 ActiveEffectSlot；stack application 不以 ActiveEffectHandle 替代 EffectApplicationId。
+6. Capture 只能按生成期封闭的投影契约读取；不能把“最终返回 float”自动解释成 ScalarSnapshot 安全。
+7. GameplayEvent、OwnedTag 与 GameplayCue 是不同语义通道，不能互相替代。
+8. 默认 reaction 下一 tick；需要 same-tick 正确性的逻辑必须属于 kernel invariant，或闭合、有限、静态有界且不读取 post-apply fact 的 DirectEffectProgram。
+9. Cue / Presentation 观察事实，不决定 gameplay。
+10. v1 不保留任何 Prediction schema 占位。
 
 ## 历史方案定位
 
 1. Ability / Effect / Attribute / Tag 作为 ECS Core 的概念切分来自 `../历史方案参考/方案11.md:20-43`。
-2. 用 unmanaged 数据和 Burst-friendly system 承载 Ability 语义的信号来自 `../历史方案参考/方案14.md:122-180`。
+2. unmanaged、Burst-friendly Runtime Core 的设计信号来自 `../历史方案参考/方案14.md:122-180`。
 3. 外部业务只通过 facade / command 进入 GAS 的信号来自 `../历史方案参考/方案10.md:433-563`。
+4. 历史方案仅作为来源线索；本文件的 owner-local generational slab、Capture 与 deferred reaction 裁决优先。

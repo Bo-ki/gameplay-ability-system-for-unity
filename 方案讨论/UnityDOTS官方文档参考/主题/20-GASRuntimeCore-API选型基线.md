@@ -1,91 +1,119 @@
-# 20 GAS Runtime Core API 选型基线
+# 20：GAS Runtime Core API 选型基线
 
-## 定位
+> 精确版本：Unity 6000.3 / Entities 1.4.6
+> 定位：把各主题官方机制组合成 EX-GAS v1 的项目选择；不是新增 Unity 官方规则
 
-本文件是 EX-GAS Runtime Core 的 **项目级 API selection checkpoint**，不是 Unity 官方规范。所有结论必须先引用对应主题中的官方机制，再说明 EX-GAS 为什么采用或拒绝某个方案。
+## 1. 最终选择
 
-**类型：** EX-GAS 项目治理规则
-
-**证据等级：** 项目推导；具体 API 机制以关联主题的精确 PackageCache 来源为准
-
-**适用版本：** Unity 6000.3.14f1；Entities 1.4.6；Collections 2.6.6；Burst 1.8.29
-
-## 选型流程
-
-1. 明确数据是否参与 gameplay 权威结果、确定性 hash 或 replay。
-2. 明确 owner、生命周期、最大并发写入者、容量边界和销毁责任。
-3. 比较候选 API 的数据布局、同步、结构变化、Burst/AOT 和确定性语义。
-4. 写明采用、拒绝和暂不相关的理由；不能用“官方要求”替代项目判断。
-5. 定义可观测指标和重新选型条件。固定数量或耗时只有附基准证据时才能成为阈值。
-
-## 数据性质与默认候选
-
-| 数据性质 | 生命周期 | 默认候选 | 关键验证 |
+| 关注点 | EX-GAS v1 | 官方机制提供什么 | 项目额外承担什么 |
 |---|---|---|---|
-| Gameplay 权威状态 | 跨帧 | owner component / DynamicBuffer / Blob 引用 | owner、容量、确定性 |
-| 本帧确定性命令 | 帧内 | owner-local buffer、按逻辑分区的 NativeStream、Job scratch | merge key、tie-break、allocator |
-| 结构变化请求 | 延迟提交 | 明确 phase 的 ECB；主线程批量同类变化可评估 EntityManager bulk API | playback 位置、同步点、命令量 |
-| 静态定义 | 长生命周期只读 | BlobAsset 或生成的只读数据 | 构建时机、释放责任 |
-| 高频状态 | 跨帧 | enum/bit field、Enableable 或按 query 分离的数据布局 | idle 分布、查询等待、chunk 利用率 |
-| Presentation/Telemetry | 可丢弃或帧内 | Boundary outbox、截断容器 | 不反向影响 Core、独立计时 |
+| Tick | FixedStep，`0..N` Tick/render frame | rate-managed group/update order | 整数 SimulationTick、Tick Rate/hash |
+| Physics 顺序 | FixedStep 直接子组，After `PhysicsSystemGroup` | update attributes/physics groups | PostPhysics 语义 |
+| Core 系统 | 一个 `GasFixedTickSystemGroup` + 一个 `GasTickKernelSystem` | ISystem/SystemGroup/Job 调度 | lane 划分、单 Kernel 所有权 |
+| 临时内存 | `SystemState.WorldUpdateAllocator` | world/group allocator | 项目可用期仅当前 Tick |
+| 持久 ASC 数据 | Component/DynamicBuffer | chunk/component/buffer | Layout/Catalog/slab 唯一模型 |
+| 结构变化 | 标准 `EndFixedStepSimulationEntityCommandBufferSystem` | 延迟 playback | 哪些操作属于结构变化 |
+| 销毁事实 | per-ASC `ICleanupBufferElementData` outbox | cleanup shell 生命周期 | 单 drain、幂等 key、retention 边界 |
+| 性能门 | ScaleProfile | Profiler/容器与 Job API | 场景、门槛与回归判定 |
 
-## API 选型原则
+## 2. 执行域
 
-### 遍历
-
-- `SystemAPI.Query` 是可 Burst 的主线程遍历 API，并会完成必要依赖；它不是仅供 debug 的 API。
-- `IJobEntity`、`IJobChunk` 或主线程遍历的选择依据工作量、依赖链、批处理机会和 Profiler，不使用固定 entity 数量分界。
-- 随机 Lookup 有额外定位和缓存成本，但不把它描述为固定算法或固定倍率。
-
-### 并行写入与确定性
-
-- 普通 `ParallelWriter` 只保证并发安全，不保证调度顺序。
-- `NativeStream` 的 bufferCount 是逻辑分区数量，不等于线程数。若逻辑分区和段内写入稳定，可按分区顺序读取；若业务需要全序，使用稳定 total key 和 tie-breaker 排序。
-- 并行 ECB 使用 `EntityCommandBuffer.ParallelWriter` 和调度无关 sort key；跨 job 的业务全序不能只依赖 chunk index。
-
-### 结构变化
-
-- worker job 中不能直接执行结构变化，通常通过 ECB 延迟。
-- “单一 playback phase”是 EX-GAS 可选的架构纪律，不是 Unity 唯一合法模型。
-- 多个相同类型的主线程结构变化可以评估 EntityManager 的 query/bulk API；以实际同步和拷贝成本决定。
-
-### Burst 与资源
-
-- Editor Burst 使用 JIT 语境，Player 构建使用 AOT；性能报告必须记录运行环境。
-- FunctionPointer 用 delegate，适合批处理粒度的动态分派；优先比较直接调用、Job、静态 switch 等更简单方案。
-- `UnityObjectRef<T>` 与 `WeakObjectReference<T>` 生命周期不同；Runtime Core 不在 Burst hot path 解引用托管 Unity 对象。
-
-## SEL 规则
-
-| 编号 | EX-GAS 项目规则 |
-|---|---|
-| `SEL-01` | 先按 gameplay、transient、telemetry、presentation 分类，再选 API。 |
-| `SEL-02` | Proof 方案必须显式标记，不自动升级为 scale-ready 方案。 |
-| `SEL-03` | 每个 NativeContainer 声明 allocator、owner、释放或 rewind 时机。 |
-| `SEL-04` | 重新选型条件使用可观测指标；固定阈值必须有项目基准证据。 |
-| `SEL-05` | Singleton、Query 和 EntityManager API 按真实依赖完成语义选择，不使用“永不同步/必然同步”的绝对表述。 |
-
-## 任务交还模板
-
-```markdown
-| 业务链路 | 数据性质 | 采用 API | 拒绝方案 | 官方机制依据 | 项目理由 | 指标/重选型条件 |
-|---|---|---|---|---|---|---|
-| ... | ... | ... | ... | QRY-xx / SC-xx | ... | ... |
+```csharp
+/// <summary>
+/// EX-GAS v1 的唯一固定步进域；选择主 Physics 后更新，而不是注册到会随 custom PhysicsWorld 复制的 AfterPhysicsSystemGroup。
+/// </summary>
+[UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+[UpdateAfter(typeof(PhysicsSystemGroup))]
+public partial class GasFixedTickSystemGroup : ComponentSystemGroup
+{
+}
 ```
 
-## 关联主题
+- 这是 EX-GAS 项目裁决，不是 Entities 对 GAS 的官方要求。
+- 一渲染帧固定组可以更新 `0..N` 次；Duration/Period/Cooldown 使用整数 Tick。
+- Session Tick Rate 建立后不可变，并参与规则哈希。
+- GAS 默认 PostPhysics；当前 Tick 的 GAS 物理写入在下一 Physics Tick 生效。
+- manual/独立 World 必须更新完整 FixedStep 父链，不能手工更新 GAS phase 清单。
 
-- [Query 与 Job](Query-Job-遍历/_index.md)
-- [结构变化与 ECB](结构变化-ECB/_index.md)
-- [DynamicBuffer 与 Chunk](DynamicBuffer-Chunk-Archetype/_index.md)
-- [Enableable](Enableable-Component选型/_index.md)
-- [NativeContainer 与 Allocator](NativeContainer-Allocator/_index.md)
-- [Burst 与 AOT](Burst-AOT/_index.md)
-- [确定性](Mathematics-确定性/_index.md)
+参考：[System / World / SystemGroup 解读](./System-World-SystemGroup/API与EX-GAS解读.md)。
 
-## 验收
+## 3. System 与 Job
 
-1. 每个 Runtime Core 任务交还 API 选型表。
-2. 所有官方结论可追溯到精确版本来源；所有项目策略明确标注。
-3. 性能结论分离 core、physics、render 和 runner 成本。
-4. 固定阈值附目标平台、场景、测量方法和日期；否则只保留定性重选型条件。
+v1 只允许：
+
+- 可选 `GasCommandIngressSystem`：规范化外部输入，不执行 GAS 语义；
+- `GasTickKernelSystem`：拥有整 Tick Job DAG 与 scratch；
+- Unity 标准 EndFixed ECB system；
+- 固定步进批次后的单 `GasBoundaryDrainSystem`。
+
+Kernel 的逻辑 lane 是具名 Job/纯函数：freeze/sort/resolve、ability/continuation、pre-apply expansion、target bucket、apply/stabilize、fact merge、boundary projection、ECB record。禁止为了 phase 排序把它们重新拆成多个 SystemGroup，也禁止 phase `Complete()`。
+
+## 4. 数据 API
+
+| 数据 | API/布局 | 硬契约 |
+|---|---|---|
+| 静态定义/Catalog/Layout | BlobAsset | build 时验证；运行时只读共享 |
+| Attribute | fixed logical length DynamicBuffer | Layout id→index；Base/Current 唯一权威 |
+| Tag | fixed logical length count Buffer | Exact/Inclusive；bitset 仅派生 |
+| Granted Ability | ASC-local slab Buffer | slot+generation；不压缩 |
+| Continuation | ASC-local slab Buffer | 跨 Tick 持久，不用 scratch |
+| Active Effect | target-local slab Buffer | capture/stack/period/inhibition/channel |
+| Tick work | WorldUpdateAllocator NativeContainer | 单 Kernel/单 Tick项目所有权 |
+| Boundary | ASC Cleanup Buffer | 自包含 id/tick/key；单 managed drain |
+
+v1 不允许 definition-time slot→Entity promotion。projectile/hitbox 可作为独立 Entity，但只引用权威 slot handle。
+
+## 5. 并行与确定性
+
+- Command 输入生成 canonical stable key。
+- target bucket 之间并行，同 target 单 writer。
+- ongoing/inhibition/tag grant/remove 在 target-local stabilization 中求稳定态。
+- Definition build 检查带符号依赖与 closed/finite/bounded program。
+- 运行时不收敛为 deterministic fatal；不固定 pass 静默截断。
+- Ability direct output 与 verified pre-apply program 可 same-tick；apply 后 Fact reaction 默认下一 Tick。
+- Fact/ECB 排序使用 stable key，不依赖 worker 完成时序。
+
+## 6. 结构与边界
+
+Ability/Effect 槽写、Attribute/Tag 更新、outbox append 都不是结构变化。创建/销毁 Entity、增删 Component/Buffer 才进入标准 EndFixed。
+
+ASC spawn 必须显式添加 cleanup outbox，因为 cleanup component 不从 prefab instance 自动继承。Destroy 后 shell 只保留 cleanup 数据；drain 接管后清空，并在下一标准 EndFixed 移除 buffer。
+
+Runtime Core 只提供一个 managed drain。UI/Audio/Cue/Log/Network 的多消费者与 retention 在托管 dispatch 层处理，不在 ECS 内维护多游标。
+
+参考：[ECB 解读](./结构变化-ECB/API与EX-GAS解读.md) 与 [数据流/生命周期解读](./数据流-系统生命周期/API与EX-GAS解读.md)。
+
+## 7. Allocator
+
+官方 world/group allocator 可能在物理上保留两次更新；EX-GAS 仍把 scratch 的项目可用期限制到当前 Tick DAG。尚未 rewind 不等于允许跨 Tick引用。
+
+禁止：
+
+- 自定义 FrameArena Singleton/手工 rewind；
+- scratch 写入 Component/static/managed field；
+- 跨 System传 NativeContainer；
+- 长期 continuation/effect 使用临时 allocator；
+- 仅为 lane 边界调用 `Complete()`。
+
+参考：[NativeContainer / Allocator 解读](./NativeContainer-Allocator/API与EX-GAS解读.md)。
+
+## 8. ScaleProfile
+
+任何 IBC、初始容量、batch size、算法与数值门槛必须引用版本化 ScaleProfile，包含环境、输入分布、场景生成、采样方法、基线 commit 与验收阈值。
+
+通用架构只写形态红线：无 phase sync、无双事实源、无热路径结构变化/resize、无同 target 竞态写、无越生命周期 scratch、无未稳定事实、无遗留 cleanup shell。
+
+## 9. 任务交还模板
+
+涉及 Runtime Core 的设计/实现必须回答：
+
+1. 运行在哪个 Tick/Group，`0..N` Tick 是否成立？
+2. 权威 owner、读写者与 stable key 是什么？
+3. 数据为何选择 Component/Buffer/Blob/NativeContainer/Cleanup？
+4. allocator、项目可用期与最终 JobHandle 是什么？
+5. 是否结构变化，在哪个标准 playback 点可见？
+6. same-tick 是否证明 closed/finite/bounded，否则如何推迟？
+7. Destroy/shutdown 后谁 drain/清理？
+8. 哪个 ScaleProfile/验收场景支持容量与性能选择？
+
+缺少任一项不得称为可实施设计。

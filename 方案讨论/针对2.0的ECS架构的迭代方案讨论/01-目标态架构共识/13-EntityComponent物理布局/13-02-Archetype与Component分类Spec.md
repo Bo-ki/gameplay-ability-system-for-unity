@@ -1,124 +1,157 @@
 # 13-02：Archetype 与 Component 分类 Spec
 
-> Owner：`01-目标态架构共识/13-EntityComponent物理布局` | 状态：目标态 Spec 子页 | 来源：`../13-EntityComponent物理布局Spec.md` 同 owner 拆分
+> 状态：v1 目标态
+> 目标：内容变化不制造 archetype，业务热路径不依赖结构变化
 
-本文件只描述目标态 Entity / Component 物理布局，不记录当前实现状态、迁移进度、验证数字或任务计划。现实代码事实必须回到 `../../00-当前架构事实/`，任务拆分必须回到 `../../02-主线任务树/`。
+## 1. 结论
 
-## ASC Entity 批量创建策略（`PRF-24`）
+同一 Session 的 live ASC 采用一个固定基础 archetype。Attribute、Tag、Ability 定义、Effect 状态与工作量差异全部表达在固定 Buffer/槽元素中，不通过增删 Component 表达。
 
-> **`PRF-24`**：禁止逐 Component 构建 Entity Archetype。使用 `EntityManager.CreateEntity()` 后逐次 `AddComponent<T>()` 会在每次调用时创建中间 archetype，这些中间 archetype 在应用剩余生命周期内持续存在并增加所有 `EntityQuery` 的计算开销。
+允许的额外 archetype 只来自明确生命周期边界：Session、外部 Integration Request、独立 gameplay Entity，以及 ASC 销毁后的 cleanup shell。
 
-**正确做法 —— 预建 Archetype 批量创建：**
+## 2. 类型选择矩阵
 
-```csharp
-// 在 battle bootstrap / ASC factory 中一次性创建
-var ascArchetype = EntityManager.CreateArchetype(
-    typeof(ASCIdentityComponent),
-    typeof(CombatAttributeCurrentSetComponent),
-    typeof(CombatAttributeBaseSetComponent),
-    typeof(ResourceAttributeCurrentSetComponent),
-    typeof(ResourceAttributeBaseSetComponent),
-    typeof(AttributeDirtyMaskComponent),
-    typeof(TagMaskComponent),
-    typeof(ASCActiveEffectsComponent),
-    typeof(AbilitySlotBuffer),
-    typeof(ActiveGameplayEffectBuffer),
-    typeof(PresentationEventBuffer),
-    typeof(GameplayEventBuffer)      // 小容量 Core fact range；高规模可迁移到 compact owner range
-);
+| 类型 | v1 用途 | 示例 | 约束 |
+|---|---|---|---|
+| `IComponentData` | 单值、固定形态状态/句柄 | Session/ASC lifecycle、identity、`AscBattleMembership`、Actor refs、RNG、slab heads | unmanaged；不因内容增删 |
+| `IBufferElementData` | Session registry或 ASC-local 索引数组、队列、slab/range store | `BattleInstanceSlot`、Attribute、Tag、Ability/Activation/Continuation/Subscription、Effect/Payload/Aggregator、Pending Command | 逻辑长度/句柄规则显式 |
+| `ICleanupBufferElementData` | 销毁后仍需 drain 的事实 | Boundary Fact outbox | spawn 显式添加；drain 后在标准 EndFixed 移除 |
+| `ICleanupComponentData` | 销毁后仍需保留的接管 receipt | BoundaryDrainState/frozen physical owner identity/NextOwnerSequence/BatchId/InFlightWatermark | staging receipt 后 Accepted；Kernel cleanup prepass 清理 |
+| `IEnableableComponent` | 高频启停的派生 work marker | OutboxDirty、HasPendingWork（按 profile） | 预挂载；不是业务权威 |
+| `BlobAssetReference<T>` | 静态定义/Catalog/Layout/程序 | GE/GA definition、tag parent、attribute index | 不可变；build 时验证 |
+| NativeContainer | 当前 Tick scratch | sort keys、target buckets、fact partitions | Kernel-owned；不跨 Tick/System |
 
-// 批量创建 ASC Entity（AutoChess battle init 等场景）
-var entities = new NativeArray<Entity>(count, Allocator.Temp);
-EntityManager.CreateEntity(ascArchetype, entities);
+`ISharedComponentData` 与 chunk component 不是 v1 默认。前者可能造成 chunk 分片，后者会把本应 per-ASC 的状态提升为 chunk 共享；只有 profile 与独立 ADR 证明必要时才能引入。
+
+## 3. Session 与 Live ASC archetype
+
+Session archetype 固定包含：
+
+```text
+GasSessionIdentity
+GasSessionConfig
+GasDefinitionRegistry
+GasCatalogRegistry
+SimulationTickState
+GasSessionLifecycle
+SessionFaultLatch
+BattleInstanceSlot[]
+AscRegistrySlot[]
+BoundaryCommandInbox[]
+BoundaryDrainState             (cleanup component)
+BoundaryFactBuffer[]           (cleanup buffer；Battle/Session scope)
 ```
 
-**为什么必须预建 Archetype：**
-- ECB 逐个 `AddComponent` → N-1 个冗余中间 Archetype 永久存在
-- AutoChess 50 棋子逐个添加 5 个 component → 4 个冗余 Archetype，每次 Query 创建/更新都要遍历
-- 预建 Archetype → 零中间 Archetype，所有 ASC Entity 共享同一 Archetype
+`BattleInstanceSlot` 使用非压缩 slot/generation 与稳定 `BattleInstanceId`，保存 BattleLocalTick、ingress/lifecycle、member range/count 和 terminal/outcome state。单 slot Terminal 不改变其他 slot；全部终局或显式 stop才推进 Session Terminalizing。`BoundaryCommandInbox` 是唯一 ingress写入、Kernel Gather消费的跨 tick持久队列；不能与内部 `PendingCommand(T+1)` 合并为无来源队列。
 
-**验收指标**：Debugger 报告 `ascArchetypeCount = 1`（所有 ASC Entity 属于同一 Archetype），`intermediateArchetypeCount = 0`。
+### 3.1 Live ASC
 
----
+概念形态：
 
----
+```text
+GasAscIdentity
+AscBattleMembership
+AscLifecycle
+AscActorRefs
+AscRandomState
+AscSlabHeads
+BoundaryDrainState             (cleanup component)
+[pre-attached enableable work markers]
+AttributeValueSlot[]
+AttributeDirtyWord[]
+TagCountSlot[]
+TagPresenceWord[]
+GrantedAbilitySlot[]
+AbilityActivationSlot[]
+ContinuationSlot[]
+AbilitySubscriptionSlot[]
+CooldownGateSlot[]
+ActivationOwnedContributionSlot[]
+EmittedApplicationRefSlot[]
+ActiveEffectSlot[]
+ActiveEffectPayload[]          (non-compacting variable ranges)
+ActiveEffectCaptureSlot[]
+AggregatorSlot[]
+LiveDependencySlot[]
+LiveDependencyRouteSlot[]
+PendingCommand[]
+BoundaryFactBuffer[]  (cleanup buffer)
+```
 
-## Archetype 审计目标
+是否“有激活 Ability”“有 Active Effect”“有 Boundary Fact”都不能触发 archetype 变化。空状态由零 live slots/零长度可变队列/disabled marker 表达。
 
-| 指标 | 目标值 | 告警阈值 | 关联风险 |
-|---|---|---|---|
-| Runtime Core archetype 总数 | < 10 | > 20 | ISSUE-001/004 |
-| 仅含 1 个 entity 的 archetype | 0（除 singleton） | > 3 | `performance-chunk-allocations.html`: "100K entity with unique archetypes = >1.5 GB" |
-| Prefab archetype 数量 | 0（GE 定义不用 prefab） | > 10 | 每个 prefab = 16 KiB chunk |
-| Tag component 数量 | 0 | > 0 | 每个 tag 翻倍 archetype 排列 |
-| SharedComponent unique value 数 | < 5 | > 10 | 每个 unique value 创建新 chunk |
+`AscBattleMembership` 固定保存 BattleInstance handle/id、稳定 ScenarioUnitId、side/team 与 membership ordinal；ASC 发布 Ready 后不可变。Target grouping、Battle terminal 与 semantic hash 不得回退到 raw Entity 或 chunk 顺序。
 
----
+Attribute 与 Tag 权威 Buffer 是固定逻辑长度，其中 Attribute 元素包含 `Base/Current/Revision`；slab/队列可以改变物理长度，但复用 free slot/free range 且不移动 live slot 或 live payload range。`CooldownGateSlot` 是 owner ASC 的长期 slab，不随 Activation End/Cancel 释放。Buffer 物理外溢到 heap 不是语义错误，是否可接受由 ScaleProfile 测量。
 
-## Component 分类完整清单
+## 4. Enableable Component 规则
 
-### IComponentData（unmanaged 数据）
+可使用 enableable marker 的前提：
 
-| Component | 挂载 Entity | 大小估计 | 说明 |
-|---|---|---|---|
-| `FrameArenaStateComponent` | FrameArenaSingleton | ~32 bytes | allocator handle + frame index |
-| `FrameArenaOwnerComponent` | FrameArenaSingleton | ~4 bytes | owner 标记 |
-| `GASDefinitionCatalogComponent` | DefinitionCatalogSingleton | ~24 bytes | `BlobAssetReference<GASDefinitionCatalogBlob>` + schema/content hash，只读 |
-| `ASCIdentityComponent` | ASC Entity | ~8 bytes | PlayerId, TeamId |
-| `CombatAttributeCurrentSetComponent` / `ResourceAttributeCurrentSetComponent` | ASC Entity | 按 set 固定 | 高频 Current 值，按真实热路径聚合 |
-| `CombatAttributeBaseSetComponent` / `ResourceAttributeBaseSetComponent` | ASC Entity | 按 set 固定 | 低频 Base/Min/Max/Clamp/Config 值 |
-| `AttributeDirtyMaskComponent` | ASC Entity | 8-24 bytes | 本帧 AttributeCode 变化 bitset，供 fact/projection 精确过滤 |
-| `TagMaskComponent` | ASC Entity | ~24 bytes | 三层 uint64 bitmask（192 tags）+ 层级查询 |
-| `TagStatusFlagsComponent`（可选，同 archetype） | ASC Entity | ~4-8 bytes | 高频 status 分支 cache，从 `TagMaskComponent` 派生 |
-| `ASCActiveEffectsComponent` | ASC Entity | ~4 bytes | store version marker |
-| `AbilityActivationRequestComponent` | Request Entity | ~40 bytes | source ASC, ability entity, explicit target, input sequence, request frame, target mode |
-| `AbilityCommandComponent` | Request Entity | ~56 bytes | normalized activation command, primary GE, level, target params, status |
-| `GEEffectOwnerComponent` | Active Effect Query Entity (可选) | ~8 bytes | owning ASC ref |
-| `GEStreamOwnerComponent`（非目标态 proof） | `GEStreamOwnerSingleton`（proof-only） | ~16 bytes | version, sequence；scale-ready 不作为默认 owner |
+1. 所有 live ASC 在 spawn 时已挂载该类型；
+2. 它只表示“是否值得查询/调度”，真实状态可从权威 Buffer 重建；
+3. 查询明确选择 enabled/disabled 语义；
+4. 写 enable bit 的 Job 依赖被完整追踪。
 
-### IBufferElementData
+禁止用 enable bit 表示 Tag presence、Ability 激活或 Effect inhibition 的唯一事实。禁止用 `IgnoreComponentEnabledState` 来掩盖并发写或错误查询。
 
-| Buffer Element | 挂载 Entity | InternalBufferCapacity | 每元素大小 |
-|---|---|---|---|
-| `GEEffectCommandBuffer` | ASC Entity compact range / `GEStreamOwnerSingleton`（非目标态 proof） | 4-16（目标）/ 256（proof-only） | ~32 bytes |
-| `GESetByCallerValueBuffer` | command range owner / `GEStreamOwnerSingleton`（非目标态 proof） | 8-32（目标）/ 256（proof-only） | ~16 bytes |
-| `GEEffectSpecBuffer` | frame scratch / `GEStreamOwnerSingleton`（非目标态 proof） | 目标态优先 NativeContainer / 256（proof-only） | ~48 bytes |
-| `AttributeModifierBuffer` | target grouped range / `GEStreamOwnerSingleton`（非目标态 proof） | 8-32（目标）/ 512（proof-only） | ~24 bytes |
-| `ActiveEffectMutationBuffer` | ASC Entity / frame scratch / `GEStreamOwnerSingleton`（非目标态 proof） | 4-16（目标）/ 128（proof-only） | ~32 bytes |
-| `GameplayEventBuffer` | per-owner fact/outbox / `GEStreamOwnerSingleton`（非目标态 proof） | 8-32（目标）/ 256（proof-only） | ~32 bytes |
-| `AbilitySlotBuffer` | ASC Entity | 8 | ~16 bytes |
-| `PresentationEventBuffer` | ASC Entity | 4 | ~32 bytes |
-| `ActiveGameplayEffectBuffer` | ASC Entity | 8 | ~64 bytes |
-| `TargetDataBuffer` | Request Entity | 16 | ~8 bytes |
+## 5. Cleanup archetype
 
-> **注：** `TargetDataBuffer` 承载一次 Ability 激活的目标解析结果，挂在 request/command entity 上。每个 target 对应一个 entry。若 target 数量超过 `InternalBufferCapacity`，spill 监控同 `ActiveGameplayEffectBuffer` 策略；不得把它挂在 Ability Entity 上作为跨帧状态。
+`DestroyEntity` 后，只要 ASC 或 Session 仍有 cleanup buffer/component，Entity 会保留为 cleanup shell。该 shell：
 
-### IEnableableComponent
+- 不再有 `GasAscIdentity`/`GasSessionIdentity` 或 owner 的普通 gameplay 数据；
+- 不能被 live ASC/Session query 或 Registry 当作业务对象；
+- 只由 `GasBoundaryDrainSystem`/cleanup path 读取；
+- managed staging 以 `BatchId/physical owner/InFlightWatermark` 返回幂等 receipt 后只清 accepted prefix；late tail回 Pending，无 tail/NoFactReceipt才写 `BoundaryDrainState=Accepted`；`NextOwnerSequence` 不重置；
+- 下一次 Kernel cleanup prepass 把移除 outbox 与 drain state 记录到该 Tick 标准 EndFixed，随后最终销毁。
 
-| Component | 挂载 Entity | Toggle 频率 | Toggle Phase |
-|---|---|---|---|
-| `AbilityExecutableTag`（可选） | Ability Entity | 仅当 profiler 证明大量不可执行 ability 需要 query skip 时启用 | `GASCoreSimulationSystemGroup` State lane |
-| `PeriodDueTag`（可选） | ASC Entity | 仅当 profiler 证明大量 idle slot 需要 enableable skip 时启用 | `GASCoreSimulationSystemGroup` State lane |
+事实元素本身必须保存 identity scope、FactPlane、Battle、Source/Target 的 stable id + generation；空 shell由 `BoundaryDrainState` 冻结的 physical owner identity/range产生 NoFactReceipt，不能 lookup 已移除的普通 Component，也不得为 Session shell伪造唯一 Battle。
 
-> **注：** Per-slot active/inhibited 标记通过 `ActiveGameplayEffectBuffer.Flags` 的 bit 表示，不使用独立的 enableable component。这样可以避免每个 slot 一个 component type 的 archetype 爆炸。Chunk 级跳过通过 `ChunkComponent` 实现。目标态禁止为单个 effect slot 定义独立 enableable component。
+## 6. Spawn 与 Destroy
 
-### ChunkComponent
+### 6.1 Spawn
 
-| Component | 挂载 Chunk（entity 所在 chunk） | 用途 |
-|---|---|---|
-| `AllIdleChunkComponent` | 所有 ASC entity 都是 idle 的 chunk | chunk 级跳过 |
-| `NoActiveEffectsChunkComponent` | 无任何 ASC entity 有 active effect 的 chunk | chunk 级跳过 |
+通过 ECB/初始化路径一次性：
 
-### 明确禁止的 Component 类型
+1. 创建固定 ASC archetype；
+2. 设置 identity、`AscBattleMembership`、Actor refs/RNG/slab heads，并令 `AscLifecycle=Pending`；同时在目标 `BattleInstanceSlot` 预留稳定 member ordinal；
+3. 按 Session Layout/Catalog 初始化 Attribute/Tag 固定 Buffer；
+4. 预热 slab/队列的物理容量（由 ScaleProfile 决定）；
+5. 显式添加 cleanup outbox 与 drain state；
+6. setup update 的 EndFixed只建立 Pending Entity/Registry entry；下一 FixedStep 的 Kernel `SpawnFinalize` maintenance lane在 scratch 完成 canonical `SpawnInitializationTransaction`，将 Attribute init、initial tags、default grants 和静态有界 self-initial effects 全部计算/准入成功后，才 no-fail统一写入权威状态、initial fact/Cue、`Ready` 并发布 Registry；该 update不计 gameplay Tick且不运行 gameplay DAG。
 
-| 禁止项 | 原因 | 对应规范 |
-|---|---|---|
-| 任何纯标记 tag component（无数据字段的 IComponentData） | 每个 tag 翻倍 archetype 排列数 | `PRF-03` |
-| 任何 managed IComponentData（含托管引用） | 不能 Burst，hot path 退化 | `SYS-01` |
-| 用 `ISharedComponent` 做 ASC 分组 | 值改变 = entity 迁移 chunk；除非满足三条件 | `PRF-12` |
-| 用 `ICleanupComponent` 做普通状态存储 | Cleanup 有特殊生命周期；误用导致内存泄漏 | `PRF-12` |
-| NativeContainer（如 `NativeArray`/`NativeHashMap`）放在 `IComponentData` 上并对其所在 entity 调度 `IJobChunk`/`IJobEntity` | 安全系统无法追踪 component 内嵌容器的读写依赖，导致竞态或 job 依赖缺失 | `PRF-34` |
-| 依赖 ECS Child Buffer 的 sibling index 做确定性排序 | Child buffer 迭代顺序在 Entities 1.4.6 中不保证确定，跨帧/跨平台可能变化 | `PRF-31` |
+cleanup component 不依赖 prefab instantiate 复制；spawn 验收必须直接检查其存在。SpawnBatch 只保证 gameplay 可见性原子，不承诺 ECB 物理回滚；失败批次进入 Session `Faulted/Disposing`，全部 Pending Entity 都不得部分发布。
 
----
+### 6.2 Destroy
 
+1. 将 `AscLifecycle` 转为 `DestroyPending`，阻止新 Command 并使 identity/generation 失效；
+2. 生成必要的 cancel/remove/death Boundary Fact；
+3. 记录 EndFixed Destroy；
+4. managed staging receipt 成功后只清 `<=InFlightWatermark`，无 tail才标记 `BoundaryDrainState=Accepted`；失败则保留 outbox/InFlight identity且阻止 FinalDrain 完成；
+5. 下一 Kernel cleanup prepass 记录当前 Tick EndFixed 移除 cleanup buffer/state。若 shutdown 无下一 Tick，在完整 EndFixed/producer completion/FinalDrain receipt 后由停止世界 teardown 直接清 shell。
+
+## 7. Archetype 风险与监控
+
+ScaleProfile 至少采集：
+
+- live ASC archetype 数与 chunk utilization；
+- 各 Buffer chunk 内/外分布；
+- enableable marker 筛选收益；
+- structural change 与 ECB command 数；
+- cleanup shell 数量与存活 Tick；
+- staging backlog、Accepted 等待 prepass 数量与 BatchId/InFlightWatermark 重试；
+- slab high-water/free ratio。
+
+Spec 不规定“最多几个 archetype/多少 overflow”为通用常数。门槛由目标平台 profile 设定，但 live ASC 因内容类型分裂 archetype 本身属于设计失败。
+
+## 8. 禁止方向
+
+- 一属性一 Component 或一 Tag 一 Component。
+- 给每种 Ability/Effect/状态添加 marker Component。
+- Attribute/Tag Buffer 与 generated component 双写。
+- 为了 Query 方便把每个 Ability/Effect slot 建成 Entity。
+- 运行中反复增删 work marker，而不是预挂载 enableable。
+- 把 cleanup shell 当 live ASC。
+- 用 ECB 表达本可通过槽字段完成的 Activate/Commit/Cancel。
+- 把 ASC SpawnBatch 的 gameplay 可见性原子误写成 ECB 物理回滚。
+- Post-Fixed drain 排跨 batch ECB，或 staging receipt 前清 outbox。

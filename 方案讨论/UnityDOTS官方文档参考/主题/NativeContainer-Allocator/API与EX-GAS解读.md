@@ -1,157 +1,127 @@
-# NativeContainer-Allocator：API 与 EX-GAS 解读
+# NativeContainer / Allocator：API 与 EX-GAS 解读
 
-**适用版本**：Unity `6000.3.14f1`；Collections `2.6.6`；Entities `1.4.6`
+> 精确基线：Unity 6000.3 / Entities 1.4.6
+> 边界：allocator 的物理寿命来自官方；EX-GAS 另设更短的业务所有权
 
-## Allocator 生命周期
+## 1. 官方机制
 
-| Allocator | 官方生命周期约束 | 释放/失效 |
+### 1.1 Allocator 类型
+
+官方区分 Temp、TempJob、Persistent、rewindable、world update、system group 与 ECB allocator。选择要同时考虑 lifetime、Job 可用性、释放责任与线程安全，不能只看分配速度。
+
+官方快照：
+
+- [Allocator overview](../../官方文档原件/com.unity.entities/Documentation~/allocators-overview.md)
+- [World update allocator](../../官方文档原件/com.unity.entities/Documentation~/allocators-world-update.md)
+- [System group allocator](../../官方文档原件/com.unity.entities/Documentation~/allocators-system-group.md)
+- [ECB allocator](../../官方文档原件/com.unity.entities/Documentation~/allocators-entity-command-buffer.md)
+
+### 1.2 World/group allocator 生命周期
+
+- World update allocator 是 double rewindable；官方说明分配物理寿命跨两次 world update。
+- 调用 `SetRateManagerCreateAllocator` 的 ComponentSystemGroup 可建立 double rewindable group allocator。
+- 组更新时 group allocator 被设为当前 world update allocator；通过 `SystemState.WorldUpdateAllocator` 创建的容器会使用当前上下文 allocator。
+- group allocator 的分配物理寿命跨两次该组更新。
+
+“内存还没被 rewind”只说明物理存储暂时存在，不自动授予另一个 Tick/System 读取权，也不替代 JobHandle 依赖。
+
+### 1.3 NativeContainer 与并行写
+
+- NativeContainer 的 safety/依赖规则要求明确读写者。
+- ParallelWriter 允许并发追加，不保证物理写入顺序等于游戏语义顺序。
+- `NativeStream` 适合按 logical foreach index 分区写、之后读取的 fan-in 场景，但需要定义分区、读取和稳定 merge；并非所有 fan-in 的默认最优容器。
+- Persistent 容器必须有唯一 owner、释放点和 shutdown 路径。
+
+关联规则：[NAT-01](./NAT-01.md)、[NAT-02](./NAT-02.md)、[NAT-03](./NAT-03.md)、[NAT-04](./NAT-04.md)。
+
+## 2. EX-GAS v1 裁决
+
+### 2.1 Kernel-owned Tick scratch
+
+`GasTickKernelSystem` 使用 `state.WorldUpdateAllocator` 创建：
+
+- canonical command keys/ranges；
+- resolve/validation partitions；
+- bounded pre-apply operation list；
+- target buckets/ranges；
+- target-local worklist；
+- Core Fact partitions 与 stable merge indices；
+- Boundary routing indices。
+
+虽然 allocator 物理寿命可能覆盖两次组更新，EX-GAS 把这些容器的项目可用期严格限制到当前 `SimulationTick` 的 Kernel Job DAG。Tick 结束后不再保存/读取。
+
+### 2.2 单 Job DAG
+
+Kernel 从 `state.Dependency` 建立连续依赖，把所有 container producer/consumer 串成 DAG，并将最终 handle 交回 `state.Dependency`。真实 ECB producer 也登记完整依赖。
+
+禁止：
+
+- lane/phase 之间 `Complete()`；
+- 把 scratch 写入 Component/Buffer/Singleton/static/managed field；
+- 一个 System 分配、另一个 System 消费当前 Tick scratch；
+- 手工 `Rewind` 或自建 `FrameArenaSingleton`；
+- 用 WorldUpdateAllocator 保存跨 Tick continuation/effect/pending request。
+
+长期状态进入 ASC DynamicBuffer；托管 Boundary retention 进入 drain 之后的 managed queue。
+
+## 3. 容器选择原则
+
+| 工作集 | 候选 | 选择条件 |
 |---|---|---|
-| `Allocator.Temp` | 只在创建它的线程与作用域内安全；主线程创建的 Temp allocation 不能传入 job；job 内可使用该 worker 的 Temp allocator | 主线程 Temp 在帧末整体回收；job 的线程 Temp 在 job 结束时整体回收；单独 Dispose 不释放该块 |
-| `Allocator.TempJob` | 可以传入 job；必须在创建后 4 帧内释放 | `Dispose()` 或 `Dispose(JobHandle)` |
-| `Allocator.Persistent` | 可长期存在，安全系统无法判断是否超出业务生命周期 | owner 在 teardown 显式 `Dispose` |
+| 追加并可预估长度 | `NativeList` + 分区/prefix sum | 单/分区 writer，后续稳定排序 |
+| per-target ranges | key array + sort/radix + range scan | 需要 canonical target order |
+| 并行可变 fan-in | `NativeStream` | logical index 映射自然、两段读取可接受 |
+| key→value 临时表 | Native hash map/multi-map | 查找收益高于 hash/内存成本 |
+| bit/dirty work | Native bit array/word array | Catalog-indexed 固定空间 |
 
-`Dispose(JobHandle)` 会调度一个依赖输入 handle 的释放 job。容器是 struct；对一个副本调用 Dispose 不会把其他副本的 `IsCreated` 自动改为 false，因此所有权不能靠 `IsCreated` 猜测。
+Spec 不指定一种容器覆盖所有 lane。选择必须记录：
 
-## RewindableAllocator 2.6.6 API
+- owner 与 allocator；
+- 写入/读取 Job；
+- logical ordering；
+- capacity/overflow 策略；
+- 最终依赖与失效点；
+- ScaleProfile 数据。
 
-`RewindableAllocator` 不是 `new RewindableAllocator(Allocator.Persistent, size)`。Collections 2.6.6 的官方创建方式是 `AllocatorHelper<RewindableAllocator>` + `Initialize`。调用 `Rewind()` 会一次失效所有子 allocation 和 child safety handle；任何由它创建的容器都不得再访问。
+## 4. 确定性
 
-```csharp
-using System;
-using Unity.Collections;
+ParallelWriter 的 append 顺序、Job worker 和 hash iteration 都不能成为 Command/Fact 顺序。结果必须按显式 stable key canonicalize，例如：
 
-/// <summary>
-/// 拥有一块可整批回收的帧级临时内存。
-/// </summary>
-public struct FrameArena : IDisposable
-{
-    private AllocatorHelper<RewindableAllocator> allocatorHelper;
-
-    private ref RewindableAllocator Allocator => ref allocatorHelper.Allocator;
-
-    /// <summary>
-    /// 创建并注册 RewindableAllocator。
-    /// </summary>
-    public void Initialize(int initialBlockSize)
-    {
-        allocatorHelper =
-            new AllocatorHelper<RewindableAllocator>(Unity.Collections.Allocator.Persistent);
-        Allocator.Initialize(initialBlockSize, false);
-    }
-
-    /// <summary>
-    /// 使用当前 arena 创建 NativeList。
-    /// </summary>
-    public NativeList<int> CreateList()
-    {
-        return new NativeList<int>(Allocator.Handle);
-    }
-
-    /// <summary>
-    /// 一次失效并回收当前 arena 的全部子 allocation。
-    /// </summary>
-    public void Rewind()
-    {
-        Allocator.Rewind();
-    }
-
-    /// <summary>
-    /// 注销并释放 allocator 自身及其内存块。
-    /// </summary>
-    public void Dispose()
-    {
-        Allocator.Dispose();
-        allocatorHelper.Dispose();
-    }
-}
+```text
+(SimulationTick, TargetStableId, SourceStableId, SourceSequence, Kind, LocalSequence)
 ```
 
-不要在仍有读取/写入 job 使用 arena allocation 时 Rewind。Entities 的 World Update Allocator 和 System Group Allocator 已管理自己的 rewind 周期；使用者只应把 allocation 保留在官方声明的更新窗口内。
+是否需要全排序、radix、bucket-local sort 或 prefix sum 由 ScaleProfile 决定；语义 key 不得随算法改变。
 
-## NativeStream 的真实模型
+## 5. ScaleProfile
 
-`new NativeStream(bufferCount, allocator)` 创建的是**固定数量的逻辑 buffer**，`ForEachCount == bufferCount`，且 `bufferCount` 必须大于 0。它不会自动读取 worker thread 数，也不会在调度后改变 segment 数。构造参数通常可以按线程数设计，但更稳妥的确定性模式是让逻辑工作索引映射到固定 buffer。
+必须采集：
 
-每个 buffer 只能由一个 writer 使用；一个 writer 对该 buffer 调用一次 `BeginForEachIndex(index)`，完成后调用 `EndForEachIndex()`。所有写入必须先于第一次读取完成。
+- 每个 Tick 临时容器峰值、初始容量、扩容/overflow；
+- allocator 分配次数与字节；
+- target bucket 长度/偏斜；
+- sort/build/merge 各 Job 耗时；
+- Job DAG 空洞与主线程 sync 原因；
+- container 选择对 cache/chunk/worker 的影响；
+- 0/1/N fixed Tick 的峰值内存。
 
-```csharp
-/// <summary>
-/// 每个逻辑输入索引独占一个 NativeStream buffer。
-/// </summary>
-[BurstCompile]
-public struct FanInJob : IJobFor
-{
-    public NativeStream.Writer Writer;
+不在通用文档写死容器容量、ASC 数、毫秒或分配次数阈值。profile 需包含硬件、版本、输入分布、采样方法与基线 commit。
 
-    /// <summary>
-    /// 把当前逻辑输入的输出写入同索引 buffer。
-    /// </summary>
-    public void Execute(int index)
-    {
-        Writer.BeginForEachIndex(index);
-        Writer.Write(new EffectCommand
-        {
-            ProducerIndex = index
-        });
-        Writer.EndForEachIndex();
-    }
-}
+## 6. 生命周期验收
 
-int inputCount = commands.Length; // 为 0 时由外层直接跳过，不创建 NativeStream。
-var stream = new NativeStream(inputCount, Allocator.TempJob);
-JobHandle produceHandle = new FanInJob
-{
-    Writer = stream.AsWriter()
-}.ScheduleParallel(inputCount, 64, dependency);
-```
+- 一个渲染帧连续 N 个 FixedStep update 时，每 Tick scratch 不被下一 Tick 读取。
+- safety checks/Burst 下无 use-after-rewind、race 或 leaked Persistent allocation。
+- phase profiler 中无非必要 `Complete`。
+- manual World 通过完整 FixedStep 父链获得相同 group allocator 上下文。
+- shutdown 完成所有 producer 依赖后才释放 Persistent/Blob/managed owner。
 
-如果构造时传 `threadCount`，却在 `IJobFor.Execute(index)` 中把任意输入 index 传给 `BeginForEachIndex`，当 input count 大于 buffer count 时会越界；同一 buffer 被多个 Execute 重复 Begin 也违反 writer 契约。
+## 7. 不能由官方直接推出
 
-## NativeStream 与确定性
+官方只提供 allocator/container 能力；以下是项目决策：
 
-Collections 官方文档指出普通 ParallelWriter 的追加顺序依赖线程调度，而 NativeStream 通过独立 buffer 避免这种调度顺序竞争。NativeStream 本身并不自动提供“跨运行业务顺序”，确定性取决于：
-
-1. buffer index 到逻辑输入的映射是否稳定；
-2. 单个 buffer 内的生产顺序是否稳定；
-3. 消费端是否固定按 `0..ForEachCount-1` 与 buffer 内写入顺序读取；
-4. 若业务要求与上述顺序不同，是否按稳定全序键排序并处理 tie-breaker。
-
-因此，“所有 NativeStream 结果必须再排序”和“NativeStream 的 ForEachCount 顺序不可控”都不正确。若一索引一 buffer 且映射稳定，按 index 合并可以确定；多个来源或同键命令需要统一业务顺序时，才进行 total-key sort。
-
-## System Group Allocator
-
-`ComponentSystemGroup.SetRateManagerCreateAllocator(IRateManager)` 在设置 rate manager 的同时创建 group allocator。官方示例在 system group 构造函数中调用它。不是传入不存在的 `RateUtils.RateManagerCreateAllocator` 工厂，也不需要业务代码自行构造 `DoubleRewindableAllocators`。
-
-```csharp
-/// <summary>
-/// 以固定步长更新并拥有 group allocator 的系统组。
-/// </summary>
-public partial class GasFixedStepGroup : ComponentSystemGroup
-{
-    /// <summary>
-    /// 创建 fixed-rate manager 和对应的 group allocator。
-    /// </summary>
-    public GasFixedStepGroup()
-    {
-        SetRateManagerCreateAllocator(new RateUtils.FixedRateSimpleManager(1f / 60f));
-    }
-}
-```
-
-## EX-GAS 项目策略
-
-- 每个 NativeContainer 分配点说明 allocator、owner、最后使用它的 JobHandle，以及 Dispose/Rewind 边界。
-- 影响 battle hash 的无序并行输出必须在消费前建立稳定顺序；不禁止 ParallelWriter 本身，禁止的是把其物理写入顺序当业务顺序。
-- Debugger 记录项目能可靠采集的 allocation count/bytes、NativeStream buffer/item count、arena 高水位；指标及告警阈值必须由基准校准。
-- 将 NativeContainer 嵌入 component 时，禁止对该 component 调度 `IJobChunk`/`IJobEntity`；主线程获取 component、提取 container，再把 container 本身传给 job，并正确串联依赖。
-
-## 官方证据
-
-| 官方文档 | 可裁决结论 |
-|---|---|
-| Collections `allocator-overview.md` | Temp/TempJob/Persistent 生命周期、4 帧限制、`Dispose(JobHandle)`、`IsCreated` 限制 |
-| Collections `allocator-rewindable.md` | `AllocatorHelper<RewindableAllocator>`、Initialize/Rewind/Dispose 顺序和失效语义 |
-| Collections `parallel-readers.md` | ParallelWriter 顺序不确定；NativeStream/UnsafeStream 可隔离并行读写 |
-| Collections `NativeStream.cs` API 注释 | bufferCount/ForEachCount、单 buffer writer、Begin/End 和先写后读契约 |
-| Entities `allocators-system-group.md` | `SetRateManagerCreateAllocator` 与 group allocator 生命周期 |
-| Entities `components-nativecontainers.md` | 禁止对含嵌套 NativeContainer 的 component 调度 IJobChunk/IJobEntity；允许提取 container 后调度 |
+- 一个 Kernel 拥有全部 Tick scratch；
+- 项目可用期比 allocator 物理寿命更短；
+- target-local bucket/single writer；
+- same-tick closed bounded DAG；
+- 不自建 FrameArena；
+- 具体 stable key 与 ScaleProfile 门。

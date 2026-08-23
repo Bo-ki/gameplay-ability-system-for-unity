@@ -1,94 +1,136 @@
-# 03I：System / Lane Catalog 与禁止方向
+# 03I：System / Lane Catalog 与禁止方向 Spec
 
-> Owner：`01-目标态架构共识/03-RuntimeCore管线` | 状态：目标态子 Spec | 拆分来源：`../03-RuntimeCore管线Spec.md` | 最近拆分：2026-06-07
+> 状态：v1 系统目录冻结
+> 目的：固定“哪些是 System、哪些只是 Kernel 内 lane”，阻止旧多阶段组重新出现
 
-本文件只描述理想 Runtime Core 目标态。禁止写入当前代码事实、迁移流水、验证数字或下一步任务；现实证据必须回到 `../../00-当前架构事实/`，任务拆分必须回到 `../../02-主线任务树/`。
+## 1. v1 System Catalog
 
-定位：目标态 System/Lane Catalog、禁止方向和历史方案定位。
+| 名称 | 类型/父组 | 必需 | 单一职责 |
+|---|---|---:|---|
+| `GasCommandIngressSystem` | `ISystem`；`GasFixedTickSystemGroup` | 是 | 在 Tick cutoff 前把 `SessionIngressGate` 已接收的 Boundary journal record 搬入 ECS inbox；不得执行 GAS 语义 |
+| `GasFixedTickSystemGroup` | `ComponentSystemGroup`；FixedStep 直接子组、After Physics | 是 | 定义 GAS PostPhysics 固定步进域 |
+| `GasTickKernelSystem` | `ISystem`；GasFixedTick | 是 | 拥有完整 Runtime Core Job DAG、Tick scratch 与 Core 写权限 |
+| `EndFixedStepSimulationEntityCommandBufferSystem` | Unity 标准系统 | 是 | 播放当 Tick 真实结构变化 |
+| `GasBoundaryDrainSystem` | managed；固定步进批次之后 | 是 | 唯一接管 live/cleanup-shell outbox，并分发到托管层 |
 
-## 附录：目标 System / Lane Catalog
+除 ingress 外，新增 Runtime Core System 必须满足：需要独立生命周期/更新频率/托管边界，或 Unity API 强制独立更新点。仅为“代码太长”“方便排序”不能新建 System。
 
-以下清单只描述目标命名和职责，不表达实现状态。旧 `GASSpecEvaluationSystemGroup` / `GASDeltaApplySystemGroup` / `GASGameplayEventProjectionSystemGroup` 以及“每 kernel 一个 group”的名称不是新任务目标命名。
+## 2. 更新关系
 
-### GASFramePrepareSystemGroup
+```text
+SimulationSystemGroup
+├─ FixedStepSimulationSystemGroup        (0..N updates/render frame)
+│  ├─ PhysicsSystemGroup
+│  ├─ GasFixedTickSystemGroup
+│  │  ├─ GasCommandIngressSystem
+│  │  └─ GasTickKernelSystem
+│  └─ EndFixedStepSimulationEntityCommandBufferSystem
+└─ GasBoundaryDrainSystem                (once after the fixed-step batch)
+```
 
-| System | 目标职责 |
-|---|---|
-| `GASFrameArenaSetupSystem` | 帧首刷新 lookup handle、rewind scratch allocator、输出 dependency budget |
+若实际 PlayerLoop 组装使 drain 不适合放在 `SimulationSystemGroup`，可由明确的 TickBatch owner 在完整 FixedStep 批次后调用同一 drain service；不能因此把 drain 塞进 Kernel 或让多个消费者直接扫 ECS。cleanup shell 成功接管后只清 accepted prefix，无 tail才标记 Accepted；下一次 Kernel cleanup prepass 将 remove 记录到该 Tick 标准 EndFixed，drain 不创建跨 batch ECB。shutdown 无后续 Tick 时走显式 teardown。
 
-### GASCommandResolveSystemGroup
+`GasCommandIngressSystem` 与公开 CommandPort capability 成对必装，必须同时声明 `[UpdateInGroup(typeof(GasFixedTickSystemGroup), OrderFirst = true)]` 与 `[UpdateBefore(typeof(GasTickKernelSystem))]`。它只从 `BoundaryIngressJournal` 搬运完整 record，完成 durable ECS inbox append 后再让 Kernel seal cutoff；外部 ECS Request Entity 若存在也只能先规范化进同一 journal，不能绕过 gate 或新增第二 inbox writer。
 
-| Lane | System | 目标职责 |
-|---|---|---|
-| Boundary Command Ingest | `AbilityCommandIngestSystem` | 消费 Boundary ability request + Definition Catalog → normalized ability command / cost / cooldown seed |
-| Boundary Command Ingest | `GEBoundaryCommandIngestSystem` | 消费低频外部 GE apply request → normalized GE command seed |
-| Target Resolve | `AbilityTargetResolveSystem` / `ResolveAbilityCommandTargetsJob` | command record / request target rule / physics snapshot / self target → `AbilityTargetRecord` NativeStream；低量物化路径可写 request-owned `TargetDataBuffer` |
-| Target Resolve | `TargetSortSystem` | 按 battle-deterministic key 排序 target，避免依赖 query/chunk 隐式顺序 |
+## 3. Kernel Lane Catalog
 
-### GASCoreSimulationSystemGroup
+| Lane | 输入 | 输出 | 并行/所有权 |
+|---|---|---|---|
+| CleanupAcceptedPrepass（所有未Disposed lifecycle） | Accepted live owner/shell | live owner→Idle；shell cleanup remove intent→本 update标准EndFixed | 不依赖 gameplay admission 的 lifecycle maintenance；ECB allocator/OOM 仍属 fatal environment failure；不递增 gameplay Tick |
+| SpawnFinalize（仅 SpawnPending maintenance update） | EndFixed 已创建的完整 Pending batch、Session registry/layout/hash、generated SpawnInitializationProgram | shadow Attribute/Tag/Grant/self-initial-effect transaction 全量成功后的整批权威/initial fact/Cue/Ready publish，或 Faulted + destroy intent | Kernel 唯一 writer；ReadyTick 为下一 gameplay Tick；不递增 gameplay Tick、不运行其余 gameplay lanes |
+| Gather/TickStartSnapshot + PlanExpandScratchProvision | persistent inbox、due work、ASC state、Catalog per-definition maxima、ScaleProfile | immutable Tick input/snapshot；checked envelope 或 fault candidate 的 `PlanExpandScratchEnvelopeToken`，并在 Plan/Expand 写前 provision 定长 scratch | 只读 durable state；逻辑超限使预排 Plan/Expand no-op |
+| OwnerPlanBuild | Tick-start snapshot、有效 envelope token、Blob、同 ASC shadow plans | CommitPlan、post-commit capture candidate、生成上界 | owner ASC shadow RYW；零权威写 |
+| TargetResolve/Expand | CommitPlan、有效 envelope token、target rules、verified program | bounded target/effect ops 与完整上界 | 只写已 provision scratch |
+| WholeTickInfraAdmission | 全 Tick 上界、PlanExpandScratchEnvelopeToken、ScaleProfile、slab/queue 元数据 | downstream/durable reservation token/ranges 或 InfraAdmissionFault | 验证 envelope；任何 gameplay 权威写之前 |
+| AscOwnerCommandWave | admitted CommitPlan | Activation/Continuation/Subscription/owned contribution 与 source work | owner ASC 单写；no-fail mutation |
+| SourceSpecProjection | committed plan、post-commit candidate | immutable source-bound specs | 只密封成功 Commit |
+| GroupByTarget | admitted effect ops | per-target canonical ranges | stable target key |
+| AscTargetStateWave | target ranges + target state | application outcome、Effect/Attribute/Tag mutation | target 间并行、target 内单写 |
+| Stabilize/Death | target dirty closure | stable target state、death candidates、fact partitions | target owner 单写 |
+| StableFactMerge/TerminalResolve | partition facts/death candidates | canonical facts、per-BattleInstance terminal decision | 全 target 完成后唯一 resolver |
+| GroupNextTickRouteByDestination | public reaction/live dirty | destination-grouped PendingCommand(T+1) | 跨 ASC 按 destination 分组 |
+| BoundaryProject | canonical facts | 已预留 scoped cleanup outbox ranges | ASC facts 按 ASC-local writer；Battle/Session facts 由 Session唯一 writer |
+| Record EndFixed | admitted spawn/destroy intent | parallel ECB commands | 仅记录，标准 EndFixed playback |
 
-| Lane | System | 目标职责 |
-|---|---|---|
-| Effect Fan-In | `GASEffectFanInSystem` | 多来源 command producer → `NativeStream` → deterministic merge |
-| Effect Fan-In | `GEEffectSpecBuildSystem` | command + GE definition → resolved modifier candidate；实现上可作为 fan-in 内部 job 或独立 lane system |
-| Effect Fan-In / Attribute Reduce | `GEExecutionCalculationOutputModifierSystem` | execution output → resolved modifier record → target ASC chunk job apply；不得逐 effect 主线程 random write |
-| Effect Fan-In | `PeriodOverflowCommandDeriveSystem` | period / overflow producer，作为 fan-in producer |
-| State Evaluate / PreTick | `GASActiveEffectPreTickSystem` 或 `GASEffectFanInSystem` 内 producer job | owner-local active effect period / expire seed → Effect Fan-In producer；是否独立 system 由 `SYS-03` / `PRF-07` 决定 |
-| State Evaluate / PostApply | `GASActiveEffectPostApplySystem` | owner-local active effect slot enum / duration / stack / inhibit / chunk skip |
-| State Evaluate | `AbilityStateEvaluateSystem` | ability active / cooldown / cancel / end state |
-| State Evaluate | `ChunkComponentMaintainSystem` | 维护 `AllIdleChunkComponent` / `NoActiveEffectsChunkComponent` |
-| Attribute Reduce/Apply | `GASAttributeSetReduceApplySystem` | target-grouped AttributeSet modifier reduce / apply |
-| Attribute Reduce/Apply | `AttributeModifierApplySystem` | owner-local / target-grouped modifier range → AttributeSet 写入 |
-| Gameplay Fact | `GameplayFactProjectionSystem` | Attribute / Cue / Damage typed fact projection |
-| Gameplay Fact | `GameplayReactionSystem` | Core reaction：Ability trigger / reactive GE command seed（默认 next-frame，不进入 Boundary） |
-| Gameplay Fact | `CueRequestProjectionSystem` | Cue fact 进入 boundary fact，不直接表现 side effect |
+Lane 应用具名 Job/纯函数和 ProfilerMarker 暴露，不用 SystemGroup 暴露。
 
-### GASStructuralCommitSystemGroup
+Kernel 外层 dispatch固定为：先对所有未Disposed状态运行`CleanupAcceptedPrepass`，再按`SpawnPending / Ready|Running / Terminalizing|FinalDrain|Faulted|Disposing / Disposed`分派 SpawnFinalize、完整gameplay DAG、teardown maintenance或no-op。这样最后gameplay Tick后的Accepted shell不依赖“再跑一个假 gameplay Tick”；shutdown确实无下一FixedStep时才使用03F定义的FinalDrain后direct cleanup。
 
-| System | 目标职责 |
-|---|---|
-| `BeginGASStructuralCommitECBSystem` | ECB playback（OrderFirst，默认少用） |
-| `EndGASStructuralCommitECBSystem` | ECB playback（OrderLast）- destroy、cleanup、grant/revoke ability |
-| `GASAbilityDestroyCommitSystem` | pending destroy ability → ECB destroy |
-| `FrameEndCleanupSystem` | frame-local compact owner buffer 清空、stream counter 重置 |
+## 4. 调试契约
 
-### GASBoundaryProjectionSystemGroup
+每条拒绝、fault 与可选 trace 至少包含：
 
-| System | 目标职责 |
-|---|---|
-| `PresentationOutboxSystem` | `GameplayEventBuffer` / typed fact range → `PresentationEventBuffer` |
-| `ReplayLogSystem` | `GameplayEventBuffer` / typed fact range → replay event |
-| `DiagnosticsSnapshotSystem` | Debugger counters → `RuntimeDiagnosticsSnapshot` |
+- `SimulationTick`；
+- Lane Id；
+- Source/Target ASC stable id；
+- Command/Fact/Event stable id；
+- Definition id 与 slot+generation（若适用）；
+- 稳定枚举错误码，不依赖托管异常文本。
 
-> **`PRF-07` 说明 —— 不拆分 Group**：三个 System 共享相同的输入 Query（`GameplayEventBuffer`），合并在同一 SystemGroup 是正确的。每个 System 有固定的 TypeHandle 刷新 + Lookup 创建 + Dependency 链开销，不必要地拆分为多个 Group 会增加固定成本（`PRF-07`）。
->
-> **`DiagnosticsSnapshotSystem` 采样频率控制**：不同于 `PresentationOutboxSystem` 需要每帧执行（低延迟 UI 反馈），`DiagnosticsSnapshotSystem` 应在其内部用帧计数器控制采样频率（如每 60 帧采样一次），而非通过拆分 Group 实现。三个 System 的写入频率、消费者和性能预算不同，通过**内部采样控制**而非**Group 拆分**来解决。
->
-> ```
-> PresentationOutboxSystem:  每帧执行（UI 低延迟要求）
-> ReplayLogSystem:           每帧执行（确定性回放要求）
-> DiagnosticsSnapshotSystem: 每 N 帧采样（N 可配置，默认 60）
-> ```
+Trace 写入 Tick-local 分区 Buffer，稳定 merge 后才输出。不得在 worker Job 内直接写 Unity Console。
 
----
+## 5. 独立 World / AutoChess Runner
 
-## 禁止方向
+runner 不拥有 GAS phase 清单。它只拥有 TickBatch：
 
-1. Simple instant GE 默认创建 runtime GE entity。
-2. 业务 reaction 扫描全局 observation event 作为主输入。
-3. Presentation / Replay / Debugger 混入 core simulation tick。
-4. 在 Target Resolve / Effect Fan-In / State Evaluate / Attribute Apply / Gameplay Fact 中直接执行 `EntityManager` 结构变化。
-5. 把 request entity 当作高频 instant GE 的默认 command 载体。
-6. **更新：** 在 Target Resolve / Effect Fan-In / Attribute Apply / Gameplay Fact 中做 enableable toggle。
-7. **新增：** 使用 Unity 默认的 `BeginSimulationEntityCommandBufferSystem` / `EndSimulationEntityCommandBufferSystem` 做 Runtime Core 结构变化（playback 位置不对）。
-8. **新增：** 在 hot path 临时创建 EntityQuery，或把 ComponentLookup / BufferLookup / TypeHandle 放进中央 singleton registry；EntityQuery 必须由 owner `ISystem.OnCreate` 通过 `SystemState.GetEntityQuery` 创建，Lookup / TypeHandle 必须由 owner `ISystem.OnUpdate` 刷新并计数。
-9. **新增：** 使用同步 enableable-filtered query 而不评估 sync point 成本。
-10. **新增：** 把 proof-only `GEStreamOwnerSingleton` / 大容量 singleton DynamicBuffer / 大容量 per-ASC frame buffer 当成 scale-ready 目标态。
-11. **新增：** Runtime Core 反查 Luban managed row、JSON、`Dictionary`、`Func<>` registry，或把 per-definition entity query 当成每帧配置 lookup。
+1. 按固定 Tick accumulator 决定本渲染/驱动批次的 `0..N` Tick；
+2. 更新完整 `FixedStepSimulationSystemGroup` 父链；
+3. 让父链处理 group allocator、Physics、GAS 与 EndFixed；
+4. 批次结束调用单 managed drain；
+5. Session Tick Rate 与规则哈希和标准 World 一致。
 
-## 历史方案定位
+任何“手工 Update 五个 GAS 组”的 runner 都必须迁移，避免遗漏 allocator reset、PhysicsWorld 或标准 EndFixed。
 
-1. Ability command 作为纯 ECS 激活入口的设计信号来自 `../../历史方案参考/方案15.md:199-232`。
-2. OOP 只通过边界层 command gateway 发命令、ECS 侧写 request 的边界来自 `../../历史方案参考/方案14.md:265-335`。
-3. Command Buffer / Event Buffer 单向边界来自 `../../历史方案参考/方案11.md:20-43`。
-4. Attribute 计算从托管 helper 迁移到 unmanaged / Burst-friendly 计算的信号来自 `../../历史方案参考/方案15.md:350-466`。
+## 6. 明确禁止
+
+### 6.1 执行域
+
+- 恢复多个 GAS phase SystemGroup。
+- 把全局 GAS 放到 `AfterPhysicsSystemGroup` 并假设它覆盖所有 PhysicsWorld。
+- 以渲染帧 delta/time 驱动 Duration/Period。
+- runner 直接 Update Kernel 或部分 GAS 子组。
+
+### 6.2 数据模型
+
+- Attribute/Tag Buffer 与 generated component 同时作为权威。
+- 一属性一 Component。
+- Definition-time slot/Entity 双模型；v1 的 Ability/Continuation/Effect 权威实例只能是 ASC slab。
+- slab 压缩 live slot 或省略 generation。
+- 用 presence bitset 反推 Tag exact count。
+
+### 6.3 Job 与内存
+
+- phase 级 `Complete()`。
+- 自定义 FrameArena Singleton、手工 rewind 或跨 System scratch。
+- 同 target 无分区并行写。
+- 用 Job 完成顺序作为 Fact 顺序。
+- 把长期 continuation/effect 放临时 NativeContainer。
+
+### 6.4 语义与生命周期
+
+- 仅凭无环就允许 same-tick 任意 reaction；必须同时 finite、closed、bounded。
+- 固定 pass 静默截断 stabilization。
+- 在未稳定状态上发布 Fact。
+- 自定义 GAS ECB playback、phase 中途 playback。
+- cleanup outbox 未 drain 就销毁，或让多个托管消费者直接清 Buffer。
+- 以 `EntityManager.Exists` 判断 cleanup shell 仍是业务 ASC。
+
+### 6.5 验收
+
+- 在 Spec 硬编码通用实体数、容量、毫秒或百分比阈值。
+- 缺少输入分布与环境版本的性能结论。
+- 只测一渲染帧一个 Tick。
+- 只测 live ASC，不测同 Tick destroy 与 shutdown drain。
+
+## 7. 可变但必须有 ADR/Profile 的选择
+
+以下不在 v1 写死：
+
+- 具体 NativeContainer、排序算法、并行 batch size；
+- DynamicBuffer InternalBufferCapacity 与 scratch 初始容量；
+- trace 采样率与托管 retention；
+- float/fixed-point 数值表示（但必须满足项目确定性目标）；
+- 是否为特定独立 gameplay object 建 Entity；
+- profiling 后是否整体调整 outbox owner 策略；同一事实始终只能有一个 owner，不能建立 ASC/Session 镜像。
+
+任何变化不得破坏唯一事实源、Tick 时序、单 target writer、standard EndFixed 与单 drain 契约。

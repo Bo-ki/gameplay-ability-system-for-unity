@@ -1,168 +1,117 @@
-# System-World-SystemGroup: API 与 EX-GAS 解读
+# System / World / SystemGroup：API 与 EX-GAS 解读
 
-## 核心概念
+> 精确基线：Unity 6000.3 / Entities 1.4.6
+> 边界：先陈述官方机制，再给 EX-GAS v1 项目裁决
 
-### World
+## 1. 官方机制
 
-World 是 ECS 数据和系统调度的最高边界。每个 World 拥有独立的 `EntityManager`、System 集合和 entity ID 命名空间——同一 entity ID 在不同 World 中指向不同实体。
+### 1.1 World 与 System
 
-**World 生命周期：**
+- World 是 EntityManager、System 与 ECS 数据的生命周期边界。
+- `ISystem` 是 unmanaged system 形态；`SystemBase` 支持托管字段与托管边界，但不因此自动适合热点 Core。
+- System 的数据访问声明与 `JobHandle` 依赖共同决定安全调度；调度 Job 的 system 必须把最终依赖交还框架。
+- System 有固定 update/调度成本；官方性能文档说明不必要的 system 拆分可能增加开销，但没有规定“项目最多几个 System”。
 
-```csharp
-// 默认由 Unity 自动创建
-// 手动控制使用 ICustomBootstrap
-public class GASBootstrap : ICustomBootstrap
-{
-    public bool Initialize(string defaultWorldName)
-    {
-        var world = new World("GASWorld", WorldFlags.Game);
-        world.GetOrCreateSystem<GASCommandIngestSystem>();
-        ScriptBehaviourUpdateOrder.AppendWorldToCurrentPlayerLoop(world);
-        return true; // 阻止默认 World 创建
-    }
-}
-```
+官方快照：
 
-**关键事实：**
-- `WorldFlags` 控制行为：`Game`（运行时）、`Editor`（编辑器预览）、`ThinClient`（无渲染）
-- 默认禁用：`#UNITY_DISABLE_AUTOMATIC_SYSTEM_BOOTSTRAP_RUNTIME_WORLD`
-- `World.Dispose()` 销毁所有 entity 和 system，按创建逆序销毁
-- 多 World 场景（如 Netcode 客户端/服务器分离）在同进程中运行独立 ECS 实例
+- [World 概念](../../官方文档原件/com.unity.entities/Documentation~/concepts-worlds.md)
+- [System 概念](../../官方文档原件/com.unity.entities/Documentation~/concepts-systems.md)
+- [ISystem](../../官方文档原件/com.unity.entities/Documentation~/systems-isystem.md)
+- [SystemBase](../../官方文档原件/com.unity.entities/Documentation~/systems-systembase.md)
+- [System 优化](../../官方文档原件/com.unity.entities/Documentation~/systems-optimizing.md)
 
-### ISystem vs SystemBase
+### 1.2 SystemGroup 与更新顺序
 
-| 特性 | ISystem | SystemBase |
-|------|---------|------------|
-| 类型 | unmanaged struct | managed class |
-| Burst 编译 | `OnCreate`/`OnUpdate`/`OnDestroy` 均可 `[BurstCompile]` | 仅 job 体内可 Burst |
-| 开销 | 较低（无托管对象） | 较高（GC 分配、虚调用） |
-| 状态访问 | `ref SystemState` 参数 | `this.World` / `this.EntityManager` |
-| **EX-GAS 推荐** | Runtime Core 热路径 | Boundary / Editor / 低频 |
+- `UpdateInGroup` 把 System/Group 放进父组；`UpdateBefore`/`UpdateAfter` 表达同组内约束。
+- 属性是排序约束，不替代数据 `JobHandle`。
+- `FixedStepSimulationSystemGroup` 使用 fixed-rate manager；一次外层更新可能执行零次或多次 fixed update。
+- 通过 `SetRateManagerCreateAllocator` 设置 rate manager 的组可建立自己的 double rewindable allocator，并在组更新期间替换当前 world update allocator。
 
-**ISystem 标准结构：**
+官方快照：
 
-```csharp
-[BurstCompile]
-public partial struct SAttributeRecalculate : ISystem
-{
-    public void OnCreate(ref SystemState state) { }
+- [System 更新顺序](../../官方文档原件/com.unity.entities/Documentation~/systems-update-order.md)
+- [System 时间](../../官方文档原件/com.unity.entities/Documentation~/systems-time.md)
+- [System group allocator](../../官方文档原件/com.unity.entities/Documentation~/allocators-system-group.md)
 
-    [BurstCompile]
-    public void OnUpdate(ref SystemState state)
-    {
-        // 只做 job 调度，不放业务逻辑在主线程
-        var job = new AttributeRecalculateJob { ... };
-        state.Dependency = job.ScheduleParallel(state.Dependency);
-    }
+### 1.3 Physics group
 
-    [BurstCompile]
-    public void OnDestroy(ref SystemState state) { }
-}
-```
+Unity Physics 的 custom physics group 会为指定 PhysicsWorld 运行自己的 PhysicsSystemGroup；挂在 `BeforePhysicsSystemGroup`/`AfterPhysicsSystemGroup` 的用户系统也会随该 custom group 运行。
 
-**System 生命周期回调顺序：**
+官方快照：[Physics system groups](../../官方文档原件/com.unity.physics/Documentation~/group-body.md)。
 
-```
-OnCreate -> OnStartRunning -> OnUpdate（每帧）-> OnStopRunning -> OnDestroy
-```
+因此，“把一个系统放 AfterPhysicsSystemGroup”不仅表示主 Physics 后运行，还可能让它在多个 custom PhysicsWorld group 中被复制调用。这是机制；系统是否应该复制是项目语义。
 
-- `OnStartRunning`：首次 `OnUpdate` 前 + 从停止/禁用恢复时调用
-- `OnStopRunning`：无匹配 entity（`RequireForUpdate` 不满足）或 `Enabled = false` 时调用
-- `RequireMatchingQueriesForUpdate`：没有任何 query 匹配 entity 时跳过 `OnUpdate`
+## 2. EX-GAS v1 裁决
 
-### SystemGroup 与 Update Order
-
-SystemGroup 是 phase owner——它把子系统和子 Group 组织成有序更新树。
-
-**默认三层根 Group：**
-
-```
-InitializationSystemGroup    (PlayerLoop Initialization 末尾)
-SimulationSystemGroup        (PlayerLoop Update 末尾)
-PresentationSystemGroup      (PlayerLoop PreLateUpdate 末尾)
-```
-
-**FixedStepSimulationSystemGroup：**
-
-`FixedStepSimulationSystemGroup` 是 `SimulationSystemGroup` 下的固定步模拟域。PackageCache `systems-time.md` 明确说明固定步系统按固定时间间隔更新，并且一帧可能运行多次。EX-GAS Runtime Core 若以 battle tick / frame index / replay hash 为权威时序，核心物理执行域默认挂在 `FixedStepSimulationSystemGroup` 下；variable-step profile 必须额外给出确定性证据。
-
-**自定义 SystemGroup：**
+### 2.1 唯一固定步进域
 
 ```csharp
+/// <summary>
+/// EX-GAS 的主固定步进域；作为 FixedStep 直接子组只跟随主 Physics 顺序，不随 custom PhysicsWorld 的 AfterPhysics 组复制。
+/// </summary>
 [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-[UpdateBefore(typeof(GASCoreSimulationSystemGroup))]
-public partial class GASCommandResolveSystemGroup : ComponentSystemGroup { }
+[UpdateAfter(typeof(PhysicsSystemGroup))]
+public partial class GasFixedTickSystemGroup : ComponentSystemGroup
+{
+}
 ```
 
-**排序控制优先级：**
-1. `OrderFirst` / `OrderLast`（最高优先级）
-2. `UpdateBefore` / `UpdateAfter`（同级 Group 内）
-3. 未受约束的同级顺序不作为业务 contract；需要先后的 system 必须显式声明约束
+这是项目决策：
 
-### 系统数量成本
+- GAS 使用 FixedStep，默认 PostPhysics。
+- 一渲染帧可 `0..N` GAS Tick。
+- 持续时间/周期/冷却使用整数 `SimulationTick`。
+- Session Tick Rate 建立后不可变并进入规则哈希。
+- 当前 Tick 的 Physics 结果可供 GAS；GAS 写入 Physics/Transform 的结果在下一 Physics Tick 生效。
 
-每个活跃 System 的固定开销来自三处：
+不选择 `AfterPhysicsSystemGroup`，是为了避免全局 GAS 随 custom PhysicsWorld 复制。若某项逻辑确实属于每个 PhysicsWorld，应建立专用局部 integration system，不改变 GAS authority owner。
 
-1. **Handle 更新**：每个 system 有自己的 handle/query 缓存；显式缓存的 `ComponentTypeHandle` / Lookup 在使用前更新，source-generated `SystemAPI` 缓存由生成代码更新。结构变化不会要求每帧重新创建 EntityQuery。
-2. **Lookup 重复创建**：不同 System 可能创建相同的 `ComponentLookup<T>`，每帧各自更新。
-3. **Dependency 链**：每个 System 通过 `Dependency` JobHandle 传递依赖。N 个 system = N 个 JobHandle 链接点。
+### 2.2 一个 Group + 一个 Kernel
 
----
+`GasFixedTickSystemGroup` 默认包含：
 
-## EX-GAS 项目解读
+1. 可选 `GasCommandIngressSystem`：只做外部请求规范化；
+2. `GasTickKernelSystem`：拥有全部 Runtime Core Job DAG。
 
-### Runtime Core Phase 设计
+Resolve、Ability、Effect、Stabilization、Fact merge 等是 Kernel 内具名 lane/Job，不是多个 SystemGroup。该选择减少固定调度面并让 Tick scratch/依赖有唯一 owner；官方文档并未要求 GAS 必须如此。
 
-目标态 Runtime Core SystemGroup 映射采用 FixedStep 下的少量物理执行域，不再按每个 GAS 语义阶段建立 group：
+如果未来新增 Core System，必须证明其需要不同生命周期/频率/托管边界，而不是仅为了源文件拆分或 phase 排序。
 
-| 物理执行域 | 默认挂载位置 | 承载的 kernel lane | 结构变化权限 |
-|-----------|-------------|----------|--------------|
-| `GASFramePrepareSystemGroup` | `FixedStepSimulationSystemGroup` 最前 | frame clock、allocator / budget、debug counters；query 由 owner system 创建 | 禁止 |
-| `GASCommandResolveSystemGroup` | FramePrepare 之后 | Boundary Command Ingest、Target Resolve | 禁止 |
-| `GASCoreSimulationSystemGroup` | CommandResolve 之后 | Effect Fan-In、State Evaluate、Attribute Reduce/Apply、Gameplay Fact | 禁止直接结构变化 |
-| `GASStructuralCommitSystemGroup` | CoreSimulation 之后 | grant/remove/spawn/destroy/cleanup 的 ECB playback 或 EntityQuery bulk | EX-GAS 默认集中提交 phase；例外需正确性与 Profiler 证据 |
-| `GASBoundaryProjectionSystemGroup` | StructuralCommit 之后 | ReadModel、Presentation outbox、Replay、Debugger | 只读 |
+### 2.3 Managed 边界
 
-旧 `SpecEvaluation / DeltaApply / TypedFactProjection` 是 GAS 语义链，不是 DOTS 物理边界。只有新边界对应独立同步点、结构变化点、固定步策略或投影边界时，才允许新增 `ComponentSystemGroup`。
+`GasBoundaryDrainSystem` 可以使用 `SystemBase`/托管 service，因为它明确处于 Core 之外并需要对接 Cue/UI/Audio/日志。它在固定步进批次后单次接管 outbox，不把 UnityEngine.Object 送入 Burst Job。
 
-### 当前代码对齐
+## 3. manual / 独立 World
 
-- `GASManager.CreateSystems()` 已收束到 `GASSystemScheduleContract`，方向正确。
-- 不应使用 `DefaultWorldInitialization` 自动发现替代显式 phase contract。
-- `GASRuntimeFrameBudgetContract` 应指定每组预算上限。
-- `GASRuntimeQueryLayoutPlan` 应与 phase 设计对齐。
+官方允许自定义 bootstrap/world，但手动调用某个 system 的 Update 不能自动复现默认父组的 rate manager、allocator、Physics 和 ECB 顺序。
 
-### 性能归因要求
+EX-GAS runner 合约：
 
-Core / Physics / Presentation / Runner 必须分组统计，禁止将所有 PlayerLoop 成本归因到 GAS Core。
+- TickBatch owner 更新完整 `FixedStepSimulationSystemGroup` 父链；
+- 不直接 Update Kernel，不维护旧 GAS phase 清单；
+- 父链自然执行 Physics → GAS → 标准 EndFixed；
+- 固定批次后执行单 managed drain；
+- 标准与 manual World 使用相同 Session Tick Rate/规则 hash。
 
-### ICustomBootstrap 的使用时机
+参考：[ICustomBootstrap](../../官方文档原件/com.unity.entities/Documentation~/systems-icustombootstrap.md) 与本主题 [CASE-17](./CASE-17.md)。
 
-AutoChess 无头验收 Demo 如果使用隔离 World，必须通过 `ICustomBootstrap` 或手动 World 控制，并明确 world time / tick source，不能隐式依赖 Editor frame delta。
+## 4. 依赖与可观测性
 
----
+- Update ordering 只表达 system 顺序；Kernel lane 之间使用 JobHandle。
+- Kernel 不在 phase 边界 `Complete()`。
+- 单 Kernel 内用具名 Job、ProfilerMarker、稳定 trace id 保持可调试性。
+- Debug/Presentation 只能读 Boundary/快照，不能从托管 manager 驱动 Core。
 
-## 常见陷阱
+关联规则：[SYS-01](./SYS-01.md)、[SYS-03](./SYS-03.md)、[SYS-05](./SYS-05.md)。
 
-1. **在 `OnCreate` 中访问未创建的系统**：使用 `CreateAfter` 确保依赖系统已存在
-2. **System 数量膨胀**：每个 system 都有 type handle + lookup + dependency 成本
-3. **忘记 `ref` 关键字**：正确签名是 `OnUpdate(ref SystemState state)`；签名不匹配时不会实现 `ISystem` 接口并产生编译错误
-4. **World 生命周期**：`World.Dispose()` 后所有 entity/component 失效，无自动恢复
-5. **多 World 混用**：entity ID 只在 World 内唯一，跨 World 传递需用 entity mapping
-6. **ISystem 中意外使用托管 API**：可能导致 Burst 编译诊断或该调用路径无法 Burst；检查 Burst Inspector/编译日志，不把它描述成必然“静默退化”
-7. **`[RequireMatchingQueriesForUpdate]` 的误用**：始终有 entity 匹配的 system 加此属性反而增加检查开销
-8. **SystemGroup 嵌套过深**：没有官方“三层”上限；只为真实物理边界增加 group，并用 Systems 窗口检查可理解性与排序
-9. **手动调用其他 System 的 Update()**：破坏 EntityQuery 变更版本号
+## 5. 不应写死
 
-## 官方证据
+以下由 ScaleProfile/ADR 决定：
 
-| 官方文档 | 关键结论 | 关联规则 |
-|----------|----------|----------|
-| `concepts-worlds.md` | World 是 entity ID 唯一性和系统调度边界 | SYS-01, SYS-05 |
-| `systems-intro.md` | ISystem 是 unmanaged 首选，SystemBase 退居 managed 场景 | SYS-01, PRF-16 |
-| `systems-update-order.md` | SystemGroup 提供分层排序；创建顺序与更新顺序是不同约束 | SYS-02, PRF-16 |
-| `systems-optimizing.md` | 每个 system 有固定 overhead；用 Profiler 决定是否合并 | SYS-03, SYS-04, PRF-07 |
-| `systems-isystem.md` | ISystem 回调签名使用 `ref SystemState`；回调可 Burst 编译 | PRF-16 |
-| `allocators-system-group.md` | `SetRateManagerCreateAllocator` 与 double rewindable group allocator 生命周期 | CASE-16 |
-| `systems-version-numbers.md` | 手动调用其他 System Update() 破坏变更版本号 | SYS-02 |
-| `systems-entity-command-buffers.md` | ECB 最佳实践、独立 ECB per job | SYS-02 |
+- 具体 Job 类型、batch size 与排序算法；
+- 是否真的需要 ingress 独立 System；
+- managed drain 的实际父组/宿主（但必须在完整固定批次后且保持单消费者）；
+- 多 World 的构建方式；
+- System 数量与耗时数值门槛。
+
+不能变化的 v1 契约是 FixedStep/PostPhysics、完整父链、单 Kernel ownership、整数 Tick 与标准 EndFixed。

@@ -29,6 +29,7 @@ AutoChess 验收测试样例的最小单位不是单个 C# test，也不是单�
 | 字段 | 说明 |
 |---|---|
 | `SampleId` | 样例稳定 id，例如 `ACCEPT-AC-001` |
+| `ValidationTier` | Tier A LegacyCharacterization / Tier B TargetSemanticConformance / Tier C Extension |
 | `BusinessPackage` | Ability Package / Effect Package 名称 |
 | `PlannerIntent` | 策划意图，用业务语言描述 |
 | `Template` | 使用的 Business Template |
@@ -42,66 +43,72 @@ AutoChess 验收测试样例的最小单位不是单个 C# test，也不是单�
 
 ## 核心测试能力样例
 
+样例按三层报告：Tier A 只刻画真实 9101–9104 主战；Tier B 证明目标语义；Tier C 的盾击、冰霜、治疗与羁绊只证明扩展性。三层不得合并为一个“AutoChess 已通过”。Tier B 的固定微场景清单由 `10-AutoChess无头验收Spec.md` 持有，本页只定义配置投影。
+
 ### ACCEPT-AC-001：普攻伤害闭环
 
 | 项 | 内容 |
 |---|---|
+| ValidationTier | Tier A `LegacyCharacterization` |
 | BusinessPackage | `BasicAttackDamagePackage` |
-| PlannerIntent | 任意存活单位自动选择最近敌人，造成一次基于 ATK 的 HP 扣减，并输出伤害飘字和 hit cue |
+| PlannerIntent | 存活单位按 `ActiveDue > Finisher > Primary` 选择行动，按稳定 `ScenarioUnitId` tie-break 选择同 BattleInstance 敌方 Frozen ASC；9101/9102 普攻分别固定扣 12/8 Health |
 | Template | `SingleTargetDamageAbility` + `InstantDamageEffect` |
-| RowProjection | `autochess.ability.xlsx` 普攻 `AbilityId=0` 或默认 auto attack；`autochess.gameplay_effect.xlsx` `GEId=4001`；`autochess.cue.xlsx` `DamageText` / hit marker；`autochess.validation_expectation.xlsx` required fact `DamageResolved` |
-| ConfigReferenceGraph | Unit -> default attack ability -> GE 4001 -> modifier HP Minus ATK*1.0 -> DamageText cue -> x1 scenario |
-| RuntimeTracePreview | `AbilityActivationPlanRecord(DefaultAttack) -> GECommandSeedRecord(4001) -> ResolvedModifierRecord(HP,-ATK*1.0) -> GameplayFact(DamageResolved) -> BoundaryCue(DamageText)` |
-| ScenarioValidationBinding | x1 默认 4v4 场景；x50 用于 command/fact fan-in 放大 |
-| AcceptanceAssertions | 至少 1 次 `DamageResolved`；至少 1 次 HP 降低；DamageText marker 存在；Core 不创建 runtime GE entity；summary hash 稳定 |
-| ImpactAnalysis | 修改 GE 4001 的公式时必须影响全部带普攻的 Unit、x1/x50 scenario 和 Damage expectation |
+| RowProjection | Ability 9101/9102；Instant GE 9201/9202；ValidationExpectation 标记 `LegacyCharacterization` |
+| ConfigReferenceGraph | Unit -> 9101/9102 -> 9201/9202 -> fixed Health delta -> semantic_x1 / replicated_groups_50 |
+| RuntimeTracePreview | `RequestActivate -> AscOwnerCommandWave Commit -> AscTargetStateWave -> Health Base Delta(-12/-8) -> typed outcome/fact` |
+| ScenarioValidationBinding | `semantic_x1`；legacy `x50` 只能映射 50 个隔离 4 单位 `replicated_groups_50` |
+| AcceptanceAssertions | winner/count/finish tick、BattleLocalTick、ability priority 与 ScenarioUnitId target order 稳定；不得据此宣称 cost/cooldown、wait、immunity 或 Cue 四阶段已通过 |
+| ImpactAnalysis | 修改 9201/9202 时影响 9101/9102、Tier A baseline 与 replicated-groups expectation |
 
 为什么它是第一样例：它覆盖最短 GAS 链路，能证明 Ability -> GE -> Modifier -> AttributeDelta -> Fact -> Cue 的基本闭环。
 
-### ACCEPT-AC-002：盾击眩晕与行动阻断
+### ACCEPT-AC-002：盾击眩晕与行动阻断（Tier C 扩展）
 
 | 项 | 内容 |
 |---|---|
+| ValidationTier | Tier C `Extension`；不构成当前覆盖 |
 | BusinessPackage | `ShieldBashStunPackage` |
 | PlannerIntent | 霜甲剑士释放盾击，对最近敌人造成伤害，并施加 2 秒眩晕；眩晕期间目标不可释放主动技能 |
 | Template | `SingleTargetDamageAbility` + `DurationTagEffect` |
-| RowProjection | Ability 3001；GE 5001 盾击伤害；GE 5002 眩晕；Tag `State.Stunned`；Cue `ShieldBashVFX/SFX`；ValidationExpectation required facts `DamageResolved,EffectApplied,EffectExpired` |
-| ConfigReferenceGraph | Unit 2001 / 2005 -> Ability 3001 -> GE 5001 + GE 5002 -> Tag Stunned -> BlockTags(Stunned,Frozen) -> ShieldBash cue |
-| RuntimeTracePreview | `AbilityActivationPlanRecord(3001) -> GECommandSeedRecord(5001/5002) -> ResolvedModifierRecord(HP,-ATK*0.8) + ActiveEffectMutation(Stunned,120f) -> GameplayFact(EffectApplied/Expired) -> BoundaryCue(ShieldBash)` |
+| RowProjection | Ability 3001（BlockTagRequirementId=7001）；GE 5001 盾击伤害；GE 5002 眩晕（GrantedTagIds=[1]）；TagId 1=`State.Stunned`、TagId 3=`State.Frozen`；TagRequirement 7001=`Any Inclusive [1,3]`；Cue `ShieldBashVFX/SFX`；ValidationExpectation required facts `DamageResolved,EffectApplied,EffectExpired` |
+| ConfigReferenceGraph | Unit 2001 / 2005 -> Ability 3001 -> GE 5001 + GE 5002 -> TagId 1 -> TagRequirementId 7001(TagIds 1,3) -> ShieldBash cue |
+| RuntimeTracePreview | `AbilityActivationCommand(3001) -> DirectEffectProgram(5001/5002) -> AttributeDelta(Health,-Attack*0.8) + ActiveEffectSlot(Stunned) -> BoundaryFact(EffectApplied/Expired/ShieldBashCue)` |
 | ScenarioValidationBinding | x1 默认场景；专用 expectation 要求 target 在 Stunned window 内不产生主动 Ability activation |
 | BalancePreview | ManaCost 40、Cooldown 180、Damage ATK*0.8、Duration 120 frames；展示眩晕覆盖率和技能阻断窗口 |
 | AcceptanceAssertions | Stunned tag 授予和移除各出现一次；眩晕窗口内目标主动技能 activation count = 0；到期后 tag 清除；ShieldBash cue marker 存在 |
-| ImpactAnalysis | 修改 Tag `State.Stunned` 或 GE 5002 时，影响所有 BlockTags 引用、盾击样例、可能的 Frozen/Stunned 互斥校验 |
+| ImpactAnalysis | 修改 TagId 1=`State.Stunned`、TagId 3=`State.Frozen`、TagRequirement 7001 或 GE 5002 时，影响所有 BlockTagRequirementId 引用、盾击样例与 Frozen/Stunned 互斥校验 |
 
-为什么它重要：它验证 Duration GE、GrantedTag、BlockTags、Effect expire、状态对 Ability 激活的约束，而不是只验证数值扣血。
+为什么它重要：它验证 Duration GE、GrantedTagId、BlockTagRequirement、Effect expire、状态对 Ability 激活的约束，而不是只验证数值扣血。
 
 ### ACCEPT-AC-003：毒刃周期叠加
 
 | 项 | 内容 |
 |---|---|
+| ValidationTier | Tier B `TargetSemanticConformance` |
 | BusinessPackage | `PoisonBladePeriodicStackPackage` |
-| PlannerIntent | 暗影刺客对目标施加中毒，持续 4 秒，每 60 frame tick 一次，最多 3 层，叠层后 tick 伤害增加 |
+| PlannerIntent | 9104 对 Frozen target ASC 施加 9203：Duration 8、Period 2、最多 3 层，同 source 聚合；Source Attack 在 `SourceSpecProjection` snapshot，每次成功 application 用本次 snapshot 替换 payload，period 伤害随当前层数增加 |
 | Template | `PeriodicStackingEffect` |
-| RowProjection | Ability 3003；GE 5005；Tag `State.Poisoned`；Cue `PoisonSlashVFX`；ValidationExpectation required facts `EffectApplied,StackChanged,PeriodTick,EffectExpired` |
-| ConfigReferenceGraph | Unit 2003 -> Ability 3003 -> GE 5005 -> Duration 240 / Period 60 / StackLimit 3 / SourceAggregate -> Poisoned tag -> PoisonSlash cue |
-| RuntimeTracePreview | `AbilityActivationPlanRecord(3003) -> GECommandSeedRecord(5005) -> ActiveEffectMutation(Stack slot) -> PeriodTick -> ResolvedModifierRecord(HP,-ATK*0.3*StackCount) -> GameplayFact(StackChanged/PeriodTick)` |
-| ScenarioValidationBinding | x1 可验证 1-2 层；x50 应验证多单位并行 DOT tick 和 active store pressure |
-| BalancePreview | Duration 240、Period 60、StackLimit 3、ATK*0.3；展示每层 tick 伤害、总伤害、overflow 行为 |
-| AcceptanceAssertions | Period tick 次数符合 Duration/Period；StackChanged 出现；Poisoned tag 到期移除；active effect slot 不泄漏；x50 不出现 buffer spill 超线 |
-| ImpactAnalysis | 修改 GE 5005 公式、period 或 stack policy 时，影响 Ability 3003、Unit 2003、DOT scenario、x50 active store pressure expectation |
+| RowProjection | Ability 9104；GE 9203；Tag `State.Poisoned`；Cue lifecycle；ValidationExpectation required facts `ApplicationAccepted,StackChanged,PeriodExecuted,EffectExpired/Removed` |
+| ConfigReferenceGraph | Unit -> 9104 -> 9203 -> `(Definition,TargetASC,SourceASC)`/AggregateBySource/ReplaceLatest -> Poisoned/Cue -> semantic + period-burst scenarios |
+| RuntimeTracePreview | `9104 Commit -> 9203 accepted -> replace Snapshot/Provenance + reset NextDue -> DueTick Health.Base -= SnapshotAttack*0.3*StackCount -> period fact/cue` |
+| ScenarioValidationBinding | `semantic_x1` 验证 1/2/3/cap/expiry/inhibit；`period_burst` 只验证同 tick due 和容量压力 |
+| BalancePreview | Duration 8、Period 2、StackLimit 3；apply 不刷新 duration；cap reapply 替换 payload 并 reset due；Due=End 时 period 先于 expiry |
+| AcceptanceAssertions | ExecuteOnApply=false；expiry remove-one+refresh duration+reset period；inhibit duration 继续、period skip/no catch-up；period kill provenance 取 latest application；slot/Tag/Cue 无泄漏 |
+| ImpactAnalysis | 修改 9203 任一公式/period/stack/capture 列时，影响 9104、毒微场景、period-burst profile、generated evaluator/Blob/hash；legacy 9204 不在兼容范围 |
 
 为什么它重要：它覆盖 Duration + Period + Stack + ActiveEffectStore，是 GAS 配置复杂度最高、最容易被 raw protocol 弄错的链路。
 
-### ACCEPT-AC-004：冰霜新星 AoE 减速
+### ACCEPT-AC-004：冰霜新星 AoE 减速（Tier C 扩展）
 
 | 项 | 内容 |
 |---|---|
+| ValidationTier | Tier C `Extension`；不构成当前覆盖 |
 | BusinessPackage | `FrostNovaAoeSlowPackage` |
 | PlannerIntent | 冰霜女巫释放冰霜新星，对最多 3 个最近敌人造成伤害，并施加 3 秒减速 |
 | Template | `AreaDamageAbility` + `DurationTagEffect` |
 | RowProjection | Ability 3002；GE 5003 冰霜伤害；GE 5004 减速；Tag `State.Slowed`；Cue `IceNovaVFX/SFX`；TargetRule `NearestEnemies` `MaxTargets=3` |
 | ConfigReferenceGraph | Unit 2002 -> Ability 3002 -> TargetRule NearestEnemies -> GE 5003 + GE 5004 -> Slowed tag -> IceNova cues |
-| RuntimeTracePreview | `AbilityActivationPlanRecord(3002) -> TargetRecords(max 3) -> GECommandSeedRecord(5003/5004 per target) -> HP modifier + ActiveEffectMutation(Slowed,180f) -> BoundaryCue(IceNova)` |
+| RuntimeTracePreview | `AbilityActivationCommand(3002) -> TargetRecords(max 3) -> EffectApplicationSpec(5003/5004 per target) -> Health Delta + ActiveEffectSlot(Slowed) -> BoundaryFact(IceNovaCue)` |
 | ScenarioValidationBinding | x1 默认 4v4；expectation 要求 target count <= 3 且每个 target 输出 damage / slow facts |
 | BalancePreview | ManaCost 80、Cooldown 300、AoE MaxTargets 3、Damage MagicPower*1.5-DEF*0.3、Slow ASPD*0.7 |
 | AcceptanceAssertions | Target count 不超过 3；至少 2 个目标产生 DamageResolved；Slowed tag 授予和移除；IceNova cue marker 数与 target / cast 对齐 |
@@ -109,16 +116,17 @@ AutoChess 验收测试样例的最小单位不是单个 C# test，也不是单�
 
 为什么它重要：它验证 target resolve、多目标 GE seed、Boundary cue fan-out 和 tag duration 的组合。
 
-### ACCEPT-AC-005：圣光治疗与牧师增益
+### ACCEPT-AC-005：圣光治疗与牧师增益（Tier C 扩展）
 
 | 项 | 内容 |
 |---|---|
+| ValidationTier | Tier C `Extension`；不构成当前覆盖 |
 | BusinessPackage | `HolyLightHealSynergyPackage` |
 | PlannerIntent | 圣光牧师治疗血量最低友军；当牧师羁绊满足阈值时，治疗量提升 20% |
 | Template | `SingleTargetHealAbility` + `TypedFactReactionRequirement` |
 | RowProjection | Ability 3004；GE 5006；Tag / Synergy `Synergy.Priest`；Cue `HealBeamVFX` / `HealText`；Scenario 增加 Priest synergy expectation |
 | ConfigReferenceGraph | Unit 2004 -> Ability 3004 -> TargetRule LowestHPAlly -> GE 5006 -> Heal modifier -> Priest synergy requirement -> HealBonus tag/fact |
-| RuntimeTracePreview | `AbilityActivationPlanRecord(3004) -> TargetRecord(LowestHPAlly) -> GECommandSeedRecord(5006) -> ResolvedModifierRecord(HP,+MagicPower*0.8*SynergyMultiplier) -> GameplayFact(HealResolved) -> BoundaryCue(HealText)` |
+| RuntimeTracePreview | `AbilityActivationCommand(3004) -> TargetRecord(LowestHealthAlly) -> EffectApplicationSpec(5006) -> AttributeDelta(Health,+MagicPower*0.8*SynergyMultiplier) -> BoundaryFact(HealResolved/ExecutedCue)` |
 | ScenarioValidationBinding | 专用 synergy scenario：2 个 Priest 单位；expectation 要求 HealResolved 和 SynergyActivated |
 | BalancePreview | ManaCost 40、Cooldown 240、Heal MagicPower*0.8、Synergy multiplier 1.2；展示无羁绊 / 有羁绊治疗对比 |
 | AcceptanceAssertions | LowestHPAlly 选择正确；治疗不超过 MaxHP；SynergyActivated fact 存在；HealText marker 存在；无羁绊场景 healing <= 有羁绊场景 healing |
@@ -130,15 +138,16 @@ AutoChess 验收测试样例的最小单位不是单个 C# test，也不是单�
 
 | 项 | 内容 |
 |---|---|
+| ValidationTier | Tier B 配置回归 |
 | BusinessPackage | `PoisonBladeBalanceChangeSet` |
 | PlannerIntent | 将毒刃 tick 伤害从 `ATK*0.3` 调整为 `ATK*0.25`，发布前明确影响范围 |
 | Template | `BalanceChangeSet` |
-| RowProjection | 修改 GE 5005 的 `ModifierMmc`；不新增 Runtime row；更新 validation expectation 的 expected damage range / summary hash |
-| ConfigReferenceGraph | GE 5005 -> Ability 3003 -> Unit 2003 -> x1 poison scenario / x50 DOT pressure scenario -> generated MmcEvaluator case |
-| RuntimeTracePreview | 旧：`ResolvedModifierRecord(HP,-ATK*0.3*StackCount)`；新：`ResolvedModifierRecord(HP,-ATK*0.25*StackCount)` |
-| ScenarioValidationBinding | 必须重新跑 x1 poison expectation；x50 只需 sampled DOT pressure unless threshold changed |
+| RowProjection | 修改 GE 9203 的 `ModifierMmc`；不新增 Runtime row；更新 validation expectation 的 expected damage range / semantic hash |
+| ConfigReferenceGraph | GE 9203 -> Ability 9104 -> unit/scenario -> semantic poison / period-burst scenario -> compiled evaluator glue |
+| RuntimeTracePreview | 旧：`AttributeDelta(Health,-Attack*0.3*StackCount)`；新：`AttributeDelta(Health,-Attack*0.25*StackCount)` |
+| ScenarioValidationBinding | 必须重新跑 Tier B poison conformance；`period_burst` 只做同 tick due/capacity 压力，不替代语义场景 |
 | BalancePreview | 展示 1/2/3 层每 tick 伤害和总伤害变化，标记是否低于最低击杀阈值 |
-| AcceptanceAssertions | ImpactAnalysis 列出 Ability 3003、Unit 2003、GE 5005、Poison scenario、x50 profile、MmcEvaluator generated artifact；PublishValidationSnapshot content hash 变化；未受影响的 ShieldBash / HolyLight 样例不应进入影响列表 |
+| AcceptanceAssertions | ImpactAnalysis 列出 Ability 9104、GE 9203、Poison scenarios、period-burst profile、compiled Blob/evaluator glue；PublishValidationSnapshot content hash 变化；未受影响的 Tier C 样例不进入影响列表 |
 | ImpactAnalysis | 该样例本身就是影响分析门禁 |
 
 为什么它重要：它验证策划配置能力，而不是 GAS 运行语义。真实项目中最常见的是平衡改数值，工具必须解释改动影响，而不是只保存 Excel。
@@ -160,7 +169,7 @@ AutoChess 验收测试样例的最小单位不是单个 C# test，也不是单�
 
 | 测试层 | 输入 | 输出 | 失败条件 |
 |---|---|---|---|
-| Config Review Test | Business Package Change Set | Config Review Gate summary | 缺 row projection、缺引用、缺 SourceGenerator gate、缺 DOTS carrier hint |
+| Config Review Test | Luban Business Package Change Set | Config Review Gate summary | 缺 row projection/provenance、非法 enum/range、同字段 overlay、SourceGenerator 注入语义、缺 DOTS carrier hint |
 | Runtime Trace Test | generated catalog metadata + pure glue | Runtime Trace Preview | plan / seed / modifier / fact / cue 链不完整，或读取 Runtime World active state |
 | Scenario Validation Test | Publish Validation Snapshot + Scenario Validation Binding | AutoChessValidationEvidence | RequiredFact / RequiredCue / summary hash / threshold 失败 |
 
@@ -168,10 +177,13 @@ AutoChess 验收测试样例的最小单位不是单个 C# test，也不是单�
 
 ```text
 Config Review Test
-  -> SourceGenerator / generated metadata check
+  -> Luban bake/provenance negative tests
+  -> SourceGenerator pure-glue/generated metadata check
   -> Runtime Trace Test
-  -> x1 Scenario Validation Test
-  -> x50 sampled Scale Test（仅 ACCEPT-AC-001 / 003 / 004 默认启用）
+  -> Tier A Legacy Characterization
+  -> Tier B Semantic Conformance micro-scenarios
+  -> typed Scale Test（按 WorkloadKind）
+  -> Tier C Extension（按需，不影响主线结论）
 ```
 
 ## 目标发布快照样例
@@ -181,13 +193,16 @@ Config Review Test
 | 字段 | 示例值 |
 |---|---|
 | `BusinessPackageId` | `PoisonBladePeriodicStackPackage` |
-| `ChangedRows` | Ability 3003, GE 5005, Tag Poisoned, Cue PoisonSlash, Expectation PoisonDOT |
-| `ReferenceGraphHash` | 来源于 Unit 2003 -> Ability 3003 -> GE 5005 -> Tag/Cue/Scenario |
-| `ImpactAnalysisId` | `impact.poisonblade.5005` |
+| `ValidationTier` | `TargetSemanticConformance` |
+| `ChangedRows` | Ability 9104, GE 9203, Tag Poisoned, Cue lifecycle, Expectation PoisonDOT |
+| `ReferenceGraphHash` | 来源于 Unit -> Ability 9104 -> GE 9203 -> Tag/Cue/Scenario |
+| `ImpactAnalysisId` | `impact.poison.9203` |
 | `RuntimeTracePreviewId` | `trace.poisonblade.periodic_stack.v1` |
-| `ScenarioValidationEvidenceId` | `scenario.poisonblade.x1` |
-| `ScaleProfileIds` | `x1`, `x50` |
-| `SourceGeneratorGateSummary` | no lifecycle / no hidden query / no managed config / evaluator generated |
+| `ScenarioValidationEvidenceId` | `scenario.poison.9203.semantic.v1` |
+| `ScaleProfileIds` | `semantic_x1`, `period_burst` |
+| `LubanBakeProvenance` | workbook/table/row/column/raw/normalized 均可追溯 |
+| `SourceGeneratorGateSummary` | pure glue / no field override / no dummy modifier / no lifecycle / evaluator dispatch generated |
+| `SemanticHashContract` | include stable identity/tick/order/outcome/state；exclude batch/raw Entity/wall-clock/profiler/allocator/teardown |
 | `DotsCoverageSummary` | `BLOB-01`, `BUR-01`, `NAT-03`, `BUF-01`, `SYS-05`, `ODF-*` |
 
 ## 禁止方向
@@ -197,3 +212,5 @@ Config Review Test
 3. 不用运行后的 Debugger 事实反推配置正确；Runtime Trace Preview 必须来自 generated metadata 和 pure glue。
 4. 不让 ScaleProfile / ValidationExpectation 成为测试脚本字段；它们必须是配置权威源。
 5. 不为了样例快速通过而绕过 Cue / Presentation marker；无头也必须输出 marker evidence。
+6. 不让 SourceGenerator sidecar 覆盖 Luban 语义；同字段冲突、非法 enum/range 与缺失 ValueView 必须携 provenance bake fail。
+7. 不用 legacy count/hash、x50 replicated groups 或 Tier C 展示样例替代 Tier B semantic conformance。

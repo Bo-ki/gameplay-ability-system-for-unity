@@ -1,335 +1,98 @@
-# 10B-02：技能与 GameplayEffect 目标设计
+# 10B-02 技能与 GameplayEffect
 
-> Owner：`01-目标态架构共识/10B-AutoChess完整业务案例` | 状态：目标态子 Spec | 拆分来源：`../10B-AutoChess完整业务案例设计Spec.md` | 最近拆分：2026-06-07
+## 分层业务能力
 
-本文件只描述 AutoChess 完整业务案例的目标态设计。禁止写入当前代码事实、执行流水、验证数字或下一步任务；现实证据必须回到 `../../00-当前架构事实/`，任务拆分必须回到 `../../02-主线任务树/`。
-## 五、技能设计
+### Tier A：legacy real characterization
 
-### 5.1 技能 Luban 配置（`autochess.ability.xlsx`）
+| Ability | Effect | 当前业务意义 | v1 特征化口径 |
+|---|---|---|---|
+| 9101 | 9201 | 己方 primary attack | 保留攻击/伤害/胜负结果，不保留 raw Entity 排序 |
+| 9102 | 9202 | 敌方 primary attack | 同上 |
+| 9103 | 9207 | 对低血量目标斩杀 | 9207 改为 Instant pure evaluator，不保留无限 ActiveEffect marker |
+| 9104 | 9203 -> 9204 | 主动毒，period 扣血 | 9203 采用本页唯一目标毒语义，当前异常全部列 breaking/bake-fail |
 
-| AbilityId | Name | Type | ManaCost | CooldownFrames | TargetRule | MaxTargets | Range | EffectId_Primary | EffectId_Secondary | BlockTags |
-|-----------|------|------|----------|----------------|------------|------------|-------|------------------|--------------------|------------|
-| 3001 | 盾击 | Active | 40 | 180 (3s@60fps) | NearestEnemy | 1 | 1.5 | 5001 | 5002 | Stunned,Frozen |
-| 3002 | 冰霜新星 | Active | 80 | 300 (5s@60fps) | NearestEnemies | 3 | 3.0 | 5003 | 5004 | Stunned,Frozen |
-| 3003 | 毒刃 | Active | 60 | 120 (2s@60fps) | NearestEnemy | 1 | 1.5 | 5005 | — | Stunned,Frozen |
-| 3004 | 圣光治疗 | Active | 40 | 240 (4s@60fps) | LowestHPAlly | 1 | 4.0 | 5006 | — | Stunned,Frozen |
-| 0 | 普攻 | PassiveAuto | 0 | — | NearestEnemy | 1 | 按职业 | 4001 | — | Stunned,Frozen |
+AI 优先级冻结为 `ActiveDue > Finisher > Primary`。时间输入使用 `BattleLocalTick`，目标破平使用稳定 `ScenarioUnitId`，不使用 wall clock 或 raw Entity index/version。
 
-**普攻是 default ability**：每个棋子都有，不占 AbilityId 槽位。普攻通过 `AttackAbilityDataComponent` component 配置其伤害 GE 和攻击范围。
+Tier A 当前 cost/cooldown/requirement 均为 0/空，因此只做业务结果特征化，不作为 Commit、cancel/wait、immunity/inhibition、Tag count、grant removal 或 cleanup 证明。
 
-### 5.2 技能 BlobAsset 结构
+### Tier B：目标语义微场景
 
-```csharp
-// ============================================================
-// [Layer 4: Definition & Generation]
-// Ability 静态定义 BlobAsset
-// ============================================================
+Tier B 固定覆盖 Commit cost/cooldown、Frozen target/AliveOnly、9203 精确 period/stack、Death、wait/cancel、immunity/inhibition、Exact/Inclusive Tag、LeaveGranted 和 Cue/FinalDrain。每个机制使用独立微场景，不依赖 Tier A 的 count > 0。
 
-public struct AbilityDefBlob
-{
-    public int AbilityId;
-    public FixedString32Bytes Name;
-    public byte AbilityType;     // 0=PassiveAuto, 1=Active
-    public float ManaCost;
-    public float CooldownFrames;
-    public byte TargetRule;      // 0=NearestEnemy, 1=LowestHPAlly, 2=NearestEnemies
-    public byte MaxTargets;
-    public float Range;
-    public int EffectIdPrimary;  // 主 GE ID
-    public int EffectIdSecondary;// 副 GE ID（如盾击：主=伤害GE，副=眩晕GE）
-    public ulong BlockTagBits;   // 自身有此 tag 时禁止释放
-}
+### Tier C：扩展样例
 
-public enum AbilityRuntimeState : byte
-{
-    Granted = 0,
-    Ready = 1,
-    Active = 2,
-    Cooldown = 3,
-    Ending = 4
-}
+| Ability | Target | Effect | 关键语义 |
+|---|---|---|---|
+| 盾击 | 敌方前排单体 | damage + duration stun | 多 Effect DirectEffectProgram、Tag grant/remove、Duration Cue |
+| 冰霜新星 | 距离最近 3 个敌人 | damage + slow | 多目标 fan-in、target ordinal、各目标独立 capture |
+| 羁绊/治疗 | roster/低血量友军 | duration/infinite buff 或 instant heal | 低频 intent、target rule、positive modifier |
 
-[System.Flags]
-public enum AbilityRuntimeFlags : ushort
-{
-    None = 0,
-    Executable = 1 << 0,
-    Activating = 1 << 1,
-    Blocked = 1 << 2
-}
+Tier C 只是目标扩展，不能冒充当前 AutoChess 已覆盖。
 
-// Ability Entity 上挂载的跨帧 granted ability 状态
-public struct AbilityStateComponent : IComponentData
-{
-    public Entity OwnerAsc;
-    public int AbilityId;
-    public int PrimaryGameplayEffectCode;
-    public int SecondaryGameplayEffectCode;
-    public short Level;
-    public AbilityRuntimeState State;
-    public AbilityRuntimeFlags Flags;
-    public int CooldownEndFrame;
-}
+## Ability Definition
+
+每个 Definition 配置 activation required/blocked tags、cancel/block tags、cost/cooldown、instance/retrigger policy、target rule、TargetLifePolicy、Avatar/spatial binding policy、DirectEffectProgram 和 Cue/trace policy。Grant 后进入 `GrantedAbilitySlot`；每次执行创建独立 ActivationSlot，不创建 Ability Entity。
+
+普攻/技能的 cost/cooldown 在 Commit 时重查并在 owner-local CommitPlan 中原子提交。已 Commit 的远程 work 不因 source 后续死亡而撤回；各 target application 仍按自己的 TargetLifePolicy 输出 accepted/typed reject。
+
+AutoChess hostile ability 默认使用 Frozen ASC target + AliveOnly；失效、死亡或 binding mismatch 只能拒绝，绝不 implicit fallback self。Self target 必须由 Definition 显式声明。
+
+## GameplayEffect Definition
+
+每个 GE 保持 Application/Ongoing/Removal/Immunity requirements、duration/period、stack/overflow、modifiers/executions、granted tags/abilities/cues 与 capture contracts 的独立 ranges。
+
+- Damage/Periodic Poison execute 修改 Health Base，随后 Aggregator 重算 Current。
+- Stun/Slow Duration Effect 创建 ActiveEffectSlot；inhibit 与 remove 语义分离。
+- stack 合并保持 ActiveEffectHandle，但每次 application 有独立 ApplicationId。
+- owner-local PeriodDue 在 DueTick 同 tick 执行；post-apply overflow/reaction/cross-owner dynamic child 默认 T+1。
+- 静态闭合、生成期可完全展开且有界的 DirectEffectProgram 仍可 same tick；不得用 post-apply fact 回灌伪造同 tick。
+
+## 9203 主业务毒的唯一目标语义
+
+| 字段 | 目标值 |
+|---|---|
+| StackKey | `(Definition, TargetASC, SourceASC)` |
+| StackType | `AggregateBySource` |
+| StackPayloadPolicy | `ReplaceLatest` |
+| Source capture | 每次成功 application 在 SpecCreation 捕获 Source Attack Snapshot，并替换 active stack payload |
+| Period magnitude | `SnapshotAttack * 0.3 * CurrentStackCount` |
+| Duration / Period / Limit | `8 / 2 / 3` SimulationTicks |
+| ExecuteOnApply | `false` |
+| Duration refresh | application 不刷新 duration |
+| Period reset | 每次成功 application 都重置 `NextDueTick = ApplyTick + 2` |
+| Cap reapply | stack 保持 3，但 application 仍 accepted；替换 latest payload/Application provenance 并 reset period，不刷新 duration |
+| Due = End | 同 tick 先用当前 stack/payload 执行 period，后执行 expiry |
+| Expiration | `RemoveSingleStackAndRefreshDuration`；stack > 1 时减 1，以 expiry tick 刷新 duration 并重置 period；stack=1 时 Remove |
+| Inhibition | duration 继续推进；due period skip；解除后不 catch-up，从下一法定 due 继续 |
+| Kill provenance | period 致死归因 latest successful application，使用已冻结 Source/Application/Causality，不反查已结束 Activation |
+
+当前 `StackingType=9203`、`StackCode=0`、sourcegen Energy dummy modifier/refresh/expiration override、9204 固定 `-1` 且不乘 StackCount 均是 breaking/bake-fail 输入。v1 由 9203 Definition 直接编译 inline pure period evaluator，删除 9204 的目标态 identity/Catalog row，不保留兼容分支；配置事实见 [AutoChess 真实业务链二轮审查事实](../../00-当前架构事实/AutoChess真实业务链二轮审查事实.md)。
+
+## 9207 Instant pure evaluator
+
+9207 不创建 ActiveEffectSlot，不使用无限 duration marker，不注册 Demo Core System。它是 Catalog 声明的 Instant execution：
+
+```text
+HealthIndex = EffectDefinition.ValueView.HealthLayoutIndex (bake-resolved)
+HealthBefore = Target.AttributeValueSlot[HealthIndex].Base
+HealthMax = AttributeLayout[HealthIndex].MaxValue
+MissingHealth = max(0, HealthMax - HealthBefore)
+Damage = clamp(16 + MissingHealth * 0.5, 12, 42)
+write Target.AttributeValueSlot[HealthIndex].Base -= Damage and increment Revision
+then recompute/clamp the same slot Current through the single Aggregator lane
 ```
 
----
+Base / Current / definition MaxValue 必须是 evaluator descriptor 的显式 `ValueView`，且 layout index 在 bake 时解析；禁止在 glue 中隐式改读 Current、用 Current 反写 Base或回退到 per-attribute component。9207 只输出 Application/Execution/Attribute/ExecutedCue facts，无长期 slot 与 Removed Cue。
 
-## 六、GE 设计
+## Cue
 
-### 6.1 GE Luban 配置（`autochess.gameplay_effect.xlsx`）
+- Instant/period execution：`Executed`；instant identity 使用 `(EffectApplicationId,CueDefinitionOrdinal)`，period identity 使用 `(SimulationEpoch,ActiveEffectHandle,PeriodExecutionOrdinal,CueDefinitionOrdinal)`。
+- Stun/Slow/Poison duration：`OnActive -> WhileActive -> Removed`，使用 ActiveEffectHandle + ActiveCycleOrdinal + CueDefinitionOrdinal 配对。
+- Cue payload 包含 stable source/target、EffectContext、magnitude snapshot、Avatar binding generation/空间快照。
 
-| GEId | Name | Type | DurationFrames | PeriodFrames | StackLimit | StackPolicy | ModifierAttr | ModifierOp | ModifierMmc | GrantedTags | RemoveTags | ApplicationTagReq | ImmunityTags |
-|------|------|------|----------------|--------------|------------|-------------|-------------|------------|-------------|-------------|------------|-------------------|--------------|
-| 4001 | 普攻伤害 | Instant | 0 | 0 | — | — | HP | Minus | ATK*1.0 | — | — | — | — |
-| 4002 | 冰系减速 | Duration | 180 (3s) | 0 | — | — | ASPD | Multiply | 0.7 | Slowed | — | — | — |
-| 5001 | 盾击伤害 | Instant | 0 | 0 | — | — | HP | Minus | ATK*0.8 | — | — | — | — |
-| 5002 | 眩晕 | Duration | 120 (2s) | 0 | — | — | ASPD | Override | 0.0 | Stunned | — | — | — |
-| 5003 | 冰霜新星伤害 | Instant | 0 | 0 | — | — | HP | Minus | MagicPower*1.5-DEF*0.3 | — | — | — | — |
-| 5004 | 冰霜减速 | Duration | 180 (3s) | 0 | — | — | ASPD | Multiply | 0.7 | Slowed | — | — | Frozen |
-| 5005 | 毒刃 | Duration | 240 (4s) | 60 (1s) | 3 | SourceAggregate | HP | Minus | ATK*0.3 | Poisoned | — | — | — |
-| 5006 | 圣光治疗 | Instant | 0 | 0 | — | — | HP | Add | MagicPower*0.8 | — | — | — | — |
+## 验收
 
-**MMC 说明：**
-- `ATK*1.0`：取 Source ASC 的 ATK CurrentValue × 1.0
-- `MagicPower*1.5-DEF*0.3`：取 Source MagicPower × 1.5 − Target DEF × 0.3
-- `ATK*0.8`：取 Source ATK × 0.8
-- `ATK*0.3`：取 Source ATK × 0.3
-- `MagicPower*0.8`：取 Source MagicPower × 0.8
-- `0.7`：固定倍率（Multiply 操作，ASPD × 0.7）
-- `0.0`：固定值（Override 操作，ASPD = 0）
-
-### 6.2 GE BlobAsset 构建（SourceGenerator 生成）
-
-```csharp
-// ============================================================
-// [Layer 4: Definition & Generation]
-// 目标输出路径: Assets/AutoChessDemo/Config/GeneratedRuntime/AutoChessBlobBuilders.g.cs
-// 由 Luban 读取 GE 配置 → SourceGenerator 生成 BlobAsset 构建代码
-// ============================================================
-
-public enum GEType : byte { Instant = 0, Duration = 1 }
-public enum GEOperation : byte { Add = 0, Minus = 1, Multiply = 2, Override = 3 }
-public enum GEStackPolicy : byte { None = 0, SourceAggregate = 1, TargetAggregate = 2 }
-
-public struct GEStaticBlob
-{
-    public int GeId;
-    public GEType GeType;
-    public float DurationFrames;       // 0 = Instant
-    public float PeriodFrames;         // 0 = 无 Period
-    public byte StackLimit;            // 0 = 不可叠加
-    public GEStackPolicy StackPolicy;
-
-    public BlobArray<GEModifierBlob> Modifiers;
-    public BlobArray<ulong> GrantedTags;   // GE 激活时授予的 tag bits
-    public BlobArray<ulong> RemoveTags;    // GE 激活时移除的 tag bits
-    public ulong ApplicationTagReqBits;    // 目标必须有这些 tag 才能施加
-    public ulong ImmunityTagBits;          // 目标有这些 tag 则免疫
-    public FixedString32Bytes Name;
-}
-
-public struct GEModifierBlob
-{
-    public int AttrCode;         // XAttr.HP / XAttr.ATK / ...
-    public GEOperation Operation;
-    public byte MmcTypeId;       // generated static evaluator code
-    public float BaseMagnitude;  // 固定值（如 0.7, 0.0）
-}
-
-// ============================================================
-// GE_5003: 冰霜新星伤害（Instant，MMC = MagicPower*1.5 - DEF*0.3）
-// ============================================================
-public static class GEBlobBuilder
-{
-    public static BlobAssetReference<GEStaticBlob> Build_FrostNovaDamage()
-    {
-        var builder = new BlobBuilder(Allocator.Temp);
-        ref var root = ref builder.ConstructRoot<GEStaticBlob>();
-
-        root.GeId = 5003;
-        root.GeType = GEType.Instant;
-        root.DurationFrames = 0;
-        root.PeriodFrames = 0;
-        root.StackLimit = 0;
-        root.StackPolicy = GEStackPolicy.None;
-        root.ApplicationTagReqBits = 0;
-        root.ImmunityTagBits = 0;
-        root.Name = "冰霜新星伤害";
-
-        var modifiers = builder.Allocate(ref root.Modifiers, 1);
-        modifiers[0] = new GEModifierBlob
-        {
-            AttrCode = XAttr.HP,
-            Operation = GEOperation.Minus,
-            MmcTypeId = MmcTypeId.MagicPowerMulDefReduc, // static evaluator code
-            BaseMagnitude = 0f,
-        };
-
-        builder.Allocate(ref root.GrantedTags, 0);
-        builder.Allocate(ref root.RemoveTags, 0);
-
-        var result = builder.CreateBlobAssetReference<GEStaticBlob>(Allocator.Persistent);
-        builder.Dispose();
-        return result;
-    }
-
-    // ============================================================
-    // GE_5005: 毒刃（Duration 4s, Period 1s, StackLimit=3, SourceAggregate）
-    // ============================================================
-    public static BlobAssetReference<GEStaticBlob> Build_PoisonBlade()
-    {
-        var builder = new BlobBuilder(Allocator.Temp);
-        ref var root = ref builder.ConstructRoot<GEStaticBlob>();
-
-        root.GeId = 5005;
-        root.GeType = GEType.Duration;
-        root.DurationFrames = 240f;   // 4s @ 60fps
-        root.PeriodFrames = 60f;      // 1s @ 60fps
-        root.StackLimit = 3;
-        root.StackPolicy = GEStackPolicy.SourceAggregate;
-        root.ApplicationTagReqBits = 0;
-        root.ImmunityTagBits = 0;
-        root.Name = "毒刃";
-
-        var modifiers = builder.Allocate(ref root.Modifiers, 1);
-        modifiers[0] = new GEModifierBlob
-        {
-            AttrCode = XAttr.HP,
-            Operation = GEOperation.Minus,
-            MmcTypeId = MmcTypeId.AtkScale03, // ATK * 0.3
-            BaseMagnitude = 0f,
-        };
-
-        var grantedTags = builder.Allocate(ref root.GrantedTags, 1);
-        grantedTags[0] = XTagBit.Poisoned;
-
-        builder.Allocate(ref root.RemoveTags, 0);
-
-        var result = builder.CreateBlobAssetReference<GEStaticBlob>(Allocator.Persistent);
-        builder.Dispose();
-        return result;
-    }
-
-    // ============================================================
-    // GE_5002: 眩晕（Duration 2s，Override ASPD=0，授予 Stunned tag）
-    // ============================================================
-    public static BlobAssetReference<GEStaticBlob> Build_Stun()
-    {
-        var builder = new BlobBuilder(Allocator.Temp);
-        ref var root = ref builder.ConstructRoot<GEStaticBlob>();
-
-        root.GeId = 5002;
-        root.GeType = GEType.Duration;
-        root.DurationFrames = 120f;   // 2s @ 60fps
-        root.PeriodFrames = 0;
-        root.StackLimit = 0;
-        root.StackPolicy = GEStackPolicy.None;
-        root.ApplicationTagReqBits = 0;
-        root.ImmunityTagBits = XTagBit.Frozen; // 冰冻免疫眩晕
-        root.Name = "眩晕";
-
-        var modifiers = builder.Allocate(ref root.Modifiers, 1);
-        modifiers[0] = new GEModifierBlob
-        {
-            AttrCode = XAttr.ASPD,
-            Operation = GEOperation.Override,
-            MmcTypeId = MmcTypeId.Flat,         // 固定值
-            BaseMagnitude = 0f,                  // ASPD → 0
-        };
-
-        var grantedTags = builder.Allocate(ref root.GrantedTags, 1);
-        grantedTags[0] = XTagBit.Stunned;
-
-        builder.Allocate(ref root.RemoveTags, 0);
-
-        var result = builder.CreateBlobAssetReference<GEStaticBlob>(Allocator.Persistent);
-        builder.Dispose();
-        return result;
-    }
-
-    // ============================================================
-    // GE_5006: 圣光治疗（Instant，HP += MagicPower*0.8）
-    // ============================================================
-    public static BlobAssetReference<GEStaticBlob> Build_HolyLightHeal()
-    {
-        var builder = new BlobBuilder(Allocator.Temp);
-        ref var root = ref builder.ConstructRoot<GEStaticBlob>();
-
-        root.GeId = 5006;
-        root.GeType = GEType.Instant;
-        root.DurationFrames = 0;
-        root.PeriodFrames = 0;
-        root.StackLimit = 0;
-        root.StackPolicy = GEStackPolicy.None;
-        root.ApplicationTagReqBits = 0;
-        root.ImmunityTagBits = 0;
-        root.Name = "圣光治疗";
-
-        var modifiers = builder.Allocate(ref root.Modifiers, 1);
-        modifiers[0] = new GEModifierBlob
-        {
-            AttrCode = XAttr.HP,
-            Operation = GEOperation.Add,
-            MmcTypeId = MmcTypeId.MagicPowerScale08,
-            BaseMagnitude = 0f,
-        };
-
-        builder.Allocate(ref root.GrantedTags, 0);
-        builder.Allocate(ref root.RemoveTags, 0);
-
-        var result = builder.CreateBlobAssetReference<GEStaticBlob>(Allocator.Persistent);
-        builder.Dispose();
-        return result;
-    }
-}
-```
-
-### 6.3 MMC 静态 Evaluator
-
-```csharp
-// ============================================================
-// [Layer 3: GAS Runtime Core]
-// MMC 默认使用 generated static switch；FunctionPointer 只允许同类型大批量 batch
-// 不变量 29: 不使用托管 delegate 或可变静态注册表
-// ============================================================
-
-public static class MmcTypeId
-{
-    public const byte Flat                = 0;
-    public const byte AtkScale10          = 1;
-    public const byte AtkScale08          = 2;
-    public const byte AtkScale03          = 3;
-    public const byte MagicPowerScale08   = 4;
-    public const byte MagicPowerMulDefReduc = 5; // MagicPower*1.5 - TargetDEF*0.3
-}
-
-[BurstCompile]
-public static class MmcEvaluator
-{
-    // GE 施加时调用：计算 modifier 的实际 magnitude
-    // source/target AttributeSet snapshot 在 Magnitude Resolve lane 只读采集；
-    // Attribute Apply lane 不再通过 ComponentLookup 随机写其他 ASC。
-    [BurstCompile]
-    public static float Evaluate(
-        byte mmcTypeId,
-        float baseMagnitude,
-        in AutoChessCombatAttributeCurrentSetComponent sourceCombat,
-        in AutoChessResourceAttributeCurrentSetComponent sourceResource,
-        in AutoChessCombatAttributeCurrentSetComponent targetCombat,
-        in AutoChessResourceAttributeCurrentSetComponent targetResource)
-    {
-        return mmcTypeId switch
-        {
-            MmcTypeId.Flat                => baseMagnitude,
-            MmcTypeId.AtkScale10          => sourceCombat.Attack * 1.0f,
-            MmcTypeId.AtkScale08          => sourceCombat.Attack * 0.8f,
-            MmcTypeId.AtkScale03          => sourceCombat.Attack * 0.3f,
-            MmcTypeId.MagicPowerScale08   => sourceCombat.Attack * 0.8f,  // demo 暂用 Attack 代表法强输入
-            MmcTypeId.MagicPowerMulDefReduc => sourceCombat.Attack * 1.5f - targetCombat.Defense * 0.3f,
-            _ => baseMagnitude,
-        };
-    }
-}
-```
-
----
+- Tier A 使用 `BattleLocalTick` / `ScenarioUnitId` 的业务 golden，不锁定 raw Entity、旧 group timing 或 current hash 污染。
+- Tier B 覆盖 Commit 重查、Frozen/AliveOnly/no-self-fallback、9203 全表、Death/cancel、wait、immunity/inhibition、Tag count、LeaveGranted 与 Cue lifecycle。
+- 9207 无 ActiveEffectSlot，Base/Current ValueView 测试、斩杀伤害和 ExecutedCue golden 通过。
+- Tier C 未运行的盾击/冰霜/羁绊不计入当前覆盖。

@@ -1,159 +1,117 @@
 # 四层架构 Spec
 
-## 目的
+## 结论
 
-把 EX-GAS 2.0 的目标态主架构从旧“五平面”口径重构为四层工程架构，并给 Runtime Core、配置生成链、Debugger、AutoChess 验收 Demo 和任务树拆分提供统一边界。
+四层是依赖与权限边界，不是四套 Runtime。Gameplay 权威只存在于 Layer 3；Layer 1/2 只写入意图、读取不可变结果，Layer 4 只提供不可变定义和纯计算。任何跨层接口一旦暴露 ECS 句柄、可写容器或调度 owner，就视为边界失败。
 
-旧五平面只能作为历史解释词汇，不再作为主 Spec。所有设计、任务领取和代码命名都应优先使用本文件的四层名称。
+## 依赖方向
 
-## 四层命名
-
-| 层级 | 规范英文名 | 规范中文名 | 旧口径吸收 | 核心职责 |
-|---|---|---|---|---|
-| Layer 1 | Application Shell Layer | 应用壳层 | Extension / Presentation consumer | UI、输入、AI、网络、场景编排、Demo runner、真实资源和无头 log 占位 |
-| Layer 2 | Runtime Boundary Layer | 运行时边界层 | Thin Adapter / Observation / Debugger | OOP/ECS 边界、command gateway、read model、presentation outbox、diagnostics/replay sink |
-| Layer 3 | GAS Runtime Core Layer | GAS 运行时核心层 | Simulation | ASC、Ability、GameplayEffect、Attribute、Tag、Target、EffectCommand、StateEvaluate、AttributeReduceApply、GameplayFact |
-| Layer 4 | Definition & Generation Layer | 定义与生成层 | Authoring / Definition / Generated | Luban source、schema、generated id、static lookup、Blob/Bake plan、validation summary |
-
-层级编号沿用历史方案的表达习惯，不代表调用方向。目标态调用方向只有两条：应用壳层通过运行时边界层写入命令，GAS Runtime Core 只消费定义与生成层的不可变输入并输出事实。
-
-## Debugger 与 AutoChessDemo 定位
-
-1. Runtime Debugger 的采样、counter、timing、buffer pressure、official tool diff 和 replay export 归属 **Layer 2 Runtime Boundary Layer**，具体职责是 `DiagnosticsSink` / `ReplaySink` / read-only observation，不是 Runtime Core 输入。
-2. Editor Debugger Window 归属 **Layer 1 Application Shell Layer** 的 Editor Extension。窗口只能消费 Layer 2 snapshot / export API，不直接写 Runtime Core component / buffer，也不放入 AutoChessDemo。
-3. Headless runner 同样归属 **Layer 1 Application Shell Layer**，它和 Editor 窗口共享 Layer 2 Runtime Debugger 数据出口；区别只在输出目标是 batchmode log / CI summary，而不是编辑器窗口。
-4. `Assets/AutoChessDemo` 整体归属 **Layer 1 Application Shell Layer** 的业务验收 Demo。它可以编排业务 AI、场景和验证 runner，但不能成为 GAS Runtime Core 的一部分，也不能私有化 Debugger 窗口。
-5. Layer 3 只负责产出 Debugger 所需的只读事实、数值 counter 和 outbox marker；任何 Debugger / Replay / Presentation 结果都不得反向驱动 simulation。
-6. AutoChessDemo 允许拥有面向业务的 Battle Runtime Adapter seam，但该 seam 只能负责把 Layer 1 业务流程接到 Layer 2 / Layer 3 运行时入口。它不是新的 OOP 中间层，也不能把 gameplay calculation、target selection、damage formula、validation policy 和 Runtime Core lifecycle 混成一个万能 `Adapter`。
-7. Battle Runtime Adapter 的目标 interface 必须比 implementation 更窄：外部只看到 runtime init / battle open / fixed tick / battle close / snapshot export 这类业务动作；内部 direct `EntityManager`、catalog install/dispose、ASC/unit lifecycle、official diff 和 observation reset 必须按 owner 分类并被 validation evidence 标注。
-
-## 总体数据流
-
-```mermaid
-flowchart TB
-    Definition["Layer 4: Definition & Generation\nLuban / SourceGenerator / Static Lookup / Bake Plan"]
-    Core["Layer 3: GAS Runtime Core\nASC / Ability / Effect / Attribute / Tag / GameplayFact"]
-    Boundary["Layer 2: Runtime Boundary\nCommandPort / ReadModel / PresentationOutboxBridge / DiagnosticsSink"]
-    Shell["Layer 1: Application Shell\nUI / AI / Input / Network / Demo Runner / Editor Debug Window"]
-
-    Definition -->|"immutable definitions"| Core
-    Shell -->|"intent, no EntityManager"| Boundary
-    Boundary -->|"request entity / command stream"| Core
-    Core -->|"typed facts / deltas / diagnostics facts"| Boundary
-    Boundary -->|"read model / markers / replay / logs / debugger snapshot"| Shell
+```text
+Layer 4 Definition & Generation ──immutable catalog/pure glue──► Layer 3 Core
+Layer 1 Application Shell ──intent──► Layer 2 Boundary ──persistent inbox──► Layer 3 Core
+Layer 3 Core ──cleanup outbox──► Layer 2 Boundary ──immutable batch──► Layer 1 Consumers
 ```
 
-## Unity Entities 校准
+禁止 Layer 3 依赖 Layer 1 的资源、UI、Demo 或 managed service；禁止 Layer 4 生成 Layer 3 lifecycle；禁止 Layer 1 绕过 Boundary 直接操作 Core。
 
-四层架构只是工程边界，不是自定义 ECS runtime。Layer 3 和 Layer 4 的实现必须遵守 `UnityDOTS官方文档参考/主题/01-Entities系统与World.md`：
-
-1. Layer 3 的物理执行域必须映射到 Unity `ComponentSystemGroup` 和 update order；业务 kernel 只作为 lane system / job chain，不默认新增 group。
-2. Layer 3 hot path 默认使用 unmanaged `ISystem` 和 job，不依赖 managed object。
-3. Layer 3 结构变化集中到 `GASStructuralCommitSystemGroup`，不在 Target Resolve / Effect Fan-In / State Evaluate / Attribute Apply / Gameplay Fact kernel 直接 create / destroy entity。
-4. Layer 4 的 generated artifact 优先落为 Blob、Baker output、static lookup 和 validation graph。
-5. Layer 2 / Layer 1 可以有 managed bridge，但不能把 managed bridge 写回 Runtime Core 热路径。
-
-## 官方依据与设计论证
-
-| 分层选择 | 官方规则依据 | 为什么更优秀 | 为什么有必要 |
-|---|---|---|---|
-| Layer 3 只承载 GAS Runtime Core，且以 SystemGroup / `ISystem` / Job 表达物理执行域 | `SYS-01`、`SYS-02`、`SYS-03`、`PRF-07` | 把 runtime ownership、update order、依赖链和 sync point 暴露给 Entities 调度系统 | 如果把 OOP manager 或 adapter 作为中间层，Profiler 只能看到托管调用，无法定位真正的 ECS hot path |
-| Layer 2 只做 command port、read model、outbox、diagnostics/replay sink | `SYS-05`、`DBG-01`、`SEL-01`、`ODF-07` | 外部业务可以用 OOP API，但 gameplay 写入仍收敛为 command data，观察结果仍来自 typed facts | UI、AI、网络、Debugger、Replay 生命周期不同；混成一个 adapter 会让业务逻辑、日志、缓存和写 Core 互相污染 |
-| Layer 4 只生成 immutable definition、Blob、lookup、pure glue 和 validation artifact | `BAKE-01`、`BLOB-01`、`BLOB-02`、`CASE-07`、`BUR-01` | 配置链把 Luban row 压缩成 Burst-friendly 的只读输入，Runtime lane 不反查 managed row / JSON / Dictionary | GAS 配置量大且公式/条件多；若 Runtime 每帧查托管表，会直接违背 hot path job 化和 unmanaged 数据约束 |
-| Layer 1 只能通过 Boundary 接入 Runtime，并消费 read model / marker / diagnostics snapshot | `SYS-05`、`ODF-18`、`CASE-17` | Demo、无头 runner、Editor 工具和真实产品可共用同一运行时证据模型 | 真实资源、窗口、场景和无头 CI 的生命周期不同；允许 Layer 1 直连 `EntityManager` 会让验收路径和产品路径分裂 |
-
-## Layer 4: Definition & Generation Layer
+## Layer 1：Application Shell
 
 ### 职责
 
-1. 维护 Luban Excel / JSON / schema / validation rule。
-2. 生成稳定 id、静态 lookup、definition snapshot、bake plan 和 runtime integration plan。
-3. 为 Runtime Core 提供不可变、可校验、可 Burst 消费的定义输入。
-4. 维护生成链路的显式 pipeline、RowMetadata、Phase manifest、路径审计和 orphan generated file 清理策略。
+- 收集玩家输入、AI、网络权威输入和场景事件。
+- 以业务稳定 ID 表达目标，调用 `CommandPort.Request*`。
+- 消费不可变 `BoundaryBatch`、ReadModel 与 Diagnostics snapshot。
+- 驱动唯一 Session runner；无头模式只省略真实资源，不省略 Boundary 语义。
 
 ### 禁止
 
-1. 不生成 Ability / GameplayEffect lifecycle system。
-2. 不携带 runtime state、spec、context、cooldown instance、active effect instance。
-3. 不依赖 GameObject、MonoBehaviour、Editor window、Odin、XLua 或业务 UI。
-4. 不把 Luban managed row、`cfg.*`、`XLuban`、`SimpleJSON` 或 JSON reader 暴露给 Runtime Core assembly。
-5. 不用托管数组、managed dictionary 或可变 delegate registry 作为 Runtime Core hot path lookup。
+- 直接 `World.Update()` 某个 GAS 子 Group/System。
+- 保存 ASC/Ability/Effect 的 raw `Entity`。
+- 读取或清理 Core buffer，参与 cost/cooldown/target/effect 计算。
+- 以 UI、Cue 或日志是否成功反向决定 gameplay。
 
-## Layer 3: GAS Runtime Core Layer
+## Layer 2：Runtime Boundary
 
-### 职责
+### 入站 owner
 
-1. 承载 GAS 权威状态和 gameplay 规则，所有热路径以 unmanaged component、buffer、blob、lookup、command stream、typed fact 表达。
-2. 以显式 DOTS kernel 处理 `Boundary Command Ingest -> Target Resolve -> Effect Fan-In -> State Evaluate -> Attribute Reduce/Apply -> Gameplay Fact -> Structural Commit -> Boundary Projection`。
-3. 将 Cue、UI、VFX、SFX、FloatingText、Debugger 需要的信息输出为只读 facts / outbox marker。
-4. 将 `EffectCommand / Spec / Delta / Fact` 作为语义链，而不是全局 singleton 总线；scale-ready fan-in 默认走 `NativeStream` deterministic merge + compact owner-local buffer。
+`CommandPort` 在唯一 `SessionIngressGate` 上线性化 accept，把外部意图先复制到 Runtime Boundary 跨渲染帧持久 `BoundaryIngressJournal`；只有 pre-Fixed `GasCommandIngressSystem` 能在 Kernel 读 Job 之前搬入 ECS `BoundaryCommandInbox`。FixedStep 为 0 次时不得丢失；catch-up 为 N 次时每条命令只能被一个 `SimulationTick` 消费一次。命令携带 session/target identity、request id、payload 与明确的 stale/reject 规则，不保存 tick 临时内存引用。Kernel 读 inbox 期间禁止并发 append 同一 DynamicBuffer。
 
-### 禁止
+### 出站 owner
 
-1. 不持有托管业务对象，不调用 `GameObject`、`MonoBehaviour`、真实 UI/VFX/SFX 资源。
-2. 不把全局 `EventBus` 当业务 reaction 主输入，不用 observation stream 反向驱动 simulation。
-3. 不跨结构变化持有 `DynamicBuffer` / `ComponentLookup` / `BufferTypeHandle` 的旧句柄。
-4. 不把 Frame Arena 写成 query registry / service locator；EntityQuery 归属各 `ISystem`。
-5. 不把大容量 singleton DynamicBuffer 或大容量 per-ASC frame buffer 固化为目标态。
+`GasBoundaryDrainSystem` 是唯一 ECS→managed 交接点：
 
-## Layer 2: Runtime Boundary Layer
+1. Drain live ASC 的 dirty outbox。
+2. Drain 分别查询 live ASC、live Session 与没有任一 live identity 的 cleanup shell outbox；禁止把 live Session 因 `WithNone<GasAscIdentity>` 误判为 dead shell。
+3. 按正式全序复制到 managed staging；BatchId/InFlightWatermark 幂等接管成功后才清 ECS facts。
+4. 把死 shell 标记 Accepted；下一 Kernel prepass记录本 tick标准 EndFixed removal，Session teardown 是无下一 tick且 FinalDrain完成后的显式例外。
+5. 发布一个不可变 batch/ring或机器可读 drop/fatal receipt，所有 Cue/UI/Replay/Debugger/Headless consumer 只读同一批次。
 
-### 职责
+Boundary 不维护 gameplay 权威或 per-consumer cursor，不允许多个 consumer 竞争清空 ECS 数据。
 
-1. `CommandPort`：把应用壳层意图转换为 request entity、command buffer 或等价 command data；公开方法必须使用 `Request*` 命名，避免伪装成立即执行的 OOP 对象操作。
-2. `ReadModel`：提供只读镜像，不暴露 `EntityManager`、`EntityQuery`、runtime buffer 可写句柄。
-3. `PresentationOutboxBridge`：消费 Core facts，输出 UI/Cue/VFX/SFX/log marker；无头 Demo 也必须走同一 outbox 语义。
-4. `DiagnosticsSink` / `ReplaySink`：导出结构化日志、timing、buffer pressure、fact count、scale profile，不参与 gameplay routing。
-5. `OfficialToolDiff`：在 Editor / Development 可用时用 Entities Journaling 形成官方差分；Unity Profiler modules 未启用时只记录 category / disabled reason，不伪造 captured 数据。
+### 公开身份
 
-### 禁止
+公开身份使用 `SimulationEpoch`、稳定 ASC/Avatar ID、BindingGeneration、强类型 generational handle、Definition/Application/Causality ID。raw `Entity` 只能留在 Core 内的 ActorBinding；`EntityManager.Exists` 不能作为 ASC liveness 判据，因为 cleanup shell 仍存在。
 
-1. 不做伤害、治疗、Tag requirement、Cooldown、Cost、Stack、Period 等 gameplay 计算。
-2. 不把 `Adapter` 写成“边界 + 缓存 + 业务反应 + 调试日志”的混合对象。
-3. 不把 `Debugger` / `Logger` / `Replay` 作为 Runtime Core 的实时输入。
-4. 不把 `EntityManager` / `GASManager` 作为 Layer 1 可以直接持有的工具。若某个 Application Shell Demo 需要创建/销毁 ASC、driver、catalog 或观测 singleton，必须通过 Battle Runtime Adapter seam，并标注该操作是否属于 bootstrap、structural lifecycle、observation-only 或 core tick。
+## Layer 3：GAS Runtime Core
 
-## Layer 1: Application Shell Layer
+### 聚合根
 
-### 职责
+ASC Entity 是唯一 gameplay 聚合根；其 owner-local 数据包括：
 
-1. 面向产品、Demo、自动验收和真实资源接入，组织 UI、输入、AI、网络、场景、MonoBehaviour、Prefab、Timeline 等外部模块。
-2. 调用运行时边界层 API 发起意图，订阅 read model、presentation marker、structured log。
-3. AutoChess 无头验收 Demo 虽然没有真实画面资源，也必须完整保留 UI/Cue/VFX/SFX/FloatingText marker 逻辑。
-4. Editor Debugger Window 属于本层 Editor Extension，只读消费 Layer 2 diagnostics snapshot；无头 runner 也属于本层业务验证入口。
-5. AutoChess headless runner 与 scene runner 必须共享同一个 battle run loop Module。启动方式、输出路径、Profiler 驱动和资源 bridge 可以不同；warmup、measured window、official diff、completion rule、result build 和 validation evidence 不得复制两套。
+- `GasAscIdentity` 与 `GasActorBinding`；
+- GrantedAbility、Activation、Continuation、Subscription、ActiveEffect 非压缩 slabs；
+- 固定长度 Attribute/Tag authority buffers 与派生缓存；
+- pending work、provenance、outbox 和 diagnostics counters。
 
-### 禁止
+Ability、ActiveEffect、Task、Spec 不创建权威 Entity。Projectile/Aura/Zone 可以是派生 Entity，但只能复制命中所需的 definition/context/capture/provenance，不能延长或镜像 Activation 权威。
 
-1. 不直接写 Runtime Core component / buffer。
-2. 不持有 GAS 权威状态副本。
-3. 不通过 log/replay 反向修正 gameplay 结果。
-4. 不把业务 Demo 退化为测试 harness。无头只替换最终表现 side effect，不删除真实业务流程、资源 marker、Cue marker、validation expectation 或 scale profile。
+### 调度 owner
 
-## 旧五平面到四层的吸收关系
+`GasFixedTickSystemGroup` 位于主 Physics 后，内部由 `GasTickKernelSystem` 独占 tick scratch、Job DAG 与最终 dependency。Kernel 以 target ASC 为 mutation partition，完成 ability、effect、tag、attribute、stabilization 和最终 fact。结构变化交给标准 EndFixed ECB；managed drain 在 catch-up 后执行。
 
-| 旧术语 | 新归属 | 说明 |
+### 写入规则
+
+- Core 外部只能写 Boundary inbox；Core 内不同目标可并行，同一目标只有一个逻辑写 lane。
+- 长期 authority 只通过强类型 handle 与 owner-local slot 访问。
+- 临时数据使用 `WorldUpdateAllocator`，不能跨 System/tick 保存。
+- public reaction 默认下一 tick；同 tick 只允许 kernel invariant 与生成期闭合有界的 DirectEffectProgram。
+- ActiveEffect stabilization 先达到最终稳定态再发 fact/Cue；不收敛为 fatal fault。
+
+## Layer 4：Definition & Generation
+
+### 唯一权威
+
+Luban rows 是策划源，生成产物把它们规范化为 Session 内不可变 Blob catalog。生成期必须预解析 Attribute/Tag index、requirement 分区、capture contract、DirectEffectProgram、依赖图、容量报告、schema/content hash 和 Editor metadata。
+
+### Pure Glue
+
+Generated Runtime Glue 只能是 Burst-compatible 的静态 lookup/evaluator/record builder。它不得拥有：
+
+- `ISystem`、`OnUpdate` 或 system registration；
+- query、type handle refresh、ECB、`EntityManager` 写入；
+- NativeContainer allocator/lifetime；
+- gameplay lifecycle、fallback backend 或 managed runtime lookup。
+
+无法由封闭生成契约证明的动态 Capture/Execution/Prediction 能力必须 bake fail。
+
+## 跨层 Contract
+
+| 方向 | 允许 | 禁止 |
 |---|---|---|
-| Authoring Plane | Definition & Generation Layer | Authoring 是定义与生成层的输入面，不再单独作为主层 |
-| Definition Plane | Definition & Generation Layer | 继续保留“定义数据不可变”的约束 |
-| Simulation Plane | GAS Runtime Core Layer | 统一改称 Runtime Core，强调 GAS 语义和 ECS 热路径 |
-| Observation Plane | Runtime Boundary Layer | Observation 拆成 read model、presentation outbox、diagnostics/replay sink |
-| Extension Plane | Application Shell Layer | Extension 是外部应用壳层，不直接进入 Runtime Core |
+| Shell → Boundary | intent、stable id、request id、冻结 payload | raw Entity、callback 闭包、同步 gameplay 返回值 |
+| Boundary → Core | persistent inbox record、immutable session config | managed object、consumer cursor、资源引用 |
+| Core → Boundary | final fact、stable provenance、snapshot/evidence | writable buffer、CoreReaction 中间态、临时 NativeContainer |
+| Definition → Core | Blob、index/range、pure evaluator、validation metadata | lifecycle System、运行时 Dictionary、可变 row |
 
-## 验收方式
+## Session 生命周期
 
-1. 文档验收：目标态 Spec 和任务树不再以“五平面”作为主架构入口；引用旧术语时必须标注为旧口径。
-2. Runtime 验收：Core hot path 不依赖 Editor / GameObject / Odin / managed gameplay object；system tick 目标保持 `0.0X - 0.X ms` 级别。
-3. 边界验收：CommandPort 只写命令，ReadModel 只读，PresentationOutboxBridge / Diagnostics / Replay 不反向写 simulation。
-4. 配置验收：Luban + SourceGenerator 只输出 Definition & Generation Layer artifact，不生成 runtime lifecycle。
-5. Demo 验收：AutoChessDemo 位于 Runtime Core 外部的 Application Shell Layer，走真实业务流程，同时支持无头自动结算和十万级以上压力测试预演。
-6. Adapter 验收：AutoChess Battle Runtime Adapter 对外 interface 不得暴露 GAS implementation 细节；direct `EntityManager` 使用面必须集中、分类、可审计，并且不能进入 `coreTickMs`。
+Session install 必须一次性固定：World/SimulationEpoch、tick rate、AttributeLayout、TagCatalog、Definition content hash、scale profile 与 Boundary policy。运行中禁止热替换 layout/catalog；变化必须新建 Session/World。Session dispose 必须等待 Jobs、drain terminal facts、释放 runtime-created Blob，并使旧 handle/command 因 Epoch 不匹配而失效。
 
-## 历史方案定位
+## 验收
 
-1. 四层原始模型来自 `../历史方案参考/方案15.md:35-50`，但本 Spec 将 `业务层 / 适配层 / ECS核心层 / 数据配置层` 重新命名为更精确的四层工程名。
-2. 方案15 的 Layer 2 示例强调“接收 OOP 命令、转换为 ECS 标记/组件、不包含业务逻辑”，对应本 Spec 的 Runtime Boundary Layer：`../历史方案参考/方案15.md:473-490`。
-3. 方案15 对四层架构与旧架构的对比指出 OOP 层必须退回外壳层、Ability 行为必须进入 Burst System：`../历史方案参考/方案15.md:1289-1315`。
-4. 方案15 对边界单向性的总结可作为应用壳层、运行时边界层和 Runtime Core 的验收图：`../历史方案参考/方案15.md:2843-2857`。
-5. 方案14 的四层职责总览和 Luban + SourceGenerator 生成链路提供了 Definition & Generation Layer 的来源参考：`../历史方案参考/方案14.md:100-118`。
-6. 方案14 的“架构分层职责最终定义”提供了 Core 全 unmanaged、全 Burst、禁止反向查 OOP 的硬约束：`../历史方案参考/方案14.md:1038-1058`。
+- Shell 和 Boundary public API 零 raw Entity/World/EntityManager/EntityQuery/writable buffer。
+- Runtime assembly 的 generated artifact 零 lifecycle owner。
+- 所有 gameplay mutation 能归属到一个 target-owned kernel lane。
+- 所有 managed consumer 只读同一 immutable Boundary batch。
+- Headless、Scene 和 AutoChess runner 经过同一完整 FixedStep/EndFixed/Drain 路径。
+- current facts、target spec、tasks、handoff 各自只写入 00/01/02/04 对应 owner。

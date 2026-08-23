@@ -1,272 +1,92 @@
-# 03E-03：Attribute Reduce / Apply
+# Attribute Aggregator 与 Apply Spec
 
-> Owner：`01-目标态架构共识/03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact` | 状态：目标态 Spec 子页 | 最近拆分：2026-06-08
+## 结论
 
-本文件只描述目标态 Attribute Reduce / Apply。当前代码事实、验证数字、执行流水和迁移 proof 不写入本文件。
+每个 ASC 使用 Session 唯一 AttributeLayout 对应的固定长度 `AttributeValueSlot` buffer。Base、Current 与 Aggregator contribution 是权威状态；不存在 per-attribute component 镜像，也不存在每 tick resize。
 
-## 定位
+## 固定布局
 
-Attribute Reduce / Apply 负责消费 Effect Fan-In / Magnitude Resolve 后的 target grouped modifier 输入，只写本 chunk 内 target ASC 的 AttributeSet、dirty mask 和 fact buffer。
-
-## 目标代码骨架
-
-```csharp
-using Unity.Burst;
-using Unity.Collections;
-using Unity.Entities;
-using Unity.Mathematics;
-
-namespace GAS.Runtime
-{
-    [BurstCompile]
-    [UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
-    [UpdateAfter(typeof(GASActiveEffectPostApplySystem))]
-    public partial struct GASAttributeSetReduceApplySystem : ISystem
-    {
-        private EntityQuery _targetQuery;
-
-        [BurstCompile]
-        public void OnCreate(ref SystemState state)
-        {
-            _targetQuery = state.GetEntityQuery(new EntityQueryDesc
-            {
-                All = new[]
-                {
-                    ComponentType.ReadWrite<CombatAttributeCurrentSetComponent>(),
-                    ComponentType.ReadOnly<CombatAttributeBaseSetComponent>(),
-                    ComponentType.ReadWrite<ResourceAttributeCurrentSetComponent>(),
-                    ComponentType.ReadOnly<ResourceAttributeBaseSetComponent>(),
-                    ComponentType.ReadWrite<AttributeDirtyMaskComponent>(),
-                    ComponentType.ReadWrite<AttributeModifierBuffer>(),
-                    ComponentType.ReadWrite<GameplayEventBuffer>()
-                }
-            });
-
-            state.RequireForUpdate(_targetQuery);
-        }
-
-        [BurstCompile]
-        public void OnUpdate(ref SystemState state)
-        {
-            state.Dependency = new ApplyAttributeSetModifiersJob
-            {
-                CombatCurrentType = state.GetComponentTypeHandle<CombatAttributeCurrentSetComponent>(false),
-                CombatBaseType = state.GetComponentTypeHandle<CombatAttributeBaseSetComponent>(true),
-                ResourceCurrentType = state.GetComponentTypeHandle<ResourceAttributeCurrentSetComponent>(false),
-                ResourceBaseType = state.GetComponentTypeHandle<ResourceAttributeBaseSetComponent>(true),
-                DirtyMaskType = state.GetComponentTypeHandle<AttributeDirtyMaskComponent>(false),
-                ModifierBufferType = state.GetBufferTypeHandle<AttributeModifierBuffer>(false),
-                FactBufferType = state.GetBufferTypeHandle<GameplayEventBuffer>(false)
-            }.ScheduleParallel(_targetQuery, state.Dependency);
-        }
-
-        [BurstCompile]
-        private struct ApplyAttributeSetModifiersJob : IJobChunk
-        {
-            public ComponentTypeHandle<CombatAttributeCurrentSetComponent> CombatCurrentType;
-            [ReadOnly] public ComponentTypeHandle<CombatAttributeBaseSetComponent> CombatBaseType;
-            public ComponentTypeHandle<ResourceAttributeCurrentSetComponent> ResourceCurrentType;
-            [ReadOnly] public ComponentTypeHandle<ResourceAttributeBaseSetComponent> ResourceBaseType;
-            public ComponentTypeHandle<AttributeDirtyMaskComponent> DirtyMaskType;
-            public BufferTypeHandle<AttributeModifierBuffer> ModifierBufferType;
-            public BufferTypeHandle<GameplayEventBuffer> FactBufferType;
-
-            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in Unity.Burst.Intrinsics.v128 chunkEnabledMask)
-            {
-                var combatValues = chunk.GetNativeArray(ref CombatCurrentType);
-                var combatBaseValues = chunk.GetNativeArray(ref CombatBaseType);
-                var resourceValues = chunk.GetNativeArray(ref ResourceCurrentType);
-                var resourceBaseValues = chunk.GetNativeArray(ref ResourceBaseType);
-                var dirtyMasks = chunk.GetNativeArray(ref DirtyMaskType);
-                var modifiersByTarget = chunk.GetBufferAccessor(ref ModifierBufferType);
-                var factsByTarget = chunk.GetBufferAccessor(ref FactBufferType);
-
-                if (!useEnabledMask)
-                {
-                    for (var entityIndex = 0; entityIndex < chunk.Count; entityIndex++)
-                    {
-                        ApplyEntity(
-                            entityIndex,
-                            unfilteredChunkIndex,
-                            combatValues,
-                            combatBaseValues,
-                            resourceValues,
-                            resourceBaseValues,
-                            dirtyMasks,
-                            modifiersByTarget,
-                            factsByTarget);
-                    }
-
-                    return;
-                }
-
-                var enumerator = new ChunkEntityEnumerator(true, chunkEnabledMask, chunk.Count);
-                while (enumerator.NextEntityIndex(out var entityIndex))
-                {
-                    ApplyEntity(
-                        entityIndex,
-                        unfilteredChunkIndex,
-                        combatValues,
-                        combatBaseValues,
-                        resourceValues,
-                        resourceBaseValues,
-                        dirtyMasks,
-                        modifiersByTarget,
-                        factsByTarget);
-                }
-            }
-
-            private static void ApplyEntity(
-                int entityIndex,
-                int unfilteredChunkIndex,
-                NativeArray<CombatAttributeCurrentSetComponent> combatValues,
-                NativeArray<CombatAttributeBaseSetComponent> combatBaseValues,
-                NativeArray<ResourceAttributeCurrentSetComponent> resourceValues,
-                NativeArray<ResourceAttributeBaseSetComponent> resourceBaseValues,
-                NativeArray<AttributeDirtyMaskComponent> dirtyMasks,
-                BufferAccessor<AttributeModifierBuffer> modifiersByTarget,
-                BufferAccessor<GameplayEventBuffer> factsByTarget)
-            {
-                var combat = combatValues[entityIndex];
-                var combatBase = combatBaseValues[entityIndex];
-                var resource = resourceValues[entityIndex];
-                var resourceBase = resourceBaseValues[entityIndex];
-                var dirty = dirtyMasks[entityIndex];
-                var modifiers = modifiersByTarget[entityIndex];
-                var facts = factsByTarget[entityIndex];
-
-                if (modifiers.Length == 0)
-                    return;
-
-                for (var i = 0; i < modifiers.Length; i++)
-                {
-                    if (!ApplyModifier(ref combat, in combatBase, ref resource, in resourceBase, ref dirty, modifiers[i], out var appliedDelta))
-                        continue;
-
-                    facts.Add(new GameplayEventBuffer
-                    {
-                        Sequence = ((unfilteredChunkIndex & 0x7FFF) << 17) | (entityIndex << 8) | (i & 0xFF),
-                        EventCode = GameplayEventCodes.AttributeChanged,
-                        SourceAsc = modifiers[i].SourceAsc,
-                        TargetAsc = modifiers[i].TargetAsc,
-                        Value = appliedDelta
-                    });
-                }
-
-                combatValues[entityIndex] = combat;
-                resourceValues[entityIndex] = resource;
-                dirtyMasks[entityIndex] = dirty;
-                modifiers.Clear();
-            }
-
-            private static bool ApplyModifier(
-                ref CombatAttributeCurrentSetComponent combat,
-                in CombatAttributeBaseSetComponent combatBase,
-                ref ResourceAttributeCurrentSetComponent resource,
-                in ResourceAttributeBaseSetComponent resourceBase,
-                ref AttributeDirtyMaskComponent dirty,
-                in AttributeModifierBuffer modifier,
-                out float appliedDelta)
-            {
-                appliedDelta = 0f;
-
-                switch (modifier.AttributeCode)
-                {
-                    case AttributeCodes.Health:
-                    {
-                        var oldValue = combat.Health;
-                        combat.Health = math.clamp(oldValue + modifier.Magnitude, 0f, combatBase.MaxHealth);
-                        appliedDelta = combat.Health - oldValue;
-                        if (appliedDelta != 0f)
-                            dirty.CombatWord |= AttributeDirtyBits.Health;
-                        return appliedDelta != 0f;
-                    }
-                    case AttributeCodes.Shield:
-                    {
-                        var oldValue = combat.Shield;
-                        combat.Shield = math.clamp(oldValue + modifier.Magnitude, 0f, combatBase.MaxShield);
-                        appliedDelta = combat.Shield - oldValue;
-                        if (appliedDelta != 0f)
-                            dirty.CombatWord |= AttributeDirtyBits.Shield;
-                        return appliedDelta != 0f;
-                    }
-                    case AttributeCodes.Attack:
-                    {
-                        var oldValue = combat.Attack;
-                        combat.Attack = math.max(0f, oldValue + modifier.Magnitude);
-                        appliedDelta = combat.Attack - oldValue;
-                        if (appliedDelta != 0f)
-                            dirty.CombatWord |= AttributeDirtyBits.Attack;
-                        return appliedDelta != 0f;
-                    }
-                    case AttributeCodes.Defense:
-                    {
-                        var oldValue = combat.Defense;
-                        combat.Defense = math.max(0f, oldValue + modifier.Magnitude);
-                        appliedDelta = combat.Defense - oldValue;
-                        if (appliedDelta != 0f)
-                            dirty.CombatWord |= AttributeDirtyBits.Defense;
-                        return appliedDelta != 0f;
-                    }
-                    case AttributeCodes.MagicPower:
-                    {
-                        var oldValue = combat.MagicPower;
-                        combat.MagicPower = math.max(0f, oldValue + modifier.Magnitude);
-                        appliedDelta = combat.MagicPower - oldValue;
-                        if (appliedDelta != 0f)
-                            dirty.CombatWord |= AttributeDirtyBits.MagicPower;
-                        return appliedDelta != 0f;
-                    }
-                    case AttributeCodes.Mana:
-                    {
-                        var oldValue = resource.Mana;
-                        resource.Mana = math.clamp(oldValue + modifier.Magnitude, 0f, resourceBase.MaxMana);
-                        appliedDelta = resource.Mana - oldValue;
-                        if (appliedDelta != 0f)
-                            dirty.ResourceWord |= AttributeDirtyBits.Mana;
-                        return appliedDelta != 0f;
-                    }
-                    case AttributeCodes.Energy:
-                    {
-                        var oldValue = resource.Energy;
-                        resource.Energy = math.clamp(oldValue + modifier.Magnitude, 0f, resourceBase.MaxEnergy);
-                        appliedDelta = resource.Energy - oldValue;
-                        if (appliedDelta != 0f)
-                            dirty.ResourceWord |= AttributeDirtyBits.Energy;
-                        return appliedDelta != 0f;
-                    }
-                    default:
-                        return false;
-                }
-            }
-        }
-    }
-}
+```text
+AttributeDefinitionId
+  -> AttributeLayoutBlob.ResolveIndex()
+  -> AttributeValueSlot[index] { Base, Current, Revision }
 ```
 
-## 合理性
+- Session 启动时固定 Layout/content hash。
+- ASC spawn 时一次 sizing/初始化，运行中只按 index overwrite。
+- Definition/Ability/Effect 在生成期预解析 AttributeIndex。
+- 越界、Layout hash 不一致为 fault。
+- ECS change version 只能表示整个 buffer 改变；具体 dirty attribute 使用 `AttributeDirtyWord`、revision 或等价位图。
 
-1. 每个 job 只写自己 chunk 内 target ASC 的 AttributeSet 和 fact buffer，避免 `ComponentLookup` 随机写竞态。
-2. Attribute current 与 base / config 分离，保持 read-only / read-write 数据粒度清晰；写 Current 不应把 Base 的 reactive consumer 误触发。
-3. 不再按 `Health/Mana/Attack/...` 生成同形 apply system，避免 system 固定成本、重复 lookup/type handle 和更复杂 `JobHandle` 链。
-4. `AttributeModifierBuffer` 是 Effect Fan-In / Magnitude Resolve 后的 target grouped 输入；MMC 读取 source / target snapshot 的随机访问发生在写属性之前，Apply lane 不再 random write 其他 ASC。
-5. `if (!useEnabledMask) for ... else ChunkEntityEnumerator` 同时保留无 enableable query 的普通 for 快路径，以及未来加入 enableable filter 时的 disabled entity 正确性。
+## Aggregator 语义
 
-## Spec 输入 Owner Gate
+Aggregator 至少支持稳定定义的 channel、ModifierOp、qualifier、contributor identity 与 order key。推荐规范化 contribution：
 
-Attribute Reduce / Apply 可以消费 owner-local spec、target grouped modifier range 或 chunk-local scratch，但必须满足三条目标态门槛：
+```text
+ContributorId
+ModifierOp
+Channel
+EffectiveMagnitude
+OrderKey = (Channel, Op, EffectApplicationSequence, ModifierOrdinal)
+Source/TargetRequirementId
+```
 
-1. spec 输入属于 target owner 或当前 chunk，不从全局 singleton spec buffer 顺序扫描。
-2. SetByCaller、magnitude context、source / target identity 和 sequence 与 spec 同生命周期、同 owner 归属；需要跨 owner source attribute 时，先由 magnitude snapshot lane 生成只读 snapshot record。
-3. spec build / reduce 的 query、type handle、lookup refresh、allocator、dependency 和 evidence counter 归手写 Core lane owner；SourceGenerator 只提供 pure evaluator / lookup / validation，不生成该 lane lifecycle。
+Override 返回稳定顺序中的首个 qualified Override；浮点归并也必须使用稳定次序。Effect stack 产生的 magnitude 可在 contribution 中预折叠，但必须能按 ContributorId 精确撤销。
 
-## 与 EntityComponent 物理布局的关系
+Duration/Infinite modifier 通常改变 Current：移除 contributor 后恢复。Instant/Periodic execute 按定义改变 Base，再由 Aggregator 重算 Current。Pre/execute/Post、clamp 与 meta→real attribute 属于同一 target transaction，不能延期为公开 reaction。
 
-1. [13 EntityComponent 物理布局](../../13-EntityComponent物理布局Spec.md) 维护 AttributeSet、buffer、dirty mask 的全局物理布局和命名约束。
-2. 本文件只维护 Attribute Apply lane 对这些 component / buffer 的读写顺序和 owner-local 写入规则。
-3. 如果 AttributeSet 打包策略变化，先更新 `13`，再由本文件调整目标代码骨架。
+## Capture
 
-## 反向入口
+Capture 的唯一完整契约见 [04 EffectCommand/Spec](../../04-EffectCommand-SpecStream-AttributeDeltaSpec.md)。本阶段遵守：
 
-- 03E 子页索引：[README.md](README.md)
-- 03E 根索引：[../03E-EffectFanIn-State-Attribute-FactSpec.md](../03E-EffectFanIn-State-Attribute-FactSpec.md)
+- Snapshot 使用冻结 scalar 或规范化 AggregatorSnapshot。
+- Scalar 只有在所有 evaluator 输入已冻结且 API 闭合时合法。
+- Source Snapshot 只接受成功 Owner Commit 后的 `SourceSpecProjection`；Target Snapshot 在每条 target application 的最终线性化点、requirement/immunity 之前建立。
+- Live binding 至少使用 `(CapturedAscInstanceId, AttributeId, ProjectionContractId, CaptureOrdinal, ConsumerNodeId, ConsumerFieldId, LastSeenRevision, DependentActiveEffectHandle, SourceGonePolicy)`；同一 effect 多个字段不能因只按 AttributeId 去重而漏更新。
+- 同 ASC Live dirty 纳入当前 target-local stabilization，以 canonical read-your-writes 反复重算至稳定。
+- 跨 ASC source revision 在 T 改变时，只产生 destination 在 T+1 消费的有序 dirty work；该 work 在目标语义序上先于 T+1 `PeriodDue`。未实现 generation 校验、双向 cleanup、source-gone policy、cycle guard 与预算时 Definition bake fail。
+- “每 phase 读一次当前值”是 PhaseSample，不得冒充 Live Capture。
+
+`SourceGonePolicy` 必须显式为 typed-failure/remove-dependent/freeze-last-value 等已生成策略之一，不能静默回退到 0、当前 target 值或 self。跨 ASC edge 必须携带稳定 CausalityId/edge ordinal；重复 edge、运行时 cycle 或 next-tick ping-pong 超预算时产生 deterministic fault，不提交半重算值。
+
+## AttributeMutationFact 与 Death crossing
+
+每次权威 Attribute mutation 必须产生可对账的 `AttributeMutationFact`；clamp 后只保留最终值不足以解释伤害、overkill、threshold 或 replay：
+
+```text
+AttributeMutationFact =
+    AttributeId
+    + RequestedDelta
+    + PreClampBase / PreClampCurrent
+    + UnclampedResult
+    + PostClampBase / PostClampCurrent
+    + EffectiveDelta
+    + EffectApplicationId
+    + ContributorId?
+    + CausalityId
+    + DeathTransitionId?
+```
+
+- `RequestedDelta` 是 execution/modifier 请求写入的语义量；`EffectiveDelta` 由对应 pre-clamp 权威值与 post-clamp 权威值计算，两者不能互相替代。
+- `UnclampedResult` 是本次 Health domain mutation 在 clamp 前的结果，用于 crossing 与 overkill；不得从 `PostClamp=0` 反推。
+- Death 只在权威 Health 的首个 `old > 0 && UnclampedResult <= 0` crossing 创建一次 `DeathTransitionId`，并冻结 killer、致死 EffectApplicationId/ContributorId/CausalityId 与 `Overkill = max(0, -UnclampedResult)`。
+- crossing 立即把 target lifecycle 写入 canonical Dead，使同一 target application 序列中后续 `AliveOnly` application 以 typed outcome 拒绝；这些拒绝的 applied damage、overkill 与 assist contribution 必须为 0。
+- 已经越过最终 application 线性化点的致死 application 必须完成自身全部 modifier、execution、clamp、meta conversion 与 fact 节点；Death 不是在节点中途抛出的可重入 callback。其后续节点不得改写首次冻结的 killer/overkill，也不得创建第二个 DeathTransitionId。
+- `AllowTerminal`、ReviveOnly 或 CorpseTargeting 是显式 `TargetLifePolicy`；不得通过把死亡状态延迟到下一 tick 来模拟。
+
+## Job 与所有权
+
+`TargetOwnedApplyJob` 只写当前 ASC 的 Attribute buffer、aggregator slab、dirty word 和 final fact scratch。跨 ASC source snapshot 从明确 phase read snapshot 读取，不直接在目标 Job 随机访问/写入活跃源数据。
+
+具体 IJobChunk/IJobEntity 选型和 IBC 由 ScaleProfile 决定；逻辑长度与单一 owner 不变。生成报告必须估算 `ASCCount × AttributeCount × slot size`、external buffer allocation 与 dirty scan 成本。
+
+## 验收
+
+- Base/Current、Add/Multiply/Divide/Override/channel/qualifier 的固定向量测试。
+- contributor 移除后数值恢复；顺序与 battle hash 重跑一致。
+- Source Snapshot/Target pre-application/同 ASC Live/跨 ASC T+1 dirty、late tags/filter/ignore 的组合测试。
+- 跨 ASC dirty 在同一目标的 PeriodDue 前可见；source gone/cycle/预算超限均走显式策略或 fault。
+- AttributeMutationFact 可同时还原 requested、unclamped、clamped 与 effective delta，不用表现层反推。
+- 同 tick 多次致死输入只产生一个 DeathTransitionId；致死 application 完整结束，后续 AliveOnly application typed reject 且 damage/overkill/assist 为 0。
+- dirty attribute 只重算必要 index，且不依赖 buffer 级 change filter 猜测 slot。
+- dense 内存不达标时另立 ADR 整体替换 backend，不保留双权威。

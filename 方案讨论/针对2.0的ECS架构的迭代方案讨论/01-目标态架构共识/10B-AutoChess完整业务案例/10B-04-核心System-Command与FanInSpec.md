@@ -1,513 +1,56 @@
-# 10B-04：核心 System 的 Command、技能激活与 Effect Fan-In
+# 10B-04 Command、Activation 与 Effect Fan-In 投影
 
-> Owner：`01-目标态架构共识/10B-AutoChess完整业务案例` | 状态：目标态子 Spec | 拆分来源：`../10B-AutoChess完整业务案例设计Spec.md` | 最近拆分：2026-06-07
+## 结论
 
-本文件只描述 AutoChess 完整业务案例的目标态设计。禁止写入当前代码事实、执行流水、验证数字或下一步任务；现实证据必须回到 `../../00-当前架构事实/`，任务拆分必须回到 `../../02-主线任务树/`。
+AutoChess 不新增核心 System。普攻、技能和 AI 命令全部成为通用 Kernel 的输入/Job 数据；Kernel 先执行按 ASC owner 分组的 `AscOwnerCommandWave`，再执行按 target ASC 分组的 `AscTargetStateWave`。“核心 System”仅保留为业务概念标题。
 
-## 与 Runtime Core 通用 Spec 的合并裁决
+## 两波执行与原子 Commit
 
-本文件是 AutoChess 业务案例投影，不是通用 Runtime Core 规则的第二正文。出现规则重复或冲突时，按下表回到唯一 owner 修改，10B 只同步业务字段和案例代码。
+- `OwnerPlanBuild` 按 owner ASC 与稳定 request identity 在 shadow 中完成 CanActivate/Commit 业务检查和 canonical read-your-writes，并产出完整生成上界；它不写权威状态。
+- `WholeTickInfraAdmission` 在所有 owner/target work展开后统一预留 downstream scratch/slab/payload/pending/fact/outbox。失败是 tick-level `InfraAdmissionFault`：全部 gameplay 权威零写，DAG 内只写固定大小 `SessionFaultLatch=Detected` 与 sealed subset 证据。本 Tick不写逐 request Boundary fact；outer completion 后 FaultClose 与 CommandPort accept 在同一 `SessionIngressGate` 线性化，冻结关闭前全部 accepted-outstanding request的 first/last/count/hash，含 unsealed/future tail。这些请求由同一 FaultId 统一终结，原 inbox/接收 journal 保留供诊断审计且不重放；关闭后请求同步拒绝。
+- `AscOwnerCommandWave` 只提交已通过整 Tick admission 的 no-fail CommitPlan；cost/cooldown、tag、target 引用等业务条件已在 plan 中闭合，提交不得再发生容量失败或部分 mutation。
+- Commit 后远端 application 进入 `AscTargetStateWave`，按 target ASC 与 application identity 稳定排序；target 内 canonical read-your-writes。
+- target wave 产生的 overflow/reaction/cross-owner dynamic child 统一进入 `T+1`；Definition 静态闭合的 `DirectEffectProgram` 可在当前 tick 完成。
 
-| 主题 | 唯一正文 owner | 本文件只保留 |
-|---|---|---|
-| Shell intent / Boundary command envelope | [16-02 Boundary Command 与 Core Command Resolve](../16-纯ECS内核与边界重划分/16-02-BoundaryCommand与CoreCommandResolveSpec.md) | AutoChess 输入如何映射为 ability / effect command |
-| Ability command normalization、Target Resolve、TargetDataBuffer / NativeStream 选型 | [03D Command Resolve 与 Target Resolve](../03-RuntimeCore管线/03D-CommandResolve与TargetResolveSpec.md) | 棋子 mana、cooldown、stun/freeze、ability level 等业务校验字段 |
-| Effect Fan-In、deterministic merge、target grouped range | [03E-01 Effect Fan-In](../03-RuntimeCore管线/03E-EffectFanIn-State-Attribute-Fact/03E-01-EffectFanInSpec.md) | 普攻、技能和 duration GE 在 AutoChess 场景中的 producer / range 样例 |
-| Frame-local stream / range / capacity 基础设施 | [10B-03B Runtime 基础设施](10B-03B-Runtime基础设施Spec.md) 与 [13-03 Buffer 容量与 Phase 映射](../13-EntityComponent物理布局/13-03-Buffer容量与Phase映射Spec.md) | AutoChess 所需 lane 名称、字段映射和验收样例 |
+## 普攻
 
-## 八、核心 System 实现
+1. AI 按 `ActiveDue > Finisher > Primary` 选择 ability，并以稳定 `ScenarioUnitId` 选择 target，提交 Attack/Activate intent。
+2. Kernel resolve GrantedAbilityHandle，执行 CanActivate。
+3. Activation 进入 RunningUncommitted；Commit 重查攻速/cooldown/stun/cost。
+4. Definition DirectEffectProgram 生成 damage application command。
+5. target grouping 前固定 source/target identity、ApplicationId、target ordinal 和 capture input；AutoChess 使用 frozen target ASC，非法 target typed reject，绝不 fallback self。
 
-> **代码读取方式：** 本章代码表达目标态 AutoChess 业务链路的投影：frame command / spec / fact / mutation 默认通过 `NativeStream` producer、deterministic merge 和 target grouped range 流转；结构变化只输出 structural intent，并统一在 `GASStructuralCommitSystemGroup` 对应 ECB phase 播放。通用 Runtime Core 规则以上表 owner 为准，本文只展示 AutoChess 字段如何套入这些规则。
+## 技能
 
-### 8.1 普攻 System（GASCoreSimulationSystemGroup / Effect Fan-In lane）
+盾击产生 damage+stun 静态程序；冰霜新星 target rule 输出至多 3 个稳定目标；毒刃产生 stackable poison application。一个 Activation 可以并行等待动画/逻辑 wake 或 target data，但表现动画 completion 不作为权威 commit 条件，除非通过明确 Continuation command 回到后续 tick。
 
-```csharp
-// ============================================================
-// [Layer 3: GAS Runtime Core — GASCoreSimulationSystemGroup]
-// 普攻 System：冷却计时 → 选敌 → 发射 Instant GE command
-// ============================================================
+## Fan-In
 
-[UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
-[BurstCompile]
-public partial struct GEAutoAttackSystem : ISystem
-{
-    [BurstCompile]
-    public void OnCreate(ref SystemState state)
-    {
-        state.RequireForUpdate<CChessCombat>();
-        state.RequireForUpdate<EffectFanInLaneStateComponent>();
-    }
+来自普攻、技能、period、羁绊和上一 tick reaction 的 commands 统一写 tick scratch，按 target ASC/canonical key 分组。一个目标 invocation 串行处理自身 range，不同目标并行。
 
-    [BurstCompile]
-    public void OnUpdate(ref SystemState state)
-    {
-        // 1. 法力自然回复
-        var manaRegenJob = new ManaRegenTickJob
-        {
-            DeltaTime = SystemAPI.Time.DeltaTime,
-        };
-        state.Dependency = manaRegenJob.ScheduleParallel(state.Dependency);
+排序字段至少覆盖 target、available tick、source ASC、source sequence、causality、program node、target ordinal、application id。不得以单位数组顺序、chunk 顺序或 Job 完成顺序决定伤害先后。
 
-        // 2. 普攻冷却 tick + 攻击检测 → 写入 EffectCommand NativeStream lane
-        var attackJob = new AutoAttackTickJob
-        {
-            DeltaTime = SystemAPI.Time.DeltaTime,
-            Commands = GASEffectCommandSink.Resolve(ref state).AsParallelWriter(),
-        };
-        state.Dependency = attackJob.ScheduleParallel(state.Dependency);
-    }
-}
+## 多目标与原子性
 
-[BurstCompile]
-public partial struct ManaRegenTickJob : IJobEntity
-{
-    public float DeltaTime;
+一次冰霜新星命中 3 个目标共享 Activation/Causality，但三个 target transaction 独立成功/失败；v1 不承诺跨三个 ASC 的分布式原子回滚。每个目标拥有独立 target capture/ApplicationId/result。
 
-    public void Execute(
-        ref AutoChessResourceAttributeCurrentSetComponent resource,
-        in AutoChessResourceAttributeBaseSetComponent resourceBase,
-        ref AutoChessAttributeDirtyMaskComponent dirty,
-        in TagMaskComponent tagMask)
-    {
-        if (TagCheck.IsDead(tagMask.Value)) return;
-        var oldMana = resource.Mana;
-        resource.Mana = math.min(resource.Mana + resourceBase.ManaRegen * DeltaTime, resourceBase.MaxMana);
-        if (resource.Mana != oldMana)
-            dirty.ResourceWord |= 1ul << 0;
-    }
-}
+## Target life policy 与 committed-work-wins
 
-[BurstCompile]
-public partial struct AutoAttackTickJob : IJobEntity
-{
-    public float DeltaTime;
-    public GASEffectCommandSink.ParallelWriter Commands;
+- AutoChess 主业务固定 `FrozenAsc + AliveOnly`；Commit 前 target 已失效则 Activate/Commit 拒绝。
+- Commit 后 source 死亡不撤回已发出的远端工作。
+- target canonical range 内首次 `Alive -> Dead` crossing 仍由致死 application 结算 damage、overkill 与 provenance；后续 `AliveOnly` application typed reject，不计 damage、assist 或 Cue Executed。
+- corpse ASC 保留至结果快照与 teardown；不得用即时销毁代替 life-policy 判定。
 
-    public void Execute(
-        [EntityIndexInChunk] int chunkIndex,
-        Entity attacker,
-        ref CChessCombat combat,
-        in CChessUnit unit,
-        in TagMaskComponent tagMask,
-        in AutoChessCombatAttributeCurrentSetComponent combatAttributes)
-    {
-        if (!unit.IsAlive) return;
-        if (TagCheck.IsStunnedOrFrozen(tagMask.Value)) return;
+## Wait 线性化
 
-        combat.AttackCooldownRemaining -= DeltaTime;
+- Wait 在 observed ASC writer 内执行 `sample + register`；Level 条件已满足可立即完成，Edge/Event 不追溯历史。
+- completion recipients 使用稳定全序；completion fact 可在当前 tick 产生，但 continuation 恢复按动态 child 规则进入 `T+1`。
 
-        if (combat.AttackCooldownRemaining <= 0f && combat.CurrentTarget != Entity.Null)
-        {
-            // 重置普攻冷却: interval = 1.0 / (ASPD/100)
-            combat.AttackCooldownRemaining = 1.0f / (combatAttributes.AttackSpeed / 100f);
+## 验收
 
-            // 发射普攻 EffectCommand (GE 4001 = 普攻伤害)
-            // SourceAsc = 攻击者自身(entity), TargetAsc = 当前目标
-            Commands.Write(chunkIndex, new GEEffectCommandBuffer
-            {
-                EffectCode = 4001,
-                SourceAsc = attacker,
-                TargetAsc = combat.CurrentTarget,
-                ContextId = 0,
-            });
-        }
-    }
-}
-```
-
-### 8.2 技能激活 System（AutoChess 对 03D Command Resolve 的业务投影）
-
-```csharp
-// ============================================================
-// [Layer 3: GAS Runtime Core — GASCommandResolveSystemGroup]
-// 技能激活检查：法力足够 + 冷却完毕 + 未眩晕/冰冻 → 发射 EffectCommand
-//
-// CASE-02 (IJobEntity) — 拒绝 CASE-01 (SystemAPI.Query)
-// 原因: 若本案例选择低频 request-owned 物化路径，也必须保持 chunk/job 化；
-//       默认 Shell intent 入口和高频 command 仍以 16-02 / 03D 的 owner-local / NativeStream 路径为准。
-// ECB: 使用 GASStructuralCommitSystemGroup ECB (EndGASStructuralCommitECB) 统一播放
-// ============================================================
-
-[UpdateInGroup(typeof(GASCommandResolveSystemGroup))]
-[BurstCompile]
-public partial struct AbilityActivationSystem : ISystem
-{
-    private EntityQuery _requestQuery;
-
-    [BurstCompile]
-    public void OnCreate(ref SystemState state)
-    {
-        _requestQuery = state.GetEntityQuery(new EntityQueryDesc
-        {
-            All = new[]
-            {
-                ComponentType.ReadOnly<AbilityActivationRequestComponent>(),
-                ComponentType.ReadWrite<AbilityCommandComponent>(),
-                ComponentType.ReadWrite<TargetDataBuffer>()
-            }
-        });
-        state.RequireForUpdate(_requestQuery);
-    }
-
-    [BurstCompile]
-    public void OnUpdate(ref SystemState state)
-    {
-        var abilityLookup = SystemAPI.GetSingleton<GAStaticLookup>(); // Ability lookup 单例（BlobAsset 表）
-
-        var ingestJob = new AbilityActivationIngestJob
-        {
-            AbilityLookup = abilityLookup,
-            AbilityStates = state.GetComponentLookup<AbilityStateComponent>(true),
-            SourceTags = state.GetComponentLookup<TagMaskComponent>(true),
-            SourceResources = state.GetComponentLookup<AutoChessResourceAttributeCurrentSetComponent>(true),
-            RequestType = state.GetComponentTypeHandle<AbilityActivationRequestComponent>(true),
-            CommandType = state.GetComponentTypeHandle<AbilityCommandComponent>(false),
-            Frame = (int)(SystemAPI.Time.ElapsedTime * 60)
-        };
-        state.Dependency = ingestJob.ScheduleParallel(_requestQuery, state.Dependency);
-    }
-}
-
-[BurstCompile]
-public struct AbilityActivationIngestJob : IJobChunk
-{
-    [ReadOnly] public GAStaticLookup AbilityLookup;
-    [ReadOnly] public ComponentLookup<AbilityStateComponent> AbilityStates;
-    [ReadOnly] public ComponentLookup<TagMaskComponent> SourceTags;
-    [ReadOnly] public ComponentLookup<AutoChessResourceAttributeCurrentSetComponent> SourceResources;
-    [ReadOnly] public ComponentTypeHandle<AbilityActivationRequestComponent> RequestType;
-    public ComponentTypeHandle<AbilityCommandComponent> CommandType;
-    public int Frame;
-
-    public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in Unity.Burst.Intrinsics.v128 chunkEnabledMask)
-    {
-        Unity.Assertions.Assert.IsFalse(useEnabledMask);
-        var requests = chunk.GetNativeArray(ref RequestType);
-        var commands = chunk.GetNativeArray(ref CommandType);
-
-        for (var entityIndex = 0; entityIndex < chunk.Count; entityIndex++)
-        {
-            var request = requests[entityIndex];
-            var command = new AbilityCommandComponent
-            {
-                SourceAsc = request.SourceAsc,
-                AbilityEntity = request.AbilityEntity,
-                ExplicitTargetAsc = request.ExplicitTargetAsc,
-                InputSequence = request.InputSequence,
-                RequestFrame = request.RequestFrame,
-                TargetGroupSortKey = request.TargetGroupSortKey,
-                TargetMode = request.TargetMode,
-                Status = AbilityCommandStatus.Rejected
-            };
-
-            if (!AbilityStates.HasComponent(request.AbilityEntity) ||
-                !SourceTags.HasComponent(request.SourceAsc) ||
-                !SourceResources.HasComponent(request.SourceAsc))
-            {
-                commands[entityIndex] = command;
-                continue;
-            }
-
-            var ability = AbilityStates[request.AbilityEntity];
-            var tagMask = SourceTags[request.SourceAsc];
-            var resource = SourceResources[request.SourceAsc];
-            var abilityDef = AbilityLookup.FindAbility(ability.AbilityId);
-
-            if (!abilityDef.IsCreated ||
-                ability.OwnerAsc != request.SourceAsc ||
-                ability.State != AbilityRuntimeState.Ready ||
-                ability.CooldownEndFrame > Frame ||
-                TagCheck.IsStunnedOrFrozen(tagMask.Value))
-            {
-                commands[entityIndex] = command;
-                continue;
-            }
-
-            ref var def = ref abilityDef.Value;
-            if (resource.Mana < def.ManaCost)
-            {
-                commands[entityIndex] = command;
-                continue;
-            }
-
-            command.PrimaryGameplayEffectCode = def.EffectIdPrimary;
-            command.SecondaryGameplayEffectCode = def.EffectIdSecondary;
-            command.Level = ability.Level;
-            command.Status = AbilityCommandStatus.Valid;
-            commands[entityIndex] = command;
-        }
-    }
-}
-```
-
-### 8.3 Effect Fan-In System（GASCoreSimulationSystemGroup / Effect Fan-In lane）
-
-```csharp
-// ============================================================
-// [Layer 3: GAS Runtime Core — GASCoreSimulationSystemGroup]
-// Effect Fan-In: 读取 EffectCommand NativeStream → 查 GE BlobAsset → 分别产出:
-//   Instant GE → InstantSpec NativeStream / target grouped range
-//   Duration GE → ActiveEffectMutation NativeStream / target grouped range
-//
-// CASE-02 (IJobEntity) — 拒绝 CASE-01 (SystemAPI.Query foreach)
-// 原因: GEEffectCommand 数量在 AoE / period / passive 场景可达数十到数百。
-//       目标态不把 frame command/fact 写入 singleton DynamicBuffer，也不把 ECB 当 event bus。
-// 实现: producer lane 写 NativeStream；Fan-In lane 只读 frame stream，
-//       输出 instant spec 和 active mutation 的 frame-local stream，
-//       后续 deterministic merge 生成 target grouped range。
-// ============================================================
-
-[UpdateInGroup(typeof(GASCoreSimulationSystemGroup))]
-[BurstCompile]
-public partial struct GEEffectFanInSystem : ISystem
-{
-    [BurstCompile]
-    public void OnCreate(ref SystemState state)
-    {
-        state.RequireForUpdate<EffectFanInLaneStateComponent>();
-    }
-
-    [BurstCompile]
-    public void OnUpdate(ref SystemState state)
-    {
-        var laneState = SystemAPI.GetSingleton<EffectFanInLaneStateComponent>();
-        var commandReader = GASEffectCommandReader.Resolve(ref state);
-        if (commandReader.CommandCount == 0)
-            return;
-
-        var specSink = GASEffectSpecSink.Resolve(ref state);
-        var mutationSink = GASActiveEffectMutationSink.Resolve(ref state);
-
-        var buildHandle = new EffectFanInBuildJob
-        {
-            CommandReader = commandReader.AsNativeStreamReader(),
-            GeLookup = SystemAPI.GetSingleton<GAStaticLookup>(),
-            SpecWriter = specSink.AsNativeStreamWriter(),
-            MutationWriter = mutationSink.AsNativeStreamWriter(),
-        }.Schedule(commandReader.ForEachCount, 1, state.Dependency);
-
-        state.Dependency = new EffectFanInDeterministicMergeJob
-        {
-            SpecReader = specSink.AsNativeStreamReader(),
-            MutationReader = mutationSink.AsNativeStreamReader(),
-            ForEachCount = commandReader.ForEachCount,
-            Frame = laneState.Frame,
-            RangeSink = GASEffectFanInRangeSink.Resolve(ref state),
-        }.Schedule(buildHandle);
-    }
-}
-
-[BurstCompile]
-public struct EffectFanInBuildJob : IJobFor
-{
-    [ReadOnly] public NativeStream.Reader CommandReader;
-    [ReadOnly] public GAStaticLookup GeLookup;
-    public NativeStream.Writer SpecWriter;
-    public NativeStream.Writer MutationWriter;
-
-    public void Execute(int commandIndex)
-    {
-        CommandReader.BeginForEachIndex(commandIndex);
-        SpecWriter.BeginForEachIndex(commandIndex);
-        MutationWriter.BeginForEachIndex(commandIndex);
-
-        int localIndex = 0;
-        while (CommandReader.RemainingItemCount > 0)
-        {
-            var cmd = CommandReader.Read<GEEffectCommandBuffer>();
-            var geBlob = GeLookup.Find(cmd.EffectCode);
-            if (!geBlob.IsCreated)
-                continue;
-
-            ref var ge = ref geBlob.Value;
-            int sortKey = commandIndex * 1024 + localIndex++;
-
-            if (ge.GeType == GEType.Instant)
-            {
-                SpecWriter.Write(new EffectFanInSpecRecord
-                {
-                    TargetAsc = cmd.TargetAsc,
-                    SortKey = sortKey,
-                    Spec = new GEEffectSpecBuffer
-                    {
-                        EffectCode = ge.GeId,
-                        ContextId = cmd.ContextId,
-                        SourceAsc = cmd.SourceAsc,
-                        TargetAsc = cmd.TargetAsc,
-                    },
-                });
-                continue;
-            }
-
-            if (ge.GeType == GEType.Duration)
-            {
-                MutationWriter.Write(new EffectFanInMutationRecord
-                {
-                    TargetAsc = cmd.TargetAsc,
-                    SortKey = sortKey,
-                    Mutation = new ActiveEffectMutationBuffer
-                    {
-                        EffectCode = ge.GeId,
-                        SourceAsc = cmd.SourceAsc,
-                        TargetAsc = cmd.TargetAsc,
-                        DurationFrames = ge.DurationFrames,
-                        PeriodFrames = ge.PeriodFrames,
-                        StackLimit = ge.StackLimit,
-                        StackPolicy = ge.StackPolicy,
-                        ContextId = cmd.ContextId,
-                    },
-                });
-            }
-        }
-
-        MutationWriter.EndForEachIndex();
-        SpecWriter.EndForEachIndex();
-        CommandReader.EndForEachIndex();
-    }
-}
-
-public struct EffectFanInSpecRecord
-{
-    public Entity TargetAsc;
-    public int SortKey;
-    public GEEffectSpecBuffer Spec;
-}
-
-public struct EffectFanInMutationRecord
-{
-    public Entity TargetAsc;
-    public int SortKey;
-    public ActiveEffectMutationBuffer Mutation;
-}
-
-[BurstCompile]
-public struct EffectFanInDeterministicMergeJob : IJob
-{
-    [ReadOnly] public NativeStream.Reader SpecReader;
-    [ReadOnly] public NativeStream.Reader MutationReader;
-    public int ForEachCount;
-    public int Frame;
-    public GASEffectFanInRangeSink RangeSink;
-
-    public void Execute()
-    {
-        RangeSink.SpecScratch.Clear();
-        RangeSink.MutationScratch.Clear();
-        RangeSink.SpecRanges.Clear();
-        RangeSink.SpecPayload.Clear();
-        RangeSink.MutationRanges.Clear();
-        RangeSink.MutationPayload.Clear();
-
-        for (int i = 0; i < ForEachCount; i++)
-        {
-            SpecReader.BeginForEachIndex(i);
-            while (SpecReader.RemainingItemCount > 0)
-                RangeSink.SpecScratch.Add(SpecReader.Read<EffectFanInSpecRecord>());
-            SpecReader.EndForEachIndex();
-
-            MutationReader.BeginForEachIndex(i);
-            while (MutationReader.RemainingItemCount > 0)
-                RangeSink.MutationScratch.Add(MutationReader.Read<EffectFanInMutationRecord>());
-            MutationReader.EndForEachIndex();
-        }
-
-        RangeSink.SpecScratch.Sort(new SpecRecordComparer());
-        RangeSink.MutationScratch.Sort(new MutationRecordComparer());
-
-        WriteSpecRanges(RangeSink.SpecScratch, Frame, ref RangeSink);
-        WriteMutationRanges(RangeSink.MutationScratch, Frame, ref RangeSink);
-    }
-
-    private static void WriteSpecRanges(
-        NativeList<EffectFanInSpecRecord> records,
-        int frame,
-        ref GASEffectFanInRangeSink sink)
-    {
-        int index = 0;
-        while (index < records.Length)
-        {
-            var owner = records[index].TargetAsc;
-            int start = sink.SpecPayload.Length;
-            int firstSortKey = records[index].SortKey;
-
-            do
-            {
-                sink.SpecPayload.Add(records[index].Spec);
-                index++;
-            }
-            while (index < records.Length && SameEntity(records[index].TargetAsc, owner));
-
-            sink.SpecRanges.Add(new EffectCommandRangeHeader
-            {
-                OwnerAsc = owner,
-                Frame = frame,
-                Start = start,
-                Length = sink.SpecPayload.Length - start,
-                SortKey = firstSortKey,
-            });
-        }
-    }
-
-    private static void WriteMutationRanges(
-        NativeList<EffectFanInMutationRecord> records,
-        int frame,
-        ref GASEffectFanInRangeSink sink)
-    {
-        int index = 0;
-        while (index < records.Length)
-        {
-            var owner = records[index].TargetAsc;
-            int start = sink.MutationPayload.Length;
-            int firstSortKey = records[index].SortKey;
-
-            do
-            {
-                sink.MutationPayload.Add(records[index].Mutation);
-                index++;
-            }
-            while (index < records.Length && SameEntity(records[index].TargetAsc, owner));
-
-            sink.MutationRanges.Add(new EffectCommandRangeHeader
-            {
-                OwnerAsc = owner,
-                Frame = frame,
-                Start = start,
-                Length = sink.MutationPayload.Length - start,
-                SortKey = firstSortKey,
-            });
-        }
-    }
-
-    private static bool SameEntity(Entity left, Entity right)
-    {
-        return left.Index == right.Index && left.Version == right.Version;
-    }
-}
-
-public struct SpecRecordComparer : IComparer<EffectFanInSpecRecord>
-{
-    public int Compare(EffectFanInSpecRecord x, EffectFanInSpecRecord y)
-    {
-        int owner = EffectFanInRecordOrder.CompareEntity(x.TargetAsc, y.TargetAsc);
-        return owner != 0 ? owner : x.SortKey.CompareTo(y.SortKey);
-    }
-}
-
-public struct MutationRecordComparer : IComparer<EffectFanInMutationRecord>
-{
-    public int Compare(EffectFanInMutationRecord x, EffectFanInMutationRecord y)
-    {
-        int owner = EffectFanInRecordOrder.CompareEntity(x.TargetAsc, y.TargetAsc);
-        return owner != 0 ? owner : x.SortKey.CompareTo(y.SortKey);
-    }
-}
-
-public static class EffectFanInRecordOrder
-{
-    public static int CompareEntity(Entity left, Entity right)
-    {
-        int index = left.Index.CompareTo(right.Index);
-        return index != 0 ? index : left.Version.CompareTo(right.Version);
-    }
-}
-```
+- OwnerPlanBuild 的 Activate/Commit 业务检查有 per-request typed outcome；WholeTickInfraAdmission失败产生 tick-level `SessionFaultLatch`，其 IngressClosed accepted-outstanding first/last/count/hash 覆盖关闭点前全部已接受未终结请求，不往未准入 fact/outbox 写回执，且整 Tick gameplay 权威零写；admitted CommitPlan一次性 no-fail提交。
+- 同 tick 多单位集火同一目标仍只有 target single writer。
+- Commit 失败不消耗 Mana/冷却、不产生 Effect command。
+- 目标死亡/stale/binding change 返回稳定 reject reason。
+- 同输入重跑 command range、target order 和 result hash 一致。
+- source Commit 后死亡不撤回远端 application；首次死亡后的 AliveOnly application 稳定拒绝且不污染伤害/助攻统计。

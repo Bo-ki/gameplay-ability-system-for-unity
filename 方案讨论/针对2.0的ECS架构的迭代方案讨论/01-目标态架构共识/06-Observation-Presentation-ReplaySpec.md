@@ -1,126 +1,150 @@
-# Runtime Boundary Observation / Presentation / Replay Spec
+# Observation、Presentation、Replay Spec
 
-## 目的
+## 结论
 
-明确 GAS Runtime Core facts、Presentation outbox、Replay sink 与 Structured log 在 Runtime Boundary Layer 中的分工。
+Core 只产生最终权威事实；Runtime Boundary 只有一个 managed Drain；Cue、UI、Replay、Debugger 和 Headless 从同一个不可变 batch 派生。任何消费者都不能直接查询、清空或确认 ECS outbox，也不能反向驱动 gameplay。
 
-## 数据流
+## 出站链
 
-```mermaid
-flowchart LR
-    GameplayFacts["Gameplay Facts"] --> FactStream["GameplayFactStream\nframe facts / read cursor"]
-    GameplayFacts --> Presentation["PresentationEventBuffer\ncurrent frame outbox"]
-    GameplayFacts --> Replay["BDebugReplayEvent\npersistent sink"]
-    Replay --> StructuredLog["Structured Log Export"]
-    Presentation --> Bridge["PresentationOutboxBridge"]
-    Bridge --> UI["UI / VFX / SFX / FloatingText"]
+```text
+Stable transaction / TerminalResolve reaches final state
+  -> BoundaryFactBuffer on unique scoped owner (ASC or Session)
+  -> optional OutboxDirty marker
+  -> EndFixed structural playback / ASC destroy
+  -> GasBoundaryDrainSystem
+      -> live ASC outboxes + live Session outbox
+      -> ASC/Session cleanup shells
+      -> stable sort / freeze BatchId + source watermarks
+      -> copy to managed staging
+      -> staging Accepted
+      -> clear only accepted source ranges
+      -> queue dead-shell cleanup removal for next Kernel prepass / standard EndFixed
+  -> Immutable BoundaryBatch / retained ring
+      ├─ Cue consumer
+      ├─ UI/ReadModel projector
+      ├─ Replay writer
+      ├─ Runtime debugger
+      └─ Headless marker/validator
 ```
 
-## 核心契约
+使用 cleanup buffer 的目的，是保证 ASC 或 Session 在 EndFixed 销毁后，terminal Death/Remove/Cue/Battle/Session facts 仍可被 Drain。ASC-scope fact 只写所属 ASC，BattleInstance/Session-scope fact 只写 Session；同一事实不得镜像。Cleanup buffer/state 必须在两类 runtime spawn 时显式添加，不能假设 prefab instantiate 会复制 cleanup component/buffer。
 
-| 流 | 生命周期 | 消费者 | 禁止 |
-|---|---|---|---|
-| Typed facts | frame-local / cursor | Simulation reaction | presentation side effect |
-| GameplayFactStream | frame-local / cursor | replay / presentation projection / read model | high frequency reaction 主输入 |
-| Presentation outbox | current frame | UI/VFX/SFX outbox bridge | gameplay mutation |
-| Replay sink | persistent | debugger / export | runtime decision |
+## BoundaryFact 契约
 
-`CGameplayEventBus` 只能作为过渡命名参考；目标态命名应向 `GameplayFactStream`、`GameplayFactReadCursor`、`PresentationOutboxBridge` 收敛。
+```text
+BoundaryEventId              (Epoch, PhysicalOwnerKind/Id/Generation, OwnerSequence) 复合交付/去重身份
+ScopeKind / ScopeStableId    Asc|BattleInstance|Session identity 与物理 outbox route
+FactPlane                    Gameplay|TeardownAudit 结果分层；不决定物理 owner
+CueLifecycleKey?             仅 Duration Cue active cycle 身份
+ExecutedCueKey?              仅 Instant/普通/Period execute 身份
+SimulationTick               Epoch/OwnerSequence 仅存于 BoundaryEventId
+FactKind / SemanticId
+Source / Target stable identity
+Definition / Activation / EffectApplication identity
+Owner / Avatar / BindingGeneration
+Instigator / EffectCauser / Context / TargetData references or frozen payload
+ParentCausalityId
+Payload
+```
 
-## 官方依据与设计论证
+`BoundaryEventId` 只用于 Boundary 交付与幂等去重，不是 gameplay provenance，也不能代替 application、period execution 或 Cue lifecycle identity。consumer 必须比较完整复合键，不得只比较 owner-local sequence。`ScopeKind` 只决定 identity/route，`FactPlane` 只决定 BattleHash 或 teardown audit inclusion。
 
-| 目标态选择 | 官方规则依据 | 为什么更优秀 | 为什么有必要 |
-|---|---|---|---|
-| CoreReactionFact 与 BoundaryObservationFact 拆分 | `SYS-05`、`DBG-01`、`SEL-01` | Core 内部 reaction 可以保持 ECS 数据流，Boundary 可以按 read model / outbox / replay 各自采样 | 同一个全局 EventBus 同时服务 gameplay reaction、UI、日志和 replay，会让表现层反向影响 simulation |
-| 多 job fact fan-in 默认用 `NativeStream` / per-thread stream + deterministic merge | `CASE-12`、`NAT-03`、`BUF-02`、`MAT-05` | 并行 producer 不争用单一全局 buffer，merge 顺序可被 replay hash 和 Debugger 复核 | GAS 的 damage、cue、death、passive trigger 会在同帧多来源产生；全局 buffer 会成为串行热点 |
-| Presentation / Replay / Debugger 只消费 Boundary 投影 | `SYS-05`、`DBG-01`、`ODF-07` | UI/VFX/SFX、replay 和诊断可以有不同采样率与持久化策略，不影响 Core tick | 无头验收、实机场景和 Editor 工具的输出形态不同；它们必须共享事实来源但不能共享写 Core 权限 |
-| 表现资源引用只在 Boundary / Presentation 出现 | `ODF-18`、`CASE-11`、`CONTENT-01` | Runtime Core 只输出 marker / request，资源加载状态可被单独诊断 | 弱引用、内容加载和渲染状态有异步生命周期；进入 Core 决策会破坏 deterministic simulation |
+```text
+CueLifecycleKey =
+    (SimulationEpoch,
+     ActiveEffectHandle,
+     ActiveCycleOrdinal,
+     CueDefinitionOrdinal)
 
-## Unity Entities 校准
+ExecutedCueKey =
+    Instant/ordinary: (EffectApplicationId, CueDefinitionOrdinal)
+    Periodic: (SimulationEpoch, ActiveEffectHandle,
+               PeriodExecutionOrdinal, CueDefinitionOrdinal)
+```
 
-Typed facts 必须继续拆分为 Core 内部 reaction 与 Boundary 观察输出：
+Duration Effect 首次稳定 Active 产生 OnActive + WhileActive；`Active → Inhibited` 对当前 lifecycle key 产生一次 Removed；reactivate 增加 `ActiveCycleOrdinal` 并建立新 key；Inhibited 状态 remove 不再重复 Removed。stack count 改变本身不建立新 cycle。稳定化内部试探态不出 Cue。
 
-| 类型 | 目标消费者 | 推荐承载 | 禁止 |
-|---|---|---|---|
-| CoreReactionFact | Runtime Core 内部 system | typed component / enableable marker / command stream / local DynamicBuffer | 全局 observation buffer 扫描 |
-| BoundaryObservationFact | ReadModel / Replay / Presentation / Debugger | fact stream / outbox buffer / diagnostics sink | 反向写 simulation |
+OnActive、WhileActive、Removed 共享 lifecycle key 以表达同一 cycle，但 delivery/dedup 必须使用 `(CueEventKind, CueLifecycleKey)`；不能只按 CueLifecycleKey 去重而吞掉 WhileActive/Removed，也不能用新的 BoundaryEventId 把 retry 伪装成新 Cue。
 
-EntityQuery change filter 只能作为 chunk 级优化，不能当作实体级事件语义。若需要精确 gameplay reaction，应使用 typed fact / command data / enableable state，而不是依赖某个 component “被写过”的 chunk 过滤结果。
+## Drain ownership
 
-## Observation API 选型修正
+- 每个 World/Session 恰有一个 `GasBoundaryDrainSystem`，Headless 也必须安装。
+- Drain 在完整 FixedStep catch-up batch 后运行，而不是每个消费者各跑一次。
+- Drain 使用三类互斥 query：live ASC（有 `GasAscIdentity`）、live Session（有 `GasSessionIdentity`）、cleanup shell（有 `BoundaryDrainState` 且两种 live identity 均无）。禁止仅用 `WithNone<GasAscIdentity>` 判定 shell，否则 live Session 会被误清理。
+- `EntityManager.Exists` 对 cleanup shell 仍为 true；registry 必须用 identity/generation 判活。
+- Drain 必须执行两阶段 `accept-before-clear`，不能在 managed owner 接管前清空 ECS outbox。
+- Drain 复制并排序后才发布 immutable batch，消费者不能持有 ECS buffer 或 managed mutable list。
 
-| 使用情形 | 推荐 API / 承载 | 边界 |
-|---|---|---|
-| Core 内部 reaction | typed component、enableable marker、local command stream、per-owner buffer | 只能在 Runtime Core 内消费，不进入表现副作用 |
-| 多 job 并行 fact fan-in | `NativeStream` / per-thread stream + merge | merge 后再投影到 Boundary，避免热路径全局托管日志 |
-| Boundary observation | outbox buffer、sampled sink、replay sink | 只读 Core facts，不反向写 simulation |
-| Presentation resource | `WeakObjectReference` / `UnityObjectRef` | 仅 Runtime Boundary / Presentation 使用 |
-| Replay / Debug sample | sampled ring、persistent sink、structured export | hot path 只写 numeric / fixed-size 数据 |
-| 大规模压力观察 | sampling、chunk counters、projection cursor | 避免每实体每帧全量日志 |
+### 两阶段接管与重试
 
-无头不代表删除表现链路。UI / VFX / SFX / Cue 仍走真实 Boundary 语义，只是 resource 和 side effect 由结构化日志占位。
+1. 对本次稳定 source range 冻结 `BatchId + SourceWatermarks[(OutboxOwnerKind, OwnerStableId, OwnerGeneration, OwnerSequence)]`；相同 source range 的 retry 必须得到相同 BatchId。
+2. 把该 range 完整复制到 managed staging；复制/排序/容量失败时 source outbox 保持不变。
+3. managed staging 返回 Accepted receipt 后才拥有该冻结 range的交付责任；随后可向 Cue/UI/Replay/Debugger 发布同一 immutable batch。
+4. 仅在 Accepted receipt 后清除各 source `<= watermark` 的记录；晚于 watermark 的新事实留在 outbox。live source有 tail时回到 Pending，无 tail才进入 Accepted/Idle交接。clear/retry 必须按 BatchId幂等，不能重复发布或越界清除。
+5. dead cleanup shell 在 Accepted 后由下一次 Kernel prepass 记录 cleanup-buffer removal，并在标准 EndFixed提交。空 shell必须在 producer completion后获得显式 `NoFactReceipt` 才能进入 Accepted。若 Session不再有下一 tick，teardown直接按 Accepted watermark/no-fact receipt清理；未 Accepted的事实必须先完成 final drain，不能丢弃。
 
-## Observation 目标验收门
+具体 structural playback 位置由 [03F](03-RuntimeCore管线/03F-StructuralCommit与BoundaryProjectionSpec.md) 所有；本文只拥有“接管成功前不得清源”和 cleanup shell 的交付不变量。
 
-1. Attribute、Cue、Damage 和 generic gameplay fact 都必须先成为 typed Core / Boundary fact，再投影到 Presentation outbox 和 Replay sink。
-2. 同一 fact 投影到多个边界输出时必须携带 source sequence / context，Boundary Projection 能避免重复投影。
-3. CoreReactionFact consumer 不能从 Presentation outbox、Replay sink、legacy EventBus 或托管日志反向读取 simulation 输入。
-4. 若 fact 承载仍使用 singleton DynamicBuffer，validation evidence 必须标记 proof-only、规模上限、cursor lag、buffer pressure、重选型触发条件和移除任务。
-5. x50 / x1000 profile 出现 fact scan cost、outbox count > fact count、global buffer pressure、buffer spill、cursor lag 或 deterministic merge 风险时，必须重新评估 owner-local fact buffer、`NativeStream` / per-thread stream + merge 或 sampling sink。
+## Semantic hash 与审计分层
 
-## DOTS 深读后的观察链路修正
+Gameplay semantic hash 必须包含：
 
-| 链路点 | 目标态设计 | 候选 API / 机制 | Debugger 证据 |
-|---|---|---|---|
-| CoreReactionFact | 只服务 Core 内部 reaction，按消费者就近组织 | typed component、enableable marker、owner-local buffer、`NativeStream` merge | fact consumer count、local stream count |
-| BoundaryObservationFact | 只读 Core facts，投影到表现 / replay / read model | outbox DynamicBuffer、sampled sink、cursor、read model component | cursor lag、backpressure、projection ms |
-| Replay sample | 用 sampled / ring / persistent sink 保存可回放摘要，不在热路径拼托管字符串 | fixed-size sample、NativeStream sampled export、Persistent owner container | sample rate、dropped count、allocator owner |
-| Presentation resource | Cue/UI/VFX/SFX 的资源句柄和加载状态只在 Boundary | WeakObjectReference、UntypedWeakReferenceId、RuntimeContentManager、log marker | load requested / ready / released、missing resource |
-| Query export | 低频导出可用 async query result，但不能阻塞 Core tick | `ToEntityListAsync`、`CreateArchetypeChunkArrayAsync`、dependent export job | gather job ms、NativeList capacity、dependency wait |
-| Streaming / scene observation | 场景 / section 加载状态属于 Shell / Boundary，不进入 Core 决策 | SceneSystem、Scene meta entity、SceneSection metadata | scene load state、structural count |
+- Session/content/schema/layout/tick-rate hash、SimulationTick 与 schema-hashed SemanticPhaseOrdinal/WorkClassOrdinal/source sequence；
+- Battle/Scenario、source/target ASC、slot generation、Definition/content version、Activation/EffectApplication/Contributor/DeathTransition 等 replay-canonical stable identity；
+- typed ApplicationOutcome、Attribute/Tag/stack/inhibition/death facts 的规范内容；
+- Fact、Reaction recipient 与 Cue 的正式稳定顺序及 lifecycle/execution identity。
 
-设计约束：
+Gameplay semantic hash 必须排除：
 
-1. Boundary outbox 可以反映 UI / VFX / SFX / FloatingText / Cue，但不能作为 gameplay reaction 主输入。
-2. 无头自动测试也必须输出 Presentation marker，证明真实表现链路存在；只是 side effect 由日志占位。
-3. Replay 和 Debugger 不共享同一个无限增长 buffer；Replay 偏持久样本，Debugger 偏当前帧 counters 和 TopN。
-4. 大规模压测默认不输出每实体每帧观察日志；用 sampling、chunk counters 和 cursor lag 解释链路健康。
-5. weak resource 未加载时只能影响表现 marker，不影响 Core simulation 结果。
+- `BoundaryEventId`、`BatchId`、source watermark envelope、transport batch 切分与 retry 次数；
+- 未归一化的 runtime-only SimulationEpoch/World identity；
+- raw Entity、chunk/job/worker/container 顺序；
+- wall-clock、frame、Profiler、Journaling、managed allocation/IO timing；
+- presentation resource id、加载/播放结果、Debugger/UI/Replay consumer 状态。
 
-## Presentation / Replay / StructuredLog Owner 验收矩阵
+Boundary record 与 Handle 仍必须携带 SimulationEpoch 做 stale guard；hash encoder 把它归一到 Session/content identity，并把 Handle 投影为 canonical ASC/slot/generation identity，不能直接 hash 每次运行随机分配的 World epoch。业务结果层只描述 gameplay state/outcome/fact/cue；teardown audit 层另记 Drain Accepted、cleanup-shell removal、final drain、Disposed 与资源清理证据。teardown audit 可以诊断遗漏，但不得进入 gameplay semantic hash、反向改写 Result，或因 batch 切分不同制造业务不一致。
 
-目标态的 Observation 链路必须把机器 evidence、表现 marker、replay 样本和人读导出分成不同 owner。它们可以共享同一 BoundaryObservationFact 来源，但不能共享写 Core 权限，也不能把派生导出当成 Core 性能证据。
+## ReadModel
 
-| Owner | Interface | Implementation ownership | 禁止方向 | 验收 evidence |
-|---|---|---|---|---|
-| `BoundaryObservationFactProjector` | fact sequence、context id、source / target opaque identity、projection cursor | 从 CoreReactionFact / BoundaryObservationFact 只读投影到 read model / outbox / replay | 反向写 Core state、重新计算 gameplay 结果 | projected fact count、duplicate skip、cursor lag、projection ms |
-| `PresentationOutboxBridge` | presentation marker、resource key、headless marker、frame / sequence | UI / VFX / SFX / FloatingText / Cue marker、resource binding、headless placeholder | gameplay mutation、Core attribute/tag/effect 写入 | outbox count、resource load / missing / release count、headless marker count |
-| `ReplaySink` | replay cursor、retention policy、sample filter、dropped count | persistent / sampled ring、cursor validity、retention trimming | simulation decision、unbounded hot path log | retained count、dropped count、cursor expired、sample rate |
-| `StructuredLogExporter` | immutable snapshot、format option、derived export handle | assertion text、human log、report fact projection、diagram data source | performance pass 字符串拼接、live ECS handle public seam、validation source 反向依赖文本 | entry count、byte count、source evidence id、export pass id |
-| `DiagnosticsSink` | runtime counter snapshot、official capture state、observation overhead | counters、TopN、Profiler / Journaling state、observation materialization cost | command writer、snapshot reader、gameplay formula | evidence tier、overhead owner、disabled reason、hotspot owner |
-| `PresentationBoundaryCost` | cost domain、managed callback marker、materialization counter | managed Cue / resource / UI callback、presentation-only query materialization | CoreSimulation tick 归因、DOTS hot path 完成证明 | callback count、materialized entity count、elapsed us、performance / diagnostic pass flag |
+ReadModel 是按稳定 ID 建立的版本化快照，不是 live ECS facade。它可以包含 ASC 公共属性、owned tags、ability/effect 摘要、Avatar binding 和 last exported tick，但不得承诺与 Core 同步可写。查询不存在或 snapshot 过期必须返回明确状态。
 
-### Derived export 规则
+表现消费者若因 ring overflow 丢失增量，通过 ReadModel snapshot reconcile；reconcile 只恢复表现视图，不向 Core 写回。
 
-1. Structured log、Mermaid 图、中文战斗日志、battle report、validation assertion 和 UI summary 都是 derived export；它们只能消费 machine evidence，不得成为 machine evidence 的来源。
-2. Derived export 若需要解析 report key、resource key 或 display name，必须在 Boundary / diagnostic pass 中完成，并写入 cost domain；performance pass 只能消费已经冻结的 snapshot 或明确关闭 derived export。
-3. Replay sink 与 structured log 不共享无限增长 buffer。Replay 负责 retention / cursor / dropped count，structured log 负责可读导出和断言文本。
-4. Presentation outbox 可在无头场景输出 marker，但 marker 不代表资源真的加载或 VFX/SFX 真的播放；资源状态必须由 PresentationBoundaryCost 或 resource evidence 单独说明。
-5. 任何 managed callback、file IO、string formatting、report / graph export、live identity display resolve 都不得进入 Runtime Core hot path 的 DOTS 优秀结论。
+## Replay
+
+Replay 至少记录 Session config/content hash、外部 command、SimulationTick、canonical identity、Boundary semantic content 与必要 delivery envelope。若目标是确定性重演，权威输入是 command+definition/session hash，Boundary facts/semantic hash 用于对账；`BatchId/InFlightWatermark` 只支持交付恢复，不进入 gameplay hash。不得把表现资源加载结果作为输入。
+
+## Diagnostics
+
+Debugger 读取 Kernel 输出的结构化 counters/evidence snapshot 与同一 Boundary batch。它可以导出日志、图表和报告，但不能拥有 query、allocator、playback 或 gameplay mutation。Profiler/Journaling 是独立官方证据源，不能由自报 timing 替代。
+
+## Overflow policy
+
+容量、保留 tick 数和字节预算来自 Boundary ScaleProfile，不在框架 Spec 写死。
+
+- Core/Headless/Validation：overflow 显式失败，保留 first-lost/last-lost tick 与 sequence。
+- Presentation：允许丢弃明确 range，再进行 snapshot reconcile。
+- Replay：根据产品 policy fail/stop-recording，但必须显式标记不完整。
+- 永不静默覆盖，永不以消费者慢为理由阻塞或改写 gameplay。
+
+## 禁止方向
+
+- `PresentationOutbox`、`ReplayBuffer`、`DebuggerBuffer` 三套 Core 写入。
+- 多个 ECS consumer 竞争 cursor/clear。
+- managed staging Accepted 前清 outbox，或 retry 时生成新的 delivery identity。
+- Boundary 携带 raw Entity、DynamicBuffer、NativeContainer 或复用槽引用。
+- Cue 播放成功/资源存在与否影响 Core。
+- 每渲染帧 cleanup 未消费的 fixed-tick 输入或 outbox。
 
 ## 验收
 
-1. 无头 AutoChess 仍输出 UI/VFX/SFX/FloatingText/Cue marker。
-2. replay/export 可解释发生了什么。
-3. core simulation tick 与 Runtime Boundary projection tick 可以分开报告。
-4. AutoChess summary 能区分 CoreReactionFact、BoundaryObservationFact、Presentation marker 和 Replay sink 数量。
-5. Debugger 能输出 projection cursor lag，证明 Boundary 消费不会反压 Core hot path。
-6. Presentation summary 能输出 weak resource load / release / missing marker，即使无头模式只用日志占位。
-
-## 历史方案定位
-
-1. Event Buffer / GameplayCue / AbilityEventLog / AttributeChangeLog 的观察层信号来自 `../历史方案参考/方案11.md:34-37`。
-2. Presentation dispatcher 消费事件并触发表现的例子来自 `../历史方案参考/方案11.md:176-227`。
-3. Demo 中 UI 更新只消费事件、与 ECS 解耦的业务信号来自 `../历史方案参考/方案12.md:713-752`。
-4. 方案14 的 GASEventBus 示例位于 `../历史方案参考/方案14.md:367-426`，本路线只吸收“ECS -> 表现观察”信号，不吸收托管 EventBus 作为实时 gameplay 路由。
-5. 方案15 中 GASEventBus / GASDebugger 的命名属于历史雏形，本路线按 `12-命名规范Spec.md` 拆分为 fact stream、outbox bridge、diagnostics sink 和 replay sink：`../历史方案参考/方案15.md:61-65`。
+- 0..N FixedStep/catch-up 后 facts 不重不漏且保持正式顺序。
+- ASC Destroy 当 tick 的终态 fact/Cue 可从 cleanup shell 导出。
+- managed staging 未 Accepted 时 source outbox 不清；Accepted 后只清到 watermark，retry 使用相同 BatchId 且不重复发布。
+- 无下一 tick 的 shutdown 先完成 final drain，再按 Accepted watermark 直接清 cleanup shell。
+- 多消费者读取同一 batch，移除一个消费者不改变 Core/其他消费者结果。
+- Headless 无表现资源时仍产生完整 Cue marker 和 replay/diagnostics 证据。
+- Cue Active→Inhibited 发送一次 Removed，reactivate 使用新 cycle，Inhibited remove 不重复 Removed，stack 不新 cycle；Executed 使用 application/period identity。
+- transport batch 切分、raw Entity、wall-clock、Profiler/Journaling 与表现加载结果变化不改变 gameplay semantic hash。
+- 业务 Result/hash 与 teardown audit 分层；不同 cleanup 时机不会改写业务胜负或事实内容。
+- overflow、stale snapshot、dead identity 都给出机器可读 reason。

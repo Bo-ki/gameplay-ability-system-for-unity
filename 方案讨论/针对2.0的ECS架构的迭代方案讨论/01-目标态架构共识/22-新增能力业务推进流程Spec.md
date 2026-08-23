@@ -150,7 +150,7 @@ flowchart TD
 | 新 formula / magnitude evaluator 缺失 | 增加 generated evaluator / Burst-friendly static glue / diagnostics code | 为单个能力写 demo ECS 公式或托管 delegate |
 | 新 requirement 缺失 | 增加 generated requirement evaluator 和 reference graph edges | 用 raw tag protocol 绕过 validation |
 | DOTS carrier / store 无法承载 | 走 Runtime Semantic Extension，审查 lane、store、capacity、query 和 evidence | 把 singleton buffer / request entity proof 固化为目标态 |
-| 新结构变化语义 | 走 Structural Commit / ECB phase 设计和 Journaling evidence | 在 ability / effect hot path 直接 `EntityManager` 写 |
+| 新结构变化语义 | 走标准 EndFixed ECB、next-tick visibility 设计和 Journaling evidence | 在 Ability/Effect hot path 直接 `EntityManager` 写 |
 
 程序的默认优先级是：
 
@@ -220,7 +220,7 @@ Runtime Semantic Extension 触发时，程序必须先输出审查结论，再�
 
 | 规则 | 对本 Spec 的约束 |
 |---|---|
-| `SYS-01`、`SYS-02`、`SYS-03`、`SYS-05` | Runtime 语义扩展必须落在手写 ECS System / Job 数据流和既定 SystemGroup phase；配置型能力不得引入 OOP manager 或 generated lifecycle |
+| `SYS-01`、`SYS-02`、`SYS-03`、`SYS-05` | Runtime 语义扩展必须落在手写 `GasTickKernelSystem` 的 Job/pure evaluator 数据流或明确 Boundary owner；配置型能力不得引入新 SystemGroup、OOP manager 或 generated lifecycle |
 | `QRY-01`、`QRY-04`、`JOB-01`、`PRF-05`、`PRF-06` | 新 Runtime lane 必须说明 job / chunk / lookup 选型；高频 random lookup 不能用配置需求掩盖 |
 | `SC-01`、`SC-03`、`ECB-03`、`PRF-02`、`PRF-04` | 新结构变化语义必须进入明确 StructuralCommit / ECB playback phase |
 | `EN-03`、`CASE-20`、`PRF-22` | 新 enableable 状态必须说明 random access 与 chunk mask 的取舍 |

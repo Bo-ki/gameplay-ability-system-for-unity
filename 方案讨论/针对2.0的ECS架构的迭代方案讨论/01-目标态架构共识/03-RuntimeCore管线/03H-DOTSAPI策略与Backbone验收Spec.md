@@ -1,162 +1,139 @@
-# 03H：DOTS API 策略与 Backbone 验收
+# 03H：DOTS API 策略与 Backbone 验收 Spec
 
-> Owner：`01-目标态架构共识/03-RuntimeCore管线` | 状态：目标态子 Spec | 拆分来源：`../03-RuntimeCore管线Spec.md` | 最近拆分：2026-06-07
+> 状态：v1 API 选择门
+> 基线：Unity 6000.3 / Entities 1.4.6
 
-本文件只描述理想 Runtime Core 目标态。禁止写入当前代码事实、迁移流水、验证数字或下一步任务；现实证据必须回到 `../../00-当前架构事实/`，任务拆分必须回到 `../../02-主线任务树/`。
+## 1. 结论
 
-定位：目标态 DOTS API 选型修正、Enableable 策略、Chunk Component 策略、DOTS Backbone First 顺序和 API 预算。
+Backbone 先证明“执行域、数据唯一性、Job DAG、生命周期、边界事实”成立，再承载完整 GAS 语义。v1 的 API 选择是成套约束，不能只复制单个示例：
 
-## DOTS API 选型修正
+- `GasFixedTickSystemGroup` 是 `FixedStepSimulationSystemGroup` 的直接子组，并 `UpdateAfter(PhysicsSystemGroup)`。
+- `GasTickKernelSystem : ISystem` 拥有当 Tick 的完整 Job DAG 与 `WorldUpdateAllocator` scratch。
+- ASC 的 Attribute/Tag/Ability/Continuation/Effect 权威状态使用 Buffer/Component，不使用托管对象和双镜像。
+- 真实结构变化只记录到标准 `EndFixedStepSimulationEntityCommandBufferSystem`。
+- Boundary 使用 scoped Cleanup Buffer：ASC-scope fact写所属 ASC，Battle/Session-scope fact写唯一 Session；每 fact恰有一个 owner，由一个 managed drain两阶段接管。
 
-Runtime Core phase 不等于固定 API。任一实现前必须按下表完成 API selection ladder：
+## 2. API 选型矩阵
 
-| Kernel | 首选问题 | 候选 DOTS API | 适用规则 | 必须输出的证据 |
-|---|---|---|---|---|
-| Frame Prepare | 本帧是否需要 frame clock / scratch / budget，生命周期多长 | `WorldUpdateAllocator`、system group allocator、Rewindable allocator、system-associated entity data、budget counter | `SYS-02` `SYS-03` `CASE-16` `CASE-45` `NAT-01` `NAT-04` `NAT-05` `PRF-14` | allocator owner、rewind 生命周期、lookup update count、query count、dependency wait |
-| Definition Consumption | 静态配置是低频 bootstrap 数据还是每帧可变状态 | `GASDefinitionCatalogComponent` singleton + `BlobAssetReference<GASDefinitionCatalogBlob>`、generated code -> index lookup、`ref readonly` Blob access、optional perfect hash | `BLOB-01` `BLOB-02` `CASE-07` `CASE-24` `CASE-46` `PRF-34` | forbidden dependency scan、schema/content hash、lookup complexity、singleton write count = 0、Blob dispose owner |
-| Boundary Command Ingest | 命令来自低频边界还是高频 fan-in | request entity、Boundary buffer、owner DynamicBuffer、`NativeStream` | `SEL-01` `SEL-02` `CASE-04` `CASE-12` `BUF-01` `NAT-03` `PRF-13` | command count、request churn、fan-in source、determinism |
-| Target Resolve | target 是否能按 command/request 顺序解析 | `IJobChunk`、`IJobParallelFor`、`AbilityTargetRecord` NativeStream、request-owned `TargetDataBuffer`（低量物化）、Physics query input snapshot、deterministic sort key | `QRY-01` `QRY-03` `QRY-04` `PHY-02` `MAT-05` `CASE-03` | target count、physics query cost、sort key、buffer spill、random lookup count |
-| Effect Fan-In | 多 producer 是否需要并行写入和确定性归并 | `NativeStream`、per-thread stream、chunk-local scratch、compact owner-local command range | `CASE-12` `NAT-02` `NAT-03` `MAT-05` `BUF-02` `SEL-02` | stream segment count、merge cost、buffer pressure、battle hash |
-| State Evaluate | 状态切换是高频开关还是生命周期变化 | enum / bit field、DynamicBuffer slot、enableable（仅高频 query skip）、Chunk Component、stable effect entity | `EN-01` `EN-02` `FSM-01`~`FSM-06` `CASE-06` `CASE-20` `CASE-28` `PRF-01` `PRF-03` | slot count、state distribution、enableable wait、chunk skip count |
-| Attribute Reduce / Apply | 是否需要随机访问或可按 target 分组 | sorted stream、per-target buffer、chunk-local apply、只读 Blob/static lookup | `QRY-03` `QRY-04` `PRF-06` `PRF-19` `PRF-26` `CASE-04` | random lookup count、write component set、change version risk |
-| Gameplay Fact | fact 是 Core reaction 还是 Boundary observation | typed fact buffer、reaction cursor、`NativeStream` + deterministic merge、sampled sink | `SYS-05` `CASE-12` `CASE-18` `CASE-38` `DBG-03` `STORE-03` | fact count、consumer count、reaction source、projection lag |
-| Structural Commit | 是否可批量而非逐实体 | EntityQuery bulk、`ComponentTypeSet`、`EntityQueryCaptureMode.AtPlayback`、custom ECB playback；`ExclusiveEntityTransaction` 仅限 secondary/streaming World | `SC-01`~`SC-03` `ECB-01`~`ECB-04` `CASE-05` `CASE-21` `CASE-33`~`CASE-35` `PRF-02` `PRF-04` `PRF-21` `PRF-25` | structural count、sync point、origin system、是否 secondary/streaming World |
-| Boundary Projection | 是否进入表现/Replay/Debugger 边界 | read-only projection job、outbox buffer、sampled sink、WeakObjectReference / UnityObjectRef boundary | `SYS-05` `DBG-01` `DBG-02` `GFX-01` `CONTENT-01` `CASE-10` `CASE-11` `PRF-32` | presentation marker、replay sink、GC alloc |
+| 需求 | v1 默认 API | 选择理由 | 禁止替代 |
+|---|---|---|---|
+| 固定 Tick 执行域 | `FixedStepSimulationSystemGroup` 子组 | 使用标准 rate manager、allocator、父链与 EndFixed | 手工五组 Update |
+| GAS 主驱动 | `ISystem` | unmanaged、Burst 友好、显式依赖 | 把核心状态放 `SystemBase` 字段 |
+| 托管边界 | `SystemBase` 或明确 managed service | 仅做 outbox drain/分发 | 在 Core Job 调 UnityEngine.Object |
+| 稳定 ASC 遍历 | `IJobChunk` / 合适的并行 Job | 可控制 BufferAccessor、enable mask 与 chunk | 无依据地强制一种 Query API |
+| 小型控制路径 | `SystemAPI.Query`/lookup | 可读性优先，需记录非热点理由 | 在热点中无测量地逐 Entity 主线程遍历 |
+| 静态定义 | `BlobAssetReference<T>` | 不可变共享、Job 可读 | ScriptableObject 直接进 Job |
+| 固定逻辑数组 | `DynamicBuffer<T>` | ASC-local、索引寻址 | Attribute 一属性一 Component |
+| 长期实例 | non-compacting slab Buffer | 稳定 slot+generation | 默认 slot→Entity promotion |
+| Tick scratch | `state.WorldUpdateAllocator` NativeContainer | 服从 FixedStep group 生命周期 | static/Singleton FrameArena |
+| 高频开关提示 | 预挂载 `IEnableableComponent` | 避免结构变化 | 用 enable bit 作为业务权威 |
+| 结构变化 | 标准 EndFixed ECB | 单 playback、标准父链 | 自定义 GAS ECB playback |
+| 销毁后事实 | `ICleanupBufferElementData` | cleanup shell 可 drain | 两套持久 outbox |
 
-执行规则：
+具体 Job 类型依数据形态选择，不把 `IJobChunk`、`IJobEntity` 或 `NativeStream` 神化为全局唯一答案。任何偏离必须由 profile 和 ADR 解释。
 
-1. EffectCommand / instant GE 主链实现前，`EffectCommand` 承载必须复核 `NativeStream` / per-owner stream / DynamicBuffer / request entity / ECB 的取舍（`CASE-04` `CASE-05` `CASE-12` `CASE-47` `SEL-01` `SEL-02`）。
-2. ActiveEffectStore 每个小闭环前，必须复核 slot、stable entity、cleanup component、enableable、enum state、chunk component 的取舍（`CASE-06` `CASE-15` `CASE-20` `CASE-28` `CASE-37` `FSM-01`~`FSM-06`）。
-3. Debugger 必须能解释 API 选型是否健康，而不是只输出 `avgTickMs`（`DBG-01`~`DBG-05`）。
-4. 每个 phase 的实现写法必须对照具体 `CASE-*`：hot path 遍历对照 `CASE-02`/`CASE-03`（禁止 `CASE-01` 主线程 foreach），结构变化对照 `CASE-05`/`CASE-21`/`CASE-33`~`CASE-35`，buffer 对照 `CASE-04`/`CASE-36`/`CASE-47`，bake/resource 对照 `CASE-07`/`CASE-39`~`CASE-44`，chunk 优化对照 `CASE-18`/`CASE-26`~`CASE-28`/`CASE-38`。
-5. Structural Commit 必须声明 `sortKey` 策略（`CASE-35` `[ChunkIndexInQuery]`）和独立 ECB per job 策略（`PRF-25`）。
-6. `IJobChunk` 迭代必须按 `useEnabledMask` 分支：无 mask 走普通 `for` 快路径；有 mask 使用 `ChunkEntityEnumerator`（`CASE-26`），批量 enable/disable 操作使用 `EnabledMask`（`CASE-20`）。
+## 3. Backbone 最小闭环
 
----
+Backbone 必须先完成以下纵向切片：
 
-## Enableable 全局策略
+1. Session 创建并冻结 Tick Rate、Catalog/Layout/Definition 哈希。
+2. ASC spawn 显式建立所有固定 Buffer 和 cleanup outbox。
+3. ingress 冻结一批 Command，并赋稳定 source sequence。
+4. Kernel 建立单 Job DAG，解析到 target bucket。
+5. target-local 写 Attribute/Tag/Effect slab 并求稳定态。
+6. stable merge Core Fact，写 Boundary Fact。
+7. 真实结构变化由标准 EndFixed playback。
+8. 单 managed drain 读取 live/shell outbox 并完成清理。
+9. 独立/manual World 通过完整 FixedStep 父链复现相同结果。
 
-### 为什么需要全局策略
+在上述闭环通过前，不扩展预测回滚、跨世界复制、可热换 Definition 或第二套 Presentation 通道。
 
-`IEnableableComponent` 是 Unity ECS 避免高频状态结构变化和 archetype 爆炸的工具（参见 `PRF-03`），但它不是生命周期状态的默认表达。PackageCache `components-enableable-intro.md` 将它限定在频繁、不可预测、高排列状态上；enableable 的同步查询也不是免费的，写 job 未完成时会等待依赖。因此需要全局策略：**哪些 component 是 enableable、哪些 query 用 IgnoreFilter、在哪个 phase 做 toggle。**
+## 4. 数据唯一性门
 
-### Enableable Component 清单
+### 4.1 Attribute
 
-| Enableable Component | 挂载 Entity | Toggle Phase | Toggle 方式 | 消费 Query 的 IgnoreFilter? |
-|---|---|---|---|---|
-| `PeriodDueTag`（optional） | ASC entity | `GASCoreSimulationSystemGroup` / State lane | `EnabledRefRW` | 仅当 profiler 证明 skip 收益时启用 |
-| `AbilityExecutableTag`（optional） | Ability entity | `GASCoreSimulationSystemGroup` / State lane | `EnabledRefRW` | 仅当 profiler 证明 query skip 收益时启用 |
-| `FactReadyTag`（optional） | fact stream | `GASCoreSimulationSystemGroup` / Fact lane | `EnabledRefRW` | 消费者用 `IgnoreFilter` 或异步 query |
+- 一个 Session 只有一个 AttributeLayout。
+- ASC Buffer 逻辑长度等于 Layout 数量，元素仅存 `Base/Current`。
+- Id→index 只来自 Layout Blob。
+- generated component 可以作为只读调试快照，但不能参与业务查询或写回；v1 默认不生成。
 
-### Query IgnoreFilter 策略
+### 4.2 Tag
 
-| Query 用途 | 是否 IgnoreFilter | 原因 |
-|---|---|---|
-| Attribute Reduce / Apply 读取 Attribute（非 enableable） | N/A | Attribute 本身不是 enableable |
-| State Evaluate 遍历 active slot | 默认 N/A；只有启用 `PeriodDueTag` 时才评估过滤 | ActiveEffect 默认用 slot enum / bit flags，不为每个 slot 创建 enableable；大量 idle 且 profiler 证明收益时才引入 enableable skip |
-| Gameplay Fact 消费 modifier / fact（非 enableable） | N/A | Modifier / fact buffer 不是 enableable |
-| Debugger 快照 | **是** — IgnoreFilter | Debug 用途不做 enableable 过滤，避免等待写 job |
-| Boundary Projection outbox 投影 | **是** — IgnoreFilter 或用异步 query | Boundary 不阻塞 Core |
+- 一个 Session 只有一个 TagCatalog。
+- 权威计数 Buffer 同时保存 exact 与 inclusive count。
+- presence/ancestor bitset 是可重建派生缓存。
+- grant/remove 只能通过 target-local writer 更新，不能从 bitset 反推权威计数。
 
-### Enableable Wait 监控
+### 4.3 长期实例
 
-Debugger 必须报告：
-- `enableableWriteJobCount` per phase
-- `enableableSyncQueryCount` — 使用了同步 query + 未用 IgnoreFilter + 有未完成的 enableable 写 job
-- **若 `enableableSyncQueryCount > 0` 告警** —— 表示本帧有额外的 sync point
+- Ability/Continuation/Effect 句柄统一为 `slot index + generation`。
+- 释放不移动 live slot。
+- Definition-time 不允许切换“这个定义用 Entity、那个定义用 slot”；否则所有查找、保存、调试与生命周期都形成双模型。
+- 真正的 projectile/hitbox 等独立游戏对象可以是 Entity，但只引用 Effect/Activation handle，不接管权威实例状态。
 
----
+## 5. 查询与依赖门
 
-## Chunk Component 策略
+- Kernel 的 ComponentTypeHandle、BufferTypeHandle、Lookup 每 Tick 更新。
+- 所有 JobHandle 从 `state.Dependency` 串接，最终返回给 `state.Dependency`；ECB producer dependency 完整登记。
+- 同一个 ASC/target 的可写 Buffer 不同时交给多个无分区 Job。
+- enableable query 的启用语义必须明确；`IgnoreComponentEnabledState` 不能用来绕开安全依赖。
+- phase/业务 lane 之间不 `Complete()`；性能采样必须把每次主线程完成依赖标注原因。
+- 临时 NativeContainer 不跨 System/Tick，长期 continuation/effect 不使用临时 allocator。
 
-### 使用场景
+## 6. 时序门
 
-| Chunk Component | 目的 | 设置 Phase | 设置条件 | 消费 Phase |
-|---|---|---|---|---|
-| `AllIdleChunkComponent` | 整个 chunk 的 ASC 的所有 effect slot 都是 idle | `GASCoreSimulationSystemGroup` / State lane | 遍历 chunk 确认所有 slot 状态 | CoreSimulation 内 Fan-In / Attribute lane 跳过整个 chunk |
-| `NoActiveEffectsChunkComponent` | 整个 chunk 的 ASC 无 active effect | `GASCoreSimulationSystemGroup` / State lane | 遍历 chunk 确认无 active | CoreSimulation 内 Attribute / Fact lane |
-| `PeriodDueChunkComponent`（可选） | 整个 chunk 的 ASC 的 period due 状态统一 | `GASCoreSimulationSystemGroup` / State lane | 按 period 时长分组 ASC 到不同 chunk | CoreSimulation 内 Fan-In lane |
+- 一渲染帧固定 Tick 数是 `0..N`。
+- Duration/Period/Cooldown 全部用整数 Tick/截止 Tick。
+- same-tick 只允许 Ability 直接输出与已证明 closed、finite、bounded 的 pre-apply program。
+- application 后 Fact reaction 默认形成下一 Tick Command。
+- stabilization 未收敛是 deterministic fatal，不是“多跑若干固定 pass”或静默截断。
 
-### Chunk Skip 实现模式
+## 7. 生命周期门
 
-```csharp
-// IJobChunk.Execute 开头：
-public void Execute(in ArchetypeChunk chunk, ...)
-{
-    // 检查 chunk component — 如果整个 chunk idle 则跳过
-    if (chunk.Has<AllIdleChunkComponent>())
-        return;  // 零 entity 遍历成本
+- Session 与 ASC spawn 都显式添加 scoped cleanup outbox/state；不依赖 prefab 复制 cleanup component。
+- Destroy 前完成 Boundary Fact 写入，EndFixed 后 shell 保留 cleanup buffer。
+- drain 冻结 `InFlight(BatchId, InFlightWatermark)`；成功 receipt 后只清 accepted `<=InFlightWatermark` prefix，late tail 保留并回到 Pending。shell 无 tail才标记 Accepted；下一次 Kernel cleanup prepass 才把 shell remove 记录到该 Tick 的标准 EndFixed，drain 不持有跨 batch ECB。
+- 业务存活检查依据 ASC identity/generation，不依据 `EntityManager.Exists`。
+- World shutdown 先完成 producer、最后 drain、清 shell，再释放 Blob/managed registry。
 
-    // ... 正常遍历
-}
-```
+## 8. ScaleProfile 门
 
-**注意：** Chunk Component 是优化，不是正确性依赖。如果 Attribute Reduce/Apply 依赖 `NoActiveEffectsChunkComponent` 跳过，但 State Evaluate 忘记更新该标记，会导致逻辑错误而非 crash。因此 Chunk Component 的使用必须有 Debugger 验证。
+Spec 不硬编码实体数、毫秒、Buffer 容量或 chunk overflow 百分比。每个目标平台建立版本化 ScaleProfile，至少包含：
 
-### Chunk Component 一致性验证算法
+- Unity/Entities/Burst/Jobs 版本与目标硬件；
+- Tick Rate、ASC/Command/Effect/Tag/Attribute 分布；
+- buffer 高水位、扩容、chunk 内/外比例；
+- target bucket 分布与最坏热点 target；
+- scratch 峰值与临时分配次数；
+- stabilization 迭代/故障；
+- 主线程同步点、ECB playback、managed drain 耗时；
+- 可接受门槛、采样方法与基线 commit。
 
-Debugger 在 `GASBoundaryProjectionSystemGroup` 中执行轻量级采样验证（不阻塞 hot path）：
+只有 profile 数据可以决定 InternalBufferCapacity、初始 scratch 容量、并行 batch size 与报警阈值。
 
-1. **采样策略**：每 N 帧（N=60，约 1 秒一次）随机选取 10% 的 chunk，对其中的全部 entity 做全量状态扫描。
-2. **验证逻辑**：
-   ```
-   for each sampled chunk:
-       if chunk.Has<AllIdleChunkComponent>():
-           // 验证：该 chunk 中不应有任何 active slot
-           for each entity in chunk:
-               for each slot in ActiveGameplayEffectBuffer:
-                   if slot.Flags & Active: → 报告 "AllIdleChunkComponent 错误标记"
-       if chunk.Has<NoActiveEffectsChunkComponent>():
-           // 验证：该 chunk 中不应有任何 active effect
-           for each entity in chunk:
-               if HasAnyActiveSlot(entity): → 报告 "NoActiveEffectsChunkComponent 错误标记"
-   ```
-3. **输出指标**：
-   - `chunkComponentMismatchCount` — 标记与实际状态不一致的 chunk 数
-   - **若 > 0 → P0 告警**（逻辑错误，可能导致 entity 被错误跳过）
-   - `chunkSkipSavings` — chunk skip 实际节省的处理量（skipped entities / total entities）
-4. **降级策略**：若 `chunkComponentMismatchCount > 0`，消费者 phase 应在该帧自动 fallback 到 per-entity 检查（忽略 Chunk Component），并向 Debugger 输出降级事件。
+## 9. Backbone 验收场景
 
----
+| 场景 | 必须证明 |
+|---|---|
+| 0/1/N Tick 帧 | 结果只依 Command 与 SimulationTick，不依渲染帧 |
+| 多 ASC 同 target | canonical order、单 target writer、结果可复现 |
+| Activate 后 Commit/Cancel | 同 Tick 槽状态正确，不依赖 ECB 新结构 |
+| Effect inhibition/stack/period | target-local stabilization 收敛且 Fact 在稳定后发布 |
+| ASC 同 Tick 销毁 | Boundary Fact 从 cleanup shell 不重不漏 drain |
+| manual World | 完整 FixedStep 父链、Physics/GAS/EndFixed/allocator 顺序一致 |
+| 定义故障 | 环/无有限界在 build 阶段拒绝；运行时越界 fatal |
+| stale handle | slot 复用后旧 generation 拒绝 |
 
-## DOTS Backbone First 目标顺序
+## 10. 性能红线
 
-`Frame Prepare` 不是可选优化阶段，而是 Runtime Core 功能扩展的前置骨架。扩展 `Effect Fan-In`、`State Evaluate`、`Attribute Reduce/Apply`、`Gameplay Fact` 或 Debugger 之前，必须先完成 `Runtime Core Frame Backbone`：
+以下是形态红线，不依赖某台机器：
 
-1. SystemGroup：建立 `GASFramePrepareSystemGroup`、`GASCommandResolveSystemGroup`、`GASCoreSimulationSystemGroup`、`GASStructuralCommitSystemGroup`、`GASBoundaryProjectionSystemGroup` 的显式顺序；业务 kernel 作为 lane system 排序。
-2. Frame owner：每类 command / spec / delta / fact / active mutation stream 都必须声明 owner、clear phase、writer phase、reader phase 和 merge phase。
-3. Query / lookup budget：每帧 query 数、lookup update 数、random lookup 数、filtered / unfiltered query 数和 enableable wait 必须可统计。
-4. Allocator / dependency budget：每帧 scratch allocator、`WorldUpdateAllocator` / `RewindableAllocator` 使用者、job dependency wait 和 manual NativeContainer dependency 必须可归因。
-5. Determinism：并行 fan-in 必须声明 sort key、partition、merge order、battle hash 或等价 deterministic output policy。
-6. Structural commit：hot path 结构变化只允许进入 `GASStructuralCommitSystemGroup`，并输出 playback count、ECB command count、bulk query count 和 origin system。
-7. Debug evidence：Debugger 至少输出 frame backbone counters；性能结论必须能和 Profiler / Entities Journaling / Burst Inspector 证据对照。
+- 热路径存在 phase 级 `Complete`。
+- Attribute/Tag 每 Tick resize 或增删 Component。
+- 同一 target 多 writer 竞争同一 Buffer。
+- Tick scratch 存进 ECS/managed/static 并跨生命周期。
+- 每个 Ability/Effect 实例默认创建 Entity。
+- Core 内维护多消费者游标或两套 outbox。
+- Profile 未记录输入分布，却以单场景平均值宣称 scale-ready。
 
-该顺序不新增架构层级，只规定 Runtime Core 的实现前置条件。任何扩展目标只能在该 backbone 上扩展，不能把 proof-only 小闭环扩写成新的目标骨架。
-
-## Runtime Core API 预算
-
-每个 phase 除了功能验收，还必须给出 API 预算和重新选型触发条件：
-
-| 预算项 | 必须记录 | 重新选型触发 |
-|---|---|---|
-| buffer pressure | length / capacity / peak / spill / clear phase | spill 或 x50 起峰值持续增长 |
-| lookup pressure | lookup update count / random lookup count / read-write lookup count | random lookup 成为 TopN 热点或随实体数线性爆炸 |
-| chunk efficiency | matched chunks / skipped chunks / utilization / enabled-aware count | 大量 idle/no-op 仍全量扫描 |
-| structural cost | query bulk count / ECB command count / playback count / sync point | 大批量变化表现为 per-entity ECB |
-| output determinism | sort key / partition / post-sort / hash | battle hash 不稳定或无序 ParallelWriter 影响 gameplay |
-| native allocation | allocator / lifetime / dispose / merge cost | TempJob 越界、Persistent 无 owner、merge cost 高于主计算 |
-| proof-only API | proof marker / scale-ready marker / reselect trigger | proof API 被用于 x1000 以上却无替代方案 |
-| dependency budget | read/write component set / enableable wait / SystemAPI foreach sync / manual NativeContainer dependency | 无意义等待成为 TopN 或 query/filter 触发主线程阻塞 |
-
-## DOTS 深读后的管线修正
-
-1. Runtime Core 每帧必须显式归因 query / lookup / allocator / dependency 成本；EntityQuery 和 Lookup 由 owner system 自己创建/刷新，Frame Prepare 负责预算计数和 allocator 生命周期。
-2. `Command Ingest` 只负责把 Boundary request 翻译为 Core command，不负责 spec 计算、不负责表现 projection、不直接结构变化。
-3. `Effect Fan-In` 和 `Attribute Reduce / Apply` 的目标形态是 target-grouped 顺序 pass；若必须 random lookup，必须解释为什么不能按 target 分组或使用 owner-local buffer。
-4. `Structural Commit` 是唯一热路径结构变化语义屏障；大批量同类结构变化优先 EntityQuery bulk / `ComponentTypeSet`，job 内发现的少量变化才进入 ECB。
-5. `Boundary Projection` 不再承担 Debugger 全量日志；只投影必要 outbox / replay / sampled sink，性能分析由 Debugger counters 与 Unity Profiler / Journaling 对照完成。
-6. AutoChess 无头验收若使用隔离 world 或固定 tick，应明确 world time / `ICustomBootstrap` / manual runner，不隐式依赖 Editor frame delta。
-7. **更新：** Enableable toggle 只能发生在明确拥有状态的 lane：`GASCoreSimulationSystemGroup` 的 State lane（高频状态）或 `GASStructuralCommitSystemGroup`（grant/revoke/destroy）；Target / Fan-In / Attribute Apply 只读 enableable。
-8. **更新：** Chunk Component 由 CoreSimulation 的 State lane 维护；消费者 lane 的 `IJobChunk` 在 `Execute` 开头检查 Chunk Component 决定是否跳过整个 chunk。
-
----
+触发任一项即不通过 Backbone；数值性能是否通过则由 ScaleProfile 判定。
