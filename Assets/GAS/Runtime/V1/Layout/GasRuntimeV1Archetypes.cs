@@ -174,6 +174,7 @@ namespace GAS.Runtime
                 ComponentType.ReadWrite<GasScaleProfile>(),
                 ComponentType.ReadWrite<SimulationTickState>(),
                 ComponentType.ReadWrite<GasSessionLifecycle>(),
+                ComponentType.ReadWrite<GasTickDiagnostics>(),
                 ComponentType.ReadWrite<GasSpawnBatchManifest>(),
                 ComponentType.ReadWrite<SessionFaultLatch>(),
                 ComponentType.ReadWrite<BattleInstanceSlot>(),
@@ -240,6 +241,7 @@ namespace GAS.Runtime
                    entityManager.HasComponent<GasScaleProfile>(entity) &&
                    entityManager.HasComponent<SimulationTickState>(entity) &&
                    entityManager.HasComponent<GasSessionLifecycle>(entity) &&
+                   entityManager.HasComponent<GasTickDiagnostics>(entity) &&
                    entityManager.HasComponent<GasSpawnBatchManifest>(entity) &&
                    entityManager.HasComponent<SessionFaultLatch>(entity) &&
                    entityManager.HasComponent<BoundaryDrainState>(entity);
@@ -358,13 +360,30 @@ namespace GAS.Runtime
                    profile.ProfileVersion > 0 &&
                    profile.ProfileHash != 0 &&
                    profile.MaxFixedTicksPerBatch > 0 &&
-                   profile.MaximumDeltaTimeTicks >= profile.MaxFixedTicksPerBatch &&
+                   profile.MaximumDeltaTimeTicks > 0 &&
+                   profile.MaximumDeltaTimeTicks <= profile.MaxFixedTicksPerBatch &&
                    profile.MaxSpawnBatchSize >= 0 &&
                    profile.MaxBattleInstanceCount >= 0 &&
                    profile.MaxAscRegistryCount >= 0 &&
                    profile.MaxBoundaryCommandCount >= 0 &&
                    profile.MaxBoundaryCommandPayloadCount >= 0 &&
+                   HasValidTickScratchCapacities(in profile) &&
                    profile.MaxSessionBoundaryFactCount >= 0;
+        }
+
+        /// <summary>
+        /// 验证完整 Tick DAG 的 scratch、reservation、fact 与结构 intent 上限均非负。
+        /// </summary>
+        private static bool HasValidTickScratchCapacities(in GasScaleProfile profile)
+        {
+            return profile.MaxOwnerPlanCount >= 0 &&
+                   profile.MaxResolvedTargetCount >= 0 &&
+                   profile.MaxEffectOperationCount >= 0 &&
+                   profile.MaxOwnerReservationCount >= 0 &&
+                   profile.MaxTargetReservationCount >= 0 &&
+                   profile.MaxCoreFactCount >= 0 &&
+                   profile.MaxNextTickRouteCount >= 0 &&
+                   profile.MaxStructuralIntentCount >= 0;
         }
 
         /// <summary>

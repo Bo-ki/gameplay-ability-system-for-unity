@@ -3,6 +3,9 @@ using UnityEngine;
 
 namespace GAS.Runtime
 {
+    /// <summary>
+    /// 提供 EX-GAS World 的应用层生命周期入口；Runtime v1 系统拓扑统一委托给 world-local owner。
+    /// </summary>
     public static class GASManager
     {
         private const int BoundaryObservationFactCapacity = 1024;
@@ -23,7 +26,7 @@ namespace GAS.Runtime
 
         public static bool IsInitialized { get; private set; }
 
-        private static bool _attachedToPlayerLoop;
+        public static GasRuntimeWorldOwner RuntimeWorldOwner { get; private set; }
 
         internal static Entity EntityGlobalTimer { get; private set; }
 
@@ -85,18 +88,17 @@ namespace GAS.Runtime
 
             if (ExWorld != null && ExWorld.IsCreated)
             {
+                RuntimeWorldOwner?.Dispose();
                 GASRuntimeFrameContext.ResetKnownGlobalTimer(EntityManager);
                 GasRuntimeDebugger.ResetKnownSingleton(EntityManager);
                 EffectCommandSpecStream.ResetKnownSingleton(EntityManager);
                 ActiveEffectStore.ResetKnownGlobalIndexStore(EntityManager);
                 GameplayEffectConfigRegistry.ReloadDefinitionCaches(EntityManager);
                 PresentationEntityBindingRegistry.ClearGameObjectBinding();
-                if (_attachedToPlayerLoop)
-                    ScriptBehaviourUpdateOrder.RemoveWorldFromCurrentPlayerLoop(ExWorld);
                 ExWorld.Dispose();
             }
 
-            _attachedToPlayerLoop = false;
+            RuntimeWorldOwner = null;
             ExWorld = null;
             EntityManager = default;
             EntityGlobalTimer = Entity.Null;
@@ -111,23 +113,7 @@ namespace GAS.Runtime
 
         private static void CreateSystems(bool attachToPlayerLoop)
         {
-            // 基础系统组
-            ExWorld.CreateSystemManaged<InitializationSystemGroup>();
-            var sgSimulation = ExWorld.CreateSystemManaged<SimulationSystemGroup>();
-            ExWorld.CreateSystemManaged<PresentationSystemGroup>();
-            var sgFixedStepSimulation = ExWorld.CreateSystemManaged<FixedStepSimulationSystemGroup>();
-            sgFixedStepSimulation.RateManager = new RateUtils.FixedRateSimpleManager(Time.fixedDeltaTime);
-            sgSimulation.AddSystemToUpdateList(sgFixedStepSimulation);
-
-            var gasGroups = GASSystemScheduleContract.CreateFixedStepGroups(ExWorld, sgFixedStepSimulation);
-            GASSystemScheduleContract.RegisterSystems(ExWorld, gasGroups);
-            GASSystemScheduleContract.SortSystems(sgFixedStepSimulation, gasGroups);
-
-            if (attachToPlayerLoop)
-            {
-                ScriptBehaviourUpdateOrder.AppendWorldToCurrentPlayerLoop(ExWorld);
-                _attachedToPlayerLoop = true;
-            }
+            RuntimeWorldOwner = GasRuntimeWorldOwner.Install(ExWorld, attachToPlayerLoop);
         }
 
         internal static Entity EntityEventBus { get; private set; }

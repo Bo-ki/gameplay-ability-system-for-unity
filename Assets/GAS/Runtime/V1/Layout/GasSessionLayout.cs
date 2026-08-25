@@ -140,10 +140,14 @@ namespace GAS.Runtime
         public int ReasonCode;
         public byte Detected;
         public byte IngressClosed;
-        public ulong SealedFirstRequestId;
-        public ulong SealedLastRequestId;
+        public ulong SealedFirstRequestSequence;
+        public ulong SealedLastRequestSequence;
         public int SealedRequestCount;
         public ulong SealedRequestHash;
+        public ulong OutstandingFirstRequestSequence;
+        public ulong OutstandingLastRequestSequence;
+        public int OutstandingRequestCount;
+        public ulong OutstandingRequestHash;
     }
 
     /// <summary>
@@ -392,6 +396,14 @@ namespace GAS.Runtime
             Add(profile.MaxAscRegistryCount);
             Add(profile.MaxBoundaryCommandCount);
             Add(profile.MaxBoundaryCommandPayloadCount);
+            Add(profile.MaxOwnerPlanCount);
+            Add(profile.MaxResolvedTargetCount);
+            Add(profile.MaxEffectOperationCount);
+            Add(profile.MaxOwnerReservationCount);
+            Add(profile.MaxTargetReservationCount);
+            Add(profile.MaxCoreFactCount);
+            Add(profile.MaxNextTickRouteCount);
+            Add(profile.MaxStructuralIntentCount);
             Add(profile.MaxSessionBoundaryFactCount);
             Add(profile.MaxAscBoundaryFactCount);
             Add(profile.MaxPendingAttributeInitializationCount);
@@ -459,13 +471,26 @@ namespace GAS.Runtime
         public ulong RequestId;
         public ulong RequestSequence;
         public ulong SourceSequence;
+        public byte HasSource;
         public OwnerAscHandle SourceAsc;
         public BattleInstanceHandle BattleInstance;
+        public BoundaryTargetRef Target;
+        public StableHandleDiagnosticCarrier SubjectHandle;
+        public int DefinitionId;
         public ulong AvailableTick;
-        public int CommandKind;
+        public GasBoundaryCommandKind CommandKind;
+        public ushort SemanticPhaseOrdinal;
+        public ushort WorkClassOrdinal;
+        public ushort PayloadSchemaVersion;
+        public GasBoundaryCommandPayloadKind PayloadKind;
         public int FrozenPayloadOffset;
         public int FrozenPayloadLength;
         public uint FrozenPayloadGeneration;
+        public ulong PayloadHash;
+        public ulong SemanticHash;
+        public ulong CommandHash;
+        public GasBoundaryCommandState State;
+        public ulong SealedTick;
     }
 
     /// <summary>

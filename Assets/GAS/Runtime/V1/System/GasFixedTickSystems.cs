@@ -23,6 +23,7 @@ namespace GAS.Runtime
     public partial struct GasTickKernelSystem : ISystem
     {
         private EntityQuery _sessionQuery;
+        private EntityQuery _gameplaySessionQuery;
         private EntityQuery _spawnBatchMarkerQuery;
         private GasStageBSpawnFinalizeJob _spawnFinalizeTemplate;
 
@@ -33,6 +34,17 @@ namespace GAS.Runtime
         {
             _sessionQuery = state.GetEntityQuery(
                 ComponentType.ReadOnly<GasActiveSessionAuthority>());
+            _gameplaySessionQuery = state.GetEntityQuery(
+                ComponentType.ReadOnly<GasActiveSessionAuthority>(),
+                ComponentType.ReadOnly<GasSessionIdentity>(),
+                ComponentType.ReadOnly<GasScaleProfile>(),
+                ComponentType.ReadOnly<GasDefinitionRegistry>(),
+                ComponentType.ReadOnly<SimulationTickState>(),
+                ComponentType.ReadOnly<GasSessionLifecycle>(),
+                ComponentType.ReadOnly<SessionFaultLatch>(),
+                ComponentType.ReadOnly<GasTickDiagnostics>(),
+                ComponentType.ReadOnly<BoundaryCommandInbox>(),
+                ComponentType.ReadOnly<BoundaryCommandFrozenPayload>());
             _spawnBatchMarkerQuery = state.GetEntityQuery(
                 ComponentType.ReadOnly<GasSpawnBatchMarker>());
             _spawnFinalizeTemplate.InitializeLookups(ref state);
@@ -40,40 +52,77 @@ namespace GAS.Runtime
         }
 
         /// <summary>
-        /// 先执行单 Session fail-closed，再按 lifecycle 仅分派 SpawnFinalize 或 Stage-B no-op lane。
+        /// 先排 maintenance，再对唯一 Session 串联 SpawnFinalize 与完整 gameplay DAG。
         /// </summary>
         public void OnUpdate(ref SystemState state)
         {
+            var dependency = GasTickDag.ScheduleCleanupAcceptedPrepass(state.Dependency);
             var sessionCount = _sessionQuery.CalculateEntityCount();
             if (sessionCount == 0)
+            {
+                state.Dependency = dependency;
                 return;
+            }
 
             _spawnFinalizeTemplate.UpdateLookups(ref state);
             var endFixed = SystemAPI.GetSingleton<
                 EndFixedStepSimulationEntityCommandBufferSystem.Singleton>();
             var commandBuffer = endFixed.CreateCommandBuffer(state.WorldUnmanaged);
-            var batchMarkedAscs = _spawnBatchMarkerQuery.ToEntityArray(Allocator.TempJob);
             if (sessionCount != 1)
             {
+                var faultBatchMarkedAscs = _spawnBatchMarkerQuery.ToEntityArray(Allocator.TempJob);
                 var sessions = _sessionQuery.ToEntityArray(Allocator.TempJob);
                 state.Dependency = GasStageBSpawnFinalize.FailSessionCardinality(
                     ref _spawnFinalizeTemplate,
                     sessions,
-                    batchMarkedAscs,
+                    faultBatchMarkedAscs,
                     commandBuffer,
-                    state.Dependency);
+                    dependency);
                 return;
             }
 
             var session = _sessionQuery.GetSingletonEntity();
-            state.Dependency = GasStageBSpawnFinalize.Run(
+            var batchMarkedAscs = _spawnBatchMarkerQuery.ToEntityListAsync(
+                Allocator.TempJob,
+                out var gatherDependency);
+            if (_gameplaySessionQuery.CalculateEntityCount() != 1)
+            {
+                state.Dependency = GasStageBSpawnFinalize.Run(
+                    ref _spawnFinalizeTemplate,
+                    session,
+                    batchMarkedAscs,
+                    0,
+                    gatherDependency,
+                    commandBuffer,
+                    dependency);
+                return;
+            }
+
+            var identity = state.EntityManager.GetComponentData<GasSessionIdentity>(session);
+            var profile = state.EntityManager.GetComponentData<GasScaleProfile>(session);
+            var definitions = state.EntityManager.GetComponentData<GasDefinitionRegistry>(session);
+            var scratch = GasTickDag.CreateScratch(ref state, in profile);
+            dependency = GasTickDag.ScheduleModeCapture(
+                ref state,
+                session,
+                in scratch,
+                dependency);
+            dependency = GasStageBSpawnFinalize.Run(
                 ref _spawnFinalizeTemplate,
                 session,
                 batchMarkedAscs,
+                profile.MaxSpawnBatchSize,
+                gatherDependency,
                 commandBuffer,
-                state.Dependency);
-
-            // Stage B 的 Ready/Running admission 与 gameplay DAG 尚未实现，当前不递增 Tick、不消费 inbox。
+                dependency);
+            state.Dependency = GasTickDag.ScheduleGameplay(
+                ref state,
+                session,
+                in identity,
+                in profile,
+                in definitions,
+                in scratch,
+                dependency);
         }
     }
 }

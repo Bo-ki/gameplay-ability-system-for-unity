@@ -617,6 +617,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
         {
             Assert.That(actual.FreeHeadIndex, Is.EqualTo(expected.FreeHeadIndex));
             Assert.That(actual.HighWater, Is.EqualTo(expected.HighWater));
+            Assert.That(actual.FreeCount, Is.EqualTo(expected.FreeCount));
         }
 
         /// <summary>

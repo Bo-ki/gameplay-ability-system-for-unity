@@ -15,17 +15,22 @@ namespace GAS.Runtime
         internal static JobHandle Run(
             ref GasStageBSpawnFinalizeJob template,
             Entity session,
-            NativeArray<Entity> batchMarkedAscs,
+            NativeList<Entity> batchMarkedAscs,
+            int maximumDestroyCount,
+            JobHandle gatherDependency,
             EntityCommandBuffer endFixed,
             JobHandle dependency)
         {
-            var recordedDestroys = new NativeList<Entity>(batchMarkedAscs.Length, Allocator.TempJob);
+            var recordedDestroys = new NativeList<Entity>(
+                maximumDestroyCount < 0 ? 0 : maximumDestroyCount,
+                Allocator.TempJob);
             var job = template;
             job.EndFixed = endFixed;
             job.Session = session;
-            job.BatchMarkedAscs = batchMarkedAscs;
+            job.BatchMarkedAscs = batchMarkedAscs.AsDeferredJobArray();
             job.RecordedDestroyEntities = recordedDestroys;
-            var handle = job.Schedule(dependency);
+            var combinedDependency = JobHandle.CombineDependencies(dependency, gatherDependency);
+            var handle = job.Schedule(combinedDependency);
             handle = recordedDestroys.Dispose(handle);
             return batchMarkedAscs.Dispose(handle);
         }
@@ -782,7 +787,7 @@ namespace GAS.Runtime
         /// </summary>
         private static bool IsEmpty(GasSlabHead head)
         {
-            return head.FreeHeadIndex == -1 && head.HighWater == 0;
+            return head.FreeHeadIndex == -1 && head.HighWater == 0 && head.FreeCount == 0;
         }
 
         /// <summary>
@@ -1269,7 +1274,7 @@ namespace GAS.Runtime
             latch.FaultTick = Ticks.HasComponent(session) ? Ticks[session].CurrentTick : 0;
             latch.ReasonCode = (int)reason;
             latch.Detected = 1;
-            latch.IngressClosed = 1;
+            latch.IngressClosed = 0;
             FaultLatches[session] = latch;
         }
 

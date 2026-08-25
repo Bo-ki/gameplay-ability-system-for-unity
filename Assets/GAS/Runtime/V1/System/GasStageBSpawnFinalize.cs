@@ -339,12 +339,25 @@ namespace GAS.Runtime
         {
             return profile.ProfileId > 0 && profile.ProfileVersion > 0 && profile.ProfileHash != 0 &&
                    profile.MaxFixedTicksPerBatch > 0 &&
-                   profile.MaximumDeltaTimeTicks >= profile.MaxFixedTicksPerBatch &&
+                   profile.MaximumDeltaTimeTicks > 0 &&
+                   profile.MaximumDeltaTimeTicks <= profile.MaxFixedTicksPerBatch &&
                    profile.MaxSpawnBatchSize >= 0 && profile.MaxBattleInstanceCount >= 0 &&
                    profile.MaxAscRegistryCount >= 0 && profile.MaxBoundaryCommandCount >= 0 &&
                    profile.MaxBoundaryCommandPayloadCount >= 0 && profile.MaxSessionBoundaryFactCount >= 0 &&
-                   profile.MaxAscBoundaryFactCount >= 0 && HasValidAbilityProfile(in profile) &&
+                   profile.MaxAscBoundaryFactCount >= 0 && HasValidTickProfile(in profile) &&
+                   HasValidAbilityProfile(in profile) &&
                    HasValidEffectProfile(in profile);
+        }
+
+        /// <summary>
+        /// 验证完整 Tick DAG 的 scratch、reservation、fact 与结构 intent 上限均非负。
+        /// </summary>
+        private static bool HasValidTickProfile(in GasScaleProfile profile)
+        {
+            return profile.MaxOwnerPlanCount >= 0 && profile.MaxResolvedTargetCount >= 0 &&
+                   profile.MaxEffectOperationCount >= 0 && profile.MaxOwnerReservationCount >= 0 &&
+                   profile.MaxTargetReservationCount >= 0 && profile.MaxCoreFactCount >= 0 &&
+                   profile.MaxNextTickRouteCount >= 0 && profile.MaxStructuralIntentCount >= 0;
         }
 
         /// <summary>

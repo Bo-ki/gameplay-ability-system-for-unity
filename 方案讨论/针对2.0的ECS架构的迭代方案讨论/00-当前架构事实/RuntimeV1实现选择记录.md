@@ -17,3 +17,19 @@
 - Pending Session 保存原始 Battle/ASC/三类初始化计数、不可变 member ranges 与内容哈希；ASC 同时预挂 enableable batch work marker。Finalize 必须同时匹配 manifest、registry 与 runtime 快照，被同步裁短的自洽子集也会整批失败；marker 只用于损坏映射后的 teardown 兜底，Ready/teardown 后禁用但保留不可变诊断字段，并清空临时 member 映射。
 - Session 基数只统计携带 `GasActiveSessionAuthority` 的实体；保留的 `Disposed/Faulted` 诊断记录在失去 authority marker 后不参与单 active Session 判定。
 - 阶段 B 的 internal recorder 只验证最小 Attribute/Tag/Grant bootstrap；它不是单位配置公开入口。初始 ActiveEffect 必须由阶段 E 的 target transaction 与 generated SpawnInitializationProgram 接管后，完整单位 Spawn 才可对 Demo 开放。
+
+## 阶段 C 选择
+
+- `GasCommandPort` 只持有 world-local `SessionIngressGate`，公开面固定为 Activate/Commit/Cancel/ApplyEffect/RemoveEffect 五个 typed 方法；不存在 raw submit、World、EntityManager 或 Entity 入口。
+- Gate 在同一把锁内完成 authority 校验、RequestId 去重、RequestSequence 分配、payload 深复制、journal append 与 FaultClose；`RequestSequence` 仅用于运输/关闭审计，gameplay canonical order 只读取调用方冻结的 `SourceSequence`。
+- managed journal 的 `Sealed` 表示 record 已完整接受；搬入 ECS 时统一投影为 `BoundaryCommandInbox.Pending`。Kernel 的 `Sealed` 仅表示本 candidate tick 已 seal，两种状态不共享隐式时点。
+- `GasCommandIngressSystem` 是唯一 journal→ECS writer。每个 FixedStep 开头原子切走一个 journal window；cutoff 后接受的请求只留在 tail，最早由下一 ingress window 搬运。
+- inbox 原样保存 Battle/Source/Target/typed handle/Definition/payload schema、RequestId/RequestSequence/SourceSequence、AvailableTick、payload/semantic/command hash；payload 字节位于同 Session 的唯一冻结 byte buffer。
+- 已消费记录只在 outer batch fence 向 Gate 成功 ack 后，才允许下一 ingress window 稳定压缩；同一 catch-up 批次内尚未 ack 的 Consumed 记录不得提前删除。FaultTerminated 载体保留用于审计。
+- Gate 的 command/payload 容量只核算 accepted-outstanding；首次消费确认释放容量，但 lifetime RequestId ledger 与原 RequestSequence 继续保留，用于 exact duplicate 去重和审计。
+- Boundary 外部 owner command 的 `SemanticPhaseOrdinal` 冻结为 `1`，`WorkClassOrdinal` 冻结为五种 typed command 的闭世界 ordinal；这两个值来自版本化 Boundary policy，而非 Job、worker、chunk 或 ECB lane。
+- Kernel 使用 `WorldUpdateAllocator` 一次创建 profile 定长 scratch；Gather 按 `AvailableTick <= CurrentTick` seal，`CurrentTick + 1` 仅作为成功提交后的 candidate tick。相同完整 canonical key 的 work 必须逐字段、逐 payload byte 等价，不能用哈希碰撞或 RequestSequence tie-break。
+- `MaximumDeltaTimeTicks` 必须 `> 0 && <= MaxFixedTicksPerBatch`。World owner 在真实 outer batch 进入 `FixedRateCatchUpManager` 前投影 `TickRate` 与 `World.MaximumDeltaTime`，使一次批次实际 Tick 数不突破 profile 预算。
+- Admission 后所有具名 Job 无条件预排并读取同一 `AdmissionResult`；失败 Tick 只允许 latch/lifecycle/diagnostic/inbox seal 等控制证据变化，不推进 Tick、不消费请求、不写 gameplay authority、fact、route 或结构 intent。
+- FaultClose 复用完整 FixedStep outer fence：先 ack 已成功消费请求，再与 Port accept 共锁关闭 Gate，冻结全部 accepted-outstanding（含 sealed、future inbox 与 journal tail）摘要，最后把 latch 终结为 `IngressClosed`；DAG 内不新增 completion fence。
+- Session fault latch 采用 first-write-wins；同一 outer catch-up 内后续 ingress/Kernel fault 不得覆盖首次 FaultId 与证据。World owner 释放也先在 Gate 锁内关闭 Port，缓存 capability 只能同步拒绝，不能留下无人搬运的 journal。

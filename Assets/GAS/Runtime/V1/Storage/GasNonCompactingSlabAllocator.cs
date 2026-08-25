@@ -152,6 +152,7 @@ namespace GAS.Runtime
             header.LinkFree(header.Generation + 1, head.FreeHeadIndex);
             storage.WriteHeader(slotIndex, in header);
             head.FreeHeadIndex = slotIndex;
+            head.FreeCount++;
             return GasSlabStorageFailure.None;
         }
 
@@ -167,7 +168,8 @@ namespace GAS.Runtime
             if (hardCapacity < 0 || head.HighWater > hardCapacity)
                 return GasSlabStorageFailure.InvalidCapacity;
 
-            if (head.HighWater < 0 || storage.Count != head.HighWater)
+            if (head.HighWater < 0 || head.FreeCount < 0 || head.FreeCount > head.HighWater ||
+                storage.Count != head.HighWater)
                 return GasSlabStorageFailure.MetadataCorrupt;
 
             if (head.FreeHeadIndex < -1 || head.FreeHeadIndex >= head.HighWater)
@@ -201,7 +203,7 @@ namespace GAS.Runtime
                     return GasSlabStorageFailure.FreeListCorrupt;
             }
 
-            return visitedCount == freeCount
+            return visitedCount == freeCount && freeCount == head.FreeCount
                 ? GasSlabStorageFailure.None
                 : GasSlabStorageFailure.FreeListCorrupt;
         }
@@ -230,6 +232,7 @@ namespace GAS.Runtime
             var liveHeader = GasSlabSlotHeader.CreateLive(freeHeader.Generation);
             storage.WriteHeader(slotIndex, in liveHeader);
             head.FreeHeadIndex = freeHeader.NextFreeIndex;
+            head.FreeCount--;
             allocation = new GasSlabAllocation(
                 slotIndex,
                 freeHeader.Generation,

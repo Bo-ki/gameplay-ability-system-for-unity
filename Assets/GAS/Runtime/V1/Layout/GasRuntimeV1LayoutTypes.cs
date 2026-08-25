@@ -162,6 +162,14 @@ namespace GAS.Runtime
         public int MaxAscRegistryCount;
         public int MaxBoundaryCommandCount;
         public int MaxBoundaryCommandPayloadCount;
+        public int MaxOwnerPlanCount;
+        public int MaxResolvedTargetCount;
+        public int MaxEffectOperationCount;
+        public int MaxOwnerReservationCount;
+        public int MaxTargetReservationCount;
+        public int MaxCoreFactCount;
+        public int MaxNextTickRouteCount;
+        public int MaxStructuralIntentCount;
         public int MaxSessionBoundaryFactCount;
         public int MaxAscBoundaryFactCount;
         public int MaxPendingAttributeInitializationCount;
@@ -181,5 +189,17 @@ namespace GAS.Runtime
         public int MaxLiveDependencyCount;
         public int MaxLiveDependencyRouteCount;
         public int MaxPendingCommandCount;
+    }
+
+    /// <summary>
+    /// 保存最近一次 gameplay Tick DAG 的准入与 lane 诊断，不参与任何 gameplay 判定。
+    /// </summary>
+    public struct GasTickDiagnostics : IComponentData
+    {
+        public ulong CandidateTick;
+        public ulong ExecutedLaneMask;
+        public int AdmissionReasonCode;
+        public int SealedCommandCount;
+        public byte AdmissionSucceeded;
     }
 }

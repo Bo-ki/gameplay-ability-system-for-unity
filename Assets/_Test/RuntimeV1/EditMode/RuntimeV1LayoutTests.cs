@@ -66,6 +66,23 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
+        /// 验证 MaximumDeltaTimeTicks 必须为正且不得突破单 outer batch 的固定 Tick 上限。
+        /// </summary>
+        [Test]
+        public void ScaleProfile_MaximumDeltaTimeTicks受FixedBatch上限约束()
+        {
+            var profile = CreateCapacityProfile();
+            profile.MaxFixedTicksPerBatch = 2;
+            profile.MaximumDeltaTimeTicks = 2;
+            Assert.That(GasStageBSpawnContract.HasValidProfile(in profile), Is.True);
+
+            profile.MaximumDeltaTimeTicks = 0;
+            Assert.That(GasStageBSpawnContract.HasValidProfile(in profile), Is.False);
+            profile.MaximumDeltaTimeTicks = 3;
+            Assert.That(GasStageBSpawnContract.HasValidProfile(in profile), Is.False);
+        }
+
+        /// <summary>
         /// 构造覆盖全部 ASC 可变 buffer 的非零版本化容量档位。
         /// </summary>
         private static GasScaleProfile CreateCapacityProfile()
@@ -77,6 +94,14 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 ProfileHash = 7001,
                 MaxFixedTicksPerBatch = 1,
                 MaximumDeltaTimeTicks = 1,
+                MaxOwnerPlanCount = 22,
+                MaxResolvedTargetCount = 23,
+                MaxEffectOperationCount = 24,
+                MaxOwnerReservationCount = 25,
+                MaxTargetReservationCount = 26,
+                MaxCoreFactCount = 27,
+                MaxNextTickRouteCount = 28,
+                MaxStructuralIntentCount = 29,
                 MaxPendingAttributeInitializationCount = 3,
                 MaxPendingTagInitializationCount = 4,
                 MaxPendingGrantedAbilityInitializationCount = 2,

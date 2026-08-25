@@ -20,6 +20,7 @@ namespace GAS.Runtime
     {
         public int FreeHeadIndex;
         public int HighWater;
+        public int FreeCount;
 
         /// <summary>
         /// 创建尚未分配槽位且没有 free-list 节点的 slab 头。
@@ -30,6 +31,7 @@ namespace GAS.Runtime
             {
                 FreeHeadIndex = -1,
                 HighWater = 0,
+                FreeCount = 0,
             };
         }
     }

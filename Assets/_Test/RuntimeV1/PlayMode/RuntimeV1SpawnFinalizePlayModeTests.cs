@@ -495,7 +495,8 @@ namespace GAS.RuntimeV1.Tests.PlayMode
 
             Assert.That(lifecycle.State, Is.EqualTo(GasSessionLifecycleState.Faulted));
             Assert.That(latch.ReasonCode, Is.EqualTo((int)expectedReason));
-            Assert.That(latch.IngressClosed, Is.EqualTo(1));
+            Assert.That(latch.Detected, Is.EqualTo(1));
+            Assert.That(latch.IngressClosed, Is.Zero);
             Assert.That(tick.CurrentTick, Is.Zero);
             Assert.That(battles[0].ReadyMemberCount, Is.Zero);
             Assert.That(battles[0].State, Is.EqualTo(GasBattleInstanceState.Tombstone));
@@ -603,7 +604,8 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             var registry = _world.EntityManager.GetBuffer<AscRegistrySlot>(session);
             Assert.That(lifecycle.State, Is.EqualTo(GasSessionLifecycleState.Faulted));
             Assert.That(latch.ReasonCode, Is.EqualTo((int)GasStageBSpawnFaultReason.SessionCardinality));
-            Assert.That(latch.IngressClosed, Is.EqualTo(1));
+            Assert.That(latch.Detected, Is.EqualTo(1));
+            Assert.That(latch.IngressClosed, Is.Zero);
             for (var index = 0; index < registry.Length; index++)
                 Assert.That(registry[index].State, Is.EqualTo(GasAscRegistryState.Tombstone));
         }
@@ -771,6 +773,14 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 MaxAscRegistryCount = 2,
                 MaxBoundaryCommandCount = 2,
                 MaxBoundaryCommandPayloadCount = 8,
+                MaxOwnerPlanCount = 8,
+                MaxResolvedTargetCount = 8,
+                MaxEffectOperationCount = 8,
+                MaxOwnerReservationCount = 8,
+                MaxTargetReservationCount = 8,
+                MaxCoreFactCount = 8,
+                MaxNextTickRouteCount = 8,
+                MaxStructuralIntentCount = 8,
                 MaxSessionBoundaryFactCount = 4,
                 MaxAscBoundaryFactCount = 4,
                 MaxPendingAttributeInitializationCount = 2,
