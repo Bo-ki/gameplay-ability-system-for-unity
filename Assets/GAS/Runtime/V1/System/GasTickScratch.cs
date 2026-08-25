@@ -48,6 +48,7 @@ namespace GAS.Runtime
         DurableCapacityUnavailable = 1014,
         IngressPayloadRangeInvalid = 1015,
         IngressPhysicalCapacityUnavailable = 1016,
+        WaitRouteOverdue = 1017,
     }
 
     /// <summary>
@@ -115,6 +116,9 @@ namespace GAS.Runtime
         public int OwnerPlanCount;
         public int ResolvedTargetCount;
         public int EffectOperationCount;
+        public int AbilityRouteCount;
+        public ulong FirstAbilityRouteStableSequence;
+        public ulong NextStableSequenceAfterPlan;
         public GasTickAdmissionFailureReason PreAdmissionFailure;
         public byte GameplayEnabled;
     }
@@ -132,15 +136,139 @@ namespace GAS.Runtime
     }
 
     /// <summary>
-    /// 保存 OwnerPlanBuild 的阶段 C 计划载体；业务跃迁在阶段 D 才填充，当前仍保持零权威写。
+    /// 保存 OwnerPlanBuild 已全量验证的 Ability owner-local 事务，失败计划保持零资源需求。
     /// </summary>
     internal struct GasOwnerPlanRecord
     {
         public int SealedCommandOrdinal;
         public OwnerAscHandle OwnerAsc;
         public ulong SourceSequence;
-        public int CommandKind;
+        public ulong StableSequence;
+        public StableHandleDiagnosticCarrier SubjectHandle;
+        public BoundaryTargetRef Target;
+        public byte HasTarget;
+        public GrantedAbilityHandle GrantedAbility;
+        public AbilityActivationHandle Activation;
+        public GasBoundaryCommandKind CommandKind;
+        public GasAbilityCommandResult Result;
+        public int DefinitionIndex;
+        public int CostAttributeLayoutIndex;
+        public float CostBaseDelta;
+        public float CostCurrentDelta;
+        public int CooldownGateKey;
+        public int CooldownDurationTicks;
+        public int CooldownOwnedTagIndex;
+        public GasAbilityEndReason EndReason;
+        public byte WasCancelled;
+        public byte RequiresActivationSlot;
+        public byte RequiresCooldownSlot;
+        public byte ProducesCommittedWork;
         public byte BusinessAccepted;
+    }
+
+    /// <summary>
+    /// 保存 owner/observed ASC writer 产生且只能在 T+1 投递的 Ability 内部消息。
+    /// </summary>
+    internal struct GasAbilityRouteRecord
+    {
+        public OwnerAscHandle DestinationAsc;
+        public PendingCommand Command;
+        public ulong OriginCommandSequence;
+        public int OriginCommandKind;
+        public byte RequiresOwnerApply;
+        public byte Used;
+    }
+
+    /// <summary>
+    /// 按 destination、deliver tick 与完整 wait identity 排定跨 ASC 内部消息的唯一全序。
+    /// </summary>
+    internal struct GasAbilityRouteComparer : System.Collections.Generic.IComparer<GasAbilityRouteRecord>
+    {
+        /// <summary>
+        /// Used 记录优先，再比较 destination、因果来源与冻结 recipient 语义键。
+        /// </summary>
+        public int Compare(GasAbilityRouteRecord left, GasAbilityRouteRecord right)
+        {
+            var comparison = right.Used.CompareTo(left.Used);
+            if (comparison != 0)
+                return comparison;
+            comparison = CompareOwner(in left.DestinationAsc, in right.DestinationAsc);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.Command.AvailableTick.CompareTo(right.Command.AvailableTick);
+            if (comparison != 0)
+                return comparison;
+            comparison = CompareOwner(in left.Command.SourceAsc, in right.Command.SourceAsc);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.OriginCommandSequence.CompareTo(right.OriginCommandSequence);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.Command.RecipientKindPriority.CompareTo(
+                right.Command.RecipientKindPriority);
+            if (comparison != 0)
+                return comparison;
+            comparison = right.Command.MatchedTagDepth.CompareTo(left.Command.MatchedTagDepth);
+            if (comparison != 0)
+                return comparison;
+            comparison = CompareContinuation(
+                in left.Command.Continuation, in right.Command.Continuation);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.Command.RegistrationSequence.CompareTo(
+                right.Command.RegistrationSequence);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.Command.WakeOrdinal.CompareTo(right.Command.WakeOrdinal);
+            if (comparison != 0)
+                return comparison;
+            comparison = CompareActivation(in left.Command.Activation, in right.Command.Activation);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.Command.RegistrationGeneration.CompareTo(
+                right.Command.RegistrationGeneration);
+            return comparison != 0 ? comparison :
+                GasAbilityPendingCommandOrder.GetSemanticPriority(left.Command.CommandKind).CompareTo(
+                    GasAbilityPendingCommandOrder.GetSemanticPriority(right.Command.CommandKind));
+        }
+
+        /// <summary>
+        /// 比较完整 ASC owner 身份。
+        /// </summary>
+        private static int CompareOwner(in OwnerAscHandle left, in OwnerAscHandle right)
+        {
+            var comparison = left.AscStableId.CompareTo(right.AscStableId);
+            return comparison != 0 ? comparison : left.AscGeneration.CompareTo(right.AscGeneration);
+        }
+
+        /// <summary>
+        /// 比较 Activation 的 owner、slot 与 generation 身份。
+        /// </summary>
+        private static int CompareActivation(
+            in AbilityActivationHandle left,
+            in AbilityActivationHandle right)
+        {
+            var comparison = CompareOwner(in left.OwnerAsc, in right.OwnerAsc);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.SlotIndex.CompareTo(right.SlotIndex);
+            return comparison != 0
+                ? comparison
+                : left.SlotGeneration.CompareTo(right.SlotGeneration);
+        }
+
+        /// <summary>
+        /// 比较 Continuation 的稳定 slot 与 generation 身份。
+        /// </summary>
+        private static int CompareContinuation(
+            in AbilityContinuationHandle left,
+            in AbilityContinuationHandle right)
+        {
+            var comparison = left.SlotIndex.CompareTo(right.SlotIndex);
+            return comparison != 0
+                ? comparison
+                : left.SlotGeneration.CompareTo(right.SlotGeneration);
+        }
     }
 
     /// <summary>
@@ -151,6 +279,9 @@ namespace GAS.Runtime
         public int OwnerPlanOrdinal;
         public OwnerAscHandle TargetAsc;
         public int TargetOrdinal;
+        public int DefinitionIndex;
+        public ulong ApplicationId;
+        public byte TargetIsAlive;
     }
 
     /// <summary>
@@ -161,6 +292,12 @@ namespace GAS.Runtime
         public int OwnerPlanOrdinal;
         public int TargetOrdinal;
         public int ProgramNodeOrdinal;
+        public int DefinitionIndex;
+        public OwnerAscHandle SourceAsc;
+        public OwnerAscHandle TargetAsc;
+        public ulong ApplicationId;
+        public ulong StartTick;
+        public byte TargetIsAlive;
     }
 
     /// <summary>
@@ -214,8 +351,10 @@ namespace GAS.Runtime
         public NativeArray<GasOwnerPlanRecord> OwnerPlans;
         public NativeArray<GasResolvedTargetRecord> ResolvedTargets;
         public NativeArray<GasEffectOperationRecord> EffectOperations;
+        public NativeArray<GasAbilityRouteRecord> AbilityRoutes;
         public NativeArray<GasOwnerResourceDemand> OwnerDemands;
         public NativeArray<GasTargetResourceDemand> TargetDemands;
+        public NativeArray<float> EvaluatorStack;
 
         /// <summary>
         /// 按 ScaleProfile 逻辑上限创建全部定长容器，Job 只能在界内写入而不得扩容。
@@ -233,8 +372,11 @@ namespace GAS.Runtime
                 OwnerPlans = CreateArray<GasOwnerPlanRecord>(ClampLength(profile.MaxOwnerPlanCount), allocator),
                 ResolvedTargets = CreateArray<GasResolvedTargetRecord>(ClampLength(profile.MaxResolvedTargetCount), allocator),
                 EffectOperations = CreateArray<GasEffectOperationRecord>(ClampLength(profile.MaxEffectOperationCount), allocator),
+                AbilityRoutes = CreateArray<GasAbilityRouteRecord>(ClampLength(profile.MaxNextTickRouteCount), allocator),
                 OwnerDemands = CreateArray<GasOwnerResourceDemand>(ClampLength(profile.MaxOwnerReservationCount), allocator),
                 TargetDemands = CreateArray<GasTargetResourceDemand>(ClampLength(profile.MaxTargetReservationCount), allocator),
+                EvaluatorStack = CreateArray<float>(
+                    ClampLength(profile.MaxEffectOperationCount), allocator),
             };
         }
 

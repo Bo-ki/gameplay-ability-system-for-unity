@@ -131,6 +131,93 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
+        /// 验证 Activate 不消费资源，Commit 后同 Tick Cancel 仍保留 cost/cooldown 与已提交身份。
+        /// </summary>
+        [Test]
+        public void Ability_ActivateCommit分离且Commit后Cancel保留已提交工作()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(withAbility: true);
+            var grant = fixture.GrantedAbilities[0].Handle;
+
+            Assert.That(fixture.SubmitActivate(1001, grant).IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            var activation = fixture.Activations[0];
+            Assert.That(activation.Phase, Is.EqualTo(GasAbilityActivationPhase.RunningUncommitted));
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(100f));
+            Assert.That(fixture.Cooldowns.Length, Is.Zero);
+
+            Assert.That(fixture.SubmitCommit(1002, activation.Handle).IsAccepted, Is.True);
+            Assert.That(fixture.SubmitCancel(1003, activation.Handle).IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            activation = fixture.Activations[0];
+            Assert.That(activation.Phase, Is.EqualTo(GasAbilityActivationPhase.Ended));
+            Assert.That(activation.Header.StorageState, Is.EqualTo(GasSlabSlotState.Tombstone));
+            Assert.That(activation.CommitSequence, Is.Not.Zero);
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(90f));
+            Assert.That(fixture.Cooldowns.Length, Is.EqualTo(1));
+            Assert.That(fixture.Cooldowns[0].State, Is.EqualTo(GasSlotBusinessState.Active));
+
+            Assert.That(fixture.SubmitCommit(1004, activation.Handle).IsAccepted, Is.True);
+            fixture.TickBatch();
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(90f));
+
+            fixture.TickBatch();
+            Assert.That(fixture.Cooldowns[0].Header.StorageState, Is.EqualTo(GasSlabSlotState.Free));
+        }
+
+        /// <summary>
+        /// 验证同 ASC 两个竞争 CommitPlan 按 canonical order read-your-writes，失败者保持未提交且零副作用。
+        /// </summary>
+        [Test]
+        public void Ability_竞争Commit仅首个事务成功()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(withAbility: true, costDelta: -60f);
+            var grant = fixture.GrantedAbilities[0].Handle;
+            Assert.That(fixture.SubmitActivate(1101, grant).IsAccepted, Is.True);
+            Assert.That(fixture.SubmitActivate(1102, grant).IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            var first = fixture.Activations[0].Handle;
+            var second = fixture.Activations[1].Handle;
+            Assert.That(fixture.SubmitCommit(1103, first).IsAccepted, Is.True);
+            Assert.That(fixture.SubmitCommit(1104, second).IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(40f));
+            Assert.That(fixture.Activations[0].Phase, Is.EqualTo(GasAbilityActivationPhase.Committed));
+            Assert.That(fixture.Activations[1].Phase,
+                Is.EqualTo(GasAbilityActivationPhase.RunningUncommitted));
+            Assert.That(fixture.Cooldowns.Length, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// 验证 Activate 不偷跑 Commit 的 cost 条件，资源不足只在 Commit 时确定性拒绝。
+        /// </summary>
+        [Test]
+        public void Ability_Activate不预检Cost而Commit重新裁决()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(withAbility: true, costDelta: -120f);
+            var grant = fixture.GrantedAbilities[0].Handle;
+
+            Assert.That(fixture.SubmitActivate(1201, grant).IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            var activation = fixture.Activations[0];
+            Assert.That(activation.Phase, Is.EqualTo(GasAbilityActivationPhase.RunningUncommitted));
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(100f));
+
+            Assert.That(fixture.SubmitCommit(1202, activation.Handle).IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            Assert.That(fixture.Activations[0].Phase,
+                Is.EqualTo(GasAbilityActivationPhase.RunningUncommitted));
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(100f));
+            Assert.That(fixture.Cooldowns.Length, Is.Zero);
+        }
+
+        /// <summary>
         /// 验证 FixedStep 的完整系统句柄顺序严格满足 Physics、GAS、标准 EndFixed。
         /// </summary>
         private static void AssertFormalParentOrder(World world)
@@ -214,6 +301,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         private readonly GasRuntimeWorldOwner _owner;
         private double _elapsedTime = -FixedDeltaTime;
         private GasStageBBootstrapRecordGate _recordGate;
+        private readonly bool _withAbility;
 
         internal Entity Session { get; private set; }
         internal Entity Asc { get; private set; }
@@ -224,6 +312,10 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         internal GasTickDiagnostics Diagnostics => EntityManager.GetComponentData<GasTickDiagnostics>(Session);
         internal GasSessionLifecycle SessionLifecycle => EntityManager.GetComponentData<GasSessionLifecycle>(Session);
         internal DynamicBuffer<BoundaryCommandInbox> Inbox => EntityManager.GetBuffer<BoundaryCommandInbox>(Session);
+        internal DynamicBuffer<GrantedAbilitySlot> GrantedAbilities => EntityManager.GetBuffer<GrantedAbilitySlot>(Asc);
+        internal DynamicBuffer<AbilityActivationSlot> Activations => EntityManager.GetBuffer<AbilityActivationSlot>(Asc);
+        internal DynamicBuffer<CooldownGateSlot> Cooldowns => EntityManager.GetBuffer<CooldownGateSlot>(Asc);
+        internal DynamicBuffer<AttributeValueSlot> Attributes => EntityManager.GetBuffer<AttributeValueSlot>(Asc);
         internal float FixedTimestep => _world.GetExistingSystemManaged<FixedStepSimulationSystemGroup>().Timestep;
         internal float MaximumDeltaTime => _world.MaximumDeltaTime;
 
@@ -232,9 +324,13 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         /// <summary>
         /// 安装正式拓扑、记录最小 SpawnBatch，并用两次完整批次发布 Ready。
         /// </summary>
-        internal RuntimeV1TickDagTestWorld(int maxOwnerPlanCount = 4)
+        internal RuntimeV1TickDagTestWorld(
+            int maxOwnerPlanCount = 4,
+            bool withAbility = false,
+            float costDelta = -10f)
         {
-            _catalog = CreateEmptyCatalog();
+            _withAbility = withAbility;
+            _catalog = withAbility ? CreateAbilityCatalog(costDelta) : CreateEmptyCatalog();
             _world = new World("Runtime v1 Tick DAG PlayMode test");
             _owner = GasRuntimeWorldOwner.Install(_world);
             _world.GetExistingSystemManaged<FixedStepSimulationSystemGroup>().Timestep = FixedDeltaTime;
@@ -296,6 +392,101 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
+        /// 通过唯一 typed Port 提交当前 Tick due 的 GrantedAbility 激活请求。
+        /// </summary>
+        internal GasCommandAcceptResult SubmitActivate(ulong requestId, in GrantedAbilityHandle grant)
+        {
+            var context = CreateAbilityContext(requestId);
+            return _owner.Port.RequestActivate(
+                context, grant, BoundaryCommandPayloadDescriptor.None, ReadOnlySpan<byte>.Empty);
+        }
+
+        /// <summary>
+        /// 通过唯一 typed Port 提交当前 Tick due 的 Activation Commit 请求。
+        /// </summary>
+        internal GasCommandAcceptResult SubmitCommit(ulong requestId, in AbilityActivationHandle activation)
+        {
+            var context = CreateAbilityContext(requestId);
+            return _owner.Port.RequestCommit(
+                context, activation, BoundaryCommandPayloadDescriptor.None, ReadOnlySpan<byte>.Empty);
+        }
+
+        /// <summary>
+        /// 通过唯一 typed Port 提交当前 Tick due 的 Activation Cancel 请求。
+        /// </summary>
+        internal GasCommandAcceptResult SubmitCancel(ulong requestId, in AbilityActivationHandle activation)
+        {
+            var context = CreateAbilityContext(requestId);
+            return _owner.Port.RequestCancel(
+                context, activation, BoundaryCommandPayloadDescriptor.None, ReadOnlySpan<byte>.Empty);
+        }
+
+        /// <summary>
+        /// 通过正式 lifecycle helper 写入下一 candidate Tick due 的 grant removal 命令。
+        /// </summary>
+        internal void EnqueueGrantedRemoval(
+            ulong commandSequence,
+            in GrantedAbilityHandle grant,
+            GasGrantedAbilityRemovalPolicy policy)
+        {
+            var profile = EntityManager.GetComponentData<GasScaleProfile>(Session);
+            var heads = EntityManager.GetComponentData<AscSlabHeads>(Asc);
+            var commands = EntityManager.GetBuffer<PendingCommand>(Asc);
+            var battle = Battle;
+            var owner = OwnerAsc;
+            var enqueued = GasAbilityLifecycleMaintenance.TryEnqueueGrantedRemoval(
+                in battle,
+                in owner,
+                in grant,
+                GrantedAbilities,
+                policy,
+                CurrentTick + 1,
+                commandSequence,
+                profile.MaxPendingCommandCount,
+                commands,
+                ref heads.PendingCommand);
+            Assert.That(enqueued, Is.True);
+            EntityManager.SetComponentData(Asc, heads);
+        }
+
+        /// <summary>
+        /// 为 LeaveGranted 验收挂入一个待脱钩 ActiveEffect provenance，同时保留审计字段。
+        /// </summary>
+        internal void AttachActiveEffectProvenance(
+            in GrantedAbilityHandle grant,
+            ulong sourceStableId,
+            ulong applicationId,
+            ulong contextId)
+        {
+            var grants = GrantedAbilities;
+            var slot = grants[grant.SlotIndex];
+            Assert.That(slot.Header.StorageState, Is.EqualTo(GasSlabSlotState.Live));
+            Assert.That(slot.Handle, Is.EqualTo(grant));
+            slot.GrantSourceKind = GasAbilityGrantSourceKind.ActiveEffect;
+            slot.GrantSourceStableId = sourceStableId;
+            slot.GrantingActiveEffect = new ActiveEffectHandle(Epoch, OwnerAsc, 0, 1);
+            slot.GrantApplicationId = applicationId;
+            slot.GrantContextId = contextId;
+            grants[grant.SlotIndex] = slot;
+        }
+
+        /// <summary>
+        /// 构造无 target 且 source 与 subject owner 一致的 Ability 请求上下文。
+        /// </summary>
+        private GasBoundaryCommandContext CreateAbilityContext(ulong requestId)
+        {
+            return new GasBoundaryCommandContext(
+                Epoch,
+                requestId,
+                requestId + 1000,
+                CurrentTick,
+                true,
+                Battle,
+                OwnerAsc,
+                BoundaryTargetRef.None);
+        }
+
+        /// <summary>
         /// 捕获 fault 前必须保持完全不变的 Tick、RNG、slab 与各类 durable 长度。
         /// </summary>
         internal RuntimeV1GameplayAuthoritySnapshot CaptureGameplayAuthority()
@@ -352,7 +543,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             using var ascs = CreateAscRequests();
             using var attributes = new NativeArray<PendingAttributeInitialization>(0, Allocator.Temp);
             using var tags = new NativeArray<PendingTagInitialization>(0, Allocator.Temp);
-            using var abilities = new NativeArray<PendingGrantedAbilityInitialization>(0, Allocator.Temp);
+            using var abilities = CreateAbilityInitializations();
             var request = CreateSessionRequest(maxOwnerPlanCount);
             var failure = GasStageBBootstrapRecorder.Record(
                 EntityManager,
@@ -367,6 +558,25 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 abilities,
                 out _);
             Assert.That(failure, Is.EqualTo(GasStageBSpawnFaultReason.None));
+        }
+
+        /// <summary>
+        /// 按 fixture 模式构造空或单 grant 初始化数组，并在转为 using 变量前完成写入。
+        /// </summary>
+        private NativeArray<PendingGrantedAbilityInitialization> CreateAbilityInitializations()
+        {
+            var abilities = new NativeArray<PendingGrantedAbilityInitialization>(
+                _withAbility ? 1 : 0,
+                Allocator.Temp);
+            if (_withAbility)
+            {
+                abilities[0] = new PendingGrantedAbilityInitialization
+                {
+                    LayoutIndex = 0,
+                    ConfigOrdinal = 0,
+                };
+            }
+            return abilities;
         }
 
         /// <summary>
@@ -447,6 +657,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 ActorBindingGeneration = 1,
                 RandomState0 = 3000,
                 RandomState1 = 4000,
+                GrantedAbilityInitializationCount = _withAbility ? 1 : 0,
             };
             return values;
         }
@@ -542,6 +753,82 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 MaxCoreFactCount = 4,
                 MaxNextTickRouteCount = 4,
                 MaxStructuralIntentCount = 4,
+                MaxPendingGrantedAbilityInitializationCount = 1,
+                MaxGrantedAbilityCount = 2,
+                MaxAbilityActivationCount = 4,
+                MaxAbilityContinuationCount = 4,
+                MaxAbilitySubscriptionCount = 4,
+                MaxCooldownGateCount = 4,
+                MaxActivationOwnedContributionCount = 4,
+                MaxEmittedApplicationRefCount = 4,
+                MaxPendingCommandCount = 8,
+            };
+        }
+
+        /// <summary>
+        /// 构造带一个 owner-local cost/cooldown Ability 与一个资源 Attribute 的合法 Catalog。
+        /// </summary>
+        private static BlobAssetReference<GasDefinitionCatalogBlob> CreateAbilityCatalog(float costDelta)
+        {
+            var builder = new BlobBuilder(Allocator.Temp);
+            try
+            {
+                ref var root = ref builder.ConstructRoot<GasDefinitionCatalogBlob>();
+                InitializeCatalogHeader(ref root);
+                var attributes = builder.Allocate(ref root.AttributeLayout.Entries, 1);
+                attributes[0] = new GasAttributeLayoutEntryBlob
+                {
+                    AttributeId = 1,
+                    LayoutIndex = 0,
+                    DefaultValue = 100f,
+                    MinimumValue = 0f,
+                    MaximumValue = 100f,
+                    ClampMinimum = 1,
+                    ClampMaximum = 1,
+                };
+                AllocateEmptyCatalogArraysExceptAbility(ref builder, ref root);
+                var indices = builder.Allocate(ref root.AbilityIndex, 1);
+                indices[0] = new GasDefinitionIndexEntry { DefinitionId = 7001, DefinitionIndex = 0 };
+                var abilities = builder.Allocate(ref root.Abilities, 1);
+                abilities[0] = CreateAbilityDefinition(costDelta);
+                return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+            }
+            finally
+            {
+                builder.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// 创建费用直接改写 Attribute、冷却持续两 Tick 的最小 Ability 定义。
+        /// </summary>
+        private static GasAbilityDefinitionBlob CreateAbilityDefinition(float costDelta)
+        {
+            return new GasAbilityDefinitionBlob
+            {
+                DefinitionId = 7001,
+                Level = 1,
+                TargetPolicy = new GasTargetPolicyBlob
+                {
+                    LogicalTarget = GasLogicalTargetPolicy.Self,
+                    Avatar = GasAvatarTargetPolicy.FollowAsc,
+                    Spatial = GasSpatialTargetPolicy.None,
+                    Life = GasTargetLifePolicy.AliveOnly,
+                },
+                CostMutationContract = new GasCostMutationContractBlob
+                {
+                    Enabled = 1,
+                    AttributeLayoutIndex = 0,
+                    BaseDelta = costDelta,
+                    CurrentDelta = costDelta,
+                },
+                CooldownGateContract = new GasCooldownGateContractBlob
+                {
+                    Enabled = 1,
+                    GateKey = 9001,
+                    DurationTicks = 2,
+                    OwnedTagIndex = -1,
+                },
             };
         }
 
@@ -554,11 +841,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             try
             {
                 ref var root = ref builder.ConstructRoot<GasDefinitionCatalogBlob>();
-                root.SchemaVersion = GasDefinitionCatalogSchema.Version;
-                root.SchemaHash = SchemaHash;
-                root.ContentHash = ContentHash;
-                root.AttributeLayout.LayoutHash = AttributeHash;
-                root.TagCatalog.CatalogHash = TagHash;
+                InitializeCatalogHeader(ref root);
                 AllocateEmptyCatalogArrays(ref builder, ref root);
                 return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
             }
@@ -566,6 +849,42 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             {
                 builder.Dispose();
             }
+        }
+
+        /// <summary>
+        /// 写入两个测试 Catalog 共享的冻结 schema/content/layout header。
+        /// </summary>
+        private static void InitializeCatalogHeader(ref GasDefinitionCatalogBlob root)
+        {
+            root.SchemaVersion = GasDefinitionCatalogSchema.Version;
+            root.SchemaHash = SchemaHash;
+            root.ContentHash = ContentHash;
+            root.AttributeLayout.LayoutHash = AttributeHash;
+            root.TagCatalog.CatalogHash = TagHash;
+        }
+
+        /// <summary>
+        /// 分配 Ability 测试 Catalog 中除 Attribute 与 Ability 数组外的全部空根数组。
+        /// </summary>
+        private static void AllocateEmptyCatalogArraysExceptAbility(
+            ref BlobBuilder builder,
+            ref GasDefinitionCatalogBlob root)
+        {
+            builder.Allocate(ref root.TagCatalog.Entries, 0);
+            builder.Allocate(ref root.TagCatalog.AncestorIndices, 0);
+            builder.Allocate(ref root.GameplayEffectIndex, 0);
+            builder.Allocate(ref root.GameplayEffects, 0);
+            builder.Allocate(ref root.Requirements, 0);
+            builder.Allocate(ref root.RequirementTagIndices, 0);
+            builder.Allocate(ref root.CaptureDescriptors, 0);
+            builder.Allocate(ref root.Modifiers, 0);
+            builder.Allocate(ref root.DirectEffectProgramNodes, 0);
+            builder.Allocate(ref root.CueReferences, 0);
+            builder.Allocate(ref root.ValueViews, 0);
+            builder.Allocate(ref root.EvaluatorInstructions, 0);
+            builder.Allocate(ref root.SetByCallerDescriptors, 0);
+            builder.Allocate(ref root.TargetDataDescriptors, 0);
+            builder.Allocate(ref root.EffectContextFieldDescriptors, 0);
         }
 
         /// <summary>

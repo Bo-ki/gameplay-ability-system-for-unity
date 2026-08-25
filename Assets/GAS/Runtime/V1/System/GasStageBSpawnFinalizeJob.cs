@@ -1133,10 +1133,14 @@ namespace GAS.Runtime
                         owner,
                         slotIndex,
                         InitialGeneration),
+                    DefinitionId = catalog.Abilities[definitionIndex].DefinitionId,
                     DefinitionIndex = definitionIndex,
+                    DefinitionVersion = snapshot.Definitions.SchemaVersion,
+                    DefinitionHash = snapshot.Definitions.ContentHash,
                     Level = catalog.Abilities[definitionIndex].Level,
                     GrantOrdinal = pending[index].ConfigOrdinal,
-                    State = GasSlotBusinessState.Active,
+                    GrantSourceKind = GasAbilityGrantSourceKind.Bootstrap,
+                    RemovalPolicy = GasGrantedAbilityRemovalPolicy.LeaveGranted,
                 });
             }
             var heads = SlabHeads[asc];
