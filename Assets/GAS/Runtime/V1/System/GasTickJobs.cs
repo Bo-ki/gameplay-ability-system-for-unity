@@ -5,15 +5,43 @@ using Unity.Jobs;
 namespace GAS.Runtime
 {
     /// <summary>
-    /// 在任何 Session cardinality 分支前占据 cleanup maintenance 依赖位置；阶段 F 将填充 drain receipt 清理。
+    /// 在任何 Session cardinality 分支前记录已接管 cleanup shell 的标准 EndFixed 移除。
     /// </summary>
     internal struct GasCleanupAcceptedPrepassJob : IJob
     {
+        [ReadOnly]
+        public NativeArray<Entity> AcceptedShells;
+        [ReadOnly]
+        public ComponentLookup<BoundaryDrainState> DrainStates;
+        [ReadOnly]
+        public BufferLookup<BoundaryFactBuffer> FactBuffers;
+        public EntityCommandBuffer EndFixed;
+
         /// <summary>
-        /// 保持所有 Kernel update 都经过同一 maintenance 前置依赖，当前阶段没有 Accepted receipt 可变更。
+        /// 只移除已 Accepted 且无 late tail 的 cleanup 载体，结构变化交给标准 EndFixed playback。
         /// </summary>
         public void Execute()
         {
+            for (var index = 0; index < AcceptedShells.Length; index++)
+            {
+                var entity = AcceptedShells[index];
+                if (!DrainStates.HasComponent(entity) || !FactBuffers.HasBuffer(entity))
+                    continue;
+
+                var state = DrainStates[entity];
+                if (state.Phase != GasBoundaryDrainPhase.Accepted ||
+                    state.SimulationEpoch == 0 ||
+                    state.OwnerKind == GasBoundaryOwnerKind.None ||
+                    state.OwnerStableId == 0 ||
+                    state.OwnerGeneration == 0 ||
+                    state.NextOwnerSequence == 0 ||
+                    FactBuffers[entity].Length != 0)
+                    continue;
+
+                EndFixed.RemoveComponent<BoundaryDrainState>(entity);
+                EndFixed.RemoveComponent<BoundaryFactBuffer>(entity);
+                EndFixed.DestroyEntity(entity);
+            }
         }
     }
 

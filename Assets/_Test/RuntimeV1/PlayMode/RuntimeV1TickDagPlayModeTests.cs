@@ -68,6 +68,27 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
+        /// 验证 Accepted cleanup shell 在下一 Kernel prepass 记录标准 EndFixed removal，而非 outer batch 直接结构写。
+        /// </summary>
+        [Test]
+        public void BoundaryAcceptedShell_下一Kernel经EndFixed回收()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld();
+            var shell = fixture.CreateEmptyBoundaryShell();
+
+            fixture.TickBatch();
+            Assert.That(fixture.EntityManager.Exists(shell), Is.True);
+            Assert.That(
+                fixture.EntityManager.GetComponentData<BoundaryDrainState>(shell).Phase,
+                Is.EqualTo(GasBoundaryDrainPhase.Accepted));
+            Assert.That(fixture.AcceptedBoundaryShellCount, Is.EqualTo(1));
+
+            fixture.TickBatch();
+
+            Assert.That(fixture.EntityManager.Exists(shell), Is.False);
+        }
+
+        /// <summary>
         /// 验证 AvailableTick 尚未到达的命令只进入持久 inbox，不会被当前 Tick 提前 seal。
         /// </summary>
         [Test]
@@ -319,7 +340,29 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         internal float FixedTimestep => _world.GetExistingSystemManaged<FixedStepSimulationSystemGroup>().Timestep;
         internal float MaximumDeltaTime => _world.MaximumDeltaTime;
 
-        private EntityManager EntityManager => _world.EntityManager;
+        internal EntityManager EntityManager => _world.EntityManager;
+
+        internal int AcceptedBoundaryShellCount
+        {
+            get
+            {
+                using var query = EntityManager.CreateEntityQuery(
+                    new EntityQueryDesc
+                    {
+                        All = new[]
+                        {
+                            ComponentType.ReadOnly<BoundaryDrainState>(),
+                            ComponentType.ReadOnly<BoundaryFactBuffer>(),
+                        },
+                        None = new[]
+                        {
+                            ComponentType.ReadOnly<GasAscIdentity>(),
+                            ComponentType.ReadOnly<GasSessionIdentity>(),
+                        },
+                    });
+                return query.CalculateEntityCount();
+            }
+        }
 
         /// <summary>
         /// 安装正式拓扑、记录最小 SpawnBatch，并用两次完整批次发布 Ready。
@@ -367,6 +410,20 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             _elapsedTime += FixedDeltaTime;
             _world.SetTime(new TimeData(_elapsedTime, FixedDeltaTime));
             _owner.TickBatch();
+        }
+
+        /// <summary>
+        /// 创建只含 Boundary cleanup 载体的空 shell，供下一批次验证 NoFactReceipt 与 EndFixed 回收。
+        /// </summary>
+        internal Entity CreateEmptyBoundaryShell()
+        {
+            var shell = EntityManager.CreateEntity(
+                ComponentType.ReadWrite<BoundaryDrainState>(),
+                ComponentType.ReadWrite<BoundaryFactBuffer>());
+            EntityManager.SetComponentData(
+                shell,
+                BoundaryDrainState.Create(Epoch, GasBoundaryOwnerKind.Session, Epoch, 1, 1));
+            return shell;
         }
 
         /// <summary>

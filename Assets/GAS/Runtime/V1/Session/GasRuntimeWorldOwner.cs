@@ -118,14 +118,6 @@ namespace GAS.Runtime
             if (_disposed || !_world.IsCreated)
                 return;
 
-            if (!_boundaryDrain.TryRemoveAcceptedShells(
-                    _world.EntityManager,
-                    out _,
-                    out var cleanupFailure))
-            {
-                LastBoundaryDrainFailure = cleanupFailure;
-                throw CreateBoundaryDrainException("cleanup shell", cleanupFailure);
-            }
             if (!TryReadBatchTiming(out var timestep, out var maximumDeltaTime))
                 return;
 

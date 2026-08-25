@@ -1,5 +1,6 @@
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Physics.Systems;
 
 namespace GAS.Runtime
@@ -25,6 +26,7 @@ namespace GAS.Runtime
         private EntityQuery _sessionQuery;
         private EntityQuery _gameplaySessionQuery;
         private EntityQuery _spawnBatchMarkerQuery;
+        private EntityQuery _acceptedBoundaryShellQuery;
         private GasStageBSpawnFinalizeJob _spawnFinalizeTemplate;
 
         /// <summary>
@@ -47,6 +49,19 @@ namespace GAS.Runtime
                 ComponentType.ReadOnly<BoundaryCommandFrozenPayload>());
             _spawnBatchMarkerQuery = state.GetEntityQuery(
                 ComponentType.ReadOnly<GasSpawnBatchMarker>());
+            _acceptedBoundaryShellQuery = state.GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<BoundaryDrainState>(),
+                    ComponentType.ReadOnly<BoundaryFactBuffer>(),
+                },
+                None = new[]
+                {
+                    ComponentType.ReadOnly<GasAscIdentity>(),
+                    ComponentType.ReadOnly<GasSessionIdentity>(),
+                },
+            });
             _spawnFinalizeTemplate.InitializeLookups(ref state);
             state.RequireForUpdate<EndFixedStepSimulationEntityCommandBufferSystem.Singleton>();
         }
@@ -56,7 +71,20 @@ namespace GAS.Runtime
         /// </summary>
         public void OnUpdate(ref SystemState state)
         {
-            var dependency = GasTickDag.ScheduleCleanupAcceptedPrepass(state.Dependency);
+            var endFixed = SystemAPI.GetSingleton<
+                EndFixedStepSimulationEntityCommandBufferSystem.Singleton>();
+            var commandBuffer = endFixed.CreateCommandBuffer(state.WorldUnmanaged);
+            var acceptedShells = _acceptedBoundaryShellQuery.ToEntityListAsync(
+                Allocator.TempJob,
+                out var shellGatherDependency);
+            var prepassDependency = JobHandle.CombineDependencies(
+                state.Dependency,
+                shellGatherDependency);
+            var dependency = GasTickDag.ScheduleCleanupAcceptedPrepass(
+                ref state,
+                acceptedShells,
+                commandBuffer,
+                prepassDependency);
             var sessionCount = _sessionQuery.CalculateEntityCount();
             if (sessionCount == 0)
             {
@@ -65,9 +93,6 @@ namespace GAS.Runtime
             }
 
             _spawnFinalizeTemplate.UpdateLookups(ref state);
-            var endFixed = SystemAPI.GetSingleton<
-                EndFixedStepSimulationEntityCommandBufferSystem.Singleton>();
-            var commandBuffer = endFixed.CreateCommandBuffer(state.WorldUnmanaged);
             if (sessionCount != 1)
             {
                 var faultBatchMarkedAscs = _spawnBatchMarkerQuery.ToEntityArray(Allocator.TempJob);

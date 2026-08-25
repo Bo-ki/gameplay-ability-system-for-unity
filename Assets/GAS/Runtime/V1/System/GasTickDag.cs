@@ -1,3 +1,4 @@
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 
@@ -9,11 +10,22 @@ namespace GAS.Runtime
     internal static class GasTickDag
     {
         /// <summary>
-        /// 为所有未 Disposed Kernel update 预排 cleanup maintenance 前置依赖。
+        /// 为所有未 Disposed Kernel update 预排 cleanup maintenance，并把 shell removal 写入 EndFixed ECB。
         /// </summary>
-        internal static JobHandle ScheduleCleanupAcceptedPrepass(JobHandle dependency)
+        internal static JobHandle ScheduleCleanupAcceptedPrepass(
+            ref SystemState state,
+            NativeList<Entity> acceptedShells,
+            EntityCommandBuffer endFixed,
+            JobHandle dependency)
         {
-            return new GasCleanupAcceptedPrepassJob().Schedule(dependency);
+            var handle = new GasCleanupAcceptedPrepassJob
+            {
+                AcceptedShells = acceptedShells.AsDeferredJobArray(),
+                DrainStates = state.GetComponentLookup<BoundaryDrainState>(true),
+                FactBuffers = state.GetBufferLookup<BoundaryFactBuffer>(true),
+                EndFixed = endFixed,
+            }.Schedule(dependency);
+            return acceptedShells.Dispose(handle);
         }
 
         /// <summary>
