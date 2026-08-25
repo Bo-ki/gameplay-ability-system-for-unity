@@ -212,6 +212,73 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
+        /// 验证未启用 stack 的 ActiveEffect 不得携带多层 stack 计数。
+        /// </summary>
+        [Test]
+        public void NoStack槽携带多层计数_预检拒绝()
+        {
+            using var world = new World("Runtime v1 lifecycle no stack invariant test");
+            var entity = CreateEntity(world, 0);
+            using var catalog = CreateCatalog(
+                GasExpirySameTickPolicy.PeriodDueBeforeExpiry,
+                GasExpiryPolicy.Remove,
+                GasExpiryPeriodPolicy.Stop,
+                10,
+                0,
+                noStack: true);
+            var head = CreateSlot(world, entity, catalog, 10, 0, 2);
+
+            Assert.That(Process(world, entity, catalog, ref head, 1, out var result), Is.False);
+            Assert.That(result.Failure, Is.EqualTo(GasActiveEffectLifecycleFailure.InvalidDefinition));
+        }
+
+        /// <summary>
+        /// 验证尚未物化的 period catch-up 策略在 lifecycle 入口 fail-closed。
+        /// </summary>
+        [Test]
+        public void 未物化CatchUp策略_预检拒绝()
+        {
+            using var world = new World("Runtime v1 lifecycle catch up policy test");
+            var entity = CreateEntity(world, 0);
+            using var catalog = CreateCatalog(
+                GasExpirySameTickPolicy.PeriodDueBeforeExpiry,
+                GasExpiryPolicy.Remove,
+                GasExpiryPeriodPolicy.Stop,
+                10,
+                2,
+                missedPeriodPolicy: GasMissedPeriodPolicy.ExecuteOnce);
+            var head = CreateSlot(world, entity, catalog, 10, 2, 1);
+
+            Assert.That(Process(world, entity, catalog, ref head, 2, out var result), Is.False);
+            Assert.That(result.Failure, Is.EqualTo(GasActiveEffectLifecycleFailure.InvalidDefinition));
+        }
+
+        /// <summary>
+        /// 验证 duration/period reset 的 tick 回绕在 expiry 同 tick 分支也被预检拦截。
+        /// </summary>
+        [Test]
+        public void StackRefreshPeriodOverflow_预检失败且不写入()
+        {
+            using var world = new World("Runtime v1 lifecycle refresh overflow test");
+            var entity = CreateEntity(world, 0);
+            using var catalog = CreateCatalog(
+                GasExpirySameTickPolicy.ExpiryBeforePeriodDue,
+                GasExpiryPolicy.RemoveOneStackAndRefreshDuration,
+                GasExpiryPeriodPolicy.Reset,
+                5,
+                2);
+            var head = CreateSlot(world, entity, catalog, ulong.MaxValue, ulong.MaxValue, 2);
+            var before = world.EntityManager.GetBuffer<ActiveEffectSlot>(entity)[0];
+
+            Assert.That(
+                Process(world, entity, catalog, ref head, ulong.MaxValue, out var result), Is.False);
+            var after = world.EntityManager.GetBuffer<ActiveEffectSlot>(entity)[0];
+            Assert.That(result.Failure, Is.EqualTo(GasActiveEffectLifecycleFailure.InvalidTiming));
+            Assert.That(after.StackCount, Is.EqualTo(before.StackCount));
+            Assert.That(after.NextPeriodTick, Is.EqualTo(before.NextPeriodTick));
+        }
+
+        /// <summary>
         /// 创建只含 ActiveEffect 与 Tag authority buffer 的测试实体。
         /// </summary>
         private static Entity CreateEntity(World world, int tagCount)
@@ -221,6 +288,8 @@ namespace GAS.RuntimeV1.Tests.EditMode
             effects.EnsureCapacity(4);
             var tags = world.EntityManager.AddBuffer<TagCountSlot>(entity);
             tags.ResizeUninitialized(tagCount);
+            for (var index = 0; index < tags.Length; index++)
+                tags[index] = default;
             return entity;
         }
 
@@ -289,7 +358,9 @@ namespace GAS.RuntimeV1.Tests.EditMode
             GasExpiryPeriodPolicy expiryPeriodPolicy,
             int durationTicks,
             int periodTicks,
-            bool withOngoingRequirement = false)
+            bool withOngoingRequirement = false,
+            bool noStack = false,
+            GasMissedPeriodPolicy missedPeriodPolicy = GasMissedPeriodPolicy.SkipNoCatchUp)
         {
             var builder = new BlobBuilder(Allocator.Temp);
             ref var root = ref builder.ConstructRoot<GasDefinitionCatalogBlob>();
@@ -323,21 +394,27 @@ namespace GAS.RuntimeV1.Tests.EditMode
                     : default,
                 DurationTicks = durationTicks,
                 PeriodTicks = periodTicks,
-                StackLimit = 3,
-                StackKey = GasStackKeyFields.Definition |
+                StackLimit = noStack ? 0 : 3,
+                StackKey = noStack
+                    ? GasStackKeyFields.None
+                    : GasStackKeyFields.Definition |
                            GasStackKeyFields.TargetAsc |
                            GasStackKeyFields.SourceAsc,
-                StackPolicy = GasStackPolicy.AggregateBySource,
-                StackPayloadPolicy = GasStackPayloadPolicy.ReplaceLatestPayloadAndProvenance,
-                StackLimitApplicationPolicy = GasStackLimitApplicationPolicy.RejectAtLimit,
+                StackPolicy = noStack ? GasStackPolicy.None : GasStackPolicy.AggregateBySource,
+                StackPayloadPolicy = noStack
+                    ? GasStackPayloadPolicy.None
+                    : GasStackPayloadPolicy.ReplaceLatestPayloadAndProvenance,
+                StackLimitApplicationPolicy = noStack
+                    ? GasStackLimitApplicationPolicy.None
+                    : GasStackLimitApplicationPolicy.RejectAtLimit,
                 DurationRefreshPolicy = GasDurationRefreshPolicy.Never,
                 PeriodResetPolicy = GasPeriodResetPolicy.Never,
-                ExpiryPolicy = expiryPolicy,
+                ExpiryPolicy = noStack ? GasExpiryPolicy.Remove : expiryPolicy,
                 ExpiryPeriodPolicy = expiryPeriodPolicy,
                 ExpirySameTickPolicy = sameTickPolicy,
                 InhibitTimePolicy = GasInhibitTimePolicy.DurationContinues,
                 InhibitedPeriodPolicy = GasInhibitedPeriodPolicy.SkipExecution,
-                MissedPeriodPolicy = GasMissedPeriodPolicy.SkipNoCatchUp,
+                MissedPeriodPolicy = missedPeriodPolicy,
             };
             var requirements = builder.Allocate(
                 ref root.Requirements, withOngoingRequirement ? 1 : 0);

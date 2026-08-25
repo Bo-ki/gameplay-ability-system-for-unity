@@ -46,6 +46,23 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
+        /// 验证尚未物化 catch-up 预算时安装期拒绝 ExecuteOnce 策略。
+        /// </summary>
+        [Test]
+        public void ExecuteOnce_缺少CatchUp预算时安装期拒绝()
+        {
+            using var catalog = CreateCatalog();
+            ref var root = ref catalog.Value;
+            root.GameplayEffects[0].MissedPeriodPolicy = GasMissedPeriodPolicy.ExecuteOnce;
+
+            var result = Validate(ref root);
+
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Error, Is.EqualTo(GasCatalogValidationError.DefinitionPolicyInvalid));
+            Assert.That(result.DefinitionId, Is.EqualTo(100));
+        }
+
+        /// <summary>
         /// 创建最小但完整的 Duration stack Definition，供安装校验变体复用。
         /// </summary>
         private static BlobAssetReference<GasDefinitionCatalogBlob> CreateCatalog()

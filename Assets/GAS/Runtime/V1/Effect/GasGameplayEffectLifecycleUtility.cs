@@ -222,6 +222,8 @@ namespace GAS.Runtime
                 return false;
             if (definition.StackLimit > 0 && slot.StackCount > definition.StackLimit)
                 return false;
+            if (definition.StackPolicy == GasStackPolicy.None && slot.StackCount != 1)
+                return false;
             if (definition.StackPolicy != GasStackPolicy.None &&
                 (definition.StackKey & GasStackKeyFields.StackingId) != 0)
                 return false;
@@ -229,7 +231,7 @@ namespace GAS.Runtime
                 (definition.DurationTicks != 0 || slot.EndTick != ulong.MaxValue))
                 return false;
             if (definition.Lifetime == GasEffectLifetimePolicy.Duration &&
-                (definition.DurationTicks <= 0 || slot.EndTick == 0))
+                (definition.DurationTicks <= 0 || slot.EndTick <= slot.StartTick))
                 return false;
             if (definition.PeriodTicks == 0)
                 return slot.NextPeriodTick == 0 && ValidatePolicies(in definition);
@@ -270,6 +272,9 @@ namespace GAS.Runtime
                 return false;
             if (definition.InhibitTimePolicy == GasInhibitTimePolicy.PauseDuration)
                 return false;
+            // v1 只物化单次 due claim，未实现 ExecuteOnce/CatchUpBounded 的追赶预算。
+            if (definition.MissedPeriodPolicy != GasMissedPeriodPolicy.SkipNoCatchUp)
+                return false;
             if (definition.StackPolicy == GasStackPolicy.None)
                 return definition.StackLimit == 0 &&
                        definition.StackKey == GasStackKeyFields.None &&
@@ -301,6 +306,13 @@ namespace GAS.Runtime
                 definition.ExpiryPolicy == GasExpiryPolicy.RemoveOneStackAndRefreshDuration &&
                 slot.StackCount > 1 &&
                 !TryAddTick(candidateTick, (ulong)definition.DurationTicks, out _))
+                return false;
+            if (slot.EndTick <= candidateTick &&
+                definition.ExpiryPolicy == GasExpiryPolicy.RemoveOneStackAndRefreshDuration &&
+                slot.StackCount > 1 &&
+                definition.ExpiryPeriodPolicy == GasExpiryPeriodPolicy.Reset &&
+                definition.PeriodTicks > 0 &&
+                !TryAddTick(candidateTick, (ulong)definition.PeriodTicks, out _))
                 return false;
             if (ShouldAdvancePeriod(in definition, in slot, candidateTick) &&
                 !TryAddTick(candidateTick, (ulong)definition.PeriodTicks, out _))
