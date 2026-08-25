@@ -214,7 +214,11 @@ namespace GAS.Runtime
             if (definition.Lifetime != GasEffectLifetimePolicy.Duration &&
                 definition.Lifetime != GasEffectLifetimePolicy.Infinite)
                 return false;
-            if (definition.PeriodTicks < 0 || definition.StackLimit < 0 || slot.StackCount <= 0)
+            if (definition.DurationTicks < 0 || definition.PeriodTicks < 0 ||
+                definition.StackLimit < 0 || slot.StackCount <= 0 || slot.Inhibited > 1)
+                return false;
+            if (slot.StartTick > slot.EndTick ||
+                (slot.NextPeriodTick != 0 && slot.NextPeriodTick < slot.StartTick))
                 return false;
             if (definition.StackLimit > 0 && slot.StackCount > definition.StackLimit)
                 return false;
@@ -222,7 +226,7 @@ namespace GAS.Runtime
                 (definition.StackKey & GasStackKeyFields.StackingId) != 0)
                 return false;
             if (definition.Lifetime == GasEffectLifetimePolicy.Infinite &&
-                slot.EndTick != ulong.MaxValue)
+                (definition.DurationTicks != 0 || slot.EndTick != ulong.MaxValue))
                 return false;
             if (definition.Lifetime == GasEffectLifetimePolicy.Duration &&
                 (definition.DurationTicks <= 0 || slot.EndTick == 0))
@@ -267,9 +271,13 @@ namespace GAS.Runtime
             if (definition.InhibitTimePolicy == GasInhibitTimePolicy.PauseDuration)
                 return false;
             if (definition.StackPolicy == GasStackPolicy.None)
-                return definition.StackKey == GasStackKeyFields.None &&
+                return definition.StackLimit == 0 &&
+                       definition.StackKey == GasStackKeyFields.None &&
                        definition.StackPayloadPolicy == GasStackPayloadPolicy.None &&
-                       definition.StackLimitApplicationPolicy == GasStackLimitApplicationPolicy.None;
+                       definition.StackLimitApplicationPolicy == GasStackLimitApplicationPolicy.None &&
+                       definition.ExpiryPolicy == GasExpiryPolicy.Remove;
+            if (definition.StackLimit <= 0)
+                return false;
             const GasStackKeyFields required = GasStackKeyFields.Definition |
                                                 GasStackKeyFields.TargetAsc |
                                                 GasStackKeyFields.SourceAsc;
