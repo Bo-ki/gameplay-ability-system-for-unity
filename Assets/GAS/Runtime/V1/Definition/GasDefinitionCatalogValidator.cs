@@ -1147,10 +1147,13 @@ namespace GAS.Runtime
                 && definition.ExpirySameTickPolicy <= GasExpirySameTickPolicy.PeriodDueBeforeExpiry
                 && definition.InhibitTimePolicy >= GasInhibitTimePolicy.PauseDuration
                 && definition.InhibitTimePolicy <= GasInhibitTimePolicy.DurationContinues
+                // v1 ActiveEffectSlot 尚无 inhibition anchor，PauseDuration 不能静默降级为 continue。
+                && definition.InhibitTimePolicy != GasInhibitTimePolicy.PauseDuration
                 && definition.InhibitedPeriodPolicy >= GasInhibitedPeriodPolicy.None
                 && definition.InhibitedPeriodPolicy <= GasInhibitedPeriodPolicy.ContinueExecution
                 && definition.MissedPeriodPolicy >= GasMissedPeriodPolicy.SkipNoCatchUp
-                && definition.MissedPeriodPolicy <= GasMissedPeriodPolicy.CatchUpBounded;
+                && definition.MissedPeriodPolicy <= GasMissedPeriodPolicy.CatchUpBounded
+                && IsSupportedStackKey(in definition);
         }
 
         /// <summary>
@@ -1172,12 +1175,21 @@ namespace GAS.Runtime
             const GasStackKeyFields required = GasStackKeyFields.Definition
                 | GasStackKeyFields.TargetAsc
                 | GasStackKeyFields.SourceAsc;
-            const GasStackKeyFields all = required | GasStackKeyFields.StackingId;
+            const GasStackKeyFields all = required;
             return (definition.StackKey & required) == required
                 && (definition.StackKey & ~all) == 0
                 && definition.StackPolicy != GasStackPolicy.None
                 && definition.StackPayloadPolicy != GasStackPayloadPolicy.None
                 && definition.StackLimitApplicationPolicy != GasStackLimitApplicationPolicy.None;
+        }
+
+        /// <summary>
+        /// v1 只物化 Definition/TargetASC/SourceASC 三维 stack key，拒绝未落地的 StackingId 维度。
+        /// </summary>
+        private static bool IsSupportedStackKey(
+            in GasGameplayEffectDefinitionBlob definition)
+        {
+            return (definition.StackKey & GasStackKeyFields.StackingId) == 0;
         }
 
         /// <summary>
