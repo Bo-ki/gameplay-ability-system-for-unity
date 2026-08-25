@@ -91,7 +91,6 @@ $eventBusClearPath = Join-Path $runtimePath "System\Event\GameplayEventBusClearS
 $presentationOutboxProjectionPath = Join-Path $runtimePath "System\Event\PresentationOutboxProjectionSystem.cs"
 $replayLogPath = Join-Path $runtimePath "System\Event\ReplayLogSystem.cs"
 $gameplayEffectRequestWriterPath = Join-Path $runtimePath "System\Effect\GameplayEffectRequestWriter.cs"
-$abilityRuntimeActionsPath = Join-Path $runtimePath "Ability\AbilityRuntimeActions.cs"
 $executionCalculationRuntimeActionsPath = Join-Path $runtimePath "Effect\ExecutionCalculationRuntimeActions.cs"
 $effectMagnitudeResolverPath = Join-Path $runtimePath "System\Effect\EffectMagnitudeResolver.cs"
 $effectRuntimeUtilityPath = Join-Path $runtimePath "System\Effect\EffectRuntimeUtility.cs"
@@ -1177,10 +1176,6 @@ Assert-FileContains `
     -Path $streamPath `
     -Pattern "AppendOwnerLocalActiveMutationCommand[\s\S]*?CopyRequestSetByCallerValues\(ownerSetByCallerValues" `
     -Message "EffectCommandSpecStream writer must copy runtime request set-by-caller payloads to owner-local active mutation payload buffers."
-Assert-FileNotContains `
-    -Path $abilityRuntimeActionsPath `
-    -Pattern "BeginGameplayEventWriter|AppendGameplayEvent" `
-    -Message "AbilityRuntimeActions must use explicit owner-local fact writing for helper facts."
 Assert-FileNotContains `
     -Path $executionCalculationRuntimeActionsPath `
     -Pattern "BeginGameplayEventWriter|AppendGameplayEvent|GameplayEventWriter" `

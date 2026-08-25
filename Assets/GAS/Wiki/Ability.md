@@ -60,12 +60,7 @@ Ability 负责“产生意图”：
 
 ## End / Cancel
 
-End / Cancel 不应由任意 system 手写 marker。统一入口是：
-
-- `AbilityRuntimeActions.RequestAbilityEnd(...)`
-- `AbilityRuntimeActions.RequestAbilityCancel(...)`
-
-该入口会同步写 lifecycle request component 和 request fact。`SAbilityStateCleanup` 消费 `CAbilityInTryEnd` / `CAbilityInTryCancel` 后做最终清理，并输出 `AbilityEnded` / `AbilityCanceled`。
+End / Cancel 不应由任意 system 绕过生命周期请求组件直接清理。统一承载是 `AbilityEndRequestComponent` / `AbilityCancelRequestComponent`；`AbilityLifecycleRequestSystem` 归一化请求，`AbilityStateCleanupSystem` 做最终清理并输出 `AbilityEnded` / `AbilityCanceled`。
 
 当前已统一的 producer 包括：
 
@@ -108,4 +103,4 @@ Ability 激活相关标签条件统一为 `TagRequirementData`：
 - `ActivationBlockedTags`：blocked query 命中即失败。
 - active ability block relation 命中时输出 `AbilityActivationBlockedByAbility` fact。
 
-失败原因会进入 `AbilityActivationResult` 和 tag requirement failure code，供 replay / log / test 读取。
+标签条件失败由 runtime requirement evaluator 判定；当前不再维护独立的激活失败枚举。
