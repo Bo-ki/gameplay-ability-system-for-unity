@@ -9,14 +9,6 @@ namespace GAS.Runtime
         public int StateStartFrame;
     }
 
-    public struct GEEffectPendingApplyComponent : IComponentData
-    {
-    }
-
-    public struct GEEffectCleanupComponent : IComponentData
-    {
-    }
-
     public struct GEEffectFinalDestroyComponent : IComponentData, IEnableableComponent
     {
     }
@@ -31,8 +23,4 @@ namespace GAS.Runtime
         public int GameplayEffectCode;
     }
 
-    public struct GECreatedByAbilityComponent : IComponentData
-    {
-        public Entity Ability;
-    }
 }

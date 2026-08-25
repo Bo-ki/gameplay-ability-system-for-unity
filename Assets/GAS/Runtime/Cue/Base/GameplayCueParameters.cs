@@ -1,5 +1,3 @@
-using Unity.Entities;
-
 namespace GAS.Runtime
 {
     public enum CueSourceType
@@ -10,9 +8,4 @@ namespace GAS.Runtime
         GameplayAbility,
     }
 
-    public class GameplayCueParametersBase
-    {
-        public CueSourceType SourceType;
-        public Entity entity;
-    }
 }
