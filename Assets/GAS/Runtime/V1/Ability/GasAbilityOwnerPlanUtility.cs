@@ -27,6 +27,9 @@ namespace GAS.Runtime
             var plan = CreatePlan(in command);
             switch (command.CommandKind)
             {
+                case GasBoundaryCommandKind.ApplyEffect:
+                    PlanApplyEffect(ref plan, ref catalog, command.DefinitionId);
+                    break;
                 case GasBoundaryCommandKind.Activate:
                     PlanActivate(ref plan, simulationEpoch, candidateTick, ref catalog,
                         grants, activations, attributes, cooldowns, pendingCommands,
@@ -47,6 +50,30 @@ namespace GAS.Runtime
                     break;
             }
             return plan;
+        }
+
+        /// <summary>
+        /// 为直接 GameplayEffect 请求建立 source-local committed-work 计划；正式 application identity 由 OwnerPlan 分配。
+        /// </summary>
+        private static void PlanApplyEffect(
+            ref GasOwnerPlanRecord plan,
+            ref GasDefinitionCatalogBlob catalog,
+            int definitionId)
+        {
+            if (plan.OwnerAsc.IsValid == false ||
+                plan.Target.Kind != GasBoundaryTargetKind.Asc ||
+                !plan.Target.TargetAsc.IsValid ||
+                !GasDefinitionCatalogLookup.TryGetGameplayEffectIndex(
+                    ref catalog, definitionId, out var definitionIndex))
+            {
+                plan.Result = GasAbilityCommandResult.DefinitionInvalid;
+                return;
+            }
+
+            plan.DefinitionIndex = definitionIndex;
+            plan.Result = GasAbilityCommandResult.None;
+            plan.ProducesCommittedWork = 1;
+            plan.BusinessAccepted = 1;
         }
 
         /// <summary>

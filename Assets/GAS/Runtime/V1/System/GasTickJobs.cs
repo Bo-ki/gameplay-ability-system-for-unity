@@ -456,7 +456,8 @@ namespace GAS.Runtime
                     var plan = BuildPlan(in command, ref catalog, in execution, index);
                     if (plan.BusinessAccepted != 0 &&
                         (plan.CommandKind == GasBoundaryCommandKind.Activate ||
-                         plan.CommandKind == GasBoundaryCommandKind.Commit))
+                         plan.CommandKind == GasBoundaryCommandKind.Commit ||
+                         plan.CommandKind == GasBoundaryCommandKind.ApplyEffect))
                     {
                         if (nextStableSequence == ulong.MaxValue)
                             execution.PreAdmissionFailure =
@@ -1142,12 +1143,15 @@ namespace GAS.Runtime
             in GasTickExecutionState execution,
             int planOrdinal)
         {
-            if (!TryResolveOwner(command.SourceAsc, out var asc))
+            var owner = ResolveCommandOwner(in command);
+            var planningCommand = command;
+            planningCommand.SourceAsc = owner;
+            if (!TryResolveOwner(owner, out var asc))
             {
                 return new GasOwnerPlanRecord
                 {
                     SealedCommandOrdinal = planOrdinal,
-                    OwnerAsc = command.SourceAsc,
+                    OwnerAsc = owner,
                     SourceSequence = command.SourceSequence,
                     SubjectHandle = command.SubjectHandle,
                     CommandKind = command.CommandKind,
@@ -1157,7 +1161,7 @@ namespace GAS.Runtime
                 };
             }
             var plan = GasAbilityOwnerPlanUtility.Build(
-                in command,
+                in planningCommand,
                 SimulationEpoch,
                 execution.CandidateTick,
                 ref catalog,
@@ -1170,6 +1174,19 @@ namespace GAS.Runtime
                 planOrdinal);
             plan.SealedCommandOrdinal = planOrdinal;
             return plan;
+        }
+
+        /// <summary>
+        /// 解析 command 的 source owner；无显式 source 的直接 Effect 以显式 target owner 作为 source。
+        /// </summary>
+        private static OwnerAscHandle ResolveCommandOwner(
+            in BoundaryCommandInbox command)
+        {
+            return command.CommandKind == GasBoundaryCommandKind.ApplyEffect &&
+                   command.HasSource == 0 &&
+                   command.Target.Kind == GasBoundaryTargetKind.Asc
+                ? command.Target.TargetAsc
+                : command.SourceAsc;
         }
 
         /// <summary>
@@ -1239,7 +1256,9 @@ namespace GAS.Runtime
                 {
                     var command = SealedCommands[index].Command;
                     if (command.CommandKind != GasBoundaryCommandKind.ApplyEffect ||
-                        command.RequestSequence == 0 ||
+                        index >= execution.OwnerPlanCount ||
+                        OwnerPlans[index].BusinessAccepted == 0 ||
+                        OwnerPlans[index].StableSequence == 0 ||
                         !GasDefinitionCatalogLookup.TryGetGameplayEffectIndex(
                             ref catalog, command.DefinitionId, out var definitionIndex))
                         continue;
@@ -1251,14 +1270,23 @@ namespace GAS.Runtime
                             out var targetAlive))
                         continue;
                     var sourceAsc = command.HasSource != 0 ? command.SourceAsc : targetAsc;
+                    if (!TryComposeApplicationId(
+                            OwnerPlans[index].StableSequence,
+                            0,
+                            out var applicationId))
+                    {
+                        execution.PreAdmissionFailure =
+                            GasTickAdmissionFailureReason.EnvelopeArithmeticOverflow;
+                        break;
+                    }
                     if (!TryAddOperation(
                             ref execution,
                             index,
-                            -1,
+                            0,
                             definitionIndex,
                             sourceAsc,
                             targetAsc,
-                            command.RequestSequence,
+                            applicationId,
                             execution.CandidateTick,
                             targetAlive))
                         break;
@@ -1473,6 +1501,11 @@ namespace GAS.Runtime
         [ReadOnly] public BufferLookup<AttributeDirtyWord> AttributeDirtyWords;
         [ReadOnly] public BufferLookup<TagCountSlot> TagCounts;
         [ReadOnly] public BufferLookup<TagPresenceWord> TagPresenceWords;
+        [ReadOnly] public ComponentLookup<BoundaryDrainState> BoundaryDrains;
+        [ReadOnly] public BufferLookup<BoundaryFactBuffer> BoundaryFacts;
+        [ReadOnly] public NativeArray<GasSourceSpecRecord> SourceSpecs;
+        [ReadOnly] public NativeArray<GasApplicationOutcomeRecord> ApplicationOutcomes;
+        [ReadOnly] public NativeArray<GasCoreFactRecord> CoreFacts;
         [ReadOnly] public NativeArray<float> EvaluatorStack;
         public NativeArray<GasAdmissionResult> Admission;
         public NativeArray<GasTickExecutionState> Execution;
@@ -1492,9 +1525,13 @@ namespace GAS.Runtime
             if (failure == GasTickAdmissionFailureReason.None)
                 failure = ValidateActualCounts(in execution);
             if (failure == GasTickAdmissionFailureReason.None)
+                failure = ValidateEffectOperationIdentities(in execution);
+            if (failure == GasTickAdmissionFailureReason.None)
                 failure = ValidateAbilityReservations(in execution);
             if (failure == GasTickAdmissionFailureReason.None)
                 failure = ValidateTargetReservations(in execution);
+            if (failure == GasTickAdmissionFailureReason.None)
+                failure = ValidateBoundaryReservations(in execution);
             Admission[0] = new GasAdmissionResult
             {
                 CandidateTick = execution.CandidateTick,
@@ -1509,12 +1546,35 @@ namespace GAS.Runtime
         /// </summary>
         private GasTickAdmissionFailureReason ValidateActualCounts(in GasTickExecutionState execution)
         {
+            if (execution.OwnerPlanCount < 0)
+                return GasTickAdmissionFailureReason.OwnerPlanLimit;
+            if (execution.ResolvedTargetCount < 0)
+                return GasTickAdmissionFailureReason.ResolvedTargetLimit;
+            if (execution.EffectOperationCount < 0)
+                return GasTickAdmissionFailureReason.EffectOperationLimit;
+            if (execution.AbilityRouteCount < 0)
+                return GasTickAdmissionFailureReason.NextTickRouteLimit;
+            if (!HasActualCapacity(OwnerPlans, execution.OwnerPlanCount))
+                return GasTickAdmissionFailureReason.OwnerPlanLimit;
+            if (!HasActualCapacity(AbilityRoutes, execution.AbilityRouteCount))
+                return GasTickAdmissionFailureReason.NextTickRouteLimit;
             if (execution.OwnerPlanCount > Profile.MaxOwnerPlanCount)
                 return GasTickAdmissionFailureReason.OwnerPlanLimit;
             if (execution.ResolvedTargetCount > Profile.MaxResolvedTargetCount)
                 return GasTickAdmissionFailureReason.ResolvedTargetLimit;
             if (execution.EffectOperationCount > Profile.MaxEffectOperationCount)
                 return GasTickAdmissionFailureReason.EffectOperationLimit;
+            if (!HasActualCapacity(EffectOperations, execution.EffectOperationCount))
+                return GasTickAdmissionFailureReason.EffectOperationLimit;
+            if (!HasActualCapacity(ResolvedTargets, execution.ResolvedTargetCount))
+                return GasTickAdmissionFailureReason.ResolvedTargetLimit;
+            if (!HasActualCapacity(SourceSpecs, execution.EffectOperationCount) ||
+                !HasActualCapacity(ApplicationOutcomes, execution.EffectOperationCount))
+                return GasTickAdmissionFailureReason.EffectOperationLimit;
+            if (!HasActualCapacity(CoreFacts, execution.EffectOperationCount))
+                return GasTickAdmissionFailureReason.CoreFactLimit;
+            if (execution.EffectOperationCount > Profile.MaxCoreFactCount)
+                return GasTickAdmissionFailureReason.CoreFactLimit;
             if (execution.AbilityRouteCount > Profile.MaxNextTickRouteCount)
                 return GasTickAdmissionFailureReason.NextTickRouteLimit;
             if (Profile.MaxOwnerReservationCount < 0)
@@ -1523,11 +1583,99 @@ namespace GAS.Runtime
                 return GasTickAdmissionFailureReason.TargetReservationLimit;
             if (Profile.MaxCoreFactCount < 0)
                 return GasTickAdmissionFailureReason.CoreFactLimit;
+            if (Profile.MaxSessionBoundaryFactCount < 0 || Profile.MaxAscBoundaryFactCount < 0)
+                return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
             if (Profile.MaxNextTickRouteCount < 0)
                 return GasTickAdmissionFailureReason.NextTickRouteLimit;
             return Profile.MaxStructuralIntentCount < 0
                 ? GasTickAdmissionFailureReason.StructuralIntentLimit
                 : GasTickAdmissionFailureReason.None;
+        }
+
+        /// <summary>
+        /// 检查新 scratch 容器已创建且实际长度覆盖本 Tick 的最小产出数量。
+        /// </summary>
+        private static bool HasActualCapacity<T>(NativeArray<T> values, int required)
+            where T : struct
+        {
+            return required == 0 || (values.IsCreated && values.Length >= required);
+        }
+
+        /// <summary>
+        /// 验证每条 effect operation 的稳定身份、目标引用和 application 唯一性，确保后续 SourceSpec 不会静默跳过。
+        /// </summary>
+        private GasTickAdmissionFailureReason ValidateEffectOperationIdentities(
+            in GasTickExecutionState execution)
+        {
+            if (execution.EffectOperationCount == 0)
+                return GasTickAdmissionFailureReason.None;
+            if (!Registries.HasBuffer(Session) || !BoundaryDrains.HasComponent(Session) ||
+                !BoundaryFacts.HasBuffer(Session) || !Catalog.IsCreated)
+                return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+
+            ref var catalog = ref Catalog.Value;
+            for (var index = 0; index < execution.EffectOperationCount; index++)
+            {
+                var operation = EffectOperations[index];
+                if (!operation.SourceAsc.IsValid || !operation.TargetAsc.IsValid ||
+                    operation.ApplicationId == 0 ||
+                    operation.DefinitionIndex < 0 ||
+                    operation.DefinitionIndex >= catalog.GameplayEffects.Length ||
+                    operation.OwnerPlanOrdinal < -1 ||
+                    operation.OwnerPlanOrdinal >= execution.OwnerPlanCount ||
+                    operation.TargetOrdinal < 0 ||
+                    operation.TargetOrdinal >= execution.ResolvedTargetCount ||
+                    operation.ProgramNodeOrdinal < -1 ||
+                    operation.TargetIsAlive > 1)
+                    return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+
+                if (operation.OwnerPlanOrdinal < 0 && operation.ProgramNodeOrdinal >= 0)
+                    return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+
+                if (operation.OwnerPlanOrdinal < 0)
+                    return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+                var plan = OwnerPlans[operation.OwnerPlanOrdinal];
+                if (plan.BusinessAccepted == 0 || plan.StableSequence == 0 ||
+                    !plan.OwnerAsc.Equals(operation.SourceAsc) ||
+                    !TryComposeApplicationId(
+                        plan.StableSequence,
+                        operation.ProgramNodeOrdinal,
+                        out var expectedApplicationId) ||
+                    expectedApplicationId != operation.ApplicationId)
+                    return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+
+                var resolved = ResolvedTargets[operation.TargetOrdinal];
+                if (resolved.OwnerPlanOrdinal != operation.OwnerPlanOrdinal ||
+                    resolved.TargetOrdinal != operation.TargetOrdinal ||
+                    !resolved.TargetAsc.Equals(operation.TargetAsc) ||
+                    resolved.DefinitionIndex != operation.DefinitionIndex ||
+                    resolved.ApplicationId != operation.ApplicationId ||
+                    resolved.TargetIsAlive != operation.TargetIsAlive)
+                    return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+
+                for (var prior = 0; prior < index; prior++)
+                {
+                    if (EffectOperations[prior].ApplicationId == operation.ApplicationId)
+                        return GasTickAdmissionFailureReason.CanonicalKeyCollision;
+                }
+            }
+            return GasTickAdmissionFailureReason.None;
+        }
+
+        /// <summary>
+        /// 复算 Owner Commit sequence 与 direct-program ordinal 的正式 ApplicationId，拒绝 transport 序号冒充身份。
+        /// </summary>
+        private static bool TryComposeApplicationId(
+            ulong stableSequence,
+            int nodeOrdinal,
+            out ulong applicationId)
+        {
+            applicationId = 0;
+            if (stableSequence == 0 || nodeOrdinal < 0 || nodeOrdinal >= ushort.MaxValue ||
+                stableSequence > (ulong.MaxValue >> 16))
+                return false;
+            applicationId = (stableSequence << 16) | (uint)(nodeOrdinal + 1);
+            return applicationId != 0;
         }
 
         /// <summary>
@@ -1630,6 +1778,102 @@ namespace GAS.Runtime
                     return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
             }
             return GasTickAdmissionFailureReason.None;
+        }
+
+        /// <summary>
+        /// 按 target 汇总本 Tick CoreFact demand，并证明 ASC cleanup outbox 可在 BoundaryProject 中无扩容追加。
+        /// </summary>
+        private GasTickAdmissionFailureReason ValidateBoundaryReservations(
+            in GasTickExecutionState execution)
+        {
+            if (execution.EffectOperationCount == 0)
+                return GasTickAdmissionFailureReason.None;
+            if (Profile.MaxAscBoundaryFactCount < 0 || Profile.MaxSessionBoundaryFactCount < 0)
+                return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+
+            var sessionState = BoundaryDrains[Session];
+            if (sessionState.SimulationEpoch != SimulationEpoch ||
+                sessionState.OwnerKind != GasBoundaryOwnerKind.Session ||
+                sessionState.OwnerStableId == 0 || sessionState.OwnerGeneration == 0 ||
+                sessionState.NextOwnerSequence == 0 ||
+                sessionState.NextOwnerSequence == ulong.MaxValue ||
+                (sessionState.Phase != GasBoundaryDrainPhase.Idle &&
+                 sessionState.Phase != GasBoundaryDrainPhase.Pending &&
+                 sessionState.Phase != GasBoundaryDrainPhase.InFlight))
+                return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+
+            for (var index = 0; index < execution.EffectOperationCount; index++)
+            {
+                var operation = EffectOperations[index];
+                if (HasPriorTarget(in operation.TargetAsc, index))
+                    continue;
+                if (!TryResolveTarget(operation.TargetAsc, out var target) ||
+                    !BoundaryDrains.HasComponent(target) || !BoundaryFacts.HasBuffer(target))
+                    return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+
+                var demand = CountBoundaryDemand(in operation.TargetAsc, execution.EffectOperationCount);
+                if (!ValidateBoundaryOwner(target, in operation.TargetAsc, demand))
+                    return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+            }
+            return GasTickAdmissionFailureReason.None;
+        }
+
+        /// <summary>
+        /// 验证目标 outbox 的 owner、阶段、序号、profile 逻辑上限和物理容量均可承载 demand。
+        /// </summary>
+        private bool ValidateBoundaryOwner(
+            Entity target,
+            in OwnerAscHandle owner,
+            int demand)
+        {
+            var state = BoundaryDrains[target];
+            if (state.SimulationEpoch != SimulationEpoch ||
+                state.OwnerKind != GasBoundaryOwnerKind.Asc ||
+                state.OwnerStableId != owner.AscStableId ||
+                state.OwnerGeneration != owner.AscGeneration ||
+                state.NextOwnerSequence == 0 || state.NextOwnerSequence == ulong.MaxValue ||
+                (state.Phase != GasBoundaryDrainPhase.Idle &&
+                 state.Phase != GasBoundaryDrainPhase.Pending &&
+                 state.Phase != GasBoundaryDrainPhase.InFlight) ||
+                (state.Phase == GasBoundaryDrainPhase.InFlight &&
+                 state.InFlightWatermark >= state.NextOwnerSequence))
+                return false;
+
+            var outbox = BoundaryFacts[target];
+            if (demand <= 0 || demand > Profile.MaxAscBoundaryFactCount ||
+                outbox.Length > Profile.MaxAscBoundaryFactCount - demand ||
+                outbox.Length > int.MaxValue - demand ||
+                outbox.Capacity < outbox.Length + demand)
+                return false;
+
+            return (ulong)demand <= ulong.MaxValue - state.NextOwnerSequence;
+        }
+
+        /// <summary>
+        /// 统计同一 target 在当前 Tick 必须投影的最小 CoreFact 数量。
+        /// </summary>
+        private int CountBoundaryDemand(in OwnerAscHandle target, int operationCount)
+        {
+            var demand = 0;
+            for (var index = 0; index < operationCount; index++)
+            {
+                if (EffectOperations[index].TargetAsc.Equals(target))
+                    demand++;
+            }
+            return demand;
+        }
+
+        /// <summary>
+        /// 判断 target 是否已在更早 operation 中计数，避免重复验证同一物理 outbox。
+        /// </summary>
+        private bool HasPriorTarget(in OwnerAscHandle target, int currentIndex)
+        {
+            for (var index = 0; index < currentIndex; index++)
+            {
+                if (EffectOperations[index].TargetAsc.Equals(target))
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -2307,6 +2551,7 @@ namespace GAS.Runtime
         public NativeArray<GasTickExecutionState> Execution;
         public ComponentLookup<SessionFaultLatch> FaultLatches;
         public ComponentLookup<GasSessionLifecycle> Lifecycles;
+        public byte IncludePostAdmissionFailure;
 
         /// <summary>
         /// 成功时只记录 lane；失败时锁存 deterministic FaultId、sealed subset 与 Faulted lifecycle。
@@ -2318,15 +2563,20 @@ namespace GAS.Runtime
                 return;
             execution.LaneMask |= GasTickLaneMask.FaultLatch;
             var admission = Admission[0];
-            if (admission.Succeeded == 0)
+            var reason = admission.Succeeded == 0
+                ? admission.FailureReason
+                : IncludePostAdmissionFailure != 0
+                    ? execution.PostAdmissionFailure
+                    : GasTickAdmissionFailureReason.None;
+            if (reason != GasTickAdmissionFailureReason.None)
             {
-                var faultId = CreateFaultId(in execution, admission.FailureReason);
+                var faultId = CreateFaultId(in execution, reason);
                 FaultLatches[Session] = new SessionFaultLatch
                 {
                     FaultId = faultId,
                     FaultEpoch = SimulationEpoch,
                     FaultTick = execution.CandidateTick,
-                    ReasonCode = (int)admission.FailureReason,
+                    ReasonCode = (int)reason,
                     Detected = 1,
                     SealedFirstRequestSequence = execution.SealedFirstRequestSequence,
                     SealedLastRequestSequence = execution.SealedLastRequestSequence,
@@ -3018,36 +3268,108 @@ namespace GAS.Runtime
     }
 
     /// <summary>
-    /// 只为成功 Commit 的正式身份密封 source-bound spec；阶段 C 固定预排/no-op contract。
+    /// 只为成功 Commit 的正式身份密封 source-bound spec，后续 target lane 只读取该不可变投影。
     /// </summary>
     internal struct GasSourceSpecProjectionJob : IJob
     {
         [ReadOnly] public NativeArray<GasAdmissionResult> Admission;
+        [ReadOnly] public NativeArray<GasEffectOperationRecord> EffectOperations;
+        public NativeArray<GasSourceSpecRecord> SourceSpecs;
         public NativeArray<GasTickExecutionState> Execution;
 
         /// <summary>
-        /// 无条件进入 lane，admission 失败时立即 no-op。
+        /// 将 admission 后的 effect operation 密封为 source-bound spec，并拒绝不完整身份。
         /// </summary>
         public void Execute()
         {
-            GasTickJobUtility.EnterDownstream(Admission, Execution, GasTickLaneMask.SourceProjection);
+            if (!GasTickJobUtility.EnterDownstream(
+                    Admission, Execution, GasTickLaneMask.SourceProjection))
+                return;
+
+            var execution = Execution[0];
+            execution.SourceSpecCount = 0;
+            for (var index = 0; index < execution.EffectOperationCount; index++)
+            {
+                var operation = EffectOperations[index];
+                if (operation.ApplicationId == 0 ||
+                    !operation.SourceAsc.IsValid || !operation.TargetAsc.IsValid ||
+                    operation.DefinitionIndex < 0)
+                {
+                    execution.PostAdmissionFailure =
+                        GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                    break;
+                }
+                if (execution.SourceSpecCount >= SourceSpecs.Length)
+                {
+                    execution.PostAdmissionFailure =
+                        GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                    break;
+                }
+                SourceSpecs[execution.SourceSpecCount++] = new GasSourceSpecRecord
+                {
+                    OperationOrdinal = index,
+                    DefinitionIndex = operation.DefinitionIndex,
+                    SourceAsc = operation.SourceAsc,
+                    TargetAsc = operation.TargetAsc,
+                    ApplicationId = operation.ApplicationId,
+                    StartTick = operation.StartTick,
+                    TargetIsAlive = operation.TargetIsAlive,
+                };
+            }
+            Execution[0] = execution;
         }
     }
 
     /// <summary>
-    /// 按稳定 target identity 建 canonical ranges；阶段 C 固定预排/no-op contract。
+    /// 按稳定 target identity 对 source-bound spec 建立 canonical ranges，保证每个 target 单写。
     /// </summary>
     internal struct GasGroupWorkByTargetJob : IJob
     {
         [ReadOnly] public NativeArray<GasAdmissionResult> Admission;
+        public NativeArray<GasSourceSpecRecord> SourceSpecs;
         public NativeArray<GasTickExecutionState> Execution;
 
         /// <summary>
-        /// 无条件进入 lane，admission 失败时立即 no-op。
+        /// 使用稳定 target、application 与 operation ordinal 做有界插入排序，不依赖 Job 完成顺序。
         /// </summary>
         public void Execute()
         {
-            GasTickJobUtility.EnterDownstream(Admission, Execution, GasTickLaneMask.GroupTarget);
+            if (!GasTickJobUtility.EnterDownstream(
+                    Admission, Execution, GasTickLaneMask.GroupTarget))
+                return;
+
+            var execution = Execution[0];
+            for (var index = 1; index < execution.SourceSpecCount; index++)
+            {
+                var value = SourceSpecs[index];
+                var position = index - 1;
+                while (position >= 0)
+                {
+                    var previous = SourceSpecs[position];
+                    if (Compare(in previous, in value) <= 0)
+                        break;
+                    SourceSpecs[position + 1] = SourceSpecs[position];
+                    position--;
+                }
+                SourceSpecs[position + 1] = value;
+            }
+        }
+
+        /// <summary>
+        /// 按 target identity、application identity 与原始 operation ordinal 比较 source spec。
+        /// </summary>
+        private static int Compare(in GasSourceSpecRecord left, in GasSourceSpecRecord right)
+        {
+            var comparison = left.TargetAsc.AscStableId.CompareTo(right.TargetAsc.AscStableId);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.TargetAsc.AscGeneration.CompareTo(right.TargetAsc.AscGeneration);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.ApplicationId.CompareTo(right.ApplicationId);
+            return comparison != 0
+                ? comparison
+                : left.OperationOrdinal.CompareTo(right.OperationOrdinal);
         }
     }
 
@@ -3060,8 +3382,8 @@ namespace GAS.Runtime
         [ReadOnly] public GasScaleProfile Profile;
         [ReadOnly] public BlobAssetReference<GasDefinitionCatalogBlob> Catalog;
         [ReadOnly] public NativeArray<GasAdmissionResult> Admission;
-        [ReadOnly] public NativeArray<GasEffectOperationRecord> EffectOperations;
-        [ReadOnly] public NativeArray<float> EvaluatorStack;
+        [ReadOnly] public NativeArray<GasSourceSpecRecord> SourceSpecs;
+        public NativeArray<float> EvaluatorStack;
         [ReadOnly] public BufferLookup<AscRegistrySlot> Registries;
         [ReadOnly] public ComponentLookup<GasAscIdentity> AscIdentities;
         [ReadOnly] public ComponentLookup<AscLifecycle> AscLifecycles;
@@ -3074,6 +3396,7 @@ namespace GAS.Runtime
         public BufferLookup<TagPresenceWord> TagPresenceWords;
         public BufferLookup<GasPayloadRangeRecord> PayloadRanges;
         public BufferLookup<GasPayloadValueSlot> PayloadValues;
+        public NativeArray<GasApplicationOutcomeRecord> ApplicationOutcomes;
         public NativeArray<GasTickExecutionState> Execution;
 
         /// <summary>
@@ -3084,26 +3407,40 @@ namespace GAS.Runtime
             if (!GasTickJobUtility.EnterDownstream(Admission, Execution, GasTickLaneMask.TargetWave))
                 return;
             var execution = Execution[0];
+            execution.ApplicationOutcomeCount = 0;
             ref var catalog = ref Catalog.Value;
-            for (var index = 0; index < execution.EffectOperationCount; index++)
+            for (var index = 0; index < execution.SourceSpecCount; index++)
             {
-                var operation = EffectOperations[index];
-                if (!TryResolveOwner(operation.TargetAsc, out var target))
+                if (execution.ApplicationOutcomeCount >= ApplicationOutcomes.Length)
+                {
+                    execution.PostAdmissionFailure =
+                        GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                    break;
+                }
+                var spec = SourceSpecs[index];
+                var outcome = default(GasGameplayEffectApplicationResult);
+                if (!TryResolveOwner(spec.TargetAsc, out var target))
+                {
+                    outcome.Outcome = GasGameplayEffectApplicationOutcome.RejectedStaleBinding;
+                    outcome.Failure = GasGameplayEffectTransactionFailure.InvalidIdentity;
+                    outcome.ApplicationId = spec.ApplicationId;
+                    StoreOutcome(ref execution, in spec, in outcome);
                     continue;
+                }
                 var heads = SlabHeads[target];
                 var request = new GasGameplayEffectApplicationRequest
                 {
                     SimulationEpoch = SimulationEpoch,
-                    SourceAsc = operation.SourceAsc,
-                    TargetAsc = operation.TargetAsc,
-                    DefinitionIndex = operation.DefinitionIndex,
-                    ApplicationId = operation.ApplicationId,
-                    StartTick = operation.StartTick,
-                    TargetIsAlive = operation.TargetIsAlive,
+                    SourceAsc = spec.SourceAsc,
+                    TargetAsc = spec.TargetAsc,
+                    DefinitionIndex = spec.DefinitionIndex,
+                    ApplicationId = spec.ApplicationId,
+                    StartTick = spec.StartTick,
+                    TargetIsAlive = spec.TargetIsAlive,
                     CaptureValueCount = 0,
                     ValueViewCount = 0,
                 };
-                GasGameplayEffectTransaction.TryApply(
+                var applied = GasGameplayEffectTransaction.TryApply(
                     ref catalog,
                     in request,
                     ActiveEffects[target],
@@ -3116,9 +3453,46 @@ namespace GAS.Runtime
                     default(NativeArray<float>),
                     default(NativeArray<float>),
                     EvaluatorStack,
-                    out _);
+                    out outcome);
+                StoreOutcome(ref execution, in spec, in outcome);
                 SlabHeads[target] = heads;
+                if (!applied &&
+                    outcome.Outcome == GasGameplayEffectApplicationOutcome.InfrastructureFault)
+                {
+                    execution.PostAdmissionFailure =
+                        GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                    break;
+                }
             }
+            Execution[0] = execution;
+        }
+
+        /// <summary>
+        /// 将每条 target application 的成功或拒绝结果写入定长 scratch，禁止结果被静默丢弃。
+        /// </summary>
+        private void StoreOutcome(
+            ref GasTickExecutionState execution,
+            in GasSourceSpecRecord spec,
+            in GasGameplayEffectApplicationResult outcome)
+        {
+            if (execution.ApplicationOutcomeCount >= ApplicationOutcomes.Length)
+            {
+                execution.PostAdmissionFailure =
+                    GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                return;
+            }
+            ApplicationOutcomes[execution.ApplicationOutcomeCount++] = new GasApplicationOutcomeRecord
+            {
+                OperationOrdinal = spec.OperationOrdinal,
+                Outcome = outcome.Outcome,
+                Failure = outcome.Failure,
+                SourceAsc = spec.SourceAsc,
+                TargetAsc = spec.TargetAsc,
+                ActiveEffect = outcome.ActiveEffect,
+                ApplicationId = outcome.ApplicationId,
+                AppliedModifierCount = outcome.AppliedModifierCount,
+                DeathCrossed = outcome.DeathCrossed,
+            };
         }
 
         /// <summary>
@@ -3164,36 +3538,137 @@ namespace GAS.Runtime
     }
 
     /// <summary>
-    /// 求 target-local stable state 与首次 death crossing；阶段 C 固定预排/no-op contract。
+    /// 把 target writer 的 application outcome 收敛为 target-owned stable CoreFact 分区。
     /// </summary>
     internal struct GasTargetLocalStabilizationDeathJob : IJob
     {
         [ReadOnly] public NativeArray<GasAdmissionResult> Admission;
+        [ReadOnly] public NativeArray<GasApplicationOutcomeRecord> ApplicationOutcomes;
+        public NativeArray<GasCoreFactRecord> CoreFacts;
         public NativeArray<GasTickExecutionState> Execution;
 
         /// <summary>
-        /// 无条件进入 lane，admission 失败时立即 no-op。
+        /// 对每条 application 固化 typed outcome；结果在 merge 前不直接投影到 Boundary。
         /// </summary>
         public void Execute()
         {
-            GasTickJobUtility.EnterDownstream(Admission, Execution, GasTickLaneMask.StabilizeDeath);
+            if (!GasTickJobUtility.EnterDownstream(
+                    Admission, Execution, GasTickLaneMask.StabilizeDeath))
+                return;
+
+            var execution = Execution[0];
+            execution.CoreFactCount = 0;
+            for (var index = 0; index < execution.ApplicationOutcomeCount; index++)
+            {
+                if (execution.CoreFactCount >= CoreFacts.Length)
+                {
+                    execution.PostAdmissionFailure =
+                        GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                    break;
+                }
+                var outcome = ApplicationOutcomes[index];
+                CoreFacts[execution.CoreFactCount++] = new GasCoreFactRecord
+                {
+                    Scope = GasBoundaryFactScope.Asc,
+                    Plane = GasBoundaryFactPlane.Gameplay,
+                    Kind = GasBoundaryFactKind.EffectLifecycle,
+                    SourceAsc = outcome.SourceAsc,
+                    TargetAsc = outcome.TargetAsc,
+                    SimulationTick = execution.CandidateTick,
+                    SemanticPhaseOrdinal = 1,
+                    WorkClassOrdinal = 1,
+                    ParentCausalityId = outcome.ApplicationId,
+                    SemanticId = outcome.ApplicationId,
+                    Payload = CreateOutcomePayload(in outcome),
+                    OperationOrdinal = outcome.OperationOrdinal,
+                };
+            }
+            Execution[0] = execution;
+        }
+
+        /// <summary>
+        /// 将 outcome、failure、modifier count 与 ActiveEffect slot 身份编码为闭世界 payload。
+        /// </summary>
+        private static BoundaryFactPayload CreateOutcomePayload(
+            in GasApplicationOutcomeRecord outcome)
+        {
+            return new BoundaryFactPayload
+            {
+                SchemaVersion = 1,
+                Kind = GasBoundaryPayloadKind.IntegerPair,
+                Integer0 = (long)outcome.Outcome,
+                Integer1 = ((long)(byte)outcome.Failure << 32) |
+                           (uint)outcome.AppliedModifierCount,
+                StableId0 = outcome.ApplicationId,
+                StableId1 = outcome.ActiveEffect.OwnerAsc.AscStableId,
+                Generation0 = outcome.ActiveEffect.SlotGeneration,
+                Generation1 = outcome.ActiveEffect.OwnerAsc.AscGeneration,
+            };
         }
     }
 
     /// <summary>
-    /// 稳定合并 Core Fact 并按 BattleInstance 唯一裁决终局；阶段 C 固定预排/no-op contract。
+    /// 使用稳定 semantic key 合并各 target 分区 CoreFact，禁止以 Job 完成顺序决定事实顺序。
     /// </summary>
     internal struct GasStableFactMergeTerminalResolveJob : IJob
     {
         [ReadOnly] public NativeArray<GasAdmissionResult> Admission;
+        public NativeArray<GasCoreFactRecord> CoreFacts;
         public NativeArray<GasTickExecutionState> Execution;
 
         /// <summary>
-        /// 无条件进入 lane，admission 失败时立即 no-op。
+        /// 对已稳定的 CoreFact 做 bounded insertion sort，形成 BoundaryProject 唯一输入序列。
         /// </summary>
         public void Execute()
         {
-            GasTickJobUtility.EnterDownstream(Admission, Execution, GasTickLaneMask.FactMergeTerminal);
+            if (!GasTickJobUtility.EnterDownstream(
+                    Admission, Execution, GasTickLaneMask.FactMergeTerminal))
+                return;
+
+            var execution = Execution[0];
+            for (var index = 1; index < execution.CoreFactCount; index++)
+            {
+                var value = CoreFacts[index];
+                var position = index - 1;
+                while (position >= 0)
+                {
+                    var previous = CoreFacts[position];
+                    if (Compare(in previous, in value) <= 0)
+                        break;
+                    CoreFacts[position + 1] = CoreFacts[position];
+                    position--;
+                }
+                CoreFacts[position + 1] = value;
+            }
+        }
+
+        /// <summary>
+        /// 比较 scope、target、semantic phase、work class 与 semantic id 的完整稳定键。
+        /// </summary>
+        private static int Compare(in GasCoreFactRecord left, in GasCoreFactRecord right)
+        {
+            var comparison = left.Scope.CompareTo(right.Scope);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.TargetAsc.AscStableId.CompareTo(right.TargetAsc.AscStableId);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.TargetAsc.AscGeneration.CompareTo(right.TargetAsc.AscGeneration);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.SimulationTick.CompareTo(right.SimulationTick);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.SemanticPhaseOrdinal.CompareTo(right.SemanticPhaseOrdinal);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.WorkClassOrdinal.CompareTo(right.WorkClassOrdinal);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.SemanticId.CompareTo(right.SemanticId);
+            return comparison != 0
+                ? comparison
+                : left.OperationOrdinal.CompareTo(right.OperationOrdinal);
         }
     }
 
@@ -3399,19 +3874,132 @@ namespace GAS.Runtime
     }
 
     /// <summary>
-    /// 把稳定事实投影到唯一 scoped cleanup outbox；阶段 C 固定预排/no-op contract。
+    /// 把稳定 CoreFact 按唯一物理 owner 投影到 ASC scoped cleanup outbox。
     /// </summary>
     internal struct GasBoundaryProjectJob : IJob
     {
+        public Entity Session;
+        public ulong SimulationEpoch;
+        [ReadOnly] public NativeArray<GasCoreFactRecord> CoreFacts;
         [ReadOnly] public NativeArray<GasAdmissionResult> Admission;
+        [ReadOnly] public BufferLookup<AscRegistrySlot> Registries;
+        [ReadOnly] public ComponentLookup<GasAscIdentity> AscIdentities;
+        [ReadOnly] public ComponentLookup<AscLifecycle> AscLifecycles;
+        [ReadOnly] public ComponentLookup<AscBattleMembership> Memberships;
+        public ComponentLookup<BoundaryDrainState> Drains;
+        public BufferLookup<BoundaryFactBuffer> BoundaryFacts;
         public NativeArray<GasTickExecutionState> Execution;
 
         /// <summary>
-        /// 无条件进入 lane，admission 失败时立即 no-op。
+        /// 通过稳定 target identity 找到唯一 ASC outbox，并按 owner sequence 追加自包含事实。
         /// </summary>
         public void Execute()
         {
-            GasTickJobUtility.EnterDownstream(Admission, Execution, GasTickLaneMask.BoundaryProject);
+            if (!GasTickJobUtility.EnterDownstream(
+                    Admission, Execution, GasTickLaneMask.BoundaryProject))
+                return;
+
+            var execution = Execution[0];
+            execution.BoundaryFactCount = 0;
+            if (!Registries.HasBuffer(Session))
+            {
+                execution.PostAdmissionFailure =
+                    GasTickAdmissionFailureReason.BoundaryProjectionFailure;
+                Execution[0] = execution;
+                return;
+            }
+            for (var index = 0; index < execution.CoreFactCount; index++)
+            {
+                var coreFact = CoreFacts[index];
+                if (coreFact.Scope != GasBoundaryFactScope.Asc ||
+                    !TryResolveOwner(coreFact.TargetAsc, out var target, out var membership))
+                {
+                    execution.PostAdmissionFailure =
+                        GasTickAdmissionFailureReason.BoundaryProjectionFailure;
+                    break;
+                }
+                if (!Drains.HasComponent(target) || !BoundaryFacts.HasBuffer(target))
+                {
+                    execution.PostAdmissionFailure =
+                        GasTickAdmissionFailureReason.BoundaryProjectionFailure;
+                    break;
+                }
+
+                var state = Drains[target];
+                var fact = new BoundaryFactBuffer
+                {
+                    Scope = coreFact.Scope,
+                    Plane = coreFact.Plane,
+                    ScopeStableId = state.OwnerStableId,
+                    ScopeGeneration = state.OwnerGeneration,
+                    BattleInstanceId = membership.BattleInstance.BattleStableId,
+                    BattleInstanceGeneration = membership.BattleInstance.BattleGeneration,
+                    OwnerScenarioUnitId = membership.ScenarioUnitId,
+                    SourceAsc = coreFact.SourceAsc,
+                    TargetAsc = coreFact.TargetAsc,
+                    SimulationTick = coreFact.SimulationTick,
+                    SemanticPhaseOrdinal = coreFact.SemanticPhaseOrdinal,
+                    WorkClassOrdinal = coreFact.WorkClassOrdinal,
+                    ParentCausalityId = coreFact.ParentCausalityId,
+                    SemanticId = coreFact.SemanticId,
+                    Kind = coreFact.Kind,
+                    Payload = coreFact.Payload,
+                };
+                if (!GasBoundaryDrainProtocol.TryAppendFactWithSequence(
+                        ref state,
+                        BoundaryFacts[target],
+                        in fact,
+                        out _,
+                        out _))
+                {
+                    execution.PostAdmissionFailure =
+                        GasTickAdmissionFailureReason.BoundaryProjectionFailure;
+                    break;
+                }
+                Drains[target] = state;
+                execution.BoundaryFactCount++;
+            }
+            Execution[0] = execution;
+        }
+
+        /// <summary>
+        /// 通过 Session registry 解析 target Entity，并复验 Epoch、identity、lifecycle 与 membership。
+        /// </summary>
+        private bool TryResolveOwner(
+            in OwnerAscHandle owner,
+            out Entity asc,
+            out AscBattleMembership membership)
+        {
+            if (!Registries.HasBuffer(Session))
+            {
+                asc = Entity.Null;
+                membership = default;
+                return false;
+            }
+            var registry = Registries[Session];
+            for (var index = 0; index < registry.Length; index++)
+            {
+                var slot = registry[index];
+                if (slot.State != GasAscRegistryState.Ready || !slot.OwnerAsc.Equals(owner))
+                    continue;
+                asc = slot.ResolveRuntimeEntity();
+                if (!AscIdentities.HasComponent(asc) || !AscLifecycles.HasComponent(asc) ||
+                    !Memberships.HasComponent(asc))
+                    break;
+                var identity = AscIdentities[asc];
+                var lifecycle = AscLifecycles[asc].State;
+                membership = Memberships[asc];
+                if (identity.SimulationEpoch == SimulationEpoch &&
+                    identity.OwnerAsc.Equals(owner) &&
+                    (lifecycle == GasAscLifecycleState.Ready ||
+                     lifecycle == GasAscLifecycleState.Alive ||
+                     lifecycle == GasAscLifecycleState.Terminal))
+                    return true;
+                break;
+            }
+            asc = Entity.Null;
+            membership = default;
+            return false;
         }
     }
 
@@ -3455,7 +4043,8 @@ namespace GAS.Runtime
                 return;
             execution.LaneMask |= GasTickLaneMask.TickFinalize;
             var admission = Admission[0];
-            if (admission.Succeeded != 0)
+            if (admission.Succeeded != 0 &&
+                execution.PostAdmissionFailure == GasTickAdmissionFailureReason.None)
             {
                 var tick = Ticks[Session];
                 tick.CurrentTick = admission.CandidateTick;
@@ -3507,6 +4096,10 @@ namespace GAS.Runtime
                 ExecutedLaneMask = execution.LaneMask,
                 AdmissionReasonCode = (int)admission.FailureReason,
                 SealedCommandCount = execution.SealedCommandCount,
+                SourceSpecCount = execution.SourceSpecCount,
+                ApplicationOutcomeCount = execution.ApplicationOutcomeCount,
+                CoreFactCount = execution.CoreFactCount,
+                BoundaryFactCount = execution.BoundaryFactCount,
                 AdmissionSucceeded = admission.Succeeded,
             };
         }
@@ -3530,7 +4123,8 @@ namespace GAS.Runtime
                 return false;
             state.LaneMask |= laneMask;
             execution[0] = state;
-            return admission[0].Succeeded != 0;
+            return admission[0].Succeeded != 0 &&
+                   state.PostAdmissionFailure == GasTickAdmissionFailureReason.None;
         }
     }
 }

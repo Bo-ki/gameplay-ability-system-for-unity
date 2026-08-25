@@ -49,6 +49,8 @@ namespace GAS.Runtime
         IngressPayloadRangeInvalid = 1015,
         IngressPhysicalCapacityUnavailable = 1016,
         WaitRouteOverdue = 1017,
+        BoundaryProjectionFailure = 1018,
+        PostAdmissionInvariantViolation = 1019,
     }
 
     /// <summary>
@@ -116,6 +118,11 @@ namespace GAS.Runtime
         public int OwnerPlanCount;
         public int ResolvedTargetCount;
         public int EffectOperationCount;
+        public int SourceSpecCount;
+        public int ApplicationOutcomeCount;
+        public int CoreFactCount;
+        public int BoundaryFactCount;
+        public GasTickAdmissionFailureReason PostAdmissionFailure;
         public int AbilityRouteCount;
         public ulong FirstAbilityRouteStableSequence;
         public ulong NextStableSequenceAfterPlan;
@@ -301,6 +308,55 @@ namespace GAS.Runtime
     }
 
     /// <summary>
+    /// 保存 SourceSpecProjection 密封后的 source-bound effect spec，后续 lane 不再直接消费未投影 operation。
+    /// </summary>
+    internal struct GasSourceSpecRecord
+    {
+        public int OperationOrdinal;
+        public int DefinitionIndex;
+        public OwnerAscHandle SourceAsc;
+        public OwnerAscHandle TargetAsc;
+        public ulong ApplicationId;
+        public ulong StartTick;
+        public byte TargetIsAlive;
+    }
+
+    /// <summary>
+    /// 保存 target writer 线性化后的 typed application outcome，拒绝与成功都必须进入后续 fact 链。
+    /// </summary>
+    internal struct GasApplicationOutcomeRecord
+    {
+        public int OperationOrdinal;
+        public GasGameplayEffectApplicationOutcome Outcome;
+        public GasGameplayEffectTransactionFailure Failure;
+        public OwnerAscHandle SourceAsc;
+        public OwnerAscHandle TargetAsc;
+        public ActiveEffectHandle ActiveEffect;
+        public ulong ApplicationId;
+        public int AppliedModifierCount;
+        public byte DeathCrossed;
+    }
+
+    /// <summary>
+    /// 保存 StableFactMerge 前的单条 Core reaction record，字段已足够独立投影到 scoped Boundary outbox。
+    /// </summary>
+    internal struct GasCoreFactRecord
+    {
+        public GasBoundaryFactScope Scope;
+        public GasBoundaryFactPlane Plane;
+        public GasBoundaryFactKind Kind;
+        public OwnerAscHandle SourceAsc;
+        public OwnerAscHandle TargetAsc;
+        public ulong SimulationTick;
+        public ushort SemanticPhaseOrdinal;
+        public ushort WorkClassOrdinal;
+        public ulong ParentCausalityId;
+        public ulong SemanticId;
+        public BoundaryFactPayload Payload;
+        public int OperationOrdinal;
+    }
+
+    /// <summary>
     /// 汇总单 owner 在 admission 中必须预留的全部长期资源需求。
     /// </summary>
     internal struct GasOwnerResourceDemand
@@ -351,6 +407,9 @@ namespace GAS.Runtime
         public NativeArray<GasOwnerPlanRecord> OwnerPlans;
         public NativeArray<GasResolvedTargetRecord> ResolvedTargets;
         public NativeArray<GasEffectOperationRecord> EffectOperations;
+        public NativeArray<GasSourceSpecRecord> SourceSpecs;
+        public NativeArray<GasApplicationOutcomeRecord> ApplicationOutcomes;
+        public NativeArray<GasCoreFactRecord> CoreFacts;
         public NativeArray<GasAbilityRouteRecord> AbilityRoutes;
         public NativeArray<GasOwnerResourceDemand> OwnerDemands;
         public NativeArray<GasTargetResourceDemand> TargetDemands;
@@ -372,6 +431,10 @@ namespace GAS.Runtime
                 OwnerPlans = CreateArray<GasOwnerPlanRecord>(ClampLength(profile.MaxOwnerPlanCount), allocator),
                 ResolvedTargets = CreateArray<GasResolvedTargetRecord>(ClampLength(profile.MaxResolvedTargetCount), allocator),
                 EffectOperations = CreateArray<GasEffectOperationRecord>(ClampLength(profile.MaxEffectOperationCount), allocator),
+                SourceSpecs = CreateArray<GasSourceSpecRecord>(ClampLength(profile.MaxEffectOperationCount), allocator),
+                ApplicationOutcomes = CreateArray<GasApplicationOutcomeRecord>(
+                    ClampLength(profile.MaxEffectOperationCount), allocator),
+                CoreFacts = CreateArray<GasCoreFactRecord>(ClampLength(profile.MaxCoreFactCount), allocator),
                 AbilityRoutes = CreateArray<GasAbilityRouteRecord>(ClampLength(profile.MaxNextTickRouteCount), allocator),
                 OwnerDemands = CreateArray<GasOwnerResourceDemand>(ClampLength(profile.MaxOwnerReservationCount), allocator),
                 TargetDemands = CreateArray<GasTargetResourceDemand>(ClampLength(profile.MaxTargetReservationCount), allocator),

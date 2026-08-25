@@ -200,6 +200,10 @@ namespace GAS.Runtime
         public ulong ExecutedLaneMask;
         public int AdmissionReasonCode;
         public int SealedCommandCount;
+        public int SourceSpecCount;
+        public int ApplicationOutcomeCount;
+        public int CoreFactCount;
+        public int BoundaryFactCount;
         public byte AdmissionSucceeded;
     }
 }

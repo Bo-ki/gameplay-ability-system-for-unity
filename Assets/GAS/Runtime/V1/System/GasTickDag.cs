@@ -179,6 +179,11 @@ namespace GAS.Runtime
                 AttributeDirtyWords = state.GetBufferLookup<AttributeDirtyWord>(true),
                 TagCounts = state.GetBufferLookup<TagCountSlot>(true),
                 TagPresenceWords = state.GetBufferLookup<TagPresenceWord>(true),
+                BoundaryDrains = state.GetComponentLookup<BoundaryDrainState>(true),
+                BoundaryFacts = state.GetBufferLookup<BoundaryFactBuffer>(true),
+                SourceSpecs = scratch.SourceSpecs,
+                ApplicationOutcomes = scratch.ApplicationOutcomes,
+                CoreFacts = scratch.CoreFacts,
                 EvaluatorStack = scratch.EvaluatorStack,
                 Admission = scratch.Admission,
                 Execution = scratch.Execution,
@@ -199,7 +204,8 @@ namespace GAS.Runtime
             Entity session,
             ulong simulationEpoch,
             in GasTickScratch scratch,
-            JobHandle dependency)
+            JobHandle dependency,
+            byte includePostAdmissionFailure = 0)
         {
             return new GasFaultLatchJob
             {
@@ -209,6 +215,7 @@ namespace GAS.Runtime
                 Execution = scratch.Execution,
                 FaultLatches = state.GetComponentLookup<SessionFaultLatch>(),
                 Lifecycles = state.GetComponentLookup<GasSessionLifecycle>(),
+                IncludePostAdmissionFailure = includePostAdmissionFailure,
             }.Schedule(dependency);
         }
 
@@ -252,9 +259,18 @@ namespace GAS.Runtime
                 TagPresence = state.GetBufferLookup<TagPresenceWord>(),
             }.Schedule(dependency);
             dependency = new GasSourceSpecProjectionJob
-                { Admission = scratch.Admission, Execution = scratch.Execution }.Schedule(dependency);
+            {
+                Admission = scratch.Admission,
+                EffectOperations = scratch.EffectOperations,
+                SourceSpecs = scratch.SourceSpecs,
+                Execution = scratch.Execution,
+            }.Schedule(dependency);
             dependency = new GasGroupWorkByTargetJob
-                { Admission = scratch.Admission, Execution = scratch.Execution }.Schedule(dependency);
+            {
+                Admission = scratch.Admission,
+                SourceSpecs = scratch.SourceSpecs,
+                Execution = scratch.Execution,
+            }.Schedule(dependency);
             dependency = new GasAscTargetStateWaveJob
             {
                 Session = session,
@@ -262,7 +278,7 @@ namespace GAS.Runtime
                 Profile = profile,
                 Catalog = catalog,
                 Admission = scratch.Admission,
-                EffectOperations = scratch.EffectOperations,
+                SourceSpecs = scratch.SourceSpecs,
                 EvaluatorStack = scratch.EvaluatorStack,
                 Registries = state.GetBufferLookup<AscRegistrySlot>(true),
                 AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
@@ -276,12 +292,22 @@ namespace GAS.Runtime
                 PayloadStates = state.GetComponentLookup<GasPayloadRangeAllocatorState>(),
                 PayloadRanges = state.GetBufferLookup<GasPayloadRangeRecord>(),
                 PayloadValues = state.GetBufferLookup<GasPayloadValueSlot>(),
+                ApplicationOutcomes = scratch.ApplicationOutcomes,
                 Execution = scratch.Execution,
             }.Schedule(dependency);
             dependency = new GasTargetLocalStabilizationDeathJob
-                { Admission = scratch.Admission, Execution = scratch.Execution }.Schedule(dependency);
+            {
+                Admission = scratch.Admission,
+                ApplicationOutcomes = scratch.ApplicationOutcomes,
+                CoreFacts = scratch.CoreFacts,
+                Execution = scratch.Execution,
+            }.Schedule(dependency);
             dependency = new GasStableFactMergeTerminalResolveJob
-                { Admission = scratch.Admission, Execution = scratch.Execution }.Schedule(dependency);
+            {
+                Admission = scratch.Admission,
+                CoreFacts = scratch.CoreFacts,
+                Execution = scratch.Execution,
+            }.Schedule(dependency);
             dependency = new GasGroupNextTickRouteByDestinationJob
             {
                 Session = session,
@@ -297,7 +323,26 @@ namespace GAS.Runtime
                 Execution = scratch.Execution,
             }.Schedule(dependency);
             dependency = new GasBoundaryProjectJob
-                { Admission = scratch.Admission, Execution = scratch.Execution }.Schedule(dependency);
+            {
+                Session = session,
+                SimulationEpoch = simulationEpoch,
+                CoreFacts = scratch.CoreFacts,
+                Admission = scratch.Admission,
+                Registries = state.GetBufferLookup<AscRegistrySlot>(true),
+                AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
+                AscLifecycles = state.GetComponentLookup<AscLifecycle>(true),
+                Memberships = state.GetComponentLookup<AscBattleMembership>(true),
+                Drains = state.GetComponentLookup<BoundaryDrainState>(),
+                BoundaryFacts = state.GetBufferLookup<BoundaryFactBuffer>(),
+                Execution = scratch.Execution,
+            }.Schedule(dependency);
+            dependency = ScheduleFaultLatch(
+                ref state,
+                session,
+                simulationEpoch,
+                in scratch,
+                dependency,
+                includePostAdmissionFailure: 1);
             return new GasRecordEndFixedJob
                 { Admission = scratch.Admission, Execution = scratch.Execution }.Schedule(dependency);
         }

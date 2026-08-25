@@ -14,6 +14,7 @@ namespace GAS.Runtime
         private const string RegistrationEntityName = "GAS_RuntimeV1_WorldOwner";
 
         private readonly World _world;
+        private readonly SimulationSystemGroup _simulation;
         private readonly FixedStepSimulationSystemGroup _fixedStep;
         private readonly GasCommandIngressSystem _ingressSystem;
         private readonly SessionIngressGate _ingressGate;
@@ -46,6 +47,7 @@ namespace GAS.Runtime
             GasBoundaryDrainRing boundaryDrainRing)
         {
             _world = world;
+            _simulation = topology.Simulation;
             _fixedStep = topology.FixedStep;
             _ingressSystem = topology.Ingress;
             _ingressGate = ingressGate;
@@ -105,9 +107,7 @@ namespace GAS.Runtime
         public void TickBatch()
         {
             EnsureUsable();
-            PrepareBatch();
-            _fixedStep.Update();
-            CompleteBatchFence();
+            _simulation.Update();
         }
 
         /// <summary>
@@ -235,7 +235,7 @@ namespace GAS.Runtime
             gas.SortSystems();
             fixedStep.SortSystems();
             simulation.SortSystems();
-            return new GasRuntimeSystemTopology(fixedStep, ingress);
+            return new GasRuntimeSystemTopology(simulation, fixedStep, ingress);
         }
 
         /// <summary>
@@ -585,6 +585,7 @@ namespace GAS.Runtime
     /// </summary>
     internal readonly struct GasRuntimeSystemTopology
     {
+        internal readonly SimulationSystemGroup Simulation;
         internal readonly FixedStepSimulationSystemGroup FixedStep;
         internal readonly GasCommandIngressSystem Ingress;
 
@@ -592,9 +593,11 @@ namespace GAS.Runtime
         /// 创建已完成注册与排序的最小 Runtime v1 拓扑引用。
         /// </summary>
         internal GasRuntimeSystemTopology(
+            SimulationSystemGroup simulation,
             FixedStepSimulationSystemGroup fixedStep,
             GasCommandIngressSystem ingress)
         {
+            Simulation = simulation;
             FixedStep = fixedStep;
             Ingress = ingress;
         }

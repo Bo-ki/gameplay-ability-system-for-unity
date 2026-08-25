@@ -133,6 +133,40 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
+        /// 验证直接 Effect 请求经过 OwnerPlan 身份分配、SourceSpec、Target transaction、CoreFact 与 ASC outbox 的完整闭环。
+        /// </summary>
+        [Test]
+        public void EffectApplication_经SourceSpec到BoundaryFact完整闭环()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(withEffect: true);
+            var accepted = fixture.SubmitApplyEffect(850, fixture.CurrentTick);
+
+            Assert.That(accepted.IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            var diagnostics = fixture.Diagnostics;
+            Assert.That(diagnostics.AdmissionSucceeded, Is.EqualTo(1));
+            Assert.That(diagnostics.SourceSpecCount, Is.EqualTo(1));
+            Assert.That(diagnostics.ApplicationOutcomeCount, Is.EqualTo(1));
+            Assert.That(diagnostics.CoreFactCount, Is.EqualTo(1));
+            Assert.That(diagnostics.BoundaryFactCount, Is.EqualTo(1));
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(105f));
+
+            Assert.That(fixture.TryDequeueBoundaryBatch(out var batch), Is.True);
+            Assert.That(batch.IsNoFact, Is.False);
+            Assert.That(batch.Facts.Count, Is.EqualTo(1));
+            var fact = batch.Facts[0];
+            Assert.That(fact.Scope, Is.EqualTo(GasBoundaryFactScope.Asc));
+            Assert.That(fact.Kind, Is.EqualTo(GasBoundaryFactKind.EffectLifecycle));
+            Assert.That(fact.EventId.OwnerKind, Is.EqualTo(GasBoundaryOwnerKind.Asc));
+            Assert.That(fact.EventId.OwnerSequence, Is.EqualTo(1UL));
+            Assert.That(
+                fact.Payload.Integer0,
+                Is.EqualTo((long)GasGameplayEffectApplicationOutcome.AppliedInstant));
+            Assert.That(fact.Payload.StableId0, Is.Not.Zero);
+        }
+
+        /// <summary>
         /// 验证 owner-plan 容量失败不推进 Tick，仍执行全部 lane，并由 outer fence 原子关闭 Gate。
         /// </summary>
         [Test]
@@ -370,10 +404,12 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         internal RuntimeV1TickDagTestWorld(
             int maxOwnerPlanCount = 4,
             bool withAbility = false,
-            float costDelta = -10f)
+            float costDelta = -10f,
+            bool withEffect = false)
         {
             _withAbility = withAbility;
-            _catalog = withAbility ? CreateAbilityCatalog(costDelta) : CreateEmptyCatalog();
+            _catalog = withAbility ? CreateAbilityCatalog(costDelta) :
+                withEffect ? CreateEffectCatalog() : CreateEmptyCatalog();
             _world = new World("Runtime v1 Tick DAG PlayMode test");
             _owner = GasRuntimeWorldOwner.Install(_world);
             _world.GetExistingSystemManaged<FixedStepSimulationSystemGroup>().Timestep = FixedDeltaTime;
@@ -410,6 +446,16 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             _elapsedTime += FixedDeltaTime;
             _world.SetTime(new TimeData(_elapsedTime, FixedDeltaTime));
             _owner.TickBatch();
+        }
+
+        /// <summary>
+        /// 从正式 managed Boundary ring 取出一次已接管的不可变批次。
+        /// </summary>
+        internal bool TryDequeueBoundaryBatch(out GasBoundaryDrainBatch batch)
+        {
+            batch = default;
+            return _owner.BoundaryDrainRing != null &&
+                   _owner.BoundaryDrainRing.TryDequeue(out batch);
         }
 
         /// <summary>
@@ -818,7 +864,15 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 MaxCooldownGateCount = 4,
                 MaxActivationOwnedContributionCount = 4,
                 MaxEmittedApplicationRefCount = 4,
+                MaxActiveEffectCount = 4,
+                MaxPayloadRangeRecordCount = 4,
+                MaxPayloadValueCount = 4,
+                MaxAttributeAggregatorCount = 4,
+                MaxLiveDependencyCount = 4,
+                MaxLiveDependencyRouteCount = 4,
                 MaxPendingCommandCount = 8,
+                MaxSessionBoundaryFactCount = 4,
+                MaxAscBoundaryFactCount = 4,
             };
         }
 
@@ -854,6 +908,104 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             {
                 builder.Dispose();
             }
+        }
+
+        /// <summary>
+        /// 创建一个 Instant Add GameplayEffect，供 Kernel 真实验证 target-owned application 与 Boundary fact。
+        /// </summary>
+        private static BlobAssetReference<GasDefinitionCatalogBlob> CreateEffectCatalog()
+        {
+            var builder = new BlobBuilder(Allocator.Temp);
+            try
+            {
+                ref var root = ref builder.ConstructRoot<GasDefinitionCatalogBlob>();
+                InitializeCatalogHeader(ref root);
+                builder.Allocate(ref root.AttributeLayout.Entries, 1)[0] = new GasAttributeLayoutEntryBlob
+                {
+                    AttributeId = 1,
+                    LayoutIndex = 0,
+                    DefaultValue = 100f,
+                    MinimumValue = 0f,
+                    MaximumValue = 1000f,
+                    ClampMinimum = 1,
+                    ClampMaximum = 1,
+                };
+                builder.Allocate(ref root.TagCatalog.Entries, 0);
+                builder.Allocate(ref root.TagCatalog.AncestorIndices, 0);
+                builder.Allocate(ref root.AbilityIndex, 0);
+                builder.Allocate(ref root.Abilities, 0);
+                builder.Allocate(ref root.GameplayEffectIndex, 1)[0] =
+                    new GasDefinitionIndexEntry { DefinitionId = EffectDefinitionId, DefinitionIndex = 0 };
+                builder.Allocate(ref root.GameplayEffects, 1)[0] = new GasGameplayEffectDefinitionBlob
+                {
+                    DefinitionId = EffectDefinitionId,
+                    Lifetime = GasEffectLifetimePolicy.Instant,
+                    TargetPolicy = new GasTargetPolicyBlob
+                    {
+                        LogicalTarget = GasLogicalTargetPolicy.Self,
+                        Avatar = GasAvatarTargetPolicy.FollowAsc,
+                        Spatial = GasSpatialTargetPolicy.None,
+                        Life = GasTargetLifePolicy.AliveOnly,
+                    },
+                    ModifierRange = new GasCatalogRange { Start = 0, Count = 1 },
+                    EvaluatorProgramRange = new GasCatalogRange { Start = 0, Count = 1 },
+                    ExpiryPolicy = GasExpiryPolicy.Remove,
+                    ExpiryPeriodPolicy = GasExpiryPeriodPolicy.Stop,
+                    ExpirySameTickPolicy = GasExpirySameTickPolicy.ExpiryBeforePeriodDue,
+                    InhibitTimePolicy = GasInhibitTimePolicy.DurationContinues,
+                    MissedPeriodPolicy = GasMissedPeriodPolicy.SkipNoCatchUp,
+                    Maxima = CreateEffectMaxima(),
+                };
+                builder.Allocate(ref root.Modifiers, 1)[0] = new GasModifierDefinitionBlob
+                {
+                    AttributeLayoutIndex = 0,
+                    Operation = GasModifierOperation.Add,
+                    EvaluatorProgramRange = new GasCatalogRange { Start = 0, Count = 1 },
+                };
+                builder.Allocate(ref root.EvaluatorInstructions, 1)[0] = new GasEvaluatorInstructionBlob
+                {
+                    Opcode = GasEvaluatorOpcode.PushConstant,
+                    ConstantValue = 5f,
+                };
+                AllocateEmptyEffectCatalogArrays(ref builder, ref root);
+                return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+            }
+            finally
+            {
+                builder.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// 返回单 modifier effect 的闭合生成期容量上界。
+        /// </summary>
+        private static GasDefinitionMaxima CreateEffectMaxima()
+        {
+            return new GasDefinitionMaxima
+            {
+                MaximumTargetCount = 1,
+                MaximumPlannedApplicationCount = 1,
+                MaximumModifierCount = 1,
+                MaximumEvaluatorInstructionCount = 1,
+            };
+        }
+
+        /// <summary>
+        /// 分配 Effect Catalog 未使用的全部根数组，确保 Blob 形状完整且可验证。
+        /// </summary>
+        private static void AllocateEmptyEffectCatalogArrays(
+            ref BlobBuilder builder,
+            ref GasDefinitionCatalogBlob root)
+        {
+            builder.Allocate(ref root.Requirements, 0);
+            builder.Allocate(ref root.RequirementTagIndices, 0);
+            builder.Allocate(ref root.CaptureDescriptors, 0);
+            builder.Allocate(ref root.DirectEffectProgramNodes, 0);
+            builder.Allocate(ref root.CueReferences, 0);
+            builder.Allocate(ref root.ValueViews, 0);
+            builder.Allocate(ref root.SetByCallerDescriptors, 0);
+            builder.Allocate(ref root.TargetDataDescriptors, 0);
+            builder.Allocate(ref root.EffectContextFieldDescriptors, 0);
         }
 
         /// <summary>
