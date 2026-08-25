@@ -133,11 +133,6 @@ namespace GAS.Runtime
                 : default;
         }
 
-        internal static bool TryCompleteRuntimeJobs()
-        {
-            return TryDrainRuntimeJobs();
-        }
-
         internal static bool TryDrainRuntimeJobs()
         {
             if (!TryResolveRuntimeEntityManager(out var entityManager))
