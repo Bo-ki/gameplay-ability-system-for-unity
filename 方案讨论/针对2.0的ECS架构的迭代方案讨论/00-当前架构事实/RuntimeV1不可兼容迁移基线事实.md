@@ -8,6 +8,8 @@
 
 当前 EX-GAS 已形成可运行的 DOTS 迁移骨架，但还不是语义闭合、单一权威的 GAS Runtime。五段物理组、Ability Entity、owner-local ActiveEffect slot、legacy GE entity、singleton/EventBus 与多 Boundary consumer 同时存在；它们是当前事实，不是 v1 目标态。
 
+阶段 A 的逐项旧入口、调用方、迁移 owner/lane、建立与删除阶段以及死代码证据，见 [Runtime v1 旧入口迁移表](RuntimeV1旧入口迁移表.md)。
+
 ## 当前物理调度
 
 `GASSystemScheduleContract` 当前创建并注册五段自定义 physical group：

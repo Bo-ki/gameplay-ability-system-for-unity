@@ -32,9 +32,10 @@ Use a single-context domain documentation layout. Read `CONTEXT.md` and `docs/ad
   - Windows: `EX_GAS_Config\ProjectConfigTable\exgas_config\gen.bat`
   - macOS/Linux: `bash EX_GAS_Config/ProjectConfigTable/exgas_config/gen.sh`
 - Run EditMode tests (batchmode):
-  - `Unity.exe -batchmode -quit -projectPath . -runTests -testPlatform EditMode -testResults TestResults/EditMode.xml`
+  - `Unity.exe -batchmode -projectPath . -runTests -testPlatform EditMode -testResults TestResults/EditMode.xml`
 - Run PlayMode tests (batchmode):
-  - `Unity.exe -batchmode -quit -projectPath . -runTests -testPlatform PlayMode -testResults TestResults/PlayMode.xml`
+  - `Unity.exe -batchmode -projectPath . -runTests -testPlatform PlayMode -testResults TestResults/PlayMode.xml`
+- Unity Test Framework `1.6.0` 会自行退出；不要把 `-quit` 与 `-runTests` 同用，否则测试不会执行。
 
 ## Coding Style & Naming Conventions
 - Language: C# with 4-space indentation, braces on new lines (match existing files).

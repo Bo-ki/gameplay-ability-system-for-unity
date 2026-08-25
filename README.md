@@ -142,9 +142,11 @@ dotnet build .\com.exhard.exgas.autochessdemo.csproj --no-restore
 Unity Test Runner：
 
 ```powershell
-Unity.exe -batchmode -quit -projectPath . -runTests -testPlatform EditMode -testResults TestResults/EditMode.xml
-Unity.exe -batchmode -quit -projectPath . -runTests -testPlatform PlayMode -testResults TestResults/PlayMode.xml
+Unity.exe -batchmode -projectPath . -runTests -testPlatform EditMode -testResults TestResults/EditMode.xml
+Unity.exe -batchmode -projectPath . -runTests -testPlatform PlayMode -testResults TestResults/PlayMode.xml
 ```
+
+Unity Test Framework `1.6.0` 会在测试结束后自行退出；不要把 `-quit` 与 `-runTests` 同用，否则测试不会执行。
 
 AutoChessDemo batch 验证入口：
 

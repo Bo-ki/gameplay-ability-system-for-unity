@@ -32,7 +32,7 @@ V2-V4 是同一个不可分割的 Runtime authority 集成窗口：允许在隔�
 
 ## Tier B 最低向量消费
 
-V0 建立 15 项 red/green manifest，后续任务按下表实现并回填；任何一项无 owner 或最终非 green 都阻止 V6 删除门与 V7 release evidence：
+V0 建立 17 项 red/green manifest，后续任务按下表实现并回填；任何一项无 owner 或最终非 green 都阻止 V6 删除门与 V7 release evidence：
 
 | `10B-08` 向量 | 实现/验收 owner |
 |---|---|
@@ -43,8 +43,10 @@ V0 建立 15 项 red/green manifest，后续任务按下表实现并回填；任
 | 10-11：LeaveGranted、Cue active cycle | V4 + V5 |
 | 12：Avatar rebind/FrozenSpatial | V1 + V3 + V6 |
 | 13：双杀/平局与 multi-BattleInstance 终局隔离 | V3 + V6 |
-| 14：Boundary retry、无下一 tick teardown、Result后零事实 | V5 + V6 |
-| 15：TickBatch切分不改变 semantic hash | V7 |
+| 14：SpawnBatch 原子 Ready | V3 + V6 |
+| 15：admission fault 零写与 IngressClosed | V2 + V3 |
+| 16：Boundary retry、无下一 tick teardown、Result后零事实 | V5 + V6 |
+| 17：TickBatch切分不改变 semantic hash | V7 |
 
 ## 全局停止条件
 
