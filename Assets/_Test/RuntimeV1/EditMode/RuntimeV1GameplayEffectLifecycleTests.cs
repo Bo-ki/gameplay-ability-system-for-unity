@@ -180,6 +180,38 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
+        /// 验证 ActiveEffect handle 的 Epoch 与 slot generation 任一失配都在写入前拒绝。
+        /// </summary>
+        [Test]
+        public void StaleHandle_预检拒绝且保留Live槽()
+        {
+            using var world = new World("Runtime v1 lifecycle identity test");
+            var entity = CreateEntity(world, 0);
+            using var catalog = CreateCatalog(
+                GasExpirySameTickPolicy.PeriodDueBeforeExpiry,
+                GasExpiryPolicy.Remove,
+                GasExpiryPeriodPolicy.Stop,
+                10,
+                2);
+            var head = CreateSlot(world, entity, catalog, 10, 2, 1);
+            var effects = world.EntityManager.GetBuffer<ActiveEffectSlot>(entity);
+            var slot = effects[0];
+            var owner = slot.Handle.OwnerAsc;
+            slot.Handle = new ActiveEffectHandle(2, owner, 0, slot.Header.Generation);
+            effects[0] = slot;
+
+            Assert.That(Process(world, entity, catalog, ref head, 2, out var epochResult), Is.False);
+            Assert.That(epochResult.Failure, Is.EqualTo(GasActiveEffectLifecycleFailure.InvalidIdentity));
+            Assert.That(effects[0].Header.StorageState, Is.EqualTo(GasSlabSlotState.Live));
+
+            slot.Handle = new ActiveEffectHandle(1, owner, 0, slot.Header.Generation + 1);
+            effects[0] = slot;
+            Assert.That(Process(world, entity, catalog, ref head, 2, out var generationResult), Is.False);
+            Assert.That(generationResult.Failure, Is.EqualTo(GasActiveEffectLifecycleFailure.InvalidIdentity));
+            Assert.That(effects[0].Header.StorageState, Is.EqualTo(GasSlabSlotState.Live));
+        }
+
+        /// <summary>
         /// 创建只含 ActiveEffect 与 Tag authority buffer 的测试实体。
         /// </summary>
         private static Entity CreateEntity(World world, int tagCount)
