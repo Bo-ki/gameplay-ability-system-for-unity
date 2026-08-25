@@ -17,11 +17,22 @@ namespace GAS.Runtime
         private readonly FixedStepSimulationSystemGroup _fixedStep;
         private readonly GasCommandIngressSystem _ingressSystem;
         private readonly SessionIngressGate _ingressGate;
+        private readonly GasBoundaryDrainCoordinator _boundaryDrain;
         private Entity _registrationEntity;
         private bool _attachedToPlayerLoop;
         private bool _disposed;
 
         public GasCommandPort Port { get; }
+
+        /// <summary>
+        /// 暴露唯一 managed Drain 的 immutable ring；注入外部 stager 时该属性为 null。
+        /// </summary>
+        public GasBoundaryDrainRing BoundaryDrainRing { get; }
+
+        /// <summary>
+        /// 返回最近一次完成 fence 的 Boundary Drain 失败原因，成功时为 None。
+        /// </summary>
+        public GasBoundaryDrainFailure LastBoundaryDrainFailure { get; private set; }
 
         /// <summary>
         /// 保存已经显式安装并排序的 world-local owner 状态。
@@ -30,13 +41,17 @@ namespace GAS.Runtime
             World world,
             in GasRuntimeSystemTopology topology,
             SessionIngressGate ingressGate,
-            GasCommandPort port)
+            GasCommandPort port,
+            GasBoundaryDrainCoordinator boundaryDrain,
+            GasBoundaryDrainRing boundaryDrainRing)
         {
             _world = world;
             _fixedStep = topology.FixedStep;
             _ingressSystem = topology.Ingress;
             _ingressGate = ingressGate;
             Port = port;
+            _boundaryDrain = boundaryDrain;
+            BoundaryDrainRing = boundaryDrainRing;
         }
 
         /// <summary>
@@ -44,6 +59,17 @@ namespace GAS.Runtime
         /// </summary>
         public static GasRuntimeWorldOwner Install(
             World world,
+            bool attachToPlayerLoop = false)
+        {
+            return Install(world, null, attachToPlayerLoop);
+        }
+
+        /// <summary>
+        /// 安装唯一 Runtime v1 owner，并允许 headless/managed 宿主注入唯一 staging sink。
+        /// </summary>
+        public static GasRuntimeWorldOwner Install(
+            World world,
+            IGasBoundaryDrainStager boundaryStager,
             bool attachToPlayerLoop = false)
         {
             ValidateWorld(world);
@@ -57,11 +83,16 @@ namespace GAS.Runtime
             var ingressGate = new SessionIngressGate();
             var port = new GasCommandPort(ingressGate);
             var topology = InstallSystemTopology(world, ingressGate);
+            var ring = boundaryStager == null ? new GasBoundaryDrainRing() : null;
+            var stager = boundaryStager ?? (IGasBoundaryDrainStager)ring;
+            var boundaryDrain = new GasBoundaryDrainCoordinator(stager);
             var owner = new GasRuntimeWorldOwner(
                 world,
                 in topology,
                 ingressGate,
-                port);
+                port,
+                boundaryDrain,
+                ring);
             owner.RegisterInWorld();
             if (attachToPlayerLoop)
                 owner.AttachToPlayerLoop();
@@ -84,7 +115,18 @@ namespace GAS.Runtime
         /// </summary>
         internal void PrepareBatch()
         {
-            if (_disposed || !_world.IsCreated || !TryReadBatchTiming(out var timestep, out var maximumDeltaTime))
+            if (_disposed || !_world.IsCreated)
+                return;
+
+            if (!_boundaryDrain.TryRemoveAcceptedShells(
+                    _world.EntityManager,
+                    out _,
+                    out var cleanupFailure))
+            {
+                LastBoundaryDrainFailure = cleanupFailure;
+                throw CreateBoundaryDrainException("cleanup shell", cleanupFailure);
+            }
+            if (!TryReadBatchTiming(out var timestep, out var maximumDeltaTime))
                 return;
 
             _fixedStep.Timestep = timestep;
@@ -99,9 +141,26 @@ namespace GAS.Runtime
             if (_disposed)
                 return;
 
+            // 先关闭 ingress，阻止 teardown 期间再产生无法纳入 final drain 的新工作。
             _ingressGate.CloseForOwnerDisposal();
             if (_attachedToPlayerLoop && _world.IsCreated)
+            {
+                // FinalDrain 失败时也停止自动 gameplay 更新，保留 registration 供显式重试。
                 ScriptBehaviourUpdateOrder.RemoveWorldFromCurrentPlayerLoop(_world);
+                _attachedToPlayerLoop = false;
+            }
+            if (_world.IsCreated)
+            {
+                _world.EntityManager.CompleteAllTrackedJobs();
+                if (!_boundaryDrain.TryFinalDrain(
+                        _world.EntityManager,
+                        out var drainResult))
+                {
+                    LastBoundaryDrainFailure = drainResult.Failure;
+                    throw CreateBoundaryDrainException("final drain", drainResult.Failure);
+                }
+                LastBoundaryDrainFailure = drainResult.Failure;
+            }
 
             if (_world.IsCreated &&
                 _registrationEntity != Entity.Null &&
@@ -122,9 +181,28 @@ namespace GAS.Runtime
                 return;
 
             _world.EntityManager.CompleteAllTrackedJobs();
+            if (!_boundaryDrain.TryDrain(
+                    _world.EntityManager,
+                    out var drainResult))
+            {
+                LastBoundaryDrainFailure = drainResult.Failure;
+                throw CreateBoundaryDrainException("batch drain", drainResult.Failure);
+            }
+            LastBoundaryDrainFailure = drainResult.Failure;
             _ingressSystem.AcknowledgeConsumedAfterBatch(_world.EntityManager);
             if (!CloseDetectedFault())
                 RefreshAuthoritySnapshot();
+        }
+
+        /// <summary>
+        /// 构造带有确定性失败原因的 Boundary Drain 异常，源 outbox 保持可重试状态。
+        /// </summary>
+        private static InvalidOperationException CreateBoundaryDrainException(
+            string phase,
+            GasBoundaryDrainFailure failure)
+        {
+            return new InvalidOperationException(
+                "Runtime v1 Boundary " + phase + " failed: " + failure);
         }
 
         /// <summary>
