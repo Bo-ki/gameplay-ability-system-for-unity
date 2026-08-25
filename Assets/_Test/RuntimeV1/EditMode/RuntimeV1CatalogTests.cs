@@ -182,6 +182,52 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
+        /// 验证 Ability 的 cost/cooldown 直接编译为 owner-local Commit 契约且可省略 owned Tag。
+        /// </summary>
+        [Test]
+        public void AbilityOwnerCommitContract_有效Cost与Cooldown可直接进入Blob()
+        {
+            using var catalog = RuntimeV1CatalogTestBlobFactory.Create();
+            ref var root = ref catalog.Value;
+            var ability = root.Abilities[0];
+
+            Assert.That(ability.MaxConcurrentActivations, Is.EqualTo(2));
+            Assert.That(ability.CostMutationContract.Enabled, Is.EqualTo(1));
+            Assert.That(ability.CostMutationContract.AttributeLayoutIndex, Is.Zero);
+            Assert.That(ability.CostMutationContract.CurrentDelta, Is.EqualTo(-10f));
+            Assert.That(ability.CooldownGateContract.Enabled, Is.EqualTo(1));
+            Assert.That(ability.CooldownGateContract.GateKey, Is.EqualTo(9103));
+            Assert.That(ability.CooldownGateContract.OwnedTagIndex, Is.EqualTo(-1));
+            Assert.That(Validate(ref root).Succeeded, Is.True);
+        }
+
+        /// <summary>
+        /// 验证 Ability owner-local Commit 契约的开关、索引、有限数、正值与规范空值均 fail-closed。
+        /// </summary>
+        [TestCase(AbilityContractMismatch.NegativeConcurrency)]
+        [TestCase(AbilityContractMismatch.CostEnabledOutOfRange)]
+        [TestCase(AbilityContractMismatch.CostDisabledNotCanonical)]
+        [TestCase(AbilityContractMismatch.CostAttributeOutOfRange)]
+        [TestCase(AbilityContractMismatch.CostNotFinite)]
+        [TestCase(AbilityContractMismatch.CostEmptyMutation)]
+        [TestCase(AbilityContractMismatch.CooldownEnabledOutOfRange)]
+        [TestCase(AbilityContractMismatch.CooldownDisabledNotCanonical)]
+        [TestCase(AbilityContractMismatch.CooldownGateKeyMissing)]
+        [TestCase(AbilityContractMismatch.CooldownDurationMissing)]
+        [TestCase(AbilityContractMismatch.CooldownOwnedTagOutOfRange)]
+        public void AbilityOwnerCommitContract_非法配置返回Definition定位(
+            AbilityContractMismatch mismatch)
+        {
+            using var catalog = RuntimeV1CatalogTestBlobFactory.Create(abilityContractMismatch: mismatch);
+            ref var root = ref catalog.Value;
+
+            var result = Validate(ref root);
+
+            Assert.That(result.Error, Is.EqualTo(GasCatalogValidationError.DefinitionPolicyInvalid));
+            Assert.That(result.DefinitionId, Is.EqualTo(9103));
+        }
+
+        /// <summary>
         /// 读取指定 GameplayEffect Definition，并让缺失直接表现为测试失败。
         /// </summary>
         private static GasGameplayEffectDefinitionBlob GetEffect(
@@ -332,6 +378,25 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
+        /// 定向破坏 Ability owner-local Commit 契约的一个校验维度。
+        /// </summary>
+        public enum AbilityContractMismatch : byte
+        {
+            None = 0,
+            NegativeConcurrency = 1,
+            CostEnabledOutOfRange = 2,
+            CostDisabledNotCanonical = 3,
+            CostAttributeOutOfRange = 4,
+            CostNotFinite = 5,
+            CostEmptyMutation = 6,
+            CooldownEnabledOutOfRange = 7,
+            CooldownDisabledNotCanonical = 8,
+            CooldownGateKeyMissing = 9,
+            CooldownDurationMissing = 10,
+            CooldownOwnedTagOutOfRange = 11,
+        }
+
+        /// <summary>
         /// 构造测试专用 immutable Catalog Blob，不承担 Runtime Catalog 生命周期。
         /// </summary>
         private static class RuntimeV1CatalogTestBlobFactory
@@ -340,7 +405,8 @@ namespace GAS.RuntimeV1.Tests.EditMode
             /// 构造完整合法 Catalog，或仅破坏 9203 capture range 以验证 fail-closed。
             /// </summary>
             public static BlobAssetReference<GasDefinitionCatalogBlob> Create(
-                bool withInvalidPoisonCaptureRange = false)
+                bool withInvalidPoisonCaptureRange = false,
+                AbilityContractMismatch abilityContractMismatch = AbilityContractMismatch.None)
             {
                 var builder = new BlobBuilder(Allocator.Temp);
                 try
@@ -349,7 +415,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
                     PopulateHeader(ref root);
                     PopulateAttributeLayout(ref builder, ref root);
                     PopulateTagAndRequirements(ref builder, ref root);
-                    PopulateAbilities(ref builder, ref root);
+                    PopulateAbilities(ref builder, ref root, abilityContractMismatch);
                     PopulateCaptures(ref builder, ref root);
                     PopulateEvaluatorPrograms(ref builder, ref root);
                     PopulateSpecContracts(ref builder, ref root);
@@ -443,7 +509,8 @@ namespace GAS.RuntimeV1.Tests.EditMode
             /// </summary>
             private static void PopulateAbilities(
                 ref BlobBuilder builder,
-                ref GasDefinitionCatalogBlob root)
+                ref GasDefinitionCatalogBlob root,
+                AbilityContractMismatch mismatch)
             {
                 var index = builder.Allocate(ref root.AbilityIndex, 2);
                 index[0] = DefinitionIndex(9103, 0);
@@ -452,8 +519,61 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 nodes[0] = DirectNode(FinisherEffectId);
                 nodes[1] = DirectNode(PoisonEffectId);
                 var definitions = builder.Allocate(ref root.Abilities, 2);
-                definitions[0] = Ability(9103, Range(0, 1));
+                var ability = Ability(9103, Range(0, 1), withOwnerCommitContracts: true);
+                CorruptAbilityContract(ref ability, mismatch);
+                definitions[0] = ability;
                 definitions[1] = Ability(9104, Range(1, 1));
+            }
+
+            /// <summary>
+            /// 仅破坏一个 Ability Commit 字段，使 validator 测试精确覆盖对应不变量。
+            /// </summary>
+            private static void CorruptAbilityContract(
+                ref GasAbilityDefinitionBlob ability,
+                AbilityContractMismatch mismatch)
+            {
+                switch (mismatch)
+                {
+                    case AbilityContractMismatch.None:
+                        return;
+                    case AbilityContractMismatch.NegativeConcurrency:
+                        ability.MaxConcurrentActivations = -1;
+                        return;
+                    case AbilityContractMismatch.CostEnabledOutOfRange:
+                        ability.CostMutationContract.Enabled = 2;
+                        return;
+                    case AbilityContractMismatch.CostDisabledNotCanonical:
+                        ability.CostMutationContract.Enabled = 0;
+                        return;
+                    case AbilityContractMismatch.CostAttributeOutOfRange:
+                        ability.CostMutationContract.AttributeLayoutIndex = 2;
+                        return;
+                    case AbilityContractMismatch.CostNotFinite:
+                        ability.CostMutationContract.CurrentDelta = float.NaN;
+                        return;
+                    case AbilityContractMismatch.CostEmptyMutation:
+                        ability.CostMutationContract.BaseDelta = 0f;
+                        ability.CostMutationContract.CurrentDelta = 0f;
+                        return;
+                    case AbilityContractMismatch.CooldownEnabledOutOfRange:
+                        ability.CooldownGateContract.Enabled = 2;
+                        return;
+                    case AbilityContractMismatch.CooldownDisabledNotCanonical:
+                        ability.CooldownGateContract.Enabled = 0;
+                        return;
+                    case AbilityContractMismatch.CooldownGateKeyMissing:
+                        ability.CooldownGateContract.GateKey = 0;
+                        return;
+                    case AbilityContractMismatch.CooldownDurationMissing:
+                        ability.CooldownGateContract.DurationTicks = 0;
+                        return;
+                    case AbilityContractMismatch.CooldownOwnedTagOutOfRange:
+                        ability.CooldownGateContract.OwnedTagIndex = 1;
+                        return;
+                    default:
+                        ability.CostMutationContract.Enabled = byte.MaxValue;
+                        return;
+                }
             }
 
             /// <summary>
@@ -697,9 +817,12 @@ namespace GAS.RuntimeV1.Tests.EditMode
             /// <summary>
             /// 构造一个 FrozenAsc/RequireSameAvatar/AliveOnly Ability Definition。
             /// </summary>
-            private static GasAbilityDefinitionBlob Ability(int definitionId, GasCatalogRange programRange)
+            private static GasAbilityDefinitionBlob Ability(
+                int definitionId,
+                GasCatalogRange programRange,
+                bool withOwnerCommitContracts = false)
             {
-                return new GasAbilityDefinitionBlob
+                var ability = new GasAbilityDefinitionBlob
                 {
                     DefinitionId = definitionId,
                     Level = 1,
@@ -707,6 +830,25 @@ namespace GAS.RuntimeV1.Tests.EditMode
                     DirectEffectProgramRange = programRange,
                     Maxima = Maxima(directNodes: 1, directOutputs: 1),
                 };
+
+                if (!withOwnerCommitContracts)
+                    return ability;
+
+                ability.MaxConcurrentActivations = 2;
+                ability.CostMutationContract = new GasCostMutationContractBlob
+                {
+                    Enabled = 1,
+                    AttributeLayoutIndex = 0,
+                    CurrentDelta = -10f,
+                };
+                ability.CooldownGateContract = new GasCooldownGateContractBlob
+                {
+                    Enabled = 1,
+                    GateKey = definitionId,
+                    DurationTicks = 5,
+                    OwnedTagIndex = -1,
+                };
+                return ability;
             }
 
             /// <summary>

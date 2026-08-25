@@ -73,6 +73,18 @@ namespace GAS.Runtime
         private const uint FirstGeneration = 1;
 
         /// <summary>
+        /// 在 WholeTick admission 中只读验证完整 slab 元数据与 free-list，不修改 caller-owned authority。
+        /// </summary>
+        internal static GasSlabStorageFailure Validate<TStorage>(
+            in GasSlabHead head,
+            ref TStorage storage,
+            int hardCapacity)
+            where TStorage : struct, IGasSlabHeaderStorage
+        {
+            return ValidateMetadata(in head, ref storage, hardCapacity);
+        }
+
+        /// <summary>
         /// 优先复用 free-head，否则在 hard capacity 内扩展 high-water。
         /// </summary>
         public static GasSlabStorageFailure TryAllocate<TStorage>(

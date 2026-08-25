@@ -521,7 +521,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
                     ExpiryPolicy = GasExpiryPolicy.Remove,
                     ExpiryPeriodPolicy = GasExpiryPeriodPolicy.Stop,
                     ExpirySameTickPolicy = GasExpirySameTickPolicy.ExpiryBeforePeriodDue,
-                    InhibitTimePolicy = GasInhibitTimePolicy.PauseDuration,
+                    InhibitTimePolicy = GasInhibitTimePolicy.DurationContinues,
                     InhibitedPeriodPolicy = GasInhibitedPeriodPolicy.None,
                     MissedPeriodPolicy = GasMissedPeriodPolicy.SkipNoCatchUp,
                     Maxima = Maxima(captureRange.Count, evaluatorRange.Count),

@@ -234,10 +234,22 @@ namespace GAS.Runtime
     {
         public GasSlabSlotHeader Header;
         public GrantedAbilityHandle Handle;
+        public int DefinitionId;
         public int DefinitionIndex;
+        public int DefinitionVersion;
+        public ulong DefinitionHash;
         public int Level;
+        public int InputBindingId;
         public int GrantOrdinal;
-        public GasSlotBusinessState State;
+        public GasAbilityGrantSourceKind GrantSourceKind;
+        public ulong GrantSourceStableId;
+        public ActiveEffectHandle GrantingActiveEffect;
+        public ulong GrantApplicationId;
+        public ulong GrantContextId;
+        public int ChildActivationCount;
+        public GasGrantedAbilityRemovalPolicy RemovalPolicy;
+        public GasGrantedAbilityRemovalState RemovalState;
+        public byte ProvenanceDetached;
     }
 
     /// <summary>
@@ -249,9 +261,23 @@ namespace GAS.Runtime
         public GasSlabSlotHeader Header;
         public AbilityActivationHandle Handle;
         public GrantedAbilityHandle GrantedAbility;
+        public ulong CausalityId;
         public ulong ActivationSequence;
         public ulong StartTick;
-        public GasSlotBusinessState State;
+        public ulong CommitSequence;
+        public ulong EventDataId;
+        public ulong TargetDataId;
+        public ulong EffectContextId;
+        public uint SourceAvatarBindingGeneration;
+        public int ContinuationCount;
+        public int OwnedContributionStart;
+        public int OwnedContributionCount;
+        public int EmittedApplicationStart;
+        public int EmittedApplicationCount;
+        public GasAbilityActivationPhase Phase;
+        public GasAbilityEndReason EndReason;
+        public GasAbilityCommandResult LastCommandResult;
+        public byte WasCancelled;
     }
 
     /// <summary>
@@ -263,9 +289,23 @@ namespace GAS.Runtime
         public GasSlabSlotHeader Header;
         public AbilityContinuationHandle Handle;
         public AbilityActivationHandle Activation;
+        public OwnerAscHandle ObservedAsc;
+        public GasAbilityObservedHandle ObservedHandle;
+        public AbilitySubscriptionHandle Subscription;
         public PayloadRangeHandle PayloadRange;
+        public ulong TargetDataId;
+        public ulong DueTick;
         public ulong ResumeTick;
-        public GasSlotBusinessState State;
+        public ulong WakeOrdinal;
+        public ulong ObservedBaseline;
+        public int ProgramCounter;
+        public int InstanceNameId;
+        public int QueryKey;
+        public uint RegistrationGeneration;
+        public GasAbilityWaitSemantic WaitSemantic;
+        public GasAbilityWaitPolicy WaitPolicy;
+        public GasAbilityWaitState WaitState;
+        public GasAbilityWaitCompletionReason CompletionReason;
     }
 
     /// <summary>
@@ -276,10 +316,19 @@ namespace GAS.Runtime
     {
         public GasSlabSlotHeader Header;
         public AbilitySubscriptionHandle Handle;
+        public OwnerAscHandle ObservedAsc;
+        public OwnerAscHandle SubscriberAsc;
         public AbilityActivationHandle Activation;
-        public int EventKind;
-        public int SubscriptionOrdinal;
-        public GasSlotBusinessState State;
+        public AbilityContinuationHandle Continuation;
+        public GasAbilityObservedHandle ObservedHandle;
+        public ulong ObservedRevisionAtRegister;
+        public ulong RegistrationSequence;
+        public ulong WakeOrdinal;
+        public int QueryKey;
+        public uint RegistrationGeneration;
+        public GasAbilityWaitSemantic WaitSemantic;
+        public GasAbilityWaitPolicy WaitPolicy;
+        public GasAbilitySubscriptionState State;
     }
 
     /// <summary>
@@ -291,6 +340,10 @@ namespace GAS.Runtime
         public GasSlabSlotHeader Header;
         public CooldownGateHandle Handle;
         public GrantedAbilityHandle GrantedAbility;
+        public AbilityActivationHandle SourceCommitActivation;
+        public int GateKey;
+        public int AbilityDefinitionId;
+        public int OwnedTagIndex;
         public ulong StartTick;
         public ulong EndTick;
         public GasSlotBusinessState State;
@@ -305,8 +358,11 @@ namespace GAS.Runtime
         public GasSlabSlotHeader Header;
         public AbilityActivationHandle Activation;
         public ActiveEffectHandle ActiveEffect;
+        public ulong ApplicationId;
         public int AttributeLayoutIndex;
+        public int TagIndex;
         public float Magnitude;
+        public GasAbilityContributionKind Kind;
         public GasSlotBusinessState State;
     }
 
@@ -320,7 +376,9 @@ namespace GAS.Runtime
         public AbilityActivationHandle Activation;
         public OwnerAscHandle TargetAsc;
         public ActiveEffectHandle ActiveEffect;
+        public ulong EffectSpecId;
         public ulong ApplicationId;
+        public GasEmittedApplicationCleanupPolicy CleanupPolicy;
         public GasSlotBusinessState State;
     }
 
@@ -397,10 +455,35 @@ namespace GAS.Runtime
         public BattleInstanceHandle BattleInstance;
         public OwnerAscHandle SourceAsc;
         public OwnerAscHandle TargetAsc;
+        public GrantedAbilityHandle GrantedAbility;
+        public AbilityActivationHandle Activation;
+        public AbilityContinuationHandle Continuation;
+        public AbilitySubscriptionHandle Subscription;
+        public GasAbilityObservedHandle ObservedHandle;
         public PayloadRangeHandle PayloadRange;
         public ulong AvailableTick;
         public ulong CommandSequence;
+        public ulong RegistrationSequence;
+        public ulong DueTick;
+        public ulong CompletionTick;
+        public ulong ResumeTick;
+        public ulong WakeOrdinal;
+        public ulong ObservedRevision;
+        public int QueryKey;
+        public int MatchedTagDepth;
+        public uint RegistrationGeneration;
+        public ushort RecipientKindPriority;
         public int CommandKind;
+        public GasGrantedAbilityRemovalPolicy GrantedRemovalPolicy;
+        public GasAbilityGrantSourceKind GrantedRemovalSourceKind;
+        public ulong GrantedRemovalSourceStableId;
+        public ActiveEffectHandle GrantedRemovalActiveEffect;
+        public ulong GrantedRemovalApplicationId;
+        public ulong GrantedRemovalContextId;
+        public GasAbilityWaitSemantic WaitSemantic;
+        public GasAbilityWaitPolicy WaitPolicy;
+        public GasAbilityWaitSignalKind WaitSignalKind;
+        public GasAbilityWaitCompletionReason CompletionReason;
         public GasSlotBusinessState State;
     }
 }

@@ -511,12 +511,37 @@ namespace GAS.Runtime
     }
 
     /// <summary>
-    /// 保存一个 Ability 的不可变 target、DirectEffectProgram 与容量契约。
+    /// 冻结 Ability Commit 对 owner ASC 同一属性权威执行的单一 cost 变更，禁止投影为普通 self GE。
+    /// </summary>
+    public struct GasCostMutationContractBlob
+    {
+        public byte Enabled;
+        public int AttributeLayoutIndex;
+        public float BaseDelta;
+        public float CurrentDelta;
+    }
+
+    /// <summary>
+    /// 冻结 Ability Commit 在 owner ASC 创建的单一 cooldown gate 及其可选 owned Tag。
+    /// </summary>
+    public struct GasCooldownGateContractBlob
+    {
+        public byte Enabled;
+        public int GateKey;
+        public int DurationTicks;
+        public int OwnedTagIndex;
+    }
+
+    /// <summary>
+    /// 保存一个 Ability 的不可变 owner commit、target、DirectEffectProgram 与容量契约。
     /// </summary>
     public struct GasAbilityDefinitionBlob
     {
         public int DefinitionId;
         public int Level;
+        public int MaxConcurrentActivations;
+        public GasCostMutationContractBlob CostMutationContract;
+        public GasCooldownGateContractBlob CooldownGateContract;
         public GasTargetPolicyBlob TargetPolicy;
         public GasCatalogRange DirectEffectProgramRange;
         public GasCatalogRange CueRange;

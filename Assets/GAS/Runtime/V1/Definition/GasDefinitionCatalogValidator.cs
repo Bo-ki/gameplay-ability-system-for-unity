@@ -379,7 +379,7 @@ namespace GAS.Runtime
         }
 
         /// <summary>
-        /// 验证每个 Ability 的 target、program/cue range 与静态上限。
+        /// 验证每个 Ability 的 owner commit、target、program/cue range 与静态上限。
         /// </summary>
         private static GasCatalogValidationResult ValidateAbilityDefinitions(
             ref GasDefinitionCatalogBlob catalog)
@@ -387,7 +387,11 @@ namespace GAS.Runtime
             for (var index = 0; index < catalog.Abilities.Length; index++)
             {
                 var definition = catalog.Abilities[index];
-                if (definition.DefinitionId <= 0 || definition.Level <= 0)
+                if (definition.DefinitionId <= 0
+                    || definition.Level <= 0
+                    || definition.MaxConcurrentActivations < 0
+                    || !IsCostMutationContractValid(ref catalog, in definition.CostMutationContract)
+                    || !IsCooldownGateContractValid(ref catalog, in definition.CooldownGateContract))
                     return Failure(GasCatalogValidationError.DefinitionPolicyInvalid, definitionId: definition.DefinitionId);
 
                 if (!IsTargetPolicyValid(definition.TargetPolicy))
@@ -407,6 +411,54 @@ namespace GAS.Runtime
             }
 
             return Success();
+        }
+
+        /// <summary>
+        /// 验证 cost 关闭时为规范空值，启用时只引用 owner ASC 的有效属性并产生有限非零变更。
+        /// </summary>
+        private static bool IsCostMutationContractValid(
+            ref GasDefinitionCatalogBlob catalog,
+            in GasCostMutationContractBlob contract)
+        {
+            if (contract.Enabled > 1)
+                return false;
+
+            if (contract.Enabled == 0)
+            {
+                return contract.AttributeLayoutIndex == 0
+                    && contract.BaseDelta == 0f
+                    && contract.CurrentDelta == 0f;
+            }
+
+            return contract.AttributeLayoutIndex >= 0
+                && contract.AttributeLayoutIndex < catalog.AttributeLayout.Entries.Length
+                && IsFinite(contract.BaseDelta)
+                && IsFinite(contract.CurrentDelta)
+                && (contract.BaseDelta != 0f || contract.CurrentDelta != 0f);
+        }
+
+        /// <summary>
+        /// 验证 cooldown 关闭时为规范空值，启用时具有稳定 key、正 duration 与可选有效 owned Tag。
+        /// </summary>
+        private static bool IsCooldownGateContractValid(
+            ref GasDefinitionCatalogBlob catalog,
+            in GasCooldownGateContractBlob contract)
+        {
+            if (contract.Enabled > 1)
+                return false;
+
+            if (contract.Enabled == 0)
+            {
+                return contract.GateKey == 0
+                    && contract.DurationTicks == 0
+                    && contract.OwnedTagIndex == 0;
+            }
+
+            return contract.GateKey > 0
+                && contract.DurationTicks > 0
+                && (contract.OwnedTagIndex == -1
+                    || (contract.OwnedTagIndex >= 0
+                        && contract.OwnedTagIndex < catalog.TagCatalog.Entries.Length));
         }
 
         /// <summary>
@@ -1153,6 +1205,8 @@ namespace GAS.Runtime
                 && definition.InhibitedPeriodPolicy <= GasInhibitedPeriodPolicy.ContinueExecution
                 && definition.MissedPeriodPolicy >= GasMissedPeriodPolicy.SkipNoCatchUp
                 && definition.MissedPeriodPolicy <= GasMissedPeriodPolicy.CatchUpBounded
+                // v1 lifecycle 只物化单次 claim，未生成 catch-up 预算与 execution ordinal。
+                && definition.MissedPeriodPolicy == GasMissedPeriodPolicy.SkipNoCatchUp
                 && IsSupportedStackKey(in definition);
         }
 
