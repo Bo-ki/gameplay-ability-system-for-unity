@@ -15,6 +15,8 @@ namespace GAS.AutoChessDemo
         private static ulong _nextCommandOrdinal;
         private static readonly Dictionary<AutoChessBattleUnitKey, OwnerAscHandle> BattleUnitRegistry =
             new Dictionary<AutoChessBattleUnitKey, OwnerAscHandle>();
+        private static readonly Dictionary<AutoChessBattleUnitKey, AutoChessUnitDefinition> BattleUnitDefinitions =
+            new Dictionary<AutoChessBattleUnitKey, AutoChessUnitDefinition>();
 
         internal static GasStageBSpawnFaultReason LastBootstrapFailure { get; private set; }
 
@@ -29,6 +31,7 @@ namespace GAS.AutoChessDemo
             var key = AutoChessBattleUnitKey.Create(++_nextBattleUnitKey);
             var owner = new OwnerAscHandle(++_nextAscStableId, 1);
             BattleUnitRegistry[key] = owner;
+            BattleUnitDefinitions[key] = definition;
             return new AutoChessGasBattleUnitHandle(key);
         }
 
@@ -68,7 +71,10 @@ namespace GAS.AutoChessDemo
         public static void DestroyBattleUnit(AutoChessGasBattleUnitHandle handle)
         {
             if (handle.IsValid)
+            {
                 BattleUnitRegistry.Remove(handle.Key);
+                BattleUnitDefinitions.Remove(handle.Key);
+            }
         }
 
         /// <summary>
@@ -98,7 +104,11 @@ namespace GAS.AutoChessDemo
                 true,
                 in battle,
                 in sourceAsc,
-                BoundaryTargetRef.ForAsc(in battle, in targetAsc));
+                BoundaryTargetRef.ForAsc(
+                    in battle,
+                    in targetAsc,
+                    (ulong)targetHandle.Key.ReportKey,
+                    1));
             return owner.Port.RequestApplyEffect(
                 in context,
                 effectDefinitionId,
@@ -112,6 +122,7 @@ namespace GAS.AutoChessDemo
         public static void ResetRuntimeCache()
         {
             BattleUnitRegistry.Clear();
+            BattleUnitDefinitions.Clear();
             _nextBattleUnitKey = 0;
             _nextAscStableId = 0;
             _nextCommandOrdinal = 0;
@@ -145,9 +156,14 @@ namespace GAS.AutoChessDemo
             var battle = new BattleInstanceHandle(1, 1, 1);
             var battles = new NativeArray<GasStageBBattleBootstrapRequest>(1, Allocator.Temp);
             var ascs = new NativeArray<GasStageBAscBootstrapRequest>(handles.Length, Allocator.Temp);
-            var attributes = new NativeArray<PendingAttributeInitialization>(0, Allocator.Temp);
+            var attributeCount = handles.Length * 3;
+            var abilityCount = CountInitialAbilities(handles);
+            var attributes = new NativeArray<PendingAttributeInitialization>(attributeCount, Allocator.Temp);
             var tags = new NativeArray<PendingTagInitialization>(0, Allocator.Temp);
-            var abilities = new NativeArray<PendingGrantedAbilityInitialization>(0, Allocator.Temp);
+            var abilities = new NativeArray<PendingGrantedAbilityInitialization>(abilityCount, Allocator.Temp);
+            var nextAttribute = 0;
+            var nextAbility = 0;
+            var configOrdinal = 0;
             battles[0] = new GasStageBBattleBootstrapRequest
             {
                 BattleInstance = battle,
@@ -167,18 +183,48 @@ namespace GAS.AutoChessDemo
                     abilities.Dispose();
                     return false;
                 }
+                if (!BattleUnitDefinitions.TryGetValue(handles[index].Key, out var definition))
+                {
+                    LastBootstrapFailure = GasStageBSpawnFaultReason.SessionLayout;
+                    battles.Dispose();
+                    ascs.Dispose();
+                    attributes.Dispose();
+                    tags.Dispose();
+                    abilities.Dispose();
+                    return false;
+                }
+                var unitAttributeStart = nextAttribute;
+                attributes[nextAttribute++] = CreateAttributeInitialization(0, definition.Health, ref configOrdinal);
+                attributes[nextAttribute++] = CreateAttributeInitialization(1, definition.Energy, ref configOrdinal);
+                attributes[nextAttribute++] = CreateAttributeInitialization(2, 20f, ref configOrdinal);
+                var unitAbilities = definition.CreateAbilityCodes();
+                var unitAbilityStart = nextAbility;
+                for (var abilityIndex = 0; abilityIndex < unitAbilities.Length; abilityIndex++)
+                {
+                    abilities[nextAbility++] = new PendingGrantedAbilityInitialization
+                    {
+                        LayoutIndex = ResolveAbilityLayoutIndex(unitAbilities[abilityIndex]),
+                        ConfigOrdinal = configOrdinal++,
+                    };
+                }
                 ascs[index] = new GasStageBAscBootstrapRequest
                 {
                     OwnerAsc = ownerAsc,
                     BattleInstance = battle,
                     RegistryOrdinal = index,
                     ScenarioUnitId = (ulong)(index + 1),
+                    SideId = (int)definition.Team,
+                    TeamId = (int)definition.Team,
                     MembershipOrdinal = index + 1,
                     OwnerActorStableId = (ulong)(index + 1),
                     AvatarActorStableId = (ulong)(index + 1),
                     ActorBindingGeneration = 1,
                     RandomState0 = (ulong)(index + 1),
                     RandomState1 = (ulong)(index + 1),
+                    AttributeInitializationStart = unitAttributeStart,
+                    AttributeInitializationCount = 3,
+                    GrantedAbilityInitializationStart = unitAbilityStart,
+                    GrantedAbilityInitializationCount = unitAbilities.Length,
                 };
             }
 
@@ -233,19 +279,19 @@ namespace GAS.AutoChessDemo
                 MaxCoreFactCount = capacity * 16,
                 MaxNextTickRouteCount = capacity * 4,
                 MaxStructuralIntentCount = capacity * 4,
-                MaxPendingAttributeInitializationCount = 0,
+                MaxPendingAttributeInitializationCount = capacity * 3,
                 MaxPendingTagInitializationCount = 0,
-                MaxPendingGrantedAbilityInitializationCount = 0,
-                MaxGrantedAbilityCount = 0,
+                MaxPendingGrantedAbilityInitializationCount = capacity * 3,
+                MaxGrantedAbilityCount = capacity * 3,
                 MaxAbilityActivationCount = capacity * 2,
                 MaxAbilityContinuationCount = capacity * 2,
                 MaxAbilitySubscriptionCount = capacity * 2,
                 MaxCooldownGateCount = capacity * 2,
                 MaxActivationOwnedContributionCount = capacity * 2,
                 MaxEmittedApplicationRefCount = capacity * 2,
-                MaxActiveEffectCount = capacity * 2,
-                MaxPayloadRangeRecordCount = capacity * 2,
-                MaxPayloadValueCount = capacity * 2,
+                MaxActiveEffectCount = capacity * 4,
+                MaxPayloadRangeRecordCount = capacity * 4,
+                MaxPayloadValueCount = capacity * 4,
                 MaxAttributeAggregatorCount = capacity * 2,
                 MaxLiveDependencyCount = capacity * 2,
                 MaxLiveDependencyRouteCount = capacity * 2,
@@ -253,6 +299,58 @@ namespace GAS.AutoChessDemo
                 MaxSessionBoundaryFactCount = capacity * 16,
                 MaxAscBoundaryFactCount = capacity * 16,
             };
+        }
+
+        /// <summary>
+        /// 计算本批单位生成期默认 Ability grant 总数，供固定容量 preflight 使用。
+        /// </summary>
+        private static int CountInitialAbilities(AutoChessGasBattleUnitHandle[] handles)
+        {
+            var count = 0;
+            for (var index = 0; index < handles.Length; index++)
+            {
+                if (BattleUnitDefinitions.TryGetValue(handles[index].Key, out var definition))
+                    count += definition.CreateAbilityCodes().Length;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// 创建带显式 Base/Current 初值的 Spawn Attribute 初始化记录。
+        /// </summary>
+        private static PendingAttributeInitialization CreateAttributeInitialization(
+            int layoutIndex,
+            float value,
+            ref int configOrdinal)
+        {
+            return new PendingAttributeInitialization
+            {
+                LayoutIndex = layoutIndex,
+                ConfigOrdinal = configOrdinal++,
+                HasExplicitValue = 1,
+                BaseValue = value,
+                CurrentValue = value,
+            };
+        }
+
+        /// <summary>
+        /// 将生成 Ability stable id 映射到 Catalog 中的稳定 dense Definition index。
+        /// </summary>
+        private static int ResolveAbilityLayoutIndex(int abilityCode)
+        {
+            switch (abilityCode)
+            {
+                case AutoChessBattleRules.AbilityPlayerAttack:
+                    return 0;
+                case AutoChessBattleRules.AbilityEnemyAttack:
+                    return 1;
+                case AutoChessBattleRules.AbilityPlayerExecute:
+                    return 2;
+                case AutoChessBattleRules.AbilityPlayerPoison:
+                    return 3;
+                default:
+                    return -1;
+            }
         }
     }
 

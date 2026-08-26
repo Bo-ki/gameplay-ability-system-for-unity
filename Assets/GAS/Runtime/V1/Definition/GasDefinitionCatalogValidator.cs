@@ -55,6 +55,7 @@ namespace GAS.Runtime
         SetByCaller = 13,
         TargetData = 14,
         EffectContext = 15,
+        AbilityActivationRequirement = 16,
     }
 
     /// <summary>
@@ -480,6 +481,15 @@ namespace GAS.Runtime
             ref GasDefinitionCatalogBlob catalog,
             in GasAbilityDefinitionBlob definition)
         {
+            var result = ValidateRequirementRange(
+                ref catalog,
+                definition.ActivationRequirementRange,
+                GasRequirementPhase.AbilityActivation,
+                GasCatalogRangeKind.AbilityActivationRequirement,
+                definition.DefinitionId);
+            if (!result.Succeeded)
+                return result;
+
             if (!IsRangeValid(definition.DirectEffectProgramRange, catalog.DirectEffectProgramNodes.Length))
                 return RangeFailure(GasCatalogRangeKind.DirectEffectProgram, definition.DefinitionId);
 
@@ -487,6 +497,7 @@ namespace GAS.Runtime
                 return RangeFailure(GasCatalogRangeKind.Cue, definition.DefinitionId);
 
             if (!AreMaximaNonNegative(in definition.Maxima)
+                || definition.ActivationRequirementRange.Count > definition.Maxima.MaximumRequirementCount
                 || definition.DirectEffectProgramRange.Count > definition.Maxima.MaximumDirectProgramNodeCount
                 || definition.CueRange.Count > definition.Maxima.MaximumCueCount)
                 return Failure(GasCatalogValidationError.DefinitionMaximaExceeded, definitionId: definition.DefinitionId);
@@ -712,6 +723,7 @@ namespace GAS.Runtime
                 definition.ModifierRange,
                 definition.EvaluatorProgramRange,
                 definition.CaptureRange,
+                definition.ValueViewRange.Count,
                 definition.DefinitionId);
             if (!result.Succeeded)
                 return result;
@@ -776,6 +788,7 @@ namespace GAS.Runtime
             GasCatalogRange range,
             GasCatalogRange definitionEvaluatorRange,
             GasCatalogRange definitionCaptureRange,
+            int definitionValueViewCount,
             int definitionId)
         {
             for (var offset = 0; offset < range.Count; offset++)
@@ -801,7 +814,7 @@ namespace GAS.Runtime
                     ref catalog,
                     modifier.EvaluatorProgramRange,
                     modifier.CaptureRange.Count,
-                    0,
+                    definitionValueViewCount,
                     definitionId);
                 if (!result.Succeeded)
                     return result;
@@ -1089,16 +1102,73 @@ namespace GAS.Runtime
                 seenVariants |= variantBit;
             }
 
-            var hasStableAsc = (seenVariants & (1u << (int)GasTargetDataVariant.StableAsc)) != 0;
             var spatialMask = (1u << (int)GasTargetDataVariant.FrozenSpatialPoint)
                 | (1u << (int)GasTargetDataVariant.FrozenSpatialHit)
                 | (1u << (int)GasTargetDataVariant.FrozenSpatialShape);
-            var missingAsc = targetPolicy.LogicalTarget == GasLogicalTargetPolicy.FrozenAsc && !hasStableAsc;
+            var stableAscRequired = targetPolicy.LogicalTarget == GasLogicalTargetPolicy.FrozenAsc;
+            var missingAsc = stableAscRequired && !HasRequiredTargetDataVariant(
+                ref catalog,
+                range,
+                GasTargetDataVariant.StableAsc);
             var missingSpatial = targetPolicy.Spatial == GasSpatialTargetPolicy.FrozenSpatial
-                && (seenVariants & spatialMask) == 0;
+                && ((seenVariants & spatialMask) == 0 ||
+                    CountTargetDataVariants(ref catalog, range, spatialMask) != 1 ||
+                    !HasRequiredSpatialVariant(ref catalog, range));
             return missingAsc || missingSpatial
                 ? Failure(GasCatalogValidationError.TargetDataInvalid, GasCatalogRangeKind.TargetData, definitionId)
                 : Success();
+        }
+
+        /// <summary>
+        /// 判断指定 TargetData 变体在当前 Definition range 中是否显式标记为必填。
+        /// </summary>
+        private static bool HasRequiredTargetDataVariant(
+            ref GasDefinitionCatalogBlob catalog,
+            GasCatalogRange range,
+            GasTargetDataVariant variant)
+        {
+            for (var offset = 0; offset < range.Count; offset++)
+            {
+                var descriptor = catalog.TargetDataDescriptors[range.Start + offset];
+                if (descriptor.Variant == variant)
+                    return descriptor.Required != 0;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 统计当前 Definition range 内命中的空间 TargetData 变体数量。
+        /// </summary>
+        private static int CountTargetDataVariants(
+            ref GasDefinitionCatalogBlob catalog,
+            GasCatalogRange range,
+            uint spatialMask)
+        {
+            var count = 0;
+            for (var offset = 0; offset < range.Count; offset++)
+            {
+                var variant = catalog.TargetDataDescriptors[range.Start + offset].Variant;
+                if ((spatialMask & (1u << (int)variant)) != 0)
+                    count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// 判断 FrozenSpatial range 中唯一空间变体是否显式必填。
+        /// </summary>
+        private static bool HasRequiredSpatialVariant(
+            ref GasDefinitionCatalogBlob catalog,
+            GasCatalogRange range)
+        {
+            for (var offset = 0; offset < range.Count; offset++)
+            {
+                var descriptor = catalog.TargetDataDescriptors[range.Start + offset];
+                if (descriptor.Variant >= GasTargetDataVariant.FrozenSpatialPoint &&
+                    descriptor.Variant <= GasTargetDataVariant.FrozenSpatialShape)
+                    return descriptor.Required != 0;
+            }
+            return false;
         }
 
         /// <summary>

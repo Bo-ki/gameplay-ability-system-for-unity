@@ -827,7 +827,11 @@ namespace GAS.Runtime
                 var value = values[index];
                 if (value.LayoutIndex < 0 || value.LayoutIndex >= catalog.AttributeLayout.Entries.Length ||
                     catalog.AttributeLayout.Entries[value.LayoutIndex].LayoutIndex != value.LayoutIndex ||
-                    value.ConfigOrdinal <= previous)
+                    value.ConfigOrdinal <= previous ||
+                    value.HasExplicitValue > 1 ||
+                    value.HasExplicitValue != 0 &&
+                    (float.IsNaN(value.BaseValue) || float.IsInfinity(value.BaseValue) ||
+                     float.IsNaN(value.CurrentValue) || float.IsInfinity(value.CurrentValue)))
                     return false;
                 previous = value.ConfigOrdinal;
             }
@@ -1086,6 +1090,39 @@ namespace GAS.Runtime
                 };
                 SetBit(dirty, index);
             }
+
+            var pending = PendingAttributes[asc];
+            for (var index = 0; index < pending.Length; index++)
+            {
+                var initialization = pending[index];
+                if (initialization.HasExplicitValue == 0)
+                    continue;
+
+                var entry = catalog.AttributeLayout.Entries[initialization.LayoutIndex];
+                var baseValue = ClampInitialValue(initialization.BaseValue, in entry);
+                var currentValue = ClampInitialValue(initialization.CurrentValue, in entry);
+                values[initialization.LayoutIndex] = new AttributeValueSlot
+                {
+                    Base = baseValue,
+                    Current = currentValue,
+                    Revision = InitialGeneration,
+                };
+                SetBit(dirty, initialization.LayoutIndex);
+            }
+        }
+
+        /// <summary>
+        /// 按 Catalog clamp 元数据规范化 Spawn 初始值，确保发布前后使用同一数值边界。
+        /// </summary>
+        private static float ClampInitialValue(
+            float value,
+            in GasAttributeLayoutEntryBlob entry)
+        {
+            if (entry.ClampMinimum != 0 && value < entry.MinimumValue)
+                value = entry.MinimumValue;
+            if (entry.ClampMaximum != 0 && value > entry.MaximumValue)
+                value = entry.MaximumValue;
+            return value;
         }
 
         /// <summary>

@@ -1,4 +1,5 @@
 using Unity.Entities;
+using Unity.Mathematics;
 
 namespace GAS.Runtime
 {
@@ -343,6 +344,9 @@ namespace GAS.Runtime
         {
             Add(value.LayoutIndex);
             Add(value.ConfigOrdinal);
+            Add(value.HasExplicitValue);
+            Add(value.BaseValue);
+            Add(value.CurrentValue);
         }
 
         /// <summary>
@@ -449,6 +453,14 @@ namespace GAS.Runtime
         {
             for (var shift = 0; shift < 64; shift += 8)
                 AddByte((byte)(value >> shift));
+        }
+
+        /// <summary>
+        /// 以 IEEE-754 原始位模式加入浮点初值，避免文本格式化造成跨平台哈希差异。
+        /// </summary>
+        private void Add(float value)
+        {
+            Add(math.asuint(value));
         }
 
         /// <summary>

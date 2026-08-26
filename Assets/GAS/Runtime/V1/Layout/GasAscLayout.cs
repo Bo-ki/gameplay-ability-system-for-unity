@@ -209,6 +209,12 @@ namespace GAS.Runtime
     {
         public int LayoutIndex;
         public int ConfigOrdinal;
+        /// <summary>
+        /// 标记该初始化记录是否携带显式 Base/Current 初值；未标记时沿用 Catalog 默认值。
+        /// </summary>
+        public byte HasExplicitValue;
+        public float BaseValue;
+        public float CurrentValue;
     }
 
     /// <summary>
@@ -412,6 +418,15 @@ namespace GAS.Runtime
         public uint PeriodExecutionOrdinal;
         public PayloadRangeHandle PayloadRange;
         public PayloadRangeHandle CaptureRange;
+        /// <summary>
+        /// 保存 RequireSameAvatar application 成功时的冻结 Avatar 身份，period 不重新采样。
+        /// </summary>
+        public ulong TargetAvatarStableId;
+        public uint TargetAvatarBindingGeneration;
+        /// <summary>
+        /// 保存 FrozenSpatial application 的不可变 TargetData，直到 ActiveEffect 终止。
+        /// </summary>
+        public GasBoundarySpatialSnapshot SpatialSnapshot;
         public GasSlotBusinessState State;
         public byte Inhibited;
     }
