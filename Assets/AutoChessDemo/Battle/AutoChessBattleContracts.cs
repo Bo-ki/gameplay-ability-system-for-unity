@@ -12,6 +12,15 @@ namespace GAS.AutoChessDemo
         Draw = 3,
     }
 
+    /// <summary>
+    /// 描述业务侧的静态目标选择偏好；Runtime v1 实际目标仍由稳定 BoundaryTargetRef 冻结。
+    /// </summary>
+    public enum AutoChessTargetPolicy : byte
+    {
+        Frontline = 0,
+        LowestHealth = 1,
+    }
+
     public readonly struct AutoChessBattleOptions
     {
         public readonly int MaxTicks;
@@ -117,47 +126,108 @@ namespace GAS.AutoChessDemo
         }
     }
 
-    public readonly struct AutoChessBattleEventCounts
+    /// <summary>
+    /// 保存 AutoChess 从 Runtime v1 immutable Boundary ring 汇总出的事实与 Session 诊断快照。
+    /// 该快照只描述已经由 managed gateway 接管的 Runtime v1 事实，不把旁路诊断计数冒充为业务语义。
+    /// </summary>
+    public readonly struct AutoChessGasV1ObservationSnapshot
     {
-        public readonly int ReplayEvents;
-        public readonly int StructuredLogEntries;
-        public readonly int AbilityCommitSucceeded;
-        public readonly int GameplayEffectInstanced;
-        public readonly int GameplayEffectApplied;
-        public readonly int GameplayEffectRemoved;
-        public readonly int ExecutionCalculationOutputUpdated;
-        public readonly int AttributeChanges;
-        public readonly int PeriodTickDamageFacts;
+        public readonly int BoundaryBatchCount;
+        public readonly int BoundaryFactCount;
+        public readonly int GameplayFactCount;
+        public readonly int TeardownFactCount;
+        public readonly int NoFactReceiptCount;
+        public readonly int DeadShellCount;
+        public readonly int AttributeFactCount;
+        public readonly int TagFactCount;
+        public readonly int AbilityLifecycleFactCount;
+        public readonly int EffectLifecycleFactCount;
+        public readonly int ExecutionCalculationFactCount;
+        public readonly int PeriodTickFactCount;
         public readonly float PeriodTickDamageTotal;
-        public readonly int TagChanges;
-        public readonly int CueRequests;
+        public readonly int CueFactCount;
+        public readonly int BattleOutcomeFactCount;
+        public readonly int SessionLifecycleFactCount;
+        public readonly int DeathFactCount;
+        public readonly int FaultFactCount;
+        public readonly int RejectedEffectFactCount;
+        public readonly int StructuredLogEntryCount;
+        public readonly int NegativeHealthFactCount;
+        public readonly float NegativeHealthTotal;
+        public readonly int InvalidFactCount;
+        public readonly int RingHighWater;
+        public readonly int RingCapacity;
+        public readonly int DrainFailureCount;
+        public readonly GasBoundaryDrainFailure LastDrainFailure;
+        public readonly uint BoundarySequenceHash;
+        public readonly bool HasSessionObservation;
+        public readonly GasRuntimeSessionObservation SessionObservation;
 
-        public AutoChessBattleEventCounts(
-            int replayEvents,
-            int structuredLogEntries,
-            int abilityCommitSucceeded,
-            int gameplayEffectInstanced,
-            int gameplayEffectApplied,
-            int gameplayEffectRemoved,
-            int executionCalculationOutputUpdated,
-            int attributeChanges,
-            int periodTickDamageFacts,
-            float periodTickDamageTotal,
-            int tagChanges,
-            int cueRequests)
+        /// <summary>
+        /// 创建不可变 Runtime v1 Boundary/Session 观测快照。
+        /// </summary>
+        public AutoChessGasV1ObservationSnapshot(
+            int boundaryBatchCount,
+            int boundaryFactCount,
+            int gameplayFactCount,
+            int teardownFactCount,
+            int noFactReceiptCount,
+            int deadShellCount,
+            int attributeFactCount,
+             int tagFactCount,
+             int abilityLifecycleFactCount,
+             int effectLifecycleFactCount,
+             int executionCalculationFactCount,
+             int periodTickFactCount,
+             float periodTickDamageTotal,
+             int cueFactCount,
+            int battleOutcomeFactCount,
+            int sessionLifecycleFactCount,
+            int deathFactCount,
+             int faultFactCount,
+             int rejectedEffectFactCount,
+             int structuredLogEntryCount,
+             int negativeHealthFactCount,
+            float negativeHealthTotal,
+            int invalidFactCount,
+            int ringHighWater,
+            int ringCapacity,
+            int drainFailureCount,
+            GasBoundaryDrainFailure lastDrainFailure,
+            uint boundarySequenceHash,
+            bool hasSessionObservation,
+            GasRuntimeSessionObservation sessionObservation)
         {
-            ReplayEvents = replayEvents;
-            StructuredLogEntries = structuredLogEntries;
-            AbilityCommitSucceeded = abilityCommitSucceeded;
-            GameplayEffectInstanced = gameplayEffectInstanced;
-            GameplayEffectApplied = gameplayEffectApplied;
-            GameplayEffectRemoved = gameplayEffectRemoved;
-            ExecutionCalculationOutputUpdated = executionCalculationOutputUpdated;
-            AttributeChanges = attributeChanges;
-            PeriodTickDamageFacts = periodTickDamageFacts;
+            BoundaryBatchCount = boundaryBatchCount;
+            BoundaryFactCount = boundaryFactCount;
+            GameplayFactCount = gameplayFactCount;
+            TeardownFactCount = teardownFactCount;
+            NoFactReceiptCount = noFactReceiptCount;
+            DeadShellCount = deadShellCount;
+            AttributeFactCount = attributeFactCount;
+            TagFactCount = tagFactCount;
+            AbilityLifecycleFactCount = abilityLifecycleFactCount;
+            EffectLifecycleFactCount = effectLifecycleFactCount;
+            ExecutionCalculationFactCount = executionCalculationFactCount;
+            PeriodTickFactCount = periodTickFactCount;
             PeriodTickDamageTotal = periodTickDamageTotal;
-            TagChanges = tagChanges;
-            CueRequests = cueRequests;
+            CueFactCount = cueFactCount;
+            BattleOutcomeFactCount = battleOutcomeFactCount;
+            SessionLifecycleFactCount = sessionLifecycleFactCount;
+            DeathFactCount = deathFactCount;
+            FaultFactCount = faultFactCount;
+            RejectedEffectFactCount = rejectedEffectFactCount;
+            StructuredLogEntryCount = structuredLogEntryCount;
+            NegativeHealthFactCount = negativeHealthFactCount;
+            NegativeHealthTotal = negativeHealthTotal;
+            InvalidFactCount = invalidFactCount;
+            RingHighWater = ringHighWater;
+            RingCapacity = ringCapacity;
+            DrainFailureCount = drainFailureCount;
+            LastDrainFailure = lastDrainFailure;
+            BoundarySequenceHash = boundarySequenceHash;
+            HasSessionObservation = hasSessionObservation;
+            SessionObservation = sessionObservation;
         }
     }
 
@@ -398,7 +468,7 @@ namespace GAS.AutoChessDemo
         public readonly int PresentationSourceLineCount;
         public readonly int PresentationDisplayLineCount;
         public readonly int PresentationDroppedLineCount;
-        public readonly int PeakEventBusLength;
+        public readonly int PeakBoundaryRingLength;
         public readonly int ReplayLag;
         public readonly int ProcessWarmupRuns;
         public readonly int ProofOnlyApiMask;
@@ -511,7 +581,7 @@ namespace GAS.AutoChessDemo
             int presentationSourceLineCount,
             int presentationDisplayLineCount,
             int presentationDroppedLineCount,
-            int peakEventBusLength,
+            int peakBoundaryRingLength,
             int replayLag,
             int processWarmupRuns,
             int proofOnlyApiMask,
@@ -623,7 +693,7 @@ namespace GAS.AutoChessDemo
             PresentationSourceLineCount = presentationSourceLineCount;
             PresentationDisplayLineCount = presentationDisplayLineCount;
             PresentationDroppedLineCount = presentationDroppedLineCount;
-            PeakEventBusLength = peakEventBusLength;
+            PeakBoundaryRingLength = peakBoundaryRingLength;
             ReplayLag = replayLag;
             ProcessWarmupRuns = processWarmupRuns;
             ProofOnlyApiMask = proofOnlyApiMask;
@@ -714,17 +784,7 @@ namespace GAS.AutoChessDemo
         public readonly int TotalTicks;
         public readonly int WarmupDroppedTicks;
         public readonly int MeasuredTicks;
-        public readonly int DriverIssuedCommands;
-        public readonly int DriverIssuedPrimaryCommands;
-        public readonly int DriverIssuedFinisherCommands;
-        public readonly int DriverLowestHealthTargetSelections;
-        public readonly int DriverExecutionSpecScans;
-        public readonly int DriverExecutionMatchedEffectSpecs;
-        public readonly int DriverExecutionTargetOwnerMismatches;
-        public readonly int DriverExecutionMissingAttributes;
-        public readonly int DriverExecutionEvaluatorRejects;
-        public readonly int DriverExecutionOutputWrites;
-        public readonly AutoChessBattleDriverOwnerSnapshot DriverOwnerSnapshot;
+        public readonly int AcceptedCommandCount;
         public readonly long ElapsedTicks;
         public readonly double ElapsedMilliseconds;
         public readonly long MeasuredElapsedTicks;
@@ -732,14 +792,12 @@ namespace GAS.AutoChessDemo
         public readonly double AverageTickMilliseconds;
         public readonly AutoChessBattleRuntimeTiming RuntimeTiming;
         public readonly AutoChessBattleUnitResult[] Units;
-        public readonly AutoChessBattleEventCounts EventCounts;
+        public readonly AutoChessGasV1ObservationSnapshot RuntimeV1Observation;
         public readonly GasRuntimeDiagnosticSnapshot RuntimeDiagnostics;
-        public readonly string RuntimeDiagnosticsLog;
         public readonly GasRuntimeOfficialToolDiffSnapshot OfficialToolDiff;
         public readonly GasStructuredLogExportSnapshot StructuredLogSnapshot;
         public readonly AutoChessBattleReport BattleReport;
         public readonly AutoChessBattleLogSnapshot BattleLog;
-        public readonly string AssertionLog;
 
         public AutoChessBattleResult(
             string roomId,
@@ -750,31 +808,19 @@ namespace GAS.AutoChessDemo
             int totalTicks,
             int warmupDroppedTicks,
             int measuredTicks,
-            int driverIssuedCommands,
-            int driverIssuedPrimaryCommands,
-            int driverIssuedFinisherCommands,
-            int driverLowestHealthTargetSelections,
-            int driverExecutionSpecScans,
-            int driverExecutionMatchedEffectSpecs,
-            int driverExecutionTargetOwnerMismatches,
-            int driverExecutionMissingAttributes,
-            int driverExecutionEvaluatorRejects,
-            int driverExecutionOutputWrites,
-            AutoChessBattleDriverOwnerSnapshot driverOwnerSnapshot,
+            int acceptedCommandCount,
             long elapsedTicks,
             double elapsedMilliseconds,
             long measuredElapsedTicks,
             double measuredElapsedMilliseconds,
             AutoChessBattleRuntimeTiming runtimeTiming,
             AutoChessBattleUnitResult[] units,
-            AutoChessBattleEventCounts eventCounts,
+            AutoChessGasV1ObservationSnapshot runtimeV1Observation,
             GasRuntimeDiagnosticSnapshot runtimeDiagnostics,
-            string runtimeDiagnosticsLog,
             GasRuntimeOfficialToolDiffSnapshot officialToolDiff,
             GasStructuredLogExportSnapshot structuredLogSnapshot,
             AutoChessBattleReport battleReport,
-            AutoChessBattleLogSnapshot battleLog,
-            string assertionLog)
+            AutoChessBattleLogSnapshot battleLog)
         {
             RoomId = roomId ?? string.Empty;
             Completed = completed;
@@ -784,17 +830,7 @@ namespace GAS.AutoChessDemo
             TotalTicks = totalTicks;
             WarmupDroppedTicks = warmupDroppedTicks;
             MeasuredTicks = measuredTicks;
-            DriverIssuedCommands = driverIssuedCommands;
-            DriverIssuedPrimaryCommands = driverIssuedPrimaryCommands;
-            DriverIssuedFinisherCommands = driverIssuedFinisherCommands;
-            DriverLowestHealthTargetSelections = driverLowestHealthTargetSelections;
-            DriverExecutionSpecScans = driverExecutionSpecScans;
-            DriverExecutionMatchedEffectSpecs = driverExecutionMatchedEffectSpecs;
-            DriverExecutionTargetOwnerMismatches = driverExecutionTargetOwnerMismatches;
-            DriverExecutionMissingAttributes = driverExecutionMissingAttributes;
-            DriverExecutionEvaluatorRejects = driverExecutionEvaluatorRejects;
-            DriverExecutionOutputWrites = driverExecutionOutputWrites;
-            DriverOwnerSnapshot = driverOwnerSnapshot;
+            AcceptedCommandCount = acceptedCommandCount;
             ElapsedTicks = elapsedTicks;
             ElapsedMilliseconds = elapsedMilliseconds;
             MeasuredElapsedTicks = measuredElapsedTicks;
@@ -802,14 +838,12 @@ namespace GAS.AutoChessDemo
             AverageTickMilliseconds = measuredTicks > 0 ? measuredElapsedMilliseconds / measuredTicks : 0d;
             RuntimeTiming = runtimeTiming;
             Units = units ?? Array.Empty<AutoChessBattleUnitResult>();
-            EventCounts = eventCounts;
+            RuntimeV1Observation = runtimeV1Observation;
             RuntimeDiagnostics = runtimeDiagnostics;
-            RuntimeDiagnosticsLog = runtimeDiagnosticsLog ?? string.Empty;
             OfficialToolDiff = officialToolDiff;
             StructuredLogSnapshot = structuredLogSnapshot;
             BattleReport = battleReport;
             BattleLog = battleLog;
-            AssertionLog = assertionLog ?? string.Empty;
         }
 
         public AutoChessBattleResult WithOfficialToolDiff(GasRuntimeOfficialToolDiffSnapshot officialToolDiff)
@@ -823,31 +857,19 @@ namespace GAS.AutoChessDemo
                 TotalTicks,
                 WarmupDroppedTicks,
                 MeasuredTicks,
-                DriverIssuedCommands,
-                DriverIssuedPrimaryCommands,
-                DriverIssuedFinisherCommands,
-                DriverLowestHealthTargetSelections,
-                DriverExecutionSpecScans,
-                DriverExecutionMatchedEffectSpecs,
-                DriverExecutionTargetOwnerMismatches,
-                DriverExecutionMissingAttributes,
-                DriverExecutionEvaluatorRejects,
-                DriverExecutionOutputWrites,
-                DriverOwnerSnapshot,
+                AcceptedCommandCount,
                 ElapsedTicks,
                 ElapsedMilliseconds,
                 MeasuredElapsedTicks,
                 MeasuredElapsedMilliseconds,
                 RuntimeTiming,
                 Units,
-                EventCounts,
+                RuntimeV1Observation,
                 RuntimeDiagnostics,
-                RuntimeDiagnosticsLog,
                 officialToolDiff,
                 StructuredLogSnapshot,
                 BattleReport,
-                BattleLog,
-                AssertionLog);
+                BattleLog);
         }
     }
 }

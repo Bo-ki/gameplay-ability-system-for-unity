@@ -9,33 +9,11 @@ namespace GAS.AutoChessDemo
             return AutoChessGasBattleEntityLifecycle.CreateBattleUnit(definition);
         }
 
-        public static AutoChessGasBattleDriverHandle CreateBattleDriver()
-        {
-            return AutoChessGasBattleEntityLifecycle.CreateBattleDriver();
-        }
-
         public static AutoChessBattleReportFact[] CreateReportFacts(
             in GasStructuredLogExportSnapshot structuredLog,
             AutoChessGasBattleUnitHandle[] handles)
         {
             return AutoChessGasBattleEntityLifecycle.CreateReportFacts(structuredLog, handles);
-        }
-
-        public static AutoChessBattleDriverComponent GetBattleDriverStats(
-            AutoChessGasBattleDriverHandle driverHandle)
-        {
-            return AutoChessGasBattleEntityLifecycle.GetBattleDriverStats(driverHandle);
-        }
-
-        public static AutoChessBattleDriverOwnerSnapshot GetBattleDriverOwnerSnapshot(
-            AutoChessGasBattleDriverHandle driverHandle)
-        {
-            return AutoChessGasBattleEntityLifecycle.GetBattleDriverOwnerSnapshot(driverHandle);
-        }
-
-        public static void CloseBattleDriver(AutoChessGasBattleDriverHandle driverHandle)
-        {
-            AutoChessGasBattleEntityLifecycle.CloseBattleDriver(driverHandle);
         }
 
         public static void DestroyBattleUnit(AutoChessGasBattleUnitHandle handle)

@@ -14,8 +14,6 @@ namespace GAS.AutoChessDemo
             int totalTicks,
             int warmupDroppedTicks,
             int measuredTicks,
-            AutoChessBattleDriverComponent driverStats,
-            AutoChessBattleDriverOwnerSnapshot driverOwnerSnapshot,
             long elapsedTicks,
             double elapsedMilliseconds,
             long measuredElapsedTicks,
@@ -33,6 +31,7 @@ namespace GAS.AutoChessDemo
                 battleReport,
                 winner,
                 battleTicks);
+            var commandCount = session.AcceptedCommandCount;
 
             return new AutoChessBattleResult(
                 session.Room.RoomId,
@@ -43,31 +42,19 @@ namespace GAS.AutoChessDemo
                 totalTicks,
                 warmupDroppedTicks,
                 measuredTicks,
-                driverStats.IssuedCommandCount,
-                driverStats.IssuedPrimaryCommandCount,
-                driverStats.IssuedFinisherCommandCount,
-                driverStats.LowestHealthTargetCount,
-                driverStats.ExecutionSpecScanCount,
-                driverStats.ExecutionMatchedEffectSpecCount,
-                driverStats.ExecutionTargetOwnerMismatchCount,
-                driverStats.ExecutionMissingAttributeCount,
-                driverStats.ExecutionEvaluatorRejectCount,
-                driverStats.ExecutionOutputWriteCount,
-                driverOwnerSnapshot,
-                elapsedTicks,
+                commandCount,
+                 elapsedTicks,
                 elapsedMilliseconds,
                 measuredElapsedTicks,
                 measuredElapsedMilliseconds,
                 runtimeTiming,
                 units,
-                coreObservation.EventCounts,
+                coreObservation.RuntimeV1Observation,
                 coreObservation.RuntimeDiagnostics,
-                coreObservation.RuntimeDiagnosticsLog,
                 officialToolDiff,
                 coreObservation.StructuredLog,
                 battleReport,
-                battleLog,
-                coreObservation.AssertionLog);
+                battleLog);
         }
     }
 }

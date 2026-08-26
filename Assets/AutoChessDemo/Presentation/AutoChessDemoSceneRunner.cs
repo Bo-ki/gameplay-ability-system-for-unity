@@ -235,14 +235,14 @@ namespace GAS.AutoChessDemo
             Debug.Log("AutoChessDemoBattleLog:\n" + runResult.Presentation.ToText());
             Debug.Log("AutoChessDemoPlayModeTiming: "
                       + AutoChessBattleValidationReport.CreateTimingSummary(result, runResult.Evidence));
-            Debug.Log("AutoChessDemoPlayModeDebugger: "
+            Debug.Log("AutoChessDemoPlayModeRuntimeV1Boundary: "
                       + AutoChessBattleValidationReport.CreateDebuggerSummary(diagnosticResult));
             Debug.Log("AutoChessDemoPlayModeOfficialToolDiff: "
                       + AutoChessBattleValidationReport.CreateOfficialToolDiffSummary(
                           result,
                           runResult.Evidence));
             Debug.Log("AutoChessDemoPlayModeProfiler: " + profilerSummary);
-            Debug.Log("AutoChessDemoPlayModeDiagnosticRunner: "
+            Debug.Log("AutoChessDemoPlayModeRuntimeV1Report: "
                       + AutoChessBattleValidationReport.CreateSummary(
                           AutoChessBattleValidationReport.CreateEvidence(
                               AutoChessGeneratedConfig.ValidationScenario,
@@ -288,7 +288,7 @@ namespace GAS.AutoChessDemo
                                + ", disabledReason="
                                + runResult.Presentation.DisabledReason);
             builder.AppendLine("AutoChessDemoPlayModeProfiler: " + profilerSummary);
-            builder.AppendLine("AutoChessDemoPlayModeDiagnosticRunner: "
+            builder.AppendLine("AutoChessDemoPlayModeRuntimeV1Report: "
                                + AutoChessBattleValidationReport.CreateSummary(
                                    AutoChessBattleValidationReport.CreateEvidence(
                                        AutoChessGeneratedConfig.ValidationScenario,

@@ -60,7 +60,7 @@ namespace GAS.Editor
             writer.WriteLine("public readonly int ProcessWarmupRuns;");
             writer.WriteLine("public readonly float HealthMultiplier;");
             writer.WriteLine("public readonly AutoChessTeam ExpectedWinner;");
-            writer.WriteLine("public readonly int MinDriverIssuedCommands;");
+            writer.WriteLine("public readonly int MinAcceptedCommands;");
             writer.WriteLine("public readonly int MinAttributeChanges;");
             writer.WriteLine("public readonly int MinExecutionOutputs;");
             writer.WriteLine("public readonly int MinCueRequests;");
@@ -80,7 +80,7 @@ namespace GAS.Editor
             writer.WriteLine("int processWarmupRuns,");
             writer.WriteLine("float healthMultiplier,");
             writer.WriteLine("AutoChessTeam expectedWinner,");
-            writer.WriteLine("int minDriverIssuedCommands,");
+            writer.WriteLine("int minAcceptedCommands,");
             writer.WriteLine("int minAttributeChanges,");
             writer.WriteLine("int minExecutionOutputs,");
             writer.WriteLine("int minCueRequests,");
@@ -100,7 +100,7 @@ namespace GAS.Editor
             writer.WriteLine("ProcessWarmupRuns = processWarmupRuns;");
             writer.WriteLine("HealthMultiplier = healthMultiplier;");
             writer.WriteLine("ExpectedWinner = expectedWinner;");
-            writer.WriteLine("MinDriverIssuedCommands = minDriverIssuedCommands;");
+            writer.WriteLine("MinAcceptedCommands = minAcceptedCommands;");
             writer.WriteLine("MinAttributeChanges = minAttributeChanges;");
             writer.WriteLine("MinExecutionOutputs = minExecutionOutputs;");
             writer.WriteLine("MinCueRequests = minCueRequests;");
@@ -321,7 +321,7 @@ namespace GAS.Editor
             writer.WriteLine($"{model.ValidationScenario.ProcessWarmupRuns},");
             writer.WriteLine($"{FloatLiteral(model.ValidationScenario.HealthMultiplier)},");
             writer.WriteLine($"{model.ValidationScenario.ExpectedWinner},");
-            writer.WriteLine($"{model.ValidationScenario.MinDriverIssuedCommands},");
+            writer.WriteLine($"{model.ValidationScenario.MinAcceptedCommands},");
             writer.WriteLine($"{model.ValidationScenario.MinAttributeChanges},");
             writer.WriteLine($"{model.ValidationScenario.MinExecutionOutputs},");
             writer.WriteLine($"{model.ValidationScenario.MinCueRequests},");

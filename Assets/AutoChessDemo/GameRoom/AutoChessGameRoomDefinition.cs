@@ -18,7 +18,6 @@ namespace GAS.AutoChessDemo
         public const int GameplayEffectEnemyAttackDamage = AutoChessGeneratedConfig.GameplayEffectEnemyAttackDamage;
         public const int GameplayEffectPlayerExecute = AutoChessGeneratedConfig.GameplayEffectPlayerExecute;
         public const int GameplayEffectPlayerPoison = AutoChessGeneratedConfig.GameplayEffectPlayerPoison;
-        public const int GameplayEffectPoisonTickDamage = AutoChessGeneratedConfig.GameplayEffectPoisonTickDamage;
 
         public const int ExecutionCalculationExecuteDamage = AutoChessGeneratedConfig.ExecutionCalculationExecuteDamage;
         public const int ExecutionCalculationExecuteDamageOutput = AutoChessGeneratedConfig.ExecutionCalculationExecuteDamageOutput;
@@ -56,7 +55,6 @@ namespace GAS.AutoChessDemo
                 GameplayEffectEnemyAttackDamage => "蛮力打击伤害",
                 GameplayEffectPlayerExecute => "斩杀追击伤害",
                 GameplayEffectPlayerPoison => "毒刃中毒",
-                GameplayEffectPoisonTickDamage => "毒刃跳伤",
                 _ => "未知效果",
             };
         }
@@ -69,7 +67,6 @@ namespace GAS.AutoChessDemo
                 GameplayEffectEnemyAttackDamage => GetAbilityName(AbilityEnemyAttack),
                 GameplayEffectPlayerExecute => GetAbilityName(AbilityPlayerExecute),
                 GameplayEffectPlayerPoison => GetAbilityName(AbilityPlayerPoison),
-                GameplayEffectPoisonTickDamage => GetAbilityName(AbilityPlayerPoison),
                 _ => GetGameplayEffectName(gameplayEffectCode),
             };
         }

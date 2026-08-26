@@ -12,7 +12,7 @@ namespace GAS.AutoChessDemo
         public readonly int ProcessWarmupRuns;
         public readonly float HealthMultiplier;
         public readonly AutoChessTeam ExpectedWinner;
-        public readonly int MinDriverIssuedCommands;
+        public readonly int MinAcceptedCommands;
         public readonly int MinAttributeChanges;
         public readonly int MinExecutionOutputs;
         public readonly int MinCueRequests;
@@ -31,7 +31,7 @@ namespace GAS.AutoChessDemo
             int processWarmupRuns,
             float healthMultiplier,
             AutoChessTeam expectedWinner,
-            int minDriverIssuedCommands,
+            int minAcceptedCommands,
             int minAttributeChanges,
             int minExecutionOutputs,
             int minCueRequests,
@@ -49,7 +49,7 @@ namespace GAS.AutoChessDemo
             ProcessWarmupRuns = processWarmupRuns;
             HealthMultiplier = healthMultiplier;
             ExpectedWinner = expectedWinner;
-            MinDriverIssuedCommands = minDriverIssuedCommands;
+            MinAcceptedCommands = minAcceptedCommands;
             MinAttributeChanges = minAttributeChanges;
             MinExecutionOutputs = minExecutionOutputs;
             MinCueRequests = minCueRequests;
@@ -212,7 +212,6 @@ namespace GAS.AutoChessDemo
         public const int GameplayEffectEnemyAttackDamage = 9202;
         public const int GameplayEffectPlayerExecute = 9207;
         public const int GameplayEffectPlayerPoison = 9203;
-        public const int GameplayEffectPoisonTickDamage = 9204;
         public const int ExecutionCalculationExecuteDamage = 9401;
         public const int ExecutionCalculationExecuteDamageOutput = 9402;
         public const int TagAttackCooldown = 1;
