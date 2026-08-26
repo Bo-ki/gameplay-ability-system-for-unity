@@ -23,7 +23,6 @@ namespace GAS.Editor
         public int GameplayEffectEnemyAttackDamage { get; private set; }
         public int GameplayEffectPlayerExecute { get; private set; }
         public int GameplayEffectPlayerPoison { get; private set; }
-        public int GameplayEffectPoisonTickDamage { get; private set; }
         public int ExecutionCalculationExecuteDamage { get; private set; }
         public int ExecutionCalculationExecuteDamageOutput { get; private set; }
         public int TagAttackCooldown { get; private set; }
@@ -43,17 +42,10 @@ namespace GAS.Editor
             var enemyAttack = RequiredEffect(gameplayEffects, "AutoChessEnemyAttackDamage");
             var playerExecute = RequiredEffect(gameplayEffects, "AutoChessPlayerExecute");
             var playerPoison = RequiredEffect(gameplayEffects, "AutoChessPlayerPoison");
-            var poisonTick = RequiredEffect(gameplayEffects, "AutoChessPoisonTickDamage");
             var combatSet = playerAttack.ModifierAttributeSetCode;
             var health = playerAttack.ModifierAttributeCode;
             if (combatSet <= 0 || health <= 0)
                 throw new InvalidOperationException("[AutoChessDemoConfig] AutoChess player attack GE must resolve combat health modifier from Luban rows.");
-
-            if (poisonTick.ModifierAttributeSetCode != combatSet
-                || poisonTick.ModifierAttributeCode != health)
-            {
-                throw new InvalidOperationException("[AutoChessDemoConfig] AutoChess poison tick GE must resolve combat health modifier from Luban rows.");
-            }
 
             var energy = attributes
                 .Where(row => row.AttributeSetCode == combatSet && row.AttributeCode != health)
@@ -72,7 +64,6 @@ namespace GAS.Editor
                 GameplayEffectEnemyAttackDamage = enemyAttack.GameplayEffectCode,
                 GameplayEffectPlayerExecute = playerExecute.GameplayEffectCode,
                 GameplayEffectPlayerPoison = playerPoison.GameplayEffectCode,
-                GameplayEffectPoisonTickDamage = poisonTick.GameplayEffectCode,
                 AbilityPlayerAttack = RequiredAbility(abilities, playerAttack.GameplayEffectCode),
                 AbilityEnemyAttack = RequiredAbility(abilities, enemyAttack.GameplayEffectCode),
                 AbilityPlayerExecute = RequiredAbility(abilities, playerExecute.GameplayEffectCode),
@@ -119,8 +110,6 @@ namespace GAS.Editor
     {
         public int Scale;
         public int MaxTicks;
-        public int PostVictoryFlushTicks;
-        public int ProcessWarmupRuns;
         public float HealthMultiplier;
         public string ExpectedWinner;
         public int MinDriverIssuedCommands;
@@ -458,8 +447,6 @@ namespace GAS.Editor
             {
                 Scale = RequiredInt(scenario, "scale"),
                 MaxTicks = RequiredInt(scenario, "maxTicks"),
-                PostVictoryFlushTicks = RequiredInt(scenario, "postVictoryFlushTicks"),
-                ProcessWarmupRuns = RequiredInt(scenario, "processWarmupRuns"),
                 HealthMultiplier = RequiredFloat(scenario, "healthMultiplier"),
                 ExpectedWinner = RequiredString(scenario, "expectedWinner"),
                 MinDriverIssuedCommands = RequiredInt(scenario, "minDriverIssuedCommands"),

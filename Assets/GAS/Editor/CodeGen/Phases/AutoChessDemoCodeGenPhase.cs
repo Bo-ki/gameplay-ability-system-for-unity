@@ -56,8 +56,6 @@ namespace GAS.Editor
             writer.Indent++;
             writer.WriteLine("public readonly int Scale;");
             writer.WriteLine("public readonly int MaxTicks;");
-            writer.WriteLine("public readonly int PostVictoryFlushTicks;");
-            writer.WriteLine("public readonly int ProcessWarmupRuns;");
             writer.WriteLine("public readonly float HealthMultiplier;");
             writer.WriteLine("public readonly AutoChessTeam ExpectedWinner;");
             writer.WriteLine("public readonly int MinDriverIssuedCommands;");
@@ -76,8 +74,6 @@ namespace GAS.Editor
             writer.Indent++;
             writer.WriteLine("int scale,");
             writer.WriteLine("int maxTicks,");
-            writer.WriteLine("int postVictoryFlushTicks,");
-            writer.WriteLine("int processWarmupRuns,");
             writer.WriteLine("float healthMultiplier,");
             writer.WriteLine("AutoChessTeam expectedWinner,");
             writer.WriteLine("int minDriverIssuedCommands,");
@@ -96,8 +92,6 @@ namespace GAS.Editor
             writer.Indent++;
             writer.WriteLine("Scale = scale;");
             writer.WriteLine("MaxTicks = maxTicks;");
-            writer.WriteLine("PostVictoryFlushTicks = postVictoryFlushTicks;");
-            writer.WriteLine("ProcessWarmupRuns = processWarmupRuns;");
             writer.WriteLine("HealthMultiplier = healthMultiplier;");
             writer.WriteLine("ExpectedWinner = expectedWinner;");
             writer.WriteLine("MinDriverIssuedCommands = minDriverIssuedCommands;");
@@ -306,7 +300,6 @@ namespace GAS.Editor
             writer.WriteLine($"public const int GameplayEffectEnemyAttackDamage = {model.GameplayEffectEnemyAttackDamage};");
             writer.WriteLine($"public const int GameplayEffectPlayerExecute = {model.GameplayEffectPlayerExecute};");
             writer.WriteLine($"public const int GameplayEffectPlayerPoison = {model.GameplayEffectPlayerPoison};");
-            writer.WriteLine($"public const int GameplayEffectPoisonTickDamage = {model.GameplayEffectPoisonTickDamage};");
             writer.WriteLine($"public const int ExecutionCalculationExecuteDamage = {model.ExecutionCalculationExecuteDamage};");
             writer.WriteLine($"public const int ExecutionCalculationExecuteDamageOutput = {model.ExecutionCalculationExecuteDamageOutput};");
             writer.WriteLine($"public const int TagAttackCooldown = {model.TagAttackCooldown};");
@@ -317,8 +310,6 @@ namespace GAS.Editor
             writer.Indent++;
             writer.WriteLine($"{model.ValidationScenario.Scale},");
             writer.WriteLine($"{model.ValidationScenario.MaxTicks},");
-            writer.WriteLine($"{model.ValidationScenario.PostVictoryFlushTicks},");
-            writer.WriteLine($"{model.ValidationScenario.ProcessWarmupRuns},");
             writer.WriteLine($"{FloatLiteral(model.ValidationScenario.HealthMultiplier)},");
             writer.WriteLine($"{model.ValidationScenario.ExpectedWinner},");
             writer.WriteLine($"{model.ValidationScenario.MinDriverIssuedCommands},");

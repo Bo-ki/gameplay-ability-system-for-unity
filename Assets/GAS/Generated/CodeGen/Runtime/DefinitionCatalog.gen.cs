@@ -13,8 +13,8 @@ namespace GAS.Runtime.Generated
     {
         public const int SchemaVersion = 1;
         public const int AbilityCount = 9;
-        public const int GameplayEffectCount = 17;
-        public const int ModifierCount = 12;
+        public const int GameplayEffectCount = 16;
+        public const int ModifierCount = 11;
         public const int TagMaskCount = 7;
     }
 
@@ -239,7 +239,7 @@ namespace GAS.Runtime.Generated
                 TargetRuleParam1 = 0,
             };
 
-            var gameplayEffectCodes = builder.Allocate(ref root.GameplayEffectCodes, 17);
+            var gameplayEffectCodes = builder.Allocate(ref root.GameplayEffectCodes, 16);
             gameplayEffectCodes[0] = 1001;
             gameplayEffectCodes[1] = 1002;
             gameplayEffectCodes[2] = 1003;
@@ -255,10 +255,9 @@ namespace GAS.Runtime.Generated
             gameplayEffectCodes[12] = 9201;
             gameplayEffectCodes[13] = 9202;
             gameplayEffectCodes[14] = 9203;
-            gameplayEffectCodes[15] = 9204;
-            gameplayEffectCodes[16] = 9207;
+            gameplayEffectCodes[15] = 9207;
 
-            var gameplayEffects = builder.Allocate(ref root.GameplayEffects, 17);
+            var gameplayEffects = builder.Allocate(ref root.GameplayEffects, 16);
             gameplayEffects[0] = new GASCatalogGameplayEffectDefinitionBlob
             {
                 GameplayEffectCode = 1001,
@@ -684,7 +683,7 @@ namespace GAS.Runtime.Generated
                 GameplayEffectCode = 9203,
                 DurationFrames = 8,
                 PeriodFrames = 2,
-                PeriodGameplayEffectCode = 9204,
+                PeriodGameplayEffectCode = 0,
                 GrantedTagMaskIndex = -1,
                 RemoveGameplayEffectTagMaskIndex = -1,
                 RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
@@ -711,36 +710,6 @@ namespace GAS.Runtime.Generated
             };
             gameplayEffects[15] = new GASCatalogGameplayEffectDefinitionBlob
             {
-                GameplayEffectCode = 9204,
-                DurationFrames = 0,
-                PeriodFrames = 0,
-                PeriodGameplayEffectCode = 0,
-                GrantedTagMaskIndex = -1,
-                RemoveGameplayEffectTagMaskIndex = -1,
-                RemoveGameplayEffectTagQuery = new TagRequirementMask { All = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, Any = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul }, None = new TagMaskComponent { Mask0 = 0ul, Mask1 = 0ul, Mask2 = 0ul, Mask3 = 0ul } },
-                GameplayCueCode = 9301,
-                DamageTypeCode = 0,
-                ResistanceAttributeSetCode = 0,
-                ResistanceAttributeCode = 0,
-                ResistanceCap = 0f,
-                StackingCode = 0,
-                StackLimitCount = 0,
-                StackType = 0,
-                EffectDurationRefreshPolicy = 0,
-                EffectPeriodResetPolicy = 0,
-                EffectExpirationPolicy = 0,
-                DenyOverflowApplication = (byte)0,
-                ClearStackOnOverflow = (byte)0,
-                OverflowGameplayEffectCode = 0,
-                ModifierStart = 11,
-                ModifierCount = 1,
-                RequirementStart = 3,
-                RequirementCount = 0,
-                GrantedAbilityStart = 0,
-                GrantedAbilityCount = 0,
-            };
-            gameplayEffects[16] = new GASCatalogGameplayEffectDefinitionBlob
-            {
                 GameplayEffectCode = 9207,
                 DurationFrames = -1,
                 PeriodFrames = 0,
@@ -762,7 +731,7 @@ namespace GAS.Runtime.Generated
                 DenyOverflowApplication = (byte)0,
                 ClearStackOnOverflow = (byte)0,
                 OverflowGameplayEffectCode = 0,
-                ModifierStart = 12,
+                ModifierStart = 11,
                 ModifierCount = 0,
                 RequirementStart = 3,
                 RequirementCount = 0,
@@ -770,7 +739,7 @@ namespace GAS.Runtime.Generated
                 GrantedAbilityCount = 0,
             };
 
-            var modifiers = builder.Allocate(ref root.Modifiers, 12);
+            var modifiers = builder.Allocate(ref root.Modifiers, 11);
             modifiers[0] = new GASCatalogModifierDefinitionBlob
             {
                 GameplayEffectCode = 1002,
@@ -965,24 +934,6 @@ namespace GAS.Runtime.Generated
                 CaptureAttributeCode = 2,
                 CaptureTiming = (EAttributeCaptureTiming)0,
                 FallbackMagnitude = 0f,
-                Coefficient = 1f,
-                PreAdd = 0f,
-                PostAdd = 0f,
-            };
-            modifiers[11] = new GASCatalogModifierDefinitionBlob
-            {
-                GameplayEffectCode = 9204,
-                ModifierIndex = 0,
-                AttributeSetCode = 9001,
-                AttributeCode = 1,
-                Operation = (EModifierOp)3,
-                BaseMagnitude = 1f,
-                MagnitudeSource = (EMagnitudeSource)0,
-                MagnitudeKey = 0,
-                CaptureAttributeSetCode = 9001,
-                CaptureAttributeCode = 1,
-                CaptureTiming = (EAttributeCaptureTiming)0,
-                FallbackMagnitude = 1f,
                 Coefficient = 1f,
                 PreAdd = 0f,
                 PostAdd = 0f,
