@@ -16,6 +16,7 @@
     <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Core\LubanNormalizedRowBootstrap.cs" Link="CodeGen\Core\LubanNormalizedRowBootstrap.cs" />
     <Compile Include="..\..\Assets\GAS\Generated\CodeGen\Editor\LubanNormalizedRows.gen.cs" Link="CodeGen\Generated\LubanNormalizedRows.gen.cs" />
     <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Core\RowMetadata.cs" Link="CodeGen\Core\RowMetadata.cs" />
+    <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Core\GasDefinitionKind.cs" Link="CodeGen\Core\GasDefinitionKind.cs" />
     <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Core\RowMetadataFactory.cs" Link="CodeGen\Core\RowMetadataFactory.cs" />
     <Compile Include="..\..\Assets\GAS\Editor\CodeGen\GasCodeGenPipeline.cs" Link="CodeGen\GasCodeGenPipeline.cs" />
     <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Phases\GasGlueCodeGenPhases.cs" Link="CodeGen\Phases\GasGlueCodeGenPhases.cs" />

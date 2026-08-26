@@ -379,13 +379,13 @@ $hotspotAttributions = ConvertTo-HotspotAttributionEntries $hotspotAttributionLi
 $measuredTicks = [math]::Max(1, (Get-MapNumber $performance "measuredTicks"))
 $diagnosticTicks = [math]::Max(1, (Get-MapNumber $diagnostic "measuredTicks" $measuredTicks))
 $totalAvg = Get-TimingAvg $timing "GASTickTotal"
-$commandAvg = Get-TimingAvg $timing "GASCommandResolveSystemGroup"
-$coreAvg = Get-TimingAvg $timing "GASCoreSimulationSystemGroup"
-$structuralAvg = Get-TimingAvg $timing "GASStructuralCommitSystemGroup"
-$boundaryAvg = Get-TimingAvg $timing "GASBoundaryProjectionSystemGroup"
-$prepareAvg = Get-TimingAvg $timing "GASFramePrepareSystemGroup"
-$debuggerOwnerAvg = Get-TimingAvg $timing "DebuggerOwner"
-$runnerAvg = Get-TimingAvg $timing "RunnerOwner"
+$commandAvg = Get-TimingAvg $timing "GasCommandIngressSystem"
+$coreAvg = Get-TimingAvg $timing "GasTickKernelCore"
+$structuralAvg = Get-TimingAvg $timing "GasTickKernelStructuralCommit"
+$boundaryAvg = Get-TimingAvg $timing "GasBoundaryDrainProjection"
+$prepareAvg = Get-TimingAvg $timing "GasFixedTickSystemGroup"
+$debuggerOwnerAvg = Get-TimingAvg $timing "RuntimeV1ObservationExport"
+$runnerAvg = Get-TimingAvg $timing "AutoChessValidationRunner"
 
 $getComponentRw = Get-MapNumber $official "journalingGetComponentDataRW"
 $getBufferRw = Get-MapNumber $official "journalingGetBufferRW"
@@ -648,7 +648,7 @@ if ($debuggerOwnerAvg -gt 10 -or ($totalAvg -gt 0 -and $debuggerOwnerAvg -gt $to
     $findings += New-Finding `
         "GAS-DBG-01" `
         "High" `
-        ("DebuggerOwner avg is {0:n3} ms for {1:n0} materialized entities and {2:n0} queries; GASTick avg is {3:n3} ms." -f $debuggerOwnerAvg, $diagnosticObservationEntities, $diagnosticObservationQueries, $totalAvg) `
+        ("RuntimeV1ObservationExport avg is {0:n3} ms for {1:n0} materialized entities and {2:n0} queries; GASTick avg is {3:n3} ms." -f $debuggerOwnerAvg, $diagnosticObservationEntities, $diagnosticObservationQueries, $totalAvg) `
         "The debugger can locate gameplay hot spots, but its diagnostic materialization/export pass is itself a large one-shot cost." `
         "Runtime diagnostics still mix validation evidence, materialization, and text-export obligations too closely." `
         "Keep performance pass counter-only, and split DiagnosticMaterializationPass/export into an explicitly budgeted post-run owner."
@@ -753,8 +753,8 @@ $builder = [System.Text.StringBuilder]::new()
 [void]$builder.AppendLine(("| CoreSimulation | {0:n3} | {1} |" -f $coreAvg, (Format-Percent $derived.coreSimulationSharePct)))
 [void]$builder.AppendLine(("| StructuralCommit | {0:n3} | {1} |" -f $structuralAvg, (Format-Percent $derived.structuralCommitSharePct)))
 [void]$builder.AppendLine(("| BoundaryProjection | {0:n3} | {1} |" -f $boundaryAvg, (Format-Percent $derived.boundaryProjectionSharePct)))
-[void]$builder.AppendLine(("| RunnerOwner | {0:n3} | {1} |" -f $runnerAvg, (Format-Percent $derived.runnerSharePct)))
-[void]$builder.AppendLine(("| DebuggerOwner | {0:n3} | outside tick |" -f $debuggerOwnerAvg))
+[void]$builder.AppendLine(("| ValidationRunner | {0:n3} | {1} |" -f $runnerAvg, (Format-Percent $derived.runnerSharePct)))
+[void]$builder.AppendLine(("| RuntimeV1ObservationExport | {0:n3} | outside tick |" -f $debuggerOwnerAvg))
 [void]$builder.AppendLine()
 [void]$builder.AppendLine("## Journaling Rates")
 [void]$builder.AppendLine()
@@ -919,8 +919,8 @@ $performanceReport = [System.Text.StringBuilder]::new()
 [void]$performanceReport.AppendLine(("| CoreSimulation | {0:n3} | {1} |" -f $coreAvg, (Format-Percent $derived.coreSimulationSharePct)))
 [void]$performanceReport.AppendLine(("| StructuralCommit | {0:n3} | {1} |" -f $structuralAvg, (Format-Percent $derived.structuralCommitSharePct)))
 [void]$performanceReport.AppendLine(("| BoundaryProjection | {0:n3} | {1} |" -f $boundaryAvg, (Format-Percent $derived.boundaryProjectionSharePct)))
-[void]$performanceReport.AppendLine(("| RunnerOwner | {0:n3} | {1} |" -f $runnerAvg, (Format-Percent $derived.runnerSharePct)))
-[void]$performanceReport.AppendLine(("| DebuggerOwner | {0:n3} | outside tick |" -f $debuggerOwnerAvg))
+[void]$performanceReport.AppendLine(("| ValidationRunner | {0:n3} | {1} |" -f $runnerAvg, (Format-Percent $derived.runnerSharePct)))
+[void]$performanceReport.AppendLine(("| RuntimeV1ObservationExport | {0:n3} | outside tick |" -f $debuggerOwnerAvg))
 
 $hotspotReport = [System.Text.StringBuilder]::new()
 [void]$hotspotReport.AppendLine("# Hotspot Attribution")

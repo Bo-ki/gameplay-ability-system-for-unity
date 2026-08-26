@@ -7,16 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] - 2026-02-08
 
+> 历史记录：本节描述的是早期 ECS 实现，当前已由 Runtime v1 破坏性替换；其中 `AbilitySystemBinding`、request entity、旧 EventBus、`GASSystemScheduleContract` 等不再是当前入口。
+
 重大更新，EX-GAS 主线从 1.x 托管 OOP 运行模型切换为 Unity DOTS / ECS 架构。运行时权威状态由 Entity / Component / System 承载，GameObject 和 MonoBehaviour 只作为输入、表现和生命周期绑定壳。
 配置分层改为以 Luban 表、生成代码和 ECS definition / runtime component 为主，不再以 ScriptableObject 或托管 Spec 对象作为运行时主入口。
 
 ### Changed
 
-- Runtime 主入口调整为 `AbilitySystemBinding` + `AbilitySystemFacade`；外部调用通过 command / request entity 写入 ECS。
+- Runtime 主入口调整为 `GasRuntimeWorldOwner` + `GasCommandPort`；外部调用通过 owner-local command lane 写入 intent。
 - Ability 行为改为数据化配置和 ECS system 推进，不再以 `AbilityLogicBase` / `AbilityTaskBase` 作为当前扩展入口。
-- GameplayEffect 施加链路改为 `CApplyGameplayEffectRequest`、spec/context component、runtime GE entity 和生命周期 system。
-- Event / Cue / Log / Replay 改为从 `CGameplayEventBus`、`BPresentationEvent`、`BDebugReplayEvent` 等事实和观察数据派生，不再决定 gameplay 状态。
-- Runtime system 调度收敛到 `GASSystemScheduleContract`，新增 system 需要显式纳入调度契约。
+- GameplayEffect 施加链路改为 V1 definition / transaction / Boundary fact。
+- Event / Cue / Log / Replay 只消费 V1 Boundary facts、read model 与 diagnostics evidence，不决定 gameplay 状态。
+- Runtime v1 调度由 `GasTickDag` 统一推进，新增阶段必须更新 DAG 与验证。
+
+## [2.0.0-v1] - 未发布
+
+Runtime v1 是当前唯一实现：由 `GasRuntimeWorldOwner` 持有 session 与 catalog，`GasCommandPort` 接收 intent，`GasTickDag` 推进 simulation，`GasBoundaryDrainCoordinator` 投影只读 facts。旧 facade、registry、ECS request/component 闭包和旧生成器不提供兼容层。
 
 ## [1.1.8] - 2024-07-30
 

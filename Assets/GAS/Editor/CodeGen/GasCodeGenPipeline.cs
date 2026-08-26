@@ -10,15 +10,7 @@ namespace GAS.Editor
         private static readonly IGasCodeGenPhase[] s_corePhases =
         {
             new AssemblyDefinitionPhase(),
-            new DefinitionIndexPhase(),
-            new BlobSchemaPhase(),
-            new StaticLookupPhase(),
-            new DefinitionCatalogPhase(),
-            new RuntimeDefinitionGluePhase(),
             new RuntimeLifecycleMigrationPhase(),
-            new BakerGluePhase(),
-            new ComponentTypeSetPhase(),
-            new QueryLayoutPhase(),
             new ValidationReportPhase(),
         };
 
@@ -74,7 +66,6 @@ namespace GAS.Editor
             manifest.AddGeneratedFile("LubanNormalizedRows", lubanRowsPath, "Editor", false);
             var errors = new List<string>();
             var orphanCleanupRan = false;
-            var executedCount = 0;
 
             foreach (var phase in phaseList)
             {
@@ -88,7 +79,6 @@ namespace GAS.Editor
                     }
 
                     phase.Execute(context, manifest);
-                    executedCount++;
                     GasCodeGenEnvironment.Log($"[GasCodeGenPipeline] {phase.PhaseName} 完成: {string.Join(", ", phase.OutputFileNames)}");
                 }
                 catch (Exception ex)

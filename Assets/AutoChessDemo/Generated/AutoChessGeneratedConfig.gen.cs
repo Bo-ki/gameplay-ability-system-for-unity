@@ -212,6 +212,7 @@ namespace GAS.AutoChessDemo
         public const int GameplayEffectEnemyAttackDamage = 9202;
         public const int GameplayEffectPlayerExecute = 9207;
         public const int GameplayEffectPlayerPoison = 9203;
+        public const int GameplayEffectPoisonTickDamage = 9204;
         public const int ExecutionCalculationExecuteDamage = 9401;
         public const int ExecutionCalculationExecuteDamageOutput = 9402;
         public const int TagAttackCooldown = 1;

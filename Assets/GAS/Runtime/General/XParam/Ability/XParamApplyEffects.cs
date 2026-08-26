@@ -49,6 +49,9 @@ namespace GAS.Runtime
 #if UNITY_EDITOR
         public void DecodeExcelData(List<object> paramData)  
         {  
+            if (paramData == null)
+                return;
+
             // IDs（原有逻辑保留，slot 0）  
             IDs = Array.Empty<int>();  
             if (paramData.Count > 0)  
@@ -75,8 +78,14 @@ namespace GAS.Runtime
                     paramDataForCatcher.Add(paramData[i]);  
   
                 var catcherParamType = TargetCatcherHelper.GetCatcherParamType(CatcherType);  
-                Param = (XParam)Activator.CreateInstance(catcherParamType);  
-                Param.DecodeExcelData(paramDataForCatcher);  
+                if (catcherParamType == null)
+                {
+                    Param = null;
+                    return;
+                }
+
+                Param = Activator.CreateInstance(catcherParamType) as XParam;
+                Param?.DecodeExcelData(paramDataForCatcher);
             }  
         }  
   

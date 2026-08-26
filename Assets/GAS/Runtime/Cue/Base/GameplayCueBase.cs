@@ -1,232 +1,217 @@
-using Unity.Entities;
 using UnityEngine;
 
 namespace GAS.Runtime
 {
+    /// <summary>
+    /// 表示由 Boundary fact 驱动的表现层 Cue；只保存托管表现状态，绝不持有 Entity 或 EntityManager。
+    /// </summary>
     public abstract class GameplayCueBase
     {
-        protected Entity _cueEntity;
-        protected Entity _sourceEntity;
-        protected CueSourceType _sourceType;
-        protected Entity _targetAscEntity;
-        protected EntityManager EntityManager { get; private set; }
-        protected GameObject TargetGameObject => PresentationEntityBindingRegistry.GetGameObjectFromEntity(EntityManager, _targetAscEntity);
+        private GameObject _targetGameObject;
+        private ulong _sourceStableId;
+        private bool _playRequested;
+        private bool _stopRequested;
+        private bool _removeRequested;
+        private bool _killRequested;
 
+        protected CueSourceType _sourceType;
+
+        /// <summary>
+        /// 返回 Boundary 为该 Cue 绑定的表现目标对象。
+        /// </summary>
+        protected GameObject TargetGameObject => _targetGameObject;
+
+        /// <summary>
+        /// 返回当前 Cue 的稳定来源身份，供日志和表现诊断使用。
+        /// </summary>
+        protected ulong SourceStableId => _sourceStableId;
+
+        /// <summary>
+        /// 返回 Cue 的来源域。
+        /// </summary>
+        protected CueSourceType SourceType => _sourceType;
+
+        /// <summary>
+        /// 返回 Boundary 是否请求播放该 Cue。
+        /// </summary>
+        public bool PlayRequested => _playRequested;
+
+        /// <summary>
+        /// 返回 Boundary 是否请求停止该 Cue。
+        /// </summary>
+        public bool StopRequested => _stopRequested;
+
+        /// <summary>
+        /// 返回 Boundary 是否请求移除该 Cue。
+        /// </summary>
+        public bool RemoveRequested => _removeRequested;
+
+        /// <summary>
+        /// 返回 Boundary 是否请求销毁该 Cue 实例。
+        /// </summary>
+        public bool KillRequested => _killRequested;
+
+        /// <summary>
+        /// 将不可变参数注入表现对象。
+        /// </summary>
         public abstract void InitParameters(XParam xParam);
 
+        /// <summary>
+        /// 清除表现请求与短生命周期状态，使实例可被新的 Cue fact 复用。
+        /// </summary>
         public virtual void Reset()
         {
+            _playRequested = false;
+            _stopRequested = false;
+            _removeRequested = false;
+            _killRequested = false;
+            _targetGameObject = null;
+            _sourceStableId = 0;
+            _sourceType = CueSourceType.None;
         }
 
-        public void SetRuntime(EntityManager entityManager, Entity cueEntity)
+        /// <summary>
+        /// 设置 Boundary 提供的表现上下文；该方法是唯一的目标对象与来源身份入口。
+        /// </summary>
+        public void SetPresentationContext(GameObject target, CueSourceType sourceType, ulong sourceStableId)
         {
-            EntityManager = entityManager;
-            _cueEntity = cueEntity;
-        }
-
-        public void SetSourceEntity(Entity e, CueSourceType sourceType)
-        {
-            _sourceEntity = e;
+            _targetGameObject = target;
             _sourceType = sourceType;
+            _sourceStableId = sourceStableId;
         }
 
         /// <summary>
-        /// 添加Cue到目标ASC
+        /// 请求播放 Cue；实际播放由表现层宿主消费请求完成。
         /// </summary>
-        /// <param name="e"></param>
-        internal void ApplyAddToTargetAsc(Entity e, float time)
+        public void Play(bool replay = false)
         {
-            if (e != Entity.Null)
-            {
-                _targetAscEntity = e;
-                OnAdd(time);
-            }
+            if (!CanPlay())
+                return;
+
+            _playRequested = true;
+            _stopRequested = false;
+            if (replay)
+                _removeRequested = false;
         }
 
         /// <summary>
-        /// cue从目标ASC移除
+        /// 请求停止 Cue；不直接触碰 Runtime Core 状态。
         /// </summary>
-        internal void ApplyRemoveFromTargetAsc(float time)
+        public void Stop(bool immediate = false)
         {
-            OnRemove(time);
-            _targetAscEntity = Entity.Null;
+            _playRequested = false;
+            _stopRequested = true;
         }
 
         /// <summary>
-        /// 自定义能否播放cue逻辑
+        /// 请求立即停止 Cue。
         /// </summary>
-        /// <returns></returns>
+        public void StopImmediate()
+        {
+            Stop(true);
+        }
+
+        /// <summary>
+        /// 请求销毁 Cue 实例。
+        /// </summary>
+        public void KillSelf()
+        {
+            _killRequested = true;
+        }
+
+        /// <summary>
+        /// 请求从表现层移除 Cue。
+        /// </summary>
+        public void RemoveSelf()
+        {
+            _removeRequested = true;
+            _stopRequested = true;
+            _playRequested = false;
+        }
+
+        /// <summary>
+        /// 判断当前表现上下文是否允许播放 Cue。
+        /// </summary>
         protected virtual bool CanPlay()
         {
             return true;
         }
 
         /// <summary>
-        /// 播放Cue
+        /// 处理 Cue 被加入目标表现对象的生命周期回调。
         /// </summary>
-        /// <param name="replay"> 是否从头播放 </param>
-        public void Play(bool replay = false)
-        {
-            if (!CanPlay())
-                return;
-
-            if (replay && TryGetPresentationRequest(out var request))
-            {
-                request.ResetRequested = 1;
-                SetPresentationRequest(request);
-                SetCueState<CuePlayingTag>(false);
-            }
-
-            SetCueState<CuePlayableTag>(true);
-        }
-
-        /// <summary>
-        /// 停止Cue
-        /// </summary>
-        /// <param name="immediate"> 是否立即停止 </param>
-        public void Stop(bool immediate = false)
-        {
-            SetCueState<CuePlayableTag>(false);
-        }
-
-        public void StopImmediate() => Stop(true);
-
-        public void KillSelf()
-        {
-            SetCueState<CueKillRequestTag>(true);
-        }
-
-        public void RemoveSelf()
-        {
-            StopImmediate();
-            if (!TryGetPresentationRequest(out var request))
-                return;
-
-            request.RemoveTargetRequested = 1;
-            SetPresentationRequest(request);
-        }
-
-        internal bool CanPlayRuntime() => CanPlay();
-
-        public Entity GetSourceEffectEntity()
-        {
-            if (_sourceType != CueSourceType.GameplayEffect) return Entity.Null;
-            if (_sourceEntity == Entity.Null || !HasRuntimeContext() || !EntityManager.Exists(_sourceEntity)) return Entity.Null;
-            return _sourceEntity;
-        }
-
-        public Entity GetSourceAbilityEntity()
-        {
-            if (_sourceType != CueSourceType.GameplayAbility) return Entity.Null;
-            if (_sourceEntity == Entity.Null || !HasRuntimeContext() || !EntityManager.Exists(_sourceEntity)) return Entity.Null;
-            return _sourceEntity;
-        }
-
-        private void SetCueState<T>(bool enabled)
-            where T : unmanaged, IComponentData, IEnableableComponent
-        {
-            if (!HasRuntimeContext())
-                return;
-
-            if (_cueEntity != Entity.Null
-                && EntityManager.Exists(_cueEntity)
-                && EntityManager.HasComponent<CueRuntimeActiveTag>(_cueEntity)
-                && EntityManager.IsComponentEnabled<CueRuntimeActiveTag>(_cueEntity)
-                && EntityManager.HasComponent<T>(_cueEntity))
-            {
-                EntityManager.SetComponentEnabled<T>(_cueEntity, enabled);
-            }
-        }
-
-        private bool TryGetPresentationRequest(out CuePresentationRequestComponent request)
-        {
-            request = default;
-            if (!HasRuntimeContext()
-                || _cueEntity == Entity.Null
-                || !EntityManager.Exists(_cueEntity)
-                || !EntityManager.HasComponent<CuePresentationRequestComponent>(_cueEntity))
-            {
-                return false;
-            }
-
-            request = EntityManager.GetComponentData<CuePresentationRequestComponent>(_cueEntity);
-            return true;
-        }
-
-        private void SetPresentationRequest(in CuePresentationRequestComponent request)
-        {
-            if (!HasRuntimeContext()
-                || _cueEntity == Entity.Null
-                || !EntityManager.Exists(_cueEntity)
-                || !EntityManager.HasComponent<CuePresentationRequestComponent>(_cueEntity))
-            {
-                return;
-            }
-
-            EntityManager.SetComponentData(_cueEntity, request);
-        }
-
-        private bool HasRuntimeContext()
-        {
-            return EntityManager.World != null && EntityManager.World.IsCreated;
-        }
-
-        #region system function
-
         public virtual void OnAdd(float time)
         {
         }
 
+        /// <summary>
+        /// 处理 Cue 从目标表现对象移除的生命周期回调。
+        /// </summary>
         public virtual void OnRemove(float time)
         {
         }
 
+        /// <summary>
+        /// 处理 Cue 激活回调。
+        /// </summary>
         public virtual void OnActivate(float time)
         {
         }
 
+        /// <summary>
+        /// 处理 Cue 停用回调。
+        /// </summary>
         public virtual void OnDeactivate(float time)
         {
         }
 
+        /// <summary>
+        /// 处理 Cue 周期更新回调。
+        /// </summary>
         public virtual void OnTick(float time)
         {
         }
 
+        /// <summary>
+        /// 处理 Cue 销毁回调。
+        /// </summary>
         public virtual void OnDestroy(float time)
         {
         }
 
 #if UNITY_EDITOR
         /// <summary>
-        ///     编辑器预览Cue效果
-        ///     注意：该方法只在编辑器下有效，运行时无效。
-        ///     请使用 UNITY_EDITOR 宏来包裹该方法，否则在运行时会导致编译错误。
+        /// 在编辑器中预览 Cue 表现；运行时不会调用该入口。
         /// </summary>
-        /// <param name="target"></param>
-        /// <param name="frame"></param>
-        /// <param name="startFrame"></param>
-        /// <param name="endFrame"></param>
         public virtual void OnPreview(GameObject target, int frame, int startFrame, int endFrame)
         {
-
         }
 #endif
-
-        #endregion
     }
 
+    /// <summary>
+    /// 为 Cue 绑定强类型参数的表现基类，保持参数解析与表现生命周期解耦。
+    /// </summary>
     public abstract class GameplayCueBase<T> : GameplayCueBase where T : XParam
     {
+        /// <summary>
+        /// 返回当前 Cue 的强类型参数实例。
+        /// </summary>
         public T Parameter { get; private set; }
 
+        /// <summary>
+        /// 校验并保存强类型 Cue 参数。
+        /// </summary>
         public override void InitParameters(XParam xParam)
         {
-            if (xParam is T t)
-                Parameter = t;
+            if (xParam is T typedParameter)
+            {
+                Parameter = typedParameter;
+                return;
+            }
+
 #if UNITY_EDITOR
-            else
-                Debug.LogError($"Parameter type mismatch: expected {typeof(T)}, but got {xParam.GetType()}");
+            Debug.LogError($"Parameter type mismatch: expected {typeof(T)}, but got {xParam?.GetType()}");
 #endif
         }
     }

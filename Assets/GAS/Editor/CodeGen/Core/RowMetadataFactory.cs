@@ -3,12 +3,16 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using GAS.Runtime;
-
 namespace GAS.Editor
 {
+    /// <summary>
+    /// 从 Definition Row 类型提取统一 CodeGen 元数据，并在输入不完整时显式失败。
+    /// </summary>
     public static class RowMetadataFactory
     {
+        /// <summary>
+        /// 为全部已扫描的 Definition Row 构建元数据快照。
+        /// </summary>
         public static IReadOnlyList<RowMetadata> BuildAll(
             IReadOnlyList<Type> rowTypes,
             GasCodeGenSettings settings)
@@ -16,6 +20,9 @@ namespace GAS.Editor
             return rowTypes.Select(rowType => Build(rowType, settings)).ToList();
         }
 
+        /// <summary>
+        /// 为单个 Definition Row 解析字段、工厂和 Blob 成员。
+        /// </summary>
         public static RowMetadata Build(Type rowType, GasCodeGenSettings settings)
         {
             var domainName = InferDomainName(rowType, settings);
@@ -37,8 +44,6 @@ namespace GAS.Editor
                 BakerMethodName = $"Build{blobSchemaName}",
                 ComponentSetName = $"{definitionName}ComponentTypes",
                 QueryDescName = $"{definitionName}Query",
-                CodeComponentType = InferCodeComponentType(domainName),
-                BlobComponentType = InferBlobComponentType(domainName),
                 RowFactoryTypeName = rowFactory.TypeName,
                 RowFactoryMethodName = rowFactory.MethodName,
                 BlobMembers = BuildBlobMembers(rowType),
@@ -69,22 +74,22 @@ namespace GAS.Editor
             return name;
         }
 
-        private static GASDefinitionKind InferDefinitionKind(string domainName)
+        private static GasDefinitionKind InferDefinitionKind(string domainName)
         {
             if (domainName == "Ability")
-                return GASDefinitionKind.Ability;
+                return GasDefinitionKind.Ability;
             if (domainName == "GameplayEffect")
-                return GASDefinitionKind.GameplayEffect;
+                return GasDefinitionKind.GameplayEffect;
             if (domainName == "AttributeSet")
-                return GASDefinitionKind.AttributeSet;
+                return GasDefinitionKind.AttributeSet;
             if (domainName == "Attribute")
-                return GASDefinitionKind.Attribute;
+                return GasDefinitionKind.Attribute;
             if (domainName == "GameplayTag")
-                return GASDefinitionKind.GameplayTag;
+                return GasDefinitionKind.GameplayTag;
             if (domainName == "GameplayCue")
-                return GASDefinitionKind.GameplayCue;
+                return GasDefinitionKind.GameplayCue;
 
-            return GASDefinitionKind.None;
+            return GasDefinitionKind.None;
         }
 
         private static string InferCodeFieldName(Type rowType, string domainName)
@@ -161,16 +166,6 @@ namespace GAS.Editor
             return new[] { codeFieldName };
         }
 
-        private static string InferCodeComponentType(string domainName)
-        {
-            return "GASDefinitionCodeComponent";
-        }
-
-        private static string InferBlobComponentType(string domainName)
-        {
-            return string.Empty;
-        }
-
         private static RowFactoryInfo FindRowFactory(Type rowType)
         {
             var candidates = new List<MethodInfo>();
@@ -216,12 +211,19 @@ namespace GAS.Editor
             IReadOnlyList<string> bakerKeyFieldNames,
             RowFactoryInfo rowFactory)
         {
-            var rows = rowFactory.Method != null
-                ? InvokeRows(rowFactory.Method, rowType)
-                : FindRowsFromSnapshot(rowType);
+            if (rowFactory.Method == null)
+            {
+                throw new InvalidOperationException(
+                    $"Definition Row {rowType.FullName} 必须提供 public static 零参数数组工厂。生成已拒绝静默空输入。");
+            }
+
+            var rows = InvokeRows(rowFactory.Method, rowType);
 
             if (rows.Count == 0)
-                return Array.Empty<RowValueSnapshot>();
+            {
+                throw new InvalidOperationException(
+                    $"Definition Row {rowType.FullName} 的工厂 {rowFactory.TypeName}.{rowFactory.MethodName}() 返回空集合。");
+            }
 
             var result = new List<RowValueSnapshot>(rows.Count);
             foreach (var row in rows)
@@ -259,83 +261,6 @@ namespace GAS.Editor
 
             var value = method.Invoke(null, null);
             return MaterializeRows(value, rowType);
-        }
-
-        private static IReadOnlyList<object> FindRowsFromSnapshot(Type rowType)
-        {
-            foreach (var type in rowType.Assembly.GetExportedTypes())
-            {
-                foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static))
-                {
-                    if (method.GetParameters().Length != 0)
-                        continue;
-
-                    if (!method.Name.StartsWith("Create", StringComparison.Ordinal))
-                        continue;
-
-                    if (method.DeclaringType == null
-                        || method.DeclaringType.Name.IndexOf("GeneratedDefinition", StringComparison.Ordinal) < 0)
-                        continue;
-
-                    if (method.ReturnType == typeof(void) || method.ReturnType.IsPrimitive || method.ReturnType == typeof(string))
-                        continue;
-
-                    var snapshot = method.Invoke(null, null);
-                    if (snapshot == null)
-                        continue;
-
-                    var rows = FindRowsOnObject(snapshot, rowType);
-                    if (rows.Count > 0)
-                        return rows;
-                }
-            }
-
-            return Array.Empty<object>();
-        }
-
-        private static IReadOnlyList<object> FindRowsOnObject(object owner, Type rowType)
-        {
-            var ownerType = owner.GetType();
-            foreach (var property in ownerType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-            {
-                if (!property.CanRead)
-                    continue;
-
-                if (!IsEnumerableOfRowType(property.PropertyType, rowType))
-                    continue;
-
-                var rows = MaterializeRows(property.GetValue(owner), rowType);
-                if (rows.Count > 0)
-                    return rows;
-            }
-
-            foreach (var field in ownerType.GetFields(BindingFlags.Public | BindingFlags.Instance))
-            {
-                if (!IsEnumerableOfRowType(field.FieldType, rowType))
-                    continue;
-
-                var rows = MaterializeRows(field.GetValue(owner), rowType);
-                if (rows.Count > 0)
-                    return rows;
-            }
-
-            return Array.Empty<object>();
-        }
-
-        private static bool IsEnumerableOfRowType(Type type, Type rowType)
-        {
-            if (type.IsArray)
-                return type.GetElementType() == rowType;
-
-            if (!type.IsGenericType)
-                return false;
-
-            var generic = type.GetGenericTypeDefinition();
-            return (generic == typeof(IReadOnlyList<>)
-                    || generic == typeof(IReadOnlyCollection<>)
-                    || generic == typeof(IEnumerable<>)
-                    || generic == typeof(List<>))
-                   && type.GetGenericArguments()[0] == rowType;
         }
 
         private static IReadOnlyList<object> MaterializeRows(object rows, Type rowType)

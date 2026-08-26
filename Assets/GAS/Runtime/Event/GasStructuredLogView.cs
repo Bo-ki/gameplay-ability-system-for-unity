@@ -1,7 +1,8 @@
-using Unity.Entities;
-
 namespace GAS.Runtime
 {
+    /// <summary>
+    /// 标识 managed 结构化日志级别。
+    /// </summary>
     public enum EGasStructuredLogLevel : byte
     {
         Trace = 0,
@@ -10,6 +11,9 @@ namespace GAS.Runtime
         Error = 3,
     }
 
+    /// <summary>
+    /// 标识 managed 结构化日志所属模块。
+    /// </summary>
     public enum EGasStructuredLogModule : byte
     {
         Unknown = 0,
@@ -25,6 +29,9 @@ namespace GAS.Runtime
         Damage = 10,
     }
 
+    /// <summary>
+    /// 保存从 Runtime v1 Boundary fact 投影出的不可变 managed 日志；只携带稳定业务键，不暴露 ECS Entity。
+    /// </summary>
     public readonly struct GasStructuredLogEntry
     {
         public readonly int LogIndex;
@@ -38,16 +45,8 @@ namespace GAS.Runtime
         public readonly EDebugReplayEventKind ReplayKind;
         public readonly EGameplayEventType GameplayEventType;
         public readonly EGameplayCueEvent CueEvent;
-        public readonly Entity SourceAsc;
-        public readonly Entity TargetAsc;
         public readonly int SourceReportKey;
         public readonly int TargetReportKey;
-        public readonly Entity SourceAbility;
-        public readonly Entity GameplayEffect;
-        public readonly Entity SourceEntity;
-        public readonly Entity RelatedAbility;
-        public readonly Entity CueEntity;
-        public readonly CueSourceType CueSourceType;
         public readonly int ContextId;
         public readonly int EventCode;
         public readonly int ReasonCode;
@@ -61,6 +60,9 @@ namespace GAS.Runtime
         public readonly float DamageAmount;
         public readonly byte Flag;
 
+        /// <summary>
+        /// 构造一个只读日志条目；调用方必须先把 Runtime handle 投影为稳定报告键。
+        /// </summary>
         public GasStructuredLogEntry(
             int logIndex,
             int frame,
@@ -73,14 +75,8 @@ namespace GAS.Runtime
             EDebugReplayEventKind replayKind,
             EGameplayEventType gameplayEventType,
             EGameplayCueEvent cueEvent,
-            Entity sourceAsc,
-            Entity targetAsc,
-            Entity sourceAbility,
-            Entity gameplayEffect,
-            Entity sourceEntity,
-            Entity relatedAbility,
-            Entity cueEntity,
-            CueSourceType cueSourceType,
+            int sourceReportKey,
+            int targetReportKey,
             int contextId,
             int eventCode,
             int reasonCode,
@@ -92,9 +88,7 @@ namespace GAS.Runtime
             float oldValue,
             float newValue,
             float damageAmount,
-            byte flag,
-            int sourceReportKey = 0,
-            int targetReportKey = 0)
+            byte flag)
         {
             LogIndex = logIndex;
             Frame = frame;
@@ -107,16 +101,8 @@ namespace GAS.Runtime
             ReplayKind = replayKind;
             GameplayEventType = gameplayEventType;
             CueEvent = cueEvent;
-            SourceAsc = sourceAsc;
-            TargetAsc = targetAsc;
             SourceReportKey = sourceReportKey;
             TargetReportKey = targetReportKey;
-            SourceAbility = sourceAbility;
-            GameplayEffect = gameplayEffect;
-            SourceEntity = sourceEntity;
-            RelatedAbility = relatedAbility;
-            CueEntity = cueEntity;
-            CueSourceType = cueSourceType;
             ContextId = contextId;
             EventCode = eventCode;
             ReasonCode = reasonCode;
@@ -131,181 +117,8 @@ namespace GAS.Runtime
             Flag = flag;
         }
 
-        public GasStructuredLogEntry WithBoundaryReportKeys(int sourceReportKey, int targetReportKey)
-        {
-            return new GasStructuredLogEntry(
-                LogIndex,
-                Frame,
-                Sequence,
-                Level,
-                Module,
-                FactDomain,
-                FactCategory,
-                FactSeverity,
-                ReplayKind,
-                GameplayEventType,
-                CueEvent,
-                SourceAsc,
-                TargetAsc,
-                SourceAbility,
-                GameplayEffect,
-                SourceEntity,
-                RelatedAbility,
-                CueEntity,
-                CueSourceType,
-                ContextId,
-                EventCode,
-                ReasonCode,
-                RelatedAbilityCode,
-                AttrSetCode,
-                AttributeCode,
-                TagIndex,
-                Value,
-                OldValue,
-                NewValue,
-                DamageAmount,
-                Flag,
-                sourceReportKey,
-                targetReportKey);
-        }
-
         public bool IsReplayBacked => LogIndex >= 0;
         public bool IsFailure => FactCategory == EGameplayFactCategory.Failure;
         public bool IsDiagnostic => FactCategory == EGameplayFactCategory.Diagnostic;
-    }
-
-    public static class GasStructuredLogView
-    {
-        public const int NoReplayLogIndex = -1;
-
-        public static GasStructuredLogEntry FromReplay(in ReplayLogEventBuffer evt)
-        {
-            return Create(evt.LogIndex, evt, GameplayFactClassifier.Classify(evt));
-        }
-
-        public static GasStructuredLogEntry FromAttributeChange(in AttributeChangeEventBuffer evt)
-        {
-            var replay = new ReplayLogEventBuffer
-            {
-                LogIndex = NoReplayLogIndex,
-                Kind = EDebugReplayEventKind.AttributeChange,
-                SourceAsc = evt.SourceAsc,
-                TargetAsc = evt.ASC,
-                SourceAbility = evt.SourceAbility,
-                GameplayEffect = evt.GameplayEffect,
-                ContextId = evt.ContextId,
-                EventCode = evt.EventCode,
-                AttrSetCode = evt.AttrSetCode,
-                AttributeCode = evt.AttributeCode,
-                OldValue = evt.OldValue,
-                NewValue = evt.NewValue,
-                Flag = evt.IsBaseValue ? (byte)1 : (byte)0,
-            };
-
-            return Create(NoReplayLogIndex, replay, GameplayFactClassifier.Classify(replay));
-        }
-
-        public static GasStructuredLogEntry FromCueRequest(in CueRequestBuffer evt)
-        {
-            var replay = new ReplayLogEventBuffer
-            {
-                LogIndex = NoReplayLogIndex,
-                Kind = EDebugReplayEventKind.CueRequest,
-                CueEvent = evt.CueEvent,
-                SourceAsc = evt.SourceAsc,
-                TargetAsc = evt.TargetAsc,
-                SourceAbility = evt.SourceAbility,
-                GameplayEffect = evt.GameplayEffect,
-                SourceEntity = evt.SourceEntity,
-                CueEntity = evt.CueEntity,
-                CueSourceType = evt.SourceType,
-                ContextId = evt.ContextId,
-                EventCode = (int)evt.CueEvent,
-            };
-
-            return Create(NoReplayLogIndex, replay, GameplayFactClassifier.Classify(replay));
-        }
-
-        public static GasStructuredLogEntry FromTagChange(in TagChangeEventBuffer evt)
-        {
-            var replay = new ReplayLogEventBuffer
-            {
-                LogIndex = NoReplayLogIndex,
-                Kind = EDebugReplayEventKind.TagChange,
-                TargetAsc = evt.ASC,
-                TagIndex = evt.TagIndex,
-                Flag = evt.Added ? (byte)1 : (byte)0,
-            };
-
-            return Create(NoReplayLogIndex, replay, GameplayFactClassifier.Classify(replay));
-        }
-
-        public static EGasStructuredLogModule ToModule(EGameplayFactDomain domain)
-        {
-            return domain switch
-            {
-                EGameplayFactDomain.Ability => EGasStructuredLogModule.Ability,
-                EGameplayFactDomain.GameplayEffect => EGasStructuredLogModule.GameplayEffect,
-                EGameplayFactDomain.Attribute => EGasStructuredLogModule.Attribute,
-                EGameplayFactDomain.Tag => EGasStructuredLogModule.GameplayTag,
-                EGameplayFactDomain.Cue => EGasStructuredLogModule.GameplayCue,
-                EGameplayFactDomain.ExecutionCalculation => EGasStructuredLogModule.ExecutionCalculation,
-                EGameplayFactDomain.RuntimeBoundary => EGasStructuredLogModule.RuntimeBoundary,
-                EGameplayFactDomain.Presentation => EGasStructuredLogModule.Presentation,
-                EGameplayFactDomain.Damage => EGasStructuredLogModule.Damage,
-                _ => EGasStructuredLogModule.Unknown,
-            };
-        }
-
-        public static EGasStructuredLogLevel ToLevel(EGameplayFactSeverity severity)
-        {
-            return severity switch
-            {
-                EGameplayFactSeverity.Trace => EGasStructuredLogLevel.Trace,
-                EGameplayFactSeverity.Info => EGasStructuredLogLevel.Info,
-                EGameplayFactSeverity.Warning => EGasStructuredLogLevel.Warning,
-                EGameplayFactSeverity.Error => EGasStructuredLogLevel.Error,
-                _ => EGasStructuredLogLevel.Warning,
-            };
-        }
-
-        private static GasStructuredLogEntry Create(
-            int logIndex,
-            in ReplayLogEventBuffer evt,
-            GameplayFactClassification classification)
-        {
-            return new GasStructuredLogEntry(
-                logIndex,
-                evt.Frame,
-                evt.Sequence,
-                ToLevel(classification.Severity),
-                ToModule(classification.Domain),
-                classification.Domain,
-                classification.Category,
-                classification.Severity,
-                evt.Kind,
-                evt.GameplayEventType,
-                evt.CueEvent,
-                evt.SourceAsc,
-                evt.TargetAsc,
-                evt.SourceAbility,
-                evt.GameplayEffect,
-                evt.SourceEntity,
-                evt.RelatedAbility,
-                evt.CueEntity,
-                evt.CueSourceType,
-                evt.ContextId,
-                evt.EventCode,
-                evt.ReasonCode,
-                evt.RelatedAbilityCode,
-                evt.AttrSetCode,
-                evt.AttributeCode,
-                evt.TagIndex,
-                evt.Value,
-                evt.OldValue,
-                evt.NewValue,
-                evt.DamageAmount,
-                evt.Flag);
-        }
     }
 }

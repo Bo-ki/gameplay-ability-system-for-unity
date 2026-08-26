@@ -83,7 +83,7 @@ namespace GAS.AutoChessDemo
                       + AutoChessBattleValidationReport.CreateHeadlessLogicBudgetSummary(
                           runResult.HeadlessLogicBudget));
             Debug.Log("AutoChessDemoRuntimeDataOrientedScorecard:\n"
-                      + GasRuntimeDebugger.ExportDataOrientedScorecardToText(
+                      + GasRuntimeV1Diagnostics.ExportDataOrientedScorecardToText(
                           runResult.HeadlessLogicBudget.RuntimeScorecard));
             Debug.Log("AutoChessDemoRuntimeHotspots: "
                       + AutoChessBattleValidationReport.CreateHotspotSummary(result, diagnosticResult));
@@ -151,7 +151,7 @@ namespace GAS.AutoChessDemo
                                    runResult.HeadlessLogicBudget));
             builder.AppendLine("AutoChessDemoHeadlessRuntimeDataOrientedScorecard:");
             builder.Append(
-                GasRuntimeDebugger.ExportDataOrientedScorecardToText(
+                GasRuntimeV1Diagnostics.ExportDataOrientedScorecardToText(
                     runResult.HeadlessLogicBudget.RuntimeScorecard));
             builder.AppendLine("AutoChessDemoHeadlessRuntimeHotspots: "
                                + AutoChessBattleValidationReport.CreateHotspotSummary(

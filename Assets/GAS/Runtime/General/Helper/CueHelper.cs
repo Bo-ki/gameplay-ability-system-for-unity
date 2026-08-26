@@ -1,214 +1,123 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Unity.Entities;
-using UnityEngine;
 
 namespace GAS.Runtime
 {
+    /// <summary>
+    /// 提供 Cue 类型与参数的 authoring 映射；它只创建托管表现对象，不拥有 ECS 或 gameplay 状态。
+    /// </summary>
     public static class CueHelper
     {
-        public static GameplayCueBase TryCreateCue(GameplayCueConfig param)
+        private static readonly Dictionary<string, Type> CueTypeMap = new Dictionary<string, Type>();
+        private static readonly Dictionary<string, Type> CueParamTypeMap = new Dictionary<string, Type>();
+        private static readonly Dictionary<string, string> CueTypeToParamTypeMap = new Dictionary<string, string>();
+
+        /// <summary>
+        /// 根据 Cue 配置创建表现对象。
+        /// </summary>
+        public static GameplayCueBase TryCreateCue(GameplayCueConfig config)
         {
-            return TryCreateCue(param.CueType, param.Param);
+            return config == null ? null : TryCreateCue(config.CueType, config.Param);
         }
 
-        public static GameplayCueBase TryCreateCue(string cueType, XParam param)
+        /// <summary>
+        /// 根据 Cue 类型名创建表现对象。
+        /// </summary>
+        public static GameplayCueBase TryCreateCue(string cueType, XParam parameter)
         {
-            if (CueTypeMap.TryGetValue(cueType, out var type))
-                return TryCreateCue(type, param);
-#if UNITY_EDITOR
-            Debug.LogError($"[EX] 创建Cue失败:Can't find Cue for cueType [{cueType}]. " +
-                           "Cue的Type映射脚本错误，请重新生成。");
-#endif
-            return null;
+            return CueTypeMap.TryGetValue(cueType ?? string.Empty, out var type)
+                ? TryCreateCue(type, parameter)
+                : null;
         }
 
-        public static GameplayCueBase TryCreateCue(Type type, XParam param)
+        /// <summary>
+        /// 通过反射创建 Cue，并注入其强类型参数。
+        /// </summary>
+        public static GameplayCueBase TryCreateCue(Type cueType, XParam parameter)
         {
-            try
-            {
-                if (Activator.CreateInstance(type) is GameplayCueBase cue)
-                {
-                    cue.InitParameters(param);
-                    return cue;
-                }
-            }
-            catch (MissingMethodException e)
-            {
-                Debug.LogError("[EX] 创建Cue失败: " +
-                               $"请检查这个类【'{type.FullName}'】是否继承自NewGameplayCueBase;" +
-                               "或者，GameplayCueBase的Type映射脚本是否更新，重新生成。" +
-                               $"Error Exception:{e.Message}");
-                throw;
-            }
-            return null;
-        }
+            if (cueType == null || !typeof(GameplayCueBase).IsAssignableFrom(cueType))
+                return null;
 
-        public static XParam CreateCueParameter(string type, List<object> paramData = null)
-        {
-            var cueParamConfigType = GetCueLogicParamType(type);
-            var cueParamEditor = (XParam)Activator.CreateInstance(cueParamConfigType);
-#if UNITY_EDITOR
-            if (paramData != null) cueParamEditor.DecodeExcelData(paramData);
-#endif
-            return cueParamEditor;
-        }
-
-        public static Type GetCueLogicParamType(string cueType)
-        {
-            return CueType2CueParamTypeMap.TryGetValue(cueType,out var cueParam) ? CueParamTypeMap[cueParam] : null;
-        }
-
-        public static Type GetCueLogicParamType(Type cueType)
-        {
-            var cueParam = CueType2CueParamTypeMap[cueType.Name];
-            return CueParamTypeMap[cueParam];
-        }
-
-        #region Cue
-
-        private static readonly Dictionary<string, Type> CueTypeMap = new();
-        private static readonly Dictionary<string, Type> CueParamTypeMap = new();
-        private static readonly Dictionary<string, string> CueType2CueParamTypeMap = new();
-
-        public static void RegisterCue(string sType, Type logicType,Type cueParamType)
-        {
-            CueTypeMap[sType] = logicType;
-            CueParamTypeMap[cueParamType.Name] = cueParamType;
-            CueType2CueParamTypeMap[sType] = cueParamType.Name;
-        }
-
-        public static Type GetCueType(string sType)
-        {
-            if (CueTypeMap.TryGetValue(sType, out var type)) return type;
-#if UNITY_EDITOR
-            Debug.LogError($"[EX] CueTypeMap中没有找到类型: {sType}，请检查是否注册了该Cue类型。");
-#endif
-            return null;
-        }
-
-        public static void RegisterCue<T>(string sType,Type cueParam) where T : GameplayCueBase
-        {
-            RegisterCue(sType, typeof(T),cueParam);
-        }
-
-        public static List<string> GetCueTypeNames()
-        {
-            return CueTypeMap.Keys.ToList();
-        }
-
-        #endregion
-
-        public static void StopCue(Entity cueEntity,EntityManager entityManager)
-        {
-            if (cueEntity != Entity.Null
-                && entityManager.Exists(cueEntity)
-                && entityManager.HasComponent<CuePlayableTag>(cueEntity))
-            {
-                entityManager.SetComponentEnabled<CuePlayableTag>(cueEntity,false);
-            }
-        }
-
-        public static void PlayCue(Entity cueEntity,EntityManager entityManager)
-        {
-            if (cueEntity != Entity.Null
-                && entityManager.Exists(cueEntity)
-                && entityManager.HasComponent<CueRuntimeActiveTag>(cueEntity)
-                && entityManager.IsComponentEnabled<CueRuntimeActiveTag>(cueEntity)
-                && entityManager.HasComponent<CuePlayingTag>(cueEntity)
-                && entityManager.HasComponent<CuePlayableTag>(cueEntity)
-                && !entityManager.IsComponentEnabled<CuePlayingTag>(cueEntity))
-            {
-                entityManager.SetComponentEnabled<CuePlayableTag>(cueEntity,true);
-            }
-        }
-
-        public static CueManagedInstanceComponent InitInstantCueFromGameplayEffect(
-            EntityManager entityManager,
-            CueManagedInstanceComponent cue,
-            Entity cueEntity,
-            Entity ge)
-        {
-            cue.Cue.SetRuntime(entityManager, cueEntity);
-            cue.Cue.SetSourceEntity(ge,CueSourceType.GameplayEffect);
-            if (entityManager.HasComponent<CuePresentationRequestComponent>(cueEntity))
-            {
-                var request = entityManager.GetComponentData<CuePresentationRequestComponent>(cueEntity);
-                request.SourceEntity = ge;
-                request.SourceType = CueSourceType.GameplayEffect;
-                entityManager.SetComponentData(cueEntity, request);
-            }
+            var cue = Activator.CreateInstance(cueType) as GameplayCueBase;
+            cue?.InitParameters(parameter);
             return cue;
         }
 
-        #region 通用型工具接口
-
-        public static void TryPlayCueOnAsc(EntityManager entityManager, Entity targetAsc, Entity cueEntity, Entity sourceGE)
+        /// <summary>
+        /// 创建 Cue 参数对象，供配置编辑和序列化使用。
+        /// </summary>
+        public static XParam CreateCueParameter(string cueType, IList<object> parameterData = null)
         {
-            TryPlayCueOnAsc(entityManager, targetAsc, cueEntity, sourceGE, CueSourceType.GameplayEffect);
+            var parameterType = GetCueLogicParamType(cueType);
+            if (parameterType == null)
+                return null;
+
+            var parameter = Activator.CreateInstance(parameterType) as XParam;
+#if UNITY_EDITOR
+            if (parameterData != null)
+                parameter?.DecodeExcelData(parameterData.ToList());
+#endif
+            return parameter;
         }
 
-        public static void TryPlayCueOnAsc(
-            EntityManager entityManager,
-            Entity targetAsc,
-            Entity cueEntity,
-            Entity sourceEntity,
-            CueSourceType sourceType)
+        /// <summary>
+        /// 返回 Cue 类型对应的参数类型。
+        /// </summary>
+        public static Type GetCueLogicParamType(string cueType)
         {
-            // 1.先判断tag是否可以播放cue
-            if (cueEntity == Entity.Null
-                || targetAsc == Entity.Null
-                || !entityManager.Exists(cueEntity)
-                || !entityManager.Exists(targetAsc)
-                || !entityManager.HasComponent<CueRuntimeActiveTag>(cueEntity)
-                || !entityManager.IsComponentEnabled<CueRuntimeActiveTag>(cueEntity)
-                || !entityManager.HasComponent<CueManagedInstanceComponent>(cueEntity)
-                || !entityManager.HasComponent<CuePresentationRequestComponent>(cueEntity))
-            {
-                return;
-            }
+            if (!CueTypeToParamTypeMap.TryGetValue(cueType ?? string.Empty, out var parameterName))
+                return null;
 
-            if (entityManager.HasComponent<CueRequiredTagsComponent>(cueEntity)
-                && entityManager.IsComponentEnabled<CueRequiredTagsComponent>(cueEntity))
-            {
-                var requiredTags = entityManager.GetComponentData<CueRequiredTagsComponent>(cueEntity);
-                if (!TagRequirementEvaluator
-                    .EvaluateRequired(entityManager, targetAsc, requiredTags.requirement)
-                    .Passed)
-                {
-                    return;
-                }
-            }
-            if (entityManager.HasComponent<CueImmunityTagsComponent>(cueEntity)
-                && entityManager.IsComponentEnabled<CueImmunityTagsComponent>(cueEntity))
-            {
-                var immunityTags = entityManager.GetComponentData<CueImmunityTagsComponent>(cueEntity);
-                if (!TagRequirementEvaluator
-                    .EvaluateImmunity(entityManager, targetAsc, immunityTags.requirement)
-                    .Passed)
-                {
-                    return;
-                }
-            }
-            // 2.写入 Cue 表现层请求；旧 managed Cue adapter 只有在显式接入时才会消费。
-            var cueLogic = entityManager.GetComponentData<CueManagedInstanceComponent>(cueEntity);
-            if (cueLogic.Cue == null)
-                return;
-
-            var request = entityManager.GetComponentData<CuePresentationRequestComponent>(cueEntity);
-            request.ResetRequested = 1;
-            request.SourceEntity = sourceEntity;
-            request.SourceType = sourceType;
-            request.SourceUpdateRequested = 1;
-            request.TargetAsc = targetAsc;
-            request.AddTargetRequested = 1;
-            entityManager.SetComponentData(cueEntity, request);
-
-            // 3.激活CuePlaying
-            entityManager.SetComponentEnabled<CuePlayingTag>(cueEntity, false);
-            entityManager.SetComponentEnabled<CuePlayableTag>(cueEntity, true);
+            return CueParamTypeMap.TryGetValue(parameterName, out var parameterType)
+                ? parameterType
+                : null;
         }
-        #endregion
+
+        /// <summary>
+        /// 返回 Cue 类型对应的参数类型。
+        /// </summary>
+        public static Type GetCueLogicParamType(Type cueType)
+        {
+            return cueType == null ? null : GetCueLogicParamType(cueType.Name);
+        }
+
+        /// <summary>
+        /// 注册一个 Cue 类型及其参数类型，供 authoring 反射和配置解码使用。
+        /// </summary>
+        public static void RegisterCue(string cueType, Type logicType, Type cueParamType)
+        {
+            if (string.IsNullOrWhiteSpace(cueType) || logicType == null || cueParamType == null)
+                return;
+
+            CueTypeMap[cueType] = logicType;
+            CueParamTypeMap[cueParamType.Name] = cueParamType;
+            CueTypeToParamTypeMap[cueType] = cueParamType.Name;
+        }
+
+        /// <summary>
+        /// 注册一个泛型 Cue 类型及其参数类型。
+        /// </summary>
+        public static void RegisterCue<T>(string cueType, Type cueParamType)
+            where T : GameplayCueBase
+        {
+            RegisterCue(cueType, typeof(T), cueParamType);
+        }
+
+        /// <summary>
+        /// 返回已注册 Cue 类型名的稳定快照。
+        /// </summary>
+        public static List<string> GetCueTypeNames()
+        {
+            return CueTypeMap.Keys.OrderBy(value => value, StringComparer.Ordinal).ToList();
+        }
+
+        /// <summary>
+        /// 返回已注册 Cue 类型。
+        /// </summary>
+        public static Type GetCueType(string cueType)
+        {
+            return CueTypeMap.TryGetValue(cueType ?? string.Empty, out var type) ? type : null;
+        }
     }
 }

@@ -5,32 +5,25 @@ using Unity.Entities;
 namespace GAS.RuntimeV1.Tests.PlayMode
 {
     /// <summary>
-    /// 在真实 World 中冻结迁移前 ASC archetype 同时持有两套 legacy Entity buffer 的事实。
+    /// 验证 Runtime v1 只创建 ASC-local slab 布局，不再暴露旧 Ability/GameplayEffect Entity archetype。
     /// </summary>
     [TestFixture]
-    public class LegacyAscArchetypePlayModeTests
+    public class RuntimeV1AscArchetypePlayModeTests
     {
         /// <summary>
-        /// 创建 ASC archetype 实体并验证 Ability 与 GameplayEffect 的 legacy buffer 同时存在。
+        /// 创建 v1 ASC 并确认固定布局、非紧凑 slab 与 Boundary fact buffer 同时存在。
         /// </summary>
         [Test]
-        public void 旧ASCArchetype_同时包含AbilitySlot与LegacyGameplayEffectBuffer()
+        public void RuntimeV1AscArchetype_只包含OwnerLocalAuthority()
         {
-            var world = new World("RuntimeV1 baseline PlayMode test");
-            try
-            {
-                var entityManager = world.EntityManager;
-                var ascArchetype = GASRuntimeEntityArchetypes.ASC(entityManager);
-                var asc = entityManager.CreateEntity(ascArchetype);
+            using var world = new World("Runtime v1 ASC archetype PlayMode test");
+            var entityManager = world.EntityManager;
+            var asc = entityManager.CreateEntity(GasRuntimeV1Archetypes.CreateAsc(entityManager));
 
-                Assert.That(entityManager.HasBuffer<AbilitySlotBuffer>(asc), Is.True);
-                Assert.That(entityManager.HasBuffer<LegacyGameplayEffectEntityBuffer>(asc), Is.True);
-            }
-            finally
-            {
-                GASRuntimeEntityArchetypes.ResetCache();
-                world.Dispose();
-            }
+            Assert.That(GasRuntimeV1Archetypes.HasAscLayout(entityManager, asc), Is.True);
+            Assert.That(entityManager.HasBuffer<GrantedAbilitySlot>(asc), Is.True);
+            Assert.That(entityManager.HasBuffer<ActiveEffectSlot>(asc), Is.True);
+            Assert.That(entityManager.HasBuffer<BoundaryFactBuffer>(asc), Is.True);
         }
     }
 }

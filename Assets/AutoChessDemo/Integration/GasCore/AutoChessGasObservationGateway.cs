@@ -125,7 +125,7 @@ namespace GAS.AutoChessDemo
             var observation = s_runtimeV1Observation.CreateSnapshot();
             return new AutoChessGasCoreObservationSnapshot(
                 s_runtimeV1Observation.CreateStructuredLogSnapshot(),
-                default,
+                GasRuntimeV1DiagnosticSnapshot.Empty,
                 observation);
         }
 
@@ -733,14 +733,8 @@ namespace GAS.AutoChessDemo
                 replayKind,
                 gameplayEventType,
                 cueEvent,
-                Entity.Null,
-                Entity.Null,
-                Entity.Null,
-                Entity.Null,
-                Entity.Null,
-                Entity.Null,
-                Entity.Null,
-                CueSourceType.GameplayEffect,
+                sourceReportKey,
+                targetReportKey,
                 0,
                 eventCode,
                 (int)payload.Integer1,
@@ -752,9 +746,7 @@ namespace GAS.AutoChessDemo
                 oldValue,
                 newValue,
                 damage,
-                0,
-                sourceReportKey,
-                targetReportKey));
+                0));
         }
 
         /// <summary>

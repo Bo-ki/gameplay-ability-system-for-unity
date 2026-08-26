@@ -8,7 +8,7 @@
       "ProjectRelativePath": "Assets/AutoChessDemo/Generated/AutoChessGeneratedConfig.gen.cs",
       "Layer": "Runtime",
       "RuntimeVisible": true,
-      "ArtifactCategory": "",
+      "ArtifactCategory": "RuntimePureGlue",
       "VersionControlled": true
     }
   ]

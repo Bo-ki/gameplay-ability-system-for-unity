@@ -793,7 +793,7 @@ namespace GAS.AutoChessDemo
         public readonly AutoChessBattleRuntimeTiming RuntimeTiming;
         public readonly AutoChessBattleUnitResult[] Units;
         public readonly AutoChessGasV1ObservationSnapshot RuntimeV1Observation;
-        public readonly GasRuntimeDiagnosticSnapshot RuntimeDiagnostics;
+        public readonly GasRuntimeV1DiagnosticSnapshot RuntimeDiagnostics;
         public readonly GasRuntimeOfficialToolDiffSnapshot OfficialToolDiff;
         public readonly GasStructuredLogExportSnapshot StructuredLogSnapshot;
         public readonly AutoChessBattleReport BattleReport;
@@ -816,7 +816,7 @@ namespace GAS.AutoChessDemo
             AutoChessBattleRuntimeTiming runtimeTiming,
             AutoChessBattleUnitResult[] units,
             AutoChessGasV1ObservationSnapshot runtimeV1Observation,
-            GasRuntimeDiagnosticSnapshot runtimeDiagnostics,
+            GasRuntimeV1DiagnosticSnapshot runtimeDiagnostics,
             GasRuntimeOfficialToolDiffSnapshot officialToolDiff,
             GasStructuredLogExportSnapshot structuredLogSnapshot,
             AutoChessBattleReport battleReport,

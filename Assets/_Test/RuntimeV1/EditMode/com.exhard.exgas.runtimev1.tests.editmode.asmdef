@@ -3,7 +3,6 @@
     "rootNamespace": "",
     "references": [
         "com.exhard.exgas.runtime",
-        "com.exhard.exgas.generated.runtime",
         "Unity.Collections",
         "Unity.Entities"
     ],

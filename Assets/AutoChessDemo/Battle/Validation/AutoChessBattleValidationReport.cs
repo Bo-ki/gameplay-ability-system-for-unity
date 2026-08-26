@@ -544,10 +544,10 @@ namespace GAS.AutoChessDemo
             AppendTiming(builder, "GASTickTotal", result.RuntimeTiming.TickTotal);
             AppendTiming(builder, "GasFixedTickSystemGroup", result.RuntimeTiming.FramePrepare);
             AppendTiming(builder, "GasCommandIngressSystem", result.RuntimeTiming.CommandResolve);
-            AppendTiming(builder, "GasTickKernelSystem", result.RuntimeTiming.CoreSimulation);
-            AppendTiming(builder, "GasTickKernelSystem", result.RuntimeTiming.StructuralCommit);
-            AppendTiming(builder, "GasBoundaryDrainCoordinator", result.RuntimeTiming.BoundaryProjection);
-            AppendTiming(builder, "GasBoundaryDrainCoordinator", result.RuntimeTiming.DependencyDrain);
+            AppendTiming(builder, "GasTickKernelCore", result.RuntimeTiming.CoreSimulation);
+            AppendTiming(builder, "GasTickKernelStructuralCommit", result.RuntimeTiming.StructuralCommit);
+            AppendTiming(builder, "GasBoundaryDrainProjection", result.RuntimeTiming.BoundaryProjection);
+            AppendTiming(builder, "GasBoundaryDrainDependency", result.RuntimeTiming.DependencyDrain);
             return builder.ToString();
         }
 

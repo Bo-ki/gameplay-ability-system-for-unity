@@ -1,479 +1,177 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using UnityEditor;
-using UnityEngine;
-using Debug = UnityEngine.Debug;
 
 namespace GAS.Editor
 {
+    /// <summary>
+    /// EX-GAS Runtime v1 的编辑器生成入口，仅负责 Luban 导表与统一 CodeGen Pipeline 调度。
+    /// 旧版按 Tag、Ability、Cue 或 Launcher 分散生成的入口已移除，避免重新产生第二套运行时事实源。
+    /// </summary>
     public static class CodeGenerator
     {
-        [MenuItem("EXTool/EX-GAS/生成脚本/GAS表配置",priority = 0)]
+        /// <summary>
+        /// 执行 Luban 导表并刷新编辑器资源数据库。
+        /// </summary>
+        [MenuItem("EXTool/EX-GAS/生成脚本/GAS表配置", priority = 0)]
         public static void GenerateGasConfigTables()
         {
             TryGenerateGasConfigTables();
         }
 
+        /// <summary>
+        /// 执行一次 Luban 导表，供 Runtime v1 Pipeline 和 GAS Center 共用。
+        /// </summary>
         internal static bool TryGenerateGasConfigTables()
         {
             var settings = GasCodeGenEnvironment.ActiveSettings
                            ?? (GasCodeGenEnvironment.IsOffline
                                ? GasCodeGenSettings.CreateDefault()
-                               : GasCodeGenSettings.From(GASSettingAsset.Instance));
+                               : GasCodeGenSettings.From(GASSettingAsset.LoadOrCreate()));
             GasCodeGenEnvironment.SetActiveSettings(settings);
 
-            var projectRoot = GasCodeGenEnvironment.ProjectRoot;
-            var fullConfigProjectPath = ResolveProjectPath(projectRoot, settings.ConfigProjectPath);
-            var fullOutputPath = ResolveProjectPath(projectRoot, settings.LubanDataOutputPath);
-            var fullCodeOutputPath = ResolveProjectPath(projectRoot, settings.LubanCodeOutputPath);
-            var fullLubanDllPath = Path.GetFullPath(Path.Combine(fullConfigProjectPath, "..", "Tools", "Luban", "Luban.dll"));
-            var fullLubanConfPath = Path.Combine(fullConfigProjectPath, "luban.conf");
+            var configProjectPath = GasCodeGenEnvironment.ResolveProjectPath(settings.ConfigProjectPath);
+            var outputPath = GasCodeGenEnvironment.ResolveProjectPath(settings.LubanDataOutputPath);
+            var codeOutputPath = GasCodeGenEnvironment.ResolveProjectPath(settings.LubanCodeOutputPath);
+            var lubanDllPath = Path.GetFullPath(Path.Combine(configProjectPath, "..", "Tools", "Luban", "Luban.dll"));
+            var lubanConfigPath = Path.Combine(configProjectPath, "luban.conf");
 
-            if (!Directory.Exists(fullConfigProjectPath))
-            {
-                GasCodeGenEnvironment.LogError($"配置表工程路径不存在: {fullConfigProjectPath}");
+            if (!ValidateLubanInputs(configProjectPath, lubanDllPath, lubanConfigPath))
                 return false;
-            }
 
-            if (!File.Exists(fullLubanDllPath))
-            {
-                GasCodeGenEnvironment.LogError($"Luban.dll 不存在: {fullLubanDllPath}");
-                return false;
-            }
-
-            if (!File.Exists(fullLubanConfPath))
-            {
-                GasCodeGenEnvironment.LogError($"luban.conf 不存在: {fullLubanConfPath}");
-                return false;
-            }
-
-            Directory.CreateDirectory(fullOutputPath);
-            Directory.CreateDirectory(fullCodeOutputPath);
-
-            // 创建进程配置
-            Process process = new Process();
-            process.StartInfo = new ProcessStartInfo()
-            {
-                FileName = "dotnet",
-                WorkingDirectory = fullConfigProjectPath,
-                Arguments = $"{Quote(fullLubanDllPath)} " +
-                            "-t client " +
-                            "-c cs-simple-json " +
-                            "-d json " +
-                            $"--conf {Quote(fullLubanConfPath)} " +
-                            $"-x outputCodeDir={Quote(fullCodeOutputPath)} " +
-                            $"-x outputDataDir={Quote(fullOutputPath)}",
-                UseShellExecute = false,              // 不使用系统shell
-                RedirectStandardOutput = true,        // 重定向输出
-                RedirectStandardError = true,         // 重定向错误
-                CreateNoWindow = true                 // 不创建窗口
-            };
-
-            // 注册输出事件
-            process.OutputDataReceived += (sender, e) => {
-                if (!string.IsNullOrEmpty(e.Data)) 
-                    GasCodeGenEnvironment.Log(e.Data);
-            };
-        
-            process.ErrorDataReceived += (sender, e) => {
-                if (!string.IsNullOrEmpty(e.Data)) 
-                    GasCodeGenEnvironment.LogError(e.Data);
-            };
-
-            try
-            {
-                // 启动进程
-                process.Start();
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
-                process.WaitForExit(); // 等待执行完成
-                process.WaitForExit();
-
-                if (process.ExitCode != 0)
-                {
-                    GasCodeGenEnvironment.LogError($"Luban执行失败，退出代码: {process.ExitCode}");
-                    return false;
-                }
-
-                GasCodeGenEnvironment.Log($"Luban执行完成，退出代码: {process.ExitCode}");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                GasCodeGenEnvironment.LogError($"执行错误: {ex.Message}");
-                return false;
-            }
-            finally
-            {
-                process.Close();
-                // 刷新资源
-                GasCodeGenEnvironment.RefreshAssetDatabase();
-            }
+            Directory.CreateDirectory(outputPath);
+            Directory.CreateDirectory(codeOutputPath);
+            return RunLuban(configProjectPath, lubanDllPath, lubanConfigPath, outputPath, codeOutputPath);
         }
 
-        private static string ResolveProjectPath(string projectRoot, string path)
-        {
-            return Path.GetFullPath(Path.IsPathRooted(path)
-                ? path
-                : Path.Combine(projectRoot, path));
-        }
-
-        private static string Quote(string value)
-        {
-            return $"\"{value.Replace("\"", "\\\"")}\"";
-        }
-        
-        public static string MakeTagValidIdentifier(string name)
-        {
-            // Replace '.' with '_'
-            name = name.Replace('.', '_');
-
-            // If starts with a digit, add '_' at the beginning
-            if (char.IsDigit(name[0])) name = "_" + name;
-
-            // Ensure the identifier is valid
-            return string.Join("",
-                name.Split(
-                    new[]
-                    {
-                        ' ', '-', '.', ':', ',', '!', '?', '#', '$', '%', '^', '&', '*', '(', ')', '[', ']', '{', '}',
-                        '/', '\\', '|'
-                    }, StringSplitOptions.RemoveEmptyEntries));
-        }
-        
-        [MenuItem("EXTool/EX-GAS/生成脚本/GameplayTag")]
-        public static void GenerateTagCode()
-        {
-            CodeGeneratorTagPart.GenerateTag();
-        }
-        
-        [MenuItem("EXTool/EX-GAS/生成脚本/Attribute")]
-        public static void GenerateAttrCode()
-        {
-            var setting = GASSettingAsset.LoadOrCreate();
-            var attrJsonFilePath = setting.PathOfJsonAttr;
-            // 检查文件是否存在
-            if (!File.Exists(attrJsonFilePath))
-            {
-                Debug.LogError($"JSON file not found at {attrJsonFilePath}");
-                return;
-            }
-            var tagJsonText = File.ReadAllText(attrJsonFilePath);
-            var attrs = GasJsonReader.ReadAttributes(tagJsonText);
-            var filePath = setting.PathOfCodeAttr;
-            using var writer = new IndentedWriter(new StreamWriter(filePath));
-            writer.WriteLine("///////////////////////////////////");
-            writer.WriteLine("//// This is a generated file. ////");
-            writer.WriteLine("////     Do not modify it.     ////");
-            writer.WriteLine("///////////////////////////////////");
-            writer.WriteLine("");
-            writer.WriteLine("namespace GAS.Runtime");
-            writer.WriteLine("{");
-            writer.Indent++;
-            {
-                writer.WriteLine("public static class XAttribute");
-                writer.WriteLine("{");
-                writer.Indent++;
-                {
-                    foreach (var attr in attrs)
-                    {
-                        writer.WriteLine(
-                            $"public const int {MakeTagValidIdentifier(attr.name)} = {attr.id};");
-                    }
-                }
-
-                writer.Indent--;
-                writer.WriteLine("}");
-            }
-            writer.Indent--;
-            writer.WriteLine("}");
-        }
-        
-        [MenuItem("EXTool/EX-GAS/生成脚本/AttributeSet")]
-        public static void GenerateAttrSetCode()
-        {
-            var setting = GASSettingAsset.LoadOrCreate();
-            var attrSetJsonFilePath = setting.PathOfJsonAttrSet;
-            // 检查文件是否存在
-            if (!File.Exists(attrSetJsonFilePath))
-            {
-                Debug.LogError($"JSON file not found at {attrSetJsonFilePath}");
-                return;
-            }
-            var attrSetJsonText = File.ReadAllText(attrSetJsonFilePath);
-            var attrSets = GasJsonReader.ReadAttributeSets(attrSetJsonText);
-            var filePath = setting.PathOfCodeAttrSet;
-            using var writer = new IndentedWriter(new StreamWriter(filePath));
-            writer.WriteLine("///////////////////////////////////");
-            writer.WriteLine("//// This is a generated file. ////");
-            writer.WriteLine("////     Do not modify it.     ////");
-            writer.WriteLine("///////////////////////////////////");
-            writer.WriteLine("");
-            writer.WriteLine("using System.Collections.Generic;");
-            writer.WriteLine("");
-            writer.WriteLine("namespace GAS.Runtime");
-            writer.WriteLine("{");
-            writer.Indent++;
-            {
-                writer.WriteLine("public static class XAttrSet");
-                writer.WriteLine("{");
-                writer.Indent++;
-                {
-                    foreach (var attrSet in attrSets)
-                    {
-                        writer.WriteLine(
-                            $"public const int {MakeTagValidIdentifier(attrSet.name)} = {attrSet.id};");
-                    }
-                }
-                
-                writer.Indent--;
-                writer.WriteLine("");
-                
-                writer.Indent++;
-                {
-                    foreach (var attrSet in attrSets)
-                    {
-                        writer.WriteLine("");
-                        writer.WriteLine(
-                            $"public class AS_{MakeTagValidIdentifier(attrSet.name)}");
-                        writer.WriteLine("{");
-                        writer.Indent++;
-                        {
-                            foreach (var attr in attrSet.attribute)
-                                writer.WriteLine(
-                                    $"public const int {MakeTagValidIdentifier(attr.GetAttrName())} = {attr.id};");
-                        }
-                        writer.Indent--;
-                        writer.WriteLine("}");
-                    }
-                }
-                writer.WriteLine("");
-                
-                writer.WriteLine("private static Dictionary<int, AttrSetConfig> _attributeSetMap = new Dictionary<int, AttrSetConfig>();");
-                writer.WriteLine("");
-                writer.WriteLine("public static Dictionary<int, AttrSetConfig> AttributeSetMap");
-                writer.WriteLine("{");
-                writer.Indent++;
-                {
-                    writer.WriteLine("get");
-                    writer.WriteLine("{");
-                    writer.Indent++;
-                    {
-                        writer.WriteLine("if (_attributeSetMap.Count == 0)");
-                        writer.WriteLine("{");
-                        writer.Indent++;
-                        {
-                            writer.WriteLine("var datas = XLuban.Tables.TbattributeSet.DataList;");
-                            writer.WriteLine("foreach (var attrSet in datas)");
-                            writer.WriteLine("{");
-                            writer.Indent++;
-                            writer.WriteLine("var settings = new AttributeBaseSetting[attrSet.Attribute.Length];");
-                            writer.WriteLine("for (var i = 0; i < attrSet.Attribute.Length; i++)");
-                            writer.WriteLine("{");
-                            writer.Indent++;
-                            writer.WriteLine("var a = attrSet.Attribute[i];");
-                            writer.WriteLine("settings[i] = new AttributeBaseSetting(a.ID, a.InitValue, a.UseMinValue,a.UseMaxValue, a.MinValue, a.MaxValue);");
-                            writer.Indent--;
-                            writer.WriteLine("}");
-                            writer.WriteLine("_attributeSetMap.Add(attrSet.ID,new AttrSetConfig(attrSet.ID,settings));");
-                            writer.Indent--;
-                            writer.WriteLine("}");
-                        }
-                        writer.Indent--;
-                        writer.WriteLine("}");
-                        writer.WriteLine("return _attributeSetMap;");
-                    }
-                    writer.Indent--;
-                    writer.WriteLine("}");
-                }
-                writer.Indent--;
-                writer.WriteLine("}");
-                
-                writer.Indent--;
-                writer.WriteLine("}");
-            }
-            writer.Indent--;
-            writer.WriteLine("}");
-        }
-        
-        [MenuItem("EXTool/EX-GAS/生成脚本/Ability")]
-        public static void GenerateAbilityCode()
-        {
-            CodeGeneratorAbilityPart.GenerateAbilityCode();
-        }
-        
-        [MenuItem("EXTool/EX-GAS/生成脚本/GameplayCue")]
-        public static void GenerateCueCode()
-        {
-            var setting = GASSettingAsset.LoadOrCreate();
-            var filePath = setting.PathOfCodeCue;
-            using var writer = new IndentedWriter(new StreamWriter(filePath));
-            writer.WriteLine("///////////////////////////////////");
-            writer.WriteLine("//// This is a generated file. ////");
-            writer.WriteLine("////     Do not modify it.     ////");
-            writer.WriteLine("///////////////////////////////////");
-
-            writer.WriteLine("");
-            
-            writer.WriteLine("namespace GAS.Runtime");
-            writer.WriteLine("{");
-            writer.Indent++;
-            {
-                writer.WriteLine("public static class XCue");
-                writer.WriteLine("{");
-                writer.Indent++;
-                {
-                    var allCue = EditorCueHelper.GetCachedCueTypes();
-                    var cueTypes = allCue as Type[] ?? allCue.ToArray();
-                    foreach (var cueType in cueTypes)
-                    {
-                        var cueName = cueType.Name;
-                        writer.WriteLine($"public const string CUE_{cueName} = \"{cueName}\";");
-                    }
-
-                    writer.WriteLine("");
-                    writer.WriteLine("public static void LoadCueType()");
-                    writer.WriteLine("{");
-                    writer.Indent++;
-                    {
-                        foreach (var cueType in cueTypes)
-                        {
-                            var cueName = cueType.Name;
-                            var typeFullName = cueType.FullName;
-                            var cueParamType = EditorCueHelper.CueToCueParamTypeMap()[cueName];
-                            var cueParamTypeFullName = cueParamType.FullName;
-                            writer.WriteLine($"var {cueName} = typeof({typeFullName});");
-                            writer.WriteLine($"CueHelper.RegisterCue(CUE_{cueName}, {cueName}, typeof({cueParamTypeFullName}));");
-                        }
-                    }
-                    writer.Indent--;
-                    writer.WriteLine("}");
-                }
-                writer.Indent--;
-                writer.WriteLine("}");
-            }
-            writer.Indent--;
-            writer.WriteLine("}");
-            
-            Console.WriteLine($"Generated CueCode at path: {filePath}");
-            AssetDatabase.Refresh();
-        }
-        
-        [MenuItem("EXTool/EX-GAS/生成脚本/LubanExtension")]
-        public static void GenerateLubanExtension()
-        {
-            CodeGeneratorLubanPart.GenerateLubanExtension();
-        }
-        
-        [MenuItem("EXTool/EX-GAS/生成脚本/Launcher")]
-        public static void GenerateLauncher()
-        {
-            // namespace GAS.Runtime
-            // {
-            //     public static class XLauncher
-            //     {
-            //         public static void InitCache()
-            //         {
-            //             XAbility.LoadAbilityCode();
-            //             XCue.LoadCueType();
-            //             XLuban.Init();
-            //         }
-            //       
-            //         public static void Launch()
-            //         {
-            //             InitCache();
-            //             GASManager.Initialize();
-            //         
-            //             // 初始化Tag系统
-            //             // 注意需要在GASManager.Initialize()之后调用
-            //             // 因为XTag创建全Tag的图鉴单例来作为运行时缓存，需要EntityManager。
-            //             XTag.InitTagList();
-            //         }
-            //     }
-            // }
-            var setting = GASSettingAsset.LoadOrCreate();
-            var filePath = setting.PathOfCodeLauncher;
-            using var writer = new IndentedWriter(new StreamWriter(filePath));
-            writer.WriteLine("///////////////////////////////////");
-            writer.WriteLine("//// This is a generated file. ////");
-            writer.WriteLine("////     Do not modify it.     ////");
-            writer.WriteLine("///////////////////////////////////");
-            writer.WriteLine("");
-            writer.WriteLine("using System;");
-            writer.WriteLine("");
-            writer.WriteLine("namespace GAS.Runtime");
-            writer.WriteLine("{");
-            writer.Indent++;
-            {
-                writer.WriteLine("public static class XLauncher");
-                writer.WriteLine("{");
-                writer.Indent++;
-                {
-                    writer.WriteLine("public static void InitCache()");
-                    writer.WriteLine("{");
-                    writer.Indent++;
-                    {
-                        writer.WriteLine("XAbility.LoadAbilityCode();");
-                        writer.WriteLine("XCue.LoadCueType();");
-                    }
-                    writer.Indent--;
-                    writer.WriteLine("}");
-                    writer.WriteLine("");
-                    
-                    writer.WriteLine("public static void InitConfigTables(Func<string, SimpleJSON.JSONNode> loader)");
-                    writer.WriteLine("{");
-                    writer.Indent++;
-                    {
-                        writer.WriteLine("XLuban.Init(loader);");
-                    }
-                    writer.Indent--;
-                    writer.WriteLine("}");
-                    
-                    writer.WriteLine("public static void Launch()");
-                    writer.WriteLine("{");
-                    writer.Indent++;
-                    {
-                        writer.WriteLine("InitCache();");
-                        writer.WriteLine("GASManager.Initialize();");
-                        writer.WriteLine("");
-                        writer.WriteLine("// 初始化Tag系统");
-                        writer.WriteLine("// 注意需要在GASManager.Initialize()之后调用");
-                        writer.WriteLine("// 因为XTag创建全Tag的图鉴单例来作为运行时缓存，需要EntityManager。");
-                        writer.WriteLine("XTag.InitTagList();");
-                    }
-                    writer.Indent--;
-                    writer.WriteLine("}");
-                }
-                writer.Indent--;
-                writer.WriteLine("}");
-            }
-            writer.Indent--;
-            writer.WriteLine("}");
-        }
-        
         /// <summary>
-        ///  生成所有GAS相关代码
+        /// 执行 Runtime v1 的统一生成流水线。
         /// </summary>
-        [MenuItem("EXTool/EX-GAS/生成脚本/生成所有")]
+        [MenuItem("EXTool/EX-GAS/生成脚本/Runtime v1", priority = 10)]
         public static void GenerateAllCode()
         {
             TryGenerateAllCode();
         }
 
-        [MenuItem("EXTool/EX-GAS/生成脚本/Glue/生成所有胶水代码（Pipeline）")]
-        public static void GenerateGluePipeline()
-        {
-            TryGenerateAllCode();
-        }
-
+        /// <summary>
+        /// 先通过输入处理门，再运行统一 Core 与 AutoChess 生成阶段。
+        /// </summary>
         public static bool TryGenerateAllCode()
         {
             if (!GasCodeGenProcessGate.RunDefault())
                 return false;
 
             return GasCodeGenPipeline.TryRunAll();
+        }
+
+        /// <summary>
+        /// 检查 Luban 工程、配置文件和运行时程序集是否齐全。
+        /// </summary>
+        private static bool ValidateLubanInputs(
+            string configProjectPath,
+            string lubanDllPath,
+            string lubanConfigPath)
+        {
+            if (!Directory.Exists(configProjectPath))
+            {
+                GasCodeGenEnvironment.LogError($"配置表工程路径不存在: {configProjectPath}");
+                return false;
+            }
+
+            if (!File.Exists(lubanDllPath))
+            {
+                GasCodeGenEnvironment.LogError($"Luban.dll 不存在: {lubanDllPath}");
+                return false;
+            }
+
+            if (!File.Exists(lubanConfigPath))
+            {
+                GasCodeGenEnvironment.LogError($"luban.conf 不存在: {lubanConfigPath}");
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 启动 Luban 子进程并将标准输出转发到统一日志入口。
+        /// </summary>
+        private static bool RunLuban(
+            string configProjectPath,
+            string lubanDllPath,
+            string lubanConfigPath,
+            string outputPath,
+            string codeOutputPath)
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "dotnet",
+                    WorkingDirectory = configProjectPath,
+                    Arguments = $"{Quote(lubanDllPath)} -t client -c cs-simple-json -d json " +
+                                $"--conf {Quote(lubanConfigPath)} " +
+                                $"-x outputCodeDir={Quote(codeOutputPath)} " +
+                                $"-x outputDataDir={Quote(outputPath)}",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.OutputDataReceived += (_, args) => LogOutput(args.Data, false);
+            process.ErrorDataReceived += (_, args) => LogOutput(args.Data, true);
+
+            try
+            {
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+                process.WaitForExit();
+                process.WaitForExit();
+
+                if (process.ExitCode != 0)
+                {
+                    GasCodeGenEnvironment.LogError($"Luban 执行失败，退出代码: {process.ExitCode}");
+                    return false;
+                }
+
+                GasCodeGenEnvironment.Log("Luban 执行完成。");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                GasCodeGenEnvironment.LogException(ex);
+                return false;
+            }
+            finally
+            {
+                GasCodeGenEnvironment.RefreshAssetDatabase();
+            }
+        }
+
+        /// <summary>
+        /// 将 Luban 的一行输出路由到普通或错误日志。
+        /// </summary>
+        private static void LogOutput(string message, bool isError)
+        {
+            if (string.IsNullOrEmpty(message))
+                return;
+
+            if (isError)
+                GasCodeGenEnvironment.LogError(message);
+            else
+                GasCodeGenEnvironment.Log(message);
+        }
+
+        /// <summary>
+        /// 为 Luban 命令行参数添加安全引号。
+        /// </summary>
+        private static string Quote(string value)
+        {
+            return $"\"{value.Replace("\"", "\\\"")}\"";
         }
     }
 }

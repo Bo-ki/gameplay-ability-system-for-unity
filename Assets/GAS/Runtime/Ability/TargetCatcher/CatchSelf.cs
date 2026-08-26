@@ -1,13 +1,9 @@
-using System.Collections.Generic;
-using Unity.Entities;
-
 namespace GAS.Runtime
 {
+    /// <summary>
+    /// 声明 Self 目标规则；实际 Owner identity 由 Runtime v1 session 解析。
+    /// </summary>
     public sealed class CatchSelf : TargetCatcherBase<XParamNone>
     {
-        protected override void CollectTargetsNonAllocCore(Entity mainTarget, List<Entity> results)
-        {
-            results.Add(Owner);
-        }
     }
 }

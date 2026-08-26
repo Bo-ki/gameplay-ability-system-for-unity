@@ -1,74 +1,19 @@
 using System.Collections.Generic;
-using GAS.General;
-using Unity.Entities;
+using System.Globalization;
 using UnityEngine;
 
 namespace GAS.Runtime
 {
+    /// <summary>
+    /// 保存生成期 Area 目标规则参数；物理命中只允许由宿主的 TargetResolve adapter 转换为稳定 target token。
+    /// </summary>
     public sealed class CatchAreaBox3D : TargetCatcherBase<XParamCatchAreaBox3D>
     {
-        private static readonly Collider[] Colliders = new Collider[64];
-
-        protected override void CollectTargetsNonAllocCore(Entity mainTarget, List<Entity> results)
-        {
-            int count;
-            if (Parameter.isWorldSpace)
-            {
-                count = Physics.OverlapBoxNonAlloc(
-                    Parameter.offset,
-                    Parameter.size * 0.5f,
-                    Colliders,
-                    Quaternion.Euler(Parameter.rotation),
-                    Parameter.layer.value);
-            }
-            else
-            {
-                var mainGameObject = PresentationEntityBindingRegistry.GetGameObjectFromEntity(EntityManager, mainTarget);
-                if (mainGameObject == null) return;
-
-                var mainTransform = mainGameObject.transform;
-                count = Physics.OverlapBoxNonAlloc(
-                    mainTransform.TransformPoint(Parameter.offset),
-                    Parameter.size * 0.5f,
-                    Colliders,
-                    Quaternion.Euler(mainTransform.TransformDirection(Parameter.rotation)),
-                    Parameter.layer.value);
-            }
-
-            for (var i = 0; i < count; ++i)
-            {
-                var mono = Colliders[i].GetComponent<AbilitySystemBinding>();
-                if (mono != null && mono.TryResolveRuntimeEntityForBoundary(out var target))
-                    results.Add(target);
-            }
-        }
-
-        public override void OnEditorPreview(GameObject obj)
-        {
-#if UNITY_EDITOR
-            if (Parameter == null) return;
-
-            Vector3 center;
-            Quaternion rotation;
-
-            if (Parameter.isWorldSpace)
-            {
-                center = Parameter.offset;
-                rotation = Quaternion.Euler(Parameter.rotation);
-            }
-            else
-            {
-                if (obj == null) return;
-                var t = obj.transform;
-                center = t.TransformPoint(Parameter.offset);
-                rotation = Quaternion.Euler(t.TransformDirection(Parameter.rotation));
-            }
-
-            DebugDrawTool.DrawWireCube(center, rotation, Parameter.size, Color.green,10);
-#endif
-        }
     }
 
+    /// <summary>
+    /// 保存 Box3D 目标规则的 authoring 参数，供 normalized row 解码和 TargetResolve bake 使用。
+    /// </summary>
     public class XParamCatchAreaBox3D : XParam
     {
         [BeanField(nameof(SetIsWorldSpace),Order = 1)]
@@ -114,78 +59,21 @@ namespace GAS.Runtime
 #if UNITY_EDITOR
         public void DecodeExcelData(List<object> paramData)
         {
-            // isWorldSpace
-            if (paramData.Count > 0)
-            {
-                var strData = paramData[0] as string;
-                if (string.IsNullOrEmpty(strData)) return;
+            if (paramData == null)
+                return;
 
-                if (!bool.TryParse(strData, out isWorldSpace))
-                    isWorldSpace = false;
-            }
-
-            // offset
-            if (paramData.Count > 1)
-            {
-                var strData = paramData[1] as string;
-                if (string.IsNullOrEmpty(strData)) return;
-
-                var data = strData.Split(',');
-                if (data.Length == 3)
-                {
-                    if (float.TryParse(data[0], out var x) &&
-                        float.TryParse(data[1], out var y) &&
-                        float.TryParse(data[2], out var z))
-                    {
-                        offset = new Vector3(x, y, z);
-                    }
-                }
-            }
-
-            // size
-            if (paramData.Count > 2)
-            {
-                var strData = paramData[2] as string;
-                if (string.IsNullOrEmpty(strData)) return;
-
-                var data = strData.Split(',');
-                if (data.Length == 3)
-                {
-                    if (float.TryParse(data[0], out var x) &&
-                        float.TryParse(data[1], out var y) &&
-                        float.TryParse(data[2], out var z))
-                    {
-                        size = new Vector3(x, y, z);
-                    }
-                }
-            }
-
-            // rotation
-            if (paramData.Count > 3)
-            {
-                var strData = paramData[3] as string;
-                if (string.IsNullOrEmpty(strData)) return;
-
-                var data = strData.Split(',');
-                if (data.Length == 3)
-                {
-                    if (float.TryParse(data[0], out var x) &&
-                        float.TryParse(data[1], out var y) &&
-                        float.TryParse(data[2], out var z))
-                    {
-                        rotation = new Vector3(x, y, z);
-                    }
-                }
-            }
-
-            // layer
-            if (paramData.Count > 4)
-            {
-                var strData = paramData[4] as string;
-                if (string.IsNullOrEmpty(strData)) return;
-
-                if (int.TryParse(strData, out var layerNumber)) layer = layerNumber;
-            }
+            if (TryGetValue(paramData, 0, out var worldSpace)
+                && bool.TryParse(worldSpace, out var parsedWorldSpace))
+                isWorldSpace = parsedWorldSpace;
+            if (TryParseVector3(paramData, 1, out var parsedOffset))
+                offset = parsedOffset;
+            if (TryParseVector3(paramData, 2, out var parsedSize))
+                size = parsedSize;
+            if (TryParseVector3(paramData, 3, out var parsedRotation))
+                rotation = parsedRotation;
+            if (TryGetValue(paramData, 4, out var layerValue)
+                && int.TryParse(layerValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedLayer))
+                layer = parsedLayer;
         }
 
         public List<object> EncodeExcelData()
@@ -193,12 +81,47 @@ namespace GAS.Runtime
             var data = new List<object>
             {
                 isWorldSpace.ToString(),
-                $"{offset.x},{offset.y},{offset.z}",
-                $"{size.x},{size.y},{size.z}",
-                $"{rotation.x},{rotation.y},{rotation.z}",
-                layer.value.ToString()
+                FormatVector3(offset),
+                FormatVector3(size),
+                FormatVector3(rotation),
+                layer.value.ToString(CultureInfo.InvariantCulture)
             };
             return data;
+        }
+
+        private static bool TryGetValue(List<object> values, int index, out string value)
+        {
+            value = null;
+            if (index < 0 || index >= values.Count || values[index] == null)
+                return false;
+
+            value = System.Convert.ToString(values[index], CultureInfo.InvariantCulture);
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        private static bool TryParseVector3(List<object> values, int index, out Vector3 result)
+        {
+            result = default;
+            if (!TryGetValue(values, index, out var encoded))
+                return false;
+
+            var parts = encoded.Split(',');
+            if (parts.Length != 3
+                || !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x)
+                || !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y)
+                || !float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var z))
+                return false;
+
+            result = new Vector3(x, y, z);
+            return true;
+        }
+
+        private static string FormatVector3(Vector3 value)
+        {
+            return string.Join(",",
+                value.x.ToString("G9", CultureInfo.InvariantCulture),
+                value.y.ToString("G9", CultureInfo.InvariantCulture),
+                value.z.ToString("G9", CultureInfo.InvariantCulture));
         }
 #endif
     }

@@ -80,12 +80,12 @@ namespace GAS.AutoChessDemo
     internal readonly struct AutoChessGasCoreObservationSnapshot
     {
         public readonly GasStructuredLogExportSnapshot StructuredLog;
-        public readonly GasRuntimeDiagnosticSnapshot RuntimeDiagnostics;
+        public readonly GasRuntimeV1DiagnosticSnapshot RuntimeDiagnostics;
         public readonly AutoChessGasV1ObservationSnapshot RuntimeV1Observation;
 
         public AutoChessGasCoreObservationSnapshot(
             GasStructuredLogExportSnapshot structuredLog,
-            GasRuntimeDiagnosticSnapshot runtimeDiagnostics,
+            GasRuntimeV1DiagnosticSnapshot runtimeDiagnostics,
             AutoChessGasV1ObservationSnapshot runtimeV1Observation = default)
         {
             StructuredLog = structuredLog;

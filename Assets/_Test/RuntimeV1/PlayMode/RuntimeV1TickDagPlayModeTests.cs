@@ -16,10 +16,10 @@ namespace GAS.RuntimeV1.Tests.PlayMode
     public class RuntimeV1TickDagPlayModeTests
     {
         /// <summary>
-        /// 验证 WorldOwner 幂等安装唯一父链、唯一 Ingress/Kernel，且不创建旧五组实例。
+        /// 验证 WorldOwner 幂等安装唯一正式父链、Ingress 与 Kernel。
         /// </summary>
         [Test]
-        public void WorldOwner_幂等安装唯一正式拓扑且不注册旧五组()
+        public void WorldOwner_幂等安装唯一正式拓扑()
         {
             using var world = new World("Runtime v1 topology PlayMode test");
             using var owner = GasRuntimeWorldOwner.Install(world);
@@ -28,7 +28,6 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             Assert.That(repeated, Is.SameAs(owner));
             AssertFormalParentOrder(world);
             AssertIngressBeforeKernel(world);
-            AssertLegacyGroupsAbsent(world);
         }
 
         /// <summary>
@@ -426,19 +425,6 @@ namespace GAS.RuntimeV1.Tests.PlayMode
 
             Assert.That(ingressIndex, Is.GreaterThanOrEqualTo(0));
             Assert.That(kernelIndex, Is.GreaterThan(ingressIndex));
-        }
-
-        /// <summary>
-        /// 验证破坏性安装不再隐式创建旧五个 phase group。
-        /// </summary>
-        private static void AssertLegacyGroupsAbsent(World world)
-        {
-            Assert.That(world.GetExistingSystemManaged<GASFramePrepareSystemGroup>(), Is.Null);
-            Assert.That(world.GetExistingSystemManaged<GASCommandResolveSystemGroup>(), Is.Null);
-            Assert.That(world.GetExistingSystemManaged<GASCoreSimulationSystemGroup>(), Is.Null);
-            Assert.That(world.GetExistingSystemManaged<GEExecutionCalculationExtensionSystemGroup>(), Is.Null);
-            Assert.That(world.GetExistingSystemManaged<GASStructuralCommitSystemGroup>(), Is.Null);
-            Assert.That(world.GetExistingSystemManaged<GASBoundaryProjectionSystemGroup>(), Is.Null);
         }
 
         /// <summary>

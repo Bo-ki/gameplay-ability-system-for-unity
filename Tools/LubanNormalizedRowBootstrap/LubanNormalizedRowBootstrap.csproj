@@ -17,6 +17,6 @@
     <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Core\RowMetadataFactory.cs" Link="CodeGen\Core\RowMetadataFactory.cs" />
     <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Core\LubanNormalizedRowBootstrap.cs" Link="CodeGen\Core\LubanNormalizedRowBootstrap.cs" />
     <Compile Include="..\..\Assets\GAS\Editor\General\IndentedWriter.cs" Link="CodeGen\IndentedWriter.cs" />
-    <Compile Include="..\GasCodeGenCli\GasDefinitionKindShim.cs" Link="CodeGen\GasDefinitionKindShim.cs" />
+    <Compile Include="..\..\Assets\GAS\Editor\CodeGen\Core\GasDefinitionKind.cs" Link="CodeGen\Core\GasDefinitionKind.cs" />
   </ItemGroup>
 </Project>
