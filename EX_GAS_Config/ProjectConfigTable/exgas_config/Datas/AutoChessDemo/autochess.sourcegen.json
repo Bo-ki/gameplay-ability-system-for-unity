@@ -15,8 +15,6 @@
   "validationScenario": {
     "scale": 50,
     "maxTicks": 96,
-    "postVictoryFlushTicks": 4,
-    "processWarmupRuns": 1,
     "healthMultiplier": 1.0,
     "expectedWinner": "AutoChessTeam.Player",
     "minAcceptedCommands": 1,

@@ -2,7 +2,7 @@
 
 ManifestVersion: `1`
 GeneratorVersion: `EX-GAS-CodeGen-v1`
-InputHash: `fce23ddf02035dd89e6ae773f259d4361de190b9a27bdcf3fb7bc5b5b767c44d`
+InputHash: `f4b72a252c3157ea950e958d02d901ec7a9deddc08f965e34301644953cb774b`
 RowCount: `7`
 OrphansDeleted: `0`
 LegacyRuntimeImplementationArtifacts: `0`
@@ -41,3 +41,5 @@ MissingRequiredArtifacts: `0`
 | `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `Runtime` | `True` | `RuntimePureGlue` | `DefinitionCodeGen` | `False` | `False` | `False` | `False` |
 | `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `Runtime` | `True` | `RuntimePureGlue` | `DefinitionCodeGen` | `False` | `False` | `False` | `False` |
 | `ValidationReport` | `Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md` | `Editor` | `False` | `ValidationArtifact` | `EditorCi` | `False` | `False` | `False` | `False` |
+
+

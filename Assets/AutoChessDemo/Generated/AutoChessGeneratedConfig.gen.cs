@@ -8,8 +8,6 @@ namespace GAS.AutoChessDemo
     {
         public readonly int Scale;
         public readonly int MaxTicks;
-        public readonly int PostVictoryFlushTicks;
-        public readonly int ProcessWarmupRuns;
         public readonly float HealthMultiplier;
         public readonly AutoChessTeam ExpectedWinner;
         public readonly int MinAcceptedCommands;
@@ -27,8 +25,6 @@ namespace GAS.AutoChessDemo
         public AutoChessGeneratedScenarioProfile(
             int scale,
             int maxTicks,
-            int postVictoryFlushTicks,
-            int processWarmupRuns,
             float healthMultiplier,
             AutoChessTeam expectedWinner,
             int minAcceptedCommands,
@@ -45,8 +41,6 @@ namespace GAS.AutoChessDemo
         {
             Scale = scale;
             MaxTicks = maxTicks;
-            PostVictoryFlushTicks = postVictoryFlushTicks;
-            ProcessWarmupRuns = processWarmupRuns;
             HealthMultiplier = healthMultiplier;
             ExpectedWinner = expectedWinner;
             MinAcceptedCommands = minAcceptedCommands;
@@ -212,7 +206,6 @@ namespace GAS.AutoChessDemo
         public const int GameplayEffectEnemyAttackDamage = 9202;
         public const int GameplayEffectPlayerExecute = 9207;
         public const int GameplayEffectPlayerPoison = 9203;
-        public const int GameplayEffectPoisonTickDamage = 9204;
         public const int ExecutionCalculationExecuteDamage = 9401;
         public const int ExecutionCalculationExecuteDamageOutput = 9402;
         public const int TagAttackCooldown = 1;
@@ -231,8 +224,6 @@ namespace GAS.AutoChessDemo
         public static AutoChessGeneratedScenarioProfile ValidationScenario => new AutoChessGeneratedScenarioProfile(
             50,
             96,
-            4,
-            1,
             1f,
             AutoChessTeam.Player,
             1,
