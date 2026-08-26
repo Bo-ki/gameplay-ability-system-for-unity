@@ -1,5 +1,7 @@
 # GAS CodeGen Validation Report
 
+ManifestVersion: `1`
+GeneratorVersion: `EX-GAS-CodeGen-v1`
 InputHash: `fce23ddf02035dd89e6ae773f259d4361de190b9a27bdcf3fb7bc5b5b767c44d`
 RowCount: `7`
 OrphansDeleted: `0`
@@ -7,6 +9,8 @@ LegacyRuntimeImplementationArtifacts: `0`
 RuntimePureGlueArtifacts: `3`
 RuntimeLifecycleSystemArtifacts: `0`
 RuntimeWorldOwnerArtifacts: `0`
+ManifestContractErrors: `0`
+MissingRequiredArtifacts: `0`
 
 ## Generation Contract
 
@@ -28,11 +32,12 @@ RuntimeWorldOwnerArtifacts: `0`
 
 ## Manifest Entries
 
-| Phase | File | Layer | RuntimeVisible | ArtifactCategory |
-| --- | --- | --- | --- | --- |
-| `LubanNormalizedRows` | `Assets/GAS/Generated/CodeGen/Editor/LubanNormalizedRows.gen.cs` | `Editor` | `False` | `` |
-| `AssemblyDefinition` | `Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef` | `Editor` | `False` | `` |
-| `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `Runtime` | `True` | `RuntimePureGlue` |
-| `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `Runtime` | `True` | `RuntimePureGlue` |
-| `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `Runtime` | `True` | `RuntimePureGlue` |
-| `ValidationReport` | `Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md` | `Editor` | `False` | `` |
+| Phase | File | Layer | RuntimeVisible | ArtifactCategory | GeneratedArtifactOwner | MayAllocate | MayOwnLifecycle | MayOwnStructuralChange | MayOwnNativeContainer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `LubanNormalizedRows` | `Assets/GAS/Generated/CodeGen/Editor/LubanNormalizedRows.gen.cs` | `Editor` | `False` | `NormalizedDefinitionRow` | `DefinitionCodeGen` | `False` | `False` | `False` | `False` |
+| `AssemblyDefinition` | `Assets/GAS/Generated/CodeGen/Runtime/com.exhard.exgas.generated.runtime.asmdef` | `Runtime` | `True` | `AssemblyDefinition` | `DefinitionCodeGen` | `False` | `False` | `False` | `False` |
+| `AssemblyDefinition` | `Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef` | `Editor` | `False` | `AssemblyDefinition` | `DefinitionCodeGen` | `False` | `False` | `False` | `False` |
+| `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs` | `Runtime` | `True` | `RuntimePureGlue` | `DefinitionCodeGen` | `False` | `False` | `False` | `False` |
+| `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs` | `Runtime` | `True` | `RuntimePureGlue` | `DefinitionCodeGen` | `False` | `False` | `False` | `False` |
+| `RuntimeLifecycleMigration` | `Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs` | `Runtime` | `True` | `RuntimePureGlue` | `DefinitionCodeGen` | `False` | `False` | `False` | `False` |
+| `ValidationReport` | `Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md` | `Editor` | `False` | `ValidationArtifact` | `EditorCi` | `False` | `False` | `False` | `False` |

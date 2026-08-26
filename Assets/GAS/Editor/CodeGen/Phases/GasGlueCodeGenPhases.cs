@@ -21,7 +21,13 @@ namespace GAS.Editor
 
         protected static string GetOutputPath(GasCodeGenContext context, string relativePath)
         {
-            var path = Path.Combine(context.OutputDir, relativePath);
+            var path = Path.GetFullPath(Path.Combine(context.OutputDir, relativePath));
+            if (!IsUnderProjectRoot(context.ProjectRoot, path))
+            {
+                throw new InvalidOperationException(
+                    $"Generated path escapes project root: {path}");
+            }
+
             var directory = Path.GetDirectoryName(path);
             if (!string.IsNullOrWhiteSpace(directory))
                 Directory.CreateDirectory(directory);
@@ -33,7 +39,32 @@ namespace GAS.Editor
             string phaseName,
             string path)
         {
-            manifest.AddGeneratedFile(phaseName, path, "Editor", false);
+            manifest.AddGeneratedFile(
+                phaseName,
+                path,
+                "Editor",
+                false,
+                "ValidationArtifact",
+                "EditorCi");
+        }
+
+        /// <summary>
+        /// 登记生成的 asmdef，并明确它只负责程序集边界而不拥有运行时状态。
+        /// </summary>
+        protected static void AddAssemblyDefinitionManifest(
+            GasCodeGenManifest manifest,
+            string phaseName,
+            string path,
+            string layer,
+            bool runtimeVisible)
+        {
+            manifest.AddGeneratedFile(
+                phaseName,
+                path,
+                layer,
+                runtimeVisible,
+                "AssemblyDefinition",
+                "DefinitionCodeGen");
         }
 
         /// <summary>
@@ -44,15 +75,46 @@ namespace GAS.Editor
             string phaseName,
             string path)
         {
-            manifest.AddGeneratedFile(phaseName, path, "Runtime", true, "RuntimePureGlue");
+            manifest.AddGeneratedFile(
+                phaseName,
+                path,
+                "Runtime",
+                true,
+                "RuntimeDemoConfig",
+                "AutoChessDemo");
         }
 
+        /// <summary>
+        /// 登记不分配、不拥有生命周期或结构变化的纯 Runtime 胶水产物。
+        /// </summary>
         protected static void AddRuntimePureGlueManifest(
             GasCodeGenManifest manifest,
             string phaseName,
             string path)
         {
-            manifest.AddGeneratedFile(phaseName, path, "Runtime", true, "RuntimePureGlue");
+            manifest.AddGeneratedFile(
+                phaseName,
+                path,
+                "Runtime",
+                true,
+                "RuntimePureGlue",
+                "DefinitionCodeGen");
+        }
+
+        /// <summary>
+        /// 判断生成路径是否仍位于 Unity 项目根目录内，避免相对路径穿越覆盖外部文件。
+        /// </summary>
+        private static bool IsUnderProjectRoot(string projectRoot, string path)
+        {
+            var normalizedRoot = Path.GetFullPath(projectRoot)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return string.Equals(path, normalizedRoot, StringComparison.OrdinalIgnoreCase)
+                   || path.StartsWith(
+                       normalizedRoot + Path.DirectorySeparatorChar,
+                       StringComparison.OrdinalIgnoreCase)
+                   || path.StartsWith(
+                       normalizedRoot + Path.AltDirectorySeparatorChar,
+                       StringComparison.OrdinalIgnoreCase);
         }
 
         protected static void WriteHeader(IndentedWriter writer)
@@ -70,6 +132,7 @@ namespace GAS.Editor
     /// </summary>
     internal sealed class AssemblyDefinitionPhase : GasCodeGenPhaseBase
     {
+        private const string GeneratedRuntimeAssembly = "com.exhard.exgas.generated.runtime";
         private const string GeneratedEditorAssembly = "com.exhard.exgas.generated.editor";
         private const string EditorAssembly = "com.exhard.exgas.editor";
         private const string RuntimeAssembly = "com.exhard.exgas.runtime";
@@ -78,6 +141,7 @@ namespace GAS.Editor
 
         public override IReadOnlyList<string> OutputFileNames { get; } = new[]
         {
+            "Runtime/com.exhard.exgas.generated.runtime.asmdef",
             "Editor/com.exhard.exgas.generated.editor.asmdef",
         };
 
@@ -85,21 +149,70 @@ namespace GAS.Editor
 
         public override void Execute(GasCodeGenContext context, GasCodeGenManifest manifest)
         {
-            var path = GetOutputPath(context, OutputFileNames[0]);
-            WriteEditorAssemblyDefinition(context, path);
-            AddEditorManifest(manifest, PhaseName, path);
+            var runtimePath = GetOutputPath(context, OutputFileNames[0]);
+            var editorPath = GetOutputPath(context, OutputFileNames[1]);
+            WriteRuntimeAssemblyDefinition(runtimePath);
+            WriteEditorAssemblyDefinition(context, editorPath);
+            AddAssemblyDefinitionManifest(
+                manifest,
+                PhaseName,
+                runtimePath,
+                "Runtime",
+                true);
+            AddAssemblyDefinitionManifest(
+                manifest,
+                PhaseName,
+                editorPath,
+                "Editor",
+                false);
+        }
+
+        /// <summary>
+        /// 写入只依赖 GAS Runtime 与 DOTS 基础包的 Runtime generated asmdef。
+        /// </summary>
+        private static void WriteRuntimeAssemblyDefinition(string path)
+        {
+            var references = new[]
+            {
+                RuntimeAssembly,
+                "Unity.Collections",
+                "Unity.Entities",
+                "Unity.Burst",
+            };
+
+            WriteAssemblyDefinition(
+                path,
+                GeneratedRuntimeAssembly,
+                references,
+                Array.Empty<string>());
         }
 
         private static void WriteEditorAssemblyDefinition(GasCodeGenContext context, string path)
         {
             var references = BuildEditorReferences(context);
+            WriteAssemblyDefinition(
+                path,
+                GeneratedEditorAssembly,
+                references,
+                new[] { "Editor" });
+        }
+
+        /// <summary>
+        /// 以统一字段顺序输出 asmdef，保证离线生成与 Unity 导入结果一致。
+        /// </summary>
+        private static void WriteAssemblyDefinition(
+            string path,
+            string assemblyName,
+            IReadOnlyList<string> references,
+            IReadOnlyList<string> includePlatforms)
+        {
             using var writer = new IndentedWriter(new StreamWriter(path));
             writer.WriteLine("{");
             writer.Indent++;
-            writer.WriteLine($"\"name\": \"{GeneratedEditorAssembly}\",");
+            writer.WriteLine($"\"name\": \"{EscapeJson(assemblyName)}\",");
             writer.WriteLine("\"rootNamespace\": \"\",");
             WriteStringArray(writer, "references", references, trailingComma: true);
-            writer.WriteLine("\"includePlatforms\": [\"Editor\"],");
+            WriteStringArray(writer, "includePlatforms", includePlatforms, trailingComma: true);
             writer.WriteLine("\"excludePlatforms\": [],");
             writer.WriteLine("\"allowUnsafeCode\": false,");
             writer.WriteLine("\"overrideReferences\": false,");
@@ -116,6 +229,7 @@ namespace GAS.Editor
         {
             var references = new SortedSet<string>(StringComparer.Ordinal)
             {
+                GeneratedRuntimeAssembly,
                 EditorAssembly,
                 RuntimeAssembly,
                 "Unity.Collections",
@@ -128,6 +242,7 @@ namespace GAS.Editor
                 var assembly = row.RowType.Assembly.GetName().Name;
                 if (string.IsNullOrWhiteSpace(assembly)
                     || assembly == GeneratedEditorAssembly
+                    || assembly == GeneratedRuntimeAssembly
                     || assembly == "Assembly-CSharp"
                     || assembly == "Assembly-CSharp-firstpass"
                     || assembly == "GasCodeGenCli")
@@ -141,6 +256,13 @@ namespace GAS.Editor
             return references.ToArray();
         }
 
+        private static string EscapeJson(string value)
+        {
+            return (value ?? string.Empty)
+                .Replace("\\", "\\\\")
+                .Replace("\"", "\\\"");
+        }
+
         private static void WriteStringArray(
             IndentedWriter writer,
             string name,
@@ -152,7 +274,7 @@ namespace GAS.Editor
             for (var i = 0; i < values.Count; i++)
             {
                 var suffix = i == values.Count - 1 ? string.Empty : ",";
-                writer.WriteLine($"\"{values[i]}\"{suffix}");
+                writer.WriteLine($"\"{EscapeJson(values[i])}\"{suffix}");
             }
 
             writer.Indent--;
@@ -227,6 +349,8 @@ namespace GAS.Editor
             "OnUpdate(",
             "SystemAPI.",
             "EntityCommandBuffer",
+            "CreateSystem(",
+            "RegisterSystem(",
         };
 
         private static readonly string[] RuntimeWorldOwnerTokens =
@@ -238,6 +362,14 @@ namespace GAS.Editor
             "EntityCommandBuffer",
             "CreateEntity(",
             "DefaultGameObjectInjectionWorld",
+            "ComponentLookup<",
+            "BufferLookup<",
+            "NativeList<",
+            "NativeStream",
+            "Dictionary<",
+            "cfg.",
+            "SimpleJSON",
+            "DefinitionRow",
         };
 
         public override string PhaseName => "ValidationReport";
@@ -255,6 +387,8 @@ namespace GAS.Editor
             var legacyArtifacts = CountLegacyRuntimeImplementationArtifacts(context, manifest);
             var lifecycleArtifacts = CountRuntimeArtifactsContaining(context, RuntimeLifecycleTokens);
             var worldOwnerArtifacts = CountRuntimeArtifactsContaining(context, RuntimeWorldOwnerTokens);
+            var manifestContractErrors = manifest.CollectContractErrors();
+            var missingArtifacts = CollectMissingRequiredArtifacts(context, manifest);
 
             using var writer = new IndentedWriter(new StreamWriter(path));
             WriteReport(
@@ -263,13 +397,20 @@ namespace GAS.Editor
                 legacyArtifacts,
                 lifecycleArtifacts,
                 worldOwnerArtifacts,
+                manifestContractErrors,
+                missingArtifacts,
                 writer);
 
-            if (legacyArtifacts > 0 || lifecycleArtifacts > 0 || worldOwnerArtifacts > 0)
+            if (legacyArtifacts > 0
+                || lifecycleArtifacts > 0
+                || worldOwnerArtifacts > 0
+                || manifestContractErrors.Count > 0
+                || missingArtifacts.Count > 0)
             {
                 throw new InvalidOperationException(
                     $"Runtime v1 generated artifact gate failed: legacy={legacyArtifacts}, "
-                    + $"lifecycle={lifecycleArtifacts}, worldOwner={worldOwnerArtifacts}.");
+                    + $"lifecycle={lifecycleArtifacts}, worldOwner={worldOwnerArtifacts}, "
+                    + $"manifest={manifestContractErrors.Count}, missing={missingArtifacts.Count}.");
             }
         }
 
@@ -279,10 +420,14 @@ namespace GAS.Editor
             int legacyArtifacts,
             int lifecycleArtifacts,
             int worldOwnerArtifacts,
+            IReadOnlyList<string> manifestContractErrors,
+            IReadOnlyList<string> missingArtifacts,
             IndentedWriter writer)
         {
             writer.WriteLine("# GAS CodeGen Validation Report");
             writer.WriteLine(string.Empty);
+            writer.WriteLine($"ManifestVersion: `{manifest.ManifestVersion}`");
+            writer.WriteLine($"GeneratorVersion: `{manifest.GeneratorVersion}`");
             writer.WriteLine($"InputHash: `{context.InputHash}`");
             writer.WriteLine($"RowCount: `{context.Rows.Count}`");
             writer.WriteLine($"OrphansDeleted: `{context.OrphansDeleted}`");
@@ -290,6 +435,8 @@ namespace GAS.Editor
             writer.WriteLine($"RuntimePureGlueArtifacts: `{CountRuntimePureGlue(manifest)}`");
             writer.WriteLine($"RuntimeLifecycleSystemArtifacts: `{lifecycleArtifacts}`");
             writer.WriteLine($"RuntimeWorldOwnerArtifacts: `{worldOwnerArtifacts}`");
+            writer.WriteLine($"ManifestContractErrors: `{manifestContractErrors.Count}`");
+            writer.WriteLine($"MissingRequiredArtifacts: `{missingArtifacts.Count}`");
             writer.WriteLine(string.Empty);
             writer.WriteLine("## Generation Contract");
             writer.WriteLine(string.Empty);
@@ -310,19 +457,37 @@ namespace GAS.Editor
             writer.WriteLine(string.Empty);
             writer.WriteLine("## Manifest Entries");
             writer.WriteLine(string.Empty);
-            writer.WriteLine("| Phase | File | Layer | RuntimeVisible | ArtifactCategory |");
-            writer.WriteLine("| --- | --- | --- | --- | --- |");
+            writer.WriteLine("| Phase | File | Layer | RuntimeVisible | ArtifactCategory | GeneratedArtifactOwner | MayAllocate | MayOwnLifecycle | MayOwnStructuralChange | MayOwnNativeContainer |");
+            writer.WriteLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
             foreach (var entry in manifest.Entries)
             {
                 writer.WriteLine(
-                    $"| `{entry.PhaseName}` | `{entry.ProjectRelativePath}` | `{entry.Layer}` | `{entry.RuntimeVisible}` | `{entry.ArtifactCategory}` |");
+                    $"| `{entry.PhaseName}` | `{entry.ProjectRelativePath}` | `{entry.Layer}` | `{entry.RuntimeVisible}` | `{entry.ArtifactCategory}` | `{entry.GeneratedArtifactOwner}` | `{entry.MayAllocate}` | `{entry.MayOwnLifecycle}` | `{entry.MayOwnStructuralChange}` | `{entry.MayOwnNativeContainer}` |");
+            }
+
+            if (manifestContractErrors.Count > 0)
+            {
+                writer.WriteLine(string.Empty);
+                writer.WriteLine("## Manifest Contract Errors");
+                writer.WriteLine(string.Empty);
+                foreach (var error in manifestContractErrors)
+                    writer.WriteLine($"- `{error}`");
+            }
+
+            if (missingArtifacts.Count > 0)
+            {
+                writer.WriteLine(string.Empty);
+                writer.WriteLine("## Missing Required Artifacts");
+                writer.WriteLine(string.Empty);
+                foreach (var missing in missingArtifacts)
+                    writer.WriteLine($"- `{missing}`");
             }
         }
 
         private static int CountRuntimePureGlue(GasCodeGenManifest manifest)
         {
             return manifest.Entries.Count(entry =>
-                string.Equals(entry.ArtifactCategory, "RuntimePureGlue", StringComparison.Ordinal));
+                entry.IsRuntimePureGlue);
         }
 
         private static int CountLegacyRuntimeImplementationArtifacts(
@@ -333,8 +498,7 @@ namespace GAS.Editor
             foreach (var entry in manifest.Entries)
             {
                 if (!entry.RuntimeVisible
-                    || !string.Equals(entry.Layer, "Runtime", StringComparison.Ordinal)
-                    || !string.Equals(entry.ArtifactCategory, "RuntimePureGlue", StringComparison.Ordinal))
+                    || !string.Equals(entry.Layer, "Runtime", StringComparison.Ordinal))
                     continue;
 
                 allowed.Add(ResolveProjectPath(context, entry.ProjectRelativePath));
@@ -342,6 +506,52 @@ namespace GAS.Editor
 
             return EnumerateGeneratedRuntimeArtifacts(context)
                 .Count(path => !allowed.Contains(Path.GetFullPath(path)));
+        }
+
+        /// <summary>
+        /// 检查核心生成链必须存在的 Runtime asmdef，并确认它登记为 Runtime-visible assembly artifact。
+        /// </summary>
+        private static IReadOnlyList<string> CollectMissingRequiredArtifacts(
+            GasCodeGenContext context,
+            GasCodeGenManifest manifest)
+        {
+            var errors = new List<string>();
+            var runtimeAssemblyPath = Path.Combine(
+                context.OutputDir,
+                "Runtime",
+                "com.exhard.exgas.generated.runtime.asmdef");
+            var normalizedRuntimeAssemblyPath = Path.GetFullPath(runtimeAssemblyPath);
+            if (!File.Exists(normalizedRuntimeAssemblyPath))
+                errors.Add("Runtime/com.exhard.exgas.generated.runtime.asmdef 文件不存在。");
+
+            var registered = manifest.Entries.Any(entry =>
+                string.Equals(
+                    entry.ProjectRelativePath,
+                    ToProjectRelativePath(context, normalizedRuntimeAssemblyPath),
+                    StringComparison.OrdinalIgnoreCase)
+                && entry.RuntimeVisible
+                && string.Equals(entry.Layer, "Runtime", StringComparison.Ordinal)
+                && string.Equals(entry.GeneratedArtifactKind, "AssemblyDefinition", StringComparison.Ordinal));
+            if (!registered)
+            {
+                errors.Add(
+                    "Runtime/com.exhard.exgas.generated.runtime.asmdef 未以 AssemblyDefinition/Runtime-visible 登记。");
+            }
+
+            if (File.Exists(normalizedRuntimeAssemblyPath)
+                && FileContainsAny(normalizedRuntimeAssemblyPath, new[] { "com.exhard.exgas.editor", "Luban", "SimpleJSON" }))
+            {
+                errors.Add("Runtime generated asmdef 引用了 Editor/Luban/SimpleJSON 依赖。");
+            }
+
+            return errors;
+        }
+
+        private static string ToProjectRelativePath(GasCodeGenContext context, string fullPath)
+        {
+            var relative = fullPath.Substring(context.ProjectRoot.Length)
+                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return relative.Replace(Path.DirectorySeparatorChar, '/');
         }
 
         private static int CountRuntimeArtifactsContaining(

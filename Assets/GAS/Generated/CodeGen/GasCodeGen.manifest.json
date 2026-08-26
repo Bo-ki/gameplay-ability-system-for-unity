@@ -1,4 +1,6 @@
 {
+  "ManifestVersion": 1,
+  "GeneratorVersion": "EX-GAS-CodeGen-v1",
   "OutputRoot": "Assets/GAS/Generated/CodeGen",
   "InputHash": "fce23ddf02035dd89e6ae773f259d4361de190b9a27bdcf3fb7bc5b5b767c44d",
   "Entries": [
@@ -8,7 +10,28 @@
       "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/LubanNormalizedRows.gen.cs",
       "Layer": "Editor",
       "RuntimeVisible": false,
-      "ArtifactCategory": "",
+      "ArtifactCategory": "NormalizedDefinitionRow",
+      "GeneratedArtifactKind": "NormalizedDefinitionRow",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
+      "VersionControlled": true
+    },
+    {
+      "PhaseName": "AssemblyDefinition",
+      "FileName": "com.exhard.exgas.generated.runtime.asmdef",
+      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/com.exhard.exgas.generated.runtime.asmdef",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "ArtifactCategory": "AssemblyDefinition",
+      "GeneratedArtifactKind": "AssemblyDefinition",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     },
     {
@@ -17,7 +40,13 @@
       "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef",
       "Layer": "Editor",
       "RuntimeVisible": false,
-      "ArtifactCategory": "",
+      "ArtifactCategory": "AssemblyDefinition",
+      "GeneratedArtifactKind": "AssemblyDefinition",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     },
     {
@@ -27,6 +56,12 @@
       "Layer": "Runtime",
       "RuntimeVisible": true,
       "ArtifactCategory": "RuntimePureGlue",
+      "GeneratedArtifactKind": "RuntimePureGlue",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     },
     {
@@ -36,6 +71,12 @@
       "Layer": "Runtime",
       "RuntimeVisible": true,
       "ArtifactCategory": "RuntimePureGlue",
+      "GeneratedArtifactKind": "RuntimePureGlue",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     },
     {
@@ -45,6 +86,12 @@
       "Layer": "Runtime",
       "RuntimeVisible": true,
       "ArtifactCategory": "RuntimePureGlue",
+      "GeneratedArtifactKind": "RuntimePureGlue",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     },
     {
@@ -53,7 +100,13 @@
       "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md",
       "Layer": "Editor",
       "RuntimeVisible": false,
-      "ArtifactCategory": "",
+      "ArtifactCategory": "ValidationArtifact",
+      "GeneratedArtifactKind": "ValidationArtifact",
+      "GeneratedArtifactOwner": "EditorCi",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     }
   ]

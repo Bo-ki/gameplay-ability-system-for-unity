@@ -8,6 +8,24 @@ namespace GAS.Editor
     public sealed class GasCodeGenManifest
     {
         private const string ManifestFileName = "GasCodeGen.manifest.json";
+        private const int CurrentManifestVersion = 1;
+        private const string CurrentGeneratorVersion = "EX-GAS-CodeGen-v1";
+        private static readonly HashSet<string> KnownArtifactKinds = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "AssemblyDefinition",
+            "NormalizedDefinitionRow",
+            "DefinitionId",
+            "BlobSchema",
+            "BlobBuilder",
+            "DefinitionCatalog",
+            "StaticLookup",
+            "RuntimePureGlue",
+            "PureRuntimeGlue",
+            "BakerGlue",
+            "ValidationArtifact",
+            "RuntimeDemoConfig",
+            "MigrationProofOnly",
+        };
         private readonly string _projectRoot;
         private readonly string _outputRoot;
         private readonly string _inputHash;
@@ -25,16 +43,31 @@ namespace GAS.Editor
 
         public string ManifestPath => Path.Combine(_outputRoot, ManifestFileName);
 
+        public int ManifestVersion => CurrentManifestVersion;
+
+        public string GeneratorVersion => CurrentGeneratorVersion;
+
         public void AddGeneratedFile(
             string phaseName,
             string fullPath,
             string layer,
             bool runtimeVisible,
-            string artifactCategory = null)
+            string artifactCategory = null,
+            string artifactOwner = null,
+            bool mayAllocate = false,
+            bool mayOwnLifecycle = false,
+            bool mayOwnStructuralChange = false,
+            bool mayOwnNativeContainer = false)
         {
             var normalizedPath = Normalize(fullPath);
             EnsureUnderProjectRoot(normalizedPath);
             var projectRelativePath = ToProjectRelativePath(normalizedPath);
+            var resolvedCategory = string.IsNullOrWhiteSpace(artifactCategory)
+                ? "Unclassified"
+                : artifactCategory.Trim();
+            var resolvedOwner = string.IsNullOrWhiteSpace(artifactOwner)
+                ? "Unassigned"
+                : artifactOwner.Trim();
 
             for (var i = 0; i < _entries.Count; i++)
             {
@@ -50,7 +83,14 @@ namespace GAS.Editor
                 _entries[i].FileName = Path.GetFileName(normalizedPath);
                 _entries[i].Layer = layer;
                 _entries[i].RuntimeVisible = runtimeVisible;
-                _entries[i].ArtifactCategory = artifactCategory ?? string.Empty;
+                ApplyArtifactContract(
+                    _entries[i],
+                    resolvedCategory,
+                    resolvedOwner,
+                    mayAllocate,
+                    mayOwnLifecycle,
+                    mayOwnStructuralChange,
+                    mayOwnNativeContainer);
                 _entries[i].VersionControlled = IsVersionControlledPath(normalizedPath);
                 return;
             }
@@ -62,9 +102,90 @@ namespace GAS.Editor
                 ProjectRelativePath = projectRelativePath,
                 Layer = layer,
                 RuntimeVisible = runtimeVisible,
-                ArtifactCategory = artifactCategory ?? string.Empty,
                 VersionControlled = IsVersionControlledPath(normalizedPath),
             });
+
+            ApplyArtifactContract(
+                _entries[_entries.Count - 1],
+                resolvedCategory,
+                resolvedOwner,
+                mayAllocate,
+                mayOwnLifecycle,
+                mayOwnStructuralChange,
+                mayOwnNativeContainer);
+        }
+
+        /// <summary>
+        /// 校验 Runtime-visible 产物的分类与 owner 声明，阻止未分类或越权产物进入 manifest。
+        /// </summary>
+        public IReadOnlyList<string> CollectContractErrors()
+        {
+            var errors = new List<string>();
+            for (var i = 0; i < _entries.Count; i++)
+            {
+                var entry = _entries[i];
+                if (string.IsNullOrWhiteSpace(entry.GeneratedArtifactKind)
+                    || string.Equals(entry.GeneratedArtifactKind, "Unclassified", StringComparison.Ordinal)
+                    || !KnownArtifactKinds.Contains(entry.GeneratedArtifactKind))
+                {
+                    errors.Add($"{entry.ProjectRelativePath}: artifact kind 无效或未声明（{entry.GeneratedArtifactKind}）。");
+                }
+
+                if (string.IsNullOrWhiteSpace(entry.GeneratedArtifactOwner)
+                    || string.Equals(entry.GeneratedArtifactOwner, "Unassigned", StringComparison.Ordinal))
+                {
+                    errors.Add($"{entry.ProjectRelativePath}: artifact 未声明 GeneratedArtifactOwner。");
+                }
+
+                if (!string.Equals(entry.ArtifactCategory, entry.GeneratedArtifactKind, StringComparison.Ordinal))
+                {
+                    errors.Add($"{entry.ProjectRelativePath}: ArtifactCategory 与 GeneratedArtifactKind 不一致。");
+                }
+
+                if (entry.RuntimeVisible
+                    && entry.IsRuntimePureGlue
+                    && (entry.MayAllocate
+                        || entry.MayOwnLifecycle
+                        || entry.MayOwnStructuralChange
+                        || entry.MayOwnNativeContainer))
+                {
+                    errors.Add($"{entry.ProjectRelativePath}: RuntimePureGlue 不得拥有 allocator/lifecycle/structural/native-container。");
+                }
+
+                if (entry.RuntimeVisible
+                    && (string.Equals(entry.GeneratedArtifactKind, "BlobBuilder", StringComparison.Ordinal)
+                        || string.Equals(entry.GeneratedArtifactKind, "BakerGlue", StringComparison.Ordinal)
+                        || string.Equals(entry.GeneratedArtifactKind, "ValidationArtifact", StringComparison.Ordinal)
+                        || string.Equals(entry.GeneratedArtifactKind, "NormalizedDefinitionRow", StringComparison.Ordinal)))
+                {
+                    errors.Add($"{entry.ProjectRelativePath}: {entry.GeneratedArtifactKind} 不得标记为 Runtime-visible。");
+                }
+
+                if (!entry.RuntimeVisible
+                    && (string.Equals(entry.GeneratedArtifactKind, "DefinitionId", StringComparison.Ordinal)
+                        || string.Equals(entry.GeneratedArtifactKind, "BlobSchema", StringComparison.Ordinal)
+                        || string.Equals(entry.GeneratedArtifactKind, "DefinitionCatalog", StringComparison.Ordinal)
+                        || string.Equals(entry.GeneratedArtifactKind, "StaticLookup", StringComparison.Ordinal)
+                        || entry.IsRuntimePureGlue))
+                {
+                    errors.Add($"{entry.ProjectRelativePath}: {entry.GeneratedArtifactKind} 必须标记为 Runtime-visible。");
+                }
+            }
+
+            return errors;
+        }
+
+        /// <summary>
+        /// 在保存前执行 manifest 合约 gate，并把所有违规聚合为可读错误。
+        /// </summary>
+        public void EnsureContractValid()
+        {
+            var errors = CollectContractErrors();
+            if (errors.Count == 0)
+                return;
+
+            throw new InvalidOperationException(
+                "Generated artifact manifest contract failed:\n" + string.Join("\n", errors));
         }
 
         public int DeleteOrphanedFiles()
@@ -123,6 +244,8 @@ namespace GAS.Editor
 
             var data = new Data
             {
+                ManifestVersion = CurrentManifestVersion,
+                GeneratorVersion = CurrentGeneratorVersion,
                 OutputRoot = ToProjectRelativePath(_outputRoot),
                 InputHash = _inputHash,
                 Entries = _entries.ToArray(),
@@ -172,9 +295,32 @@ namespace GAS.Editor
             return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
 
+        /// <summary>
+        /// 将 artifact 分类与职责边界一次性写入 manifest，保持旧 ArtifactCategory 字段可读。
+        /// </summary>
+        private static void ApplyArtifactContract(
+            Entry entry,
+            string category,
+            string owner,
+            bool mayAllocate,
+            bool mayOwnLifecycle,
+            bool mayOwnStructuralChange,
+            bool mayOwnNativeContainer)
+        {
+            entry.ArtifactCategory = category;
+            entry.GeneratedArtifactKind = category;
+            entry.GeneratedArtifactOwner = owner;
+            entry.MayAllocate = mayAllocate;
+            entry.MayOwnLifecycle = mayOwnLifecycle;
+            entry.MayOwnStructuralChange = mayOwnStructuralChange;
+            entry.MayOwnNativeContainer = mayOwnNativeContainer;
+        }
+
         [Serializable]
         private sealed class Data
         {
+            public int ManifestVersion;
+            public string GeneratorVersion;
             public string OutputRoot;
             public string InputHash;
             public Entry[] Entries;
@@ -189,7 +335,30 @@ namespace GAS.Editor
             public string Layer;
             public bool RuntimeVisible;
             public string ArtifactCategory;
+            public string GeneratedArtifactKind;
+            public string GeneratedArtifactOwner;
+            public bool MayAllocate;
+            public bool MayOwnLifecycle;
+            public bool MayOwnStructuralChange;
+            public bool MayOwnNativeContainer;
             public bool VersionControlled;
+
+            [JsonIgnore]
+            public bool IsRuntimePureGlue =>
+                RuntimeVisible
+                && (string.Equals(GeneratedArtifactKind, "RuntimePureGlue", StringComparison.Ordinal)
+                    || string.Equals(GeneratedArtifactKind, "PureRuntimeGlue", StringComparison.Ordinal))
+                && !MayAllocate
+                && !MayOwnLifecycle
+                && !MayOwnStructuralChange
+                && !MayOwnNativeContainer;
+
+            [JsonIgnore]
+            public bool IsRuntimeBoundaryArtifact =>
+                RuntimeVisible
+                && ((string.Equals(GeneratedArtifactKind, "RuntimePureGlue", StringComparison.Ordinal)
+                     || string.Equals(GeneratedArtifactKind, "PureRuntimeGlue", StringComparison.Ordinal))
+                    || string.Equals(GeneratedArtifactKind, "AssemblyDefinition", StringComparison.Ordinal));
         }
     }
 }
