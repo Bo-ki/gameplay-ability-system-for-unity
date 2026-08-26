@@ -327,16 +327,13 @@ namespace GAS.Runtime
     public static class GasBoundaryDrainProtocol
     {
         /// <summary>
-        /// 为唯一物理 owner 分配持久 OwnerSequence 并追加一条自包含 Boundary fact。
+        /// 只验证一次追加所需的 owner、阶段与事实路由，不分配序号也不写入 outbox。
         /// </summary>
-        private static bool TryAppendFactRecord(
-            ref BoundaryDrainState state,
-            DynamicBuffer<BoundaryFactBuffer> outbox,
+        internal static bool TryValidateFactAppend(
+            in BoundaryDrainState state,
             in BoundaryFactBuffer fact,
-            out BoundaryFactBuffer appendedFact,
             out GasBoundaryDrainFailure failure)
         {
-            appendedFact = default;
             failure = ValidateOwner(in state);
             if (failure != GasBoundaryDrainFailure.None)
                 return false;
@@ -348,15 +345,28 @@ namespace GAS.Runtime
                 return false;
             }
 
-            if (!TryValidateFactRoute(in state, in fact, out failure))
-                return false;
-
-            if (state.NextOwnerSequence == 0 ||
-                state.NextOwnerSequence == ulong.MaxValue)
+            if (state.NextOwnerSequence == ulong.MaxValue)
             {
                 failure = GasBoundaryDrainFailure.SequenceOverflow;
                 return false;
             }
+
+            return TryValidateFactRoute(in state, in fact, out failure);
+        }
+
+        /// <summary>
+        /// 为唯一物理 owner 分配持久 OwnerSequence 并追加一条自包含 Boundary fact。
+        /// </summary>
+        private static bool TryAppendFactRecord(
+            ref BoundaryDrainState state,
+            DynamicBuffer<BoundaryFactBuffer> outbox,
+            in BoundaryFactBuffer fact,
+            out BoundaryFactBuffer appendedFact,
+            out GasBoundaryDrainFailure failure)
+        {
+            appendedFact = default;
+            if (!TryValidateFactAppend(in state, in fact, out failure))
+                return false;
 
             var sequence = fact.EventId.OwnerSequence;
             if (sequence != 0 && sequence != state.NextOwnerSequence)

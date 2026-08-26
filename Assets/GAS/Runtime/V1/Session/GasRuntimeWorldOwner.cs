@@ -7,6 +7,80 @@ using UnityEngine;
 namespace GAS.Runtime
 {
     /// <summary>
+    /// 提供 Runtime v1 Session 生命周期与故障锁存的纯值观察结果；不暴露 ECS Entity 或可变 buffer。
+    /// </summary>
+    public readonly struct GasRuntimeSessionObservation
+    {
+        public readonly bool Exists;
+        public readonly GasSessionLifecycleState SessionState;
+        public readonly int FaultReasonCode;
+        public readonly ulong FaultId;
+        public readonly int BattleCount;
+        public readonly int ReadyBattleCount;
+        public readonly GasBattleInstanceState FirstBattleState;
+        public readonly bool FirstBattleIngressOpen;
+        public readonly int AscCount;
+        public readonly int ReadyAscCount;
+        public readonly ulong CurrentTick;
+        public readonly GasTickDiagnostics TickDiagnostics;
+        public readonly int InboxCount;
+        public readonly int PendingInboxCount;
+        public readonly int ConsumedInboxCount;
+        public readonly OwnerAscHandle FirstAsc;
+        public readonly ulong FirstAscScenarioUnitId;
+        public readonly GasAscLifecycleState FirstAscLifecycle;
+        public readonly float FirstAscHealth;
+        public readonly float FirstAscEnergy;
+
+        /// <summary>
+        /// 创建一个不可变 Session 观察结果。
+        /// </summary>
+        public GasRuntimeSessionObservation(
+            bool exists,
+            GasSessionLifecycleState sessionState,
+            int faultReasonCode,
+            ulong faultId,
+            int battleCount,
+            int readyBattleCount,
+            GasBattleInstanceState firstBattleState,
+            bool firstBattleIngressOpen,
+            int ascCount,
+            int readyAscCount,
+            ulong currentTick,
+            in GasTickDiagnostics tickDiagnostics,
+            int inboxCount,
+            int pendingInboxCount,
+            int consumedInboxCount,
+            in OwnerAscHandle firstAsc,
+            ulong firstAscScenarioUnitId,
+            GasAscLifecycleState firstAscLifecycle,
+            float firstAscHealth,
+            float firstAscEnergy)
+        {
+            Exists = exists;
+            SessionState = sessionState;
+            FaultReasonCode = faultReasonCode;
+            FaultId = faultId;
+            BattleCount = battleCount;
+            ReadyBattleCount = readyBattleCount;
+            FirstBattleState = firstBattleState;
+            FirstBattleIngressOpen = firstBattleIngressOpen;
+            AscCount = ascCount;
+            ReadyAscCount = readyAscCount;
+            CurrentTick = currentTick;
+            TickDiagnostics = tickDiagnostics;
+            InboxCount = inboxCount;
+            PendingInboxCount = pendingInboxCount;
+            ConsumedInboxCount = consumedInboxCount;
+            FirstAsc = firstAsc;
+            FirstAscScenarioUnitId = firstAscScenarioUnitId;
+            FirstAscLifecycle = firstAscLifecycle;
+            FirstAscHealth = firstAscHealth;
+            FirstAscEnergy = firstAscEnergy;
+        }
+    }
+
+    /// <summary>
     /// 唯一拥有一个 World 的 Runtime v1 系统拓扑、CommandPort 与完整 FixedStep 批次边界。
     /// </summary>
     public sealed class GasRuntimeWorldOwner : IDisposable
@@ -20,10 +94,50 @@ namespace GAS.Runtime
         private readonly SessionIngressGate _ingressGate;
         private readonly GasBoundaryDrainCoordinator _boundaryDrain;
         private Entity _registrationEntity;
+        private GasStageBBootstrapRecordGate _bootstrapRecordGate;
         private bool _attachedToPlayerLoop;
         private bool _disposed;
 
         public GasCommandPort Port { get; }
+
+        /// <summary>
+        /// 记录一次完整 Stage-B SpawnBatch；调用方只能提交 Pending，Ready 发布仍由下一次 Kernel maintenance 完成。
+        /// </summary>
+        public GasStageBSpawnFaultReason RecordSpawnBatch(
+            in GasStageBSessionBootstrapRequest sessionRequest,
+            Unity.Collections.NativeArray<GasStageBBattleBootstrapRequest> battleRequests,
+            Unity.Collections.NativeArray<GasStageBAscBootstrapRequest> ascRequests,
+            Unity.Collections.NativeArray<PendingAttributeInitialization> attributeInitializations,
+            Unity.Collections.NativeArray<PendingTagInitialization> tagInitializations,
+            Unity.Collections.NativeArray<PendingGrantedAbilityInitialization> grantedAbilityInitializations)
+        {
+            EnsureUsable();
+            using var query = _world.EntityManager.CreateEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<EndFixedStepSimulationEntityCommandBufferSystem.Singleton>(),
+                },
+                Options = EntityQueryOptions.IncludeSystems,
+            });
+            if (query.CalculateEntityCount() != 1)
+                return GasStageBSpawnFaultReason.SessionCardinality;
+
+            var endFixed = query.GetSingleton<
+                EndFixedStepSimulationEntityCommandBufferSystem.Singleton>();
+            return GasStageBBootstrapRecorder.Record(
+                _world.EntityManager,
+                endFixed,
+                _world.Unmanaged,
+                ref _bootstrapRecordGate,
+                in sessionRequest,
+                battleRequests,
+                ascRequests,
+                attributeInitializations,
+                tagInitializations,
+                grantedAbilityInitializations,
+                out _);
+        }
 
         /// <summary>
         /// 暴露唯一 managed Drain 的 immutable ring；注入外部 stager 时该属性为 null。
@@ -104,10 +218,141 @@ namespace GAS.Runtime
         /// <summary>
         /// 推进完整 FixedStep 父组，并只在父组完成后执行 Boundary 批次握手。
         /// </summary>
-        public void TickBatch()
+        public bool TickBatch()
         {
             EnsureUsable();
             _simulation.Update();
+            return true;
+        }
+
+        /// <summary>
+        /// 读取当前唯一 Session 的生命周期、Battle/ASC Ready 计数与 fail-closed 原因。
+        /// </summary>
+        public bool TryReadSessionObservation(out GasRuntimeSessionObservation observation)
+        {
+            EnsureUsable();
+            using var query = _world.EntityManager.CreateEntityQuery(
+                ComponentType.ReadOnly<GasSessionIdentity>(),
+                ComponentType.ReadOnly<GasSessionLifecycle>(),
+                ComponentType.ReadOnly<SessionFaultLatch>(),
+                ComponentType.ReadOnly<SimulationTickState>(),
+                ComponentType.ReadOnly<BattleInstanceSlot>(),
+                ComponentType.ReadOnly<AscRegistrySlot>());
+            if (query.CalculateEntityCount() != 1)
+            {
+                observation = new GasRuntimeSessionObservation(
+                    false,
+                    default,
+                    0,
+                    0,
+                    0,
+                    0,
+                    default,
+                    false,
+                    0,
+                    0,
+                    0,
+                    default,
+                    0,
+                    0,
+                    0,
+                    default,
+                    0,
+                    default,
+                    0f,
+                    0f);
+                return false;
+            }
+
+            var session = query.GetSingletonEntity();
+            var lifecycle = _world.EntityManager.GetComponentData<GasSessionLifecycle>(session);
+            var fault = _world.EntityManager.GetComponentData<SessionFaultLatch>(session);
+            var tick = _world.EntityManager.GetComponentData<SimulationTickState>(session);
+            var diagnostics = _world.EntityManager.GetComponentData<GasTickDiagnostics>(session);
+            var inbox = _world.EntityManager.GetBuffer<BoundaryCommandInbox>(session, true);
+            var pendingInboxCount = 0;
+            var consumedInboxCount = 0;
+            for (var index = 0; index < inbox.Length; index++)
+            {
+                var state = inbox[index].State;
+                if (state == GasBoundaryCommandState.Pending ||
+                    state == GasBoundaryCommandState.Sealed)
+                    pendingInboxCount++;
+                else if (state == GasBoundaryCommandState.Consumed)
+                    consumedInboxCount++;
+            }
+            var battles = _world.EntityManager.GetBuffer<BattleInstanceSlot>(session, true);
+            var ascs = _world.EntityManager.GetBuffer<AscRegistrySlot>(session, true);
+            var readyBattles = 0;
+            var firstBattleState = default(GasBattleInstanceState);
+            var firstBattleIngressOpen = false;
+            for (var index = 0; index < battles.Length; index++)
+            {
+                var battle = battles[index];
+                if (index == 0)
+                {
+                    firstBattleState = battle.State;
+                    firstBattleIngressOpen = battle.IngressClosed == 0;
+                }
+                if (battle.State == GasBattleInstanceState.Ready ||
+                    battle.State == GasBattleInstanceState.Running)
+                    readyBattles++;
+            }
+
+            var readyAscs = 0;
+            for (var index = 0; index < ascs.Length; index++)
+                if (ascs[index].State == GasAscRegistryState.Ready)
+                    readyAscs++;
+
+            var firstAsc = default(OwnerAscHandle);
+            var firstAscScenarioUnitId = 0UL;
+            var firstAscLifecycle = default(GasAscLifecycleState);
+            var firstAscHealth = 0f;
+            var firstAscEnergy = 0f;
+            if (ascs.Length > 0)
+            {
+                var firstSlot = ascs[0];
+                firstAsc = firstSlot.OwnerAsc;
+                var firstEntity = firstSlot.ResolveRuntimeEntity();
+                if (_world.EntityManager.Exists(firstEntity) &&
+                    _world.EntityManager.HasComponent<AscLifecycle>(firstEntity))
+                {
+                    if (_world.EntityManager.HasComponent<AscBattleMembership>(firstEntity))
+                        firstAscScenarioUnitId = _world.EntityManager.GetComponentData<AscBattleMembership>(firstEntity).ScenarioUnitId;
+                    firstAscLifecycle = _world.EntityManager.GetComponentData<AscLifecycle>(firstEntity).State;
+                    if (_world.EntityManager.HasBuffer<AttributeValueSlot>(firstEntity))
+                    {
+                        var values = _world.EntityManager.GetBuffer<AttributeValueSlot>(firstEntity, true);
+                        if (values.Length > 0)
+                            firstAscHealth = values[0].Current;
+                        if (values.Length > 1)
+                            firstAscEnergy = values[1].Current;
+                    }
+                }
+            }
+
+            observation = new GasRuntimeSessionObservation(
+                true,
+                lifecycle.State,
+                fault.ReasonCode,
+                fault.FaultId,
+                battles.Length,
+                readyBattles,
+                firstBattleState,
+                firstBattleIngressOpen,
+                ascs.Length,
+                readyAscs,
+                tick.CurrentTick,
+                in diagnostics,
+                inbox.Length,
+                pendingInboxCount,
+                consumedInboxCount,
+                in firstAsc,
+                firstAscScenarioUnitId,
+                firstAscLifecycle,
+                firstAscHealth,
+                firstAscEnergy);
+            return true;
         }
 
         /// <summary>
@@ -206,6 +451,8 @@ namespace GAS.Runtime
         {
             world.GetOrCreateSystemManaged<InitializationSystemGroup>();
             var simulation = world.GetOrCreateSystemManaged<SimulationSystemGroup>();
+            var beginSimulation = world.GetOrCreateSystemManaged<
+                BeginSimulationEntityCommandBufferSystem>();
             world.GetOrCreateSystemManaged<PresentationSystemGroup>();
             var fixedStep = world.GetOrCreateSystemManaged<FixedStepSimulationSystemGroup>();
             if (fixedStep.Timestep > 0f)
@@ -229,6 +476,8 @@ namespace GAS.Runtime
             fixedStep.AddSystemToUpdateList(physics);
             fixedStep.AddSystemToUpdateList(gas);
             fixedStep.AddSystemToUpdateList(endFixed);
+            // FixedStep 的 Unity 内置 UpdateAfter(BeginSimulation) 约束必须在同一 Simulation 列表中解析。
+            simulation.AddSystemToUpdateList(beginSimulation);
             simulation.AddSystemToUpdateList(batchStart);
             simulation.AddSystemToUpdateList(fixedStep);
             simulation.AddSystemToUpdateList(batchFence);

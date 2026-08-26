@@ -151,6 +151,7 @@ namespace GAS.Runtime
                 AscLifecycles = state.GetComponentLookup<AscLifecycle>(true),
                 ResolvedTargets = scratch.ResolvedTargets,
                 EffectOperations = scratch.EffectOperations,
+                TargetResolveRejections = scratch.TargetResolveRejections,
                 Execution = scratch.Execution,
             }.Schedule(dependency);
             dependency = new GasWholeTickInfrastructureAdmissionJob
@@ -163,6 +164,7 @@ namespace GAS.Runtime
                 OwnerPlans = scratch.OwnerPlans,
                 ResolvedTargets = scratch.ResolvedTargets,
                 EffectOperations = scratch.EffectOperations,
+                TargetResolveRejections = scratch.TargetResolveRejections,
                 AbilityRoutes = scratch.AbilityRoutes,
                 Registries = state.GetBufferLookup<AscRegistrySlot>(true),
                 AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
@@ -183,6 +185,8 @@ namespace GAS.Runtime
                 BoundaryFacts = state.GetBufferLookup<BoundaryFactBuffer>(true),
                 SourceSpecs = scratch.SourceSpecs,
                 ApplicationOutcomes = scratch.ApplicationOutcomes,
+                AttributeMutations = scratch.AttributeMutations,
+                MutationOutcomes = scratch.MutationOutcomes,
                 CoreFacts = scratch.CoreFacts,
                 EvaluatorStack = scratch.EvaluatorStack,
                 Admission = scratch.Admission,
@@ -262,6 +266,7 @@ namespace GAS.Runtime
             {
                 Admission = scratch.Admission,
                 EffectOperations = scratch.EffectOperations,
+                TargetResolveRejections = scratch.TargetResolveRejections,
                 SourceSpecs = scratch.SourceSpecs,
                 Execution = scratch.Execution,
             }.Schedule(dependency);
@@ -282,7 +287,7 @@ namespace GAS.Runtime
                 EvaluatorStack = scratch.EvaluatorStack,
                 Registries = state.GetBufferLookup<AscRegistrySlot>(true),
                 AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
-                AscLifecycles = state.GetComponentLookup<AscLifecycle>(true),
+                AscLifecycles = state.GetComponentLookup<AscLifecycle>(false),
                 SlabHeads = state.GetComponentLookup<AscSlabHeads>(),
                 ActiveEffects = state.GetBufferLookup<ActiveEffectSlot>(),
                 Attributes = state.GetBufferLookup<AttributeValueSlot>(),
@@ -293,12 +298,16 @@ namespace GAS.Runtime
                 PayloadRanges = state.GetBufferLookup<GasPayloadRangeRecord>(),
                 PayloadValues = state.GetBufferLookup<GasPayloadValueSlot>(),
                 ApplicationOutcomes = scratch.ApplicationOutcomes,
+                AttributeMutations = scratch.AttributeMutations,
+                MutationOutcomes = scratch.MutationOutcomes,
                 Execution = scratch.Execution,
             }.Schedule(dependency);
             dependency = new GasTargetLocalStabilizationDeathJob
             {
                 Admission = scratch.Admission,
                 ApplicationOutcomes = scratch.ApplicationOutcomes,
+                MutationOutcomes = scratch.MutationOutcomes,
+                Catalog = catalog,
                 CoreFacts = scratch.CoreFacts,
                 Execution = scratch.Execution,
             }.Schedule(dependency);

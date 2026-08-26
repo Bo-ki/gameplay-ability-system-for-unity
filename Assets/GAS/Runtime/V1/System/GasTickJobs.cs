@@ -1236,10 +1236,11 @@ namespace GAS.Runtime
         [ReadOnly] public ComponentLookup<AscLifecycle> AscLifecycles;
         public NativeArray<GasResolvedTargetRecord> ResolvedTargets;
         public NativeArray<GasEffectOperationRecord> EffectOperations;
+        public NativeArray<GasTargetResolveRejectionRecord> TargetResolveRejections;
         public NativeArray<GasTickExecutionState> Execution;
 
         /// <summary>
-        /// 只接受显式 ASC target；selector/rule 暂无生成规则时以 typed no-op 留在 inbox 审计中。
+        /// 展开成功 operation；无法建立 binding 的 planned application 写入 bounded typed rejection。
         /// </summary>
         public void Execute()
         {
@@ -1252,33 +1253,67 @@ namespace GAS.Runtime
                 execution.ResolvedTargetCount = 0;
                 execution.EffectOperationCount = 0;
                 ref var catalog = ref Catalog.Value;
+                execution.TargetResolveRejectionCount = 0;
                 for (var index = 0; index < execution.StoredSealedCommandCount; index++)
                 {
                     var command = SealedCommands[index].Command;
                     if (command.CommandKind != GasBoundaryCommandKind.ApplyEffect ||
                         index >= execution.OwnerPlanCount ||
                         OwnerPlans[index].BusinessAccepted == 0 ||
-                        OwnerPlans[index].StableSequence == 0 ||
-                        !GasDefinitionCatalogLookup.TryGetGameplayEffectIndex(
-                            ref catalog, command.DefinitionId, out var definitionIndex))
+                        OwnerPlans[index].StableSequence == 0)
                         continue;
+                    var plan = OwnerPlans[index];
+                    if (!TryComposeApplicationId(
+                            plan.StableSequence,
+                            0,
+                            out var directApplicationId))
+                    {
+                        execution.PreAdmissionFailure =
+                            GasTickAdmissionFailureReason.EnvelopeArithmeticOverflow;
+                        break;
+                    }
+                    var directSourceAsc = command.HasSource != 0 && command.SourceAsc.IsValid
+                        ? command.SourceAsc
+                        : plan.OwnerAsc;
+                    if (!GasDefinitionCatalogLookup.TryGetGameplayEffectIndex(
+                            ref catalog, command.DefinitionId, out var definitionIndex))
+                    {
+                        if (!TryRecordRejection(
+                                ref execution,
+                                index,
+                                0,
+                                -1,
+                                directSourceAsc,
+                                ExtractTargetAsc(in command.Target),
+                                directApplicationId,
+                                plan.StableSequence,
+                                GasGameplayEffectApplicationOutcome.RejectedDefinition,
+                                GasGameplayEffectTransactionFailure.InvalidDefinition))
+                            break;
+                        continue;
+                    }
                     var definition = catalog.GameplayEffects[definitionIndex];
                     if (!TryResolveTarget(
                             in command.Target,
                             definition.TargetPolicy.Life,
                             out var targetAsc,
                             out var targetAlive))
-                        continue;
-                    var sourceAsc = command.HasSource != 0 ? command.SourceAsc : targetAsc;
-                    if (!TryComposeApplicationId(
-                            OwnerPlans[index].StableSequence,
-                            0,
-                            out var applicationId))
                     {
-                        execution.PreAdmissionFailure =
-                            GasTickAdmissionFailureReason.EnvelopeArithmeticOverflow;
-                        break;
+                        if (!TryRecordRejection(
+                                ref execution,
+                                index,
+                                0,
+                                definitionIndex,
+                                directSourceAsc,
+                                ExtractTargetAsc(in command.Target),
+                                directApplicationId,
+                                plan.StableSequence,
+                                GasGameplayEffectApplicationOutcome.RejectedStaleBinding,
+                                GasGameplayEffectTransactionFailure.InvalidIdentity))
+                            break;
+                        continue;
                     }
+                    var sourceAsc = command.HasSource != 0 ? command.SourceAsc : targetAsc;
                     if (!TryAddOperation(
                             ref execution,
                             index,
@@ -1286,8 +1321,9 @@ namespace GAS.Runtime
                             definitionIndex,
                             sourceAsc,
                             targetAsc,
-                            applicationId,
+                            directApplicationId,
                             execution.CandidateTick,
+                            plan.StableSequence,
                             targetAlive))
                         break;
                 }
@@ -1307,21 +1343,54 @@ namespace GAS.Runtime
                     for (var nodeOffset = 0; nodeOffset < nodes.Count; nodeOffset++)
                     {
                         var node = catalog.DirectEffectProgramNodes[nodes.Start + nodeOffset];
+                        if (!TryComposeApplicationId(
+                                plan.StableSequence,
+                                node.NodeOrdinal,
+                                out var applicationId))
+                        {
+                            execution.PreAdmissionFailure =
+                                GasTickAdmissionFailureReason.EnvelopeArithmeticOverflow;
+                            break;
+                        }
+                        var target = ResolveAbilityTarget(in plan, in ability);
                         if (!GasDefinitionCatalogLookup.TryGetGameplayEffectIndex(
                                 ref catalog, node.EffectDefinitionId, out var definitionIndex))
+                        {
+                            if (!TryRecordRejection(
+                                    ref execution,
+                                    index,
+                                    node.NodeOrdinal,
+                                    -1,
+                                    plan.OwnerAsc,
+                                    ExtractTargetAsc(in target),
+                                    applicationId,
+                                    plan.StableSequence,
+                                    GasGameplayEffectApplicationOutcome.RejectedDefinition,
+                                    GasGameplayEffectTransactionFailure.InvalidDefinition))
+                                break;
                             continue;
-                        var target = ResolveAbilityTarget(in plan, in ability);
+                        }
                         if (!TryResolveTarget(
                                 in target,
                                 catalog.GameplayEffects[definitionIndex].TargetPolicy.Life,
                                 out var targetAsc,
                                 out var targetAlive))
+                        {
+                            if (!TryRecordRejection(
+                                    ref execution,
+                                    index,
+                                    node.NodeOrdinal,
+                                    definitionIndex,
+                                    plan.OwnerAsc,
+                                    ExtractTargetAsc(in target),
+                                    applicationId,
+                                    plan.StableSequence,
+                                    GasGameplayEffectApplicationOutcome.RejectedStaleBinding,
+                                    GasGameplayEffectTransactionFailure.InvalidIdentity))
+                                break;
                             continue;
-                        if (!TryComposeApplicationId(
-                                plan.StableSequence,
-                                node.NodeOrdinal,
-                                out var applicationId) ||
-                            !TryAddOperation(
+                        }
+                        if (!TryAddOperation(
                                 ref execution,
                                 index,
                                 node.NodeOrdinal,
@@ -1330,12 +1399,62 @@ namespace GAS.Runtime
                                 targetAsc,
                                 applicationId,
                                 execution.CandidateTick,
+                                plan.StableSequence,
                                 targetAlive))
                             break;
                     }
                 }
             }
             Execution[0] = execution;
+        }
+
+        /// <summary>
+        /// 把 TargetResolve 失败固定为可排序 rejection，防止 planned application 被 continue 丢失。
+        /// </summary>
+        private bool TryRecordRejection(
+            ref GasTickExecutionState execution,
+            int ownerPlanOrdinal,
+            int programNodeOrdinal,
+            int definitionIndex,
+            in OwnerAscHandle sourceAsc,
+            in OwnerAscHandle targetAsc,
+            ulong applicationId,
+            ulong causalityId,
+            GasGameplayEffectApplicationOutcome outcome,
+            GasGameplayEffectTransactionFailure failure)
+        {
+            if (applicationId == 0 ||
+                execution.TargetResolveRejectionCount >= TargetResolveRejections.Length)
+            {
+                execution.PreAdmissionFailure =
+                    GasTickAdmissionFailureReason.EffectOperationLimit;
+                return false;
+            }
+            TargetResolveRejections[execution.TargetResolveRejectionCount++] =
+                new GasTargetResolveRejectionRecord
+                {
+                    OwnerPlanOrdinal = ownerPlanOrdinal,
+                    ProgramNodeOrdinal = programNodeOrdinal,
+                    DefinitionIndex = definitionIndex,
+                    SourceAsc = sourceAsc,
+                    TargetAsc = targetAsc,
+                    ApplicationId = applicationId,
+                    CausalityId = causalityId,
+                    Scope = GasBoundaryFactScope.Session,
+                    Outcome = outcome,
+                    Failure = failure,
+                };
+            return true;
+        }
+
+        /// <summary>
+        /// 从输入目标提取稳定 ASC 身份；selector/rule 不伪造目标句柄。
+        /// </summary>
+        private static OwnerAscHandle ExtractTargetAsc(in BoundaryTargetRef target)
+        {
+            return target.Kind == GasBoundaryTargetKind.Asc && target.TargetAsc.IsValid
+                ? target.TargetAsc
+                : default;
         }
 
         /// <summary>
@@ -1396,9 +1515,8 @@ namespace GAS.Runtime
                     return false;
                 var alive = lifecycle == GasAscLifecycleState.Ready ||
                             lifecycle == GasAscLifecycleState.Alive;
-                if (!alive && lifecycle != GasAscLifecycleState.Terminal)
-                    return false;
-                if (lifePolicy == GasTargetLifePolicy.AliveOnly && !alive)
+                if (!alive && lifecycle != GasAscLifecycleState.Terminal &&
+                    lifecycle != GasAscLifecycleState.Dead)
                     return false;
                 owner = target.TargetAsc;
                 targetAlive = alive ? (byte)1 : (byte)0;
@@ -1419,6 +1537,7 @@ namespace GAS.Runtime
             in OwnerAscHandle targetAsc,
             ulong applicationId,
             ulong startTick,
+            ulong causalityId,
             byte targetAlive)
         {
             if (applicationId == 0 || execution.ResolvedTargetCount >= ResolvedTargets.Length ||
@@ -1437,6 +1556,7 @@ namespace GAS.Runtime
                 DefinitionIndex = definitionIndex,
                 ApplicationId = applicationId,
                 TargetIsAlive = targetAlive,
+                CausalityId = causalityId,
             };
             EffectOperations[execution.EffectOperationCount++] = new GasEffectOperationRecord
             {
@@ -1449,6 +1569,7 @@ namespace GAS.Runtime
                 ApplicationId = applicationId,
                 StartTick = startTick,
                 TargetIsAlive = targetAlive,
+                CausalityId = causalityId,
             };
             return true;
         }
@@ -1485,6 +1606,7 @@ namespace GAS.Runtime
         [ReadOnly] public NativeArray<GasOwnerPlanRecord> OwnerPlans;
         [ReadOnly] public NativeArray<GasResolvedTargetRecord> ResolvedTargets;
         [ReadOnly] public NativeArray<GasEffectOperationRecord> EffectOperations;
+        [ReadOnly] public NativeArray<GasTargetResolveRejectionRecord> TargetResolveRejections;
         [ReadOnly] public NativeArray<GasAbilityRouteRecord> AbilityRoutes;
         [ReadOnly] public BufferLookup<AscRegistrySlot> Registries;
         [ReadOnly] public ComponentLookup<GasAscIdentity> AscIdentities;
@@ -1505,6 +1627,8 @@ namespace GAS.Runtime
         [ReadOnly] public BufferLookup<BoundaryFactBuffer> BoundaryFacts;
         [ReadOnly] public NativeArray<GasSourceSpecRecord> SourceSpecs;
         [ReadOnly] public NativeArray<GasApplicationOutcomeRecord> ApplicationOutcomes;
+        [ReadOnly] public NativeArray<GasAttributeMutationRecord> AttributeMutations;
+        [ReadOnly] public NativeArray<GasAttributeMutationOutcomeRecord> MutationOutcomes;
         [ReadOnly] public NativeArray<GasCoreFactRecord> CoreFacts;
         [ReadOnly] public NativeArray<float> EvaluatorStack;
         public NativeArray<GasAdmissionResult> Admission;
@@ -1526,6 +1650,8 @@ namespace GAS.Runtime
                 failure = ValidateActualCounts(in execution);
             if (failure == GasTickAdmissionFailureReason.None)
                 failure = ValidateEffectOperationIdentities(in execution);
+            if (failure == GasTickAdmissionFailureReason.None)
+                failure = CalculateFactDemand(ref execution);
             if (failure == GasTickAdmissionFailureReason.None)
                 failure = ValidateAbilityReservations(in execution);
             if (failure == GasTickAdmissionFailureReason.None)
@@ -1552,6 +1678,12 @@ namespace GAS.Runtime
                 return GasTickAdmissionFailureReason.ResolvedTargetLimit;
             if (execution.EffectOperationCount < 0)
                 return GasTickAdmissionFailureReason.EffectOperationLimit;
+            if (execution.TargetResolveRejectionCount < 0)
+                return GasTickAdmissionFailureReason.EffectOperationLimit;
+            if (execution.AttributeMutationCount < 0)
+                return GasTickAdmissionFailureReason.CoreFactLimit;
+            if (execution.PeriodTickDemand < 0 || execution.PeriodMutationDemand < 0)
+                return GasTickAdmissionFailureReason.CoreFactLimit;
             if (execution.AbilityRouteCount < 0)
                 return GasTickAdmissionFailureReason.NextTickRouteLimit;
             if (!HasActualCapacity(OwnerPlans, execution.OwnerPlanCount))
@@ -1564,12 +1696,17 @@ namespace GAS.Runtime
                 return GasTickAdmissionFailureReason.ResolvedTargetLimit;
             if (execution.EffectOperationCount > Profile.MaxEffectOperationCount)
                 return GasTickAdmissionFailureReason.EffectOperationLimit;
+            if (execution.TargetResolveRejectionCount > Profile.MaxEffectOperationCount)
+                return GasTickAdmissionFailureReason.EffectOperationLimit;
             if (!HasActualCapacity(EffectOperations, execution.EffectOperationCount))
                 return GasTickAdmissionFailureReason.EffectOperationLimit;
             if (!HasActualCapacity(ResolvedTargets, execution.ResolvedTargetCount))
                 return GasTickAdmissionFailureReason.ResolvedTargetLimit;
-            if (!HasActualCapacity(SourceSpecs, execution.EffectOperationCount) ||
-                !HasActualCapacity(ApplicationOutcomes, execution.EffectOperationCount))
+            var sourceSpecCount = execution.EffectOperationCount + execution.TargetResolveRejectionCount;
+            if (sourceSpecCount < execution.EffectOperationCount ||
+                !HasActualCapacity(TargetResolveRejections, execution.TargetResolveRejectionCount) ||
+                !HasActualCapacity(SourceSpecs, sourceSpecCount) ||
+                !HasActualCapacity(ApplicationOutcomes, sourceSpecCount))
                 return GasTickAdmissionFailureReason.EffectOperationLimit;
             if (!HasActualCapacity(CoreFacts, execution.EffectOperationCount))
                 return GasTickAdmissionFailureReason.CoreFactLimit;
@@ -1590,6 +1727,273 @@ namespace GAS.Runtime
             return Profile.MaxStructuralIntentCount < 0
                 ? GasTickAdmissionFailureReason.StructuralIntentLimit
                 : GasTickAdmissionFailureReason.None;
+        }
+
+        /// <summary>
+        /// 以 effect outcome 加每个 modifier mutation 的保守闭包需求完成事实与 outbox 预留。
+        /// </summary>
+        private GasTickAdmissionFailureReason CalculateFactDemand(
+            ref GasTickExecutionState execution)
+        {
+            long mutationDemand = 0;
+            for (var index = 0; index < execution.EffectOperationCount; index++)
+            {
+                var operation = EffectOperations[index];
+                if (operation.DefinitionIndex < 0 ||
+                    operation.DefinitionIndex >= Catalog.Value.GameplayEffects.Length)
+                    return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+                var range = Catalog.Value.GameplayEffects[operation.DefinitionIndex].ModifierRange;
+                if (range.Start < 0 || range.Count < 0 ||
+                    range.Start > Catalog.Value.Modifiers.Length ||
+                    range.Count > Catalog.Value.Modifiers.Length - range.Start)
+                    return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+                mutationDemand += range.Count;
+                if (mutationDemand > int.MaxValue)
+                    return GasTickAdmissionFailureReason.CoreFactLimit;
+            }
+
+            if (!TryCalculatePeriodDemand(
+                    in execution,
+                    out var periodTickDemand,
+                    out var periodMutationDemand))
+                return GasTickAdmissionFailureReason.CoreFactLimit;
+            execution.PeriodTickDemand = periodTickDemand;
+            execution.PeriodMutationDemand = periodMutationDemand;
+            var totalMutationDemand = mutationDemand + periodMutationDemand;
+            if (totalMutationDemand > int.MaxValue)
+                return GasTickAdmissionFailureReason.CoreFactLimit;
+            execution.AttributeMutationDemand = (int)totalMutationDemand;
+            var deathDemand = CountDistinctTargetsIncludingPeriod(
+                execution.EffectOperationCount);
+            var definitionFactDemand = CountDefinitionFactDemand(
+                execution.EffectOperationCount);
+            var factDemand = totalMutationDemand + execution.EffectOperationCount +
+                             execution.TargetResolveRejectionCount + deathDemand +
+                             periodTickDemand + definitionFactDemand;
+            var outcomeDemand = execution.EffectOperationCount +
+                                execution.TargetResolveRejectionCount + periodTickDemand;
+            if (factDemand > int.MaxValue || factDemand > Profile.MaxCoreFactCount ||
+                outcomeDemand > int.MaxValue ||
+                !HasActualCapacity(AttributeMutations, (int)totalMutationDemand) ||
+                !HasActualCapacity(MutationOutcomes, (int)totalMutationDemand) ||
+                !HasActualCapacity(ApplicationOutcomes, (int)outcomeDemand) ||
+                !HasActualCapacity(CoreFacts, (int)factDemand))
+                return GasTickAdmissionFailureReason.CoreFactLimit;
+            return GasTickAdmissionFailureReason.None;
+        }
+
+        /// <summary>
+        /// 统计既有 ActiveEffect due 与本 Tick 新建/重置 effect 的 period 上界，避免 period body 静默超出 scratch。
+        /// </summary>
+        private bool TryCalculatePeriodDemand(
+            in GasTickExecutionState execution,
+            out int periodTickDemand,
+            out int periodMutationDemand)
+        {
+            periodTickDemand = 0;
+            periodMutationDemand = 0;
+            long claimDemand = 0;
+            long mutationDemand = 0;
+            var registry = Registries[Session];
+            for (var registryIndex = 0; registryIndex < registry.Length; registryIndex++)
+            {
+                var ownerSlot = registry[registryIndex];
+                if (ownerSlot.State != GasAscRegistryState.Ready)
+                    continue;
+                var asc = ownerSlot.ResolveRuntimeEntity();
+                if (!ActiveEffects.HasBuffer(asc) || !TagCounts.HasBuffer(asc) ||
+                    !Attributes.HasBuffer(asc) || !AttributeDirtyWords.HasBuffer(asc) ||
+                    !TagPresenceWords.HasBuffer(asc) || !SlabHeads.HasComponent(asc))
+                    return false;
+                var activeEffects = ActiveEffects[asc];
+                var activeStorage = new GasActiveEffectSlabStorage { Buffer = activeEffects };
+                var heads = SlabHeads[asc];
+                if (GasNonCompactingSlabAllocator.Validate(
+                        in heads.ActiveEffect,
+                        ref activeStorage,
+                        Profile.MaxActiveEffectCount) != GasSlabStorageFailure.None)
+                    return false;
+                ref var catalog = ref Catalog.Value;
+                if (!GasGameplayEffectLifecycleUtility.TryEstimateDue(
+                        ref catalog,
+                        SimulationEpoch,
+                        execution.CandidateTick,
+                        activeEffects,
+                        TagCounts[asc],
+                        Profile.MaxActiveEffectCount,
+                        out var claims,
+                        out var mutations,
+                        out _))
+                    return false;
+                if (!ValidatePeriodApplicationIdentities(
+                        ref catalog,
+                        activeEffects,
+                        TagCounts[asc],
+                        execution.CandidateTick))
+                    return false;
+                claimDemand += claims;
+                mutationDemand += mutations;
+                for (var operationIndex = 0;
+                     operationIndex < execution.EffectOperationCount;
+                     operationIndex++)
+                {
+                    var operation = EffectOperations[operationIndex];
+                    if (!operation.TargetAsc.Equals(ownerSlot.OwnerAsc) ||
+                        operation.DefinitionIndex < 0 ||
+                        operation.DefinitionIndex >= catalog.GameplayEffects.Length)
+                        continue;
+                    var definition = catalog.GameplayEffects[operation.DefinitionIndex];
+                    if (definition.PeriodTicks <= 0)
+                        continue;
+                    claimDemand++;
+                    mutationDemand += definition.ModifierRange.Count;
+                }
+                if (claimDemand > int.MaxValue || mutationDemand > int.MaxValue)
+                    return false;
+            }
+            periodTickDemand = (int)claimDemand;
+            periodMutationDemand = (int)mutationDemand;
+            return true;
+        }
+
+        /// <summary>
+        /// 预拒绝即将 claim 的 ActiveEffect 缺失正式 ApplicationId，避免 TargetWave 才暴露身份故障。
+        /// </summary>
+        private static bool ValidatePeriodApplicationIdentities(
+            ref GasDefinitionCatalogBlob catalog,
+            DynamicBuffer<ActiveEffectSlot> activeEffects,
+            DynamicBuffer<TagCountSlot> tagCounts,
+            ulong candidateTick)
+        {
+            for (var index = 0; index < activeEffects.Length; index++)
+            {
+                var slot = activeEffects[index];
+                if (slot.Header.StorageState != GasSlabSlotState.Live ||
+                    slot.State != GasSlotBusinessState.Active)
+                    continue;
+                var definition = catalog.GameplayEffects[slot.DefinitionIndex];
+                if (!GasGameplayEffectLifecycleUtility.TryGetPeriodDecision(
+                        ref catalog,
+                        in definition,
+                        in slot,
+                        tagCounts,
+                        candidateTick,
+                        out var claim,
+                        out _,
+                        out _,
+                        out _))
+                    return false;
+                if (claim != 0 && slot.ApplicationId == 0)
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 统计普通 application、既有 period 与本 Tick period 上界覆盖的唯一 target death 需求。
+        /// </summary>
+        private int CountDistinctTargetsIncludingPeriod(int operationCount)
+        {
+            var count = CountDistinctTargets(operationCount);
+            var registry = Registries[Session];
+            for (var registryIndex = 0; registryIndex < registry.Length; registryIndex++)
+            {
+                var ownerSlot = registry[registryIndex];
+                if (ownerSlot.State != GasAscRegistryState.Ready)
+                    continue;
+                var asc = ownerSlot.ResolveRuntimeEntity();
+                if (!ActiveEffects.HasBuffer(asc))
+                    continue;
+                var hasPeriod = false;
+                var effects = ActiveEffects[asc];
+                for (var effectIndex = 0; effectIndex < effects.Length; effectIndex++)
+                {
+                    var effect = effects[effectIndex];
+                    if (effect.Header.StorageState == GasSlabSlotState.Live &&
+                        effect.State == GasSlotBusinessState.Active &&
+                        effect.NextPeriodTick != 0 &&
+                        effect.NextPeriodTick <= Execution[0].CandidateTick)
+                    {
+                        hasPeriod = true;
+                        break;
+                    }
+                }
+                if (!hasPeriod)
+                {
+                    for (var operationIndex = 0;
+                         operationIndex < operationCount;
+                         operationIndex++)
+                    {
+                        if (EffectOperations[operationIndex].TargetAsc.Equals(ownerSlot.OwnerAsc) &&
+                            EffectOperations[operationIndex].DefinitionIndex >= 0 &&
+                            EffectOperations[operationIndex].DefinitionIndex < Catalog.Value.GameplayEffects.Length &&
+                            Catalog.Value.GameplayEffects[
+                                EffectOperations[operationIndex].DefinitionIndex].PeriodTicks > 0)
+                        {
+                            hasPeriod = true;
+                            break;
+                        }
+                    }
+                }
+                if (hasPeriod && !HasPriorOperationTarget(ownerSlot.OwnerAsc, operationCount))
+                    count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// 判断 period target 是否已经由普通 effect operation 贡献 death reservation。
+        /// </summary>
+        private bool HasPriorOperationTarget(in OwnerAscHandle target, int operationCount)
+        {
+            for (var index = 0; index < operationCount; index++)
+                if (EffectOperations[index].TargetAsc.Equals(target))
+                    return true;
+            return false;
+        }
+
+        /// <summary>
+        /// 按 definition lifetime/cue 语义保守预留 stabilization 额外事实。
+        /// </summary>
+        private int CountDefinitionFactDemand(int operationCount)
+        {
+            long count = 0;
+            for (var index = 0; index < operationCount; index++)
+            {
+                var definitionIndex = EffectOperations[index].DefinitionIndex;
+                if (definitionIndex < 0 || definitionIndex >= Catalog.Value.GameplayEffects.Length)
+                    continue;
+                var definition = Catalog.Value.GameplayEffects[definitionIndex];
+                if (definition.Lifetime == GasEffectLifetimePolicy.InstantExecution)
+                    count += 2;
+                else if (definition.CueRange.Count > 0)
+                    count++;
+            }
+            return count > int.MaxValue ? int.MaxValue : (int)count;
+        }
+
+        /// <summary>
+        /// 统计本 Tick 可能产生首个 death crossing 的 target 数量；同一 target 最多一条 Death fact。
+        /// </summary>
+        private int CountDistinctTargets(int operationCount)
+        {
+            var count = 0;
+            for (var index = 0; index < operationCount; index++)
+            {
+                var target = EffectOperations[index].TargetAsc;
+                var seen = false;
+                for (var prior = 0; prior < index; prior++)
+                {
+                    if (EffectOperations[prior].TargetAsc.Equals(target))
+                    {
+                        seen = true;
+                        break;
+                    }
+                }
+                if (!seen)
+                    count++;
+            }
+            return count;
         }
 
         /// <summary>
@@ -1786,9 +2190,13 @@ namespace GAS.Runtime
         private GasTickAdmissionFailureReason ValidateBoundaryReservations(
             in GasTickExecutionState execution)
         {
-            if (execution.EffectOperationCount == 0)
+            if (execution.EffectOperationCount == 0 && execution.TargetResolveRejectionCount == 0 &&
+                execution.PeriodTickDemand == 0)
                 return GasTickAdmissionFailureReason.None;
             if (Profile.MaxAscBoundaryFactCount < 0 || Profile.MaxSessionBoundaryFactCount < 0)
+                return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+
+            if (!BoundaryDrains.HasComponent(Session) || !BoundaryFacts.HasBuffer(Session))
                 return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
 
             var sessionState = BoundaryDrains[Session];
@@ -1797,9 +2205,13 @@ namespace GAS.Runtime
                 sessionState.OwnerStableId == 0 || sessionState.OwnerGeneration == 0 ||
                 sessionState.NextOwnerSequence == 0 ||
                 sessionState.NextOwnerSequence == ulong.MaxValue ||
-                (sessionState.Phase != GasBoundaryDrainPhase.Idle &&
-                 sessionState.Phase != GasBoundaryDrainPhase.Pending &&
-                 sessionState.Phase != GasBoundaryDrainPhase.InFlight))
+                 (sessionState.Phase != GasBoundaryDrainPhase.Idle &&
+                  sessionState.Phase != GasBoundaryDrainPhase.Pending &&
+                  sessionState.Phase != GasBoundaryDrainPhase.InFlight))
+                return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+
+            if (execution.TargetResolveRejectionCount > 0 &&
+                !ValidateSessionBoundaryOwner(execution.TargetResolveRejectionCount))
                 return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
 
             for (var index = 0; index < execution.EffectOperationCount; index++)
@@ -1815,7 +2227,48 @@ namespace GAS.Runtime
                 if (!ValidateBoundaryOwner(target, in operation.TargetAsc, demand))
                     return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
             }
+            var registry = Registries[Session];
+            for (var registryIndex = 0; registryIndex < registry.Length; registryIndex++)
+            {
+                var ownerSlot = registry[registryIndex];
+                if (ownerSlot.State != GasAscRegistryState.Ready ||
+                    HasPriorOperationTarget(ownerSlot.OwnerAsc, execution.EffectOperationCount))
+                    continue;
+                var targetOwner = ownerSlot.OwnerAsc;
+                if (!HasPeriodBoundaryDemand(in targetOwner, in execution))
+                    continue;
+                if (!TryResolveTarget(targetOwner, out var target) ||
+                    !BoundaryDrains.HasComponent(target) || !BoundaryFacts.HasBuffer(target))
+                    return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+                var demand = CountBoundaryDemand(in targetOwner, execution.EffectOperationCount);
+                if (!ValidateBoundaryOwner(target, in targetOwner, demand))
+                    return GasTickAdmissionFailureReason.DurableCapacityUnavailable;
+            }
             return GasTickAdmissionFailureReason.None;
+        }
+
+        /// <summary>
+        /// 为无法绑定实体的 TargetResolve rejection 预留 Session scoped outbox 容量。
+        /// </summary>
+        private bool ValidateSessionBoundaryOwner(int demand)
+        {
+            var state = BoundaryDrains[Session];
+            if (state.SimulationEpoch != SimulationEpoch ||
+                state.OwnerKind != GasBoundaryOwnerKind.Session ||
+                state.OwnerStableId == 0 || state.OwnerGeneration == 0 ||
+                state.NextOwnerSequence == 0 || state.NextOwnerSequence == ulong.MaxValue ||
+                (state.Phase != GasBoundaryDrainPhase.Idle &&
+                 state.Phase != GasBoundaryDrainPhase.Pending &&
+                 state.Phase != GasBoundaryDrainPhase.InFlight))
+                return false;
+
+            var outbox = BoundaryFacts[Session];
+            return demand > 0 &&
+                   demand <= Profile.MaxSessionBoundaryFactCount &&
+                   outbox.Length <= Profile.MaxSessionBoundaryFactCount - demand &&
+                   outbox.Length <= int.MaxValue - demand &&
+                   outbox.Capacity >= outbox.Length + demand &&
+                   (ulong)demand <= ulong.MaxValue - state.NextOwnerSequence;
         }
 
         /// <summary>
@@ -1854,13 +2307,112 @@ namespace GAS.Runtime
         /// </summary>
         private int CountBoundaryDemand(in OwnerAscHandle target, int operationCount)
         {
-            var demand = 0;
+            long demand = 0;
+            for (var index = 0; index < operationCount; index++)
+            {
+                var operation = EffectOperations[index];
+                if (!operation.TargetAsc.Equals(target))
+                    continue;
+                demand++;
+                if (operation.DefinitionIndex >= 0 &&
+                    operation.DefinitionIndex < Catalog.Value.GameplayEffects.Length)
+                {
+                    var definition = Catalog.Value.GameplayEffects[operation.DefinitionIndex];
+                    demand += definition.ModifierRange.Count;
+                    if (definition.Lifetime == GasEffectLifetimePolicy.InstantExecution)
+                        demand += 2;
+                    else if (definition.CueRange.Count > 0)
+                        demand++;
+                }
+            }
+            demand += CountPeriodBoundaryDemand(in target, operationCount, out var hasPeriod);
+            if (demand < int.MaxValue &&
+                (HasFirstTargetDeathCandidate(in target, operationCount) || hasPeriod))
+                demand++;
+            return demand > int.MaxValue ? int.MaxValue : (int)demand;
+        }
+
+        /// <summary>
+        /// 统计单 target 的 period claim/body 与 definition/Cue 额外事实需求。
+        /// </summary>
+        private int CountPeriodBoundaryDemand(
+            in OwnerAscHandle target,
+            int operationCount,
+            out bool hasPeriod)
+        {
+            long demand = 0;
+            hasPeriod = false;
+            if (!TryResolveTarget(target, out var asc) ||
+                !ActiveEffects.HasBuffer(asc) || !TagCounts.HasBuffer(asc))
+                return 0;
+            var effects = ActiveEffects[asc];
+            ref var catalog = ref Catalog.Value;
+            for (var index = 0; index < effects.Length; index++)
+            {
+                var effect = effects[index];
+                if (effect.Header.StorageState != GasSlabSlotState.Live ||
+                    effect.State != GasSlotBusinessState.Active ||
+                    effect.DefinitionIndex < 0 ||
+                    effect.DefinitionIndex >= catalog.GameplayEffects.Length)
+                    continue;
+                var definition = catalog.GameplayEffects[effect.DefinitionIndex];
+                if (!GasGameplayEffectLifecycleUtility.TryGetPeriodDecision(
+                        ref catalog,
+                        in definition,
+                        in effect,
+                        TagCounts[asc],
+                        Execution[0].CandidateTick,
+                        out var claim,
+                        out var execute,
+                        out _,
+                        out _)
+                    || claim == 0)
+                    continue;
+                hasPeriod = true;
+                demand++;
+                if (execute != 0)
+                    demand += definition.ModifierRange.Count;
+            }
+            for (var index = 0; index < operationCount; index++)
+            {
+                var operation = EffectOperations[index];
+                if (!operation.TargetAsc.Equals(target) ||
+                    operation.DefinitionIndex < 0 ||
+                    operation.DefinitionIndex >= catalog.GameplayEffects.Length)
+                    continue;
+                var definition = catalog.GameplayEffects[operation.DefinitionIndex];
+                if (definition.PeriodTicks <= 0)
+                    continue;
+                hasPeriod = true;
+                demand += 1 + definition.ModifierRange.Count;
+            }
+            return demand > int.MaxValue ? int.MaxValue : (int)demand;
+        }
+
+        /// <summary>
+        /// 判断 target 是否存在当前 due 或本 Tick effect operation 引入的 period 需求。
+        /// </summary>
+        private bool HasPeriodBoundaryDemand(
+            in OwnerAscHandle target,
+            in GasTickExecutionState execution)
+        {
+            CountPeriodBoundaryDemand(in target, execution.EffectOperationCount, out var hasPeriod);
+            return hasPeriod;
+        }
+
+        /// <summary>
+        /// 以 target 的 canonical operation 集合判断是否需要为最多一条 Death fact 预留空间。
+        /// </summary>
+        private bool HasFirstTargetDeathCandidate(
+            in OwnerAscHandle target,
+            int operationCount)
+        {
             for (var index = 0; index < operationCount; index++)
             {
                 if (EffectOperations[index].TargetAsc.Equals(target))
-                    demand++;
+                    return true;
             }
-            return demand;
+            return false;
         }
 
         /// <summary>
@@ -1940,9 +2492,10 @@ namespace GAS.Runtime
                 var lifecycle = AscLifecycles[asc].State;
                 return identity.SimulationEpoch == SimulationEpoch &&
                        identity.OwnerAsc.Equals(owner) &&
-                       (lifecycle == GasAscLifecycleState.Ready ||
-                        lifecycle == GasAscLifecycleState.Alive ||
-                        lifecycle == GasAscLifecycleState.Terminal);
+                        (lifecycle == GasAscLifecycleState.Ready ||
+                         lifecycle == GasAscLifecycleState.Alive ||
+                         lifecycle == GasAscLifecycleState.Terminal ||
+                         lifecycle == GasAscLifecycleState.Dead);
             }
             asc = Entity.Null;
             return false;
@@ -3274,6 +3827,7 @@ namespace GAS.Runtime
     {
         [ReadOnly] public NativeArray<GasAdmissionResult> Admission;
         [ReadOnly] public NativeArray<GasEffectOperationRecord> EffectOperations;
+        [ReadOnly] public NativeArray<GasTargetResolveRejectionRecord> TargetResolveRejections;
         public NativeArray<GasSourceSpecRecord> SourceSpecs;
         public NativeArray<GasTickExecutionState> Execution;
 
@@ -3314,7 +3868,47 @@ namespace GAS.Runtime
                     ApplicationId = operation.ApplicationId,
                     StartTick = operation.StartTick,
                     TargetIsAlive = operation.TargetIsAlive,
+                    CausalityId = operation.CausalityId,
+                    Scope = GasBoundaryFactScope.Asc,
                 };
+            }
+            if (execution.PostAdmissionFailure == GasTickAdmissionFailureReason.None)
+            {
+                for (var index = 0; index < execution.TargetResolveRejectionCount; index++)
+                {
+                    if (execution.SourceSpecCount >= SourceSpecs.Length)
+                    {
+                        execution.PostAdmissionFailure =
+                            GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                        break;
+                    }
+                    var rejection = TargetResolveRejections[index];
+                    if (rejection.ApplicationId == 0 ||
+                        rejection.CausalityId == 0 ||
+                        rejection.Outcome == GasGameplayEffectApplicationOutcome.None)
+                    {
+                        execution.PostAdmissionFailure =
+                            GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                        break;
+                    }
+                    var operationOrdinal = execution.SourceSpecCount;
+                    SourceSpecs[operationOrdinal] = new GasSourceSpecRecord
+                    {
+                        OperationOrdinal = operationOrdinal,
+                        DefinitionIndex = rejection.DefinitionIndex,
+                        SourceAsc = rejection.SourceAsc,
+                        TargetAsc = rejection.TargetAsc,
+                        ApplicationId = rejection.ApplicationId,
+                        StartTick = execution.CandidateTick,
+                        TargetIsAlive = 0,
+                        CausalityId = rejection.CausalityId,
+                        Scope = rejection.Scope,
+                        IsTargetResolveRejection = 1,
+                        RejectionOutcome = rejection.Outcome,
+                        RejectionFailure = rejection.Failure,
+                    };
+                    execution.SourceSpecCount++;
+                }
             }
             Execution[0] = execution;
         }
@@ -3386,7 +3980,7 @@ namespace GAS.Runtime
         public NativeArray<float> EvaluatorStack;
         [ReadOnly] public BufferLookup<AscRegistrySlot> Registries;
         [ReadOnly] public ComponentLookup<GasAscIdentity> AscIdentities;
-        [ReadOnly] public ComponentLookup<AscLifecycle> AscLifecycles;
+        public ComponentLookup<AscLifecycle> AscLifecycles;
         public ComponentLookup<AscSlabHeads> SlabHeads;
         public ComponentLookup<GasPayloadRangeAllocatorState> PayloadStates;
         public BufferLookup<ActiveEffectSlot> ActiveEffects;
@@ -3397,6 +3991,8 @@ namespace GAS.Runtime
         public BufferLookup<GasPayloadRangeRecord> PayloadRanges;
         public BufferLookup<GasPayloadValueSlot> PayloadValues;
         public NativeArray<GasApplicationOutcomeRecord> ApplicationOutcomes;
+        public NativeArray<GasAttributeMutationRecord> AttributeMutations;
+        public NativeArray<GasAttributeMutationOutcomeRecord> MutationOutcomes;
         public NativeArray<GasTickExecutionState> Execution;
 
         /// <summary>
@@ -3408,6 +4004,7 @@ namespace GAS.Runtime
                 return;
             var execution = Execution[0];
             execution.ApplicationOutcomeCount = 0;
+            execution.AttributeMutationCount = 0;
             ref var catalog = ref Catalog.Value;
             for (var index = 0; index < execution.SourceSpecCount; index++)
             {
@@ -3419,14 +4016,38 @@ namespace GAS.Runtime
                 }
                 var spec = SourceSpecs[index];
                 var outcome = default(GasGameplayEffectApplicationResult);
+                if (spec.IsTargetResolveRejection != 0)
+                {
+                    if (spec.ApplicationId == 0 || spec.CausalityId == 0 ||
+                        spec.RejectionOutcome == GasGameplayEffectApplicationOutcome.None)
+                    {
+                        execution.PostAdmissionFailure =
+                            GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                        break;
+                    }
+                    outcome.Outcome = spec.RejectionOutcome;
+                    outcome.Failure = spec.RejectionFailure;
+                    outcome.ApplicationId = spec.ApplicationId;
+                    outcome.CausalityId = spec.CausalityId;
+                    StoreOutcome(ref execution, in spec, in outcome);
+                    if (execution.PostAdmissionFailure !=
+                        GasTickAdmissionFailureReason.None)
+                        break;
+                    continue;
+                }
                 if (!TryResolveOwner(spec.TargetAsc, out var target))
                 {
                     outcome.Outcome = GasGameplayEffectApplicationOutcome.RejectedStaleBinding;
                     outcome.Failure = GasGameplayEffectTransactionFailure.InvalidIdentity;
                     outcome.ApplicationId = spec.ApplicationId;
+                    outcome.CausalityId = spec.CausalityId;
                     StoreOutcome(ref execution, in spec, in outcome);
                     continue;
                 }
+                var targetLifecycle = AscLifecycles[target];
+                var targetWasAlive = targetLifecycle.State == GasAscLifecycleState.Ready ||
+                                     targetLifecycle.State == GasAscLifecycleState.Alive;
+                var mutationStart = execution.AttributeMutationCount;
                 var heads = SlabHeads[target];
                 var request = new GasGameplayEffectApplicationRequest
                 {
@@ -3436,7 +4057,8 @@ namespace GAS.Runtime
                     DefinitionIndex = spec.DefinitionIndex,
                     ApplicationId = spec.ApplicationId,
                     StartTick = spec.StartTick,
-                    TargetIsAlive = spec.TargetIsAlive,
+                    CausalityId = spec.CausalityId,
+                    TargetIsAlive = targetWasAlive ? (byte)1 : (byte)0,
                     CaptureValueCount = 0,
                     ValueViewCount = 0,
                 };
@@ -3453,7 +4075,43 @@ namespace GAS.Runtime
                     default(NativeArray<float>),
                     default(NativeArray<float>),
                     EvaluatorStack,
+                    AttributeMutations,
+                    mutationStart,
                     out outcome);
+                if (applied && outcome.MutationCount > 0)
+                {
+                    if (!CopyMutationOutcomes(
+                            ref execution,
+                            in spec,
+                            mutationStart,
+                             outcome.MutationCount,
+                             targetWasAlive,
+                             spec.CausalityId,
+                             out var deathTransitionId,
+                             out var deathOverkill,
+                             out var deathAttributeLayoutIndex,
+                             out var deathContributorId))
+                    {
+                        execution.PostAdmissionFailure =
+                            GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                        break;
+                    }
+                    if (deathTransitionId != 0 && targetWasAlive)
+                    {
+                        targetLifecycle.State = GasAscLifecycleState.Dead;
+                        targetLifecycle.DeathTick = execution.CandidateTick;
+                        targetLifecycle.DeathTransitionId = deathTransitionId;
+                        targetLifecycle.DeathApplicationId = spec.ApplicationId;
+                        targetLifecycle.DeathSourceAsc = spec.SourceAsc;
+                        targetLifecycle.DeathOverkill = deathOverkill;
+                        AscLifecycles[target] = targetLifecycle;
+                        outcome.DeathCrossed = 1;
+                        outcome.DeathTransitionId = deathTransitionId;
+                        outcome.DeathOverkill = deathOverkill;
+                        outcome.DeathAttributeLayoutIndex = deathAttributeLayoutIndex;
+                        outcome.DeathContributorId = deathContributorId;
+                    }
+                }
                 StoreOutcome(ref execution, in spec, in outcome);
                 SlabHeads[target] = heads;
                 if (!applied &&
@@ -3464,7 +4122,216 @@ namespace GAS.Runtime
                     break;
                 }
             }
+            if (execution.PostAdmissionFailure == GasTickAdmissionFailureReason.None &&
+                !ProcessPeriodEffects(ref execution, ref catalog))
+                execution.PostAdmissionFailure =
+                    GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
             Execution[0] = execution;
+        }
+
+        /// <summary>
+        /// 按 registry owner 与稳定 slot index 执行全部 due period body，再一次提交 lifecycle claim/expiry。
+        /// </summary>
+        private bool ProcessPeriodEffects(
+            ref GasTickExecutionState execution,
+            ref GasDefinitionCatalogBlob catalog)
+        {
+            var registry = FindRegistry();
+            for (var registryIndex = 0; registryIndex < registry.Length; registryIndex++)
+            {
+                var owner = registry[registryIndex];
+                if (owner.State != GasAscRegistryState.Ready ||
+                    !TryResolveOwner(owner.OwnerAsc, out var target))
+                    continue;
+                if (!ProcessPeriodEffectsForTarget(
+                        target,
+                        in owner.OwnerAsc,
+                        ref execution,
+                        ref catalog))
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 在单 target writer 内执行 period modifiers、记录 provenance，并推进 ActiveEffect due/expiry 状态。
+        /// </summary>
+        private bool ProcessPeriodEffectsForTarget(
+            Entity target,
+            in OwnerAscHandle targetOwner,
+            ref GasTickExecutionState execution,
+            ref GasDefinitionCatalogBlob catalog)
+        {
+            var activeEffects = ActiveEffects[target];
+            for (var slotIndex = 0; slotIndex < activeEffects.Length; slotIndex++)
+            {
+                var slot = activeEffects[slotIndex];
+                if (slot.Header.StorageState != GasSlabSlotState.Live ||
+                    slot.State != GasSlotBusinessState.Active)
+                    continue;
+                if (!TryExecutePeriodSlot(
+                        target,
+                        in targetOwner,
+                        slotIndex,
+                        in slot,
+                        ref execution,
+                        ref catalog))
+                    return false;
+            }
+
+            var heads = SlabHeads[target];
+            if (!GasGameplayEffectLifecycleUtility.TryProcessDue(
+                    ref catalog,
+                    SimulationEpoch,
+                    execution.CandidateTick,
+                    activeEffects,
+                    TagCounts[target],
+                    ref heads.ActiveEffect,
+                    Profile.MaxActiveEffectCount,
+                    out _))
+                return false;
+            SlabHeads[target] = heads;
+            return true;
+        }
+
+        /// <summary>
+        /// 执行一个已通过 admission 的 period claim；skip policy 仍产生唯一 PeriodTick outcome。
+        /// </summary>
+        private bool TryExecutePeriodSlot(
+            Entity target,
+            in OwnerAscHandle targetOwner,
+            int slotIndex,
+            in ActiveEffectSlot slot,
+            ref GasTickExecutionState execution,
+            ref GasDefinitionCatalogBlob catalog)
+        {
+            if (slot.DefinitionIndex < 0 || slot.DefinitionIndex >= catalog.GameplayEffects.Length)
+                return false;
+            var definition = catalog.GameplayEffects[slot.DefinitionIndex];
+            if (!GasGameplayEffectLifecycleUtility.TryGetPeriodDecision(
+                    ref catalog,
+                    in definition,
+                    in slot,
+                    TagCounts[target],
+                    execution.CandidateTick,
+                    out var claim,
+                    out var execute,
+                    out var periodOrdinal,
+                    out _))
+                return false;
+            if (claim == 0)
+                return true;
+            if (slot.ApplicationId == 0 || execution.ApplicationOutcomeCount >= ApplicationOutcomes.Length)
+                return false;
+
+            var causalityId = ComposePeriodCausalityId(
+                in slot.Handle,
+                slot.ApplicationId,
+                periodOrdinal,
+                execution.CandidateTick);
+            var outcome = CreateSkippedPeriodOutcome(
+                in slot,
+                causalityId,
+                periodOrdinal,
+                execution.AttributeMutationCount);
+            if (execute != 0 && !ApplyPeriodBody(
+                    target,
+                    in targetOwner,
+                    in slot,
+                    periodOrdinal,
+                    causalityId,
+                    ref execution,
+                    ref catalog,
+                    ref outcome))
+                return false;
+            StorePeriodOutcome(
+                ref execution,
+                slotIndex,
+                in slot,
+                in outcome,
+                periodOrdinal);
+            return execution.PostAdmissionFailure == GasTickAdmissionFailureReason.None;
+        }
+
+        /// <summary>
+        /// 调用 target transaction 应用 period modifiers，并把 Health crossing 提升为 ASC death provenance。
+        /// </summary>
+        private bool ApplyPeriodBody(
+            Entity target,
+            in OwnerAscHandle targetOwner,
+            in ActiveEffectSlot slot,
+            uint periodOrdinal,
+            ulong causalityId,
+            ref GasTickExecutionState execution,
+            ref GasDefinitionCatalogBlob catalog,
+            ref GasGameplayEffectApplicationResult outcome)
+        {
+            var lifecycle = AscLifecycles[target];
+            var targetWasAlive = lifecycle.State == GasAscLifecycleState.Ready ||
+                                 lifecycle.State == GasAscLifecycleState.Alive;
+            var mutationStart = execution.AttributeMutationCount;
+            var request = new GasGameplayEffectApplicationRequest
+            {
+                SimulationEpoch = SimulationEpoch,
+                SourceAsc = slot.SourceAsc,
+                TargetAsc = targetOwner,
+                DefinitionIndex = slot.DefinitionIndex,
+                ApplicationId = slot.ApplicationId,
+                StartTick = execution.CandidateTick,
+                CausalityId = causalityId,
+                IsPeriodTick = 1,
+                PeriodExecutionOrdinal = periodOrdinal,
+                TargetIsAlive = targetWasAlive ? (byte)1 : (byte)0,
+                CaptureValueCount = 0,
+                ValueViewCount = 0,
+            };
+            if (!GasGameplayEffectTransaction.TryApplyPeriodModifiers(
+                    ref catalog,
+                    in request,
+                    in slot,
+                    ActiveEffects[target],
+                    Attributes[target],
+                    AttributeDirtyWords[target],
+                    TagCounts[target],
+                    TagPresenceWords[target],
+                    Profile.MaxActiveEffectCount,
+                    default(NativeArray<float>),
+                    default(NativeArray<float>),
+                    EvaluatorStack,
+                    AttributeMutations,
+                    mutationStart,
+                    out outcome))
+                return false;
+            return CopyPeriodMutationOutcomes(
+                target,
+                in slot,
+                periodOrdinal,
+                mutationStart,
+                targetWasAlive,
+                ref execution,
+                ref catalog,
+                ref outcome);
+        }
+
+        /// <summary>
+        /// 创建 inhibited skip 或零 modifier period 的成功 outcome，claim 本身仍有可审计事实。
+        /// </summary>
+        private static GasGameplayEffectApplicationResult CreateSkippedPeriodOutcome(
+            in ActiveEffectSlot slot,
+            ulong causalityId,
+            uint periodOrdinal,
+            int mutationStart)
+        {
+            return new GasGameplayEffectApplicationResult
+            {
+                Outcome = GasGameplayEffectApplicationOutcome.PeriodTickExecuted,
+                ActiveEffect = slot.Handle,
+                ApplicationId = slot.ApplicationId,
+                MutationStart = mutationStart,
+                CausalityId = causalityId,
+                IsPeriodTick = 1,
+                PeriodExecutionOrdinal = periodOrdinal,
+            };
         }
 
         /// <summary>
@@ -3484,6 +4351,7 @@ namespace GAS.Runtime
             ApplicationOutcomes[execution.ApplicationOutcomeCount++] = new GasApplicationOutcomeRecord
             {
                 OperationOrdinal = spec.OperationOrdinal,
+                DefinitionId = ResolveDefinitionId(spec.DefinitionIndex),
                 Outcome = outcome.Outcome,
                 Failure = outcome.Failure,
                 SourceAsc = spec.SourceAsc,
@@ -3491,8 +4359,299 @@ namespace GAS.Runtime
                 ActiveEffect = outcome.ActiveEffect,
                 ApplicationId = outcome.ApplicationId,
                 AppliedModifierCount = outcome.AppliedModifierCount,
+                AttributeMutationStart = outcome.MutationStart,
+                AttributeMutationCount = outcome.MutationCount,
                 DeathCrossed = outcome.DeathCrossed,
+                DeathTransitionId = outcome.DeathTransitionId,
+                DeathOverkill = outcome.DeathOverkill,
+                DeathAttributeLayoutIndex = outcome.DeathAttributeLayoutIndex,
+                DeathContributorId = outcome.DeathContributorId,
+                CausalityId = outcome.CausalityId,
+                Scope = spec.Scope,
             };
+        }
+
+        /// <summary>
+        /// 将 period execution outcome 写入同一稳定化输入，并保留 ActiveEffect 与 ordinal 身份。
+        /// </summary>
+        private void StorePeriodOutcome(
+            ref GasTickExecutionState execution,
+            int slotIndex,
+            in ActiveEffectSlot slot,
+            in GasGameplayEffectApplicationResult outcome,
+            uint periodOrdinal)
+        {
+            if (execution.ApplicationOutcomeCount >= ApplicationOutcomes.Length)
+            {
+                execution.PostAdmissionFailure =
+                    GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                return;
+            }
+            ApplicationOutcomes[execution.ApplicationOutcomeCount++] = new GasApplicationOutcomeRecord
+            {
+                OperationOrdinal = slotIndex,
+                DefinitionId = ResolveDefinitionId(slot.DefinitionIndex),
+                Outcome = GasGameplayEffectApplicationOutcome.PeriodTickExecuted,
+                Failure = outcome.Failure,
+                SourceAsc = slot.SourceAsc,
+                TargetAsc = slot.Handle.OwnerAsc,
+                ActiveEffect = slot.Handle,
+                ApplicationId = slot.ApplicationId,
+                AppliedModifierCount = outcome.AppliedModifierCount,
+                AttributeMutationStart = outcome.MutationStart,
+                AttributeMutationCount = outcome.MutationCount,
+                DeathCrossed = outcome.DeathCrossed,
+                DeathTransitionId = outcome.DeathTransitionId,
+                DeathOverkill = outcome.DeathOverkill,
+                DeathAttributeLayoutIndex = outcome.DeathAttributeLayoutIndex,
+                DeathContributorId = outcome.DeathContributorId,
+                CausalityId = outcome.CausalityId,
+                Scope = GasBoundaryFactScope.Asc,
+                IsPeriodTick = 1,
+                PeriodExecutionOrdinal = periodOrdinal,
+            };
+        }
+
+        /// <summary>
+        /// 复制 period body mutation provenance，并在首次 Health crossing 时提交 ASC death 状态。
+        /// </summary>
+        private bool CopyPeriodMutationOutcomes(
+            Entity target,
+            in ActiveEffectSlot slot,
+            uint periodOrdinal,
+            int mutationStart,
+            bool targetWasAlive,
+            ref GasTickExecutionState execution,
+            ref GasDefinitionCatalogBlob catalog,
+            ref GasGameplayEffectApplicationResult result)
+        {
+            var mutationCount = result.MutationCount;
+            if (mutationStart < 0 || mutationCount < 0 ||
+                mutationStart > AttributeMutations.Length ||
+                mutationCount > AttributeMutations.Length - mutationStart ||
+                execution.AttributeMutationCount != mutationStart ||
+                mutationCount > MutationOutcomes.Length - execution.AttributeMutationCount)
+                return false;
+            for (var offset = 0; offset < mutationCount; offset++)
+            {
+                var mutation = AttributeMutations[mutationStart + offset];
+                var mutationOutcome = new GasAttributeMutationOutcomeRecord
+                {
+                    OperationOrdinal = slot.Handle.SlotIndex,
+                    ModifierOrdinal = offset,
+                    DefinitionId = ResolveDefinitionId(slot.DefinitionIndex),
+                    SourceAsc = slot.SourceAsc,
+                    TargetAsc = slot.Handle.OwnerAsc,
+                    ApplicationId = slot.ApplicationId,
+                    CausalityId = result.CausalityId,
+                    ContributorId = ComposePeriodContributorId(
+                        slot.ApplicationId, periodOrdinal, offset),
+                    IsPeriodTick = 1,
+                    PeriodExecutionOrdinal = periodOrdinal,
+                    Mutation = mutation,
+                };
+                if (IsFirstHealthCrossing(
+                        in mutation,
+                        targetWasAlive,
+                        result.DeathTransitionId))
+                    CapturePeriodDeath(
+                        target,
+                        in slot,
+                        in mutationOutcome,
+                        ref mutationOutcome,
+                        ref result,
+                        ref catalog);
+                MutationOutcomes[execution.AttributeMutationCount++] = mutationOutcome;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 判断当前 mutation 是否是本 period body 的首个存活到死亡 Health crossing。
+        /// </summary>
+        private static bool IsFirstHealthCrossing(
+            in GasAttributeMutationRecord mutation,
+            bool targetWasAlive,
+            ulong existingDeathTransitionId)
+        {
+            return targetWasAlive && existingDeathTransitionId == 0 &&
+                   mutation.PreviousCurrent > 0f && mutation.UnclampedCurrent <= 0f;
+        }
+
+        /// <summary>
+        /// 将 period mutation 的 Health crossing 写入 mutation、outcome 与 ASC lifecycle provenance。
+        /// </summary>
+        private void CapturePeriodDeath(
+            Entity target,
+            in ActiveEffectSlot slot,
+            in GasAttributeMutationOutcomeRecord source,
+            ref GasAttributeMutationOutcomeRecord mutationOutcome,
+            ref GasGameplayEffectApplicationResult result,
+            ref GasDefinitionCatalogBlob catalog)
+        {
+            var mutation = source.Mutation;
+            if (mutation.AttributeLayoutIndex < 0 ||
+                mutation.AttributeLayoutIndex >= catalog.AttributeLayout.Entries.Length ||
+                catalog.AttributeLayout.Entries[mutation.AttributeLayoutIndex].DomainRole !=
+                GasAttributeDomainRole.Health)
+                return;
+            var transitionId = ComposeDeathTransitionId(
+                in slot.Handle.OwnerAsc,
+                slot.ApplicationId,
+                result.CausalityId);
+            var overkill = mutation.UnclampedCurrent < 0f ? -mutation.UnclampedCurrent : 0f;
+            mutationOutcome.DeathTransitionId = transitionId;
+            mutationOutcome.DeathOverkill = overkill;
+            mutationOutcome.DeathCrossed = 1;
+            result.DeathCrossed = 1;
+            result.DeathTransitionId = transitionId;
+            result.DeathOverkill = overkill;
+            result.DeathAttributeLayoutIndex = mutation.AttributeLayoutIndex;
+            result.DeathContributorId = source.ContributorId;
+            var lifecycle = AscLifecycles[target];
+            lifecycle.State = GasAscLifecycleState.Dead;
+            lifecycle.DeathTick = Execution[0].CandidateTick;
+            lifecycle.DeathTransitionId = transitionId;
+            lifecycle.DeathApplicationId = slot.ApplicationId;
+            lifecycle.DeathSourceAsc = slot.SourceAsc;
+            lifecycle.DeathOverkill = overkill;
+            AscLifecycles[target] = lifecycle;
+        }
+
+        /// <summary>
+        /// 复制本次 application 的 mutation provenance，并锁存第一个 Health death crossing。
+        /// </summary>
+        private bool CopyMutationOutcomes(
+            ref GasTickExecutionState execution,
+            in GasSourceSpecRecord spec,
+            int mutationStart,
+            int mutationCount,
+            bool targetWasAlive,
+            ulong causalityId,
+            out ulong deathTransitionId,
+            out float deathOverkill,
+            out int deathAttributeLayoutIndex,
+            out ulong deathContributorId)
+        {
+            deathTransitionId = 0;
+            deathOverkill = 0f;
+            deathAttributeLayoutIndex = -1;
+            deathContributorId = 0;
+            if (mutationStart < 0 || mutationCount < 0 ||
+                mutationStart > AttributeMutations.Length ||
+                mutationCount > AttributeMutations.Length - mutationStart ||
+                execution.AttributeMutationCount != mutationStart ||
+                mutationCount > MutationOutcomes.Length - execution.AttributeMutationCount)
+                return false;
+
+            ref var catalog = ref Catalog.Value;
+            for (var offset = 0; offset < mutationCount; offset++)
+            {
+                var mutation = AttributeMutations[mutationStart + offset];
+                var outcome = new GasAttributeMutationOutcomeRecord
+                {
+                    OperationOrdinal = spec.OperationOrdinal,
+                    ModifierOrdinal = offset,
+                    DefinitionId = ResolveDefinitionId(spec.DefinitionIndex),
+                    SourceAsc = spec.SourceAsc,
+                    TargetAsc = spec.TargetAsc,
+                    ApplicationId = spec.ApplicationId,
+                    CausalityId = causalityId,
+                    ContributorId = ComposeContributorId(spec.ApplicationId, offset),
+                    Mutation = mutation,
+                };
+                if (mutation.AttributeLayoutIndex >= 0 &&
+                    mutation.AttributeLayoutIndex < catalog.AttributeLayout.Entries.Length &&
+                    catalog.AttributeLayout.Entries[mutation.AttributeLayoutIndex].DomainRole ==
+                    GasAttributeDomainRole.Health &&
+                    targetWasAlive &&
+                    mutation.PreviousCurrent > 0f && mutation.UnclampedCurrent <= 0f &&
+                    deathTransitionId == 0)
+                {
+                    deathTransitionId = ComposeDeathTransitionId(
+                        in spec.TargetAsc,
+                        spec.ApplicationId,
+                        causalityId);
+                    deathOverkill = mutation.UnclampedCurrent < 0f
+                        ? -mutation.UnclampedCurrent
+                        : 0f;
+                    deathAttributeLayoutIndex = mutation.AttributeLayoutIndex;
+                    deathContributorId = outcome.ContributorId;
+                    outcome.DeathTransitionId = deathTransitionId;
+                    outcome.DeathOverkill = deathOverkill;
+                    outcome.DeathCrossed = 1;
+                }
+                MutationOutcomes[execution.AttributeMutationCount++] = outcome;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 从已冻结 definition index 读取稳定 DefinitionId；非法索引返回零并由上游错误事实保留。
+        /// </summary>
+        private int ResolveDefinitionId(int definitionIndex)
+        {
+            return definitionIndex >= 0 && definitionIndex < Catalog.Value.GameplayEffects.Length
+                ? Catalog.Value.GameplayEffects[definitionIndex].DefinitionId
+                : 0;
+        }
+
+        /// <summary>
+        /// 为 modifier 生成稳定 contributor 身份，避免把 modifier ordinal 混入外部表现层推导。
+        /// </summary>
+        private static ulong ComposeContributorId(ulong applicationId, int modifierOrdinal)
+        {
+            var value = applicationId ^ (0x9E3779B97F4A7C15UL * (ulong)(modifierOrdinal + 1));
+            return value == 0 ? 1UL : value;
+        }
+
+        /// <summary>
+        /// 由 ActiveEffect handle、application、period ordinal 与 tick 构造唯一 period causality。
+        /// </summary>
+        private static ulong ComposePeriodCausalityId(
+            in ActiveEffectHandle handle,
+            ulong applicationId,
+            uint periodOrdinal,
+            ulong candidateTick)
+        {
+            var value = handle.SimulationEpoch ^
+                        handle.OwnerAsc.AscStableId ^
+                        ((ulong)handle.OwnerAsc.AscGeneration << 32) ^
+                        ((ulong)(uint)handle.SlotIndex << 16) ^
+                        handle.SlotGeneration ^
+                        applicationId ^
+                        ((ulong)periodOrdinal * 0x9E3779B97F4A7C15UL) ^
+                        (candidateTick * 0xD6E8FEB86659FD93UL);
+            return value == 0 ? 1UL : value;
+        }
+
+        /// <summary>
+        /// 由 application 与 period ordinal 构造 modifier contributor 身份，避免跨周期重复。
+        /// </summary>
+        private static ulong ComposePeriodContributorId(
+            ulong applicationId,
+            uint periodOrdinal,
+            int modifierOrdinal)
+        {
+            var value = applicationId ^
+                        ((ulong)periodOrdinal * 0x9E3779B97F4A7C15UL) ^
+                        ((ulong)(modifierOrdinal + 1) * 0xD6E8FEB86659FD93UL);
+            return value == 0 ? 1UL : value;
+        }
+
+        /// <summary>
+        /// 由 target、causality 与 application 生成独立 DeathTransition 身份。
+        /// </summary>
+        private static ulong ComposeDeathTransitionId(
+            in OwnerAscHandle target,
+            ulong applicationId,
+            ulong causalityId)
+        {
+            var value = target.AscStableId ^
+                        ((ulong)target.AscGeneration << 32) ^
+                        applicationId ^
+                        (causalityId * 0xD6E8FEB86659FD93UL);
+            return value == 0 ? 1UL : value;
         }
 
         /// <summary>
@@ -3515,9 +4674,10 @@ namespace GAS.Runtime
                 var identity = AscIdentities[asc];
                 var lifecycle = AscLifecycles[asc].State;
                 return identity.SimulationEpoch == SimulationEpoch && identity.OwnerAsc.Equals(owner) &&
-                       (lifecycle == GasAscLifecycleState.Ready ||
-                        lifecycle == GasAscLifecycleState.Alive ||
-                        lifecycle == GasAscLifecycleState.Terminal);
+                        (lifecycle == GasAscLifecycleState.Ready ||
+                         lifecycle == GasAscLifecycleState.Alive ||
+                         lifecycle == GasAscLifecycleState.Terminal ||
+                         lifecycle == GasAscLifecycleState.Dead);
             }
             asc = Entity.Null;
             return false;
@@ -3544,6 +4704,8 @@ namespace GAS.Runtime
     {
         [ReadOnly] public NativeArray<GasAdmissionResult> Admission;
         [ReadOnly] public NativeArray<GasApplicationOutcomeRecord> ApplicationOutcomes;
+        [ReadOnly] public NativeArray<GasAttributeMutationOutcomeRecord> MutationOutcomes;
+        [ReadOnly] public BlobAssetReference<GasDefinitionCatalogBlob> Catalog;
         public NativeArray<GasCoreFactRecord> CoreFacts;
         public NativeArray<GasTickExecutionState> Execution;
 
@@ -3558,6 +4720,52 @@ namespace GAS.Runtime
 
             var execution = Execution[0];
             execution.CoreFactCount = 0;
+            execution.DeathFactCount = 0;
+            if ((execution.AttributeMutationCount > 0 || execution.ApplicationOutcomeCount > 0) &&
+                !Catalog.IsCreated)
+            {
+                execution.PostAdmissionFailure =
+                    GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                Execution[0] = execution;
+                return;
+            }
+            if (execution.AttributeMutationCount == 0 && execution.ApplicationOutcomeCount == 0)
+            {
+                Execution[0] = execution;
+                return;
+            }
+            ref var catalog = ref Catalog.Value;
+            for (var index = 0; index < execution.AttributeMutationCount; index++)
+            {
+                if (execution.CoreFactCount >= CoreFacts.Length)
+                {
+                    execution.PostAdmissionFailure =
+                        GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                    break;
+                }
+                var mutation = MutationOutcomes[index];
+                var mutationPhase = mutation.IsPeriodTick != 0 ? (ushort)6 : (ushort)1;
+                CoreFacts[execution.CoreFactCount++] = new GasCoreFactRecord
+                {
+                    Scope = GasBoundaryFactScope.Asc,
+                    Plane = GasBoundaryFactPlane.Gameplay,
+                    Kind = GasBoundaryFactKind.AttributeChanged,
+                    SourceAsc = mutation.SourceAsc,
+                    TargetAsc = mutation.TargetAsc,
+                    SimulationTick = execution.CandidateTick,
+                    SemanticPhaseOrdinal = mutationPhase,
+                    WorkClassOrdinal = 1,
+                    ParentCausalityId = mutation.CausalityId,
+                    SemanticId = mutation.ApplicationId,
+                    Payload = CreateMutationPayload(in mutation, ref catalog),
+                    OperationOrdinal = mutation.OperationOrdinal,
+                    FactOrdinal = mutation.IsPeriodTick != 0
+                        ? ComposePeriodFactOrdinal(
+                            mutation.PeriodExecutionOrdinal,
+                            mutation.ModifierOrdinal)
+                        : mutation.ModifierOrdinal,
+                };
+            }
             for (var index = 0; index < execution.ApplicationOutcomeCount; index++)
             {
                 if (execution.CoreFactCount >= CoreFacts.Length)
@@ -3567,23 +4775,190 @@ namespace GAS.Runtime
                     break;
                 }
                 var outcome = ApplicationOutcomes[index];
+                if (outcome.IsPeriodTick != 0)
+                {
+                    CoreFacts[execution.CoreFactCount++] = new GasCoreFactRecord
+                    {
+                        Scope = outcome.Scope,
+                        Plane = GasBoundaryFactPlane.Gameplay,
+                        Kind = GasBoundaryFactKind.PeriodTick,
+                        SourceAsc = outcome.SourceAsc,
+                        TargetAsc = outcome.TargetAsc,
+                        SimulationTick = execution.CandidateTick,
+                        SemanticPhaseOrdinal = 7,
+                        WorkClassOrdinal = 1,
+                        ParentCausalityId = outcome.CausalityId,
+                        SemanticId = outcome.ApplicationId,
+                        Payload = CreatePeriodPayload(in outcome, in MutationOutcomes),
+                        OperationOrdinal = outcome.OperationOrdinal,
+                        FactOrdinal = ComposePeriodFactOrdinal(
+                            outcome.PeriodExecutionOrdinal,
+                            int.MaxValue),
+                    };
+                }
+                else
+                {
+                    CoreFacts[execution.CoreFactCount++] = new GasCoreFactRecord
+                    {
+                        Scope = outcome.Scope,
+                        Plane = GasBoundaryFactPlane.Gameplay,
+                        Kind = GasBoundaryFactKind.EffectLifecycle,
+                        SourceAsc = outcome.SourceAsc,
+                        TargetAsc = outcome.TargetAsc,
+                        SimulationTick = execution.CandidateTick,
+                        SemanticPhaseOrdinal = 2,
+                        WorkClassOrdinal = 1,
+                        ParentCausalityId = outcome.CausalityId,
+                        SemanticId = outcome.ApplicationId,
+                        Payload = CreateOutcomePayload(in outcome),
+                        OperationOrdinal = outcome.OperationOrdinal,
+                        FactOrdinal = int.MaxValue,
+                    };
+
+                    AppendDefinitionFacts(
+                        ref execution,
+                        in outcome,
+                        ref catalog);
+                }
+            }
+            for (var index = 0; index < execution.ApplicationOutcomeCount; index++)
+            {
+                var outcome = ApplicationOutcomes[index];
+                if (outcome.DeathCrossed == 0)
+                    continue;
+                if (execution.CoreFactCount >= CoreFacts.Length)
+                {
+                    execution.PostAdmissionFailure =
+                        GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                    break;
+                }
                 CoreFacts[execution.CoreFactCount++] = new GasCoreFactRecord
                 {
                     Scope = GasBoundaryFactScope.Asc,
                     Plane = GasBoundaryFactPlane.Gameplay,
-                    Kind = GasBoundaryFactKind.EffectLifecycle,
+                    Kind = GasBoundaryFactKind.Death,
                     SourceAsc = outcome.SourceAsc,
                     TargetAsc = outcome.TargetAsc,
                     SimulationTick = execution.CandidateTick,
-                    SemanticPhaseOrdinal = 1,
+                    SemanticPhaseOrdinal = outcome.IsPeriodTick != 0 ? (ushort)8 : (ushort)3,
                     WorkClassOrdinal = 1,
-                    ParentCausalityId = outcome.ApplicationId,
-                    SemanticId = outcome.ApplicationId,
-                    Payload = CreateOutcomePayload(in outcome),
+                    ParentCausalityId = outcome.CausalityId,
+                    SemanticId = outcome.DeathTransitionId,
+                    Payload = CreateDeathPayload(in outcome, ref catalog),
                     OperationOrdinal = outcome.OperationOrdinal,
+                    FactOrdinal = outcome.IsPeriodTick != 0
+                        ? ComposePeriodFactOrdinal(
+                            outcome.PeriodExecutionOrdinal,
+                            0)
+                        : 0,
                 };
+                execution.DeathFactCount++;
             }
             Execution[0] = execution;
+        }
+
+        /// <summary>
+        /// 为声明了执行或 Cue 语义的 Definition 追加独立事实，避免消费者从普通 outcome 猜测阶段。
+        /// </summary>
+        private void AppendDefinitionFacts(
+            ref GasTickExecutionState execution,
+            in GasApplicationOutcomeRecord outcome,
+            ref GasDefinitionCatalogBlob catalog)
+        {
+            if (outcome.Outcome != GasGameplayEffectApplicationOutcome.AppliedInstant &&
+                outcome.Outcome != GasGameplayEffectApplicationOutcome.CreatedActive &&
+                outcome.Outcome != GasGameplayEffectApplicationOutcome.MergedStack)
+                return;
+            if (outcome.DefinitionId == 0 || outcome.OperationOrdinal < 0)
+                return;
+            var definitionIndex = FindDefinitionIndex(ref catalog, outcome.DefinitionId);
+            if (definitionIndex < 0)
+                return;
+            var definition = catalog.GameplayEffects[definitionIndex];
+            if (definition.Lifetime == GasEffectLifetimePolicy.InstantExecution)
+            {
+                if (!TryAppendDefinitionFact(
+                        ref execution,
+                        in outcome,
+                        GasBoundaryFactKind.ExecutionCalculation,
+                        4,
+                        1))
+                    return;
+                TryAppendDefinitionFact(
+                    ref execution,
+                    in outcome,
+                    GasBoundaryFactKind.Cue,
+                    5,
+                    1);
+            }
+            else if (definition.CueRange.Count > 0)
+            {
+                TryAppendDefinitionFact(
+                    ref execution,
+                    in outcome,
+                    GasBoundaryFactKind.Cue,
+                    4,
+                    1);
+            }
+        }
+
+        /// <summary>
+        /// 将执行/Cue marker 以稳定 phase 写入 scratch；容量不足显式提升 post-admission fault。
+        /// </summary>
+        private bool TryAppendDefinitionFact(
+            ref GasTickExecutionState execution,
+            in GasApplicationOutcomeRecord outcome,
+            GasBoundaryFactKind kind,
+            ushort phase,
+            ushort workClass)
+        {
+            if (execution.CoreFactCount >= CoreFacts.Length)
+            {
+                execution.PostAdmissionFailure =
+                    GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
+                return false;
+            }
+            CoreFacts[execution.CoreFactCount++] = new GasCoreFactRecord
+            {
+                Scope = outcome.Scope,
+                Plane = GasBoundaryFactPlane.Gameplay,
+                Kind = kind,
+                SourceAsc = outcome.SourceAsc,
+                TargetAsc = outcome.TargetAsc,
+                SimulationTick = execution.CandidateTick,
+                SemanticPhaseOrdinal = phase,
+                WorkClassOrdinal = workClass,
+                ParentCausalityId = outcome.CausalityId,
+                SemanticId = outcome.ApplicationId,
+                Payload = new BoundaryFactPayload
+                {
+                    SchemaVersion = 1,
+                    Kind = GasBoundaryPayloadKind.IntegerPair,
+                    Integer0 = (long)kind,
+                    Integer1 = outcome.ApplicationId > long.MaxValue
+                        ? long.MaxValue
+                        : (long)outcome.ApplicationId,
+                    Integer2 = outcome.DefinitionId,
+                    StableId0 = outcome.ApplicationId,
+                    StableId1 = outcome.CausalityId,
+                },
+                OperationOrdinal = outcome.OperationOrdinal,
+                FactOrdinal = phase,
+            };
+            return true;
+        }
+
+        /// <summary>
+        /// 按稳定 DefinitionId 查找 Catalog dense index。
+        /// </summary>
+        private static int FindDefinitionIndex(
+            ref GasDefinitionCatalogBlob catalog,
+            int definitionId)
+        {
+            for (var index = 0; index < catalog.GameplayEffects.Length; index++)
+                if (catalog.GameplayEffects[index].DefinitionId == definitionId)
+                    return index;
+            return -1;
         }
 
         /// <summary>
@@ -3599,10 +4974,124 @@ namespace GAS.Runtime
                 Integer0 = (long)outcome.Outcome,
                 Integer1 = ((long)(byte)outcome.Failure << 32) |
                            (uint)outcome.AppliedModifierCount,
+                Integer2 = outcome.DefinitionId,
                 StableId0 = outcome.ApplicationId,
-                StableId1 = outcome.ActiveEffect.OwnerAsc.AscStableId,
+                Scalar0 = outcome.DeathOverkill,
+                StableId1 = outcome.DeathTransitionId,
+                StableId2 = outcome.ActiveEffect.OwnerAsc.AscStableId,
                 Generation0 = outcome.ActiveEffect.SlotGeneration,
                 Generation1 = outcome.ActiveEffect.OwnerAsc.AscGeneration,
+                Generation2 = outcome.ActiveEffect.OwnerAsc.AscGeneration,
+            };
+        }
+
+        /// <summary>
+        /// 将 period execution identity 与 due tick 编码为自包含 PeriodTick payload。
+        /// </summary>
+        private static BoundaryFactPayload CreatePeriodPayload(
+            in GasApplicationOutcomeRecord outcome,
+            in NativeArray<GasAttributeMutationOutcomeRecord> mutationOutcomes)
+        {
+            var totalCurrentDelta = 0f;
+            var totalBaseDelta = 0f;
+            if (outcome.AttributeMutationStart >= 0 &&
+                outcome.AttributeMutationCount > 0 &&
+                outcome.AttributeMutationStart <= mutationOutcomes.Length - outcome.AttributeMutationCount)
+            {
+                for (var index = 0; index < outcome.AttributeMutationCount; index++)
+                {
+                    var mutation = mutationOutcomes[outcome.AttributeMutationStart + index].Mutation;
+                    totalCurrentDelta += mutation.AppliedCurrent - mutation.PreviousCurrent;
+                    totalBaseDelta += mutation.AppliedBase - mutation.PreviousBase;
+                }
+            }
+            return new BoundaryFactPayload
+            {
+                SchemaVersion = 1,
+                Kind = GasBoundaryPayloadKind.IntegerPair,
+                Integer0 = (long)outcome.PeriodExecutionOrdinal,
+                Integer1 = outcome.DefinitionId,
+                Integer2 = (long)outcome.Outcome,
+                StableId0 = outcome.ApplicationId,
+                StableId1 = outcome.CausalityId,
+                StableId2 = outcome.ActiveEffect.OwnerAsc.AscStableId,
+                Generation0 = outcome.ActiveEffect.SlotGeneration,
+                Generation1 = outcome.ActiveEffect.OwnerAsc.AscGeneration,
+                Scalar0 = totalBaseDelta,
+                Scalar9 = totalCurrentDelta,
+            };
+        }
+
+        /// <summary>
+        /// 将 period ordinal 与 modifier ordinal 合成为稳定 int fact ordinal。
+        /// </summary>
+        private static int ComposePeriodFactOrdinal(uint periodOrdinal, int modifierOrdinal)
+        {
+            var ordinal = (long)periodOrdinal * 1024L + modifierOrdinal;
+            return ordinal > int.MaxValue ? int.MaxValue : (int)ordinal;
+        }
+
+        /// <summary>
+        /// 将 modifier 的 requested、unclamped、applied 与 revision 快照编码为 AttributeDelta payload。
+        /// </summary>
+        private static BoundaryFactPayload CreateMutationPayload(
+            in GasAttributeMutationOutcomeRecord outcome,
+            ref GasDefinitionCatalogBlob catalog)
+        {
+            var mutation = outcome.Mutation;
+            var death = outcome.DeathTransitionId;
+            var attributeId = mutation.AttributeLayoutIndex >= 0 &&
+                              mutation.AttributeLayoutIndex < catalog.AttributeLayout.Entries.Length
+                ? catalog.AttributeLayout.Entries[mutation.AttributeLayoutIndex].AttributeId
+                : 0;
+            return new BoundaryFactPayload
+            {
+                SchemaVersion = 1,
+                Kind = GasBoundaryPayloadKind.AttributeDelta,
+                Integer0 = attributeId,
+                Integer1 = ((long)(uint)mutation.AttributeLayoutIndex << 32) | mutation.Revision,
+                Integer2 = outcome.DefinitionId,
+                Scalar0 = mutation.RequestedBaseDelta,
+                Scalar1 = mutation.RequestedCurrentDelta,
+                Scalar2 = mutation.PreviousBase,
+                Scalar3 = mutation.PreviousCurrent,
+                Scalar4 = mutation.UnclampedBase,
+                Scalar5 = mutation.UnclampedCurrent,
+                Scalar6 = mutation.AppliedBase,
+                Scalar7 = mutation.AppliedCurrent,
+                Scalar8 = mutation.AppliedBase - mutation.PreviousBase,
+                Scalar9 = mutation.AppliedCurrent - mutation.PreviousCurrent,
+                StableId0 = outcome.ApplicationId,
+                StableId1 = death,
+                StableId2 = outcome.ContributorId,
+                Generation0 = outcome.DeathCrossed,
+                Generation1 = mutation.PreviousRevision,
+            };
+        }
+
+        /// <summary>
+        /// 将首个 Health crossing 的 transition、killer contributor 与 overkill 固化为独立 Death fact。
+        /// </summary>
+        private static BoundaryFactPayload CreateDeathPayload(
+            in GasApplicationOutcomeRecord outcome,
+            ref GasDefinitionCatalogBlob catalog)
+        {
+            var attributeId = outcome.DeathAttributeLayoutIndex >= 0 &&
+                              outcome.DeathAttributeLayoutIndex < catalog.AttributeLayout.Entries.Length
+                ? catalog.AttributeLayout.Entries[outcome.DeathAttributeLayoutIndex].AttributeId
+                : 0;
+            return new BoundaryFactPayload
+            {
+                SchemaVersion = 1,
+                Kind = GasBoundaryPayloadKind.Death,
+                Integer0 = attributeId,
+                Integer1 = outcome.DeathAttributeLayoutIndex,
+                Integer2 = outcome.DefinitionId,
+                Scalar0 = outcome.DeathOverkill,
+                StableId0 = outcome.DeathTransitionId,
+                StableId1 = outcome.ApplicationId,
+                StableId2 = outcome.DeathContributorId,
+                Generation0 = 1,
             };
         }
     }
@@ -3666,9 +5155,10 @@ namespace GAS.Runtime
             if (comparison != 0)
                 return comparison;
             comparison = left.SemanticId.CompareTo(right.SemanticId);
-            return comparison != 0
-                ? comparison
-                : left.OperationOrdinal.CompareTo(right.OperationOrdinal);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.OperationOrdinal.CompareTo(right.OperationOrdinal);
+            return comparison != 0 ? comparison : left.FactOrdinal.CompareTo(right.FactOrdinal);
         }
     }
 
@@ -3891,7 +5381,7 @@ namespace GAS.Runtime
         public NativeArray<GasTickExecutionState> Execution;
 
         /// <summary>
-        /// 通过稳定 target identity 找到唯一 ASC outbox，并按 owner sequence 追加自包含事实。
+        /// 先完成全部 owner 预检，再按稳定序列追加事实；任何异常都回滚本次 prefix。
         /// </summary>
         public void Execute()
         {
@@ -3901,65 +5391,350 @@ namespace GAS.Runtime
 
             var execution = Execution[0];
             execution.BoundaryFactCount = 0;
-            if (!Registries.HasBuffer(Session))
+            if (!TryPreflight(in execution))
             {
                 execution.PostAdmissionFailure =
                     GasTickAdmissionFailureReason.BoundaryProjectionFailure;
                 Execution[0] = execution;
                 return;
             }
-            for (var index = 0; index < execution.CoreFactCount; index++)
-            {
-                var coreFact = CoreFacts[index];
-                if (coreFact.Scope != GasBoundaryFactScope.Asc ||
-                    !TryResolveOwner(coreFact.TargetAsc, out var target, out var membership))
-                {
-                    execution.PostAdmissionFailure =
-                        GasTickAdmissionFailureReason.BoundaryProjectionFailure;
-                    break;
-                }
-                if (!Drains.HasComponent(target) || !BoundaryFacts.HasBuffer(target))
-                {
-                    execution.PostAdmissionFailure =
-                        GasTickAdmissionFailureReason.BoundaryProjectionFailure;
-                    break;
-                }
 
-                var state = Drains[target];
-                var fact = new BoundaryFactBuffer
+            var appendedCount = 0;
+            for (; appendedCount < execution.CoreFactCount; appendedCount++)
+            {
+                var coreFact = CoreFacts[appendedCount];
+                if (!TryAppendCoreFact(in coreFact))
                 {
-                    Scope = coreFact.Scope,
-                    Plane = coreFact.Plane,
-                    ScopeStableId = state.OwnerStableId,
-                    ScopeGeneration = state.OwnerGeneration,
-                    BattleInstanceId = membership.BattleInstance.BattleStableId,
-                    BattleInstanceGeneration = membership.BattleInstance.BattleGeneration,
-                    OwnerScenarioUnitId = membership.ScenarioUnitId,
-                    SourceAsc = coreFact.SourceAsc,
-                    TargetAsc = coreFact.TargetAsc,
-                    SimulationTick = coreFact.SimulationTick,
-                    SemanticPhaseOrdinal = coreFact.SemanticPhaseOrdinal,
-                    WorkClassOrdinal = coreFact.WorkClassOrdinal,
-                    ParentCausalityId = coreFact.ParentCausalityId,
-                    SemanticId = coreFact.SemanticId,
-                    Kind = coreFact.Kind,
-                    Payload = coreFact.Payload,
-                };
-                if (!GasBoundaryDrainProtocol.TryAppendFactWithSequence(
-                        ref state,
-                        BoundaryFacts[target],
-                        in fact,
-                        out _,
-                        out _))
-                {
+                    TryRollbackProjection(appendedCount);
+                    execution.BoundaryFactCount = 0;
                     execution.PostAdmissionFailure =
-                        GasTickAdmissionFailureReason.BoundaryProjectionFailure;
+                        GasTickAdmissionFailureReason.PostAdmissionInvariantViolation;
                     break;
                 }
-                Drains[target] = state;
                 execution.BoundaryFactCount++;
             }
             Execution[0] = execution;
+        }
+
+        /// <summary>
+        /// 校验 CoreFact 顺序、canonical key、owner 路由与全部 outbox 资源，期间不写入 ECS。
+        /// </summary>
+        private bool TryPreflight(in GasTickExecutionState execution)
+        {
+            if (execution.CoreFactCount < 0 || execution.CoreFactCount > CoreFacts.Length)
+                return false;
+            for (var index = 0; index < execution.CoreFactCount; index++)
+            {
+                if (index > 0)
+                {
+                    var previous = CoreFacts[index - 1];
+                    var current = CoreFacts[index];
+                    if (CompareCanonicalKey(in previous, in current) >= 0)
+                        return false;
+                }
+                if (HasPriorPhysicalOwner(index))
+                    continue;
+                if (!TryPreflightOwner(index, execution.CoreFactCount))
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 预检一个唯一物理 owner 的容量、序号和该 owner 全部事实路由。
+        /// </summary>
+        private bool TryPreflightOwner(int firstIndex, int factCount)
+        {
+            var firstCoreFact = CoreFacts[firstIndex];
+            if (!TryResolveProjectionTarget(
+                    in firstCoreFact, out var target, out var membership) ||
+                !Drains.HasComponent(target) || !BoundaryFacts.HasBuffer(target))
+                return false;
+
+            var state = Drains[target];
+            var outbox = BoundaryFacts[target];
+            var demand = CountPhysicalOwnerFacts(in firstCoreFact, factCount);
+            if (!CanReserveOwner(in state, outbox, demand))
+                return false;
+
+            var projected = state;
+            for (var index = 0; index < factCount; index++)
+            {
+                var coreFact = CoreFacts[index];
+                if (!IsSamePhysicalOwner(in firstCoreFact, in coreFact))
+                    continue;
+                if (!TryResolveProjectionTarget(
+                        in coreFact, out var candidate, out membership) ||
+                    candidate != target ||
+                    !TryBuildBoundaryFact(in coreFact, in projected, in membership, out var fact) ||
+                    !GasBoundaryDrainProtocol.TryValidateFactAppend(
+                        in projected, in fact, out _))
+                    return false;
+                AdvanceProjectedState(ref projected);
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 追加一条已通过预检的 CoreFact，并只在 protocol 成功后提交 DrainState。
+        /// </summary>
+        private bool TryAppendCoreFact(in GasCoreFactRecord coreFact)
+        {
+            if (!TryResolveProjectionTarget(
+                    in coreFact, out var target, out var membership) ||
+                !Drains.HasComponent(target) || !BoundaryFacts.HasBuffer(target))
+                return false;
+
+            var state = Drains[target];
+            if (!TryBuildBoundaryFact(in coreFact, in state, in membership, out var fact) ||
+                !GasBoundaryDrainProtocol.TryAppendFactWithSequence(
+                    ref state,
+                    BoundaryFacts[target],
+                    in fact,
+                    out _,
+                    out _))
+                return false;
+            Drains[target] = state;
+            return true;
+        }
+
+        /// <summary>
+        /// 通过唯一物理 owner 的预检结果判断当前 outbox 可无扩容承载 demand。
+        /// </summary>
+        private static bool CanReserveOwner(
+            in BoundaryDrainState state,
+            DynamicBuffer<BoundaryFactBuffer> outbox,
+            int demand)
+        {
+            if (demand <= 0 || state.NextOwnerSequence == 0 ||
+                state.NextOwnerSequence == ulong.MaxValue ||
+                (state.Phase == GasBoundaryDrainPhase.InFlight &&
+                 state.InFlightWatermark >= state.NextOwnerSequence))
+                return false;
+            if (outbox.Length > int.MaxValue - demand ||
+                outbox.Capacity < outbox.Length + demand)
+                return false;
+            return (ulong)demand <= ulong.MaxValue - state.NextOwnerSequence;
+        }
+
+        /// <summary>
+        /// 构造一次模拟 append 后的 owner 状态，不触碰组件存储。
+        /// </summary>
+        private static void AdvanceProjectedState(ref BoundaryDrainState state)
+        {
+            state.NextOwnerSequence++;
+            if (state.Phase == GasBoundaryDrainPhase.Idle)
+                state.Phase = GasBoundaryDrainPhase.Pending;
+        }
+
+        /// <summary>
+        /// 将 CoreFact 转为带 scope identity 与 membership 快照的 Boundary fact。
+        /// </summary>
+        private static bool TryBuildBoundaryFact(
+            in GasCoreFactRecord coreFact,
+            in BoundaryDrainState state,
+            in AscBattleMembership membership,
+            out BoundaryFactBuffer fact)
+        {
+            fact = new BoundaryFactBuffer
+            {
+                Scope = coreFact.Scope,
+                Plane = coreFact.Plane,
+                ScopeStableId = state.OwnerStableId,
+                ScopeGeneration = state.OwnerGeneration,
+                BattleInstanceId = coreFact.Scope == GasBoundaryFactScope.Asc
+                    ? membership.BattleInstance.BattleStableId
+                    : 0,
+                BattleInstanceGeneration = coreFact.Scope == GasBoundaryFactScope.Asc
+                    ? membership.BattleInstance.BattleGeneration
+                    : 0,
+                OwnerScenarioUnitId = coreFact.Scope == GasBoundaryFactScope.Asc
+                    ? membership.ScenarioUnitId
+                    : 0,
+                SourceAsc = coreFact.SourceAsc,
+                TargetAsc = coreFact.TargetAsc,
+                SimulationTick = coreFact.SimulationTick,
+                SemanticPhaseOrdinal = coreFact.SemanticPhaseOrdinal,
+                WorkClassOrdinal = coreFact.WorkClassOrdinal,
+                ParentCausalityId = coreFact.ParentCausalityId,
+                SemanticId = coreFact.SemanticId,
+                Kind = coreFact.Kind,
+                Payload = coreFact.Payload,
+            };
+            return coreFact.Scope == GasBoundaryFactScope.Asc ||
+                   coreFact.Scope == GasBoundaryFactScope.Session;
+        }
+
+        /// <summary>
+        /// 按当前实现支持的 scope 解析唯一物理 owner Entity。
+        /// </summary>
+        private bool TryResolveProjectionTarget(
+            in GasCoreFactRecord coreFact,
+            out Entity target,
+            out AscBattleMembership membership)
+        {
+            if (coreFact.Scope == GasBoundaryFactScope.Session)
+            {
+                target = Session;
+                membership = default;
+                return true;
+            }
+            if (coreFact.Scope == GasBoundaryFactScope.Asc)
+                return TryResolveOwner(coreFact.TargetAsc, out target, out membership);
+            target = Entity.Null;
+            membership = default;
+            return false;
+        }
+
+        /// <summary>
+        /// 判断两个 CoreFact 是否命中同一唯一物理 outbox owner。
+        /// </summary>
+        private static bool IsSamePhysicalOwner(
+            in GasCoreFactRecord left,
+            in GasCoreFactRecord right)
+        {
+            if (left.Scope != right.Scope)
+                return false;
+            return left.Scope == GasBoundaryFactScope.Session ||
+                   left.Scope == GasBoundaryFactScope.Asc &&
+                   left.TargetAsc.Equals(right.TargetAsc);
+        }
+
+        /// <summary>
+        /// 判断当前事实前是否已出现同一物理 owner，避免重复 owner 预检。
+        /// </summary>
+        private bool HasPriorPhysicalOwner(int index)
+        {
+            var current = CoreFacts[index];
+            for (var prior = 0; prior < index; prior++)
+            {
+                var candidate = CoreFacts[prior];
+                if (IsSamePhysicalOwner(in current, in candidate))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 统计 CoreFacts 中同一物理 owner 的全部需求，支持 Session facts 跨 target identity 合并。
+        /// </summary>
+        private int CountPhysicalOwnerFacts(
+            in GasCoreFactRecord ownerFact,
+            int factCount)
+        {
+            var count = 0;
+            for (var index = 0; index < factCount; index++)
+            {
+                var candidate = CoreFacts[index];
+                if (IsSamePhysicalOwner(in ownerFact, in candidate))
+                    count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// 回滚本次已追加 prefix，恢复每个 owner 的 outbox 长度、序号与 Idle/ Pending 状态。
+        /// </summary>
+        private bool TryRollbackProjection(int appendedCount)
+        {
+            var success = true;
+            for (var index = 0; index < appendedCount; index++)
+            {
+                if (HasPriorPhysicalOwnerInPrefix(index, appendedCount))
+                    continue;
+                var coreFact = CoreFacts[index];
+                if (!TryResolveProjectionTarget(
+                        in coreFact, out var target, out _) ||
+                    !Drains.HasComponent(target) || !BoundaryFacts.HasBuffer(target))
+                {
+                    success = false;
+                    continue;
+                }
+
+                var count = CountPhysicalOwnerFactsInPrefix(
+                    in coreFact, appendedCount);
+                var state = Drains[target];
+                var buffer = BoundaryFacts[target];
+                if (count <= 0 || buffer.Length < count ||
+                    state.NextOwnerSequence < (ulong)count)
+                {
+                    success = false;
+                    continue;
+                }
+                for (var remove = 0; remove < count; remove++)
+                    buffer.RemoveAt(buffer.Length - 1);
+                state.NextOwnerSequence -= (ulong)count;
+                if (state.Phase == GasBoundaryDrainPhase.Pending && buffer.Length == 0)
+                    state.Phase = GasBoundaryDrainPhase.Idle;
+                Drains[target] = state;
+            }
+            return success;
+        }
+
+        /// <summary>
+        /// 判断 prefix 内是否已出现同一物理 owner。
+        /// </summary>
+        private bool HasPriorPhysicalOwnerInPrefix(int index, int prefixCount)
+        {
+            var current = CoreFacts[index];
+            for (var prior = 0; prior < index && prior < prefixCount; prior++)
+            {
+                var candidate = CoreFacts[prior];
+                if (IsSamePhysicalOwner(in current, in candidate))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 统计已追加 prefix 中某 owner 的事实数。
+        /// </summary>
+        private int CountPhysicalOwnerFactsInPrefix(
+            in GasCoreFactRecord ownerFact,
+            int prefixCount)
+        {
+            var count = 0;
+            for (var index = 0; index < prefixCount; index++)
+            {
+                var candidate = CoreFacts[index];
+                if (IsSamePhysicalOwner(in ownerFact, in candidate))
+                    count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// 比较 StableFactMerge 使用的完整 canonical key，拒绝重复或逆序输入。
+        /// </summary>
+        private static int CompareCanonicalKey(
+            in GasCoreFactRecord left,
+            in GasCoreFactRecord right)
+        {
+            var comparison = left.Scope.CompareTo(right.Scope);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.TargetAsc.AscStableId.CompareTo(right.TargetAsc.AscStableId);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.TargetAsc.AscGeneration.CompareTo(right.TargetAsc.AscGeneration);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.SimulationTick.CompareTo(right.SimulationTick);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.SemanticPhaseOrdinal.CompareTo(right.SemanticPhaseOrdinal);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.WorkClassOrdinal.CompareTo(right.WorkClassOrdinal);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.SemanticId.CompareTo(right.SemanticId);
+            if (comparison != 0)
+                return comparison;
+            comparison = left.OperationOrdinal.CompareTo(right.OperationOrdinal);
+            return comparison != 0
+                ? comparison
+                : left.FactOrdinal.CompareTo(right.FactOrdinal);
         }
 
         /// <summary>
@@ -3993,7 +5768,8 @@ namespace GAS.Runtime
                     identity.OwnerAsc.Equals(owner) &&
                     (lifecycle == GasAscLifecycleState.Ready ||
                      lifecycle == GasAscLifecycleState.Alive ||
-                     lifecycle == GasAscLifecycleState.Terminal))
+                     lifecycle == GasAscLifecycleState.Terminal ||
+                     lifecycle == GasAscLifecycleState.Dead))
                     return true;
                 break;
             }
@@ -4098,6 +5874,8 @@ namespace GAS.Runtime
                 SealedCommandCount = execution.SealedCommandCount,
                 SourceSpecCount = execution.SourceSpecCount,
                 ApplicationOutcomeCount = execution.ApplicationOutcomeCount,
+                AttributeMutationCount = execution.AttributeMutationCount,
+                DeathFactCount = execution.DeathFactCount,
                 CoreFactCount = execution.CoreFactCount,
                 BoundaryFactCount = execution.BoundaryFactCount,
                 AdmissionSucceeded = admission.Succeeded,

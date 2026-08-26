@@ -16,6 +16,9 @@ namespace GAS.Runtime
         BattleOutcome,
         SessionLifecycle,
         Fault,
+        Death,
+        ExecutionCalculation,
+        PeriodTick,
     }
 
     /// <summary>
@@ -28,6 +31,7 @@ namespace GAS.Runtime
         ScalarPair,
         StableIdentityPair,
         AttributeDelta,
+        Death,
     }
 
     /// <summary>
@@ -51,12 +55,26 @@ namespace GAS.Runtime
         public GasBoundaryPayloadKind Kind;
         public long Integer0;
         public long Integer1;
+        /// <summary>
+        /// 保存定义或业务 schema 的第三个整数槽；零表示当前事实不携带该字段。
+        /// </summary>
+        public long Integer2;
         public float Scalar0;
         public float Scalar1;
+        public float Scalar2;
+        public float Scalar3;
+        public float Scalar4;
+        public float Scalar5;
+        public float Scalar6;
+        public float Scalar7;
+        public float Scalar8;
+        public float Scalar9;
         public ulong StableId0;
         public ulong StableId1;
+        public ulong StableId2;
         public uint Generation0;
         public uint Generation1;
+        public uint Generation2;
     }
 
     /// <summary>

@@ -76,6 +76,11 @@ namespace GAS.Runtime
         public GasAscLifecycleState State;
         public ulong ReadyTick;
         public ulong TerminalTick;
+        public ulong DeathTick;
+        public ulong DeathTransitionId;
+        public ulong DeathApplicationId;
+        public OwnerAscHandle DeathSourceAsc;
+        public float DeathOverkill;
         public byte IngressClosed;
     }
 
@@ -395,8 +400,16 @@ namespace GAS.Runtime
         public ulong StartTick;
         public ulong EndTick;
         public ulong NextPeriodTick;
+        /// <summary>
+        /// 保存创建或最近一次成功 stack application 的正式 EffectApplicationId，供 period provenance 复用。
+        /// </summary>
+        public ulong ApplicationId;
         public int StackCount;
         public uint ActiveCycleOrdinal;
+        /// <summary>
+        /// 保存该 ActiveEffect 已成功 claim 的 period execution ordinal，重复扫描不得复用。
+        /// </summary>
+        public uint PeriodExecutionOrdinal;
         public PayloadRangeHandle PayloadRange;
         public PayloadRangeHandle CaptureRange;
         public GasSlotBusinessState State;

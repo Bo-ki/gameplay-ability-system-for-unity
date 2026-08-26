@@ -18,6 +18,7 @@ namespace GAS.Runtime
         RejectedStaleBinding,
         RejectedDefinition,
         InfrastructureFault,
+        PeriodTickExecuted,
     }
 
     /// <summary>
@@ -51,6 +52,15 @@ namespace GAS.Runtime
         public int DefinitionIndex;
         public ulong ApplicationId;
         public ulong StartTick;
+        public ulong CausalityId;
+        /// <summary>
+        /// 标记该 request 是否由 ActiveEffect period due 产生，而非新的 application。
+        /// </summary>
+        public byte IsPeriodTick;
+        /// <summary>
+        /// 保存 request 对应的 period execution ordinal，和 ApplicationId 共同构成执行身份。
+        /// </summary>
+        public uint PeriodExecutionOrdinal;
         public byte TargetIsAlive;
         public int PayloadLength;
         public int CaptureValueCount;
@@ -67,7 +77,22 @@ namespace GAS.Runtime
         public ActiveEffectHandle ActiveEffect;
         public ulong ApplicationId;
         public int AppliedModifierCount;
+        public int MutationStart;
+        public int MutationCount;
         public byte DeathCrossed;
+        public ulong DeathTransitionId;
+        public float DeathOverkill;
+        public int DeathAttributeLayoutIndex;
+        public ulong DeathContributorId;
+        public ulong CausalityId;
+        /// <summary>
+        /// 标记该 outcome 是否由 ActiveEffect period due 产生，而非新的 application。
+        /// </summary>
+        public byte IsPeriodTick;
+        /// <summary>
+        /// 保存 period execution 的单调 ordinal，和 ApplicationId 共同构成执行身份。
+        /// </summary>
+        public uint PeriodExecutionOrdinal;
     }
 
     /// <summary>

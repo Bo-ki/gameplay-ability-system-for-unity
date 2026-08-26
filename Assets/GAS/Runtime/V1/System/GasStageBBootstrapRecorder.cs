@@ -6,7 +6,7 @@ namespace GAS.Runtime
     /// <summary>
     /// 保存 Stage-B Session 安装所需的 Catalog、规则、容量与 SpawnBatch；本阶段契约明确不接受 initial-effect。
     /// </summary>
-    internal struct GasStageBSessionBootstrapRequest
+    public struct GasStageBSessionBootstrapRequest
     {
         public ulong SimulationEpoch;
         public ulong SpawnBatchId;
@@ -19,14 +19,14 @@ namespace GAS.Runtime
     /// <summary>
     /// 由 World owner 持有的一次性录入门，阻止同一 EndFixed playback 前重复记录 deferred Session。
     /// </summary>
-    internal struct GasStageBBootstrapRecordGate
+    public struct GasStageBBootstrapRecordGate
     {
         private byte _closed;
 
         /// <summary>
         /// 判断 World owner 是否已在当前一次性安装流程记录过 Session。
         /// </summary>
-        internal readonly bool IsClosed()
+        public readonly bool IsClosed()
         {
             return _closed != 0;
         }
@@ -34,7 +34,7 @@ namespace GAS.Runtime
         /// <summary>
         /// 在成功记录完整 batch 后永久关闭本次 Stage-B 安装门。
         /// </summary>
-        internal void Close()
+        public void Close()
         {
             _closed = 1;
         }
@@ -43,7 +43,7 @@ namespace GAS.Runtime
     /// <summary>
     /// 保存一个初始 BattleInstance 及其在规范 ASC registry 中的连续成员 range。
     /// </summary>
-    internal struct GasStageBBattleBootstrapRequest
+    public struct GasStageBBattleBootstrapRequest
     {
         public BattleInstanceHandle BattleInstance;
         public int MemberStart;
@@ -54,7 +54,7 @@ namespace GAS.Runtime
     /// <summary>
     /// 保存一个 Pending ASC 的稳定身份、战局成员关系及三类初始化 range；raw Entity 仅限此内部协议。
     /// </summary>
-    internal struct GasStageBAscBootstrapRequest
+    public struct GasStageBAscBootstrapRequest
     {
         public OwnerAscHandle OwnerAsc;
         public BattleInstanceHandle BattleInstance;
@@ -80,7 +80,7 @@ namespace GAS.Runtime
     /// <summary>
     /// 向标准 EndFixed ECB 一次记录唯一 Pending Session、多个 BattleInstance 与完整 ASC batch，绝不直接 playback。
     /// </summary>
-    internal static class GasStageBBootstrapRecorder
+    public static class GasStageBBootstrapRecorder
     {
         private const ulong FirstStableSequence = 1;
         private const uint SessionOwnerGeneration = 1;
@@ -88,7 +88,7 @@ namespace GAS.Runtime
         /// <summary>
         /// 全批 preflight 成功后仅记录无 initial-effect 的 Pending 拓扑，并一次性关闭 World-local 录入门。
         /// </summary>
-        internal static GasStageBSpawnFaultReason Record(
+        public static GasStageBSpawnFaultReason Record(
             EntityManager entityManager,
             EndFixedStepSimulationEntityCommandBufferSystem.Singleton endFixed,
             WorldUnmanaged world,

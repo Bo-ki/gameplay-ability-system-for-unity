@@ -182,6 +182,7 @@ namespace GAS.Runtime
             ref GasDefinitionCatalogBlob catalog)
         {
             var previousId = int.MinValue;
+            var healthCount = 0;
             for (var index = 0; index < catalog.AttributeLayout.Entries.Length; index++)
             {
                 var entry = catalog.AttributeLayout.Entries[index];
@@ -195,7 +196,18 @@ namespace GAS.Runtime
                     || entry.DefaultValue < entry.MinimumValue
                     || entry.DefaultValue > entry.MaximumValue
                     || entry.ClampMinimum > 1
-                    || entry.ClampMaximum > 1)
+                    || entry.ClampMaximum > 1
+                    || entry.DomainRole < GasAttributeDomainRole.None
+                    || entry.DomainRole > GasAttributeDomainRole.Health
+                    || (entry.DomainRole == GasAttributeDomainRole.Health &&
+                        (entry.ClampMinimum == 0 || entry.MinimumValue != 0f)))
+                {
+                    return Failure(
+                        GasCatalogValidationError.AttributeLayoutInvalid,
+                        elementIndex: index);
+                }
+
+                if (entry.DomainRole == GasAttributeDomainRole.Health && ++healthCount > 1)
                 {
                     return Failure(
                         GasCatalogValidationError.AttributeLayoutInvalid,

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using GAS.Runtime;
 using NUnit.Framework;
 using Unity.Collections;
@@ -148,22 +149,141 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             Assert.That(diagnostics.AdmissionSucceeded, Is.EqualTo(1));
             Assert.That(diagnostics.SourceSpecCount, Is.EqualTo(1));
             Assert.That(diagnostics.ApplicationOutcomeCount, Is.EqualTo(1));
-            Assert.That(diagnostics.CoreFactCount, Is.EqualTo(1));
-            Assert.That(diagnostics.BoundaryFactCount, Is.EqualTo(1));
+            Assert.That(diagnostics.AttributeMutationCount, Is.EqualTo(1));
+            Assert.That(diagnostics.CoreFactCount, Is.EqualTo(2));
+            Assert.That(diagnostics.BoundaryFactCount, Is.EqualTo(2));
             Assert.That(fixture.Attributes[0].Current, Is.EqualTo(105f));
 
             Assert.That(fixture.TryDequeueBoundaryBatch(out var batch), Is.True);
             Assert.That(batch.IsNoFact, Is.False);
-            Assert.That(batch.Facts.Count, Is.EqualTo(1));
-            var fact = batch.Facts[0];
+            Assert.That(batch.Facts.Count, Is.EqualTo(2));
+            var mutationFact = batch.Facts[0];
+            Assert.That(mutationFact.Scope, Is.EqualTo(GasBoundaryFactScope.Asc));
+            Assert.That(mutationFact.Kind, Is.EqualTo(GasBoundaryFactKind.AttributeChanged));
+            Assert.That(mutationFact.EventId.OwnerKind, Is.EqualTo(GasBoundaryOwnerKind.Asc));
+            Assert.That(mutationFact.EventId.OwnerSequence, Is.EqualTo(1UL));
+            Assert.That(mutationFact.Payload.Integer0, Is.EqualTo(1L));
+            Assert.That(mutationFact.Payload.Scalar0, Is.EqualTo(5f));
+            Assert.That(mutationFact.Payload.Scalar1, Is.EqualTo(5f));
+            Assert.That(mutationFact.Payload.Scalar2, Is.EqualTo(100f));
+            Assert.That(mutationFact.Payload.Scalar3, Is.EqualTo(100f));
+            Assert.That(mutationFact.Payload.Scalar4, Is.EqualTo(105f));
+            Assert.That(mutationFact.Payload.Scalar5, Is.EqualTo(105f));
+            Assert.That(mutationFact.Payload.Scalar8, Is.EqualTo(5f));
+            Assert.That(mutationFact.Payload.Scalar9, Is.EqualTo(5f));
+            Assert.That(mutationFact.ParentCausalityId, Is.Not.Zero);
+            Assert.That(mutationFact.Payload.StableId0, Is.Not.Zero);
+            Assert.That(mutationFact.Payload.StableId2, Is.Not.Zero);
+            var fact = batch.Facts[1];
             Assert.That(fact.Scope, Is.EqualTo(GasBoundaryFactScope.Asc));
             Assert.That(fact.Kind, Is.EqualTo(GasBoundaryFactKind.EffectLifecycle));
             Assert.That(fact.EventId.OwnerKind, Is.EqualTo(GasBoundaryOwnerKind.Asc));
-            Assert.That(fact.EventId.OwnerSequence, Is.EqualTo(1UL));
+            Assert.That(fact.EventId.OwnerSequence, Is.EqualTo(2UL));
             Assert.That(
                 fact.Payload.Integer0,
                 Is.EqualTo((long)GasGameplayEffectApplicationOutcome.AppliedInstant));
             Assert.That(fact.Payload.StableId0, Is.Not.Zero);
+        }
+
+        /// <summary>
+        /// 验证 Duration GameplayEffect 在 due tick 实际重放 modifier，并输出携带 current delta 的 PeriodTick fact。
+        /// </summary>
+        [Test]
+        public void PeriodEffect_dueTick应用Modifier并输出PeriodTickFact()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(periodEffect: true);
+            var accepted = fixture.SubmitApplyEffect(853, fixture.CurrentTick);
+
+            Assert.That(accepted.IsAccepted, Is.True);
+            fixture.TickBatch();
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(97f));
+            Assert.That(
+                fixture.TryDequeueBoundaryBatch(out var applicationBatch),
+                Is.True,
+                $"first period application did not publish: tick={fixture.CurrentTick}, " +
+                $"admission={fixture.Diagnostics.AdmissionSucceeded}:{fixture.Diagnostics.AdmissionReasonCode}, " +
+                $"outcomes={fixture.Diagnostics.ApplicationOutcomeCount}, " +
+                $"mutations={fixture.Diagnostics.AttributeMutationCount}, " +
+                $"core={fixture.Diagnostics.CoreFactCount}, boundary={fixture.Diagnostics.BoundaryFactCount}");
+            Assert.That(applicationBatch.Facts.Any(
+                fact => fact.Kind == GasBoundaryFactKind.EffectLifecycle), Is.True);
+
+            fixture.TickBatch();
+
+            Assert.That(fixture.Diagnostics.AdmissionSucceeded, Is.EqualTo(1));
+            Assert.That(fixture.Diagnostics.ApplicationOutcomeCount, Is.EqualTo(1));
+            Assert.That(fixture.Diagnostics.AttributeMutationCount, Is.EqualTo(1));
+            Assert.That(fixture.Diagnostics.CoreFactCount, Is.EqualTo(2));
+            Assert.That(fixture.Diagnostics.BoundaryFactCount, Is.EqualTo(2));
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(94f));
+            Assert.That(fixture.TryDequeueBoundaryBatch(out var periodBatch), Is.True);
+            var periodFact = periodBatch.Facts.First(
+                fact => fact.Kind == GasBoundaryFactKind.PeriodTick);
+            Assert.That(periodFact.Payload.Integer0, Is.EqualTo(1L));
+            Assert.That(periodFact.Payload.Scalar9, Is.EqualTo(-3f));
+            Assert.That(periodFact.Payload.StableId0, Is.Not.Zero);
+            Assert.That(periodFact.Payload.StableId1, Is.Not.Zero);
+        }
+
+        /// <summary>
+        /// 验证同一 target 的 lethal fan-in 只产生一次 death crossing，后续 AliveOnly application typed reject。
+        /// </summary>
+        [Test]
+        public void EffectApplication_同TickDeathCrossing唯一且后续AliveOnly拒绝()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(withEffect: true, lethalEffect: true);
+            var first = fixture.SubmitApplyEffect(851, fixture.CurrentTick);
+            var second = fixture.SubmitApplyEffect(852, fixture.CurrentTick);
+
+            Assert.That(first.IsAccepted, Is.True);
+            Assert.That(second.IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            var lifecycle = fixture.EntityManager.GetComponentData<AscLifecycle>(fixture.Asc);
+            Assert.That(
+                lifecycle.State,
+                Is.EqualTo(GasAscLifecycleState.Dead),
+                $"state={lifecycle.State}, current={fixture.Attributes[0].Current}, " +
+                $"outcomes={fixture.Diagnostics.ApplicationOutcomeCount}, " +
+                $"mutations={fixture.Diagnostics.AttributeMutationCount}, " +
+                $"facts={fixture.Diagnostics.CoreFactCount}, " +
+                $"admission={fixture.Diagnostics.AdmissionSucceeded}:{fixture.Diagnostics.AdmissionReasonCode}");
+            Assert.That(lifecycle.DeathTick, Is.EqualTo(fixture.CurrentTick));
+            Assert.That(lifecycle.DeathTransitionId, Is.Not.Zero);
+            Assert.That(lifecycle.DeathApplicationId, Is.Not.EqualTo(lifecycle.DeathTransitionId));
+            Assert.That(lifecycle.DeathOverkill, Is.EqualTo(3f));
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(0f));
+            Assert.That(fixture.Diagnostics.ApplicationOutcomeCount, Is.EqualTo(2));
+            Assert.That(fixture.Diagnostics.AttributeMutationCount, Is.EqualTo(1));
+            Assert.That(fixture.Diagnostics.DeathFactCount, Is.EqualTo(1));
+            Assert.That(fixture.Diagnostics.CoreFactCount, Is.EqualTo(4));
+            Assert.That(fixture.Diagnostics.BoundaryFactCount, Is.EqualTo(4));
+
+            Assert.That(fixture.TryDequeueBoundaryBatch(out var batch), Is.True);
+            Assert.That(batch.Facts.Count, Is.EqualTo(4));
+            var deathFacts = 0;
+            var rejectedOutcomes = 0;
+            for (var index = 0; index < batch.Facts.Count; index++)
+            {
+                var fact = batch.Facts[index];
+                if (fact.Kind == GasBoundaryFactKind.Death)
+                    deathFacts++;
+                if (fact.Kind == GasBoundaryFactKind.EffectLifecycle &&
+                    fact.Payload.Integer0 ==
+                    (long)GasGameplayEffectApplicationOutcome.RejectedTargetLife)
+                    rejectedOutcomes++;
+            }
+            Assert.That(deathFacts, Is.EqualTo(1));
+            Assert.That(rejectedOutcomes, Is.EqualTo(1));
+            var deathFact = batch.Facts.First(fact => fact.Kind == GasBoundaryFactKind.Death);
+            Assert.That(deathFact.ParentCausalityId, Is.EqualTo(1UL));
+            Assert.That(deathFact.SemanticId, Is.EqualTo(lifecycle.DeathTransitionId));
+            Assert.That(deathFact.Payload.Kind, Is.EqualTo(GasBoundaryPayloadKind.Death));
+            Assert.That(deathFact.Payload.Integer0, Is.EqualTo(1L));
+            Assert.That(deathFact.Payload.Scalar0, Is.EqualTo(3f));
+            Assert.That(deathFact.Payload.StableId0, Is.EqualTo(lifecycle.DeathTransitionId));
+            Assert.That(deathFact.Payload.StableId1, Is.EqualTo(lifecycle.DeathApplicationId));
+            Assert.That(deathFact.Payload.StableId2, Is.Not.Zero);
         }
 
         /// <summary>
@@ -357,9 +477,13 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         private double _elapsedTime = -FixedDeltaTime;
         private GasStageBBootstrapRecordGate _recordGate;
         private readonly bool _withAbility;
+        private readonly bool _withEffect;
+        private readonly bool _lethalEffect;
+        private readonly bool _periodEffect;
 
         internal Entity Session { get; private set; }
         internal Entity Asc { get; private set; }
+        internal AscLifecycle Lifecycle => EntityManager.GetComponentData<AscLifecycle>(Asc);
         internal BattleInstanceHandle Battle { get; } = new BattleInstanceHandle(Epoch, 71, 1);
         internal OwnerAscHandle OwnerAsc { get; } = new OwnerAscHandle(101, 1);
 
@@ -405,11 +529,16 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             int maxOwnerPlanCount = 4,
             bool withAbility = false,
             float costDelta = -10f,
-            bool withEffect = false)
+            bool withEffect = false,
+            bool lethalEffect = false,
+            bool periodEffect = false)
         {
             _withAbility = withAbility;
+            _withEffect = withEffect || lethalEffect || periodEffect;
+            _lethalEffect = lethalEffect;
+            _periodEffect = periodEffect;
             _catalog = withAbility ? CreateAbilityCatalog(costDelta) :
-                withEffect ? CreateEffectCatalog() : CreateEmptyCatalog();
+                _withEffect ? CreateEffectCatalog(_lethalEffect, _periodEffect) : CreateEmptyCatalog();
             _world = new World("Runtime v1 Tick DAG PlayMode test");
             _owner = GasRuntimeWorldOwner.Install(_world);
             _world.GetExistingSystemManaged<FixedStepSimulationSystemGroup>().Timestep = FixedDeltaTime;
@@ -853,7 +982,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 MaxEffectOperationCount = 4,
                 MaxOwnerReservationCount = 4,
                 MaxTargetReservationCount = 4,
-                MaxCoreFactCount = 4,
+                MaxCoreFactCount = 8,
                 MaxNextTickRouteCount = 4,
                 MaxStructuralIntentCount = 4,
                 MaxPendingGrantedAbilityInitializationCount = 1,
@@ -871,8 +1000,8 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 MaxLiveDependencyCount = 4,
                 MaxLiveDependencyRouteCount = 4,
                 MaxPendingCommandCount = 8,
-                MaxSessionBoundaryFactCount = 4,
-                MaxAscBoundaryFactCount = 4,
+                MaxSessionBoundaryFactCount = 8,
+                MaxAscBoundaryFactCount = 8,
             };
         }
 
@@ -913,7 +1042,9 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         /// <summary>
         /// 创建一个 Instant Add GameplayEffect，供 Kernel 真实验证 target-owned application 与 Boundary fact。
         /// </summary>
-        private static BlobAssetReference<GasDefinitionCatalogBlob> CreateEffectCatalog()
+        private static BlobAssetReference<GasDefinitionCatalogBlob> CreateEffectCatalog(
+            bool lethal,
+            bool period)
         {
             var builder = new BlobBuilder(Allocator.Temp);
             try
@@ -924,11 +1055,12 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 {
                     AttributeId = 1,
                     LayoutIndex = 0,
-                    DefaultValue = 100f,
+                    DefaultValue = lethal ? 5f : 100f,
                     MinimumValue = 0f,
                     MaximumValue = 1000f,
                     ClampMinimum = 1,
                     ClampMaximum = 1,
+                    DomainRole = lethal ? GasAttributeDomainRole.Health : GasAttributeDomainRole.None,
                 };
                 builder.Allocate(ref root.TagCatalog.Entries, 0);
                 builder.Allocate(ref root.TagCatalog.AncestorIndices, 0);
@@ -939,7 +1071,9 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 builder.Allocate(ref root.GameplayEffects, 1)[0] = new GasGameplayEffectDefinitionBlob
                 {
                     DefinitionId = EffectDefinitionId,
-                    Lifetime = GasEffectLifetimePolicy.Instant,
+                    Lifetime = period
+                        ? GasEffectLifetimePolicy.Duration
+                        : GasEffectLifetimePolicy.Instant,
                     TargetPolicy = new GasTargetPolicyBlob
                     {
                         LogicalTarget = GasLogicalTargetPolicy.Self,
@@ -949,10 +1083,15 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                     },
                     ModifierRange = new GasCatalogRange { Start = 0, Count = 1 },
                     EvaluatorProgramRange = new GasCatalogRange { Start = 0, Count = 1 },
+                    DurationTicks = period ? 5 : 0,
+                    PeriodTicks = period ? 1 : 0,
                     ExpiryPolicy = GasExpiryPolicy.Remove,
                     ExpiryPeriodPolicy = GasExpiryPeriodPolicy.Stop,
                     ExpirySameTickPolicy = GasExpirySameTickPolicy.ExpiryBeforePeriodDue,
                     InhibitTimePolicy = GasInhibitTimePolicy.DurationContinues,
+                    InhibitedPeriodPolicy = period
+                        ? GasInhibitedPeriodPolicy.ContinueExecution
+                        : GasInhibitedPeriodPolicy.None,
                     MissedPeriodPolicy = GasMissedPeriodPolicy.SkipNoCatchUp,
                     Maxima = CreateEffectMaxima(),
                 };
@@ -965,7 +1104,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 builder.Allocate(ref root.EvaluatorInstructions, 1)[0] = new GasEvaluatorInstructionBlob
                 {
                     Opcode = GasEvaluatorOpcode.PushConstant,
-                    ConstantValue = 5f,
+                    ConstantValue = period ? -3f : lethal ? -8f : 5f,
                 };
                 AllocateEmptyEffectCatalogArrays(ref builder, ref root);
                 return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);

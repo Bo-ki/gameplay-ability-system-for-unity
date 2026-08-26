@@ -53,6 +53,7 @@ namespace GAS.Runtime
         Alive,
         Terminal,
         DestroyPending,
+        Dead,
     }
 
     /// <summary>
@@ -202,6 +203,8 @@ namespace GAS.Runtime
         public int SealedCommandCount;
         public int SourceSpecCount;
         public int ApplicationOutcomeCount;
+        public int AttributeMutationCount;
+        public int DeathFactCount;
         public int CoreFactCount;
         public int BoundaryFactCount;
         public byte AdmissionSucceeded;

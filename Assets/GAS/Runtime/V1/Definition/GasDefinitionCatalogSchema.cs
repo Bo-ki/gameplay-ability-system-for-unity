@@ -590,12 +590,22 @@ namespace GAS.Runtime
     }
 
     /// <summary>
-    /// 保存 dense AttributeLayout 中一个稳定属性的 clamp 与默认值元数据。
+    /// 标识 Attribute 在 Runtime 权威事务中的闭集领域职责；默认 None 不触发隐式业务规则。
+    /// </summary>
+    public enum GasAttributeDomainRole : byte
+    {
+        None = 0,
+        Health = 1,
+    }
+
+    /// <summary>
+    /// 保存 dense AttributeLayout 中一个稳定属性的 clamp、领域职责与默认值元数据。
     /// </summary>
     public struct GasAttributeLayoutEntryBlob
     {
         public int AttributeId;
         public int LayoutIndex;
+        public GasAttributeDomainRole DomainRole;
         public float DefaultValue;
         public float MinimumValue;
         public float MaximumValue;

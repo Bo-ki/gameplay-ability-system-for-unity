@@ -9,6 +9,100 @@ namespace GAS.Runtime
     internal static class GasGameplayEffectTransaction
     {
         /// <summary>
+        /// 只在既有 ActiveEffect 槽上执行一次 period body；不分配槽、不改变 stack 与时序。
+        /// </summary>
+        internal static bool TryApplyPeriodModifiers(
+            ref GasDefinitionCatalogBlob catalog,
+            in GasGameplayEffectApplicationRequest request,
+            in ActiveEffectSlot slot,
+            DynamicBuffer<ActiveEffectSlot> activeEffects,
+            DynamicBuffer<AttributeValueSlot> attributes,
+            DynamicBuffer<AttributeDirtyWord> dirtyWords,
+            DynamicBuffer<TagCountSlot> tagCounts,
+            DynamicBuffer<TagPresenceWord> tagPresence,
+            int activeEffectCapacity,
+            NativeArray<float> captures,
+            NativeArray<float> valueViews,
+            NativeArray<float> evaluatorStack,
+            NativeArray<GasAttributeMutationRecord> mutationOutputs,
+            int mutationStart,
+            out GasGameplayEffectApplicationResult result)
+        {
+            result = new GasGameplayEffectApplicationResult
+            {
+                ApplicationId = request.ApplicationId,
+                CausalityId = request.CausalityId,
+                MutationStart = mutationStart,
+                IsPeriodTick = 1,
+                PeriodExecutionOrdinal = request.PeriodExecutionOrdinal,
+                ActiveEffect = slot.Handle,
+                Outcome = GasGameplayEffectApplicationOutcome.PeriodTickExecuted,
+            };
+            if (!ValidateRequest(
+                    ref catalog,
+                    in request,
+                    activeEffects,
+                    attributes,
+                    dirtyWords,
+                    tagCounts,
+                    tagPresence,
+                    activeEffectCapacity,
+                    captures,
+                    valueViews,
+                    evaluatorStack) ||
+                !slot.Handle.IsValid ||
+                slot.Header.StorageState != GasSlabSlotState.Live ||
+                slot.State != GasSlotBusinessState.Active ||
+                slot.Handle.SimulationEpoch != request.SimulationEpoch ||
+                !slot.Handle.OwnerAsc.Equals(request.TargetAsc) ||
+                slot.DefinitionIndex != request.DefinitionIndex ||
+                slot.StackCount <= 0)
+            {
+                result.Outcome = GasGameplayEffectApplicationOutcome.RejectedStaleBinding;
+                result.Failure = GasGameplayEffectTransactionFailure.InvalidIdentity;
+                return false;
+            }
+
+            var definition = catalog.GameplayEffects[request.DefinitionIndex];
+            if ((definition.Lifetime != GasEffectLifetimePolicy.Duration &&
+                 definition.Lifetime != GasEffectLifetimePolicy.Infinite) ||
+                definition.PeriodTicks <= 0 ||
+                mutationOutputs.IsCreated &&
+                (mutationStart < 0 || mutationStart > mutationOutputs.Length ||
+                 definition.ModifierRange.Count > mutationOutputs.Length - mutationStart))
+            {
+                result.Outcome = GasGameplayEffectApplicationOutcome.RejectedDefinition;
+                result.Failure = GasGameplayEffectTransactionFailure.InvalidDefinition;
+                return false;
+            }
+            if (!PreflightModifiers(
+                    ref catalog,
+                    in definition,
+                    slot.StackCount,
+                    captures,
+                    valueViews,
+                    evaluatorStack,
+                    attributes,
+                    ref result))
+                return false;
+            if (!ApplyModifierWrites(
+                    ref catalog,
+                    in definition,
+                    in request,
+                    slot.StackCount,
+                    attributes,
+                    dirtyWords,
+                    captures,
+                    valueViews,
+                    evaluatorStack,
+                    mutationOutputs,
+                    mutationStart,
+                    ref result))
+                return false;
+            return true;
+        }
+
+        /// <summary>
         /// 以已冻结的 application intent 执行一条 target-owned effect transaction。
         /// </summary>
         internal static bool TryApply(
@@ -26,9 +120,49 @@ namespace GAS.Runtime
             NativeArray<float> evaluatorStack,
             out GasGameplayEffectApplicationResult result)
         {
+            return TryApply(
+                ref catalog,
+                in request,
+                activeEffects,
+                attributes,
+                dirtyWords,
+                tagCounts,
+                tagPresence,
+                ref activeEffectHead,
+                activeEffectCapacity,
+                captures,
+                valueViews,
+                evaluatorStack,
+                default(NativeArray<GasAttributeMutationRecord>),
+                0,
+                out result);
+        }
+
+        /// <summary>
+        /// 执行 effect transaction，并把每个 modifier 的完整 mutation 记录写入预留 scratch。
+        /// </summary>
+        internal static bool TryApply(
+            ref GasDefinitionCatalogBlob catalog,
+            in GasGameplayEffectApplicationRequest request,
+            DynamicBuffer<ActiveEffectSlot> activeEffects,
+            DynamicBuffer<AttributeValueSlot> attributes,
+            DynamicBuffer<AttributeDirtyWord> dirtyWords,
+            DynamicBuffer<TagCountSlot> tagCounts,
+            DynamicBuffer<TagPresenceWord> tagPresence,
+            ref GasSlabHead activeEffectHead,
+            int activeEffectCapacity,
+            NativeArray<float> captures,
+            NativeArray<float> valueViews,
+            NativeArray<float> evaluatorStack,
+            NativeArray<GasAttributeMutationRecord> mutationOutputs,
+            int mutationStart,
+            out GasGameplayEffectApplicationResult result)
+        {
             result = new GasGameplayEffectApplicationResult
             {
                 ApplicationId = request.ApplicationId,
+                CausalityId = request.CausalityId,
+                MutationStart = mutationStart,
             };
             if (!ValidateRequest(
                     ref catalog,
@@ -49,6 +183,14 @@ namespace GAS.Runtime
             }
 
             var definition = catalog.GameplayEffects[request.DefinitionIndex];
+            if (mutationOutputs.IsCreated &&
+                (mutationStart < 0 || mutationStart > mutationOutputs.Length ||
+                 definition.ModifierRange.Count > mutationOutputs.Length - mutationStart))
+            {
+                result.Outcome = GasGameplayEffectApplicationOutcome.InfrastructureFault;
+                result.Failure = GasGameplayEffectTransactionFailure.AttributeMutationFailure;
+                return false;
+            }
             if (!MatchesLifePolicy(definition.TargetPolicy.Life, request.TargetIsAlive))
             {
                 result.Outcome = GasGameplayEffectApplicationOutcome.RejectedTargetLife;
@@ -109,6 +251,8 @@ namespace GAS.Runtime
                     captures,
                     valueViews,
                     evaluatorStack,
+                    mutationOutputs,
+                    mutationStart,
                     ref result);
             }
 
@@ -123,6 +267,8 @@ namespace GAS.Runtime
                 captures,
                 valueViews,
                 evaluatorStack,
+                mutationOutputs,
+                mutationStart,
                 ref result);
         }
 
@@ -143,6 +289,8 @@ namespace GAS.Runtime
             NativeArray<float> captures,
             NativeArray<float> valueViews,
             NativeArray<float> evaluatorStack,
+            NativeArray<GasAttributeMutationRecord> mutationOutputs,
+            int mutationStart,
             ref GasGameplayEffectApplicationResult result)
         {
             var isInstant = definition.Lifetime == GasEffectLifetimePolicy.Instant ||
@@ -163,6 +311,7 @@ namespace GAS.Runtime
             if (!PreflightModifiers(
                     ref catalog,
                     in definition,
+                    1,
                     captures,
                     valueViews,
                     evaluatorStack,
@@ -190,11 +339,14 @@ namespace GAS.Runtime
                     ref catalog,
                     in definition,
                     in request,
+                    1,
                     attributes,
                     dirtyWords,
                     captures,
                     valueViews,
                     evaluatorStack,
+                    mutationOutputs,
+                    mutationStart,
                     ref result))
             {
                 if (!isInstant)
@@ -222,8 +374,10 @@ namespace GAS.Runtime
                 StartTick = request.StartTick,
                 EndTick = endTick,
                 NextPeriodTick = periodTick,
+                ApplicationId = request.ApplicationId,
                 StackCount = 1,
                 ActiveCycleOrdinal = 0,
+                PeriodExecutionOrdinal = 0,
                 State = GasSlotBusinessState.Active,
                 Inhibited = 0,
             };
@@ -246,6 +400,8 @@ namespace GAS.Runtime
             NativeArray<float> captures,
             NativeArray<float> valueViews,
             NativeArray<float> evaluatorStack,
+            NativeArray<GasAttributeMutationRecord> mutationOutputs,
+            int mutationStart,
             ref GasGameplayEffectApplicationResult result)
         {
             if (definition.StackLimit <= 0 ||
@@ -270,25 +426,73 @@ namespace GAS.Runtime
                 result.Failure = GasGameplayEffectTransactionFailure.StackRejected;
                 return false;
             }
-            if (slot.StackCount < definition.StackLimit)
-                slot.StackCount++;
+
+            var nextStackCount = slot.StackCount;
+            if (nextStackCount < definition.StackLimit)
+            {
+                if (nextStackCount == int.MaxValue)
+                {
+                    result.Outcome = GasGameplayEffectApplicationOutcome.RejectedDefinition;
+                    result.Failure = GasGameplayEffectTransactionFailure.InvalidDefinition;
+                    return false;
+                }
+                nextStackCount++;
+            }
+
+            var nextEndTick = slot.EndTick;
             if (definition.DurationRefreshPolicy == GasDurationRefreshPolicy.OnSuccessfulApplication &&
-                !TryBuildEndTick(in definition, request.StartTick, out slot.EndTick))
+                !TryBuildEndTick(in definition, request.StartTick, out nextEndTick))
             {
                 result.Outcome = GasGameplayEffectApplicationOutcome.RejectedDefinition;
                 result.Failure = GasGameplayEffectTransactionFailure.InvalidDefinition;
                 return false;
             }
+
+            var nextPeriodTick = slot.NextPeriodTick;
             if (definition.PeriodResetPolicy == GasPeriodResetPolicy.OnSuccessfulApplication &&
                 definition.PeriodTicks > 0)
             {
-                if (!TryAddTick(request.StartTick, (ulong)definition.PeriodTicks, out slot.NextPeriodTick))
+                if (!TryAddTick(request.StartTick, (ulong)definition.PeriodTicks, out nextPeriodTick))
                 {
                     result.Outcome = GasGameplayEffectApplicationOutcome.RejectedDefinition;
                     result.Failure = GasGameplayEffectTransactionFailure.InvalidDefinition;
                     return false;
                 }
             }
+
+            // ExecuteOnApplication 是 stack reapply 的 period body；首次 ApplyNew 已承担 ExecuteOnGranted。
+            if (definition.ExecuteOnApplication != 0 &&
+                !PreflightModifiers(
+                    ref catalog,
+                    in definition,
+                    nextStackCount,
+                    captures,
+                    valueViews,
+                    evaluatorStack,
+                    attributes,
+                    ref result))
+                return false;
+
+            if (definition.ExecuteOnApplication != 0 &&
+                !ApplyModifierWrites(
+                    ref catalog,
+                    in definition,
+                    in request,
+                    nextStackCount,
+                    attributes,
+                    dirtyWords,
+                    captures,
+                    valueViews,
+                    evaluatorStack,
+                    mutationOutputs,
+                    mutationStart,
+                    ref result))
+                return false;
+
+            slot.StackCount = nextStackCount;
+            slot.EndTick = nextEndTick;
+            slot.NextPeriodTick = nextPeriodTick;
+            slot.ApplicationId = request.ApplicationId;
             activeEffects[existingIndex] = slot;
             result.ActiveEffect = slot.Handle;
             result.Outcome = GasGameplayEffectApplicationOutcome.MergedStack;
@@ -331,11 +535,14 @@ namespace GAS.Runtime
             ref GasDefinitionCatalogBlob catalog,
             in GasGameplayEffectDefinitionBlob definition,
             in GasGameplayEffectApplicationRequest request,
+            int stackCount,
             DynamicBuffer<AttributeValueSlot> attributes,
             DynamicBuffer<AttributeDirtyWord> dirtyWords,
             NativeArray<float> captures,
             NativeArray<float> valueViews,
             NativeArray<float> evaluatorStack,
+            NativeArray<GasAttributeMutationRecord> mutationOutputs,
+            int mutationStart,
             ref GasGameplayEffectApplicationResult result)
         {
             for (var offset = 0; offset < definition.ModifierRange.Count; offset++)
@@ -346,7 +553,7 @@ namespace GAS.Runtime
                     modifier.EvaluatorProgramRange,
                     captures,
                     valueViews,
-                    1,
+                    stackCount,
                     evaluatorStack,
                     out var magnitude);
                 if (failure != GasEvaluatorFailure.None ||
@@ -363,15 +570,18 @@ namespace GAS.Runtime
                         currentDelta,
                         attributes,
                         dirtyWords,
-                        out _,
+                        out var mutation,
                         out _))
                 {
                     result.Outcome = GasGameplayEffectApplicationOutcome.InfrastructureFault;
                     result.Failure = GasGameplayEffectTransactionFailure.AttributeMutationFailure;
                     return false;
                 }
+                if (mutationOutputs.IsCreated)
+                    mutationOutputs[mutationStart + result.AppliedModifierCount] = mutation;
                 result.AppliedModifierCount++;
             }
+            result.MutationCount = result.AppliedModifierCount;
             return true;
         }
 
@@ -381,6 +591,7 @@ namespace GAS.Runtime
         private static bool PreflightModifiers(
             ref GasDefinitionCatalogBlob catalog,
             in GasGameplayEffectDefinitionBlob definition,
+            int stackCount,
             NativeArray<float> captures,
             NativeArray<float> valueViews,
             NativeArray<float> evaluatorStack,
@@ -398,6 +609,7 @@ namespace GAS.Runtime
                         ref catalog,
                         in definition,
                         offset,
+                        stackCount,
                         captures,
                         valueViews,
                         evaluatorStack,
@@ -409,6 +621,7 @@ namespace GAS.Runtime
                 if (!TryEvaluateMagnitude(
                         ref catalog,
                         in modifier,
+                        stackCount,
                         captures,
                         valueViews,
                         evaluatorStack,
@@ -437,6 +650,7 @@ namespace GAS.Runtime
             ref GasDefinitionCatalogBlob catalog,
             in GasGameplayEffectDefinitionBlob definition,
             int currentOffset,
+            int stackCount,
             NativeArray<float> captures,
             NativeArray<float> valueViews,
             NativeArray<float> evaluatorStack,
@@ -463,6 +677,7 @@ namespace GAS.Runtime
                 if (!TryEvaluateMagnitude(
                         ref catalog,
                         in prior,
+                        stackCount,
                         captures,
                         valueViews,
                         evaluatorStack,
@@ -492,6 +707,7 @@ namespace GAS.Runtime
         private static bool TryEvaluateMagnitude(
             ref GasDefinitionCatalogBlob catalog,
             in GasModifierDefinitionBlob modifier,
+            int stackCount,
             NativeArray<float> captures,
             NativeArray<float> valueViews,
             NativeArray<float> evaluatorStack,
@@ -502,7 +718,7 @@ namespace GAS.Runtime
                        modifier.EvaluatorProgramRange,
                        captures,
                        valueViews,
-                       1,
+                       stackCount,
                        evaluatorStack,
                        out magnitude) == GasEvaluatorFailure.None;
         }

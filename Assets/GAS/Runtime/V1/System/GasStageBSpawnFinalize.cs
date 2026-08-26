@@ -6,7 +6,7 @@ namespace GAS.Runtime
     /// <summary>
     /// 定义 Stage-B bootstrap 与 SpawnFinalize 的稳定 fail-closed 原因码，写入 SessionFaultLatch.ReasonCode。
     /// </summary>
-    internal enum GasStageBSpawnFaultReason : int
+    public enum GasStageBSpawnFaultReason : int
     {
         None = 0,
         SessionCardinality = 1,

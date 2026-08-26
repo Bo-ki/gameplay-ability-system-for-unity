@@ -120,6 +120,12 @@ namespace GAS.Runtime
         public int EffectOperationCount;
         public int SourceSpecCount;
         public int ApplicationOutcomeCount;
+        public int TargetResolveRejectionCount;
+        public int AttributeMutationDemand;
+        public int AttributeMutationCount;
+        public int PeriodTickDemand;
+        public int PeriodMutationDemand;
+        public int DeathFactCount;
         public int CoreFactCount;
         public int BoundaryFactCount;
         public GasTickAdmissionFailureReason PostAdmissionFailure;
@@ -289,6 +295,7 @@ namespace GAS.Runtime
         public int DefinitionIndex;
         public ulong ApplicationId;
         public byte TargetIsAlive;
+        public ulong CausalityId;
     }
 
     /// <summary>
@@ -305,6 +312,24 @@ namespace GAS.Runtime
         public ulong ApplicationId;
         public ulong StartTick;
         public byte TargetIsAlive;
+        public ulong CausalityId;
+    }
+
+    /// <summary>
+    /// 保存 TargetResolve 无法建立 target binding 时的 typed rejection；不把无效目标写入 effect operation。
+    /// </summary>
+    internal struct GasTargetResolveRejectionRecord
+    {
+        public int OwnerPlanOrdinal;
+        public int ProgramNodeOrdinal;
+        public int DefinitionIndex;
+        public OwnerAscHandle SourceAsc;
+        public OwnerAscHandle TargetAsc;
+        public ulong ApplicationId;
+        public ulong CausalityId;
+        public GasBoundaryFactScope Scope;
+        public GasGameplayEffectApplicationOutcome Outcome;
+        public GasGameplayEffectTransactionFailure Failure;
     }
 
     /// <summary>
@@ -319,6 +344,11 @@ namespace GAS.Runtime
         public ulong ApplicationId;
         public ulong StartTick;
         public byte TargetIsAlive;
+        public ulong CausalityId;
+        public GasBoundaryFactScope Scope;
+        public byte IsTargetResolveRejection;
+        public GasGameplayEffectApplicationOutcome RejectionOutcome;
+        public GasGameplayEffectTransactionFailure RejectionFailure;
     }
 
     /// <summary>
@@ -327,6 +357,7 @@ namespace GAS.Runtime
     internal struct GasApplicationOutcomeRecord
     {
         public int OperationOrdinal;
+        public int DefinitionId;
         public GasGameplayEffectApplicationOutcome Outcome;
         public GasGameplayEffectTransactionFailure Failure;
         public OwnerAscHandle SourceAsc;
@@ -334,6 +365,49 @@ namespace GAS.Runtime
         public ActiveEffectHandle ActiveEffect;
         public ulong ApplicationId;
         public int AppliedModifierCount;
+        public int AttributeMutationStart;
+        public int AttributeMutationCount;
+        public byte DeathCrossed;
+        public ulong DeathTransitionId;
+        public float DeathOverkill;
+        public int DeathAttributeLayoutIndex;
+        public ulong DeathContributorId;
+        public ulong CausalityId;
+        public GasBoundaryFactScope Scope;
+        /// <summary>
+        /// 标记该 outcome 是否为跨 Tick ActiveEffect period execution。
+        /// </summary>
+        public byte IsPeriodTick;
+        /// <summary>
+        /// 保存 period execution ordinal，和 ApplicationId 共同构成稳定执行身份。
+        /// </summary>
+        public uint PeriodExecutionOrdinal;
+    }
+
+    /// <summary>
+    /// 保存一条带 application provenance 的 Attribute mutation，供 CoreFact 与 death crossing 共同消费。
+    /// </summary>
+    internal struct GasAttributeMutationOutcomeRecord
+    {
+        public int OperationOrdinal;
+        public int ModifierOrdinal;
+        public int DefinitionId;
+        public OwnerAscHandle SourceAsc;
+        public OwnerAscHandle TargetAsc;
+        public ulong ApplicationId;
+        public ulong CausalityId;
+        public ulong ContributorId;
+        /// <summary>
+        /// 标记该 mutation 是否由 period body 产生。
+        /// </summary>
+        public byte IsPeriodTick;
+        /// <summary>
+        /// 保存 period body 的 execution ordinal。
+        /// </summary>
+        public uint PeriodExecutionOrdinal;
+        public GasAttributeMutationRecord Mutation;
+        public ulong DeathTransitionId;
+        public float DeathOverkill;
         public byte DeathCrossed;
     }
 
@@ -354,6 +428,7 @@ namespace GAS.Runtime
         public ulong SemanticId;
         public BoundaryFactPayload Payload;
         public int OperationOrdinal;
+        public int FactOrdinal;
     }
 
     /// <summary>
@@ -407,8 +482,11 @@ namespace GAS.Runtime
         public NativeArray<GasOwnerPlanRecord> OwnerPlans;
         public NativeArray<GasResolvedTargetRecord> ResolvedTargets;
         public NativeArray<GasEffectOperationRecord> EffectOperations;
+        public NativeArray<GasTargetResolveRejectionRecord> TargetResolveRejections;
         public NativeArray<GasSourceSpecRecord> SourceSpecs;
         public NativeArray<GasApplicationOutcomeRecord> ApplicationOutcomes;
+        public NativeArray<GasAttributeMutationRecord> AttributeMutations;
+        public NativeArray<GasAttributeMutationOutcomeRecord> MutationOutcomes;
         public NativeArray<GasCoreFactRecord> CoreFacts;
         public NativeArray<GasAbilityRouteRecord> AbilityRoutes;
         public NativeArray<GasOwnerResourceDemand> OwnerDemands;
@@ -431,9 +509,15 @@ namespace GAS.Runtime
                 OwnerPlans = CreateArray<GasOwnerPlanRecord>(ClampLength(profile.MaxOwnerPlanCount), allocator),
                 ResolvedTargets = CreateArray<GasResolvedTargetRecord>(ClampLength(profile.MaxResolvedTargetCount), allocator),
                 EffectOperations = CreateArray<GasEffectOperationRecord>(ClampLength(profile.MaxEffectOperationCount), allocator),
+                TargetResolveRejections = CreateArray<GasTargetResolveRejectionRecord>(
+                    ClampLength(profile.MaxEffectOperationCount), allocator),
                 SourceSpecs = CreateArray<GasSourceSpecRecord>(ClampLength(profile.MaxEffectOperationCount), allocator),
                 ApplicationOutcomes = CreateArray<GasApplicationOutcomeRecord>(
-                    ClampLength(profile.MaxEffectOperationCount), allocator),
+                    ClampLength(MaxLength(profile.MaxEffectOperationCount, profile.MaxCoreFactCount)), allocator),
+                AttributeMutations = CreateArray<GasAttributeMutationRecord>(
+                    ClampLength(profile.MaxCoreFactCount), allocator),
+                MutationOutcomes = CreateArray<GasAttributeMutationOutcomeRecord>(
+                    ClampLength(profile.MaxCoreFactCount), allocator),
                 CoreFacts = CreateArray<GasCoreFactRecord>(ClampLength(profile.MaxCoreFactCount), allocator),
                 AbilityRoutes = CreateArray<GasAbilityRouteRecord>(ClampLength(profile.MaxNextTickRouteCount), allocator),
                 OwnerDemands = CreateArray<GasOwnerResourceDemand>(ClampLength(profile.MaxOwnerReservationCount), allocator),
@@ -449,6 +533,14 @@ namespace GAS.Runtime
         private static int ClampLength(int length)
         {
             return length < 0 ? 0 : length;
+        }
+
+        /// <summary>
+        /// 为普通 application 与跨帧 period outcome 取统一 scratch 上界。
+        /// </summary>
+        private static int MaxLength(int left, int right)
+        {
+            return left > right ? left : right;
         }
 
         /// <summary>

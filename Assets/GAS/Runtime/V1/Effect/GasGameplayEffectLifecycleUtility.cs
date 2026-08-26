@@ -108,6 +108,116 @@ namespace GAS.Runtime
         }
 
         /// <summary>
+        /// 只读估算当前 ASC 的 period claim 与 modifier 需求，供 WholeTick admission 预留事实和 Attribute scratch。
+        /// </summary>
+        internal static bool TryEstimateDue(
+            ref GasDefinitionCatalogBlob catalog,
+            ulong simulationEpoch,
+            ulong candidateTick,
+            DynamicBuffer<ActiveEffectSlot> activeEffects,
+            DynamicBuffer<TagCountSlot> tagCounts,
+            int activeEffectCapacity,
+            out int claimCount,
+            out int mutationCount,
+            out GasActiveEffectLifecycleFailure failure)
+        {
+            claimCount = 0;
+            mutationCount = 0;
+            failure = GasActiveEffectLifecycleFailure.None;
+            if (!Preflight(
+                    ref catalog,
+                    simulationEpoch,
+                    candidateTick,
+                    activeEffects,
+                    tagCounts,
+                    out failure))
+                return false;
+
+            for (var index = 0; index < activeEffects.Length; index++)
+            {
+                var slot = activeEffects[index];
+                if (slot.Header.StorageState != GasSlabSlotState.Live ||
+                    slot.State != GasSlotBusinessState.Active)
+                    continue;
+                var definition = catalog.GameplayEffects[slot.DefinitionIndex];
+                if (!TryGetPeriodDecision(
+                        ref catalog,
+                        in definition,
+                        in slot,
+                        tagCounts,
+                        candidateTick,
+                        out var claim,
+                        out var execute,
+                        out _,
+                        out failure))
+                    return false;
+                if (claim == 0)
+                    continue;
+                if (slot.ActiveCycleOrdinal == uint.MaxValue ||
+                    slot.PeriodExecutionOrdinal >= int.MaxValue / 1024)
+                {
+                    failure = GasActiveEffectLifecycleFailure.PeriodOrdinalOverflow;
+                    return false;
+                }
+                claimCount++;
+                if (execute != 0)
+                {
+                    mutationCount += definition.ModifierRange.Count;
+                    if (mutationCount < 0)
+                    {
+                        failure = GasActiveEffectLifecycleFailure.PeriodOrdinalOverflow;
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 按 ongoing requirement、抑制策略与 expiry 仲裁返回单槽 period claim 决策，不写入任何 authority。
+        /// </summary>
+        internal static bool TryGetPeriodDecision(
+            ref GasDefinitionCatalogBlob catalog,
+            in GasGameplayEffectDefinitionBlob definition,
+            in ActiveEffectSlot slot,
+            DynamicBuffer<TagCountSlot> tagCounts,
+            ulong candidateTick,
+            out byte claim,
+            out byte execute,
+            out uint nextOrdinal,
+            out GasActiveEffectLifecycleFailure failure)
+        {
+            claim = 0;
+            execute = 0;
+            nextOrdinal = slot.PeriodExecutionOrdinal;
+            failure = GasActiveEffectLifecycleFailure.None;
+            var projected = slot;
+            if (!TryEvaluateInhibition(
+                    ref catalog,
+                    in definition,
+                    tagCounts,
+                    slot.Inhibited,
+                    out projected.Inhibited,
+                    out failure))
+                return false;
+            if (!ShouldAdvancePeriod(in definition, in projected, candidateTick))
+                return true;
+            if (slot.ActiveCycleOrdinal == uint.MaxValue ||
+                slot.PeriodExecutionOrdinal >= int.MaxValue / 1024)
+            {
+                failure = GasActiveEffectLifecycleFailure.PeriodOrdinalOverflow;
+                return false;
+            }
+            claim = 1;
+            nextOrdinal = slot.PeriodExecutionOrdinal + 1;
+            execute = projected.Inhibited != 0 &&
+                      definition.InhibitedPeriodPolicy == GasInhibitedPeriodPolicy.SkipExecution
+                ? (byte)0
+                : (byte)1;
+            return true;
+        }
+
+        /// <summary>
         /// 在引用交接完成后回收所有 ActiveEffect tombstone，保留稳定槽索引并递增 generation。
         /// </summary>
         internal static bool TryRecycleTombstones(
@@ -182,7 +292,8 @@ namespace GAS.Runtime
                 if (!ValidateDueArithmetic(in definition, in slot, candidateTick))
                     return SetFailure(out failure, GasActiveEffectLifecycleFailure.InvalidTiming);
                 if (ShouldAdvancePeriod(in definition, in slot, candidateTick) &&
-                    slot.ActiveCycleOrdinal == uint.MaxValue)
+                    (slot.ActiveCycleOrdinal == uint.MaxValue ||
+                     slot.PeriodExecutionOrdinal == uint.MaxValue))
                     return SetFailure(out failure, GasActiveEffectLifecycleFailure.PeriodOrdinalOverflow);
             }
             return true;
@@ -323,7 +434,7 @@ namespace GAS.Runtime
         /// <summary>
         /// 判断 period due 是否应推进 next due，处理抑制与 expiry 同 tick 仲裁。
         /// </summary>
-        private static bool ShouldAdvancePeriod(
+        internal static bool ShouldAdvancePeriod(
             in GasGameplayEffectDefinitionBlob definition,
             in ActiveEffectSlot slot,
             ulong candidateTick)
@@ -340,6 +451,39 @@ namespace GAS.Runtime
             return !(slot.EndTick != ulong.MaxValue &&
                      slot.NextPeriodTick == slot.EndTick &&
                      definition.ExpirySameTickPolicy == GasExpirySameTickPolicy.ExpiryBeforePeriodDue);
+        }
+
+        /// <summary>
+        /// 评估 ongoing requirement 对当前槽的有效 inhibition 状态，供 admission 与 target writer 共用。
+        /// </summary>
+        internal static bool TryEvaluateInhibition(
+            ref GasDefinitionCatalogBlob catalog,
+            in GasGameplayEffectDefinitionBlob definition,
+            DynamicBuffer<TagCountSlot> tagCounts,
+            byte currentInhibited,
+            out byte inhibited,
+            out GasActiveEffectLifecycleFailure failure)
+        {
+            inhibited = currentInhibited;
+            failure = GasActiveEffectLifecycleFailure.None;
+            if (definition.OngoingRequirementRange.Count == 0)
+            {
+                inhibited = 0;
+                return true;
+            }
+            var satisfied = GasGameplayEffectRequirements.Evaluate(
+                ref catalog,
+                definition.OngoingRequirementRange,
+                tagCounts,
+                out _,
+                out var malformed);
+            if (malformed)
+            {
+                failure = GasActiveEffectLifecycleFailure.RequirementMalformed;
+                return false;
+            }
+            inhibited = satisfied ? (byte)0 : (byte)1;
+            return true;
         }
 
         /// <summary>
@@ -398,6 +542,7 @@ namespace GAS.Runtime
             else
                 result.PeriodClaimCount++;
             slot.ActiveCycleOrdinal++;
+            slot.PeriodExecutionOrdinal++;
             TryAddTick(candidateTick, (ulong)definition.PeriodTicks, out slot.NextPeriodTick);
         }
 
