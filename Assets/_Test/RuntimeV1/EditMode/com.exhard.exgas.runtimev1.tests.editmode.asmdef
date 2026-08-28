@@ -1,0 +1,23 @@
+{
+    "name": "com.exhard.exgas.runtimev1.tests.editmode",
+    "rootNamespace": "",
+    "references": [
+        "com.exhard.exgas.runtime",
+        "Unity.Collections",
+        "Unity.Entities"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

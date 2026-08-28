@@ -10,15 +10,7 @@ namespace GAS.Editor
         private static readonly IGasCodeGenPhase[] s_corePhases =
         {
             new AssemblyDefinitionPhase(),
-            new DefinitionIndexPhase(),
-            new BlobSchemaPhase(),
-            new StaticLookupPhase(),
-            new DefinitionCatalogPhase(),
-            new RuntimeDefinitionGluePhase(),
             new RuntimeLifecycleMigrationPhase(),
-            new BakerGluePhase(),
-            new ComponentTypeSetPhase(),
-            new QueryLayoutPhase(),
             new ValidationReportPhase(),
         };
 
@@ -71,10 +63,15 @@ namespace GAS.Editor
                 throw new InvalidOperationException("[GasCodeGenPipeline] 未找到任何 Definition Row。Luban / SourceGenerator 输入 gate 失败，禁止 partial generation 输出过期 artifact。");
 
             var manifest = new GasCodeGenManifest(context.ProjectRoot, context.OutputDir, context.InputHash);
-            manifest.AddGeneratedFile("LubanNormalizedRows", lubanRowsPath, "Editor", false);
+            manifest.AddGeneratedFile(
+                "LubanNormalizedRows",
+                lubanRowsPath,
+                "Editor",
+                false,
+                "NormalizedDefinitionRow",
+                "DefinitionCodeGen");
             var errors = new List<string>();
             var orphanCleanupRan = false;
-            var executedCount = 0;
 
             foreach (var phase in phaseList)
             {
@@ -88,7 +85,6 @@ namespace GAS.Editor
                     }
 
                     phase.Execute(context, manifest);
-                    executedCount++;
                     GasCodeGenEnvironment.Log($"[GasCodeGenPipeline] {phase.PhaseName} 完成: {string.Join(", ", phase.OutputFileNames)}");
                 }
                 catch (Exception ex)
@@ -100,6 +96,8 @@ namespace GAS.Editor
 
             if (!orphanCleanupRan)
                 context.OrphansDeleted = manifest.DeleteOrphanedFiles();
+
+            AppendManifestContractError(manifest, errors);
 
             manifest.Save();
             if (refreshAssetDatabase)
@@ -146,6 +144,8 @@ namespace GAS.Editor
             if (errors.Count == 0)
                 context.OrphansDeleted = manifest.DeleteOrphanedFiles();
 
+            AppendManifestContractError(manifest, errors);
+
             manifest.Save();
             if (refreshAssetDatabase)
                 GasCodeGenEnvironment.RefreshAssetDatabase();
@@ -185,8 +185,22 @@ namespace GAS.Editor
                     phase.PhaseName,
                     Path.Combine(context.OutputDir, phase.OutputFileNames[i]),
                     layer,
-                    runtimeVisible);
+                    runtimeVisible,
+                    "ValidationArtifact",
+                    "EditorCi");
             }
+        }
+
+        /// <summary>
+        /// 在所有 phase 入口一致执行 manifest 合约 gate，防止自定义 phase 绕过验证报告直接落盘。
+        /// </summary>
+        private static void AppendManifestContractError(
+            GasCodeGenManifest manifest,
+            ICollection<string> errors)
+        {
+            var contractErrors = manifest.CollectContractErrors();
+            for (var i = 0; i < contractErrors.Count; i++)
+                errors.Add("ManifestContract: " + contractErrors[i]);
         }
     }
 }

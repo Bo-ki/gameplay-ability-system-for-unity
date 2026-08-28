@@ -1,6 +1,8 @@
 {
+  "ManifestVersion": 1,
+  "GeneratorVersion": "EX-GAS-CodeGen-v1",
   "OutputRoot": "Assets/GAS/Generated/CodeGen",
-  "InputHash": "fce23ddf02035dd89e6ae773f259d4361de190b9a27bdcf3fb7bc5b5b767c44d",
+  "InputHash": "f63654df2d6b7353c832d768a82865b1652103f50d29f7bd84b1e399d67a81c4",
   "Entries": [
     {
       "PhaseName": "LubanNormalizedRows",
@@ -8,7 +10,13 @@
       "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/LubanNormalizedRows.gen.cs",
       "Layer": "Editor",
       "RuntimeVisible": false,
-      "ArtifactCategory": "",
+      "ArtifactCategory": "NormalizedDefinitionRow",
+      "GeneratedArtifactKind": "NormalizedDefinitionRow",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     },
     {
@@ -17,88 +25,28 @@
       "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/com.exhard.exgas.generated.runtime.asmdef",
       "Layer": "Runtime",
       "RuntimeVisible": true,
-      "ArtifactCategory": "",
+      "ArtifactCategory": "AssemblyDefinition",
+      "GeneratedArtifactKind": "AssemblyDefinition",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     },
     {
       "PhaseName": "AssemblyDefinition",
       "FileName": "com.exhard.exgas.generated.editor.asmdef",
       "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef",
-      "Layer": "Baking",
+      "Layer": "Editor",
       "RuntimeVisible": false,
-      "ArtifactCategory": "",
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "DefinitionIndex",
-      "FileName": "DefinitionIndex.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/DefinitionIndex.gen.cs",
-      "Layer": "Runtime",
-      "RuntimeVisible": true,
-      "ArtifactCategory": "",
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "BlobSchema",
-      "FileName": "BlobSchemas.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/BlobSchemas.gen.cs",
-      "Layer": "Runtime",
-      "RuntimeVisible": true,
-      "ArtifactCategory": "",
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "BlobSchema",
-      "FileName": "BlobBuilders.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/BlobBuilders.gen.cs",
-      "Layer": "Baking",
-      "RuntimeVisible": false,
-      "ArtifactCategory": "",
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "StaticLookup",
-      "FileName": "StaticLookups.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/StaticLookups.gen.cs",
-      "Layer": "Runtime",
-      "RuntimeVisible": true,
-      "ArtifactCategory": "",
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "StaticLookup",
-      "FileName": "StaticLookupBuilders.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/StaticLookupBuilders.gen.cs",
-      "Layer": "Baking",
-      "RuntimeVisible": false,
-      "ArtifactCategory": "",
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "DefinitionCatalog",
-      "FileName": "DefinitionCatalog.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/DefinitionCatalog.gen.cs",
-      "Layer": "Runtime",
-      "RuntimeVisible": true,
-      "ArtifactCategory": "",
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "DefinitionCatalog",
-      "FileName": "DefinitionCatalogBuilder.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/DefinitionCatalogBuilder.gen.cs",
-      "Layer": "Baking",
-      "RuntimeVisible": false,
-      "ArtifactCategory": "",
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "RuntimeDefinitionGlue",
-      "FileName": "RuntimeDefinitionGlue.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeDefinitionGlue.gen.cs",
-      "Layer": "Runtime",
-      "RuntimeVisible": true,
-      "ArtifactCategory": "RuntimePureGlue",
+      "ArtifactCategory": "AssemblyDefinition",
+      "GeneratedArtifactKind": "AssemblyDefinition",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     },
     {
@@ -108,6 +56,12 @@
       "Layer": "Runtime",
       "RuntimeVisible": true,
       "ArtifactCategory": "RuntimePureGlue",
+      "GeneratedArtifactKind": "RuntimePureGlue",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     },
     {
@@ -117,6 +71,12 @@
       "Layer": "Runtime",
       "RuntimeVisible": true,
       "ArtifactCategory": "RuntimePureGlue",
+      "GeneratedArtifactKind": "RuntimePureGlue",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     },
     {
@@ -126,51 +86,27 @@
       "Layer": "Runtime",
       "RuntimeVisible": true,
       "ArtifactCategory": "RuntimePureGlue",
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "BakerGlue",
-      "FileName": "DefinitionComponents.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/DefinitionComponents.gen.cs",
-      "Layer": "Runtime",
-      "RuntimeVisible": true,
-      "ArtifactCategory": "",
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "BakerGlue",
-      "FileName": "BakerGlue.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/BakerGlue.gen.cs",
-      "Layer": "Baking",
-      "RuntimeVisible": false,
-      "ArtifactCategory": "",
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "ComponentTypeSet",
-      "FileName": "ComponentTypeSets.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Runtime/ComponentTypeSets.gen.cs",
-      "Layer": "Runtime",
-      "RuntimeVisible": true,
-      "ArtifactCategory": "",
-      "VersionControlled": true
-    },
-    {
-      "PhaseName": "QueryLayout",
-      "FileName": "QueryLayouts.gen.cs",
-      "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/Editor/QueryLayouts.gen.cs",
-      "Layer": "Editor/CI",
-      "RuntimeVisible": false,
-      "ArtifactCategory": "",
+      "GeneratedArtifactKind": "RuntimePureGlue",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     },
     {
       "PhaseName": "ValidationReport",
       "FileName": "GasCodeGenValidationReport.md",
       "ProjectRelativePath": "Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md",
-      "Layer": "Editor/CI",
+      "Layer": "Editor",
       "RuntimeVisible": false,
-      "ArtifactCategory": "",
+      "ArtifactCategory": "ValidationArtifact",
+      "GeneratedArtifactKind": "ValidationArtifact",
+      "GeneratedArtifactOwner": "EditorCi",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     }
   ]

@@ -223,7 +223,7 @@ namespace GAS.AutoChessDemo
             var scorecardInput = new GasRuntimeDataOrientedScorecardInput(
                 performanceResult.Units.Length,
                 performanceResult.MeasuredTicks,
-                performanceResult.DriverIssuedCommands,
+                performanceResult.AcceptedCommandCount,
                 performanceTimingAvailable,
                 profilerEvidencePassed,
                 performanceResult.AverageTickMilliseconds,
@@ -574,41 +574,48 @@ namespace GAS.AutoChessDemo
                     second,
                     second,
                     requireOfficialToolDiff: false);
+                var firstObservation = first.RuntimeV1Observation;
+                var secondObservation = second.RuntimeV1Observation;
                 var deterministicCountsPassed =
-                    first.DriverIssuedCommands == second.DriverIssuedCommands
-                    && first.EventCounts.AttributeChanges == second.EventCounts.AttributeChanges
-                    && first.EventCounts.ExecutionCalculationOutputUpdated
-                    == second.EventCounts.ExecutionCalculationOutputUpdated
-                    && first.EventCounts.CueRequests == second.EventCounts.CueRequests
-                    && first.EventCounts.PeriodTickDamageFacts
-                    == second.EventCounts.PeriodTickDamageFacts;
+                    first.AcceptedCommandCount == second.AcceptedCommandCount
+                    && firstObservation.BoundaryFactCount == secondObservation.BoundaryFactCount
+                    && firstObservation.AttributeFactCount == secondObservation.AttributeFactCount
+                    && firstObservation.ExecutionCalculationFactCount
+                    == secondObservation.ExecutionCalculationFactCount
+                    && firstObservation.CueFactCount == secondObservation.CueFactCount
+                    && firstObservation.PeriodTickFactCount
+                    == secondObservation.PeriodTickFactCount
+                    && firstObservation.BoundarySequenceHash
+                    == secondObservation.BoundarySequenceHash;
                 var passed = firstRuntimeChainPassed
                              && secondRuntimeChainPassed
                              && deterministicCountsPassed;
 
                 var evidence = new AutoChessRepeatRunEvidence(
                     passed,
-                    first.DriverIssuedCommands,
-                    second.DriverIssuedCommands,
-                    first.EventCounts.AttributeChanges,
-                    second.EventCounts.AttributeChanges,
-                    first.EventCounts.ExecutionCalculationOutputUpdated,
-                    second.EventCounts.ExecutionCalculationOutputUpdated,
-                    first.EventCounts.CueRequests,
-                    second.EventCounts.CueRequests,
-                    first.EventCounts.PeriodTickDamageFacts,
-                    second.EventCounts.PeriodTickDamageFacts,
+                    first.AcceptedCommandCount,
+                    second.AcceptedCommandCount,
+                    firstObservation.AttributeFactCount,
+                    secondObservation.AttributeFactCount,
+                    firstObservation.ExecutionCalculationFactCount,
+                    secondObservation.ExecutionCalculationFactCount,
+                    firstObservation.CueFactCount,
+                    secondObservation.CueFactCount,
+                    firstObservation.PeriodTickFactCount,
+                    secondObservation.PeriodTickFactCount,
                     first.AverageTickMilliseconds,
                     second.AverageTickMilliseconds,
                     deterministicCountsPassed,
                     firstRuntimeChainPassed,
                     secondRuntimeChainPassed,
-                    first.RuntimeDiagnostics.Evidence.Events.EventCount,
-                    second.RuntimeDiagnostics.Evidence.Events.EventCount,
-                    CountBlockingDiagnosticErrors(first.RuntimeDiagnostics),
-                    CountBlockingDiagnosticErrors(second.RuntimeDiagnostics),
-                    first.RuntimeDiagnostics.Evidence.AttributeFact.PendingAppliedDeltaCount,
-                    second.RuntimeDiagnostics.Evidence.AttributeFact.PendingAppliedDeltaCount,
+                    firstObservation.BoundaryFactCount,
+                    secondObservation.BoundaryFactCount,
+                    firstObservation.FaultFactCount + firstObservation.InvalidFactCount
+                    + firstObservation.DrainFailureCount,
+                    secondObservation.FaultFactCount + secondObservation.InvalidFactCount
+                    + secondObservation.DrainFailureCount,
+                    0,
+                    0,
                     HasRequiredBattleLog(first.BattleLog),
                     HasRequiredBattleLog(second.BattleLog));
 
@@ -735,36 +742,33 @@ namespace GAS.AutoChessDemo
             in AutoChessBattleResult performanceResult,
             in AutoChessBattleResult officialDiffResult)
         {
-            if (performanceResult.DriverIssuedCommands != officialDiffResult.DriverIssuedCommands
-                || performanceResult.EventCounts.AttributeChanges != officialDiffResult.EventCounts.AttributeChanges
-                || performanceResult.EventCounts.ExecutionCalculationOutputUpdated
-                != officialDiffResult.EventCounts.ExecutionCalculationOutputUpdated
-                || performanceResult.EventCounts.CueRequests != officialDiffResult.EventCounts.CueRequests
-                || performanceResult.EventCounts.PeriodTickDamageFacts
-                != officialDiffResult.EventCounts.PeriodTickDamageFacts)
+            var performanceObservation = performanceResult.RuntimeV1Observation;
+            var officialObservation = officialDiffResult.RuntimeV1Observation;
+            if (performanceResult.AcceptedCommandCount != officialDiffResult.AcceptedCommandCount
+                || performanceObservation.BoundaryFactCount != officialObservation.BoundaryFactCount
+                || performanceObservation.AttributeFactCount != officialObservation.AttributeFactCount
+                || performanceObservation.ExecutionCalculationFactCount
+                != officialObservation.ExecutionCalculationFactCount
+                || performanceObservation.CueFactCount != officialObservation.CueFactCount
+                || performanceObservation.PeriodTickFactCount
+                != officialObservation.PeriodTickFactCount
+                || performanceObservation.BoundarySequenceHash
+                != officialObservation.BoundarySequenceHash)
             {
                 throw new InvalidOperationException(
-                    "AutoChessBattle validation pass diverged from performance pass: "
+                    "AutoChessBattle validation pass diverged from Runtime v1 Boundary read-model: "
                     + "performanceCommands="
-                    + performanceResult.DriverIssuedCommands
+                    + performanceResult.AcceptedCommandCount
                     + ", validationCommands="
-                    + officialDiffResult.DriverIssuedCommands
-                    + ", performanceAttributeChanges="
-                    + performanceResult.EventCounts.AttributeChanges
-                    + ", validationAttributeChanges="
-                    + officialDiffResult.EventCounts.AttributeChanges
-                    + ", performanceExecutionOutputs="
-                    + performanceResult.EventCounts.ExecutionCalculationOutputUpdated
-                    + ", validationExecutionOutputs="
-                    + officialDiffResult.EventCounts.ExecutionCalculationOutputUpdated
-                    + ", performanceCueRequests="
-                    + performanceResult.EventCounts.CueRequests
-                    + ", validationCueRequests="
-                    + officialDiffResult.EventCounts.CueRequests
-                    + ", performancePeriodTickDamageFacts="
-                    + performanceResult.EventCounts.PeriodTickDamageFacts
-                    + ", validationPeriodTickDamageFacts="
-                    + officialDiffResult.EventCounts.PeriodTickDamageFacts);
+                    + officialDiffResult.AcceptedCommandCount
+                    + ", performanceBoundaryFacts="
+                    + performanceObservation.BoundaryFactCount
+                    + ", validationBoundaryFacts="
+                    + officialObservation.BoundaryFactCount
+                    + ", performanceSequenceHash=0x"
+                    + performanceObservation.BoundarySequenceHash.ToString("X8")
+                    + ", validationSequenceHash=0x"
+                    + officialObservation.BoundarySequenceHash.ToString("X8"));
             }
         }
 
@@ -780,21 +784,18 @@ namespace GAS.AutoChessDemo
             in AutoChessBattleResult diagnosticResult,
             AutoChessGeneratedScenarioProfile scenario)
         {
-            var activeEffect = diagnosticResult.RuntimeDiagnostics.Evidence.ActiveEffect;
-            var mutation = diagnosticResult.RuntimeDiagnostics.Evidence.ActiveMutation;
+            var observation = diagnosticResult.RuntimeV1Observation;
             return result.Completed
                    && result.Winner == scenario.ExpectedWinner
-                   && result.DriverIssuedCommands >= scenario.MinDriverIssuedCommands
-                   && result.EventCounts.AttributeChanges >= scenario.MinAttributeChanges
-                   && result.EventCounts.ExecutionCalculationOutputUpdated >= scenario.MinExecutionOutputs
-                   && result.EventCounts.CueRequests >= scenario.MinCueRequests
-                   && activeEffect.SlotCount >= scenario.MinActiveEffectSlots
-                   && result.EventCounts.PeriodTickDamageFacts >= scenario.MinPeriodTickDamageFacts
-                   && mutation.CommandCount >= scenario.MinActiveMutationCommands
-                   && mutation.OwnerGroupCount >= scenario.MinActiveMutationOwnerGroups
-                   && mutation.EstimatedRandomLookupCount <= scenario.MaxActiveMutationEstimatedRandomLookups
-                   && mutation.OwnerResourceLookupCount <= scenario.MaxActiveMutationOwnerResourceLookups
-                   && mutation.MigrationCarrierCount <= scenario.MaxActiveMutationMigrationCarriers;
+                    && result.AcceptedCommandCount >= scenario.MinAcceptedCommands
+                   && observation.AttributeFactCount >= scenario.MinAttributeChanges
+                   && observation.ExecutionCalculationFactCount >= scenario.MinExecutionOutputs
+                   && observation.CueFactCount >= scenario.MinCueRequests
+                   && observation.EffectLifecycleFactCount >= scenario.MinActiveEffectSlots
+                   && observation.PeriodTickFactCount >= scenario.MinPeriodTickDamageFacts
+                   && observation.BoundaryFactCount > 0
+                   && observation.InvalidFactCount == 0
+                   && observation.DrainFailureCount == 0;
         }
 
         public static bool HasRequiredRuntimeChain(
@@ -802,35 +803,23 @@ namespace GAS.AutoChessDemo
             in AutoChessBattleResult diagnosticResult,
             bool requireOfficialToolDiff)
         {
-            var evidence = diagnosticResult.RuntimeDiagnostics.Evidence;
-            var workload = evidence.Workload;
-            var attributeFact = evidence.AttributeFact;
+            var observation = diagnosticResult.RuntimeV1Observation;
             return result.Completed
-                   && result.DriverIssuedCommands > 0
-                   && result.EventCounts.AttributeChanges > 0
-                   && result.EventCounts.ExecutionCalculationOutputUpdated > 0
-                   && result.EventCounts.PeriodTickDamageFacts > 0
-                   && result.EventCounts.CueRequests > 0
-                   && evidence.Events.EventCount > 0
-                    && workload.SpecCount > 0
-                    && workload.FactCount > 0
-                    && attributeFact.PendingAppliedDeltaCount > 0
-                    && attributeFact.OwnerLocalFactFlushCount > 0
-                    && HasRequiredBattleLog(result.BattleLog)
-                    && AutoChessBattleValidationReport.HasBoundaryReportKeyCoverage(
-                        result.StructuredLogSnapshot)
-                    && !HasBlockingDiagnosticErrors(diagnosticResult.RuntimeDiagnostics)
+                    && result.AcceptedCommandCount > 0
+                   && observation.AttributeFactCount > 0
+                   && observation.ExecutionCalculationFactCount > 0
+                   && observation.PeriodTickFactCount > 0
+                   && observation.CueFactCount > 0
+                   && observation.HasSessionObservation
+                   && observation.GameplayFactCount > 0
+                   && observation.StructuredLogEntryCount > 0
+                   && observation.InvalidFactCount == 0
+                   && observation.DrainFailureCount == 0
+                   && HasRequiredBattleLog(result.BattleLog)
+                    && AutoChessBattleValidationReport.HasRuntimeV1BoundaryCoverage(
+                         diagnosticResult)
+                     && observation.FaultFactCount == 0
                     && (!requireOfficialToolDiff || result.OfficialToolDiff.JournalingCaptured);
-        }
-
-        public static bool HasBlockingDiagnosticErrors(GAS.Runtime.GasRuntimeDiagnosticSnapshot diagnostics)
-        {
-            return CountBlockingDiagnosticErrors(diagnostics) > 0;
-        }
-
-        public static int CountBlockingDiagnosticErrors(GAS.Runtime.GasRuntimeDiagnosticSnapshot diagnostics)
-        {
-            return diagnostics.Evidence.Events.BlockingErrorCount;
         }
 
         public static string CreateRepeatRunEvidenceSummary(
@@ -852,10 +841,10 @@ namespace GAS.AutoChessDemo
                    + $"deterministicCountsPassed={evidence.DeterministicCountsPassed}, "
                    + $"firstRuntimeChainPassed={evidence.FirstRuntimeChainPassed}, "
                    + $"secondRuntimeChainPassed={evidence.SecondRuntimeChainPassed}, "
-                   + $"firstRuntimeEvents={evidence.FirstRuntimeEvents}, "
-                   + $"secondRuntimeEvents={evidence.SecondRuntimeEvents}, "
-                   + $"firstBlockingErrors={evidence.FirstBlockingDiagnosticErrors}, "
-                   + $"secondBlockingErrors={evidence.SecondBlockingDiagnosticErrors}, "
+                    + $"firstRuntimeV1BoundaryFacts={evidence.FirstRuntimeEvents}, "
+                    + $"secondRuntimeV1BoundaryFacts={evidence.SecondRuntimeEvents}, "
+                    + $"firstRuntimeV1BlockingFaults={evidence.FirstBlockingDiagnosticErrors}, "
+                    + $"secondRuntimeV1BlockingFaults={evidence.SecondBlockingDiagnosticErrors}, "
                    + $"firstPendingAttributeAppliedDeltas={evidence.FirstPendingAttributeAppliedDeltas}, "
                    + $"secondPendingAttributeAppliedDeltas={evidence.SecondPendingAttributeAppliedDeltas}, "
                    + $"firstBattleLogPassed={evidence.FirstBattleLogPassed}, "

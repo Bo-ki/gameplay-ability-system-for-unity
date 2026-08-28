@@ -6,37 +6,16 @@ namespace GAS.AutoChessDemo
 {
     public static class AutoChessRuntimeSystemBootstrap
     {
-        private static World _registeredWorld;
-
-        public static void RegisterSystems(World world)
+        /// <summary>
+        /// 验证 Runtime v1 owner 已安装唯一 FixedTick lane；系统注册由 owner 统一完成。
+        /// </summary>
+        public static bool RegisterSystems(World world)
         {
             if (world == null)
                 throw new ArgumentNullException(nameof(world));
 
-            if (_registeredWorld == world)
-                return;
-
-            var groups = new GASSystemGroups(
-                world.GetExistingSystemManaged<GASFramePrepareSystemGroup>(),
-                world.GetExistingSystemManaged<GASCommandResolveSystemGroup>(),
-                world.GetExistingSystemManaged<GASCoreSimulationSystemGroup>(),
-                world.GetExistingSystemManaged<GEExecutionCalculationExtensionSystemGroup>(),
-                world.GetExistingSystemManaged<GASStructuralCommitSystemGroup>(),
-                world.GetExistingSystemManaged<BeginGASStructuralCommitECBSystem>(),
-                world.GetExistingSystemManaged<EndGASStructuralCommitECBSystem>(),
-                world.GetExistingSystemManaged<GASBoundaryProjectionSystemGroup>());
-            var fixedStepSimulation = world.GetExistingSystemManaged<FixedStepSimulationSystemGroup>();
-
-            groups.CommandResolve.AddSystemToUpdateList(world.CreateSystem(typeof(AutoChessBattleCommandDriveSystem)));
-            groups.CoreSimulation.AddSystemToUpdateList(
-                world.CreateSystem(typeof(AutoChessExecuteDamageCalculationSystem)));
-            GASSystemScheduleContract.SortSystems(fixedStepSimulation, groups);
-            _registeredWorld = world;
-        }
-
-        public static void Reset()
-        {
-            _registeredWorld = null;
+            return world.GetExistingSystemManaged<GasFixedTickSystemGroup>() != null &&
+                   world.GetExistingSystem<GasTickKernelSystem>() != default;
         }
     }
 }

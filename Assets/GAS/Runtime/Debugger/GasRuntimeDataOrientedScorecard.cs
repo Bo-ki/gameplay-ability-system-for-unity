@@ -222,7 +222,7 @@ namespace GAS.Runtime
 
         public static GasRuntimeDataOrientedScorecard Create(
             in GasRuntimeDataOrientedScorecardInput input,
-            in GasRuntimeDiagnosticSnapshot diagnostics)
+            in GasRuntimeV1DiagnosticSnapshot diagnostics)
         {
             return new GasRuntimeDataOrientedScorecard(
                 input,

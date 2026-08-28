@@ -46,7 +46,7 @@ namespace GAS.AutoChessDemo
         public readonly string RoomId;
         public readonly AutoChessTeam Winner;
         public readonly int BattleTicks;
-        public readonly int DriverIssuedCommands;
+        public readonly int AcceptedCommandCount;
         public readonly int RuntimeMarkerCount;
         public readonly string DisabledReason;
         public readonly AutoChessBattleLogSnapshot BattleLog;
@@ -55,7 +55,7 @@ namespace GAS.AutoChessDemo
             string roomId,
             AutoChessTeam winner,
             int battleTicks,
-            int driverIssuedCommands,
+            int acceptedCommandCount,
             int runtimeMarkerCount,
             string disabledReason,
             AutoChessBattleLogSnapshot battleLog)
@@ -63,7 +63,7 @@ namespace GAS.AutoChessDemo
             RoomId = roomId ?? string.Empty;
             Winner = winner;
             BattleTicks = battleTicks;
-            DriverIssuedCommands = driverIssuedCommands;
+            AcceptedCommandCount = acceptedCommandCount;
             RuntimeMarkerCount = runtimeMarkerCount;
             DisabledReason = disabledReason ?? string.Empty;
             BattleLog = battleLog;
@@ -80,7 +80,7 @@ namespace GAS.AutoChessDemo
                 result.RoomId,
                 result.Winner,
                 result.BattleTicks,
-                result.DriverIssuedCommands,
+                result.AcceptedCommandCount,
                 evidence.Workload.PresentationCount,
                 disabledReason,
                 result.BattleLog);
@@ -118,7 +118,7 @@ namespace GAS.AutoChessDemo
             var status = "房间 " + source.RoomId
                          + " | 胜者 " + source.Winner
                          + " | 帧 " + source.BattleTicks.ToString(CultureInfo.InvariantCulture)
-                         + " | 命令 " + source.DriverIssuedCommands.ToString(CultureInfo.InvariantCulture)
+                         + " | 命令 " + source.AcceptedCommandCount.ToString(CultureInfo.InvariantCulture)
                          + " | marker " + source.RuntimeMarkerCount.ToString(CultureInfo.InvariantCulture);
 
             return new AutoChessPresentationSnapshot(

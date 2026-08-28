@@ -112,7 +112,7 @@ namespace GAS.Editor
         public int MaxTicks;
         public float HealthMultiplier;
         public string ExpectedWinner;
-        public int MinDriverIssuedCommands;
+        public int MinAcceptedCommands;
         public int MinAttributeChanges;
         public int MinExecutionOutputs;
         public int MinCueRequests;
@@ -449,7 +449,7 @@ namespace GAS.Editor
                 MaxTicks = RequiredInt(scenario, "maxTicks"),
                 HealthMultiplier = RequiredFloat(scenario, "healthMultiplier"),
                 ExpectedWinner = RequiredString(scenario, "expectedWinner"),
-                MinDriverIssuedCommands = RequiredInt(scenario, "minDriverIssuedCommands"),
+                MinAcceptedCommands = RequiredInt(scenario, "minAcceptedCommands"),
                 MinAttributeChanges = RequiredInt(scenario, "minAttributeChanges"),
                 MinExecutionOutputs = RequiredInt(scenario, "minExecutionOutputs"),
                 MinCueRequests = ReadCueRequestExpectation(scenario, hasGameplayCue),

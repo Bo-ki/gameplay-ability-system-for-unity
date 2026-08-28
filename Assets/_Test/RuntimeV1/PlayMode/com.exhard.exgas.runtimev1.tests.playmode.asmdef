@@ -1,0 +1,22 @@
+{
+    "name": "com.exhard.exgas.runtimev1.tests.playmode",
+    "rootNamespace": "",
+    "references": [
+        "com.exhard.exgas.runtime",
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Physics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

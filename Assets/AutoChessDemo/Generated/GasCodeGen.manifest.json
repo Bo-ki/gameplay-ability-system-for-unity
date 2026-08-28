@@ -1,6 +1,8 @@
 {
+  "ManifestVersion": 1,
+  "GeneratorVersion": "EX-GAS-CodeGen-v1",
   "OutputRoot": "Assets/AutoChessDemo/Generated",
-  "InputHash": "f4b72a252c3157ea950e958d02d901ec7a9deddc08f965e34301644953cb774b",
+  "InputHash": "f63654df2d6b7353c832d768a82865b1652103f50d29f7bd84b1e399d67a81c4",
   "Entries": [
     {
       "PhaseName": "AutoChessDemoConfig",
@@ -8,7 +10,13 @@
       "ProjectRelativePath": "Assets/AutoChessDemo/Generated/AutoChessGeneratedConfig.gen.cs",
       "Layer": "Runtime",
       "RuntimeVisible": true,
-      "ArtifactCategory": "",
+      "ArtifactCategory": "RuntimeDemoConfig",
+      "GeneratedArtifactKind": "RuntimeDemoConfig",
+      "GeneratedArtifactOwner": "AutoChessDemo",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
       "VersionControlled": true
     }
   ]

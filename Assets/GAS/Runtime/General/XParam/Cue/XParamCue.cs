@@ -37,12 +37,12 @@ namespace GAS.Runtime
         
         public void SetRequiredTags(int[] requiredTags)
         {
-            RequiredTags = TagHelper.FilterInvalidTags(requiredTags.ToList());
+            RequiredTags = requiredTags?.ToList() ?? new List<int>();
         }
 
         public void SetImmunityTags(int[] immunityTags)
         {
-            ImmunityTags = TagHelper.FilterInvalidTags(immunityTags.ToList());
+            ImmunityTags = immunityTags?.ToList() ?? new List<int>();
         }
 
         public XParamCue()
@@ -65,17 +65,24 @@ namespace GAS.Runtime
         public GameplayCueConfig GetCueConfig()
         {
             var cueType = CueHelper.GetCueType(CueType);
-            return new GameplayCueConfig(cueType, Param, RequiredTags.ToArray(), ImmunityTags.ToArray());
+            return new GameplayCueConfig(
+                cueType,
+                Param,
+                (RequiredTags ?? new List<int>()).ToArray(),
+                (ImmunityTags ?? new List<int>()).ToArray());
         }
         
 #if UNITY_EDITOR
         public void DecodeExcelData(List<object> paramData)
         {
+            if (paramData == null)
+                return;
+
             // RequiredTags
             RequiredTags = new List<int>();
             if (paramData.Count > 0)
             {
-                var strTags = paramData[0].ToString();
+                var strTags = paramData[0]?.ToString() ?? string.Empty;
                 if (strTags != "0")
                 {
                     var tags = strTags.Split(';');
@@ -89,7 +96,7 @@ namespace GAS.Runtime
             ImmunityTags = new List<int>();
             if (paramData.Count > 1)
             {
-                var strTags = paramData[1].ToString();
+                var strTags = paramData[1]?.ToString() ?? string.Empty;
                 if (strTags != "0")
                 {
                     var tags = strTags.Split(';');
@@ -101,7 +108,7 @@ namespace GAS.Runtime
             
             // CueType
             if (paramData.Count > 2) 
-                CueType = paramData[2].ToString();
+                CueType = paramData[2]?.ToString() ?? string.Empty;
             
             // Param
             if (paramData.Count > 3)
@@ -113,8 +120,14 @@ namespace GAS.Runtime
                 }
 
                 var cueParamType = CueHelper.GetCueLogicParamType(CueType);
-                Param = (XParam)Activator.CreateInstance(cueParamType);
-                Param.DecodeExcelData(paramDataForCue);
+                if (cueParamType == null)
+                {
+                    Param = null;
+                    return;
+                }
+
+                Param = Activator.CreateInstance(cueParamType) as XParam;
+                Param?.DecodeExcelData(paramDataForCue);
             }
         }
 
@@ -123,16 +136,17 @@ namespace GAS.Runtime
             var result = new List<object>();
             // RequiredTags
             var strRequiredTags = "";
-            if (RequiredTags.Count == 0)
+            var requiredTags = RequiredTags ?? new List<int>();
+            if (requiredTags.Count == 0)
             {
                 strRequiredTags = "0";
             }
             else
             {
-                for (var i = 0; i < RequiredTags.Count; i++)
+                for (var i = 0; i < requiredTags.Count; i++)
                 {
-                    strRequiredTags += RequiredTags[i].ToString();
-                    if (i < RequiredTags.Count - 1) strRequiredTags += ";";
+                    strRequiredTags += requiredTags[i].ToString();
+                    if (i < requiredTags.Count - 1) strRequiredTags += ";";
                 }
             }
 
@@ -140,16 +154,17 @@ namespace GAS.Runtime
             
             // ImmunityTags
             var strImmunityTags = "";
-            if (ImmunityTags.Count == 0)
+            var immunityTags = ImmunityTags ?? new List<int>();
+            if (immunityTags.Count == 0)
             {
                 strImmunityTags = "0";
             }
             else
             {
-                for (var i = 0; i < ImmunityTags.Count; i++)
+                for (var i = 0; i < immunityTags.Count; i++)
                 {
-                    strImmunityTags += ImmunityTags[i].ToString();
-                    if (i < ImmunityTags.Count - 1) strImmunityTags += ";";
+                    strImmunityTags += immunityTags[i].ToString();
+                    if (i < immunityTags.Count - 1) strImmunityTags += ";";
                 }
             }
 

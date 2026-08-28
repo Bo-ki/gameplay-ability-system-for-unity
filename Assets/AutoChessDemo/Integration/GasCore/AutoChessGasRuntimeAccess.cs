@@ -12,37 +12,7 @@ namespace GAS.AutoChessDemo
             if (!TryResolveSessionWorld(out var world))
                 return false;
 
-            AutoChessRuntimeSystemBootstrap.RegisterSystems(world);
-            return true;
-        }
-
-        internal static bool TryCreateRuntimeTickGroups(out AutoChessGasRuntimeTickGroups groups)
-        {
-            groups = default;
-            if (!TryResolveSessionWorld(out var world))
-                return false;
-
-            var framePrepare = world.GetExistingSystemManaged<GASFramePrepareSystemGroup>();
-            var commandResolve = world.GetExistingSystemManaged<GASCommandResolveSystemGroup>();
-            var coreSimulation = world.GetExistingSystemManaged<GASCoreSimulationSystemGroup>();
-            var structuralCommit = world.GetExistingSystemManaged<GASStructuralCommitSystemGroup>();
-            var boundaryProjection = world.GetExistingSystemManaged<GASBoundaryProjectionSystemGroup>();
-            if (framePrepare == null
-                || commandResolve == null
-                || coreSimulation == null
-                || structuralCommit == null
-                || boundaryProjection == null)
-            {
-                return false;
-            }
-
-            groups = new AutoChessGasRuntimeTickGroups(
-                framePrepare,
-                commandResolve,
-                coreSimulation,
-                structuralCommit,
-                boundaryProjection);
-            return true;
+            return AutoChessRuntimeSystemBootstrap.RegisterSystems(world);
         }
 
         internal static bool TryInstallDefinitionCatalogSession()
@@ -50,8 +20,9 @@ namespace GAS.AutoChessDemo
             if (!TryResolveRuntimeEntityManager(out var entityManager))
                 return false;
 
-            AutoChessBattleDefinitionCatalogBuilder.Install(entityManager);
-            AutoChessBattleDriverRuntimeStore.Ensure(entityManager);
+            if (!AutoChessBattleDefinitionCatalogBuilder.Install(entityManager))
+                return false;
+
             return true;
         }
 
@@ -60,42 +31,7 @@ namespace GAS.AutoChessDemo
             if (!TryResolveRuntimeEntityManager(out var entityManager))
                 return;
 
-            AutoChessBattleDriverRuntimeStore.Uninstall(entityManager);
             AutoChessBattleDefinitionCatalogBuilder.Uninstall(entityManager);
-        }
-
-        internal static bool TryCreateBattleDriver(out AutoChessGasBattleDriverHandle driverHandle)
-        {
-            driverHandle = default;
-            if (!TryResolveRuntimeEntityManager(out var entityManager))
-                return false;
-
-            driverHandle = AutoChessBattleDriverRuntimeStore.ResetAndEnable(entityManager);
-            return driverHandle.IsValid;
-        }
-
-        internal static AutoChessBattleDriverComponent ReadBattleDriver(
-            AutoChessGasBattleDriverHandle driverHandle)
-        {
-            return TryResolveRuntimeEntityManager(out var entityManager)
-                ? AutoChessBattleDriverRuntimeStore.Read(entityManager, driverHandle)
-                : default;
-        }
-
-        internal static AutoChessBattleDriverOwnerSnapshot CreateBattleDriverOwnerSnapshot(
-            AutoChessGasBattleDriverHandle driverHandle)
-        {
-            return TryResolveRuntimeEntityManager(out var entityManager)
-                ? AutoChessBattleDriverRuntimeStore.CreateOwnerSnapshot(entityManager, driverHandle)
-                : default;
-        }
-
-        internal static void DisableBattleDriver(AutoChessGasBattleDriverHandle driverHandle)
-        {
-            if (!TryResolveRuntimeEntityManager(out var entityManager))
-                return;
-
-            AutoChessBattleDriverRuntimeStore.Disable(entityManager, driverHandle);
         }
 
         internal static bool TryBeginOfficialToolDiffCapture(
@@ -110,61 +46,78 @@ namespace GAS.AutoChessDemo
             return true;
         }
 
-        internal static bool TryResolveDiagnosticsGlobalTimer(
-            out EntityManager entityManager,
-            out Entity globalTimer)
+        /// <summary>
+        /// 读取 Runtime v1 Session 的生命周期与 Stage-B 故障证据，供启动失败报告使用。
+        /// </summary>
+        internal static bool TryReadSessionObservation(out GasRuntimeSessionObservation observation)
         {
-            return GASRuntimeShell.TryResolveGlobalTimer(out entityManager, out globalTimer);
+            var owner = AutoChessGasRuntimeHost.RuntimeOwner;
+            if (owner == null)
+            {
+                observation = default;
+                return false;
+            }
+
+            return owner.TryReadSessionObservation(out observation);
         }
 
-        internal static bool TryResolveDiagnosticsEventBus(
-            out EntityManager entityManager,
-            out Entity eventBus)
+        /// <summary>
+        /// 从唯一 Runtime v1 managed BoundaryDrainRing 取出一批自包含事实，供 AutoChess 验证层读取。
+        /// </summary>
+        internal static bool TryDequeueBoundaryBatch(out GasBoundaryDrainBatch batch)
         {
-            return GASRuntimeShell.TryResolveEventBus(out entityManager, out eventBus);
+            var ring = AutoChessGasRuntimeHost.RuntimeOwner?.BoundaryDrainRing;
+            if (ring == null)
+            {
+                batch = default;
+                return false;
+            }
+
+            return ring.TryDequeue(out batch);
         }
 
-        internal static bool TryResolveDiagnosticsEventLogSink(
-            out EntityManager entityManager,
-            out Entity eventLogSink)
+        /// <summary>
+        /// 读取 Runtime v1 managed ring 的当前数量与固定容量，供观测层记录 high-water evidence。
+        /// </summary>
+        internal static bool TryReadBoundaryRingStats(out int count, out int capacity)
         {
-            return GASRuntimeShell.TryResolveEventLogSink(out entityManager, out eventLogSink);
+            var ring = AutoChessGasRuntimeHost.RuntimeOwner?.BoundaryDrainRing;
+            if (ring == null)
+            {
+                count = 0;
+                capacity = 0;
+                return false;
+            }
+
+            count = ring.Count;
+            capacity = ring.Capacity;
+            return true;
         }
 
-        internal static bool TryResolveDiagnosticsRuntimeDebugger(
-            out EntityManager entityManager,
-            out Entity runtimeDebugger)
+        /// <summary>
+        /// 读取 owner 最近一次 Boundary drain 结果，失败时保留显式 reconcile evidence。
+        /// </summary>
+        internal static bool TryReadBoundaryDrainFailure(out GasBoundaryDrainFailure failure)
         {
-            return GASRuntimeShell.TryResolveRuntimeDebugger(out entityManager, out runtimeDebugger);
-        }
+            var owner = AutoChessGasRuntimeHost.RuntimeOwner;
+            if (owner == null)
+            {
+                failure = GasBoundaryDrainFailure.None;
+                return false;
+            }
 
-        internal static bool TryCreateBattleUnitCommandPort(
-            ComponentType additionalComponent,
-            out ASCCommandPort commandPort)
-        {
-            return GASRuntimeShell.TryCreateASCCommandPort(additionalComponent, out commandPort);
-        }
-
-        internal static bool TryCreateBattleUnitCommandPort(
-            ASCHandle handle,
-            out ASCCommandPort commandPort)
-        {
-            return GASRuntimeShell.TryCreateASCCommandPort(handle, out commandPort);
-        }
-
-        internal static bool TryDrainRunnerJobs()
-        {
-            return GASRuntimeShell.TryDrainRuntimeJobs();
+            failure = owner.LastBoundaryDrainFailure;
+            return true;
         }
 
         private static bool TryResolveSessionWorld(out World world)
         {
-            return GASRuntimeShell.TryResolveRuntimeWorld(out world);
+            return AutoChessGasRuntimeHost.TryResolveWorld(out world);
         }
 
         private static bool TryResolveRuntimeEntityManager(out EntityManager entityManager)
         {
-            return GASRuntimeShell.TryResolveRuntimeEntityManager(out entityManager);
+            return AutoChessGasRuntimeHost.TryResolveEntityManager(out entityManager);
         }
     }
 
@@ -172,10 +125,7 @@ namespace GAS.AutoChessDemo
     {
         RuntimeSession = 0,
         DefinitionCatalogLifetime = 1,
-        CommandPort = 2,
-        DiagnosticsSink = 3,
-        RunnerSync = 4,
-        DriverLifecycle = 5,
+        DiagnosticsSink = 2,
     }
 
     internal readonly struct AutoChessGasRuntimeAccessContractEntry
@@ -230,16 +180,6 @@ namespace GAS.AutoChessDemo
                 "runtimeSystemRegistration",
                 "RuntimeSession",
                 "R1"),
-            Entry(nameof(AutoChessGasRuntimeAccess.TryCreateRuntimeTickGroups),
-                AutoChessGasRuntimeAccessCapability.RuntimeSession,
-                "bootstrap",
-                proxiesEcsHandle: true,
-                manualSync: false,
-                performancePassAllowed: false,
-                affectsBattleHash: false,
-                "physicalGroupAvailability",
-                "RuntimeSession",
-                "R1/R4"),
             Entry(nameof(AutoChessGasRuntimeAccess.TryInstallDefinitionCatalogSession),
                 AutoChessGasRuntimeAccessCapability.DefinitionCatalogLifetime,
                 "bootstrap/catalog",
@@ -260,46 +200,6 @@ namespace GAS.AutoChessDemo
                 "catalogDisposeOwner",
                 "DefinitionCatalogLifetime",
                 "R5/R6"),
-            Entry(nameof(AutoChessGasRuntimeAccess.TryCreateBattleDriver),
-                AutoChessGasRuntimeAccessCapability.DriverLifecycle,
-                "battle-bootstrap",
-                proxiesEcsHandle: true,
-                manualSync: false,
-                performancePassAllowed: false,
-                affectsBattleHash: true,
-                "driverOwnerSnapshot",
-                "BoundaryStructuralOwner",
-                "R6"),
-            Entry(nameof(AutoChessGasRuntimeAccess.ReadBattleDriver),
-                AutoChessGasRuntimeAccessCapability.DriverLifecycle,
-                "snapshot-read",
-                proxiesEcsHandle: true,
-                manualSync: false,
-                performancePassAllowed: false,
-                affectsBattleHash: false,
-                "driverOwnerSnapshot",
-                "SnapshotReadModel",
-                "R6"),
-            Entry(nameof(AutoChessGasRuntimeAccess.CreateBattleDriverOwnerSnapshot),
-                AutoChessGasRuntimeAccessCapability.DriverLifecycle,
-                "diagnostic-snapshot",
-                proxiesEcsHandle: true,
-                manualSync: false,
-                performancePassAllowed: false,
-                affectsBattleHash: false,
-                "driverOwnerSnapshot",
-                "DiagnosticsSink",
-                "R6"),
-            Entry(nameof(AutoChessGasRuntimeAccess.DisableBattleDriver),
-                AutoChessGasRuntimeAccessCapability.DriverLifecycle,
-                "shutdown",
-                proxiesEcsHandle: true,
-                manualSync: false,
-                performancePassAllowed: false,
-                affectsBattleHash: true,
-                "driverDisableRequest",
-                "BoundaryStructuralOwner",
-                "R6"),
             Entry(nameof(AutoChessGasRuntimeAccess.TryBeginOfficialToolDiffCapture),
                 AutoChessGasRuntimeAccessCapability.DiagnosticsSink,
                 "official-diff-pass",
@@ -310,66 +210,6 @@ namespace GAS.AutoChessDemo
                 "journalingCaptureState",
                 "DiagnosticsSink",
                 "R4"),
-            Entry(nameof(AutoChessGasRuntimeAccess.TryResolveDiagnosticsGlobalTimer),
-                AutoChessGasRuntimeAccessCapability.DiagnosticsSink,
-                "diagnostic-reset",
-                proxiesEcsHandle: true,
-                manualSync: false,
-                performancePassAllowed: false,
-                affectsBattleHash: false,
-                "diagnosticResetOwner",
-                "DiagnosticsSink",
-                "R4/R6"),
-            Entry(nameof(AutoChessGasRuntimeAccess.TryResolveDiagnosticsEventBus),
-                AutoChessGasRuntimeAccessCapability.DiagnosticsSink,
-                "diagnostic-reset",
-                proxiesEcsHandle: true,
-                manualSync: false,
-                performancePassAllowed: false,
-                affectsBattleHash: false,
-                "observationCarrierReset",
-                "DiagnosticsSink",
-                "R4/R6"),
-            Entry(nameof(AutoChessGasRuntimeAccess.TryResolveDiagnosticsEventLogSink),
-                AutoChessGasRuntimeAccessCapability.DiagnosticsSink,
-                "diagnostic-export",
-                proxiesEcsHandle: true,
-                manualSync: false,
-                performancePassAllowed: false,
-                affectsBattleHash: false,
-                "structuredLogSnapshot",
-                "DiagnosticsSink",
-                "R4/R6"),
-            Entry(nameof(AutoChessGasRuntimeAccess.TryResolveDiagnosticsRuntimeDebugger),
-                AutoChessGasRuntimeAccessCapability.DiagnosticsSink,
-                "diagnostic-export",
-                proxiesEcsHandle: true,
-                manualSync: false,
-                performancePassAllowed: false,
-                affectsBattleHash: false,
-                "runtimeDiagnosticsSnapshot",
-                "DiagnosticsSink",
-                "R4/R6"),
-            Entry(nameof(AutoChessGasRuntimeAccess.TryCreateBattleUnitCommandPort),
-                AutoChessGasRuntimeAccessCapability.CommandPort,
-                "boundary-command",
-                proxiesEcsHandle: true,
-                manualSync: false,
-                performancePassAllowed: false,
-                affectsBattleHash: true,
-                "ownerLocalCommandBuffer",
-                "CommandPort",
-                "R1/R6"),
-            Entry(nameof(AutoChessGasRuntimeAccess.TryDrainRunnerJobs),
-                AutoChessGasRuntimeAccessCapability.RunnerSync,
-                "runner-sync",
-                proxiesEcsHandle: true,
-                manualSync: true,
-                performancePassAllowed: true,
-                affectsBattleHash: false,
-                "dependencyDrainTiming",
-                "RunnerSync",
-                "R4/R6"),
         };
 
         public static int EntryCount => s_entries.Length;

@@ -1,7 +1,6 @@
 using System;
 using System.Text;
 using GAS.Runtime;
-using Unity.Entities;
 
 namespace GAS.AutoChessDemo
 {
@@ -28,47 +27,29 @@ namespace GAS.AutoChessDemo
             in AutoChessPresentationSnapshot presentation,
             bool officialDiffSeparatePass)
         {
-            var diagnosticEvidence = diagnosticResult.RuntimeDiagnostics.Evidence;
-            var performanceEvidence = performanceResult.RuntimeDiagnostics.Evidence;
-            var eventEvidence = diagnosticEvidence.Events;
-            var workload = diagnosticEvidence.Workload;
-            var activeEffect = diagnosticEvidence.ActiveEffect;
-            var mutation = diagnosticEvidence.ActiveMutation;
-            var attributeFact = diagnosticEvidence.AttributeFact;
-            var apiHealth = diagnosticEvidence.ApiHealth;
-            var backbone = diagnosticEvidence.FrameBackbone;
-            var observation = diagnosticEvidence.Observation;
-            var performanceObservation = performanceEvidence.Observation;
-            var magnitudeSource = diagnosticEvidence.MagnitudeSource;
-            var factsHash = CalculateFactsHash(performanceResult.StructuredLogSnapshot);
-            var summaryHash = CalculateSummaryHash(performanceResult, presentation.RuntimeMarkerCount, factsHash);
-            var streamCarrierPressure = CalculateStreamCarrierPressure(diagnosticResult.RuntimeDiagnostics);
+            // ValidationEvidence 的语义字段只从 Runtime v1 immutable Boundary read-model 派生。
+            var observation = performanceResult.RuntimeV1Observation;
+            var factsHash = observation.BoundarySequenceHash;
+            var summaryHash = CalculateSummaryHash(performanceResult, factsHash);
             var reselectTriggerMask = 0;
-            if (apiHealth.RandomLookupBudget > 0)
+            if (observation.InvalidFactCount > 0)
                 reselectTriggerMask |= 1;
-            if (performanceResult.DriverIssuedCommands > 1000)
+            if (observation.DrainFailureCount > 0)
                 reselectTriggerMask |= 2;
-            if (mutation.MigrationCarrierCount > 0)
+            if (observation.RejectedEffectFactCount > 0)
                 reselectTriggerMask |= 4;
-            if (mutation.EstimatedRandomLookupCount > 0)
+            if (observation.RingCapacity > 0 && observation.RingHighWater >= observation.RingCapacity)
                 reselectTriggerMask |= 8;
-            if (streamCarrierPressure.WarningCount > 0)
+            if (!observation.HasSessionObservation)
                 reselectTriggerMask |= 16;
-            if (performanceObservation.PerformancePollutionRiskCount > 0)
+            if (observation.FaultFactCount > 0)
                 reselectTriggerMask |= 32;
-            if (magnitudeSource.CaptureMissLiveLookupCount > 0
-                || magnitudeSource.FallbackValueCount > 0
-                || magnitudeSource.FallbackFactCount > 0)
-            {
-                reselectTriggerMask |= 64;
-            }
 
             var traceAbilityCode = AutoChessBattleRules.AbilityPlayerExecute;
-            AutoChessBattleDefinitionCatalogBuilder.TryCreateRuntimeConceptEvidence(
-                traceAbilityCode,
-                performanceResult.BattleTicks,
-                out var gasConceptCoverage,
-                out var runtimeTrace);
+            var gasConceptCoverageMask = observation.BoundaryFactCount > 0 ? 1 : 0;
+            var gasConceptMissingMask = observation.BoundaryFactCount > 0 ? 0 : 1;
+            var runtimeTraceStageMask = observation.BoundaryFactCount > 0 ? 1 : 0;
+            var runtimeTraceMissingStageMask = observation.BoundaryFactCount > 0 ? 0 : 1;
 
             return new AutoChessValidationEvidence(
                 performanceResult.Completed,
@@ -79,109 +60,112 @@ namespace GAS.AutoChessDemo
                 performanceResult.BattleTicks,
                 performanceResult.TotalTicks,
                 performanceResult.WarmupDroppedTicks,
-                performanceResult.MeasuredTicks,
-                performanceResult.DriverIssuedCommands,
-                performanceResult.EventCounts.AttributeChanges,
-                performanceResult.EventCounts.PeriodTickDamageFacts,
-                performanceResult.EventCounts.PeriodTickDamageTotal,
-                performanceResult.EventCounts.ExecutionCalculationOutputUpdated,
-                performanceResult.DriverExecutionSpecScans,
-                performanceResult.DriverExecutionMatchedEffectSpecs,
-                performanceResult.DriverExecutionTargetOwnerMismatches,
-                performanceResult.DriverExecutionMissingAttributes,
-                performanceResult.DriverExecutionEvaluatorRejects,
-                performanceResult.DriverExecutionOutputWrites,
-                performanceResult.EventCounts.CueRequests,
-                eventEvidence.EventCount,
-                eventEvidence.WarningCount,
-                eventEvidence.ErrorCount,
-                eventEvidence.BlockingErrorCount,
-                workload.RequestCount,
-                workload.FactCount,
-                workload.DeltaCount,
-                workload.CueCount,
-                presentation.RuntimeMarkerCount,
-                presentation.SourceLineCount,
-                presentation.DisplayLineCount,
-                presentation.DroppedLineCount,
-                workload.PeakEventBusBufferLength,
-                workload.PeakReplayCursorLag,
-                scenario.ProcessWarmupRuns,
-                backbone.EvidenceMask,
-                reselectTriggerMask,
-                AutoChessGasRuntimeAccessContract.EntryCount,
-                AutoChessGasRuntimeAccessContract.EcsHandleProxyCount,
+                 performanceResult.MeasuredTicks,
+                 performanceResult.AcceptedCommandCount,
+                 observation.AttributeFactCount,
+                 observation.PeriodTickFactCount,
+                 observation.PeriodTickDamageTotal,
+                 observation.ExecutionCalculationFactCount,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 observation.CueFactCount,
+                 observation.BoundaryFactCount,
+                 observation.RejectedEffectFactCount,
+                 observation.FaultFactCount + observation.InvalidFactCount,
+                 observation.FaultFactCount + observation.InvalidFactCount
+                 + observation.DrainFailureCount,
+                 performanceResult.AcceptedCommandCount,
+                 observation.BoundaryFactCount,
+                 observation.AttributeFactCount,
+                 observation.CueFactCount,
+                 presentation.RuntimeMarkerCount,
+                 presentation.SourceLineCount,
+                 presentation.DisplayLineCount,
+                 presentation.DroppedLineCount,
+                 observation.RingHighWater,
+                 0,
+                 scenario.ProcessWarmupRuns,
+                 0,
+                 reselectTriggerMask,
+                 AutoChessGasRuntimeAccessContract.EntryCount,
+                 AutoChessGasRuntimeAccessContract.EcsHandleProxyCount,
                 AutoChessGasRuntimeAccessContract.ManualSyncCount,
                 AutoChessGasRuntimeAccessContract.PerformancePassRiskCount,
                 AutoChessGasRuntimeAccessContract.BattleHashAffectingCount,
                 AutoChessGasRuntimeAccessContract.CapabilityMask,
-                gasConceptCoverage.CoveredConceptMask,
-                gasConceptCoverage.MissingConceptMask,
-                traceAbilityCode,
-                runtimeTrace.StageMaskValue,
-                runtimeTrace.MissingStageMaskValue,
-                runtimeTrace.SeedCount,
-                runtimeTrace.ModifierCount,
-                runtimeTrace.FactCount,
-                runtimeTrace.CueCount,
-                runtimeTrace.ActiveMutationSeedCount,
-                runtimeTrace.ExecutionCalculationModifierCount,
-                activeEffect.SlotCount,
-                activeEffect.SlotActiveCount,
-                activeEffect.ChunkSkipDuePeriodSlotCount,
-                mutation.CommandCount,
-                mutation.OwnerGroupCount,
-                mutation.MaxOwnerRange,
-                mutation.SortMoveCount,
-                mutation.EstimatedRandomLookupCount,
-                mutation.OwnerResourceLookupCount,
-                mutation.MigrationCarrierCount,
-                attributeFact.PendingDeltaCount,
-                attributeFact.PendingAppliedDeltaCount,
-                attributeFact.PendingSkippedDeltaCount,
-                attributeFact.PendingTargetGroupCount,
-                attributeFact.PendingMaxTargetRange,
-                attributeFact.PendingEstimatedRandomLookupCount,
-                attributeFact.PendingFactPatchCount,
-                attributeFact.PendingMigrationCarrierCount,
-                attributeFact.OwnerLocalFactCount,
-                attributeFact.OwnerLocalFactOwnerGroupCount,
-                attributeFact.OwnerLocalFactMaxOwnerRange,
-                attributeFact.OwnerLocalFactFlushCount,
-                attributeFact.OwnerLocalFactChangedChunkCount,
-                attributeFact.OwnerLocalFactScannedOwnerCount,
-                attributeFact.OwnerLocalFactDirtyOwnerCount,
-                attributeFact.OwnerLocalFactSkippedOwnerCount,
-                attributeFact.OwnerLocalFactClearedOwnerCount,
-                streamCarrierPressure.WarningCount,
-                streamCarrierPressure.PeakCount,
-                streamCarrierPressure.PeakCapacity,
-                observation.MaterializedQueryCount,
-                observation.MaterializedEntityCount,
-                observation.ElapsedMicroseconds,
-                performanceObservation.PerformancePollutionRiskCount,
-                magnitudeSource.CurrentValueLookupCount,
-                magnitudeSource.CapturedValueHitCount,
-                magnitudeSource.CaptureMissCount,
-                magnitudeSource.CaptureMissLiveLookupCount,
-                magnitudeSource.FallbackValueCount,
-                magnitudeSource.FallbackFactCount,
-                magnitudeSource.SourceAttributeLookupCount,
-                magnitudeSource.TargetAttributeLookupCount,
-                magnitudeSource.ExecutionInputLookupCount,
-                performanceResult.ElapsedMilliseconds,
-                performanceResult.AverageTickMilliseconds,
-                factsHash,
+                 gasConceptCoverageMask,
+                 gasConceptMissingMask,
+                 traceAbilityCode,
+                 runtimeTraceStageMask,
+                 runtimeTraceMissingStageMask,
+                 observation.EffectLifecycleFactCount,
+                 observation.AttributeFactCount,
+                 observation.BoundaryFactCount,
+                 observation.CueFactCount,
+                  observation.EffectLifecycleFactCount,
+                  observation.ExecutionCalculationFactCount,
+                 observation.EffectLifecycleFactCount,
+                 observation.EffectLifecycleFactCount > observation.RejectedEffectFactCount
+                     ? observation.EffectLifecycleFactCount - observation.RejectedEffectFactCount
+                     : 0,
+                 0,
+                 performanceResult.AcceptedCommandCount,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 observation.AttributeFactCount,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 observation.RejectedEffectFactCount,
+                 observation.RingHighWater,
+                 observation.RingCapacity,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 0,
+                 performanceResult.ElapsedMilliseconds,
+                 performanceResult.AverageTickMilliseconds,
+                 factsHash,
                 summaryHash,
                 true,
                 officialDiffSeparatePass,
                 performanceResult.OfficialToolDiff.JournalingAvailable,
                 performanceResult.OfficialToolDiff.JournalingCaptured,
-                performanceResult.OfficialToolDiff.ProfilerAvailable,
-                performanceResult.OfficialToolDiff.ProfilerCaptureState,
-                backbone.PhysicsDisabledReasonCount > 0 ? "reported-by-runtime" : "headless-profile-disabled",
-                backbone.RenderDisabledReasonCount > 0 ? "reported-by-runtime" : "headless-profile-disabled",
-                presentation.DisabledReason);
+                 performanceResult.OfficialToolDiff.ProfilerAvailable,
+                 performanceResult.OfficialToolDiff.ProfilerCaptureState,
+                 "runtime-v1-boundary-read-model",
+                 "runtime-v1-boundary-read-model",
+                 presentation.DisabledReason);
         }
 
         public static string CreateRunResultSummary(in AutoChessValidationRunResult runResult)
@@ -198,7 +182,87 @@ namespace GAS.AutoChessDemo
                    + $"presentationDisplayedLines={runResult.Presentation.DisplayLineCount}, "
                    + $"presentationDroppedLines={runResult.Presentation.DroppedLineCount}, "
                    + $"presentationDisabledReason={runResult.Presentation.DisabledReason}, "
-                   + $"summaryHash=0x{runResult.Evidence.SummaryHash:X8}";
+                   + $"summaryHash=0x{runResult.Evidence.SummaryHash:X8}, "
+                   + CreateRuntimeV1Summary(in runResult.PerformanceResult);
+        }
+
+        /// <summary>
+        /// 输出 Runtime v1 Boundary 与 Session 诊断字段，作为报告的事实源摘要。
+        /// </summary>
+        private static string CreateRuntimeV1Summary(in AutoChessBattleResult result)
+        {
+            return CreateRuntimeV1Summary(in result.RuntimeV1Observation);
+        }
+
+        /// <summary>
+        /// 输出 immutable Boundary read-model 的完整计数与确定性字段。
+        /// </summary>
+        private static string CreateRuntimeV1Summary(
+            in AutoChessGasV1ObservationSnapshot observation)
+        {
+            return $"runtimeV1BoundaryBatches={observation.BoundaryBatchCount}, "
+                   + $"runtimeV1BoundaryFacts={observation.BoundaryFactCount}, "
+                   + $"runtimeV1GameplayFacts={observation.GameplayFactCount}, "
+                   + $"runtimeV1TeardownFacts={observation.TeardownFactCount}, "
+                   + $"runtimeV1NoFactReceipts={observation.NoFactReceiptCount}, "
+                   + $"runtimeV1DeadShells={observation.DeadShellCount}, "
+                   + $"runtimeV1AttributeFacts={observation.AttributeFactCount}, "
+                   + $"runtimeV1TagFacts={observation.TagFactCount}, "
+                   + $"runtimeV1AbilityLifecycleFacts={observation.AbilityLifecycleFactCount}, "
+                   + $"runtimeV1EffectLifecycleFacts={observation.EffectLifecycleFactCount}, "
+                   + $"runtimeV1ExecutionCalculationFacts={observation.ExecutionCalculationFactCount}, "
+                   + $"runtimeV1PeriodTickFacts={observation.PeriodTickFactCount}, "
+                   + $"runtimeV1PeriodTickDamageTotal={observation.PeriodTickDamageTotal:0.###}, "
+                   + $"runtimeV1CueFacts={observation.CueFactCount}, "
+                   + $"runtimeV1BattleOutcomeFacts={observation.BattleOutcomeFactCount}, "
+                   + $"runtimeV1SessionLifecycleFacts={observation.SessionLifecycleFactCount}, "
+                   + $"runtimeV1DeathFacts={observation.DeathFactCount}, "
+                   + $"runtimeV1FaultFacts={observation.FaultFactCount}, "
+                   + $"runtimeV1RejectedEffectFacts={observation.RejectedEffectFactCount}, "
+                   + $"runtimeV1ProjectedEntries={observation.StructuredLogEntryCount}, "
+                   + $"runtimeV1NegativeHealthFacts={observation.NegativeHealthFactCount}, "
+                   + $"runtimeV1NegativeHealthTotal={observation.NegativeHealthTotal:0.###}, "
+                   + $"runtimeV1InvalidFacts={observation.InvalidFactCount}, "
+                   + $"runtimeV1RingHighWater={observation.RingHighWater}/{observation.RingCapacity}, "
+                   + $"runtimeV1DrainFailures={observation.DrainFailureCount}, "
+                   + $"runtimeV1LastDrainFailure={observation.LastDrainFailure}, "
+                   + $"runtimeV1BoundarySequenceHash=0x{observation.BoundarySequenceHash:X8}, "
+                   + CreateRuntimeV1SessionSummary(in observation);
+        }
+
+        /// <summary>
+        /// 输出 Session observation 的准入、inbox 与首 ASC 健康值。
+        /// </summary>
+        private static string CreateRuntimeV1SessionSummary(
+            in AutoChessGasV1ObservationSnapshot observation)
+        {
+            if (!observation.HasSessionObservation)
+                return "runtimeV1SessionObservation=unavailable";
+
+            var session = observation.SessionObservation;
+            return $"runtimeV1SessionTick={session.CurrentTick}, "
+                   + $"runtimeV1SessionState={session.SessionState}, "
+                   + $"runtimeV1SessionFaultReason={session.FaultReasonCode}, "
+                   + $"runtimeV1SessionFaultId={session.FaultId}, "
+                   + $"runtimeV1BattleCount={session.BattleCount}, "
+                   + $"runtimeV1ReadyBattleCount={session.ReadyBattleCount}, "
+                   + $"runtimeV1AscCount={session.AscCount}, "
+                   + $"runtimeV1ReadyAscCount={session.ReadyAscCount}, "
+                   + $"runtimeV1FirstBattleState={session.FirstBattleState}, "
+                   + $"runtimeV1FirstBattleIngressOpen={session.FirstBattleIngressOpen}, "
+                   + $"runtimeV1Inbox={session.InboxCount}/{session.PendingInboxCount}/{session.ConsumedInboxCount}, "
+                   + $"runtimeV1FirstAscScenarioUnitId={session.FirstAscScenarioUnitId}, "
+                   + $"runtimeV1FirstAscLifecycle={session.FirstAscLifecycle}, "
+                   + $"runtimeV1FirstAscHealth={session.FirstAscHealth:0.###}, "
+                   + $"runtimeV1FirstAscEnergy={session.FirstAscEnergy:0.###}, "
+                   + $"runtimeV1AdmissionSucceeded={session.TickDiagnostics.AdmissionSucceeded != 0}, "
+                   + $"runtimeV1AdmissionReason={session.TickDiagnostics.AdmissionReasonCode}, "
+                   + $"runtimeV1ExecutedLaneMask=0x{session.TickDiagnostics.ExecutedLaneMask:X}, "
+                   + $"runtimeV1SealedCommandCount={session.TickDiagnostics.SealedCommandCount}, "
+                   + $"runtimeV1ApplicationOutcomeCount={session.TickDiagnostics.ApplicationOutcomeCount}, "
+                   + $"runtimeV1AttributeMutationCount={session.TickDiagnostics.AttributeMutationCount}, "
+                   + $"runtimeV1DeathFactCount={session.TickDiagnostics.DeathFactCount}, "
+                   + $"runtimeV1TickBoundaryFactCount={session.TickDiagnostics.BoundaryFactCount}";
         }
 
         public static string CreateHeadlessLogicBudgetSummary(
@@ -208,8 +272,8 @@ namespace GAS.AutoChessDemo
                    + $"performanceExcellentPassed={budget.PerformanceExcellentPassed}, "
                    + $"failureMask=0x{budget.FailureMask:X}, "
                    + $"performanceTimingAvailable={budget.PerformanceTimingAvailable}, "
-                   + $"scorecardSource=GasRuntimeDataOrientedScorecard, "
-                   + $"metricFamilySource=DiagnosticPassGasData+PerformancePassOverhead, "
+                   + $"scorecardSource=RuntimeV1BoundaryPerformanceScorecard, "
+                   + $"metricFamilySource=performance-only-secondary, "
                    + $"metricFamilyMask=0x{((int)budget.RuntimeScorecard.MetricFamilyMask):X}, "
                    + $"dominantRisk={budget.RuntimeScorecard.DominantRisk}, "
                    + $"units={budget.UnitCount}, "
@@ -290,24 +354,36 @@ namespace GAS.AutoChessDemo
                    + $"disabledReason={presentation.DisabledReason}";
         }
 
-        public static string CreateBoundaryReportKeyCoverageSummary(
-            in GasStructuredLogExportSnapshot snapshot)
+        /// <summary>
+        /// 输出 Runtime v1 Boundary read-model 的完整性门槛。
+        /// </summary>
+        public static string CreateRuntimeV1BoundaryCoverageSummary(
+            in AutoChessBattleResult result)
         {
-            var coverage = CalculateBoundaryReportKeyCoverage(snapshot);
-            return $"passed={coverage.Passed}, "
-                   + $"entries={coverage.EntryCount}, "
-                   + $"sourceAscRefs={coverage.SourceAscReferenceCount}, "
-                   + $"sourceReportKeys={coverage.SourceReportKeyCount}, "
-                   + $"missingSourceReportKeys={coverage.MissingSourceReportKeyCount}, "
-                   + $"targetAscRefs={coverage.TargetAscReferenceCount}, "
-                   + $"targetReportKeys={coverage.TargetReportKeyCount}, "
-                   + $"missingTargetReportKeys={coverage.MissingTargetReportKeyCount}";
+            var observation = result.RuntimeV1Observation;
+            return $"passed={HasRuntimeV1BoundaryCoverage(in result)}, "
+                   + $"batches={observation.BoundaryBatchCount}, "
+                   + $"facts={observation.BoundaryFactCount}, "
+                   + $"projectedEntries={observation.StructuredLogEntryCount}, "
+                   + $"deadShells={observation.DeadShellCount}, "
+                   + $"invalidFacts={observation.InvalidFactCount}, "
+                   + $"drainFailures={observation.DrainFailureCount}, "
+                   + $"ringHighWater={observation.RingHighWater}/{observation.RingCapacity}, "
+                   + $"sequenceHash=0x{observation.BoundarySequenceHash:X8}";
         }
 
-        public static bool HasBoundaryReportKeyCoverage(
-            in GasStructuredLogExportSnapshot snapshot)
+        /// <summary>
+        /// 验证本局 Boundary facts 已完整进入唯一 managed read-model。
+        /// </summary>
+        public static bool HasRuntimeV1BoundaryCoverage(in AutoChessBattleResult result)
         {
-            return CalculateBoundaryReportKeyCoverage(snapshot).Passed;
+            var observation = result.RuntimeV1Observation;
+            return observation.HasSessionObservation
+                   && observation.BoundaryBatchCount > 0
+                   && observation.BoundaryFactCount > 0
+                   && observation.StructuredLogEntryCount == observation.BoundaryFactCount
+                   && observation.InvalidFactCount == 0
+                   && observation.DrainFailureCount == 0;
         }
 
         public static string CreateSummary(in AutoChessValidationEvidence evidence)
@@ -322,32 +398,21 @@ namespace GAS.AutoChessDemo
                    + $"warmupDroppedTicks={evidence.WarmupDroppedTicks}, "
                    + $"measuredTicks={evidence.MeasuredTicks}, "
                    + $"commands={evidence.CommandCount}, "
-                   + $"attributeChanges={evidence.AttributeChangeCount}, "
-                    + $"periodTickDamageFacts={evidence.PeriodTickDamageFactCount}, "
-                    + $"periodTickDamageTotal={evidence.PeriodTickDamageTotal:0.###}, "
-                    + $"executionOutputs={evidence.ExecutionOutputCount}, "
-                    + $"executionSpecScans={evidence.ExecutionSpecScanCount}, "
-                    + $"executionMatchedEffectSpecs={evidence.ExecutionMatchedEffectSpecCount}, "
-                    + $"executionTargetOwnerMismatches={evidence.ExecutionTargetOwnerMismatchCount}, "
-                    + $"executionMissingAttributes={evidence.ExecutionMissingAttributeCount}, "
-                    + $"executionEvaluatorRejects={evidence.ExecutionEvaluatorRejectCount}, "
-                    + $"executionOutputWrites={evidence.ExecutionOutputWriteCount}, "
-                    + $"cueRequests={evidence.CueRequestCount}, "
-                   + $"debugEvents={evidence.RuntimeEventCount}, "
-                   + $"debugWarnings={evidence.DebugWarningCount}, "
-                   + $"debugErrors={evidence.DebugErrorCount}, "
-                   + $"blockingDebugErrors={evidence.BlockingDebugErrorCount}, "
-                   + $"coreRequests={evidence.CoreRequestCount}, "
-                   + $"coreFacts={evidence.CoreFactCount}, "
-                   + $"coreDeltas={evidence.CoreDeltaCount}, "
-                   + $"coreCues={evidence.CoreCueCount}, "
+                   + $"runtimeV1BoundaryFacts={evidence.CoreFactCount}, "
+                   + $"runtimeV1AttributeFacts={evidence.AttributeChangeCount}, "
+                   + $"runtimeV1PeriodTickFacts={evidence.PeriodTickDamageFactCount}, "
+                   + $"runtimeV1PeriodTickDamageTotal={evidence.PeriodTickDamageTotal:0.###}, "
+                   + $"runtimeV1ExecutionCalculationFacts={evidence.ExecutionOutputCount}, "
+                   + $"runtimeV1CueFacts={evidence.CueRequestCount}, "
+                   + $"runtimeV1RejectedEffectFacts={evidence.DebugWarningCount}, "
+                   + $"runtimeV1FaultFacts={evidence.DebugErrorCount}, "
+                   + $"runtimeV1BlockingFaults={evidence.BlockingDebugErrorCount}, "
+                   + $"runtimeV1BoundaryRingHighWater={evidence.PeakBoundaryRingLength}, "
                    + $"presentationMarkers={evidence.PresentationMarkerCount}, "
                    + $"presentationSourceLines={evidence.PresentationSourceLineCount}, "
                    + $"presentationDisplayedLines={evidence.PresentationDisplayLineCount}, "
                    + $"presentationDroppedLines={evidence.PresentationDroppedLineCount}, "
                    + $"presentationDisabledReason={evidence.PresentationDisabledReason}, "
-                   + $"peakEventBus={evidence.PeakEventBusLength}, "
-                    + $"replayLag={evidence.ReplayLag}, "
                     + $"proofOnlyApiMask={evidence.ProofOnlyApiMask}, "
                     + $"reselectTriggerMask={evidence.ReselectTriggerMask}, "
                     + $"runtimeAccessContractEntries={evidence.RuntimeAccessContractEntryCount}, "
@@ -363,8 +428,8 @@ namespace GAS.AutoChessDemo
                     + $"runtimeTraceMissingStageMask=0x{evidence.RuntimeTraceMissingStageMask:X}, "
                     + $"runtimeTraceSeeds={evidence.RuntimeTraceSeedCount}, "
                     + $"runtimeTraceModifiers={evidence.RuntimeTraceModifierCount}, "
-                    + $"runtimeTraceFacts={evidence.RuntimeTraceFactCount}, "
-                    + $"runtimeTraceCues={evidence.RuntimeTraceCueCount}, "
+                    + $"runtimeV1TraceFacts={evidence.RuntimeTraceFactCount}, "
+                    + $"runtimeV1TraceCues={evidence.RuntimeTraceCueCount}, "
                     + $"runtimeTraceActiveMutationSeeds={evidence.RuntimeTraceActiveMutationSeedCount}, "
                     + $"runtimeTraceExecutionCalculationModifiers={evidence.RuntimeTraceExecutionCalculationModifierCount}, "
                     + $"activeEffectSlots={evidence.ActiveEffectSlotCount}, "
@@ -411,113 +476,49 @@ namespace GAS.AutoChessDemo
                     + $"magnitudeSourceTargetAttributeLookups={evidence.MagnitudeSourceTargetAttributeLookupCount}, "
                     + $"magnitudeSourceExecutionInputLookups={evidence.MagnitudeSourceExecutionInputLookupCount}, "
                     + $"journalingCaptured={evidence.JournalingCaptured}, "
-                   + $"profilerCaptureState={evidence.ProfilerCaptureState}, "
+                    + $"profilerCaptureState={evidence.ProfilerCaptureState}, "
                    + $"ecsRuntimeTickOnly={evidence.EcsRuntimeTickOnly}, "
                    + $"officialDiffSeparatePass={evidence.OfficialDiffSeparatePass}, "
                    + $"physicsDisabledReason={evidence.PhysicsDisabledReason}, "
                    + $"renderDisabledReason={evidence.RenderDisabledReason}, "
                    + $"processWarmupRuns={evidence.ProcessWarmupRuns}, "
                    + $"totalElapsedMs={evidence.TotalElapsedMilliseconds:0.000}, "
-                   + $"factsHash=0x{evidence.FactsHash:X8}, "
-                   + $"summaryHash=0x{evidence.SummaryHash:X8}, "
+                    + $"runtimeV1BoundarySequenceHash=0x{evidence.FactsHash:X8}, "
+                    + $"summaryHash=0x{evidence.SummaryHash:X8}, "
                    + $"avgTickMs={evidence.AverageTickMilliseconds:0.000}";
         }
 
         public static string CreateDebuggerSummary(in AutoChessBattleResult result)
         {
-            var evidence = result.RuntimeDiagnostics.Evidence;
-            var events = evidence.Events;
-            var workload = evidence.Workload;
-            var activeEffect = evidence.ActiveEffect;
-            var mutation = evidence.ActiveMutation;
-            var attributeFact = evidence.AttributeFact;
-            var apiHealth = evidence.ApiHealth;
-            var backbone = evidence.FrameBackbone;
-            var observation = evidence.Observation;
-            var magnitudeSource = evidence.MagnitudeSource;
-            return $"runtimeDiagnosticsSource=GasRuntimeDiagnosticEvidenceSnapshot, "
-                   + $"events={events.EventCount}, "
-                   + $"dropped={events.DroppedEventCount}, "
-                   + $"warnings={events.WarningCount}, "
-                   + $"errors={events.ErrorCount}, "
-                   + $"blockingErrors={events.BlockingErrorCount}, "
-                   + $"requests={workload.RequestCount}, "
-                   + $"specs={workload.SpecCount}, "
-                   + $"deltas={workload.DeltaCount}, "
-                   + $"facts={workload.FactCount}, "
-                   + $"cues={workload.CueCount}, "
-                   + $"presentation={workload.PresentationCount}, "
-                   + $"activeEffectOwners={activeEffect.StoreOwnerCount}, "
-                   + $"activeEffectSlots={activeEffect.SlotCount}, "
-                   + $"periodTickDamageFacts={result.EventCounts.PeriodTickDamageFacts}, "
-                   + $"queryBudget={apiHealth.QueryBudget}, "
-                   + $"lookupBudget={apiHealth.LookupUpdateBudget}, "
-                   + $"randomLookupBudget={apiHealth.RandomLookupBudget}, "
-                   + $"syncQueryBudget={apiHealth.SyncQueryBudget}, "
-                   + $"activeMutationCommands={mutation.CommandCount}, "
-                   + $"activeMutationOwnerGroups={mutation.OwnerGroupCount}, "
-                   + $"activeMutationMaxOwnerRange={mutation.MaxOwnerRange}, "
-                   + $"activeMutationSortMoves={mutation.SortMoveCount}, "
-                   + $"activeMutationEstimatedRandomLookups={mutation.EstimatedRandomLookupCount}, "
-                   + $"activeMutationOwnerResourceLookups={mutation.OwnerResourceLookupCount}, "
-                   + $"activeMutationMigrationCarriers={mutation.MigrationCarrierCount}, "
-                   + $"pendingAttributeDeltas={attributeFact.PendingDeltaCount}, "
-                   + $"pendingAttributeAppliedDeltas={attributeFact.PendingAppliedDeltaCount}, "
-                   + $"pendingAttributeSkippedDeltas={attributeFact.PendingSkippedDeltaCount}, "
-                   + $"pendingAttributeTargetGroups={attributeFact.PendingTargetGroupCount}, "
-                   + $"pendingAttributeMaxTargetRange={attributeFact.PendingMaxTargetRange}, "
-                   + $"pendingAttributeEstimatedRandomLookups={attributeFact.PendingEstimatedRandomLookupCount}, "
-                   + $"pendingAttributeFactPatches={attributeFact.PendingFactPatchCount}, "
-                   + $"pendingAttributeMigrationCarriers={attributeFact.PendingMigrationCarrierCount}, "
-                   + $"ownerLocalFacts={attributeFact.OwnerLocalFactCount}, "
-                   + $"ownerLocalFactOwnerGroups={attributeFact.OwnerLocalFactOwnerGroupCount}, "
-                   + $"ownerLocalFactMaxOwnerRange={attributeFact.OwnerLocalFactMaxOwnerRange}, "
-                   + $"ownerLocalFactFlushes={attributeFact.OwnerLocalFactFlushCount}, "
-                   + $"ownerLocalFactChangedChunks={attributeFact.OwnerLocalFactChangedChunkCount}, "
-                   + $"ownerLocalFactScannedOwners={attributeFact.OwnerLocalFactScannedOwnerCount}, "
-                   + $"ownerLocalFactDirtyOwners={attributeFact.OwnerLocalFactDirtyOwnerCount}, "
-                   + $"ownerLocalFactSkippedOwners={attributeFact.OwnerLocalFactSkippedOwnerCount}, "
-                   + $"ownerLocalFactClearedOwners={attributeFact.OwnerLocalFactClearedOwnerCount}, "
-                   + $"ownerLocalInstantPrepareChunks={attributeFact.OwnerLocalInstantPrepareChunkCount}, "
-                   + $"ownerLocalInstantPrepareScannedOwners={attributeFact.OwnerLocalInstantPrepareScannedOwnerCount}, "
-                   + $"ownerLocalInstantPrepareSkippedOwners={attributeFact.OwnerLocalInstantPrepareSkippedOwnerCount}, "
-                   + $"ownerLocalInstantPrepareDirtyOwners={attributeFact.OwnerLocalInstantPrepareDirtyOwnerCount}, "
-                   + $"ownerLocalInstantPrepareClearedCommands={attributeFact.OwnerLocalInstantPrepareClearedCommandCount}, "
-                   + $"ownerLocalInstantPrepareClearedSpecs={attributeFact.OwnerLocalInstantPrepareClearedSpecCount}, "
-                   + $"ownerLocalInstantPreparePromotedCommands={attributeFact.OwnerLocalInstantPreparePromotedCommandCount}, "
-                   + $"activeMutationPrepareChunks={attributeFact.ActiveMutationPrepareChunkCount}, "
-                   + $"activeMutationPrepareScannedOwners={attributeFact.ActiveMutationPrepareScannedOwnerCount}, "
-                   + $"activeMutationPrepareSkippedOwners={attributeFact.ActiveMutationPrepareSkippedOwnerCount}, "
-                   + $"activeMutationPrepareDirtyOwners={attributeFact.ActiveMutationPrepareDirtyOwnerCount}, "
-                   + $"activeMutationPrepareClearedMutations={attributeFact.ActiveMutationPrepareClearedMutationCount}, "
-                   + $"activeMutationPreparePromotedCommands={attributeFact.ActiveMutationPreparePromotedCommandCount}, "
-                   + $"activeEffectPreTickChunks={activeEffect.PreTickChunkCount}, "
-                   + $"activeEffectPreTickScannedOwners={activeEffect.PreTickScannedOwnerCount}, "
-                   + $"activeEffectPreTickSkippedOwners={activeEffect.PreTickSkippedOwnerCount}, "
-                   + $"activeEffectPreTickProcessedOwners={activeEffect.PreTickProcessedOwnerCount}, "
-                   + $"activeEffectPreTickScannedSlots={activeEffect.PreTickScannedSlotCount}, "
-                   + $"activeEffectPreTickDueSlots={activeEffect.PreTickDueSlotCount}, "
-                   + $"activeEffectPreTickNoopSlots={activeEffect.PreTickNoopSlotCount}, "
-                   + $"activeEffectPreTickMutationWrites={activeEffect.PreTickMutationWriteCount}, "
-                   + $"streamCarrierPressureWarnings={events.EffectCommandStreamPressure.WarningCount}, "
-                   + $"observationMaterializedQueries={observation.MaterializedQueryCount}, "
-                   + $"observationMaterializedEntities={observation.MaterializedEntityCount}, "
-                   + $"observationMaterializationUs={observation.ElapsedMicroseconds}, "
-                   + $"performancePassObservationPollutionRisks={observation.PerformancePollutionRiskCount}, "
-                   + $"magnitudeSourceCurrentValueLookups={magnitudeSource.CurrentValueLookupCount}, "
-                   + $"magnitudeSourceCapturedValueHits={magnitudeSource.CapturedValueHitCount}, "
-                   + $"magnitudeSourceCaptureMisses={magnitudeSource.CaptureMissCount}, "
-                   + $"magnitudeSourceCaptureMissLiveLookups={magnitudeSource.CaptureMissLiveLookupCount}, "
-                   + $"magnitudeSourceFallbackValues={magnitudeSource.FallbackValueCount}, "
-                   + $"magnitudeSourceFallbackFacts={magnitudeSource.FallbackFactCount}, "
-                   + $"magnitudeSourceSourceAttributeLookups={magnitudeSource.SourceAttributeLookupCount}, "
-                   + $"magnitudeSourceTargetAttributeLookups={magnitudeSource.TargetAttributeLookupCount}, "
-                   + $"magnitudeSourceExecutionInputLookups={magnitudeSource.ExecutionInputLookupCount}, "
-                   + $"frameBackbonePhases={backbone.PhaseCount}, "
-                   + $"streams={backbone.StreamCount}, "
-                   + $"migrationCarriers={backbone.MigrationCarrierCount}, "
-                   + $"profilerMarkerContracts={backbone.ProfilerMarkerCount}, "
-                   + $"journalingMarkerContracts={backbone.JournalingMarkerCount}";
+            var observation = result.RuntimeV1Observation;
+            return "runtimeObservationSource=RuntimeV1BoundaryReadModel, "
+                   + $"runtimeV1SessionPresent={observation.HasSessionObservation}, "
+                   + $"runtimeV1BoundaryFacts={observation.BoundaryFactCount}, "
+                   + $"runtimeV1GameplayFacts={observation.GameplayFactCount}, "
+                   + $"runtimeV1TeardownFacts={observation.TeardownFactCount}, "
+                   + $"runtimeV1NoFactReceipts={observation.NoFactReceiptCount}, "
+                   + $"runtimeV1DeadShells={observation.DeadShellCount}, "
+                   + $"runtimeV1AttributeFacts={observation.AttributeFactCount}, "
+                   + $"runtimeV1TagFacts={observation.TagFactCount}, "
+                   + $"runtimeV1AbilityLifecycleFacts={observation.AbilityLifecycleFactCount}, "
+                   + $"runtimeV1EffectLifecycleFacts={observation.EffectLifecycleFactCount}, "
+                   + $"runtimeV1ExecutionCalculationFacts={observation.ExecutionCalculationFactCount}, "
+                   + $"runtimeV1PeriodTickFacts={observation.PeriodTickFactCount}, "
+                   + $"runtimeV1PeriodTickDamageTotal={observation.PeriodTickDamageTotal:0.###}, "
+                   + $"runtimeV1CueFacts={observation.CueFactCount}, "
+                   + $"runtimeV1BattleOutcomeFacts={observation.BattleOutcomeFactCount}, "
+                   + $"runtimeV1SessionLifecycleFacts={observation.SessionLifecycleFactCount}, "
+                   + $"runtimeV1DeathFacts={observation.DeathFactCount}, "
+                   + $"runtimeV1FaultFacts={observation.FaultFactCount}, "
+                   + $"runtimeV1RejectedEffectFacts={observation.RejectedEffectFactCount}, "
+                   + $"runtimeV1InvalidFacts={observation.InvalidFactCount}, "
+                   + $"runtimeV1ProjectedEntries={observation.StructuredLogEntryCount}, "
+                   + $"runtimeV1NegativeHealthFacts={observation.NegativeHealthFactCount}, "
+                   + $"runtimeV1NegativeHealthTotal={observation.NegativeHealthTotal:0.###}, "
+                   + $"runtimeV1RingHighWater={observation.RingHighWater}/{observation.RingCapacity}, "
+                   + $"runtimeV1DrainFailures={observation.DrainFailureCount}, "
+                   + $"runtimeV1BoundarySequenceHash=0x{observation.BoundarySequenceHash:X8}, "
+                   + CreateRuntimeV1SessionSummary(in observation);
         }
 
         public static string CreateTimingSummary(
@@ -527,7 +528,7 @@ namespace GAS.AutoChessDemo
             var builder = new StringBuilder(512);
             builder.Append("ecsRuntimeTickOnly=")
                 .Append(evidence.EcsRuntimeTickOnly)
-                .Append(", ownerSplit=core/boundary/debugger/runner/physics/render")
+                .Append(", ownerSplit=GasFixedTick/GasCommandIngress/GasTickKernel/GasBoundaryDrain/runner")
                 .Append(", physicsDisabledReason=")
                 .Append(evidence.PhysicsDisabledReason)
                 .Append(", renderDisabledReason=")
@@ -536,17 +537,17 @@ namespace GAS.AutoChessDemo
                 .Append(evidence.PresentationDisabledReason);
             AppendTiming(builder, "CoreRuntimeOwner", result.RuntimeTiming.CoreRuntime);
             AppendTiming(builder, "BoundaryOwner", result.RuntimeTiming.Boundary);
-            AppendTiming(builder, "DebuggerOwner", result.RuntimeTiming.Debugger);
-            AppendTiming(builder, "RunnerOwner", result.RuntimeTiming.Runner);
+            AppendTiming(builder, "RuntimeV1ObservationExport", result.RuntimeTiming.Debugger);
+            AppendTiming(builder, "AutoChessValidationRunner", result.RuntimeTiming.Runner);
             AppendTiming(builder, "PhysicsOwner", result.RuntimeTiming.Physics);
             AppendTiming(builder, "RenderOwner", result.RuntimeTiming.Render);
             AppendTiming(builder, "GASTickTotal", result.RuntimeTiming.TickTotal);
-            AppendTiming(builder, nameof(GASFramePrepareSystemGroup), result.RuntimeTiming.FramePrepare);
-            AppendTiming(builder, nameof(GASCommandResolveSystemGroup), result.RuntimeTiming.CommandResolve);
-            AppendTiming(builder, nameof(GASCoreSimulationSystemGroup), result.RuntimeTiming.CoreSimulation);
-            AppendTiming(builder, nameof(GASStructuralCommitSystemGroup), result.RuntimeTiming.StructuralCommit);
-            AppendTiming(builder, nameof(GASBoundaryProjectionSystemGroup), result.RuntimeTiming.BoundaryProjection);
-            AppendTiming(builder, "GASDependencyDrain", result.RuntimeTiming.DependencyDrain);
+            AppendTiming(builder, "GasFixedTickSystemGroup", result.RuntimeTiming.FramePrepare);
+            AppendTiming(builder, "GasCommandIngressSystem", result.RuntimeTiming.CommandResolve);
+            AppendTiming(builder, "GasTickKernelCore", result.RuntimeTiming.CoreSimulation);
+            AppendTiming(builder, "GasTickKernelStructuralCommit", result.RuntimeTiming.StructuralCommit);
+            AppendTiming(builder, "GasBoundaryDrainProjection", result.RuntimeTiming.BoundaryProjection);
+            AppendTiming(builder, "GasBoundaryDrainDependency", result.RuntimeTiming.DependencyDrain);
             return builder.ToString();
         }
 
@@ -559,55 +560,30 @@ namespace GAS.AutoChessDemo
             in AutoChessBattleResult performanceResult,
             in AutoChessBattleResult diagnosticResult)
         {
-            var diagnosticEvidence = diagnosticResult.RuntimeDiagnostics.Evidence;
-            var performanceEvidence = performanceResult.RuntimeDiagnostics.Evidence;
-            var mutation = diagnosticEvidence.ActiveMutation;
-            var attributeFact = diagnosticEvidence.AttributeFact;
-            var observation = diagnosticEvidence.Observation;
-            var performanceObservation = performanceEvidence.Observation;
-            var magnitudeSource = diagnosticEvidence.MagnitudeSource;
-            return $"primaryCommands={performanceResult.DriverIssuedPrimaryCommands}, "
-                   + $"finisherCommands={performanceResult.DriverIssuedFinisherCommands}, "
-                   + $"lowestHealthSelections={performanceResult.DriverLowestHealthTargetSelections}, "
+            var observation = performanceResult.RuntimeV1Observation;
+            var diagnosticObservation = diagnosticResult.RuntimeV1Observation;
+            return $"acceptedCommands={performanceResult.AcceptedCommandCount}, "
                    + $"tickAvgMs={performanceResult.RuntimeTiming.TickTotal.AverageMilliseconds:0.000}, "
-                   + $"coreRuntimeOwnerAvgMs={performanceResult.RuntimeTiming.CoreRuntime.AverageMilliseconds:0.000}, "
-                   + $"boundaryOwnerAvgMs={performanceResult.RuntimeTiming.Boundary.AverageMilliseconds:0.000}, "
-                   + $"runnerOwnerAvgMs={performanceResult.RuntimeTiming.Runner.AverageMilliseconds:0.000}, "
-                   + $"debuggerOwnerAvgMs={performanceResult.RuntimeTiming.Debugger.AverageMilliseconds:0.000}, "
-                   + $"commandResolveAvgMs={performanceResult.RuntimeTiming.CommandResolve.AverageMilliseconds:0.000}, "
-                   + $"coreSimulationAvgMs={performanceResult.RuntimeTiming.CoreSimulation.AverageMilliseconds:0.000}, "
-                   + $"activeMutationCommands={mutation.CommandCount}, "
-                   + $"activeMutationOwnerGroups={mutation.OwnerGroupCount}, "
-                   + $"activeMutationMaxOwnerRange={mutation.MaxOwnerRange}, "
-                   + $"activeMutationEstimatedRandomLookups={mutation.EstimatedRandomLookupCount}, "
-                   + $"periodTickDamageFacts={performanceResult.EventCounts.PeriodTickDamageFacts}, "
-                   + $"executionSpecScans={performanceResult.DriverExecutionSpecScans}, "
-                   + $"executionMatchedEffectSpecs={performanceResult.DriverExecutionMatchedEffectSpecs}, "
-                   + $"executionTargetOwnerMismatches={performanceResult.DriverExecutionTargetOwnerMismatches}, "
-                   + $"executionMissingAttributes={performanceResult.DriverExecutionMissingAttributes}, "
-                   + $"executionEvaluatorRejects={performanceResult.DriverExecutionEvaluatorRejects}, "
-                   + $"executionOutputWrites={performanceResult.DriverExecutionOutputWrites}, "
-                   + $"pendingAttributeDeltas={attributeFact.PendingDeltaCount}, "
-                   + $"pendingAttributeAppliedDeltas={attributeFact.PendingAppliedDeltaCount}, "
-                   + $"pendingAttributeTargetGroups={attributeFact.PendingTargetGroupCount}, "
-                   + $"pendingAttributeEstimatedRandomLookups={attributeFact.PendingEstimatedRandomLookupCount}, "
-                   + $"ownerLocalFacts={attributeFact.OwnerLocalFactCount}, "
-                   + $"ownerLocalFactOwnerGroups={attributeFact.OwnerLocalFactOwnerGroupCount}, "
-                   + $"ownerLocalFactFlushes={attributeFact.OwnerLocalFactFlushCount}, "
-                   + $"ownerLocalFactDirtyOwners={attributeFact.OwnerLocalFactDirtyOwnerCount}, "
-                   + $"ownerLocalFactSkippedOwners={attributeFact.OwnerLocalFactSkippedOwnerCount}, "
-                   + $"streamCarrierPressureWarnings={diagnosticEvidence.Events.EffectCommandStreamPressure.WarningCount}, "
-                   + $"observationMaterializedQueries={observation.MaterializedQueryCount}, "
-                   + $"observationMaterializationUs={observation.ElapsedMicroseconds}, "
-                   + $"performancePassObservationPollutionRisks={performanceObservation.PerformancePollutionRiskCount}, "
-                   + $"magnitudeSourceCaptureMisses={magnitudeSource.CaptureMissCount}, "
-                   + $"magnitudeSourceCaptureMissLiveLookups={magnitudeSource.CaptureMissLiveLookupCount}, "
-                   + $"magnitudeSourceFallbackValues={magnitudeSource.FallbackValueCount}, "
-                   + $"magnitudeSourceFallbackFacts={magnitudeSource.FallbackFactCount}, "
-                   + $"magnitudeSourceExecutionInputLookups={magnitudeSource.ExecutionInputLookupCount}, "
-                   + $"structuralCommitAvgMs={performanceResult.RuntimeTiming.StructuralCommit.AverageMilliseconds:0.000}, "
-                   + $"boundaryProjectionAvgMs={performanceResult.RuntimeTiming.BoundaryProjection.AverageMilliseconds:0.000}, "
-                   + $"dependencyDrainAvgMs={performanceResult.RuntimeTiming.DependencyDrain.AverageMilliseconds:0.000}";
+                   + $"gasFixedTickAvgMs={performanceResult.RuntimeTiming.FramePrepare.AverageMilliseconds:0.000}, "
+                   + $"commandIngressAvgMs={performanceResult.RuntimeTiming.CommandResolve.AverageMilliseconds:0.000}, "
+                   + $"gasTickKernelAvgMs={performanceResult.RuntimeTiming.CoreSimulation.AverageMilliseconds:0.000}, "
+                   + $"boundaryDrainAvgMs={performanceResult.RuntimeTiming.BoundaryProjection.AverageMilliseconds:0.000}, "
+                   + $"runtimeV1BoundaryBatches={observation.BoundaryBatchCount}, "
+                   + $"runtimeV1BoundaryFacts={observation.BoundaryFactCount}, "
+                   + $"runtimeV1AttributeFacts={observation.AttributeFactCount}, "
+                   + $"runtimeV1EffectLifecycleFacts={observation.EffectLifecycleFactCount}, "
+                   + $"runtimeV1ExecutionCalculationFacts={observation.ExecutionCalculationFactCount}, "
+                   + $"runtimeV1PeriodTickFacts={observation.PeriodTickFactCount}, "
+                   + $"runtimeV1PeriodTickDamageTotal={observation.PeriodTickDamageTotal:0.###}, "
+                   + $"runtimeV1CueFacts={observation.CueFactCount}, "
+                   + $"runtimeV1DeathFacts={observation.DeathFactCount}, "
+                   + $"runtimeV1RejectedEffectFacts={observation.RejectedEffectFactCount}, "
+                   + $"runtimeV1InvalidFacts={observation.InvalidFactCount}, "
+                   + $"runtimeV1RingHighWater={observation.RingHighWater}/{observation.RingCapacity}, "
+                   + $"runtimeV1DrainFailures={observation.DrainFailureCount}, "
+                   + $"runtimeV1SequenceHash=0x{observation.BoundarySequenceHash:X8}, "
+                   + $"diagnosticSequenceHashMatch={observation.BoundarySequenceHash == diagnosticObservation.BoundarySequenceHash}, "
+                   + $"runtimeV1NegativeHealthTotal={observation.NegativeHealthTotal:0.###}";
         }
 
         public static string CreateHotspotAttributionMatrix(
@@ -615,262 +591,148 @@ namespace GAS.AutoChessDemo
             in AutoChessBattleResult diagnosticResult,
             in AutoChessHeadlessLogicBudgetResult budget)
         {
+            var observation = performanceResult.RuntimeV1Observation;
+            var diagnosticObservation = diagnosticResult.RuntimeV1Observation;
             var builder = new StringBuilder(1024);
-            var official = performanceResult.OfficialToolDiff;
-            var diagnosticEvidence = diagnosticResult.RuntimeDiagnostics.Evidence;
-            var performanceEvidence = performanceResult.RuntimeDiagnostics.Evidence;
-            var activeEffectPreTickCount = FindTopNCount(
-                official.JournalingSystemTopN,
-                "GetBufferRW",
-                "GAS.Runtime.GASActiveEffectPreTickSystem");
-            var instantPrepareCount = FindTopNCount(
-                official.JournalingSystemTopN,
-                "GetBufferRW",
-                "GAS.Runtime.OwnerLocalInstantCommandFramePrepareSystem");
-            var activeMutationPrepareCount = FindTopNCount(
-                official.JournalingSystemTopN,
-                "GetBufferRW",
-                "GAS.Runtime.ActiveEffectOwnerLocalMutationFramePrepareSystem");
-            var ownerFactBufferCount = FindTopNCount(
-                official.JournalingComponentTopN,
-                "GetBufferRW",
-                "GAS.Runtime.OwnerLocalGameplayFactBuffer");
-            var streamComponentRwCount = FindTopNCount(
-                official.JournalingComponentTopN,
-                "GetComponentDataRW",
-                "GAS.Runtime.GEEffectCommandStreamComponent");
-            var attributeBufferRwCount = FindTopNCount(
-                official.JournalingComponentTopN,
-                "GetBufferRW",
-                "GAS.Runtime.AttributeValueBuffer");
-            var effectCommandBufferRwCount = FindTopNCount(
-                official.JournalingComponentTopN,
-                "GetBufferRW",
-                "GAS.Runtime.GEEffectCommandBuffer");
-            var activeMutationBufferRwCount = FindTopNCount(
-                official.JournalingComponentTopN,
-                "GetBufferRW",
-                "GAS.Runtime.ActiveEffectMutationBuffer");
-            var executionScanCount = performanceResult.DriverExecutionSpecScans;
-            var executionMatchedCount = performanceResult.DriverExecutionMatchedEffectSpecs;
-            var executionScanRatio = executionMatchedCount > 0
-                ? (double)executionScanCount / executionMatchedCount
-                : 0d;
-            var observationQueryCount = diagnosticEvidence.Observation.MaterializedQueryCount;
-            var observationEntityCount = diagnosticEvidence.Observation.MaterializedEntityCount;
-            var performancePollutionCount =
-                performanceEvidence.Observation.PerformancePollutionRiskCount;
-
             AppendAttributionRow(
                 builder,
-                "R4-DBG-MATRIX",
+                "RUNTIME-V1-BOUNDARY",
                 "High",
-                "DebuggerEvidence",
-                "DebuggerOwner",
-                "HotspotAttribution",
-                "GasRuntimeDerivedExportSink",
-                "runtimeDataOrientedScorecard+JournalingTopN",
-                "DerivedExport",
-                official.JournalingWorldRecordCount,
-                "ManualInference",
-                "R4",
-                "keep matrix as validation contract",
-                "journalingWorldRecords=" + official.JournalingWorldRecordCount);
-
+                "BoundaryFacts",
+                "GasBoundaryDrainCoordinator",
+                "BatchDrain",
+                "GasBoundaryDrainCoordinator",
+                "GasBoundaryDrainBatch",
+                "Facts",
+                observation.BoundaryFactCount,
+                "BoundedRingDrain",
+                "RuntimeV1BoundaryReadModel",
+                "preserve immutable facts and sequence order",
+                $"batches={observation.BoundaryBatchCount};facts={observation.BoundaryFactCount}");
             AppendAttributionRow(
                 builder,
-                "GAS-ARCH-07",
+                "RUNTIME-V1-EFFECT",
                 "High",
-                "GameplayFact",
-                nameof(GASBoundaryProjectionSystemGroup),
-                "OwnerLocalFactDirtySpan",
-                "GameplayBoundaryFactExportSystem",
-                "OwnerLocalGameplayFactBuffer",
-                "GetBufferRW",
-                ownerFactBufferCount,
-                "BroadBufferRW+OwnerLocality",
-                "R3",
-                "dirty owner/fact span lane",
-                "ownerLocalFactFlushes=" + diagnosticEvidence.AttributeFact.OwnerLocalFactFlushCount
-                + ";ownerLocalFactDirtyOwners=" + diagnosticEvidence.AttributeFact.OwnerLocalFactDirtyOwnerCount
-                + ";ownerLocalFactSkippedOwners=" + diagnosticEvidence.AttributeFact.OwnerLocalFactSkippedOwnerCount);
-
+                "EffectLifecycle",
+                "GasTickKernelSystem",
+                "ApplicationOutcome",
+                "GasGameplayEffectTransaction",
+                "BoundaryFactBuffer",
+                "EffectLifecycle",
+                observation.EffectLifecycleFactCount,
+                "TypedOutcome",
+                "RuntimeV1BoundaryReadModel",
+                "retain applied and rejected outcomes",
+                $"rejected={observation.RejectedEffectFactCount}");
             AppendAttributionRow(
                 builder,
-                "GAS-ARCH-AE-PRETICK",
-                "High",
-                "ActiveEffectLifecycle",
-                nameof(GASCoreSimulationSystemGroup),
-                "ActiveEffectPreTick",
-                "GASActiveEffectPreTickSystem",
-                "ActiveGameplayEffectBuffer+ActiveEffectMutationBuffer",
-                "GetBufferRW",
-                activeEffectPreTickCount,
-                "PerFrameSlotScan",
-                "R7/R3",
-                "dirty/due slot lane",
-                "activeEffectSlots=" + diagnosticEvidence.ActiveEffect.SlotCount);
-
-            AppendAttributionRow(
-                builder,
-                "GAS-ARCH-CMD-PREPARE",
-                "High",
-                "CommandFanIn",
-                nameof(GASFramePrepareSystemGroup),
-                "OwnerLocalInstantCommandPrepare",
-                "OwnerLocalInstantCommandFramePrepareSystem",
-                "GEEffectCommandBuffer+GESetByCallerValueBuffer",
-                "GetBufferRW",
-                instantPrepareCount,
-                "PerFrameBufferClearCopy",
-                "R7/R3",
-                "dirty command owner lane",
-                "commands=" + performanceResult.DriverIssuedCommands);
-
-            AppendAttributionRow(
-                builder,
-                "GAS-ARCH-AE-MUTATION-PREPARE",
-                "High",
-                "ActiveEffectMutation",
-                nameof(GASFramePrepareSystemGroup),
-                "ActiveEffectMutationPrepare",
-                "ActiveEffectOwnerLocalMutationFramePrepareSystem",
-                "ActiveEffectMutationBuffer",
-                "GetBufferRW",
-                activeMutationPrepareCount + activeMutationBufferRwCount,
-                "PerFrameBufferClearCopy",
-                "R7/R3",
-                "dirty active mutation owner lane",
-                "activeMutationCommands=" + diagnosticEvidence.ActiveMutation.CommandCount);
-
-            AppendAttributionRow(
-                builder,
-                "GAS-ARCH-06",
+                "RUNTIME-V1-EXECUTION",
                 "High",
                 "ExecutionCalculation",
-                nameof(GASCoreSimulationSystemGroup),
-                "ExecutionSpecSelection",
-                "AutoChessExecuteDamageCalculationSystem",
-                "GEEffectSpecBuffer",
-                "SpecScan",
-                executionScanCount,
-                "FanOutScan",
-                "R5/R3",
-                "calculationCode to effect-spec generated index",
-                "scanMatchRatio=" + executionScanRatio.ToString("0.###"));
-
+                "GasTickKernelSystem",
+                "ExecutionFact",
+                "GasTickKernelSystem",
+                "BoundaryFactBuffer",
+                "ExecutionCalculation",
+                observation.ExecutionCalculationFactCount,
+                "TypedFact",
+                "RuntimeV1BoundaryReadModel",
+                "consume execution output facts only",
+                $"sequenceHash=0x{observation.BoundarySequenceHash:X8}");
             AppendAttributionRow(
                 builder,
-                "GAS-ARCH-STREAM-RW",
-                "High",
-                "EffectCommandStream",
-                nameof(GASCoreSimulationSystemGroup),
-                "StreamSequenceAllocation",
-                "GEEffectCommandSpecStream",
-                "GEEffectCommandStreamComponent",
-                "GetComponentDataRW",
-                streamComponentRwCount,
-                "SingletonStreamRW",
-                "R4/R3",
-                "per-lane sequence counter attribution",
-                "effectCommandBufferRW=" + effectCommandBufferRwCount);
-
-            AppendAttributionRow(
-                builder,
-                "GAS-ARCH-ATTR-RW",
+                "RUNTIME-V1-ATTRIBUTE",
                 "High",
                 "AttributeState",
-                nameof(GASCoreSimulationSystemGroup),
-                "AttributeDeltaApply",
-                "GASAttributeModifierDeltaApplySystem",
-                "AttributeValueBuffer",
-                "GetBufferRW",
-                attributeBufferRwCount,
-                "BroadBufferRW",
-                "R3",
-                "attribute dirty range apply lane",
-                "pendingAttributeDeltas=" + diagnosticEvidence.AttributeFact.PendingDeltaCount);
-
+                "GasTickKernelSystem",
+                "AttributeChanged",
+                "GasGameplayEffectTransaction",
+                "BoundaryFactBuffer",
+                "AttributeDelta",
+                observation.AttributeFactCount,
+                "TargetOwnedMutation",
+                "RuntimeV1BoundaryReadModel",
+                "consume canonical attribute facts",
+                $"negativeHealthFacts={observation.NegativeHealthFactCount}");
             AppendAttributionRow(
                 builder,
-                "GAS-DBG-01",
-                "High",
-                "DebuggerObservation",
-                "DebuggerOwner",
-                "DiagnosticMaterialization",
-                "DiagnosticsSnapshotSystem",
-                "ToEntityArray",
-                "Materialization",
-                observationQueryCount + observationEntityCount,
-                "ObservationMaterialization",
-                "R4",
-                "budgeted diagnostic materialization owner",
-                "queries=" + observationQueryCount + ";entities=" + observationEntityCount);
-
-            AppendAttributionRow(
-                builder,
-                "GAS-MEASURE-02",
+                "RUNTIME-V1-PERIOD",
                 "Medium",
-                "OfficialToolEvidence",
-                "Validation",
-                "ProfilerCapture",
-                "GasRuntimeOfficialToolDiff",
-                "Profiler",
-                "ProfilerEvidence",
-                budget.ProfilerEvidencePassed ? 0 : 1,
-                "MissingProfilerEvidence",
-                "R8",
-                "profiler-enabled x50/x100/x1000 scale gate",
-                "profilerCaptureState=" + budget.ProfilerCaptureState);
-
+                "PeriodTick",
+                "GasTickKernelSystem",
+                "PeriodTick",
+                "GasGameplayEffectTransaction",
+                "BoundaryFactBuffer",
+                "PeriodDamage",
+                observation.PeriodTickFactCount,
+                "TypedFact",
+                "RuntimeV1BoundaryReadModel",
+                "read damage from period and attribute facts",
+                $"damageTotal={observation.PeriodTickDamageTotal:0.###}");
             AppendAttributionRow(
                 builder,
-                "GAS-DBG-POLLUTION-GATE",
+                "RUNTIME-V1-CUE",
+                "Medium",
+                "CueLifecycle",
+                "GasBoundaryDrainCoordinator",
+                "CueFact",
+                "GasBoundaryDrainCoordinator",
+                "BoundaryFactBuffer",
+                "Cue",
+                observation.CueFactCount,
+                "TypedFact",
+                "RuntimeV1BoundaryReadModel",
+                "keep cue lifecycle in boundary plane",
+                $"deadShells={observation.DeadShellCount}");
+            AppendAttributionRow(
+                builder,
+                "RUNTIME-V1-FAULT",
                 "High",
-                "DebuggerObservation",
-                "PerformancePass",
-                "ObservationPollutionGate",
-                "AutoChessHeadlessLogicBudgetResult",
-                "performanceObservationPollutionRisks",
-                "PollutionGate",
-                performancePollutionCount,
-                "PerformanceObservationPollution",
-                "R4",
-                "keep performance pass counter-only",
-                "performanceObservationPollutionRisks=" + performancePollutionCount);
-
+                "BoundaryIntegrity",
+                "RuntimeV1BoundaryReadModel",
+                "FaultAndReject",
+                "RuntimeV1BoundaryReadModel",
+                "GasBoundaryDrainFailure",
+                "Integrity",
+                observation.FaultFactCount + observation.InvalidFactCount
+                    + observation.DrainFailureCount,
+                "ExplicitFailure",
+                "Validation",
+                "fail validation on any unbounded or invalid boundary state",
+                $"invalid={observation.InvalidFactCount};drainFailures={observation.DrainFailureCount}");
+            builder.Append("runtimeV1HotspotSource=RuntimeV1BoundaryReadModel")
+                .Append("|diagnosticSequenceHashMatch=")
+                .Append(observation.BoundarySequenceHash == diagnosticObservation.BoundarySequenceHash)
+                .Append("|profilerPass=")
+                .Append(budget.ProfilerCaptureState)
+                .AppendLine();
             return builder.ToString();
         }
 
         public static string CreateBoundaryOwnerSummary(in AutoChessBattleResult result)
         {
-            var driverOwner = result.DriverOwnerSnapshot;
+            var observation = result.RuntimeV1Observation;
             return "shellPublicRawEcsSurface=false, "
-                   + "unitIdentity=AutoChessBattleUnitKey, "
-                   + "unitRuntimeHandle=ASCHandle, "
-                   + "unitCreateOwner=RuntimeShell.ASCCommandCapability, "
-                   + "unitDestroyOwner=ASCCommandPort.RequestDestroy, "
-                   + "driverLifecycleOwner=AutoChessBattleDriverRuntimeStore, "
-                   + "driverHandle=OpaqueDriverIdVersion, "
-                   + "driverAdapterRawEntity=false, "
-                   + $"driverOwnerInstalled={Bool(driverOwner.OwnerInstalled)}, "
-                   + $"driverOwnerEnabled={Bool(driverOwner.OwnerEnabled)}, "
-                   + $"driverOwnerHandleMatched={Bool(driverOwner.HandleMatched)}, "
-                   + $"driverStructuralCreates={driverOwner.StructuralCreateCount}, "
-                   + $"driverEnableRequests={driverOwner.EnableCount}, "
-                   + $"driverDisableRequests={driverOwner.DisableCount}, "
-                   + $"driverUninstallRequests={driverOwner.UninstallCount}, "
+                   + "unitIdentity=ScenarioUnitId, "
+                   + "unitRuntimeHandle=OwnerAscHandle, "
+                   + "unitCreateOwner=GasStageBBootstrapRecorder, "
+                   + "unitDestroyOwner=GasBoundaryDrainCoordinator, "
                    + "catalogOwner=AutoChessGasCatalogSession, "
-                   + "snapshotOwner=AutoChessGasBattleUnitSnapshotProjector.StructuredLog, "
-                   + "observationOwner=AutoChessGasObservationGateway, "
-                   + "runnerSyncOwner=GASDependencyDrain, "
-                   + "reportProjectionOwner=AutoChessRuntimeUnitResolver.BoundaryReportKey, "
+                   + "boundaryFactOwner=GasBoundaryDrainCoordinator, "
+                   + "observationOwner=RuntimeV1BoundaryReadModel, "
+                   + "reportProjectionOwner=RuntimeV1BoundaryReadModel, "
+                   + "runnerSyncOwner=AutoChessGasRuntimeTicker, "
+                   + $"runtimeV1BoundaryBatches={observation.BoundaryBatchCount}, "
+                   + $"runtimeV1BoundaryFacts={observation.BoundaryFactCount}, "
+                   + $"runtimeV1DeadShells={observation.DeadShellCount}, "
+                   + $"runtimeV1RingHighWater={observation.RingHighWater}/{observation.RingCapacity}, "
+                   + $"runtimeV1DrainFailures={observation.DrainFailureCount}, "
+                   + $"runtimeV1InvalidFacts={observation.InvalidFactCount}, "
+                   + $"runtimeV1BoundarySequenceHash=0x{observation.BoundarySequenceHash:X8}, "
                    + $"runtimeAccessContractEntries={AutoChessGasRuntimeAccessContract.EntryCount}, "
                    + $"runtimeAccessEcsHandleProxies={AutoChessGasRuntimeAccessContract.EcsHandleProxyCount}, "
                    + $"runtimeAccessManualSync={AutoChessGasRuntimeAccessContract.ManualSyncCount}, "
-                   + $"runtimeAccessPerformancePassRisks={AutoChessGasRuntimeAccessContract.PerformancePassRiskCount}, "
-                   + CreateBoundaryReportKeyCoverageSummary(result.StructuredLogSnapshot)
-                   + $", factsHash=0x{CalculateFactsHash(result.StructuredLogSnapshot):X8}";
+                   + $"runtimeAccessPerformancePassRisks={AutoChessGasRuntimeAccessContract.PerformancePassRiskCount}";
         }
 
         public static string CreateRuntimeAccessContractSummary()
@@ -903,9 +765,9 @@ namespace GAS.AutoChessDemo
                 return;
 
             builder.Append("hotspotAttribution|source=AutoChessBattleValidationReport")
-                .Append("|readModel=JournalingTopN+DiagnosticMetricFamily")
+                .Append("|readModel=RuntimeV1BoundaryReadModel")
                 .Append("|passMode=DerivedExport")
-                .Append("|costDomain=Debugger")
+                .Append("|costDomain=RuntimeV1Boundary")
                 .Append("|evidenceTier=ValidationEvidence")
                 .Append("|id=")
                 .Append(id)
@@ -936,58 +798,22 @@ namespace GAS.AutoChessDemo
                 .AppendLine();
         }
 
-        private static int FindTopNCount(string topN, string operation, string target)
-        {
-            if (string.IsNullOrEmpty(topN)
-                || string.IsNullOrEmpty(operation)
-                || string.IsNullOrEmpty(target))
-            {
-                return 0;
-            }
-
-            var entries = topN.Split(';');
-            for (var i = 0; i < entries.Length; i++)
-            {
-                var entry = entries[i].Trim();
-                if (!entry.StartsWith(operation, StringComparison.Ordinal)
-                    || entry.IndexOf(target, StringComparison.Ordinal) < 0)
-                {
-                    continue;
-                }
-
-                var equalsIndex = entry.LastIndexOf('=');
-                if (equalsIndex < 0 || equalsIndex + 1 >= entry.Length)
-                    continue;
-
-                if (int.TryParse(entry.Substring(equalsIndex + 1), out var count))
-                    return count;
-            }
-
-            return 0;
-        }
-
         public static string CreateOfficialToolDiffSummary(
             in AutoChessBattleResult result,
             in AutoChessValidationEvidence evidence)
         {
             var official = result.OfficialToolDiff;
-            var runtime = result.RuntimeDiagnostics.Evidence.Structural;
-            var runtimeStructural = runtime.RuntimeStructuralApproximationCount;
-            var officialStructural = official.JournalingStructuralRecordCount;
-            return $"runtimeSelfDiagnostics=events:{result.RuntimeDiagnostics.Evidence.Events.EventCount}, "
+            var observation = result.RuntimeV1Observation;
+            return $"runtimeV1BoundarySequenceHash=0x{observation.BoundarySequenceHash:X8}, "
+                   + $"runtimeV1BoundaryFacts={observation.BoundaryFactCount}, "
+                   + $"runtimeV1DrainFailures={observation.DrainFailureCount}, "
                    + $"officialDiffSeparatePass={evidence.OfficialDiffSeparatePass}, "
                    + $"journalingAvailable={evidence.JournalingAvailable}, "
                    + $"journalingCaptured={evidence.JournalingCaptured}, "
                    + $"journalingWorldRecords={official.JournalingWorldRecordCount}, "
-                   + $"runtimeStructuralApprox={runtimeStructural}, "
-                   + $"journalingStructural={officialStructural}, "
-                   + $"deltaStructural={runtimeStructural - officialStructural}, "
-                   + $"runtimeCreates={runtime.EntityCreateCount}, "
+                   + $"journalingStructuralRecords={official.JournalingStructuralRecordCount}, "
                    + $"journalingCreates={official.JournalingCreateEntityCount}, "
-                   + $"deltaCreates={runtime.EntityCreateCount - official.JournalingCreateEntityCount}, "
-                   + $"runtimeDestroys={runtime.EntityDestroyCount}, "
                    + $"journalingDestroys={official.JournalingDestroyEntityCount}, "
-                   + $"deltaDestroys={runtime.EntityDestroyCount - official.JournalingDestroyEntityCount}, "
                    + $"journalingAddComponents={official.JournalingAddComponentCount}, "
                    + $"journalingRemoveComponents={official.JournalingRemoveComponentCount}, "
                    + $"journalingEnableComponents={official.JournalingEnableComponentCount}, "
@@ -1008,42 +834,45 @@ namespace GAS.AutoChessDemo
 
         public static string CreateDataFlowDiagram(in AutoChessBattleResult result)
         {
-            var workload = result.RuntimeDiagnostics.Evidence.Workload;
+            var observation = result.RuntimeV1Observation;
+            var tick = observation.HasSessionObservation
+                ? observation.SessionObservation.TickDiagnostics
+                : default;
             return "```mermaid\n"
                    + "flowchart LR\n"
-                   + $"    CommandDrive[\"AutoChessBattleCommandDriveSystem\\nscale: {result.ScenarioScale}, units: {result.Units.Length}\\ncommands: {result.DriverIssuedCommands}\"] --> AbilityBuffer[\"AbilityCommandBuffer\\nrequest entities avoided\"]\n"
-                   + $"    AbilityBuffer --> RuntimeCore[\"GAS Runtime Core\\nspecs: {workload.SpecCount}\"]\n"
-                   + $"    RuntimeCore --> GEStream[\"GEEffectCommandBuffer / Spec / Delta\\ndeltas: {workload.DeltaCount}\"]\n"
-                   + $"    GEStream --> Execution[\"AutoChessExecuteDamageCalculationSystem\\nexecution outputs: {result.EventCounts.ExecutionCalculationOutputUpdated}\"]\n"
-                   + $"    Execution --> PendingDelta[\"pending AttributeModifierBuffer\\nexecution outputs: {result.EventCounts.ExecutionCalculationOutputUpdated}\"]\n"
-                   + $"    PendingDelta --> Attribute[\"GASAttributeModifierDeltaApplySystem\\nattribute changes: {result.EventCounts.AttributeChanges}\"]\n"
-                   + $"    Attribute --> Facts[\"GameplayEventBuffer typed facts\\nfacts: {workload.FactCount}\"]\n"
-                   + $"    Facts --> Projection[\"Replay / Presentation / Layer 2 Diagnostics\\nreplay events: {result.EventCounts.ReplayEvents}\"]\n"
-                   + $"    Projection --> OfficialDiff[\"Official tool diff\\nseparate pass, journaling records: {result.OfficialToolDiff.JournalingWorldRecordCount}\"]\n"
+                   + $"    CommandPort[\"ASCCommandPort\\naccepted commands: {result.AcceptedCommandCount}\"] --> Ingress[\"GasCommandIngressSystem\\nsealed commands: {tick.SealedCommandCount}\"]\n"
+                   + $"    Ingress --> Kernel[\"GasTickKernelSystem\\napplication outcomes: {tick.ApplicationOutcomeCount}\"]\n"
+                   + $"    Kernel --> Project[\"BoundaryProject\\ncore facts: {tick.CoreFactCount}\"]\n"
+                   + $"    Project --> Ring[\"GasBoundaryDrainCoordinator\\nbatches: {observation.BoundaryBatchCount}, high-water: {observation.RingHighWater}/{observation.RingCapacity}\"]\n"
+                   + $"    Ring --> ReadModel[\"RuntimeV1BoundaryReadModel\\nfacts: {observation.BoundaryFactCount}, invalid: {observation.InvalidFactCount}\"]\n"
+                   + $"    ReadModel --> Validation[\"AutoChessBattleValidationReport\\nsequence hash: 0x{observation.BoundarySequenceHash:X8}\"]\n"
+                   + $"    ReadModel -. separate official-tool pass .-> Official[\"Journaling / Profiler\\nrecords: {result.OfficialToolDiff.JournalingWorldRecordCount}\"]\n"
                    + "```";
         }
 
         public static string CreateSequenceDiagram(in AutoChessBattleResult result)
         {
-            var diagnosticEvents = result.RuntimeDiagnostics.Evidence.Events;
+            var observation = result.RuntimeV1Observation;
+            var tick = observation.HasSessionObservation
+                ? observation.SessionObservation.TickDiagnostics
+                : default;
             return "```mermaid\n"
                    + "sequenceDiagram\n"
-                   + "    participant Runner as AutoChess Demo Runner\n"
-                   + "    participant Drive as AutoChessBattle Command Drive\n"
-                   + "    participant Core as GAS Runtime Core\n"
-                   + "    participant Exec as Execution Calculation\n"
-                   + "    participant Obs as Replay / Projection\n"
-                   + "    participant Debug as Layer 2 DiagnosticsSink\n"
-                   + "    participant Unity as Unity Journaling / Profiler\n"
-                   + $"    Runner->>Drive: fixed ticks {result.TotalTicks}, battle ticks {result.BattleTicks}, scale {result.ScenarioScale}\n"
-                   + $"    Drive->>Core: AbilityCommandBuffer commands {result.DriverIssuedCommands}\n"
-                   + $"    Core->>Exec: execute GE commands, finishers {result.DriverIssuedFinisherCommands}\n"
-                   + $"    Exec->>Core: pending modifier + typed fact outputs {result.EventCounts.ExecutionCalculationOutputUpdated}\n"
-                   + $"    Core->>Core: apply pending modifier deltas {result.EventCounts.AttributeChanges}\n"
-                   + $"    Core->>Obs: attribute changes {result.EventCounts.AttributeChanges}, cue requests {result.EventCounts.CueRequests}\n"
-                   + $"    Obs->>Debug: counters {diagnosticEvents.EventCount}, warnings {diagnosticEvents.WarningCount}, errors {diagnosticEvents.ErrorCount}\n"
-                   + $"    Debug->>Unity: read EntitiesJournaling records in a separate official-diff pass\n"
-                   + $"    Unity-->>Debug: journaling structural records {result.OfficialToolDiff.JournalingStructuralRecordCount}, profiler state {result.OfficialToolDiff.ProfilerCaptureState}\n"
+                   + "    participant Runner as AutoChess Validation Runner\n"
+                   + "    participant Port as ASCCommandPort\n"
+                   + "    participant Ingress as GasCommandIngressSystem\n"
+                   + "    participant Kernel as GasTickKernelSystem\n"
+                   + "    participant Project as BoundaryProject\n"
+                   + "    participant Ring as GasBoundaryDrainCoordinator\n"
+                   + "    participant ReadModel as RuntimeV1BoundaryReadModel\n"
+                   + "    participant Validation as ValidationReport\n"
+                   + $"    Runner->>Port: enqueue commands {result.AcceptedCommandCount}\n"
+                   + $"    Port->>Ingress: seal commands {tick.SealedCommandCount}\n"
+                   + $"    Ingress->>Kernel: admitted={tick.AdmissionSucceeded != 0}, tick={tick.CandidateTick}\n"
+                   + $"    Kernel->>Project: outcomes {tick.ApplicationOutcomeCount}, attributes {tick.AttributeMutationCount}\n"
+                   + $"    Project->>Ring: immutable facts {tick.BoundaryFactCount}\n"
+                   + $"    Ring->>ReadModel: batches {observation.BoundaryBatchCount}, facts {observation.BoundaryFactCount}\n"
+                   + $"    ReadModel->>Validation: hash 0x{observation.BoundarySequenceHash:X8}, faults {observation.FaultFactCount}, invalid {observation.InvalidFactCount}\n"
                    + "```";
         }
 
@@ -1063,109 +892,38 @@ namespace GAS.AutoChessDemo
                 .Append(')');
         }
 
-        private static uint CalculateFactsHash(in GasStructuredLogExportSnapshot snapshot)
-        {
-            unchecked
-            {
-                var hash = 2166136261u;
-                var entries = snapshot.Entries ?? Array.Empty<GasStructuredLogEntry>();
-                for (var i = 0; i < entries.Length; i++)
-                {
-                    var entry = entries[i];
-                    hash = AppendHash(hash, entry.Frame);
-                    hash = AppendHash(hash, entry.Sequence);
-                    hash = AppendHash(hash, (int)entry.ReplayKind);
-                    hash = AppendHash(hash, (int)entry.GameplayEventType);
-                    hash = AppendHash(hash, entry.EventCode);
-                    hash = AppendHash(hash, entry.ReasonCode);
-                    hash = AppendHash(hash, entry.RelatedAbilityCode);
-                    hash = AppendHash(hash, entry.ContextId);
-                    hash = AppendHash(hash, entry.AttrSetCode);
-                    hash = AppendHash(hash, entry.AttributeCode);
-                    hash = AppendHash(hash, entry.TagIndex);
-                    hash = AppendHash(hash, entry.SourceReportKey);
-                    hash = AppendHash(hash, entry.TargetReportKey);
-                    hash = AppendHash(hash, entry.SourceAbility.Index);
-                    hash = AppendHash(hash, entry.GameplayEffect.Index);
-                }
-
-                return hash;
-            }
-        }
-
-        private static BoundaryReportKeyCoverage CalculateBoundaryReportKeyCoverage(
-            in GasStructuredLogExportSnapshot snapshot)
-        {
-            var entries = snapshot.Entries ?? Array.Empty<GasStructuredLogEntry>();
-            var sourceAscReferenceCount = 0;
-            var targetAscReferenceCount = 0;
-            var sourceReportKeyCount = 0;
-            var targetReportKeyCount = 0;
-            var missingSourceReportKeyCount = 0;
-            var missingTargetReportKeyCount = 0;
-
-            for (var i = 0; i < entries.Length; i++)
-            {
-                var entry = entries[i];
-                if (entry.SourceAsc != Entity.Null)
-                {
-                    sourceAscReferenceCount++;
-                    if (entry.SourceReportKey > 0)
-                        sourceReportKeyCount++;
-                    else
-                        missingSourceReportKeyCount++;
-                }
-
-                if (entry.TargetAsc != Entity.Null)
-                {
-                    targetAscReferenceCount++;
-                    if (entry.TargetReportKey > 0)
-                        targetReportKeyCount++;
-                    else
-                        missingTargetReportKeyCount++;
-                }
-            }
-
-            return new BoundaryReportKeyCoverage(
-                entries.Length,
-                sourceAscReferenceCount,
-                sourceReportKeyCount,
-                missingSourceReportKeyCount,
-                targetAscReferenceCount,
-                targetReportKeyCount,
-                missingTargetReportKeyCount);
-        }
-
-        private static StreamCarrierPressure CalculateStreamCarrierPressure(
-            in GasRuntimeDiagnosticSnapshot diagnostics)
-        {
-            var pressure = diagnostics.Evidence.Events.EffectCommandStreamPressure;
-            return new StreamCarrierPressure(
-                pressure.WarningCount,
-                pressure.PeakCount,
-                pressure.PeakCapacity);
-        }
-
         private static uint CalculateSummaryHash(
             in AutoChessBattleResult result,
-            int presentationMarkerCount,
             uint factsHash)
         {
             unchecked
             {
+                var observation = result.RuntimeV1Observation;
                 var hash = AppendHash(2166136261u, (int)factsHash);
                 hash = AppendHash(hash, result.Completed ? 1 : 0);
                 hash = AppendHash(hash, (int)result.Winner);
                 hash = AppendHash(hash, result.ScenarioScale);
                 hash = AppendHash(hash, result.BattleTicks);
-                hash = AppendHash(hash, result.DriverIssuedCommands);
-                hash = AppendHash(hash, result.EventCounts.AttributeChanges);
-                hash = AppendHash(hash, result.EventCounts.PeriodTickDamageFacts);
-                hash = AppendHash(hash, result.EventCounts.ExecutionCalculationOutputUpdated);
-                hash = AppendHash(hash, result.EventCounts.CueRequests);
-                hash = AppendHash(hash, result.RuntimeDiagnostics.Evidence.Events.EventCount);
-                hash = AppendHash(hash, result.OfficialToolDiff.JournalingWorldRecordCount);
-                hash = AppendHash(hash, presentationMarkerCount);
+                hash = AppendHash(hash, result.AcceptedCommandCount);
+                hash = AppendHash(hash, observation.GameplayFactCount);
+                hash = AppendHash(hash, observation.AttributeFactCount);
+                hash = AppendHash(hash, observation.EffectLifecycleFactCount);
+                hash = AppendHash(hash, observation.ExecutionCalculationFactCount);
+                hash = AppendHash(hash, observation.PeriodTickFactCount);
+                hash = AppendHash(hash, observation.CueFactCount);
+                hash = AppendHash(hash, observation.BattleOutcomeFactCount);
+                hash = AppendHash(hash, observation.DeathFactCount);
+                hash = AppendHash(hash, observation.RejectedEffectFactCount);
+                hash = AppendHash(hash, observation.InvalidFactCount);
+                hash = AppendHash(hash, observation.DrainFailureCount);
+                if (observation.HasSessionObservation)
+                {
+                    var session = observation.SessionObservation;
+                    hash = AppendHash(hash, unchecked((int)session.CurrentTick));
+                    hash = AppendHash(hash, session.FaultReasonCode);
+                    hash = AppendHash(hash, session.TickDiagnostics.ApplicationOutcomeCount);
+                    hash = AppendHash(hash, session.TickDiagnostics.AttributeMutationCount);
+                }
                 return hash;
             }
         }
@@ -1179,57 +937,5 @@ namespace GAS.AutoChessDemo
             }
         }
 
-        private readonly struct BoundaryReportKeyCoverage
-        {
-            public readonly int EntryCount;
-            public readonly int SourceAscReferenceCount;
-            public readonly int SourceReportKeyCount;
-            public readonly int MissingSourceReportKeyCount;
-            public readonly int TargetAscReferenceCount;
-            public readonly int TargetReportKeyCount;
-            public readonly int MissingTargetReportKeyCount;
-
-            public bool Passed =>
-                EntryCount > 0
-                && SourceAscReferenceCount > 0
-                && TargetAscReferenceCount > 0
-                && MissingSourceReportKeyCount == 0
-                && MissingTargetReportKeyCount == 0;
-
-            public BoundaryReportKeyCoverage(
-                int entryCount,
-                int sourceAscReferenceCount,
-                int sourceReportKeyCount,
-                int missingSourceReportKeyCount,
-                int targetAscReferenceCount,
-                int targetReportKeyCount,
-                int missingTargetReportKeyCount)
-            {
-                EntryCount = entryCount;
-                SourceAscReferenceCount = sourceAscReferenceCount;
-                SourceReportKeyCount = sourceReportKeyCount;
-                MissingSourceReportKeyCount = missingSourceReportKeyCount;
-                TargetAscReferenceCount = targetAscReferenceCount;
-                TargetReportKeyCount = targetReportKeyCount;
-                MissingTargetReportKeyCount = missingTargetReportKeyCount;
-            }
-        }
-
-        private readonly struct StreamCarrierPressure
-        {
-            public readonly int WarningCount;
-            public readonly int PeakCount;
-            public readonly int PeakCapacity;
-
-            public StreamCarrierPressure(
-                int warningCount,
-                int peakCount,
-                int peakCapacity)
-            {
-                WarningCount = warningCount;
-                PeakCount = peakCount;
-                PeakCapacity = peakCapacity;
-            }
-        }
     }
 }

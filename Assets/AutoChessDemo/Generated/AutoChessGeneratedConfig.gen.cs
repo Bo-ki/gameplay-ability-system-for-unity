@@ -10,7 +10,7 @@ namespace GAS.AutoChessDemo
         public readonly int MaxTicks;
         public readonly float HealthMultiplier;
         public readonly AutoChessTeam ExpectedWinner;
-        public readonly int MinDriverIssuedCommands;
+        public readonly int MinAcceptedCommands;
         public readonly int MinAttributeChanges;
         public readonly int MinExecutionOutputs;
         public readonly int MinCueRequests;
@@ -27,7 +27,7 @@ namespace GAS.AutoChessDemo
             int maxTicks,
             float healthMultiplier,
             AutoChessTeam expectedWinner,
-            int minDriverIssuedCommands,
+            int minAcceptedCommands,
             int minAttributeChanges,
             int minExecutionOutputs,
             int minCueRequests,
@@ -43,7 +43,7 @@ namespace GAS.AutoChessDemo
             MaxTicks = maxTicks;
             HealthMultiplier = healthMultiplier;
             ExpectedWinner = expectedWinner;
-            MinDriverIssuedCommands = minDriverIssuedCommands;
+            MinAcceptedCommands = minAcceptedCommands;
             MinAttributeChanges = minAttributeChanges;
             MinExecutionOutputs = minExecutionOutputs;
             MinCueRequests = minCueRequests;

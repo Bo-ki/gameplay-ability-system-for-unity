@@ -56,38 +56,6 @@ namespace GAS.AutoChessDemo
         internal AutoChessBattleUnitKey Key => _key;
     }
 
-    internal readonly struct AutoChessGasBattleDriverHandle
-    {
-        private readonly int _driverId;
-        private readonly int _version;
-
-        internal AutoChessGasBattleDriverHandle(int driverId, int version)
-        {
-            _driverId = driverId;
-            _version = version;
-        }
-
-        public bool IsValid => _driverId > 0 && _version > 0;
-
-        internal int DriverId => _driverId;
-
-        internal int Version => _version;
-    }
-
-    internal readonly struct AutoChessCombatAttributeSnapshot
-    {
-        public readonly float Health;
-        public readonly float Energy;
-        public readonly bool Alive;
-
-        public AutoChessCombatAttributeSnapshot(float health, float energy)
-        {
-            Health = health;
-            Energy = energy;
-            Alive = health > 0f;
-        }
-    }
-
     internal struct AutoChessGasCoreOfficialToolDiffCapture
     {
         private GasRuntimeOfficialToolDiffCapture _capture;
@@ -112,23 +80,17 @@ namespace GAS.AutoChessDemo
     internal readonly struct AutoChessGasCoreObservationSnapshot
     {
         public readonly GasStructuredLogExportSnapshot StructuredLog;
-        public readonly string AssertionLog;
-        public readonly GasRuntimeDiagnosticSnapshot RuntimeDiagnostics;
-        public readonly string RuntimeDiagnosticsLog;
-        public readonly AutoChessBattleEventCounts EventCounts;
+        public readonly GasRuntimeV1DiagnosticSnapshot RuntimeDiagnostics;
+        public readonly AutoChessGasV1ObservationSnapshot RuntimeV1Observation;
 
         public AutoChessGasCoreObservationSnapshot(
             GasStructuredLogExportSnapshot structuredLog,
-            string assertionLog,
-            GasRuntimeDiagnosticSnapshot runtimeDiagnostics,
-            string runtimeDiagnosticsLog,
-            AutoChessBattleEventCounts eventCounts)
+            GasRuntimeV1DiagnosticSnapshot runtimeDiagnostics,
+            AutoChessGasV1ObservationSnapshot runtimeV1Observation = default)
         {
             StructuredLog = structuredLog;
-            AssertionLog = assertionLog ?? string.Empty;
             RuntimeDiagnostics = runtimeDiagnostics;
-            RuntimeDiagnosticsLog = runtimeDiagnosticsLog ?? string.Empty;
-            EventCounts = eventCounts;
+            RuntimeV1Observation = runtimeV1Observation;
         }
     }
 }

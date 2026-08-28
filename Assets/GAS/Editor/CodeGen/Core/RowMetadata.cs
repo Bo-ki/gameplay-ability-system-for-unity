@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using GAS.Runtime;
-
 namespace GAS.Editor
 {
     public sealed class RowMetadata
@@ -14,7 +12,7 @@ namespace GAS.Editor
 
         public IReadOnlyList<string> BakerKeyFieldNames { get; set; }
 
-        public GASDefinitionKind DefinitionKind { get; set; }
+        public GasDefinitionKind DefinitionKind { get; set; }
 
         public string BlobSchemaName { get; set; }
 
@@ -25,10 +23,6 @@ namespace GAS.Editor
         public string ComponentSetName { get; set; }
 
         public string QueryDescName { get; set; }
-
-        public string CodeComponentType { get; set; }
-
-        public string BlobComponentType { get; set; }
 
         public string RowFactoryTypeName { get; set; }
 

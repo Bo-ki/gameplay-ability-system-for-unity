@@ -83,7 +83,7 @@ namespace GAS.AutoChessDemo
                       + AutoChessBattleValidationReport.CreateHeadlessLogicBudgetSummary(
                           runResult.HeadlessLogicBudget));
             Debug.Log("AutoChessDemoRuntimeDataOrientedScorecard:\n"
-                      + GasRuntimeDebugger.ExportDataOrientedScorecardToText(
+                      + GasRuntimeV1Diagnostics.ExportDataOrientedScorecardToText(
                           runResult.HeadlessLogicBudget.RuntimeScorecard));
             Debug.Log("AutoChessDemoRuntimeHotspots: "
                       + AutoChessBattleValidationReport.CreateHotspotSummary(result, diagnosticResult));
@@ -94,13 +94,13 @@ namespace GAS.AutoChessDemo
                           runResult.HeadlessLogicBudget));
             Debug.Log("AutoChessDemoBoundaryOwners: "
                       + AutoChessBattleValidationReport.CreateBoundaryOwnerSummary(result));
-            Debug.Log("AutoChessDemoBoundaryReportKeys: "
-                      + AutoChessBattleValidationReport.CreateBoundaryReportKeyCoverageSummary(
-                          result.StructuredLogSnapshot));
+            Debug.Log("AutoChessDemoRuntimeV1BoundaryCoverage: "
+                       + AutoChessBattleValidationReport.CreateRuntimeV1BoundaryCoverageSummary(
+                           result));
             Debug.Log("AutoChessDemoBattlePresentation: "
                       + AutoChessBattleValidationReport.CreatePresentationSummary(runResult.Presentation));
             Debug.Log("AutoChessDemoRuntimeBattleLog:\n" + runResult.Presentation.ToText());
-            Debug.Log("AutoChessDemoRuntimeDebugger: "
+            Debug.Log("AutoChessDemoRuntimeV1Boundary: "
                       + AutoChessBattleValidationReport.CreateDebuggerSummary(diagnosticResult));
             Debug.Log("AutoChessDemoRuntimeTiming: "
                       + AutoChessBattleValidationReport.CreateTimingSummary(result, runResult.Evidence));
@@ -110,7 +110,9 @@ namespace GAS.AutoChessDemo
                       + AutoChessBattleValidationReport.CreateDataFlowDiagram(result));
             Debug.Log("AutoChessDemoRuntimeSequence:\n"
                       + AutoChessBattleValidationReport.CreateSequenceDiagram(result));
-            Debug.Log("AutoChessDemoRuntimeDiagnostics:\n" + diagnosticResult.RuntimeDiagnosticsLog);
+            Debug.Log("AutoChessDemoRuntimeV1BoundaryReadModel:\n"
+                       + AutoChessBattleValidationReport.CreateRuntimeV1BoundaryCoverageSummary(
+                           diagnosticResult));
         }
 
         private static void WriteRunReport(
@@ -149,7 +151,7 @@ namespace GAS.AutoChessDemo
                                    runResult.HeadlessLogicBudget));
             builder.AppendLine("AutoChessDemoHeadlessRuntimeDataOrientedScorecard:");
             builder.Append(
-                GasRuntimeDebugger.ExportDataOrientedScorecardToText(
+                GasRuntimeV1Diagnostics.ExportDataOrientedScorecardToText(
                     runResult.HeadlessLogicBudget.RuntimeScorecard));
             builder.AppendLine("AutoChessDemoHeadlessRuntimeHotspots: "
                                + AutoChessBattleValidationReport.CreateHotspotSummary(
@@ -163,13 +165,13 @@ namespace GAS.AutoChessDemo
                     runResult.HeadlessLogicBudget));
             builder.AppendLine("AutoChessDemoHeadlessBoundaryOwners: "
                                + AutoChessBattleValidationReport.CreateBoundaryOwnerSummary(result));
-            builder.AppendLine("AutoChessDemoHeadlessBoundaryReportKeys: "
-                               + AutoChessBattleValidationReport.CreateBoundaryReportKeyCoverageSummary(
-                                   result.StructuredLogSnapshot));
+            builder.AppendLine("AutoChessDemoHeadlessRuntimeV1BoundaryCoverage: "
+                                + AutoChessBattleValidationReport.CreateRuntimeV1BoundaryCoverageSummary(
+                                    result));
             builder.AppendLine("AutoChessDemoHeadlessBattlePresentation: "
                                + AutoChessBattleValidationReport.CreatePresentationSummary(
                                    runResult.Presentation));
-            builder.AppendLine("AutoChessDemoHeadlessRuntimeDebugger: "
+            builder.AppendLine("AutoChessDemoHeadlessRuntimeV1Boundary: "
                                + AutoChessBattleValidationReport.CreateDebuggerSummary(diagnosticResult));
             builder.AppendLine("AutoChessDemoHeadlessRuntimeTiming: "
                                + AutoChessBattleValidationReport.CreateTimingSummary(
@@ -257,7 +259,7 @@ namespace GAS.AutoChessDemo
                     m_processWarmupRuns >= 0 ? m_processWarmupRuns : scenario.ProcessWarmupRuns,
                     m_healthMultiplier > 0f ? m_healthMultiplier : scenario.HealthMultiplier,
                     scenario.ExpectedWinner,
-                    scenario.MinDriverIssuedCommands,
+                    scenario.MinAcceptedCommands,
                     scenario.MinAttributeChanges,
                     scenario.MinExecutionOutputs,
                     scenario.MinCueRequests,

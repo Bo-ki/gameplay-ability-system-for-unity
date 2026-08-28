@@ -1,3 +1,4 @@
+using System;
 using GAS.Runtime;
 
 namespace GAS.AutoChessDemo
@@ -8,7 +9,7 @@ namespace GAS.AutoChessDemo
 
         void Open(in AutoChessBattleOptions options);
 
-        void AdvanceFixedTick(
+        bool AdvanceFixedTick(
             bool recordTiming,
             ref AutoChessBattleRuntimeTiming runtimeTiming);
 
@@ -34,15 +35,16 @@ namespace GAS.AutoChessDemo
 
         public void Open(in AutoChessBattleOptions options)
         {
-            AutoChessGasRuntimeHost.EnsureRuntimeInitialized();
+            if (!AutoChessGasRuntimeHost.EnsureRuntimeInitialized())
+                throw new InvalidOperationException("Runtime v1 AutoChess host 初始化失败。");
             AutoChessGasObservationGateway.ResetObservationState(options.Normalize());
         }
 
-        public void AdvanceFixedTick(
+        public bool AdvanceFixedTick(
             bool recordTiming,
             ref AutoChessBattleRuntimeTiming runtimeTiming)
         {
-            AutoChessGasRuntimeTicker.TickRuntime(recordTiming, ref runtimeTiming);
+            return AutoChessGasRuntimeTicker.TickRuntime(recordTiming, ref runtimeTiming);
         }
 
         public AutoChessGasCoreOfficialToolDiffCapture BeginOfficialToolDiffCapture()

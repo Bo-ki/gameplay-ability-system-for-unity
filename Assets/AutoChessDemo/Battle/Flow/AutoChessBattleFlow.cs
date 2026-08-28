@@ -6,6 +6,7 @@ namespace GAS.AutoChessDemo
     internal sealed class AutoChessBattleFlow : System.IDisposable
     {
         private const int WarmupRuntimeTicks = 3;
+        private const int SpawnFinalizeWarmupTicks = 2;
 
         private readonly AutoChessBattleOptions _options;
         private readonly AutoChessBattleProfileHooks _profileHooks;
@@ -69,8 +70,12 @@ namespace GAS.AutoChessDemo
             var shouldRecordTiming = _droppedWarmupTicks >= WarmupRuntimeTicks;
             OpenMeasuredWindowIfNeeded(shouldRecordTiming);
 
+            // 在本次固定 tick 前完成唯一 CommandPort 的确定性业务投递，避免绕过 Runtime v1 ingress。
+            _session.QueueDeterministicCommands((ulong)(_totalTicks + 1));
+
             var tickStart = shouldRecordTiming ? Stopwatch.GetTimestamp() : 0L;
-            _runtime.AdvanceFixedTick(shouldRecordTiming, ref _runtimeTiming);
+            if (!_runtime.AdvanceFixedTick(shouldRecordTiming, ref _runtimeTiming))
+                return false;
 
             if (shouldRecordTiming)
             {
@@ -106,8 +111,6 @@ namespace GAS.AutoChessDemo
                 _session.TryResolveWinner(out _winner);
 
             _stopwatch.Stop();
-            var driverStats = _session.GetDriverStats();
-            var driverOwnerSnapshot = _session.GetDriverOwnerSnapshot();
             var diagnosticsStart = Stopwatch.GetTimestamp();
             var coreObservation = _runtime.ExportDiagnostics();
             _runtimeTiming.AddDebuggerExport(Stopwatch.GetTimestamp() - diagnosticsStart);
@@ -122,8 +125,6 @@ namespace GAS.AutoChessDemo
                 _totalTicks,
                 _droppedWarmupTicks,
                 _measuredTicks,
-                driverStats,
-                driverOwnerSnapshot,
                 _stopwatch.ElapsedTicks,
                 _stopwatch.Elapsed.TotalMilliseconds,
                 _measuredElapsedTicks,
@@ -144,17 +145,44 @@ namespace GAS.AutoChessDemo
             }
 
             _session.Close();
-            FlushRuntimeCleanup();
-            _disposed = true;
+            try
+            {
+                FlushRuntimeCleanup();
+            }
+            finally
+            {
+                // 每场战局都关闭唯一 Session/World，下一场必须重新走 Stage-B，禁止跨局复用旧代际。
+                _runtime.Shutdown();
+                _disposed = true;
+            }
         }
 
         private void OpenSession()
         {
             _stopwatch = Stopwatch.StartNew();
             _session.Open();
-            _runtime.AdvanceFixedTick(recordTiming: false, ref _runtimeTiming);
-            _droppedWarmupTicks++;
-            _totalTicks++;
+            for (var warmupIndex = 0; warmupIndex < SpawnFinalizeWarmupTicks; warmupIndex++)
+            {
+                if (!_runtime.AdvanceFixedTick(recordTiming: false, ref _runtimeTiming))
+                    throw new System.InvalidOperationException("Runtime v1 SpawnFinalize warmup batch 未执行。");
+                _droppedWarmupTicks++;
+                _totalTicks++;
+            }
+            if (!_session.QueueInitialAttack(availableTick: 1))
+            {
+                var hasObservation = AutoChessGasRuntimeAccess.TryReadSessionObservation(out var observation);
+                throw new System.InvalidOperationException(
+                    "Runtime v1 AutoChess 首个 ApplyEffect 命令未被 Port 接受，状态="
+                    + _session.InitialAttackStatus
+                    + (hasObservation
+                        ? ", session=" + observation.SessionState
+                          + ", fault=" + observation.FaultReasonCode
+                          + ", battle=" + observation.FirstBattleState
+                          + ", ingress=" + observation.FirstBattleIngressOpen
+                          + ", readyAscs=" + observation.ReadyAscCount + "/" + observation.AscCount
+                        : ", session-observation=unavailable")
+                    + "。");
+            }
             _opened = true;
         }
 
@@ -224,8 +252,10 @@ namespace GAS.AutoChessDemo
 
         private void FlushRuntimeCleanup()
         {
-            _runtime.AdvanceFixedTick(recordTiming: false, ref _runtimeTiming);
-            _runtime.AdvanceFixedTick(recordTiming: false, ref _runtimeTiming);
+            if (!_runtime.AdvanceFixedTick(recordTiming: false, ref _runtimeTiming) ||
+                !_runtime.AdvanceFixedTick(recordTiming: false, ref _runtimeTiming))
+                throw new System.InvalidOperationException("Runtime v1 cleanup batch 未执行。");
         }
+
     }
 }

@@ -17,7 +17,7 @@
     "maxTicks": 96,
     "healthMultiplier": 1.0,
     "expectedWinner": "AutoChessTeam.Player",
-    "minDriverIssuedCommands": 1,
+    "minAcceptedCommands": 1,
     "minAttributeChanges": 1,
     "minExecutionOutputs": 1,
     "minCueRequests": "Auto",

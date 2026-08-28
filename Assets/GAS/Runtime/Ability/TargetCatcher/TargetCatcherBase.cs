@@ -1,28 +1,12 @@
-using System.Collections.Generic;
-using Unity.Entities;
 using UnityEngine;
 
 namespace GAS.Runtime
 {
+    /// <summary>
+    /// 只描述生成期的目标规则参数；Runtime v1 在 TargetResolve 阶段生成稳定 planned token，禁止从这里访问 World、Entity 或物理结果。
+    /// </summary>
     public abstract class TargetCatcherBase
     {
-        public Entity Owner;
-        protected EntityManager EntityManager { get; private set; }
-
-        public virtual void Init(EntityManager entityManager, Entity owner)
-        {
-            EntityManager = entityManager;
-            Owner = owner;
-        }
-
-        public void CollectTargetsNonAlloc(Entity mainTarget, List<Entity> results)
-        {
-            results.Clear();
-            CollectTargetsNonAllocCore(mainTarget, results);
-        }
-
-        protected abstract void CollectTargetsNonAllocCore(Entity mainTarget, List<Entity> results);
-
         public virtual void InitParameters(XParam parameter) { }
 
         public virtual void OnEditorPreview(GameObject obj) { }
@@ -38,7 +22,7 @@ namespace GAS.Runtime
                 Parameter = t;
 #if UNITY_EDITOR
             else
-                Debug.LogError($"Parameter type mismatch: expected {typeof(T)}, but got {parameter.GetType()}");
+                Debug.LogError($"Parameter type mismatch: expected {typeof(T)}, but got {parameter?.GetType() ?? typeof(void)}");
 #endif
         }
     }

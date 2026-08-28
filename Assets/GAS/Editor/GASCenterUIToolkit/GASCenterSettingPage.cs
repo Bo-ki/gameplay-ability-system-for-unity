@@ -77,24 +77,12 @@ namespace GAS.Editor
                 multiline = true,
                 isReadOnly = true,
                 value =
-                    $"Launcher 脚本路径: {_context.SettingAsset.PathOfCodeLauncher}\n\n" +
-                    $"Tag 配置 Json 路径: {_context.SettingAsset.PathOfJsonTag}\n" +
-                    $"Tag 配置 Excel 路径: {_context.SettingAsset.PathOfExcelTag}\n" +
-                    $"Tag 脚本路径: {_context.SettingAsset.PathOfCodeTag}\n\n" +
-                    $"属性配置 Json 路径: {_context.SettingAsset.PathOfJsonAttr}\n" +
-                    $"属性配置 Excel 路径: {_context.SettingAsset.PathOfExcelAttr}\n" +
-                    $"属性脚本路径: {_context.SettingAsset.PathOfCodeAttr}\n\n" +
-                    $"属性集配置 Json 路径: {_context.SettingAsset.PathOfJsonAttrSet}\n" +
-                    $"属性集配置 Excel 路径: {_context.SettingAsset.PathOfExcelAttrSet}\n" +
-                    $"属性集脚本路径: {_context.SettingAsset.PathOfCodeAttrSet}\n\n" +
-                    $"Effect 配置 Json 路径: {_context.SettingAsset.PathOfJsonEffect}\n" +
-                    $"Effect 配置 Excel 路径: {_context.SettingAsset.PathOfExcelEffect}\n\n" +
-                    $"Ability 配置 Json 路径: {_context.SettingAsset.PathOfJsonAbility}\n" +
-                    $"Ability 配置 Excel 路径: {_context.SettingAsset.PathOfExcelAbility}\n" +
-                    $"Ability 脚本路径: {_context.SettingAsset.PathOfCodeAbility}\n\n" +
-                    $"Cue 配置 Json 路径: {_context.SettingAsset.PathOfJsonCue}\n" +
-                    $"Cue 配置 Excel 路径: {_context.SettingAsset.PathOfExcelCue}\n" +
-                    $"Cue 脚本路径: {_context.SettingAsset.PathOfCodeCue}"
+                    $"Runtime v1 代码输出路径: {_context.SettingAsset.CodeGeneratePath}\n" +
+                    $"规范化 Row 输出: {_context.SettingAsset.CodeGeneratePath}/Editor/LubanNormalizedRows.gen.cs\n" +
+                    $"生成清单: {_context.SettingAsset.CodeGeneratePath}/GasCodeGen.manifest.json\n" +
+                    $"验证报告: {_context.SettingAsset.CodeGeneratePath}/GasCodeGenValidationReport.md\n\n" +
+                    $"表 Json 输出路径: {_context.SettingAsset.TableOutpuPath}\n" +
+                    $"表 C# 输出路径: {_context.SettingAsset.TableClassCodeOutpuPath}"
             };
             summary.AddToClassList("gas-path-summary");
             _root.Add(summary);
@@ -102,18 +90,13 @@ namespace GAS.Editor
 
         private void AddGenerationButtons()
         {
-            AddSectionTitle("生成脚本");
+            AddSectionTitle("Runtime v1 生成");
 
             var row = new Toolbar();
             row.AddToClassList("gas-button-row");
             row.Add(new ToolbarButton(SaveSettings) { text = "保存设置" });
             row.Add(new ToolbarButton(ExportJsonTables) { text = "导出 Json 表" });
-            row.Add(new ToolbarButton(CodeGenerator.GenerateAllCode) { text = "一键生成所有" });
-            row.Add(new ToolbarButton(CodeGenerator.GenerateTagCode) { text = "Tag 脚本" });
-            row.Add(new ToolbarButton(CodeGenerator.GenerateAttrCode) { text = "属性脚本" });
-            row.Add(new ToolbarButton(CodeGenerator.GenerateAttrSetCode) { text = "属性集脚本" });
-            row.Add(new ToolbarButton(CodeGenerator.GenerateCueCode) { text = "Cue 脚本" });
-            row.Add(new ToolbarButton(CodeGenerator.GenerateAbilityCode) { text = "Ability 脚本" });
+            row.Add(new ToolbarButton(CodeGenerator.GenerateAllCode) { text = "生成 Runtime v1" });
             _root.Add(row);
         }
 

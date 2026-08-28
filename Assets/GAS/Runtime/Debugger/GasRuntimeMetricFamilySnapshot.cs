@@ -325,103 +325,6 @@ namespace GAS.Runtime
 
         public bool HasEvidence => MetricFamilyMask != GasRuntimeDiagnosticsMetricFamilyMask.None;
 
-        public static GasRuntimeMetricFamilySnapshot Create(
-            in GasRuntimeCoreDiagnosticCounters core,
-            in GasRuntimeFrameBackboneDiagnosticCounters frameBackbone,
-            in GasRuntimeObservationMaterializationCounters observation,
-            in GasRuntimeMagnitudeSourceCounters magnitude)
-        {
-            var workload = new GasRuntimeWorkloadMetricSnapshot(
-                core.RequestCount,
-                core.SpecCount,
-                core.DeltaCount,
-                core.FactCount,
-                core.CueCount,
-                core.PresentationCount);
-            var coreMagnitudeSourceLookupCount =
-                core.MagnitudeSourceCurrentValueLookupCount
-                + core.MagnitudeSourceSourceAttributeLookupCount
-                + core.MagnitudeSourceTargetAttributeLookupCount
-                + core.MagnitudeSourceExecutionInputLookupCount;
-            var diagnosticMagnitudeSourceLookupCount =
-                magnitude.CurrentValueLookupCount
-                + magnitude.SourceAttributeLookupCount
-                + magnitude.TargetAttributeLookupCount
-                + magnitude.ExecutionInputLookupCount;
-            var magnitudeSourceLookupCount = Max(
-                coreMagnitudeSourceLookupCount,
-                diagnosticMagnitudeSourceLookupCount);
-            var magnitudeSourceCaptureMissCount = Max(
-                core.MagnitudeSourceCaptureMissCount,
-                magnitude.CaptureMissCount);
-            var magnitudeSourceFallbackCount = Max(
-                core.MagnitudeSourceFallbackValueCount + core.MagnitudeSourceFallbackFactCount,
-                magnitude.FallbackValueCount + magnitude.FallbackFactCount);
-            var gasConcept = new GasRuntimeGasConceptMetricSnapshot(
-                core.ActiveMutationCommandCount,
-                core.PendingAttributeDeltaCount,
-                core.OwnerLocalFactCount,
-                core.ActiveEffectSlotCount,
-                core.ActiveEffectChunkSkipDuePeriodSlotCount,
-                magnitudeSourceLookupCount,
-                magnitudeSourceCaptureMissCount,
-                magnitudeSourceFallbackCount);
-            var dataShape = new GasRuntimeDataShapeMetricSnapshot(
-                core.ActiveMutationOwnerGroupCount,
-                core.ActiveMutationMaxOwnerRange,
-                core.PendingAttributeTargetGroupCount,
-                core.PendingAttributeMaxTargetRange,
-                core.OwnerLocalFactOwnerGroupCount,
-                core.OwnerLocalFactMaxOwnerRange,
-                core.OwnerLocalFactFlushCount,
-                core.OwnerLocalFactChangedChunkCount,
-                core.OwnerLocalFactScannedOwnerCount,
-                core.OwnerLocalFactDirtyOwnerCount,
-                core.OwnerLocalFactSkippedOwnerCount,
-                core.OwnerLocalFactClearedOwnerCount,
-                core.ActiveEffectSlotCount,
-                core.ActiveEffectSlotCapacity,
-                magnitude.ActiveEffectSlotSourceSnapshotCapacity,
-                magnitude.ActiveEffectSlotSourceSnapshotSpillCount);
-            var apiHealth = new GasRuntimeApiHealthMetricSnapshot(
-                core.QueryBudget,
-                core.FilteredQueryBudget,
-                core.UnfilteredQueryBudget,
-                core.LookupUpdateBudget,
-                core.RandomLookupBudget,
-                core.SyncQueryBudget,
-                core.HelperTempQueryRiskCount,
-                core.DependencyWaitRiskCount,
-                core.WorldUpdateAllocatorOwnerCount,
-                core.RewindableAllocatorCandidateCount,
-                core.ActiveMutationEstimatedRandomLookupCount,
-                core.PendingAttributeEstimatedRandomLookupCount);
-            var structural = new GasRuntimeStructuralMetricSnapshot(
-                core.EntityCreateCount,
-                core.EntityDestroyCount,
-                core.EcbPlaybackCount,
-                frameBackbone.RequiredStructuralPlaybackCount,
-                frameBackbone.RecordedStructuralPlaybackCount,
-                frameBackbone.EcbCommandCount,
-                frameBackbone.BulkQueryCount);
-            var overhead = new GasRuntimeOverheadMetricSnapshot(
-                observation.MaterializedQueryCount,
-                observation.MaterializedEntityCount,
-                observation.ElapsedMicroseconds,
-                observation.PerformancePollutionRiskCount,
-                frameBackbone.ProfilerMarkerCount,
-                frameBackbone.JournalingMarkerCount,
-                frameBackbone.DebuggerOverheadBudgetMicroseconds,
-                frameBackbone.SamplingInterval);
-            return new GasRuntimeMetricFamilySnapshot(
-                workload,
-                gasConcept,
-                dataShape,
-                apiHealth,
-                structural,
-                overhead);
-        }
-
         private static GasRuntimeDiagnosticsMetricFamilyMask ComputeMetricFamilyMask(
             in GasRuntimeWorkloadMetricSnapshot workload,
             in GasRuntimeGasConceptMetricSnapshot gasConcept,
@@ -448,9 +351,5 @@ namespace GAS.Runtime
             return mask;
         }
 
-        private static int Max(int left, int right)
-        {
-            return left >= right ? left : right;
-        }
     }
 }
