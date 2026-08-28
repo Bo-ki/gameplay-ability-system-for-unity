@@ -7,6 +7,7 @@
 ## 必读
 
 - 当前事实：[Runtime v1 不可兼容迁移基线事实](../../00-当前架构事实/RuntimeV1不可兼容迁移基线事实.md)
+- 第三轮增量事实：[Runtime v1 第三轮多 Agent 架构与性能审查事实](../../00-当前架构事实/RuntimeV1第三轮多Agent架构与性能审查事实.md)
 - 目标规范：[17-GAS业务链路破坏性重划分 Spec](../../01-目标态架构共识/17-GAS业务链路破坏性重划分Spec.md)
 - 二轮裁决与最低向量：[10B-08 真实业务链二轮审查](../../01-目标态架构共识/10B-AutoChess完整业务案例/10B-08-真实业务链二轮审查与疑点裁决Spec.md)
 - 总任务入口：[02 主线任务树](../README.md)
@@ -26,13 +27,13 @@ V2-V4 是同一个不可分割的 Runtime authority 集成窗口：允许在隔�
 | [V2](V2-ASC稳定Slab与Handle.md) | ASC-local non-compacting authority |
 | [V3](V3-单TickKernel与AbilityCommit.md) | 单 Core writer、标准 EndFixed、Ability transaction |
 | [V4](V4-EffectAttributeTag语义闭合.md) | Effect/Attribute/Tag 语义闭环 |
-| [V5](V5-BoundaryDrainCue与销毁交接.md) | 单 Drain、Cue 四阶段、terminal destroy handoff |
+| [V5](V5-BoundaryDrainCue与销毁交接.md) | Accepted Request ledger、per-Battle双cut+SnapshotCut seal、单Drain/Cue、Disposed/ValidationResultSeal |
 | [V6](V6-AutoChess迁移与旧链删除.md) | Demo 迁移与旧链零运行命中 |
 | [V7](V7-确定性规模与Profiler门.md) | Release evidence |
 
-## Tier B 最低向量消费
+## ValidationVectorManifest 消费
 
-V0 建立 15 项 red/green manifest，后续任务按下表实现并回填；任何一项无 owner 或最终非 green 都阻止 V6 删除门与 V7 release evidence：
+V0建立由`01/10`唯一拥有的versioned manifest。`TB-01..TB-17`覆盖第二轮业务向量，第三轮`R3-*`覆盖配置、target transaction、ingress/battle、runner/result与规模缺口；任何entry缺owner/test source/evidence或最终非green都阻止V6删除门与V7 release evidence：
 
 | `10B-08` 向量 | 实现/验收 owner |
 |---|---|
@@ -42,9 +43,16 @@ V0 建立 15 项 red/green manifest，后续任务按下表实现并回填；任
 | 9：9203 全时序与 period self-delete | V4 |
 | 10-11：LeaveGranted、Cue active cycle | V4 + V5 |
 | 12：Avatar rebind/FrozenSpatial | V1 + V3 + V6 |
-| 13：双杀/平局与 multi-BattleInstance 终局隔离 | V3 + V6 |
-| 14：Boundary retry、无下一 tick teardown、Result后零事实 | V5 + V6 |
-| 15：TickBatch切分不改变 semantic hash | V7 |
+| 13：双杀/平局与 multi-BattleInstance 终局隔离 | V3 + V5 + V6 |
+| 14：SpawnInitializationTransaction整批Ready/失败零发布 | V1 + V3 + V4 |
+| 15：Admission zero-write与FaultClose exact membership | V3 + V5 |
+| 16：scoped outbox retry/late tail/NoFactReceipt/无下一tick teardown | V5 + V6 |
+| 17：ValidationResultSeal后零事实与TickBatch partition semantic等价 | V5 + V7 |
+| `R3-CFG-*` | V1 + V6 + V7 |
+| `R3-CMT/STB/ING/BTL-*` | V3 + V4 + V5 |
+| `R3-TCK/SNP/CUE/RSL-*` | V5 + V6 + V7 |
+| `R3-GRT/LIV/REF-*` | V4 |
+| `R3-HOT-*` | V7 |
 
 ## 全局停止条件
 
@@ -55,6 +63,7 @@ V0 建立 15 项 red/green manifest，后续任务按下表实现并回填；任
 3. Kernel phase 需要跨 System NativeContainer 或主线程 `Complete()` 才能串联。
 4. Boundary consumer 需要 raw Entity/World/EntityManager 或直接清 ECS buffer。
 5. 没有真实测试却准备删除旧链。
+6. Target stabilization需要先写durable再判断fatal，或Runtime/配置发布需要fallback/双事实源。
 
 ## 交还规则
 

@@ -14,8 +14,8 @@ Gather / TickStartSnapshot + PlanExpandScratchProvision
   -> AscOwnerCommandWave（no-fail CommitPlan）
   -> SourceSpecProjection
   -> GroupByTarget
-  -> AscTargetStateWave（Requirement / Immunity / Stack / Attribute）
-  -> Stabilize / Death
+  -> TargetPrepare（Requirement / Immunity / Stack / Attribute / Stabilize / Death in shadow）
+  -> SessionFaultReduce / TargetPublish（no-fail durable publish）
   -> StableFactMerge / per-BattleInstance TerminalResolve
   -> GroupNextTickRouteByDestination
   -> BoundaryProject / Cleanup Outbox

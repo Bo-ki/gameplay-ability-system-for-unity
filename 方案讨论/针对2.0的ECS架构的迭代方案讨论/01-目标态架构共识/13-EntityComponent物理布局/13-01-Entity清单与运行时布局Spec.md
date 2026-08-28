@@ -30,7 +30,7 @@ Definition、Catalog 与 Layout 是 Blob，不因静态内容被烘焙成“每�
 | `BattleInstanceSlot[]` | 稳定 `BattleInstanceId`、BattleLocalTick、ingress/lifecycle、member range/count、terminal/outcome state | Kernel SpawnFinalize/TerminalResolve 与 teardown 单写 |
 | `AscRegistrySlot[]` | `OwnerAscHandle`、内部 Entity、BattleInstance handle、SpawnBatchId、`Pending/Ready/Tombstone`；非压缩 | SpawnFinalize/teardown 单写；Gather 只发布 Ready entry 到 tick-local lookup |
 | `SessionFaultLatch` | FaultId/Epoch/FaultTick/Reason、Detected/IngressClosed、sealed subset 证据、fault-close 时 accepted-outstanding first/last/count/hash | `FaultLatchJob` 写 Detected；DAG 完成后 Boundary `FaultCloseHandshake` 只终结 fixed-size 控制状态 |
-| `BoundaryCommandInbox[]` | Epoch、RequestId、gate-assigned RequestSequence、semantic SourceSequence、Source/Battle stable identity、AvailableTick、generated unmanaged payload/range | pre-Fixed `GasCommandIngressSystem` 唯一 append；Kernel Gather seal/consume 期间零 writer |
+| `BoundaryCommandInbox[]` | Epoch、RequestKey、PayloadHash、RequestSequence、ProducerSourceSequence、Source/Battle stable identity、AssignedAvailableTick、generated unmanaged payload/range | pre-Fixed `GasCommandIngressSystem` 唯一 append；Kernel Gather seal/consume 期间零 writer |
 | `BoundaryFactBuffer[]` | BattleInstance/Session-scope final facts；元素为 cleanup buffer | BoundaryProject 单写；单 managed drain 接管 |
 | `BoundaryDrainState` | Session outbox 的 frozen physical owner identity、持久 `NextOwnerSequence`、Idle/Pending/InFlight/Accepted、BatchId/InFlightWatermark；Session owner 不伪造唯一 Battle identity | Kernel projection/prepass + managed drain 协议写 |
 
@@ -38,7 +38,7 @@ Definition、Catalog 与 Layout 是 Blob，不因静态内容被烘焙成“每�
 
 `BattleInstanceSlot` 是 Session-local 非压缩 registry：slot identity/generation 与稳定 `BattleInstanceId` 分离，单战局 Terminal 只封闭自身 ingress。只有全部 live slot 已 Terminal，或收到显式 stop，才允许 `GasSessionLifecycle` 进入 Terminalizing。成员关系由 ASC 的 `AscBattleMembership` 指向稳定 BattleInstance slot；v1 Ready 后不支持把 live ASC静默迁移到另一战局。
 
-`BoundaryCommandInbox` 是跨 render frame/跨 fixed tick 的 Session 持久队列，不是 WorldUpdateAllocator scratch，也不同于内部 T+1 `PendingCommand`。0 fixed tick时 Boundary journal 与 ECS inbox 都保留；pre-Fixed ingress window 关闭后，Gather只 seal `AvailableTick<=CurrentTick` 的稳定范围并保证 RequestId恰好消费一次。Entities 依赖按整个 buffer 跟踪，不存在 Kernel 读 prefix 时 CommandPort 合法并发写 tail 的路径。
+`BoundaryCommandInbox` 是跨 render frame/跨 fixed tick 的 Session 持久队列，不是 WorldUpdateAllocator scratch，也不同于内部 T+1 `PendingCommand`。0 fixed tick时 Boundary journal 与 ECS inbox 都保留；pre-Fixed ingress window 关闭后，Gather只 seal `AssignedAvailableTick<=CurrentTick` 的稳定 membership，并保证每个 `RequestKey` 恰好消费一次。Entities 依赖按整个 buffer 跟踪，不存在 Kernel 读 prefix 时 CommandPort 合法并发写 tail 的路径。
 
 SpawnBatch 不承诺 ECB 物理回滚，只承诺 gameplay 可见性原子。setup update S 只记录 Pending ASC 和 Pending `AscRegistrySlot` 到标准 EndFixed；playback 后不允许 Drain/runner 写 Ready。下一次完整 FixedStep 中，`GasTickKernelSystem` 运行 `SpawnFinalize` maintenance lane：它对该 Batch 全量查询，并在 scratch 建立 canonical `SpawnInitializationTransaction`，先校验实体数、固定 Buffer 长度、hash、cleanup 类型，再对 shadow 按配置 ordinal 应用 Attribute init、initial tags、default grants 和 initial effects。initial effect 复用正式 requirement/capture/stack/contribution/grant/Cue/fact 纯 evaluator，但 v1 只允许 self-target、生成期闭合且静态有界的 bootstrap program；跨 ASC、空间目标、Live capture、动态 reaction/结构 child 必须 bake fail。全批 shadow 结果、slab/payload/outbox 上界与所有 typed outcome 均成功后，才以 no-fail 单 writer 一次拷贝权威状态、发布 initial fact/Cue，并提交全部 `AscLifecycle=Ready`/Registry Ready；任一失败则无成员可见，Session→Faulted并记录整批销毁。
 
@@ -80,7 +80,7 @@ spawn 时按照 Session Blob 一次初始化。热路径允许改元素，不允
 | Ability Subscription | observed ASC | recipient activation/continuation handle、generation、wait policy、recipient sequence；晚到投递双重 generation 校验 |
 | Cooldown Gate | owner ASC | GateKey/AbilityDefinitionId、source grant/activation/commit provenance、generation/state、StartTick/EndTick、`RejectWhileActive + ExpireOnly` policy、owned Tag contribution range |
 | Activation Owned Contribution | owner ASC | activation handle、contribution kind/handle、生命周期 policy；与 emitted application 引用分离 |
-| Emitted Application Ref | owner ASC | activation handle、TargetAscHandle、EffectApplicationId、audit retention与cleanup policy；成功 Commit时写入，不等待TargetWave outcome/ActiveEffectHandle跨 ASC回写；只有显式 `RemoveOnActivationEnd` ref随End生成remove work |
+| Emitted Application Ref | owner ASC | activation handle、TargetAscHandle、EffectApplicationId、audit retention与cleanup policy；成功 Commit时写入，不等待TargetPublish outcome/ActiveEffectHandle跨 ASC回写；只有显式 `RemoveOnActivationEnd` ref随End生成remove work |
 | Active Effect | target ASC | definition、source/target handle、generation、stack、period/end tick、inhibition、payload/capture/aggregator range |
 | Active Effect Payload/Capture | target ASC | 版本化 unmanaged variant、SetByCaller/Context、source snapshot、target capture；以 non-compacting range 引用 |
 | Aggregator | target ASC | attribute/channel/contribution、dirty/revision；只由 target writer 修改 |

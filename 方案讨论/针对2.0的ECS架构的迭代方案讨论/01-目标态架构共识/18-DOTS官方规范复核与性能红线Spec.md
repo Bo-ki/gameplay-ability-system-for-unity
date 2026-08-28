@@ -23,22 +23,25 @@
 | 主题 | v1 决策 | 性质 |
 |---|---|---|
 | 时间域 | FixedStep；一渲染帧 `0..N` Tick；整数 `SimulationTick` | 项目裁决 |
+| 首次更新 | Session Install 显式消费 RateManager 的 `t=0` maintenance prime；不递增 `SimulationTick`，业务初始态进入 `BootstrapSemanticHash` | Package 机制 + 项目裁决 |
 | 位置 | `GasFixedTickSystemGroup` 是 FixedStep 直接子组，`UpdateAfter(PhysicsSystemGroup)` | 项目裁决 |
 | Physics | GAS 默认 PostPhysics；本 Tick物理结果供 GAS，本 Tick GAS 物理写影响下一 Physics Tick | 项目裁决 |
 | 多 PhysicsWorld | 不把全局 GAS 放 `AfterPhysicsSystemGroup`，避免在 custom physics group 中复制 GAS | 项目裁决，依据 Physics 组机制 |
 | 系统形态 | 一个 `GasFixedTickSystemGroup` + 必装纯 `GasCommandIngressSystem` + 一个 `GasTickKernelSystem` | 项目裁决 |
 | Job | Kernel 内一个连续 Job DAG；lane 不等于 System；所有边为 JobHandle 依赖且无 phase Complete | 项目裁决 |
-| Kernel DAG | `Gather/TickStartSnapshot + PlanExpandScratchProvision -> OwnerPlanBuild -> TargetResolve/Expand -> WholeTickInfraAdmission -> AscOwnerCommandWave -> SourceSpecProjection -> GroupByTarget -> AscTargetStateWave -> Stabilize/Death -> StableFactMerge/TerminalResolve -> GroupNextTickRouteByDestination -> BoundaryProject -> Record EndFixed` | 项目裁决 |
+| Kernel DAG | `Gather/TickStartSnapshot + PlanExpandScratchProvision -> OwnerPlanBuild -> TargetResolve/Expand -> WholeTickInfraAdmission -> AscOwnerCommandWave -> SourceSpecProjection -> GroupByTarget -> TargetPrepare/Stabilize -> SessionFaultReduce -> TargetPublish -> StableFactMerge/TerminalResolve -> GroupNextTickRouteByDestination -> BoundaryProject -> Record EndFixed` | 项目裁决 |
 | scratch | `SystemState.WorldUpdateAllocator`；项目可用期仅当前 GAS Tick | API + 更严格项目约束 |
 | 容量 | 生成上界驱动整 Tick admission；失败时 gameplay 权威零写并 Fault；IBC 不是逻辑 capacity | 项目裁决 |
 | 结构变化 | 标准 `EndFixedStepSimulationEntityCommandBufferSystem` | 项目裁决 |
 | Session | 一 World 一个 active Tick domain；Spawn Pending/Ready 只保证 gameplay 可见性原子，不承诺 ECB 回滚 | 项目裁决 |
 | ASC 状态 | Attribute/Tag 固定逻辑长度 Buffer；Ability/Activation/Continuation/Subscription/Contribution/Effect/Payload/Aggregator/LiveDependency non-compacting slab/range | 项目裁决 |
-| 稳定化 | target 间并行、target 内单写并求稳定态；不收敛 fatal | 项目裁决 |
+| 稳定化 | target 间并行、target 内单写并在 tick-local shadow 求稳定态；SessionFaultReduce成功后才发布 durable；不收敛为 Session-fatal | 项目裁决 |
 | 顺序 | schema/catalog-hashed SemanticPhaseOrdinal/WorkClassOrdinal；不得使用 physical Job lane | 项目裁决 |
 | source/target | committed-work-wins；`TargetLifePolicy` 在每条 application 线性化点检查 | 项目裁决 |
 | reaction | same-tick 仅 closed/finite/bounded pre-apply DAG；普通 Fact reaction 下一 Tick | 项目裁决 |
 | Boundary | scoped ASC/Session Cleanup Buffer + 每 fact唯一 owner + 两阶段 single managed drain；receipt 后只清 accepted prefix，shell 由下一 Kernel prepass清理 | 项目裁决 |
+| Drain | `GasBoundaryDrainSystem` 是 outer Simulation 的直接子系统，完整 FixedStep 后每 outer update 恰运行一次；0 FixedStep 仍可推进同 BatchId retry且不增加 `SimulationTick` | 项目裁决 |
+| Fence | 只允许标准 EndFixed、outer batch→Drain、terminal FinalDrain、显式 Diagnostics capture；门禁为 `UnexpectedSyncPointCount=0` | 项目裁决 |
 | 数值门 | 无通用硬编码容量/耗时；由版本化 ScaleProfile 决定 | 项目裁决 |
 
 ## 3. 官方机制对照
@@ -48,6 +51,8 @@
 官方机制允许用 `UpdateInGroup`、`UpdateBefore`、`UpdateAfter` 表达组内顺序，固定步进组可在一次 world/render 更新中追赶多次，也可能不更新。System 有固定调度成本，因此拆分需要权衡。
 
 EX-GAS 推论：统一的整数 Tick 与一个 Kernel 可以消除渲染帧假设和过多 System 固定成本；但“一个 Kernel”仍是项目选择，不是官方上限。
+
+当前安装的 Entities RateManager 首次 update 会在 elapsed time `t=0` 进入一次 FixedStep，且 `MaximumDeltaTime` 只限制单次追债量、不丢弃剩余 debt。因此 Session 安装必须显式执行一次 maintenance prime；之后 `TickBatch` 接受单调 absolute elapsed time并返回 `PhysicalFixedUpdates/GameplayTicks/MaintenanceUpdates/FirstSimulationTick/LastSimulationTick/RemainingDebt`。未 prime 时不得用配置的 `MaxGameplayTicksPerBatch` 推导实际首次物理 update 数。
 
 ### 3.2 Physics group
 
@@ -71,6 +76,17 @@ EX-GAS 更严格规定：Kernel 从 `state.WorldUpdateAllocator` 分配，但所
 官方安全系统通过读写声明和 JobHandle 建立依赖；提前 `Complete` 会产生主线程同步。Lookup/TypeHandle 需要按更新周期刷新，parallel random write 必须证明不重叠。
 
 EX-GAS 推论：先按 owner 分组构建 shadow CommitPlan，admission 后 owner 单 writer no-fail 提交；再按 target 分 bucket，同 target 单 writer。整个 Tick 由一个 Kernel 以 JobHandle 串接依赖；Job 完成顺序不得成为 Command/Fact 顺序。
+
+合法 completion 只分四类：
+
+| `FenceKind` | 精确位置 | 次数与用途 |
+|---|---|---|
+| `EndFixedPlayback` | 每次物理 Fixed update 末 | 恰等于 `PhysicalFixedUpdates`，完成标准 ECB producer/playback |
+| `OuterBatchToDrain` | 本 outer update 的 0..N FixedStep 全部结束后 | 每 outer batch至多一次，跨入 managed staging |
+| `TerminalFinalDrain` | Gate关闭且最后 producer 已登记后 | 每 CloseEpoch至多一次；冻结 payload 的纯 retry不得重复完成 Kernel job |
+| `DiagnosticsCaptureOnly` | 显式 capture window 末 | 只在诊断 pass；不得参与正确性 |
+
+Kernel lane、Ingress direct-buffer write、逐 source Drain、正常 tick `CompleteAllTrackedJobs()`、EntityManager 隐式完成和用 diagnostics fence弥补依赖缺失均属于 unexpected fence。静态 allowlist、运行时 `Epoch/OuterBatchId/SimulationTick/FenceKind/CallsiteHash` 与 Profiler/Journaling 必须互相对账；自报 counter 不能单独证明合规。
 
 ### 3.5 ECB
 
@@ -118,11 +134,13 @@ ongoing requirement、inhibition、tag grant/remove 会相互影响，必须在 
 - 环、可达性、程序长度与扩展深度；
 - 每个 same-tick program 的 closed inputs 和静态上界。
 
-运行时超过证明的上界必须产生稳定 fault，并停止发布该 target 的半成品事实。禁止“固定跑若干 pass 后当作成功”。
+运行时超过证明的上界必须写 target-local `FaultCandidate`，由唯一 `SessionFaultReduce` 按 `(TargetAscStableId, EffectApplicationId, StabilizationRound, RepeatedStateHash)` 归约首因。`TargetPrepare` 只写 tick-local shadow/稀疏 overlay，包含 Attribute/Tag/ActiveEffect/Aggregator/Grant/cleanup、Fact/Cue/Pending/ECB intent；任一 fatal candidate 都丢弃本 Tick 全部 target shadow，禁止“固定跑若干 pass 后当作成功”。
+
+`TargetPublish` 只在 SessionFaultReduce 成功后运行，且只能消费 admission 已授予的 range，以 no-fail 顺序写 durable authority。OwnerWave 已 Commit 的 cost/cooldown/activation 前缀不回滚，进入 `CommittedPrefixHash`；fault 进入 `FaultSemanticHash`，不得伪装成正常成功 BattleHash。普通 requirement/immunity/TargetLife/stack reject仍是逐 application业务结果，不触发跨 target rollback。
 
 普通 Gameplay Fact reaction 默认下一 Tick；这样 Fact merge 是终点而非再入入口，单 Job DAG 有确定边界。
 
-OwnerPlanBuild 只能读取 Tick-start snapshot 与同 ASC 前序 shadow CommitPlan，不读取本 Tick incoming target effect；普通 self GE 也进入 TargetWave。必须同 Tick影响后续 CanActivate 的字段只能是 CommitPlan 中声明的 activation-owned invariant，否则 Definition bake fail。
+OwnerPlanBuild 只能读取 Tick-start snapshot 与同 ASC 前序 shadow CommitPlan，不读取本 Tick incoming target effect；普通 self GE 也进入 `TargetPrepare -> SessionFaultReduce -> TargetPublish`。必须同 Tick影响后续 CanActivate 的字段只能是 CommitPlan 中声明的 activation-owned invariant，否则 Definition bake fail。
 
 语义 work precedence 至少冻结为：
 
@@ -142,11 +160,12 @@ OwnerWave 已 Commit 的远端 work 采用 committed-work-wins；source 后续�
 
 OwnerPlanBuild/TargetResolve 在准入前已需写 variable scratch。因此 Gather 先以 sealed/due count、tick-start Definition lookup 与 Catalog bake maxima 用 checked arithmetic 建立 `PlanExpandScratchEnvelopeToken`并在两个 Job 写入前 provision；超 ScaleProfile 逻辑上限时 Plan/Expand 预排 no-op，由后续 admission 提升 fault。这是 pre-admission memory envelope，不是第二 gameplay admission。
 
-`WholeTickInfraAdmission` 位于 TargetResolve/Expand 后、任何 gameplay 权威写前。它先验证 envelope token，再按实际生成上界覆盖 downstream scratch、slab、payload/capture、PendingCommand、fact、outbox 与 structural intent；标准 EndFixed ECB没有公开 command reserve API，因此 structural项只做逻辑 count/token budget，allocator/OOM是宿主 fatal failure而非可恢复 gameplay outcome：
+`WholeTickInfraAdmission` 位于 TargetResolve/Expand 后、任何 gameplay 权威写前。它先验证 envelope token，再按实际生成上界覆盖 downstream scratch、target shadow、durable publish credit、slab、payload/capture、Grant child cleanup、Live fanout、EmittedRef、PendingCommand、fact/Cue、outbox 与 structural intent；标准 EndFixed ECB没有公开 command reserve API，因此 structural项只做逻辑 count/token budget，allocator/OOM是宿主 fatal failure而非可恢复 gameplay outcome：
 
 - 失败：预排的 owner/target/fact/structural jobs读取 `AdmissionResult` 后 no-op，不记录半 Tick gameplay/structural intent，只有 FaultLatch锁存确定性 Session Fault。
-- 成功：OwnerWave CommitPlan 与 TargetWave 不再允许基础设施容量分支；可预检的不足不能退化为部分 mutation。
+- 成功：OwnerWave CommitPlan、TargetPrepare 与 TargetPublish 不再允许基础设施容量分支；可预检的不足不能退化为部分 mutation。
 - 多目标：仍只逐 target application 业务原子，不提供跨 ASC rollback。
+- Stabilization fatal：与普通多目标业务拒绝不同；SessionFaultReduce 前没有 target durable write，任一 fatal 都丢弃全 Tick target shadow并保留已 Commit owner prefix。
 - Boundary：staging 发生在 gameplay 提交之后，失败不回滚 gameplay；保留 outbox并阻止 FinalDrain/Disposed。
 
 ## 7. 形态性能红线
@@ -167,22 +186,26 @@ OwnerPlanBuild/TargetResolve 在准入前已需写 variable scratch。因此 Gat
 - manual runner 绕过完整 FixedStep 父链。
 - 把 IBC 当逻辑 capacity，或 admission 后才发现可预检容量不足并留下部分权威写。
 - headless 整局塞进一次 outer batch，或按“每 SimulationTick rewind”低估 allocator 高水位。
+- target stabilization 在 durable mutation 后才发现 fatal，或多个 worker直接抢写 SessionFaultLatch。
+- 单 target work 超 `MaxTargetWorkUnitsPerTick` 后静默跨 Tick time-slice，或在权威写入后才报告超限。
 
 ## 8. ScaleProfile 门
 
 每个 profile 必须版本化：
 
-- Unity/Entities/Burst/Jobs 与目标硬件；
+- `EnvironmentFingerprint`：Unity/Entities/Burst/Jobs、操作系统、CPU、目标硬件与构建选项；
+- `BuildArtifactHash/GeneratorVersion/BaselineCommit/WorkloadParameterHash`；
 - Tick Rate、ASC/Attribute/Tag/Ability/Effect/Command 分布；
-- 典型与压力场景生成方法；
+- 典型与压力场景生成方法、确定性 `FailureInjectionPlan`；
 - chunk utilization、Buffer 内/外、高水位/扩容；
-- target bucket 偏斜、scratch 峰值；
+- target bucket 偏斜、`MaxTargetWorkUnitsPerTick/MaxBucketLength/MaxStabilizationTransitions`、shadow/publish credit与scratch峰值；
 - `MaxFixedTicksPerBatch`、`MaximumDeltaTime`、outer batch Tick 分布、N×scratch/facts 与 double-rewind 高水位；
 - whole-tick admission 上界/实际/失败资源及 admission 后容量分支；
 - period burst、hot target、mass death/teardown、Boundary burst 与 managed staging backlog/GC；
 - stabilization 分布与 fault；
 - Job 调度/主线程 sync/EndFixed playback/drain；
-- 明确门槛、采样区间、基线 commit 与回归规则。
+- `WarmupCondition/MeasurementWindow/Repetitions/SampleUnit/QuantileMethod/MinimumSampleCount`；
+- Core/Physics/EndFixed/Drain/consumer/runner各域 avg/p95/p99、版本化平台门槛与回归规则。
 
 IBC、初始容量、batch size、排序/merge 算法、trace 采样和具体耗时报警都属于 profile 决策，不应写死到通用 Spec。
 
@@ -200,6 +223,9 @@ IBC、初始容量、batch size、排序/merge 算法、trace 采样和具体耗
 10. Session 一 World 一个 active domain，SpawnBatch 不部分发布 Ready；Faulted 仍完成 FinalDrain/Disposing。
 11. source death 不撤回已 Commit work，AliveOnly 首死后拒绝顺序可重放；TargetData 无 implicit self fallback。
 12. 性能结论引用含 catch-up batch 上限的 ScaleProfile，而非无环境固定数字。
+13. fresh Session先通过 `t=0` maintenance prime；0 FixedStep outer update仍执行一个Drain并可推进retry，不增加`SimulationTick`。
+14. target simultaneous fault在不同worker/chunk下得到同一FaultId/CommittedPrefixHash，且target durable/fact/Cue/ECB零半写。
+15. fence evidence逐类对账；Kernel/Ingress `UnexpectedSyncPointCount` 必须为0。
 
 ## 10. 不能由官方文档直接推出的项目决定
 
@@ -221,3 +247,8 @@ IBC、初始容量、batch size、排序/merge 算法、trace 采样和具体耗
 - scoped ASC/Session cleanup outbox、两阶段单 drain 与 shutdown direct cleanup；
 - v1 不做 prediction/rollback；
 - ScaleProfile 的场景与数值门槛。
+
+数值确定性域仍是待决 ADR，而不是可以由 DOTS 官方文档推出的结论：
+
+- 推荐 v1 选择同 Build+Platform 的单一 IEEE754 float authority，冻结运算顺序、`-0/NaN/non-finite` policy、little-endian canonical encoder与hash算法版本，不宣称跨平台 bit-identical。
+- 若产品要求跨平台锁步，必须整体选择单一 fixed-point authority并在publish阶段证明range/overflow；禁止float/fixed双authority并存。

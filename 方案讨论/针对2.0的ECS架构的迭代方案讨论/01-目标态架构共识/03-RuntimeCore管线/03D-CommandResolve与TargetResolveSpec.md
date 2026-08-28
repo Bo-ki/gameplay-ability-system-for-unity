@@ -60,7 +60,7 @@ Command Normalize 由 `OwnerPlanBuild` 在 ASC-local shadow 上按以下顺序�
 
 CanActivate 成功不等于已 Commit。Activation 可进入 `RunningUncommitted`，之后由 Ability program 在需要时执行 CommitCheck。OwnerPlanBuild 不提前改权威 cost/cooldown；它产出完整 CommitPlan，待 `WholeTickInfraAdmission` 成功后由 `AscOwnerCommandWave` no-fail 原子提交。
 
-OwnerPlanBuild/OwnerWave 只能观察 Tick-start snapshot 与同 ASC 前序 CommitPlan，不能观察本 Tick incoming target effect。OwnerPlanBuild 先处理 due `CooldownGateSlot` release，再解释请求。需要 same-tick 影响后续 CanActivate 的内容必须建模为显式 owner commit invariant：`CostMutationContract` 写同一 Attribute 权威，`CooldownGateContract` 写 ASC-owned gate/其 owned Tag contribution，activation-owned ledger 仅表示随 Activation 生存的贡献。普通 self GE 仍走后续 TargetWave；Definition 若依赖它先改 Attribute/Tag 再激活后续 Ability，必须在 bake 时拒绝。
+OwnerPlanBuild/OwnerWave 只能观察 Tick-start snapshot 与同 ASC 前序 CommitPlan，不能观察本 Tick incoming target effect。OwnerPlanBuild 先处理 due `CooldownGateSlot` release，再解释请求。需要 same-tick 影响后续 CanActivate 的内容必须建模为显式 owner commit invariant：`CostMutationContract` 写同一 Attribute 权威，`CooldownGateContract` 写 ASC-owned gate/其 owned Tag contribution，activation-owned ledger 仅表示随 Activation 生存的贡献。普通 self GE 仍走后续 `TargetPrepare -> SessionFaultReduce -> TargetPublish`；Definition 若依赖它先改 Attribute/Tag 再激活后续 Ability，必须在 bake 时拒绝。
 
 ## Activation 与 Continuation 输出
 
@@ -98,13 +98,13 @@ Target Resolve 接收 planned activation token 或具有等价冻结 provenance 
 | `DefinitionId/Level` | Effect definition 与 scale 输入 |
 | `EmitTick/SourceSequence` | command merge 与 replay 证据 |
 
-`AscOwnerCommandWave` 在 no-fail Commit 成功的同一线性化点，以结构化 canonical tuple `(Epoch, SourceAscHandle, CommitSequence, ProgramNodeOrdinal, SpecOrdinal)` 建立正式 `EffectSpecId`，再以 `(EffectSpecId, PlannedApplicationOrdinal)` 建立正式 `EffectApplicationId`。`CommitSequence` 由 owner canonical command order 单调分配，不是 append/worker 序；序号回绕是 fatal fault。结构化 tuple 是权威，若运输用定长 hash 投影则必须检测碰撞并 fault，不得用 hash 碰撞合并身份。`SpecDraftToken` 只定位 tick-local draft，不参与上述任何身份。因此 owner ASC可同时写 `EmittedApplicationRef(TargetAscHandle, EffectApplicationId, cleanup policy)`；该 ref记录 application attempt，普通记录不要求预知 TargetWave outcome或 ActiveEffectHandle。`SourceSpecProjection` 只处理这些已 Commit身份，密封 source-bound Spec、Source Snapshot/live policy；后续 GroupByTarget、TargetWave、Fact与target ledger只能携带正式身份。未 Commit draft在 Tick末回收且不可观察。
+`AscOwnerCommandWave` 在 no-fail Commit 成功的同一线性化点，以结构化 canonical tuple `(Epoch, SourceAscHandle, CommitSequence, ProgramNodeOrdinal, SpecOrdinal)` 建立正式 `EffectSpecId`，再以 `(EffectSpecId, PlannedApplicationOrdinal)` 建立正式 `EffectApplicationId`。`CommitSequence` 由 owner canonical command order 单调分配，不是 append/worker 序；序号回绕是 fatal fault。结构化 tuple 是权威，若运输用定长 hash 投影则必须检测碰撞并 fault，不得用 hash 碰撞合并身份。`SpecDraftToken` 只定位 tick-local draft，不参与上述任何身份。因此 owner ASC可同时写 `EmittedApplicationRef(TargetAscHandle, EffectApplicationId, cleanup policy)`；该 ref记录 application attempt，普通记录不要求预知 TargetPublish outcome或 ActiveEffectHandle。`SourceSpecProjection` 只处理这些已 Commit身份，密封 source-bound Spec、Source Snapshot/live policy；后续 GroupByTarget、TargetPrepare/Publish、Fact与target ledger只能携带正式身份。未 Commit draft在 Tick末回收且不可观察。
 
 ### 多目标隔离
 
 一个 source-bound Effect Spec 可以 fan-out，但 target capture、TargetTags、application requirement 与 stack result 必须每目标独立。禁止把第一个目标的 target capture 写回共享 Spec，并被后续目标复用。
 
-整 Tick基础设施准入在任何 owner/target 权威写前覆盖所有已展开目标；准入失败则整个 Tick gameplay 权威零写并锁存 `InfraAdmissionFault`。准入成功后，业务事务边界仍是**逐 target application**：一个 target 的 requirement/reject/stack/fault 不回滚已线性化的其他 target，也不建立跨 ASC 两阶段提交。
+整 Tick基础设施准入在任何 owner/target 权威写前覆盖所有已展开目标；准入失败则整个 Tick gameplay 权威零写并锁存 `InfraAdmissionFault`。准入成功后，普通 requirement/immunity/life/stack rejection 的业务事务边界仍是**逐 target application**：一个 target 的 typed rejection 不阻止其他 target prepared outcome，也不建立跨 ASC 分布式业务事务。Stabilization、identity 或 proof invariant fatal 不属于业务 rejection；它由 `SessionFaultReduce` 阻止全部 target publish并丢弃本 Tick所有 target shadow，只保留 OwnerWave committed prefix。
 
 ### 派生 Entity
 
@@ -221,5 +221,5 @@ Effect application、CaptureProjectionContract、Attribute modifier 与 ActiveEf
 9. deferred reaction 在 T 不重入，T+1 使用冻结 payload 和投递前稳定状态。
 10. TargetData 四类字段正交，Avatar/spatial 失效不会 implicit fallback self。
 11. OwnerPlanBuild 的 shadow RYW 不读取 incoming target effect，普通 self GE 不能影响本 Tick 后续 CanActivate。
-12. 多目标只保证逐 target 业务原子；整 Tick admission 只保证基础设施失败发生在 gameplay 权威写前。
+12. 多目标只保证逐 target typed业务 outcome；基础设施失败发生在 gameplay 权威写前，Prepare 阶段 fatal则由 SessionFaultReduce 丢弃全部 target shadow并阻止 Publish。
 13. 本文件不引入 Ability/Activation Entity authority，也不保留 Prediction schema。

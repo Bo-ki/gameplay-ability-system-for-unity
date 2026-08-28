@@ -58,7 +58,9 @@ ASC-local generational slab 可以替代 UE 对象实例，但前提是：Grante
 
 - source-local CommitPlan 在全量 requirement/capacity/cost/cooldown 预检后 no-fail 原子提交 `Committed + cost + cooldown + activation-owned contributions`；同 ASC AscOwnerCommandWave canonical read-your-writes。
 - Gather 先以 sealed/due count 与 Catalog bake maxima 建立 `PlanExpandScratchEnvelopeToken`，在 Plan/Expand 写前 provision 其 scratch；WholeTickInfraAdmission 再验证 token并在任何 Owner/Target 权威写前预留下游/持久基础设施容量。任一步逻辑失败都由唯一 AdmissionResult 使本 Tick gameplay 零写并锁存 InfraAdmissionFault，成功后 capacity 不再是 application 业务分支。
-- 每条 target application 在目标 ASC writer 内最终线性化，重新 target capture/requirement/immunity/TargetLifePolicy，并输出 typed outcome/blocker provenance。
+- 每条 target application 在目标 ASC `TargetPrepare` overlay 内最终业务线性化，重新 target capture/requirement/immunity/TargetLifePolicy，并形成 typed outcome/blocker provenance；同 target 前序 prepared state 对后序 canonical 可见。
+- 所有 target mutation/fact/cue/route/ECB intent 先进入 shadow，随后 `SessionFaultReduce` 以固定 `FaultCandidateKey` 归约；任一 fatal 都丢弃全部 target shadow。v1 infrastructure/stabilization/identity/proof overflow 统一 Session-fatal，OwnerWave committed cost/cooldown/source prefix 不回滚并进入 `CommittedPrefixHash`。零 fatal 后 `TargetPublish` 才无失败写 durable state。
+- WholeTick admission 同时预留 target shadow 与 durable publish 两份 credit，并以 `MaxTargetWorkUnitsPerTick` 在 OwnerWave 前拒绝 hot target N+1；禁止已 Accepted work 静默跨 Tick time-slice。
 - wait 的 sample+register 在 observed ASC writer 内线性化；Handle Generation 阻断晚到 Ack/Completion。
 - stack/period/cue 由完整 StackTemporalContract、DueClaim/PeriodExecutionOrdinal 与 CueLifecycleKey 消除 Timer/callback 竞态。
 - Boundary 以 accept-before-clear、BatchId/InFlightWatermark 与 semantic hash 保证重试不重不漏。
@@ -69,7 +71,7 @@ v1 采用 stable-state deferred reaction。GameplayEvent、OwnedTag 触发 Abili
 
 | 偏离点 | v1 正式语义 | 配置/玩法补救 |
 |---|---|---|
-| 普通 self GE 对同 AscOwnerCommandWave 后续 CanActivate 的可见性 | 普通 GE 进入 AscTargetStateWave，不提供同步反馈 | 改为 CommitPlan/activation-owned invariant；否则 Definition bake fail |
+| 普通 self GE 对同 AscOwnerCommandWave 后续 CanActivate 的可见性 | 普通 GE 进入 TargetPrepare/Publish，不提供同步反馈 | 改为 CommitPlan/activation-owned invariant；否则 Definition bake fail |
 | GameplayEvent/OwnedTag/Task delegate | emit T，公开 delivery/resume 最早 T+1 | 改写为 kernel invariant/DirectEffectProgram，或接受 tick latency |
 | apply/overflow/period/reaction 动态 child | 默认 T+1 | 只有静态闭合、有界 DirectEffectProgram 可 same-tick |
 | 跨 ASC Live dependency | source revision T，destination dirty T+1；同 tick 先 dirty 后 PeriodDue | 玩法需要 same-tick 跨 owner 闭环时不属于 v1 |
@@ -155,7 +157,7 @@ Capture contract 必须由三轴组成：
 ### Live Capture 最终裁决
 
 - Source Snapshot：Ability 成功 Owner Commit 后才由 `SourceSpecProjection` 建立；Target Snapshot 在每条 application 的 target pre-application 最终线性化点建立。
-- 同 ASC：revision 驱动 dependent ActiveEffect 在 target-local stabilization 重算。
+- 同 ASC：revision 驱动 dependent ActiveEffect 在 TargetPrepare stabilization 重算。
 - binding 必须区分 CaptureOrdinal/ConsumerNode/ConsumerField，并声明 SourceGonePolicy、cycle guard 与 propagation budget。
 - 跨 ASC：source revision T → destination dirty T+1；target 校验 handle 后重算并双向 cleanup，且同 tick dirty 在 PeriodDue 前。
 - 未实现跨 ASC 闭环时，Definition bake fail。
@@ -215,9 +217,11 @@ UE 同步 Event→Ability/Task 链无法自动等价；玩法需要 same-tick �
 
 必须输出：GrantedBy、ActivationPolicy、CanActivateRequirements、全量可预检/no-fail CommitPlan、CancelPolicy、BlockPolicy、EndPolicy/首次 EndReason、GrantedRemovalPolicy、OwnedContributionRanges、EmittedApplication audit shape、FailureReason、TraceShape、Continuation/Subscription capability。普通 self GE 与 AscOwnerCommandWave barrier、RemoveOnActivationEnd ledger requirement 必须可静态验证。
 
+Cost/Cooldown 的 authoring 字段能否编译为 `CostMutationContract/CooldownGateContract`、固定拒绝诊断码与相应 CapacityProof 的唯一 owner 是 [25](25-配置语义编译契约与CapacityProof统一裁决Spec.md) 的 typed support matrix。本文只要求 Runtime 严格消费已通过矩阵的 contract，不复制 Cue/application/ongoing/removal/grant/live/execution/period/stack/dynamic-child 逐字段表。
+
 ### GameplayEffectSpecShape
 
-必须输出：DefinitionId/version、source/target binding、TargetLifePolicy、level、SetByCaller、EffectContext、CaptureProjectionContract/phase、duration/period、完整 StackTemporalContract、requirements/immunity、typed outcome/blocker provenance、granted state、Cue lifecycle/execution policy。
+必须输出：DefinitionId/version、source/target binding、TargetLifePolicy、level、SetByCaller、EffectContext、CaptureProjectionContract/phase、duration/period、完整 StackTemporalContract、requirements/immunity、typed outcome/blocker provenance、granted state、Cue lifecycle/execution policy，以及 Target shadow/publish、Grant cleanup、Live projection、EmittedRef retention、最大 work 所需的 CapacityProof id。
 
 ### AbilityTaskSemanticMapping
 
@@ -229,7 +233,7 @@ UE 同步 Event→Ability/Task 链无法自动等价；玩法需要 same-tick �
 
 ### SourceGenerator 门禁
 
-生成器只产生 immutable catalog、typed handle/record、Capture accessor、pure evaluator 与 validation；`SemanticPhaseOrdinal/WorkClassOrdinal` 必须来自版本化 schema/catalog 并进入 content hash，不能从 Job lane 推导。生成器必须拒绝 runtime lifecycle System、managed delegate/task、hidden query/ECB、arbitrary capture access、Prediction schema、未声明跨 ASC Live、不完整 StackTemporalContract、无法 no-fail 的 CommitPlan、普通 self GE 同 OwnerWave反馈依赖、超出 v1 bootstrap 闭世界的 initial effect，以及缺少逐 application ledger 的异质 stack/RemoveOnActivationEnd。
+生成器只产生 immutable catalog、typed handle/record、Capture accessor、pure evaluator 与 validation；`SemanticPhaseOrdinal/WorkClassOrdinal` 必须来自版本化 schema/catalog 并进入 content hash，不能从 Job lane 推导。生成器必须拒绝 runtime lifecycle System、managed delegate/task、hidden query/ECB、arbitrary capture access、Prediction schema、未声明/无界的跨 ASC Live、不完整 StackTemporalContract、无法 no-fail 的 CommitPlan、普通 self GE 同 OwnerWave反馈依赖、超出 v1 bootstrap 闭世界的 initial effect、缺少逐 application ledger 的异质 stack/RemoveOnActivationEnd，以及缺少 Target overlay/publish、Grant cleanup、EmittedRef retention 或 TargetWorkUnits 证明的 Definition。完整门禁与诊断码只引用 [25](25-配置语义编译契约与CapacityProof统一裁决Spec.md)。
 
 ## 最终语义验收矩阵
 
@@ -252,6 +256,7 @@ UE 同步 Event→Ability/Task 链无法自动等价；玩法需要 same-tick �
 | Ability | A 普通 self GE、B 同 OwnerWave CanActivate 依赖其结果 | B 不可见该 GE；Definition 依赖声明 bake fail 或改 activation-owned invariant |
 | Ability | Activation End，普通已应用 GE 仍存活 | EmittedApplicationRefs 只审计；GE 按自身 duration/remove policy 存活 |
 | Ability | RemoveOnActivationEnd 未 apply/已 apply/shared stack | cancel-before-apply / 精确 Application+Contributor 撤销 / 无 ledger bake fail |
+| Ability | 长 Activation 高频发射/target Ack 或 Boundary handoff 延迟 | AuditOnly 在 terminal Ack + audit handoff 后释放热槽；CleanupRight 等 cleanup terminal Ack；达到 retention 硬上界在 Commit 前 Session-fatal，不静默丢 ref |
 | Continuation | 同 Activation 并行多个实例 | 独立 wake/complete/cancel |
 | Continuation | 同 InstanceName 多实例 | 不覆盖，批量操作作用于全部匹配项 |
 | Wait | Level 注册时已满足 | T 产生 completion、不留 Subscription；Continuation 统一 T+1 resume |
@@ -265,6 +270,7 @@ UE 同步 Event→Ability/Task 链无法自动等价；玩法需要 same-tick �
 | Grant | RemoveWhenAllActivationsEnd | 阻止新 Activation，现有 child 结束后 tombstone |
 | Grant | LeaveGranted | slot 保持 Live 且可激活；detach ownership、冻结 provenance、无 dangling effect handle |
 | Grant | granting Effect Inhibited | SuspendWhileInhibited 独立生效；不偷换三态 removal policy |
+| Grant | CancelImmediately 含多个 child/Continuation/外部 Subscription | target Prepare 同序 End child与本地 cleanup；外部 subscription 发 generation cancel intent并等 Ack；全链有 work/credit 上界 |
 | EffectSpec | 一个 source Spec 应用多个 Target | target capture/requirement/stack 互不污染 |
 | EffectSpec | Continuation 跨 tick 保存 Spec | 持久不可变 owner；无 frame arena 悬空引用 |
 | EffectSpec | Ability Commit 失败 | SpecDraft 可丢弃；不创建权威 EffectSpecId/SourceSpecProjection，Source Snapshot 无残留 |
@@ -272,6 +278,7 @@ UE 同步 Event→Ability/Task 链无法自动等价；玩法需要 same-tick �
 | Target | 前序 application grant immunity，后序命中 | 后序 RejectedImmunity，并冻结 blocker Definition/handle/contributor/rule |
 | Target | requirement/immunity/stack-policy 拒绝 | 无 slot/stack/dependency/Attribute/Cue/contributor 部分 mutation |
 | Target | business rejection after source Commit | 不回滚 source cost/cooldown；ApplicationId/outcome 可审计 |
+| Target | 任一 Prepare stabilization/identity/proof fatal | SessionFaultReduce 选唯一 candidate；全部 target shadow/intents 丢弃，Owner committed prefix 保留，TargetPublish 不运行 |
 | Admission | infrastructure capacity 不足 | Owner/Target Job 仍在同一 DAG 中预排但读取 AdmissionResult 后 no-op；整 Tick gameplay 零写，仅 FaultLatch 锁存 InfraAdmissionFault |
 | Derived | projectile 晚于 Activation 命中 | frozen Context/capture 可完整应用，不要求 Activation 保活 |
 | Effect | non-predicted Instant | 不创建 ActiveEffectSlot；Base mutation/Executed Cue 一次 |
@@ -301,17 +308,18 @@ UE 同步 Event→Ability/Task 链无法自动等价；玩法需要 same-tick �
 | Capture | periodic 重捕 TargetTags | execute 使用声明 phase 的最新 TargetTags |
 | Live | 同 ASC dependency | revision 变化后 dependent magnitude 更新 |
 | Live | 同 attribute 多 consumer fields | CaptureOrdinal/ConsumerNode/Field 分别 dirty，不因错误去重漏更新 |
-| Live | 跨 ASC dependency | source T → destination dirty T+1，dirty 先于 PeriodDue；闭环缺失则 bake fail |
-| Live | source gone / dependency cycle / budget | 显式 policy 或 deterministic failure；不 fallback self/0/target，不提交半重算 |
+| Live | 跨 ASC dependency | source T 原子冻结 `{Revision,FrozenProjection,PayloadHash}` → destination dirty T+1，按完整 consumer-field key coalesce，dirty 先于 PeriodDue |
+| Live | source gone / dependency cycle / budget | SourceGonePolicy 显式处理；cycle/identity/proof breach Session-fatal；不 fallback self/0/target，不提交半重算 |
 | Tag | 叶 tag 增减 | 父 tag count 与 0 边界准确 |
 | Event | child tag 路由 parent | 原始 tag/payload 保留；T+1 固定顺序投递 |
 | OwnedTag trigger | 0→1 / 1→0 | transition 冻结；next-tick 差异符合正式契约 |
 | Reaction | A→B→C public chain | 每条边至少一 tick，无意外同 tick 重入 |
 | DirectEffect | 闭合、有限、静态有界且不读 post-apply fact 的 chain | same-tick 固定拓扑执行；非闭合/动态/指数展开 bake fail |
 | DirectEffect | 动态边/环 | publish/bake fail |
-| Kernel | Commit 与 target requirement/immunity/stack/clamp | 分属 source/target 最终线性化点，均在当前权威事务内闭合 |
+| Kernel | Commit 与 target requirement/immunity/stack/clamp | source Commit durable；target 在 Prepare overlay 业务线性化，Reduce 成功后 Publish；fatal 只保留 committed prefix |
+| Kernel | hot target 同总 work 不同 skew | `TargetWorkUnits` N 通过、N+1 在 OwnerWave 前 Session-fatal；合法 skew 的语义不受调度影响，不跨 Tick time-slice |
 | Stabilize | ongoing/inhibition 收敛 | 只发布最终稳定 transition |
-| Stabilize | 无固定点 | state hash/iteration cap 失败，不提交半状态 |
+| Stabilize | 无固定点 | fixed FaultCandidate；全 target shadow discard、v1 Session-fatal，不提交半状态/Fact/Cue/ECB intent |
 | Cue | Active→Inhibited→Active→Remove | cycle0 Removed；reactivate cycle1；remove cycle1 Removed；每 cycle 精确配对 |
 | Cue | Inhibited 后直接 Remove | inhibition 已发 Removed，remove 不重复；stack change 不新 cycle |
 | Cue | Instant/Periodic execute | 每次权威 execute 产生一次 Executed，分别使用 Application/PeriodExecution identity |
@@ -340,7 +348,7 @@ ASC 初始 Mana=10；Activation A 的 OwnerSequence=10、cost=7，Activation B �
 
 ### M03：普通 self GE 的两 Wave barrier
 
-A Commit 后发射普通 self GE `GrantTag.Ready`；B 位于同一 AscOwnerCommandWave，CanActivate 要求 Ready 且初始 count=0。B 不读取该普通 GE，低层 phase 测试结果为拒绝；AscTargetStateWave 后 Ready 才可见。声明依赖这种同-wave反馈的 Definition 在 bake fail；改为 activation-owned CommitPlan contribution 后才允许同步可见。
+A Commit 后发射普通 self GE `GrantTag.Ready`；B 位于同一 AscOwnerCommandWave，CanActivate 要求 Ready 且初始 count=0。B 不读取该普通 GE，低层 phase 测试结果为拒绝；TargetPublish 后 Ready 才可见。声明依赖这种同-wave 反馈的 Definition 在 bake fail；改为 activation-owned CommitPlan contribution 后才允许同步可见。
 
 ### M04：target 最终 requirement / immunity
 
@@ -377,7 +385,7 @@ Effect H cycle=0 首次 Active 发 OnActive+WhileActive；Active→Inhibited 发
 
 ### M12：跨 ASC Live 与 PeriodDue
 
-source attribute revision 在 T=30 从 4 变 7；dependent target 在 T=31 先消费指定 CaptureOrdinal/ConsumerField 的 dirty，再执行同 tick PeriodDue，period 读取 7。source gone 按 Definition 的 SourceGonePolicy；无 policy、静态 cycle 或预算不可证明时 bake fail/typed fault，不 fallback self/0/target。
+source attribute 在 T=30 从 `4@revision10` 变为 `7@revision11`，并在同一 source 线性化点冻结 `{revision11,value7,payload hash}`；dependent target 在 T=31 先消费指定 CaptureOrdinal/ConsumerField 的 payload，再执行同 tick PeriodDue，period 读取 7。source gone 按 Definition 的 SourceGonePolicy；无 policy、静态 cycle 或预算不可证明时 bake fail，运行时 identity/proof breach 为 Session-fatal，不 fallback self/0/target。
 
 ### M13：RemoveOnActivationEnd 与 shared stack
 
@@ -386,6 +394,36 @@ Activation End 发生在 application 最终线性化前：原 EffectApplicationI
 ### M14：Boundary accept-before-clear 与 semantic hash
 
 source outbox range `(ASC-1, OwnerSequence 1..10)` 冻结为 BatchId B；第一次 managed copy 失败时记录仍在 source。retry 使用同一 B，staging Accepted 后只清 `<=10`，sequence 11 留待下一 batch。把 B 切成不同 transport chunks、改变 raw Entity/wall-clock/Profiler/Journaling/表现加载结果，gameplay semantic hash 不变；stable content/tick/outcome/fact/cue order 任一改变则 hash 改变。
+
+## 第三轮固定向量
+
+以下 ID 是规范名称；实现测试不得用更弱的 smoke case 复用同一 ID。
+
+### R3-STB：TargetPrepare / SessionFaultReduce / TargetPublish
+
+- `R3-STB-01-AllTargetDiscard`：Owner A/B 已 Commit cost/gate；target X Prepare 得到 HP -2 + CreatedActive，target Y 在 granted tag/ongoing inhibition 间振荡。期望 Y 写 fixed FaultCandidate，SessionFaultReduce 不生成 publish token；X/Y 的 Attribute/Tag/Effect/Grant/fact/cue/route/ECB durable delta 全为零，A/B owner mutation 保留且进入 CommittedPrefixHash。
+- `R3-STB-02-DeterministicWinner`：三个 target 在不同 worker/batch 切分下同时产生两种 fatal。期望按 `(Epoch,Tick,TargetAscStableId,ApplicationIdOrZero,Round,StateHash,FaultKindOrdinal)` 字典序得到同一 winner/FaultId/FaultSemanticHash；同 key 不同 payload 必须转 identity fault。
+- `R3-STB-03-DoubleCredit`：test profile 分别令 shadow 或 durable credit 恰好 N/N+1。N 成功且 Publish 无 grow；N+1 在 OwnerWave 前 InfraAdmissionFault、整 Tick gameplay 零写，不得等 Prepare/Publish 中途失败。
+
+### R3-GRT：Grant writer 与 cleanup 图
+
+- `R3-GRT-01-CancelImmediately`：一个 target grant 有两个 active child；每个 child 含一个 owned contribution、一个 Continuation，其中一个还在外部 ASC 有 Subscription。Effect remove 后同 target overlay 先阻止新 activation，按 Handle 顺序 End 两 child并清本地 state，发 generation cancel intent；外部 Ack 前 grant 为 cleanup-pending，Ack 后恰好一次 tombstone，无跨 ASC 直接写。
+- `R3-GRT-02-PolicyAndBound`：同输入分别测试 CancelImmediately、RemoveWhenAllActivationsEnd、LeaveGranted、SuspendWhileInhibited，并以生成上界 N/N+1 验证 grant/child/Continuation/Subscription/owned cleanup credit；N+1 必须在 OwnerWave 前 Session-fatal。
+
+### R3-LIV：Frozen projection 与 coalesce
+
+- `R3-LIV-01-RevisionPayloadPair`：source attribute 在 T=30 依序 `4@rev10 -> 5@rev11 -> 7@rev12`，fanout 10,000 edges；每个 dependent 对同 attribute 有两个 ConsumerField。乱序投递后 T=31 每个完整 coalesce key 恰好消费 `rev12 + frozen 7` 一次，并先于 PeriodDue；不得合并两个 field，也不得出现 `rev12 + value5`。
+- `R3-LIV-02-LateCleanup`：source/dependent tombstone 与 payload range 复用后注入旧 dirty/Ack；Generation/Kind/Owner 拒绝旧消息，不命中新 slot。10,000/10,001 bytes 或 fanout N/N+1 分别验证通过/写前 fault。
+
+### R3-REF：EmittedApplicationRef retention
+
+- `R3-REF-01-LongActivation`：一个长 Activation 顺序发射 100,000 个 AuditOnly application，target Ack 与 Boundary handoff 正常推进。owner ref high-water 只受并发 outstanding/配置上界影响，不随累计发射数增长；审计仍能由 ApplicationId 完整还原。
+- `R3-REF-02-DelayedAck`：Boundary staging停滞且 CleanupRight 在 apply 前、独立 ActiveEffect 后、shared stack ledger 后分别 End。Ack/handoff 前不早释，late/duplicate Ack 不命中复用 generation；test profile `MaxRefsPerActivation=64` 时第 65 个 Commit 在 OwnerWave 前 Session-fatal，不静默淘汰。
+
+### R3-HOT：hot target work gate
+
+- `R3-HOT-01-Skew`：相同 4096 work units 分布到 1/8/64/1000 targets，在不同 worker/batch/work-stealing 下得到同一合法 gameplay state/hash；Profiler 只可改变调度数据。
+- `R3-HOT-02-NPlusOne`：`MaxTargetWorkUnitsPerTick=4096` 时单 target 4096 通过，4097 在 OwnerWave 前 Session-fatal；不得跨 Tick time-slice。另以 period+stack+Grant cleanup 同 tick 的 raid-boss burst验证 work estimator覆盖动态清理上界。
 
 ## 非目标明确化
 

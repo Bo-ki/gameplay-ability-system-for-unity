@@ -56,8 +56,8 @@ BoundaryIngressJournal
   -> WholeTickInfraAdmission（任何 gameplay 权威写之前）
   -> AscOwnerCommandWave（no-fail CommitPlan）
   -> SourceSpecProjection
-  -> GroupByTarget / AscTargetStateWave
-  -> Stabilize / Death
+  -> GroupByTarget / TargetPrepare（shadow apply / stabilize / death）
+  -> SessionFaultReduce / TargetPublish（no-fail durable publish）
   -> StableFactMerge / per-BattleInstance TerminalResolve
   -> GroupNextTickRouteByDestination
   -> BoundaryProject / scoped cleanup outbox

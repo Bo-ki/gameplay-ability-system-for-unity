@@ -6,6 +6,8 @@
 
 本文件只定义目标态业务编辑路径、Luban 配置链职责、Editor 配置链职责和验收口径。当前代码事实写入 `../00-当前架构事实/Authoring编辑链事实.md`。
 
+配置语义编译的 canonical graph、typed support matrix、稳定 RuleId/provenance、Live/Grant/EmittedRef 与 CapacityProof 由 [25](25-配置语义编译契约与CapacityProof统一裁决Spec.md) 唯一维护；本文件只定义业务字段如何消费这些生成结果。Candidate、四 hash 与原子 promotion/LKG 由 [08](08-Luban-SourceGenerator配置生成链路Spec.md) 唯一维护。
+
 ## 核心结论
 
 当前目标态必须承认一件事：GAS 的业务编辑对象不是单张 Ability 表，也不是单张 GameplayEffect 表，而是一个**业务能力包**。
@@ -15,7 +17,7 @@
 1. Ability definition：激活策略、目标规则、cost、cooldown、requirement。
 2. GameplayEffect definition：instant / duration / period / stack、modifier、granted tag / ability。
 3. Attribute / Tag / Cue reference：业务语义引用和表现请求。
-4. Validation profile：引用完整性、DOTS 承载选择、buffer capacity hint、生成链 gate。
+4. Validation profile：引用完整性、DOTS 承载选择、CapacityProof summary/consumer status、生成链 gate。
 5. Runtime trace preview：Ability intent -> command -> target -> GE seed -> modifier -> fact -> cue 的预览。
 6. Official GAS concept contracts：Ability lifecycle、GE spec shape、Tag taxonomy、Cue parameters、ASC binding。
 
@@ -32,7 +34,7 @@
 1. 新建 `SingleTargetDamageAbility` 模板。
 2. 填写 `AbilityCode / Name / TargetRule / Cost / Cooldown / DamageFormula / CueOnActive/CueExecuted` 等业务字段。
 3. Editor 自动生成或更新 Ability row、Damage GE row、Cooldown GE row、Cue reference、TagRequirement row projection。
-4. 保存时执行 config graph validation，并展示 Runtime trace：`GrantedAbilityDefinition -> AbilityActivationCommand -> OwnerPlan/Commit -> EffectApplicationSpec -> TargetStateWave -> BoundaryFactBuffer`。
+4. 保存时执行 config graph validation，并展示 Runtime trace：`GrantedAbilityDefinition -> AbilityActivationCommand -> OwnerPlan/Commit -> EffectApplicationSpec -> TargetPrepare -> SessionFaultReduce -> TargetPublish -> BoundaryFactBuffer`。
 
 被拒绝的长路径：手动先建 Ability ID，再跳到 Effect 表建 Damage GE，再建 Cooldown GE，再回填 `CdEffect`，再手写 `Modifiers` 协议，再找 Cue ID，再导出 JSON。
 
@@ -70,9 +72,11 @@ flowchart LR
     Template --> Draft["Definition Draft Graph\nAbility + GE + Tag + Cue + Attribute refs"]
     Draft --> Validate["Config Graph Validation\nreference / schema / DOTS carrier / runtime trace"]
     Validate --> Projection["Definition Row Projection\nLuban rows / stable ids / schema hash"]
-    Projection --> SourceGen["SourceGenerator\nBlob / lookup / pure glue / validation report"]
-    SourceGen --> Catalog["GASDefinitionCatalogBlob"]
-    Catalog --> Runtime["Runtime Core\nread-only definition catalog"]
+    Projection --> Graph["CanonicalNormalizedSemanticGraph\nRuleId / provenance"]
+    Graph --> SourceGen["Semantic compiler\ntyped contract / Blob / proof / pure glue"]
+    SourceGen --> Candidate["Candidate\nfour hashes / artifact bytes / validation"]
+    Candidate --> Catalog["Atomic promoted GASDefinitionCatalogBlob"]
+    Catalog --> Runtime["Runtime Core\nread-only exact install identity"]
     Validate --> Snapshot["Authoring Diagnostics Snapshot\nEditor / CI / report only"]
 ```
 
@@ -96,7 +100,7 @@ flowchart LR
 | Row source owner | 保存业务包最终投影后的 rows，作为 SourceGenerator 输入 | 把 ScriptableObject / Editor window state 当长期权威 |
 | Reference graph owner | 表达 Ability -> GE -> Modifier / Cue / Tag / GrantedAbility 的跨表关系 | 只保留裸 int ID，缺少引用类型和诊断上下文 |
 | Data version owner | 输出 schema hash、content hash、row revision、manifest input hash | 生成链无法解释本次改动来自哪组业务包 |
-| Validation input owner | 提供可被 Editor / CI / SourceGenerator 共享的 normalized rows | Runtime Core hot path 读取 `cfg.*`、JSON 或 managed row |
+| Validation input owner | 提供可被 Editor / CI / semantic compiler 共享的 typed rows，单次构建 canonical in-memory graph | generated row C#/AppDomain factory 成为 graph 权威；Runtime Core hot path 读取 `cfg.*`、JSON 或 managed row |
 
 ## Editor 配置链职责
 
@@ -105,7 +109,7 @@ flowchart LR
 | Business Authoring Session | 编辑业务能力包、模板参数、引用选择、批量新增/修改 rows | 只提供 Excel 行编辑和协议字符串输入 |
 | Draft Graph Builder | 在内存中构建 Ability / GE / Tag / Cue / Attribute 引用图 | 把 Draft Graph 保存为 Runtime 可写状态 |
 | Row Projection | 将业务包投影为 Luban rows，并输出变更 diff | 绕过 Luban 直接生成 Runtime catalog |
-| Config Graph Validation | 保存前检查缺失引用、循环、互斥策略、DOTS carrier、capacity hint、Runtime trace | 只在导出 JSON 后才发现错误 |
+| Config Graph Validation | 保存前检查缺失引用、循环、typed support RuleId、DOTS carrier、CapacityProof eligibility、Runtime trace | 只在导出 JSON 后才发现错误；把 capacity hint 当作 proof |
 | Diagnostics Presenter | 展示 validation snapshot、生成报告、official DOTS coverage、Runtime trace preview | 让 Debugger / Editor 诊断反向控制 gameplay |
 | Raw Table Advanced Mode | 提供 Excel/raw protocol 维护入口 | 作为默认业务编辑路径 |
 
@@ -116,7 +120,9 @@ flowchart LR
 | Normalize | 从 Luban rows 构建统一 `RowMetadata`、领域分组和 stable range |
 | Generate Catalog | 输出 `GASDefinitionCatalogBlob`、sorted code lookup、range-based child arrays |
 | Generate Pure Glue | 输出 ability plan、GE seed、requirement evaluator、magnitude evaluator、target rule params 等静态纯函数 |
-| Generate Validation | 输出 missing reference、orphan definition、DOTS carrier、buffer capacity、Burst target、ownership gate |
+| Generate Typed Contract | 输出 Cost/Cooldown/Capture/Stack/DirectEffect/Spawn contract/program、support result 与稳定 RuleId/provenance |
+| Generate Proof | 输出 LayoutProof、dependency graph、CapacityProof 与 admission consumer map |
+| Generate Validation | 输出 missing reference、orphan definition、DOTS carrier、CapacityProof、artifact bytes、Burst target、ownership gate |
 | Generate Editor Binding | 输出 Editor 可读 schema metadata、template field metadata、choice source，而不是 Runtime lifecycle |
 
 ## Ability Package 到 Runtime 的目标映射
@@ -128,9 +134,9 @@ flowchart LR
 | Cost | Cost GE row / Ability cost ref | `CostMutationContract` + requirement glue | `OwnerPlanBuild` 完整复核 + `AscOwnerCommandWave` 直接更新同一 `AttributeValueSlot` |
 | Cooldown | Cooldown GE row / cooldown frames | `CooldownGateContract` | `OwnerPlanBuild` gate/due 复核 + `AscOwnerCommandWave` 原子创建/释放 `CooldownGateSlot` |
 | Damage formula | GE modifier row | magnitude evaluator / modifier range | Spec / Attribute Apply |
-| Buff duration / stack | GE duration / stacking row | active mutation seed / stack policy | ActiveEffectStore |
+| Buff duration / stack | GE duration / stacking row | `StackTemporalContract` + bounded ActiveEffect application program | ActiveEffectStore |
 | Cue markers | Cue row / GE cue refs | boundary observation mapping | Boundary Projection |
-| Requirements | TagRequirement rows | tag mask / requirement evaluator | Ability / GE requirement lane |
+| Requirements | TagRequirement rows | `TagRequirementId -> TagQueryProgram` / requirement evaluator | Ability / GE requirement lane；presence words 仅为派生 cache |
 | Ability lifecycle | Ability row + requirement / cost / cooldown refs | `AbilityLifecycleContract` | Ability State Evaluate / activation plan |
 | GE runtime spec shape | GE row + modifier / duration / stack / context refs | `GameplayEffectSpecShape` | Effect Fan-In / ActiveEffectStore |
 | Tag taxonomy | Tag / TagRequirement rows | dense tag taxonomy / query evaluator | Requirement / State Evaluate |
@@ -138,6 +144,8 @@ flowchart LR
 | ASC binding | Unit / Scenario / Grant rows | `ASCBindingContract` | Bootstrap / Structural Commit |
 
 Cost/Cooldown 可以继续复用 GE 形态作为策划 authoring projection，但生成产物必须分别编译为 `CostMutationContract` 与 `CooldownGateContract`。运行时在同一 canonical owner shadow 中重新检查 requirement、资源与 cooldown gate，并在 `AscOwnerCommandWave` 一次性 no-fail 提交：Cost 写同一 Attribute 权威，Cooldown 写独立于 Activation/ActiveEffect 生命周期的 ASC-owned gate。v1 gate policy 固定为 `RejectWhileActive + ExpireOnly`；GE-like row 中的 stack/refresh/period/execution/ongoing/dispel 等无法无损编译的字段必须 bake fail，不得静默压平。如需可视、可驱散的完整 GE，另行 author 普通 self GE；它不得成为 gate 权威或 OwnerWave 同步反馈源。
+
+逐字段允许/拒绝不在本文件维护，统一引用 `25`：Cue、Application/Ongoing/Removal、grant、Live、execution 与 dynamic child 均必须返回机器可读 support result、稳定 RuleId 和唯一 provenance。Editor 不得用隐藏字段、默认值或另一份 UI 白名单绕过该矩阵。
 
 ## 策划配置能力验收矩阵
 
@@ -149,7 +157,7 @@ Cost/Cooldown 可以继续复用 GE 形态作为策划 authoring projection，�
 | 影响分析 | 修改任意 GE / Tag / Cue / Attribute 时展示受影响的 Ability Package、Unit、Scenario、Scale profile 和 validation expectation | 平衡调参最怕隐藏复用；影响范围必须成为配置工具的一等能力 |
 | Runtime trace preview | Editor 生成 `Business Intent -> AbilityActivationCommand -> EffectApplicationSpec -> ModifierContribution/AttributeDelta -> BoundaryFact/Cue` 预览 | Runtime Debugger 只能事后证明，配置工具要在保存前证明将进入正确 Runtime lane |
 | 平衡预览 | 展示等级、消耗、冷却、伤害公式、DOT tick、stack limit、overflow policy 的聚合计算结果和异常标记 | 调参是高频业务动作；公式与周期/堆叠分散会让内容质量依赖人工心算 |
-| Draft / Publish 分离 | Draft 只在 Editor session 内存在；Publish 输出 row diff、schema hash、content hash、validation snapshot 和 trace preview id | Editor 状态不能成为 Runtime source；发布单元必须可审计、可回滚、可复现 |
+| Draft / Publish 分离 | Draft 只在 Editor session 内存在；Publish 先形成 candidate，输出 row diff、四元 install identity、artifact bytes、validation snapshot、CapacityProofHash 和 trace preview id，通过 CI 后再原子 promotion | Editor 状态不能成为 Runtime source；发布单元必须可审计、可回滚、可复现且无混代文件 |
 | Raw Table Advanced Mode | raw protocol / Excel 表格仍可维护，但默认入口隐藏在高级模式 | 框架维护需要底层入口；策划默认路径不应要求手写 serialization 协议 |
 | SourceGenerator Editor Binding | SourceGenerator 输出 template field metadata、choice source、reference type、diagnostics code 和 display hint | 让 Luban schema / generated metadata 成为 UI 绑定事实源，避免 Editor 复制协议 |
 | CI / Headless 配置验收 | Publish snapshot 可被 CI 读取，并驱动最小 scenario / scale validation | 配置变更必须能自动证明至少一条 Runtime 消费链，而不是只生成文件 |
@@ -164,6 +172,10 @@ Cost/Cooldown 可以继续复用 GE 形态作为策划 authoring projection，�
 6. Runtime Core 只能通过 `GASDefinitionCatalogBlob`、generated lookup 和 pure glue 消费配置；不得读取 Editor draft、Luban managed row、JSON 或 business package object。
 7. Validation report 必须能按业务包聚合错误，例如“火球术缺少 Cue”、“中毒 DOT 的 Period 引用不存在”、“光环使用了 instant carrier 但配置为 ongoing requirement”。
 8. 业务包发布必须能对照 `24-GAS官方概念对照复核Spec.md` 输出官方概念契约；缺少 Ability lifecycle、GE spec、Tag taxonomy、Cue parameters 或 ASC binding 时不得视为可发布。
+9. 第一次与第二次生成的 canonical graph、四元 install identity 与 artifact bytes 相同；不得要求 Unity 先编译 generated row C# 才得到正确结果。
+10. 发布失败、phase/compile/AOT/scenario 失败或 promotion 失败时 active generation byte-for-byte 不变；回滚只允许通过历史成功 `ArtifactManifestHash` 的新原子 promotion。
+11. Runtime Catalog identity 不匹配直接启动失败；不读取 sidecar、managed row、ScriptableObject、旧 schema 或历史 Catalog 自动 fallback。
+12. Business Package diagnostics 必须显示 typed support RuleId、provenance 与 CapacityProof consumer status；只有 hint/report 没有 consumer 视为不可发布。
 
 ## 禁止方向
 

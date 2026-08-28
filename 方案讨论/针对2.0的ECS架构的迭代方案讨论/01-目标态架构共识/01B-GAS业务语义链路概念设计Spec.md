@@ -93,15 +93,15 @@ CanActivate 与 Commit 不能合并：
 2. Activation 可以在未 Commit 状态等待输入、目标或时间。
 3. 同一 ASC 的 Ability command 按 canonical order 串行解释；后一个 command 必须 read-your-writes 看到前一个 command 已提交的 grant、block、cancel、cost、cooldown gate 与 activation-owned contribution。
 4. CommitPlan 只能修改 source ASC。它先全量验证 source-local requirement、capacity/reservation、cost、cooldown 与 Activation phase；任一失败都不提交任何部分。它不能预留 target ASC slot，也不能保证后续 target application 成功。
-5. 全量预检成功后，`Committed + CostMutationContract + CooldownGateContract + CommitPlan activation-owned contribution` 作为 no-fail mutation 一次提交；禁止把 cost/cooldown 降成稍后 AscTargetStateWave 才处理的普通 self GE command。
+5. 全量预检成功后，`Committed + CostMutationContract + CooldownGateContract + CommitPlan activation-owned contribution` 作为 no-fail mutation 一次提交；禁止把 cost/cooldown 降成稍后 `TargetPrepare/TargetPublish` 才处理的普通 self GE command。
 6. `Committed` 只能从 false 变为 true 一次；重复 Commit 是显式错误。
 7. Commit 失败不消费 cost/cooldown，由 Ability 程序决定继续等待还是 End。
 
-普通 self-target GE 仍进入 AscTargetStateWave，不对本 AscOwnerCommandWave 中后续 CanActivate 提供同步反馈。这是正式 phase barrier：依赖“Ability A 同步应用普通 self GE 后，Ability B 在同 AscOwnerCommandWave 立即看见该 GE”的 Definition 必须 bake fail，或把该约束重写为显式 owner commit invariant。
+普通 self-target GE 仍进入 `TargetPrepare -> SessionFaultReduce -> TargetPublish`，不对本 AscOwnerCommandWave 中后续 CanActivate 提供同步反馈。这是正式 phase barrier：依赖“Ability A 同步应用普通 self GE 后，Ability B 在同 AscOwnerCommandWave 立即看见该 GE”的 Definition 必须 bake fail，或把该约束重写为显式 owner commit invariant。
 
 `CostMutationContract` 是有界、生成期封闭的 owner-local Attribute mutation：它在 shadow 中验证并在 OwnerWave 直接写同一 ASC 的 `AttributeValueSlot { Base, Current, Revision }`，不建立 cost 镜像或 ActiveEffect。`CooldownGateContract` 则在 owner ASC 的 non-compacting `CooldownGateSlot` 中写入 `GateKey/AbilityDefinitionId、SourceCommitIdentity、StartTick、EndTick、Generation、State` 与可选的 owned Tag contribution range。CooldownGateSlot 不属于 Activation；Commit 后即使立即 Cancel/End/死亡，gate 仍持续到 EndTick 或显式 cooldown removal policy。
 
-每个 gameplay Tick，`OwnerPlanBuild` 必须先把 tick-start 已 due 的 cooldown release 应用到 owner shadow，再解释当前请求；准入成功后 `AscOwnerCommandWave` 以 no-fail maintenance 先释放这些 gate/其 Tag contribution，再按 canonical order 提交 CommitPlan。OwnerWave 与后续 TargetWave 通过 JobHandle 串联后可以先后写同一 ASC 的 Attribute/Tag 权威；这是分阶段单写，不是双事实源。
+每个 gameplay Tick，`OwnerPlanBuild` 必须先把 tick-start 已 due 的 cooldown release 应用到 owner shadow，再解释当前请求；准入成功后 `AscOwnerCommandWave` 以 no-fail maintenance 先释放这些 gate/其 Tag contribution，再按 canonical order 提交 CommitPlan。OwnerWave 与后续 `TargetPrepare/TargetPublish` 通过 JobHandle 串联后可以先后处理同一 ASC；Prepare 仅写 shadow，Publish 才写 Attribute/Tag 权威，因此这是分阶段单写，不是双事实源。
 
 Owner Commit 与每个 target application 不是分布式事务。target 后续因 requirement、immunity、TargetLifePolicy、stale binding 或业务 stack policy 拒绝，不回滚 source 已提交的 cost/cooldown；只有整 tick infrastructure admission 失败才在任何 gameplay mutation 前以零写 fault 结束。
 
@@ -297,7 +297,7 @@ Authority execution domain 可以存在，但不能在每条记录上保留“�
 2. stale handle、late event、owner destroy 与 slot reuse 均不会误唤醒新对象。
 3. 同 ASC 的 AscOwnerCommandWave 使用 canonical read-your-writes；两个竞争 CommitPlan 依稳定顺序决定胜者，失败者不留下 cost、cooldown、owned contribution 或半 Committed 状态。
 4. `Commit → Cancel` 保留已消费 cost、cooldown 与已发射工作；`Cancel/End → Commit` 以 `OwnerEnding` 拒绝，EndReason 只冻结一次。
-5. 普通 self-target GE 在 AscTargetStateWave 才可见；依赖它向本 AscOwnerCommandWave 后续 CanActivate 同步反馈的 Definition 在 bake 被拒绝。
+5. 普通 self-target GE 只有在 `TargetPrepare` 形成 shadow、`SessionFaultReduce` 成功并由 `TargetPublish` 发布后才成为 durable 可见状态；依赖它向本 AscOwnerCommandWave 后续 CanActivate 同步反馈的 Definition 在 bake 被拒绝。
 6. Activation End 仅精确清理 `OwnedContributionRanges`；普通已落地 GE 不随 End 删除，`RemoveOnActivationEnd` 对 shared stack 缺少逐 application ledger 时 bake fail。
 7. Level wait 已满足时在 T 完成且不遗留 Subscription，Continuation 统一 T+1 resume；Edge/Event 不追溯；persistent 每次唤醒具有唯一 WakeOrdinal。
 8. 同一事件的多个 recipient 按完整 recipient key 得到唯一全序，one-shot 首次匹配后不可重复投递。

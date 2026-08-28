@@ -45,8 +45,9 @@ SimulationSystemGroup
 | AscOwnerCommandWave | admitted CommitPlan | Activation/Continuation/Subscription/owned contribution 与 source work | owner ASC 单写；no-fail mutation |
 | SourceSpecProjection | committed plan、post-commit candidate | immutable source-bound specs | 只密封成功 Commit |
 | GroupByTarget | admitted effect ops | per-target canonical ranges | stable target key |
-| AscTargetStateWave | target ranges + target state | application outcome、Effect/Attribute/Tag mutation | target 间并行、target 内单写 |
-| Stabilize/Death | target dirty closure | stable target state、death candidates、fact partitions | target owner 单写 |
+| TargetPrepare/Stabilize/Death | target ranges + durable snapshot + reservations | prepared application outcome、shadow Effect/Attribute/Tag/Grant/Death delta、intent partitions 或固定大小 fatal candidate | target 间并行、target 内单写；零 durable target mutation |
+| SessionFaultReduce | 每个 target 的 Ready/Fatal record | 唯一 publish token 或确定性 Session fault | 等待全部 prepare；任一 fatal 丢弃本 Tick 全 target shadow |
+| TargetPublish | publish token + prepared deltas + 预分配 durable ranges | no-fail durable target state、published fact partitions | target 间并行、target 内单写；不得再验证或分配 |
 | StableFactMerge/TerminalResolve | partition facts/death candidates | canonical facts、per-BattleInstance terminal decision | 全 target 完成后唯一 resolver |
 | GroupNextTickRouteByDestination | public reaction/live dirty | destination-grouped PendingCommand(T+1) | 跨 ASC 按 destination 分组 |
 | BoundaryProject | canonical facts | 已预留 scoped cleanup outbox ranges | ASC facts 按 ASC-local writer；Battle/Session facts 由 Session唯一 writer |

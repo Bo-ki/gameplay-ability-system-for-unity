@@ -6,6 +6,7 @@
 
 - [当前 authority 基线](../../00-当前架构事实/RuntimeV1不可兼容迁移基线事实.md)
 - [目标 Spec：ASC-local slab](../../01-目标态架构共识/17-GAS业务链路破坏性重划分Spec.md)
+- [配置语义编译与 CapacityProof 唯一裁决](../../01-目标态架构共识/25-配置语义编译契约与CapacityProof统一裁决Spec.md)
 
 ## 目标
 
@@ -17,7 +18,7 @@
 2. Ability/Activation/Continuation/Effect/payload/aggregator slab 与 capacity/overflow。
 3. stale handle、generation overflow、terminal fact before recycle。
 4. 删除或断开 Ability Entity、legacy GE entity、global ActiveEffect authority 的写入面。
-5. 为 slot/payload/outbox/wait/pending 提供可定界高水位、reservation API 与不改变既有 handle 的增长规则；V3 的 `WholeTickInfraAdmission` 使用整 Tick生成上界一次预留，禁止 per-ingress/per-transaction 容量失败形成部分 Tick提交。
+5. 为 slot/payload/outbox/wait/pending、target shadow overlay 与 durable publish range 提供可定界高水位、reservation API 与不改变既有 handle 的增长规则；生成的 `CapacityProof/consumer map` 必须逐字段映射到实际查询、checked arithmetic 与 reservation API，V3 的 `WholeTickInfraAdmission` 使用整 Tick生成上界一次预留，禁止 per-ingress/per-transaction 容量失败形成部分 Tick提交。
 6. 在 ASC archetype 上明确 owner-local writer、稳定 free-list 与 contribution/application ref 分离布局。
 
 ## 验收
@@ -28,6 +29,7 @@
 - 不存在 per-definition slot/entity promotion。
 - payload/capture range 不引用会压缩的 buffer。
 - capacity/overflow 测试证明 `InfraAdmissionFault` 前后整个 Tick的 ASC gameplay state/hash 相同，allocator 与 slab high-water 可观测；业务 stack overflow仍是 target typed result，不得混入 infra fault。
+- 每个 generated capacity 字段恰有 runtime consumer；物理 slab/reservation 峰值可与 `CapacityProof` 对账，shadow credit 与 durable publish credit 不复用同一 range。
 
 ## 交还
 

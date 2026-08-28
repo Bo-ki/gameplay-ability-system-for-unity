@@ -2,15 +2,15 @@
 
 ## 结论
 
-AutoChess 不新增核心 System。普攻、技能和 AI 命令全部成为通用 Kernel 的输入/Job 数据；Kernel 先执行按 ASC owner 分组的 `AscOwnerCommandWave`，再执行按 target ASC 分组的 `AscTargetStateWave`。“核心 System”仅保留为业务概念标题。
+AutoChess 不新增核心 System。普攻、技能和 AI 命令全部成为通用 Kernel 的输入/Job 数据；Kernel 先执行按 ASC owner 分组的 `AscOwnerCommandWave`，再执行按 target ASC 分组的 `TargetPrepare -> SessionFaultReduce -> TargetPublish`。“核心 System”仅保留为业务概念标题。
 
-## 两波执行与原子 Commit
+## Owner 提交与 Target 三段事务
 
 - `OwnerPlanBuild` 按 owner ASC 与稳定 request identity 在 shadow 中完成 CanActivate/Commit 业务检查和 canonical read-your-writes，并产出完整生成上界；它不写权威状态。
-- `WholeTickInfraAdmission` 在所有 owner/target work展开后统一预留 downstream scratch/slab/payload/pending/fact/outbox。失败是 tick-level `InfraAdmissionFault`：全部 gameplay 权威零写，DAG 内只写固定大小 `SessionFaultLatch=Detected` 与 sealed subset 证据。本 Tick不写逐 request Boundary fact；outer completion 后 FaultClose 与 CommandPort accept 在同一 `SessionIngressGate` 线性化，冻结关闭前全部 accepted-outstanding request的 first/last/count/hash，含 unsealed/future tail。这些请求由同一 FaultId 统一终结，原 inbox/接收 journal 保留供诊断审计且不重放；关闭后请求同步拒绝。
+- `WholeTickInfraAdmission` 在所有 owner/target work展开后统一预留 downstream scratch/slab/payload/pending/fact/outbox。失败是 tick-level `InfraAdmissionFault`：全部 gameplay 权威零写，DAG 内只写固定大小 `SessionFaultLatch=Detected` 与 sealed subset 证据。本 Tick不写逐 request Boundary fact；outer completion 后 FaultClose 与 CommandPort accept 在同一 `SessionIngressGate` 线性化，冻结关闭前 accepted-outstanding 的 first/last/count/hash摘要；包含 unsealed/future tail 的精确成员由 Request ledger判定。这些请求由同一 FaultId统一终结，原 inbox/接收 journal保留供诊断审计且不重放；关闭后请求同步拒绝。
 - `AscOwnerCommandWave` 只提交已通过整 Tick admission 的 no-fail CommitPlan；cost/cooldown、tag、target 引用等业务条件已在 plan 中闭合，提交不得再发生容量失败或部分 mutation。
-- Commit 后远端 application 进入 `AscTargetStateWave`，按 target ASC 与 application identity 稳定排序；target 内 canonical read-your-writes。
-- target wave 产生的 overflow/reaction/cross-owner dynamic child 统一进入 `T+1`；Definition 静态闭合的 `DirectEffectProgram` 可在当前 tick 完成。
+- Commit 后远端 application 进入 `TargetPrepare`，按 target ASC 与 application identity 稳定排序并在 shadow 内 canonical read-your-writes；全部 target prepare 完成后，经唯一 `SessionFaultReduce` 成功才由 `TargetPublish` 无失败发布。
+- TargetPrepare 产生的普通 reaction/cross-owner dynamic child 统一进入 `T+1`；越过证明上界的 overflow 是 Session-fatal，不作为延迟队列；Definition 静态闭合的 `DirectEffectProgram` 可在当前 tick 完成。
 
 ## 普攻
 
@@ -32,7 +32,7 @@ AutoChess 不新增核心 System。普攻、技能和 AI 命令全部成为通�
 
 ## 多目标与原子性
 
-一次冰霜新星命中 3 个目标共享 Activation/Causality，但三个 target transaction 独立成功/失败；v1 不承诺跨三个 ASC 的分布式原子回滚。每个目标拥有独立 target capture/ApplicationId/result。
+一次冰霜新星命中 3 个目标共享 Activation/Causality，但三个 target application 各自产生独立 typed业务 outcome；v1 不承诺跨三个 ASC 的分布式业务回滚。每个目标拥有独立 target capture/ApplicationId/result。若任一 TargetPrepare 产生 stabilization/identity/proof fatal，则它不是某一目标的业务失败：SessionFaultReduce 丢弃本 Tick全部 target shadow并阻止 Publish。
 
 ## Target life policy 与 committed-work-wins
 
@@ -48,7 +48,7 @@ AutoChess 不新增核心 System。普攻、技能和 AI 命令全部成为通�
 
 ## 验收
 
-- OwnerPlanBuild 的 Activate/Commit 业务检查有 per-request typed outcome；WholeTickInfraAdmission失败产生 tick-level `SessionFaultLatch`，其 IngressClosed accepted-outstanding first/last/count/hash 覆盖关闭点前全部已接受未终结请求，不往未准入 fact/outbox 写回执，且整 Tick gameplay 权威零写；admitted CommitPlan一次性 no-fail提交。
+- OwnerPlanBuild 的 Activate/Commit业务检查有 per-request typed outcome；WholeTickInfraAdmission失败产生 tick-level `SessionFaultLatch`，其 IngressClosed first/last/count/hash仅作摘要，关闭点前全部已接受未终结请求由 exact ledger membership逐项终结；不往未准入 gameplay fact/outbox写回执，且整 Tick gameplay权威零写；admitted CommitPlan一次性 no-fail提交。
 - 同 tick 多单位集火同一目标仍只有 target single writer。
 - Commit 失败不消耗 Mana/冷却、不产生 Effect command。
 - 目标死亡/stale/binding change 返回稳定 reject reason。

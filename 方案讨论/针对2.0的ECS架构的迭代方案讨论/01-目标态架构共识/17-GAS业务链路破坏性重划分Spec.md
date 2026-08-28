@@ -6,7 +6,7 @@
 
 EX-GAS Runtime v1 采用一次性、不可兼容的权威切换：以 ASC-local 稳定 slab、单 Core tick kernel、target-owned single writer、标准 EndFixed ECB 和单 Boundary Drain 实现 GAS 语义。旧五段 physical group、Ability Entity、legacy GE entity、双 ActiveEffect store、singleton/EventBus 主链和多 Boundary ECS consumer 不进入目标态。
 
-当前代码事实只读 [Runtime v1 不可兼容迁移基线事实](../00-当前架构事实/RuntimeV1不可兼容迁移基线事实.md)；执行顺序只读 [Runtime v1 不可兼容迁移任务](../02-主线任务树/RuntimeV1不可兼容迁移/README.md)。本文件不记录当前命中、验证流水或任务状态。
+当前代码事实只读 [Runtime v1 不可兼容迁移基线事实](../00-当前架构事实/RuntimeV1不可兼容迁移基线事实.md)与[第三轮多 Agent 架构与性能审查事实](../00-当前架构事实/RuntimeV1第三轮多Agent架构与性能审查事实.md)；执行顺序只读 [Runtime v1 不可兼容迁移任务](../02-主线任务树/RuntimeV1不可兼容迁移/README.md)。本文件不记录当前命中、验证流水或任务状态。
 
 ## v1 最终裁决
 
@@ -18,7 +18,7 @@ EX-GAS Runtime v1 采用一次性、不可兼容的权威切换：以 ASC-local 
 | 结构变化 | 使用标准 `EndFixedStepSimulationEntityCommandBufferSystem`；Core 权威状态不依赖结构变化 |
 | 长期实例 | ASC-local 非压缩 slab：slot index + generation + free-list |
 | Definition backend | 禁止按 Definition 选择 slot 或 Entity；v1 没有 per-definition Entity promotion |
-| 跨 owner 写 | ASC owner command 与 target state 分成两个依赖串联的 mutation wave；跨 ASC route 按 destination 分组 |
+| 跨 owner 写 | `AscOwnerCommandWave -> TargetPrepare -> SessionFaultReduce -> TargetPublish`依赖串联；Prepare只写shadow，Publish才写durable，跨 ASC route按destination分组 |
 | Commit | scratch plan + 全 tick infrastructure admission 后，source-local CommitPlan no-fail 原子提交 |
 | Boundary | managed staging 先接管，成功后才清 ECS outbox；单 Drain 发布 immutable batch/ring |
 | Cue | OnActive / WhileActive / Executed / Removed 四阶段 request，Core 不持有 Cue Entity |
@@ -53,7 +53,7 @@ SimulationSystemGroup
 1. 必装 `GasCommandIngressSystem` 只在 pre-Fixed window 把 `SessionIngressGate` 已接收的 Boundary journal records 搬入 ECS inbox，不拥有 tick scratch，也不写 gameplay 权威状态。
 2. `GasTickKernelSystem` 是唯一 gameplay state writer 与 tick scratch owner。
 3. 标准 EndFixed system 在独立 GAS World 中必须显式创建、注册和排序。
-4. PlayerLoop 场景由 `SimulationSystemGroup` 在 FixedStep catch-up 完成后调用一次 Drain。
+4. PlayerLoop 场景由 `SimulationSystemGroup` 在 FixedStep 子组之后调用一次 Drain；本 outer update 即使是 0 FixedStep 也仍 Drain 一次。已有 InFlight retry 复用同一 Batch，且不运行 Kernel、不增加 `SimulationTick`。
 5. Headless/AutoChess 只能调用 session `TickBatch(...)`；不得直接更新内部 group 或 system。
 6. logical phase 名称用于 Job、Profiler marker、counter 和 semantic hash，不用于恢复多组调度。
 
@@ -65,13 +65,16 @@ Session 状态至少为：
 
 ```text
 Install -> SpawnPending -> Ready -> Running
-        -> Faulted/Disposing
-Running -> Terminalizing -> FinalDrain -> Disposing -> Disposed
+        -> Faulted -> Terminalizing
+Running -> Terminalizing -> FinalDrain
+                           ├─ failure -> FinalDrainBlocked -> retry FinalDrain
+                           └─ accepted -> CleanupAudited -> Disposing -> Disposed
+                                                        -> DisposedReceipt -> ValidationResultSeal
 ```
 
 SpawnBatch 的原子性是 gameplay 可见性原子，而不是 ECB/OOM 的物理回滚承诺。进入 SpawnPending 前先验证 Catalog、稳定身份、初始 grant 与逻辑容量；setup update 的 EndFixed只创建 Pending Entity/Registry entry。下一 FixedStep由 Kernel `SpawnFinalize` maintenance lane全量查询校验，再 no-fail整体发布 handle并进入 Ready；该 update不递增 gameplay Tick，也不运行 gameplay lanes。失败批次从不进入 Ready lookup，Session进入 Faulted并teardown；禁止 Drain/runner在 post-EndFixed写 Ready。
 
-Unit Death、BattleInstance Terminal 和 Session Terminalizing 是三个层级。单 BattleInstance 终局只封闭该实例 ingress；全部实例终局或显式 shutdown 后才终止 Session。wall clock、测量 warmup 与表现等待不得改变 gameplay tick、winner 或 hash。
+Unit Death、BattleInstance Terminal 和 Session Terminalizing 是三个层级。单 BattleInstance 终局通过同一个 `SessionIngressGate` 的 per-Battle accept 状态关闭，只封闭该实例 ingress；Core terminal token 是 winner authority，Boundary registry 只是策略镜像。全部实例终局或显式 shutdown 后才终止 Session。Request ledger/per-Battle gate 只见 [16-02](16-纯ECS内核与边界重划分/16-02-BoundaryCommand与CoreCommandResolveSpec.md)，Session API 只见 [16-04](16-纯ECS内核与边界重划分/16-04-ShellCapabilityContractSpec.md)，shutdown/Disposed 的物理顺序只见 [03F](03-RuntimeCore管线/03F-StructuralCommit与BoundaryProjectionSpec.md)。wall clock、测量 warmup 与表现等待不得改变 gameplay tick、winner 或 hash。
 
 ## 单 Kernel 不是巨型单 Job
 
@@ -84,9 +87,10 @@ Unit Death、BattleInstance Terminal 和 Session Terminalizing 是三个层级�
 5. `AscOwnerCommandWaveJob`：只执行已 admission 的 no-fail CommitPlan
 6. `SourceSpecProjectionJob`
 7. `GroupWorkByTargetJob`
-8. `AscTargetStateWaveJob`：application/stack/Attribute/Tag/Death
-9. `TargetLocalStabilizationJob`
-10. `StableFactMergeAndTerminalResolveJob`
+8. `TargetPrepareJob`：在 tick-local shadow 中执行 application/stack/Attribute/Tag/Grant/stabilization/Death
+9. `SessionFaultReduceJob`：归约所有 target 的 Ready/Fatal record
+10. `TargetPublishJob`：持 publish token 无失败写 durable state
+11. `StableFactMergeAndTerminalResolveJob`
 11. `GroupNextTickRouteByDestinationJob`
 12. `ProjectBoundaryAndDiagnosticsJob`
 
@@ -98,8 +102,8 @@ Unit Death、BattleInstance Terminal 和 Session Terminalizing 是三个层级�
 - 禁止 static NativeContainer、跨 System scratch、unsafe system ref 或 `NativeDisableParallelForRestriction` 掩盖 owner 错误。
 - Job/evaluator 各自独立类型并可单测；“一个 System”不等于“所有业务写进一个方法”。
 - OwnerPlan/admission 失败发生在任何语义 mutation 前；infrastructure capacity 不足使本 tick 权威零写并进入确定性 fault。
-- AscOwnerCommandWave 到 AscTargetStateWave 之间是全局 JobHandle 依赖，但不调用 `Complete()`。
-- 普通 self-target GE 也进入 TargetWave；必须在同 OwnerWave 影响后续 CanActivate 的内容只能建成 activation-owned invariant，否则 Definition bake fail。
+- AscOwnerCommandWave 到 `TargetPrepare -> SessionFaultReduce -> TargetPublish` 之间只有 JobHandle 依赖，不调用 `Complete()`。
+- 普通 self-target GE 也进入 `TargetPrepare -> SessionFaultReduce -> TargetPublish`；必须在同 OwnerWave 影响后续 CanActivate 的内容只能建成 activation-owned invariant，否则 Definition bake fail。
 
 ## ASC identity 与 Owner/Avatar
 
@@ -219,7 +223,7 @@ ActiveEffect slot 是持续实例唯一权威，至少包含：
 
 解释：
 
-- Source Snapshot：OwnerPlanBuild 为每个计划在 shadow 中计算该计划成功 Commit 后的 capture candidate，只可见同 source 前序 CommitPlan，不可见后序计划或本 tick incoming target Effect；candidate 在 admission 前无权威身份，只有对应 Commit 成功后才由 TargetWave 前的 `SourceSpecProjection` 密封并持久化。
+- Source Snapshot：OwnerPlanBuild 为每个计划在 shadow 中计算该计划成功 Commit 后的 capture candidate，只可见同 source 前序 CommitPlan，不可见后序计划或本 tick incoming target Effect；candidate 在 admission 前无权威身份，只有对应 Commit 成功后才由 `TargetPrepare` 前的 `SourceSpecProjection` 密封并持久化。
 - Target Snapshot、application requirement 与 immunity：在每条 target application 线性化点解析，可见同目标前序 canonical application 已提交状态。
 - 同 ASC Live：在 target-local stabilization 中以 Attribute revision 更新。
 - 跨 ASC Live：source revision 在 T 生成 destination-grouped dirty command，T+1 由目标 writer 消费；缺少 consumer identity、两端 Generation、source-gone/cycle/budget 任一闭环时 bake fail。
@@ -265,9 +269,9 @@ Continuation 使用生成的封闭 tagged union，至少包含：
 
 ## Target-owned single writer
 
-每 tick 先按 source ASC 形成 `AscOwnerCommandWave`，再按 Target AscStableId 形成 `AscTargetStateWave`。同一 ASC 在每个 wave 内按 canonical key 串行，不同 ASC 可并行；两个 wave 依赖串联。
+每 tick 先按 source ASC 形成 `AscOwnerCommandWave`，再按 Target AscStableId 形成 `TargetPrepare`，全部 Prepare 完成后执行唯一 `SessionFaultReduce`，成功才进入 `TargetPublish`。同一 ASC 在 owner/prepare/publish lane 内按 canonical key 串行，不同 ASC 可并行；各 lane 依赖串联。
 
-OwnerWave 只看 tick-start 状态与本 ASC 前序 CommitPlan，不看本 tick 随后到达的 target Effect。TargetWave 在每条 application 线性化点重验 target life、binding、requirement、immunity 与 capture。已 Commit operation 在 source 随后死亡时不撤回，但仍可能被目标以 typed reason 拒绝。
+OwnerWave 只看 tick-start 状态与本 ASC 前序 CommitPlan，不看本 tick 随后到达的 target Effect。TargetPrepare 在每条 application 线性化点重验 target life、binding、requirement、immunity 与 capture，并把正常 outcome 写入 shadow；只有 SessionFaultReduce 成功后才由 TargetPublish 发布。已 Commit operation 在 source 随后死亡时不撤回，但仍可能被目标以 typed reason 拒绝。
 
 target identity 必须正交声明逻辑 ASC、Avatar binding、空间采样与 `TargetLifePolicy`；`FrozenSpatial` 不是失效 actor 的 fallback。Self 只能来自显式 SelfTarget rule，禁止 implicit fallback-to-owner。
 
@@ -384,7 +388,7 @@ Registry/liveness 只能检查 `GasAscIdentity` 与 Generation，不能因 `Enti
 
 `GasBoundaryDrainSystem` 是唯一 ECS consumer，并执行三类互斥 query：有 `GasAscIdentity` 的 live ASC、有 `GasSessionIdentity` 的 live Session、两种 live identity都没有但保留 `BoundaryDrainState` 的 cleanup shell。禁止仅用 `WithNone<GasAscIdentity>` 判 shell：
 
-1. 在 FixedStep catch-up 完成后收集 dirty ASC/Session scoped owner。
+1. 在每次 outer Simulation update 的 FixedStep 子组之后收集 dirty ASC/Session scoped owner；0 FixedStep 也执行，已有 InFlight 先原 identity 重试。
 2. 对本次稳定 source range冻结 `BatchId/per-owner InFlightWatermark`，并按 `(EventId.Epoch, Tick, FactPlane, ScopeKind, ScopeStableId, ScopeGeneration, SemanticPhaseOrdinal, WorkClassOrdinal, EventId)` 排序。物理 owner 的 `NextOwnerSequence` 在 Accepted→Idle 后仍持久单调，不从 buffer 重建。
 3. managed staging 整 batch 预留并取得唯一所有权；失败时 ECS outbox 原样保留。
 4. Accepted 后只清各 source `EventId.OwnerSequence <= InFlightWatermark`；live tail保留并回到 Pending，空 dead shell需以 physical owner/range 显式 NoFactReceipt，不伪造 Battle scope。随后标记可清理 shell，并发布 ring或机器可读 DroppedRange/Fatal receipt。
@@ -394,7 +398,7 @@ v1 不在 Core 实现 per-consumer ack：同步 consumer 在 batch 生命周期�
 
 Overflow：Validation/Headless 必须失败；Presentation 记录 dropped range并触发 snapshot reconcile；禁止静默丢弃或让 Core 等最慢 consumer。
 
-Battle result 分两层：`FactPlane=Gameplay` 事实已被 managed staging 接管后冻结 `BattleOutcomeSnapshot/BattleHash`；Session teardown audit 后才返回最终 ValidationResult。`FactPlane=TeardownAudit` 事实仍交付 Cue/Replay/Validation，但不改变 winner/BattleHash；它仍可按 Asc/Battle/Session identity scope 路由，不是第四种 ScopeKind。Result 返回后不得再产生事实。
+每个 Battle 以双切面独立封印：本 Battle 的 `CoreOutboxCut` 与同 Gate 的 `GateRequestCut` 均完成、并且 ReadModel 已推进到对应 `SnapshotCut` 后，冻结 `BattleOutcomeSeal`；A 不等待同 Session 中仍运行的 B。`FactPlane=TeardownAudit` 仍交付 Replay/Validation，但不改变 winner/gameplay hash；它仍按 Asc/Battle/Session identity scope 路由，不是第四种 ScopeKind。Session 只有在 FinalDrain、cleanup audit、World/Blob/managed resource 释放并产生 `DisposedReceipt` 后才冻结 `ValidationResultSeal`；该 seal 后不得新增 gameplay、Boundary 或 teardown fact。双 cut、hash 与封印只见 [06](06-Observation-Presentation-ReplaySpec.md)，物理关闭顺序只见 03F。
 
 ## Cue 四阶段
 
@@ -414,6 +418,8 @@ Core 输出：
 5. Headless消费同一 batch，但不加载表现资源。
 6. Duration Cue 的 lifecycle key 包含 Epoch、ActiveEffectHandle、ActiveCycleOrdinal 与 CueDefinitionOrdinal；inhibit 撤销当前 cycle，reactivate 开启新 cycle。
 7. Executed 使用 ApplicationId 或 PeriodExecutionId；stack refresh 默认不开新 lifecycle cycle，BoundaryEventId 仅表示单条交付。
+8. managed async callback 必须复核 Epoch、完整 lifecycle key、Avatar BindingGeneration 与 cancellation/consumer generation；Removed 先 tombstone/cancel 再释放，迟到 callback 不得复活旧 cycle。
+9. snapshot reconcile 只按 `SnapshotCut` 恢复完整 active cycle 集合；Executed 不可重建，丢失 range 显式。Headless 走同一 ledger 但不加载资源；完整协议只见 06。
 
 ## SourceGenerator 边界
 

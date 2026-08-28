@@ -70,15 +70,15 @@ TargetResolve / Expand
   -> SourceSpecProjection
   -> deterministic sort / prefix-range build
   -> TargetRange[targetOrdinal]
-  -> AscTargetStateWave
-  -> Stabilize / Death
+  -> TargetPrepare / Stabilize / Death（shadow）
+  -> SessionFaultReduce / TargetPublish（durable）
 ```
 
 具体使用 `NativeStream`、list+prefix sum 或 radix sort 不写死，由 ScaleProfile 选型；但 owner、生命周期、确定性结果和 pressure counters 必须一致。临时容器归 Kernel 且使用 `WorldUpdateAllocator`。所有节点以 `JobHandle` 串接，不允许为了获得数量或进入下一 lane 调用 `Complete()`。
 
 `WholeTickInfraAdmission` 使用已展开 work 的生成上界，为 scratch、target slab、non-compacting payload/capture range、PendingCommand、fact partition 和 scoped outbox 完成逻辑预算检查与物理容量预留。下游 Job 已预排在同一 DAG；失败时它们读取 `AdmissionResult` 后统一 no-op，gameplay 权威零写，只有 `FaultLatchJob` 锁存确定性 Session Fault；成功后 target application 不再发生基础设施容量失败。
 
-多 target work 只保证每个 target application 在 canonical 线性化点业务原子，不保证跨 target rollback。target writer 在每条 application 前按当前 `AscLifecycle` 执行 `TargetLifePolicy`；`AliveOnly` 的首个 death crossing 冻结后，range 内后续 `AliveOnly` work typed reject。已 Commit 的远端 work 不因 source 后续死亡而撤回。
+多 target work 只保证每个 target application 在 canonical 线性化点产生独立 typed业务 outcome，不提供跨 target 业务 rollback。target writer 在每条 application 前按当前 `AscLifecycle` 执行 `TargetLifePolicy`；`AliveOnly` 的首个 death crossing 冻结后，range 内后续 `AliveOnly` work typed reject。已 Commit 的远端 work 不因 source 后续死亡而撤回。Stabilization/identity/proof fatal 是例外：`SessionFaultReduce` 会丢弃本 Tick全部 target shadow并阻止 Publish，而不是只让一个 target失败。
 
 ## DirectEffectProgram
 
