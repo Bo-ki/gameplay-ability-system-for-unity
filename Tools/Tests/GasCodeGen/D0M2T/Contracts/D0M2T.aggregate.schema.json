@@ -1,0 +1,710 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exhard.local/schemas/D0M2T-Aggregate-v1.json",
+  "title": "D0-M2T immutable tarball full-fault aggregate",
+  "type": "object",
+  "required": [
+    "Schema",
+    "RunId",
+    "Status",
+    "Reason",
+    "SelectedRoute",
+    "SoleUnityConsumedSelector",
+    "Cases",
+    "Inputs",
+    "Authority",
+    "Selector",
+    "Unity",
+    "RoleObservations",
+    "TransientArtifactObservations",
+    "HarnessControlObservations",
+    "Fixture",
+    "EvidenceFiles",
+    "Protected",
+    "D1Authorized",
+    "ProductionInstallAdmission",
+    "DeclaredFullSemanticEligibility",
+    "NextGate"
+  ],
+  "properties": {
+    "Schema": {
+      "const": "D0M2T-Aggregate-v1"
+    },
+    "RunId": {
+      "type": "string",
+      "pattern": "^D0M2T-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$"
+    },
+    "Status": {
+      "enum": [
+        "Passed",
+        "RouteRejected",
+        "Inconclusive"
+      ]
+    },
+    "Reason": {
+      "$ref": "#/$defs/reason"
+    },
+    "SelectedRoute": {
+      "const": "ImmutableTarball"
+    },
+    "SoleUnityConsumedSelector": {
+      "const": "Packages/manifest.json"
+    },
+    "Cases": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/case" },
+            { "properties": { "CaseId": { "const": "TT-01" }, "Name": { "const": "BaselineAuthority" } }, "required": ["CaseId", "Name"] }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/case" },
+            { "properties": { "CaseId": { "const": "TT-02" }, "Name": { "const": "SelectorAtomicKill" } }, "required": ["CaseId", "Name"] }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/case" },
+            { "properties": { "CaseId": { "const": "TT-03" }, "Name": { "const": "ResolveKillRecovery" } }, "required": ["CaseId", "Name"] }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/case" },
+            { "properties": { "CaseId": { "const": "TT-04" }, "Name": { "const": "MissingCorruptAuthority" } }, "required": ["CaseId", "Name"] }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/case" },
+            { "properties": { "CaseId": { "const": "TT-05" }, "Name": { "const": "ManifestLockDrift" } }, "required": ["CaseId", "Name"] }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/case" },
+            { "properties": { "CaseId": { "const": "TT-06" }, "Name": { "const": "StaleCacheBeeRsp" } }, "required": ["CaseId", "Name"] }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/case" },
+            { "properties": { "CaseId": { "const": "TT-07" }, "Name": { "const": "BoundaryCleanup" } }, "required": ["CaseId", "Name"] }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/case" },
+            { "properties": { "CaseId": { "const": "TT-08" }, "Name": { "const": "EvidenceClosure" } }, "required": ["CaseId", "Name"] }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "Inputs": {
+      "type": "object"
+    },
+    "Authority": {
+      "type": "object"
+    },
+    "Selector": {
+      "type": "object"
+    },
+    "Unity": {
+      "type": "object"
+    },
+    "RoleObservations": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "$ref": "#/$defs/roleObservation"
+      }
+    },
+    "TransientArtifactObservations": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "$ref": "#/$defs/transientArtifactObservation"
+      }
+    },
+    "HarnessControlObservations": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "$ref": "#/$defs/harnessControlObservation"
+      }
+    },
+    "Fixture": {
+      "type": "object"
+    },
+    "EvidenceFiles": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "$ref": "#/$defs/evidenceFile"
+      }
+    },
+    "Protected": {
+      "$ref": "#/$defs/protected"
+    },
+    "D1Authorized": {
+      "const": false
+    },
+    "ProductionInstallAdmission": {
+      "const": "NotEvaluated"
+    },
+    "DeclaredFullSemanticEligibility": {
+      "const": false
+    },
+    "NextGate": {
+      "const": "D0-M2R"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "Status": {
+            "const": "Passed"
+          }
+        },
+        "required": [
+          "Status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "Reason": {
+            "const": "None"
+          },
+          "Protected": {
+            "required": [
+              "BeforeSnapshotEvidenceId",
+              "AfterSnapshotEvidenceId"
+            ],
+            "properties": {
+              "Unchanged": {
+                "const": true
+              }
+            }
+          },
+          "EvidenceFiles": {
+            "minItems": 8
+          },
+          "RoleObservations": {
+            "minItems": 7,
+            "maxItems": 7
+          },
+          "TransientArtifactObservations": {
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "HarnessControlObservations": {
+            "minItems": 23,
+            "maxItems": 23
+          },
+          "Cases": {
+            "items": {
+              "properties": {
+                "Status": {
+                  "const": "Passed"
+                }
+              },
+              "required": [
+                "Status"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "Status": {
+            "const": "RouteRejected"
+          }
+        },
+        "required": [
+          "Status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "Reason": {
+            "enum": [
+              "AuthorityMutationObserved",
+              "SelectorAtomicityViolation",
+              "MixedGenerationObserved",
+              "MissingOrCorruptAuthorityAccepted",
+              "ManifestLockDriftAccepted",
+              "CacheFallbackSelectorObserved",
+              "StaleBeeOrRspConsumed",
+              "FilesystemBoundaryViolation"
+            ]
+          },
+          "EvidenceFiles": {
+            "minItems": 8
+          },
+          "RoleObservations": {
+            "minItems": 7,
+            "maxItems": 7
+          },
+          "TransientArtifactObservations": {
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "HarnessControlObservations": {
+            "minItems": 23,
+            "maxItems": 23
+          },
+          "Protected": {
+            "required": [
+              "BeforeSnapshotEvidenceId",
+              "AfterSnapshotEvidenceId"
+            ]
+          },
+          "Cases": {
+            "items": {
+              "properties": {
+                "Status": {
+                  "enum": [
+                    "Passed",
+                    "Failed"
+                  ]
+                }
+              },
+              "required": [
+                "Status"
+              ]
+            },
+            "contains": {
+              "properties": {
+                "Status": {
+                  "const": "Failed"
+                }
+              },
+              "required": [
+                "Status"
+              ]
+            },
+            "minContains": 1
+          }
+        },
+        "required": [
+          "Reason"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "Status": {
+            "const": "Inconclusive"
+          }
+        },
+        "required": [
+          "Status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "Reason": {
+            "enum": [
+              "TimeBoxExceeded",
+              "HarnessFailure",
+              "CleanupFailure",
+              "EvidenceIncomplete",
+              "EvidenceFileMissing",
+              "EvidenceHashMismatch",
+              "SchemaViolation",
+              "CaseIdSetMismatch",
+              "ProtectedPathDrift",
+              "UnityProcessResidue",
+              "InputIdentityDrift",
+              "ToolIdentityDrift",
+              "WatcherFailure",
+              "UnityIdentityMismatch"
+            ]
+          },
+          "Cases": {
+            "contains": {
+              "properties": {
+                "Status": {
+                  "enum": [
+                    "Inconclusive",
+                    "NotRun"
+                  ]
+                }
+              },
+              "required": [
+                "Status"
+              ]
+            },
+            "minContains": 1
+          }
+        },
+        "required": [
+          "Reason"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "reason": {
+      "enum": [
+        "None",
+        "AuthorityMutationObserved",
+        "SelectorAtomicityViolation",
+        "MixedGenerationObserved",
+        "MissingOrCorruptAuthorityAccepted",
+        "ManifestLockDriftAccepted",
+        "CacheFallbackSelectorObserved",
+        "StaleBeeOrRspConsumed",
+        "FilesystemBoundaryViolation",
+        "TimeBoxExceeded",
+        "HarnessFailure",
+        "CleanupFailure",
+        "EvidenceIncomplete",
+        "EvidenceFileMissing",
+        "EvidenceHashMismatch",
+        "SchemaViolation",
+        "CaseIdSetMismatch",
+        "ProtectedPathDrift",
+        "UnityProcessResidue",
+        "InputIdentityDrift",
+        "ToolIdentityDrift",
+        "WatcherFailure",
+        "UnityIdentityMismatch"
+      ]
+    },
+    "case": {
+      "type": "object",
+      "required": [
+        "CaseId",
+        "Name",
+        "Status",
+        "Reason",
+        "EvidenceIds"
+      ],
+      "properties": {
+        "CaseId": {
+          "type": "string",
+          "pattern": "^TT-0[1-8]$"
+        },
+        "Name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Status": {
+          "enum": [
+            "Passed",
+            "Failed",
+            "Inconclusive",
+            "NotRun"
+          ]
+        },
+        "Reason": {
+          "enum": [
+            "None",
+            "NotRun",
+            "AuthorityMutationObserved",
+            "SelectorAtomicityViolation",
+            "MixedGenerationObserved",
+            "MissingOrCorruptAuthorityAccepted",
+            "ManifestLockDriftAccepted",
+            "CacheFallbackSelectorObserved",
+            "StaleBeeOrRspConsumed",
+            "FilesystemBoundaryViolation",
+            "TimeBoxExceeded",
+            "HarnessFailure",
+            "CleanupFailure",
+            "EvidenceIncomplete",
+            "EvidenceFileMissing",
+            "EvidenceHashMismatch",
+            "SchemaViolation",
+            "CaseIdSetMismatch",
+            "ProtectedPathDrift",
+            "UnityProcessResidue",
+            "InputIdentityDrift",
+            "ToolIdentityDrift",
+            "WatcherFailure",
+            "UnityIdentityMismatch"
+          ]
+        },
+        "EvidenceIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^TT-0[1-8]-[a-z0-9][a-z0-9._-]*$"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "Status": {
+                "enum": [
+                  "Passed",
+                  "Failed"
+                ]
+              }
+            },
+            "required": [
+              "Status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "EvidenceIds": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "Status": {
+                "const": "NotRun"
+              }
+            },
+            "required": [
+              "Status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "EvidenceIds": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "Status": { "const": "Passed" } }, "required": ["Status"] },
+          "then": { "properties": { "Reason": { "const": "None" } }, "required": ["Reason"] }
+        },
+        {
+          "if": { "properties": { "Status": { "const": "Failed" } }, "required": ["Status"] },
+          "then": {
+            "properties": {
+              "Reason": {
+                "enum": [
+                  "AuthorityMutationObserved",
+                  "SelectorAtomicityViolation",
+                  "MixedGenerationObserved",
+                  "MissingOrCorruptAuthorityAccepted",
+                  "ManifestLockDriftAccepted",
+                  "CacheFallbackSelectorObserved",
+                  "StaleBeeOrRspConsumed",
+                  "FilesystemBoundaryViolation"
+                ]
+              }
+            },
+            "required": ["Reason"]
+          }
+        },
+        {
+          "if": { "properties": { "Status": { "const": "Inconclusive" } }, "required": ["Status"] },
+          "then": {
+            "properties": {
+              "Reason": {
+                "enum": [
+                  "TimeBoxExceeded",
+                  "HarnessFailure",
+                  "CleanupFailure",
+                  "EvidenceIncomplete",
+                  "EvidenceFileMissing",
+                  "EvidenceHashMismatch",
+                  "SchemaViolation",
+                  "CaseIdSetMismatch",
+                  "ProtectedPathDrift",
+                  "UnityProcessResidue",
+                  "InputIdentityDrift",
+                  "ToolIdentityDrift",
+                  "WatcherFailure",
+                  "UnityIdentityMismatch"
+                ]
+              }
+            },
+            "required": ["Reason"]
+          }
+        },
+        {
+          "if": { "properties": { "Status": { "const": "NotRun" } }, "required": ["Status"] },
+          "then": { "properties": { "Reason": { "const": "NotRun" } }, "required": ["Reason"] }
+        }
+      ],
+      "additionalProperties": true
+    },
+    "evidenceFile": {
+      "type": "object",
+      "required": [
+        "EvidenceId",
+        "CaseId",
+        "Kind",
+        "Path",
+        "Sha256",
+        "Length"
+      ],
+      "properties": {
+        "EvidenceId": {
+          "type": "string",
+          "pattern": "^TT-0[1-8]-[a-z0-9][a-z0-9._-]*$"
+        },
+        "CaseId": {
+          "type": "string",
+          "pattern": "^TT-0[1-8]$"
+        },
+        "Kind": {
+          "enum": [
+            "AuthoritySnapshot",
+            "AuthorityWatcherLog",
+            "ManifestSnapshot",
+            "PackageLockSnapshot",
+            "AuditRecordSnapshot",
+            "UnityObservation",
+            "ProcessLog",
+            "FaultInjectionRecord",
+            "CacheSnapshot",
+            "BeeRspSnapshot",
+            "FilesystemBoundaryRecord",
+            "CleanupRecord",
+            "ProtectedSnapshot",
+            "EvidenceClosure"
+          ]
+        },
+        "Path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "Length": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "roleObservation": {
+      "type": "object",
+      "required": [
+        "Path",
+        "Role",
+        "ConsumerAuthority",
+        "UnityConsumerAuthority",
+        "NeverFallbackSelector"
+      ],
+      "properties": {
+        "Path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Role": {
+          "enum": [
+            "Authority",
+            "Derived",
+            "Cache"
+          ]
+        },
+        "ConsumerAuthority": {
+          "type": "string",
+          "minLength": 1
+        },
+        "UnityConsumerAuthority": {
+          "type": "integer",
+          "enum": [0, 1]
+        },
+        "NeverFallbackSelector": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "transientArtifactObservation": {
+      "type": "object",
+      "required": ["CaseId", "Phase", "Path", "Kind", "Role", "ConsumerAuthority", "UnityConsumerAuthority", "NeverFallbackSelector", "ExistedAfterKill", "ObservedLength", "ObservedSha256", "RemovedAfterCleanup"],
+      "properties": {
+        "CaseId": { "const": "TT-02" },
+        "Phase": { "enum": ["BeforeReplace", "AfterReplace"] },
+        "Path": { "type": "string", "minLength": 1 },
+        "Kind": { "enum": ["ManifestNext", "ManifestBackup"] },
+        "Role": { "const": "Derived" },
+        "ConsumerAuthority": { "const": "None" },
+        "UnityConsumerAuthority": { "const": 0 },
+        "NeverFallbackSelector": { "const": true },
+        "ExistedAfterKill": { "type": "boolean" },
+        "ObservedLength": { "type": "integer", "minimum": 0 },
+        "ObservedSha256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+        "RemovedAfterCleanup": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "harnessControlObservation": {
+      "type": "object",
+      "required": ["CaseId", "Path", "Kind", "ConsumerAuthority", "UnityConsumerAuthority", "NeverFallbackSelector", "Observed", "ObservedLength", "ObservedSha256", "RemovedAfterCleanup"],
+      "properties": {
+        "CaseId": { "type": "string", "pattern": "^TT-0[1-8]$" },
+        "Path": { "type": "string", "minLength": 1 },
+        "Kind": {
+          "enum": [
+            "WatcherCanary",
+            "ManifestAControl",
+            "ManifestBControl",
+            "SelectorWorker",
+            "SelectorWorkerCheckpoint",
+            "OwnerSentinel",
+            "MissingAuthorityHolding",
+            "StaleCacheCanary",
+            "StaleRspCanary",
+            "ExternalTargetCanary",
+            "HardlinkAttack",
+            "ReparseTargetControl",
+            "ReparseAttack",
+            "ForgedSentinelAttack"
+          ]
+        },
+        "ConsumerAuthority": { "const": "None" },
+        "UnityConsumerAuthority": { "const": 0 },
+        "NeverFallbackSelector": { "const": true },
+        "Observed": { "type": "boolean" },
+        "ObservedLength": { "type": "integer", "minimum": 0 },
+        "ObservedSha256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+        "RemovedAfterCleanup": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "protected": {
+      "type": "object",
+      "required": [
+        "Unchanged"
+      ],
+      "properties": {
+        "Unchanged": {
+          "type": "boolean"
+        },
+        "BeforeSnapshotEvidenceId": {
+          "type": "string",
+          "pattern": "^TT-07-[a-z0-9][a-z0-9._-]*$"
+        },
+        "AfterSnapshotEvidenceId": {
+          "type": "string",
+          "pattern": "^TT-07-[a-z0-9][a-z0-9._-]*$"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

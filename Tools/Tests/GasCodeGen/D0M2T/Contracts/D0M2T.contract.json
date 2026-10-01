@@ -1,0 +1,426 @@
+{
+  "Schema": "D0M2T-Contract-v1",
+  "AggregateSchema": "D0M2T-Aggregate-v1",
+  "EvidenceClosureSchema": "D0M2T-EvidenceClosure-v1",
+  "PassedSemanticEvidenceAdmission": "TypedRawV1",
+  "ArchiveIndexSha256": "696365b83636079f9099c80d9cdd5d9a81460c940c6c737782a299882c9de1cc",
+  "RunIdPattern": "^D0M2T-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$",
+  "RequiredTopLevelFields": [
+    "Schema",
+    "RunId",
+    "Status",
+    "Reason",
+    "SelectedRoute",
+    "SoleUnityConsumedSelector",
+    "Cases",
+    "Inputs",
+    "Authority",
+    "Selector",
+    "Unity",
+    "RoleObservations",
+    "TransientArtifactObservations",
+    "HarnessControlObservations",
+    "Fixture",
+    "EvidenceFiles",
+    "Protected",
+    "D1Authorized",
+    "ProductionInstallAdmission",
+    "DeclaredFullSemanticEligibility",
+    "NextGate"
+  ],
+  "AggregateStatuses": [
+    "Passed",
+    "RouteRejected",
+    "Inconclusive"
+  ],
+  "CaseStatuses": [
+    "Passed",
+    "Failed",
+    "Inconclusive",
+    "NotRun"
+  ],
+  "CaseEvidencePolicy": {
+    "Passed": "RequiredKinds",
+    "Failed": "RequiredKinds",
+    "Inconclusive": "PartialAllowed",
+    "NotRun": "MustBeEmpty"
+  },
+  "Reasons": {
+    "Passed": [
+      "None"
+    ],
+    "RouteRejected": [
+      "AuthorityMutationObserved",
+      "SelectorAtomicityViolation",
+      "MixedGenerationObserved",
+      "MissingOrCorruptAuthorityAccepted",
+      "ManifestLockDriftAccepted",
+      "CacheFallbackSelectorObserved",
+      "StaleBeeOrRspConsumed",
+      "FilesystemBoundaryViolation"
+    ],
+    "Inconclusive": [
+      "TimeBoxExceeded",
+      "HarnessFailure",
+      "CleanupFailure",
+      "EvidenceIncomplete",
+      "EvidenceFileMissing",
+      "EvidenceHashMismatch",
+      "SchemaViolation",
+      "CaseIdSetMismatch",
+      "ProtectedPathDrift",
+      "UnityProcessResidue",
+      "InputIdentityDrift",
+      "ToolIdentityDrift",
+      "WatcherFailure",
+      "UnityIdentityMismatch"
+    ]
+  },
+  "CaseReasons": [
+    "None",
+    "NotRun",
+    "AuthorityMutationObserved",
+    "SelectorAtomicityViolation",
+    "MixedGenerationObserved",
+    "MissingOrCorruptAuthorityAccepted",
+    "ManifestLockDriftAccepted",
+    "CacheFallbackSelectorObserved",
+    "StaleBeeOrRspConsumed",
+    "FilesystemBoundaryViolation",
+    "TimeBoxExceeded",
+    "HarnessFailure",
+    "CleanupFailure",
+    "EvidenceIncomplete",
+    "EvidenceFileMissing",
+    "EvidenceHashMismatch",
+    "SchemaViolation",
+    "CaseIdSetMismatch",
+    "ProtectedPathDrift",
+    "UnityProcessResidue",
+    "InputIdentityDrift",
+    "ToolIdentityDrift",
+    "WatcherFailure",
+    "UnityIdentityMismatch"
+  ],
+  "EvidenceFileFields": [
+    "EvidenceId",
+    "CaseId",
+    "Kind",
+    "Path",
+    "Sha256",
+    "Length"
+  ],
+  "EvidenceClosureRequiredFields": [
+    "Schema",
+    "RunId",
+    "ClosedAtUtc",
+    "EvidenceRoot",
+    "PriorEvidenceFiles",
+    "Checks",
+    "FixtureCleanup",
+    "OwnedProcessIds",
+    "LiveOwnedProcessIds",
+    "Passed",
+    "Reason"
+  ],
+  "EvidenceClosureCheckFields": [
+    "AllPathsRelative",
+    "AllFilesOpenable",
+    "LengthsMatch",
+    "Sha256Match",
+    "DuplicateEvidenceIds",
+    "OrphanEvidenceIds"
+  ],
+  "EvidenceClosureCleanupFields": [
+    "Requested",
+    "CreatedRoots",
+    "RemovedRoots",
+    "ResidualRoots"
+  ],
+  "EvidenceKinds": [
+    "AuthoritySnapshot",
+    "AuthorityWatcherLog",
+    "ManifestSnapshot",
+    "PackageLockSnapshot",
+    "AuditRecordSnapshot",
+    "UnityObservation",
+    "ProcessLog",
+    "FaultInjectionRecord",
+    "CacheSnapshot",
+    "BeeRspSnapshot",
+    "FilesystemBoundaryRecord",
+    "CleanupRecord",
+    "ProtectedSnapshot",
+    "EvidenceClosure"
+  ],
+  "Roles": [
+    "Authority",
+    "Derived",
+    "Cache"
+  ],
+  "PersistentRoleObservationFields": [
+    "Path",
+    "Role",
+    "ConsumerAuthority",
+    "UnityConsumerAuthority",
+    "NeverFallbackSelector"
+  ],
+  "TransientArtifactObservationFields": [
+    "CaseId",
+    "Phase",
+    "Path",
+    "Kind",
+    "Role",
+    "ConsumerAuthority",
+    "UnityConsumerAuthority",
+    "NeverFallbackSelector",
+    "ExistedAfterKill",
+    "ObservedLength",
+    "ObservedSha256",
+    "RemovedAfterCleanup"
+  ],
+  "HarnessControlObservationFields": [
+    "CaseId",
+    "Path",
+    "Kind",
+    "ConsumerAuthority",
+    "UnityConsumerAuthority",
+    "NeverFallbackSelector",
+    "Observed",
+    "ObservedLength",
+    "ObservedSha256",
+    "RemovedAfterCleanup"
+  ],
+  "TransientArtifactMatrix": [
+    {
+      "Phase": "BeforeReplace",
+      "Kind": "ManifestNext",
+      "ExistedAfterKill": true,
+      "ExpectedGeneration": "B"
+    },
+    {
+      "Phase": "BeforeReplace",
+      "Kind": "ManifestBackup",
+      "ExistedAfterKill": false,
+      "ExpectedGeneration": "None"
+    },
+    {
+      "Phase": "AfterReplace",
+      "Kind": "ManifestNext",
+      "ExistedAfterKill": false,
+      "ExpectedGeneration": "None"
+    },
+    {
+      "Phase": "AfterReplace",
+      "Kind": "ManifestBackup",
+      "ExistedAfterKill": true,
+      "ExpectedGeneration": "A"
+    }
+  ],
+  "HarnessControlInventory": [
+    { "CaseId": "TT-01", "Kind": "WatcherCanary", "Count": 1 },
+    { "CaseId": "TT-02", "Kind": "ManifestAControl", "Count": 1 },
+    { "CaseId": "TT-02", "Kind": "ManifestBControl", "Count": 1 },
+    { "CaseId": "TT-02", "Kind": "SelectorWorker", "Count": 1 },
+    { "CaseId": "TT-02", "Kind": "SelectorWorkerCheckpoint", "Count": 2 },
+    { "CaseId": "TT-04", "Kind": "OwnerSentinel", "Count": 1 },
+    { "CaseId": "TT-04", "Kind": "ManifestAControl", "Count": 1 },
+    { "CaseId": "TT-04", "Kind": "ManifestBControl", "Count": 1 },
+    { "CaseId": "TT-04", "Kind": "WatcherCanary", "Count": 1 },
+    { "CaseId": "TT-04", "Kind": "MissingAuthorityHolding", "Count": 1 },
+    { "CaseId": "TT-06", "Kind": "StaleCacheCanary", "Count": 1 },
+    { "CaseId": "TT-06", "Kind": "StaleRspCanary", "Count": 1 },
+    { "CaseId": "TT-07", "Kind": "OwnerSentinel", "Count": 5 },
+    { "CaseId": "TT-07", "Kind": "ExternalTargetCanary", "Count": 1 },
+    { "CaseId": "TT-07", "Kind": "HardlinkAttack", "Count": 1 },
+    { "CaseId": "TT-07", "Kind": "ReparseTargetControl", "Count": 1 },
+    { "CaseId": "TT-07", "Kind": "ReparseAttack", "Count": 1 },
+    { "CaseId": "TT-07", "Kind": "ForgedSentinelAttack", "Count": 1 }
+  ],
+  "HarnessDirectoryKinds": [
+    "StaleCacheCanary",
+    "ReparseTargetControl",
+    "ReparseAttack"
+  ],
+  "CaseSet": [
+    {
+      "CaseId": "TT-01",
+      "Name": "BaselineAuthority",
+      "Purpose": "Seal exact content-addressed archives, capture the cold baseline, and prove post-seal authority bytes remain event-level immutable.",
+      "RequiredEvidenceKinds": [
+        "AuthoritySnapshot",
+        "AuthorityWatcherLog"
+      ]
+    },
+    {
+      "CaseId": "TT-02",
+      "Name": "SelectorAtomicKill",
+      "Purpose": "Inject bounded kills around the complete-manifest replace and prove the selector is always an intact old or new file.",
+      "RequiredEvidenceKinds": [
+        "ManifestSnapshot",
+        "ProcessLog"
+      ]
+    },
+    {
+      "CaseId": "TT-03",
+      "Name": "ResolveKillRecovery",
+      "Purpose": "Kill during Unity or UPM resolve, restart, and prove Runtime, Editor, and AutoChess converge to the manifest-selected generation.",
+      "RequiredEvidenceKinds": [
+        "UnityObservation",
+        "ProcessLog"
+      ]
+    },
+    {
+      "CaseId": "TT-04",
+      "Name": "MissingCorruptAuthority",
+      "Purpose": "Remove or corrupt the selected archive and prove direct Unity fails closed without consuming cache as authority.",
+      "RequiredEvidenceKinds": [
+        "FaultInjectionRecord",
+        "UnityObservation"
+      ]
+    },
+    {
+      "CaseId": "TT-05",
+      "Name": "ManifestLockDrift",
+      "Purpose": "Inject manifest, lock, and audit drift while preserving manifest as the sole Unity-consumed selector.",
+      "RequiredEvidenceKinds": [
+        "ManifestSnapshot",
+        "PackageLockSnapshot",
+        "AuditRecordSnapshot"
+      ]
+    },
+    {
+      "CaseId": "TT-06",
+      "Name": "StaleCacheBeeRsp",
+      "Purpose": "Preseed stale PackageCache, Bee, and response-file state and prove none can determine the final generation.",
+      "RequiredEvidenceKinds": [
+        "CacheSnapshot",
+        "BeeRspSnapshot",
+        "UnityObservation"
+      ]
+    },
+    {
+      "CaseId": "TT-07",
+      "Name": "BoundaryCleanup",
+      "Purpose": "Reject hardlink or reparse boundary attacks, clean only suite-owned objects, and preserve the protected project snapshot.",
+      "RequiredEvidenceKinds": [
+        "FilesystemBoundaryRecord",
+        "CleanupRecord",
+        "ProtectedSnapshot"
+      ]
+    },
+    {
+      "CaseId": "TT-08",
+      "Name": "EvidenceClosure",
+      "Purpose": "Persist a raw evidence closure whose referenced files remain openable and whose lengths and SHA-256 values bind their original bytes.",
+      "RequiredEvidenceKinds": [
+        "EvidenceClosure"
+      ]
+    }
+  ],
+  "FrozenTerminalFields": {
+    "SelectedRoute": "ImmutableTarball",
+    "SoleUnityConsumedSelector": "Packages/manifest.json",
+    "D1Authorized": false,
+    "ProductionInstallAdmission": "NotEvaluated",
+    "DeclaredFullSemanticEligibility": false,
+    "NextGate": "D0-M2R"
+  },
+  "FrozenInputs": [
+    {
+      "Path": "方案讨论/针对2.0的ECS架构的迭代方案讨论/01-目标态架构共识/08-Luban-SourceGenerator配置生成链路Spec.md",
+      "Sha256": "184df26da7a9080dcafa9af3b50c42655e8a69f41115617337c09621b3bfc6b0"
+    },
+    {
+      "Path": "docs/adr/0001-codegen-single-install-root-and-install-envelope.md",
+      "Sha256": "38be527ddf587c66655685153ada138efb6a1e92d0815b02378b0bb40b373f47"
+    },
+    {
+      "Path": "方案讨论/针对2.0的ECS架构的迭代方案讨论/01-目标态架构共识/20-策划配置能力交叉审查Spec.md",
+      "Sha256": "e3141bdfb299f742b523a5e01166a3326aa01fed7d337a1881cecf48a89e1012"
+    },
+    {
+      "Path": "方案讨论/针对2.0的ECS架构的迭代方案讨论/01-目标态架构共识/91-术语表.md",
+      "Sha256": "8f6440d32dfe8a8a84c0f5bafe54af15c04b6ddf2ad382c69a76f7ed2860a7a8"
+    },
+    {
+      "Path": "docs/reviews/RuntimeV1.1-D0-M2F-选路裁决.md",
+      "Sha256": "a2d568f60a834ba8a18ed750948b10e1894d1c3e85a98dfd4744356105326629"
+    },
+    {
+      "Path": "Tools/Tests/GasCodeGen/README.md",
+      "Sha256": "e074d6d6290a244ade97547b8d0fa722d24bc6da953e46d6821c34e671e01586"
+    }
+  ],
+  "FrozenRecordSha256": "d9ec80b7cd0229157938c2ddd87701166a7347c2f7f700673b7f17a57560ee50",
+  "ProtectedPathSpecs": [
+    {
+      "Kind": "File",
+      "Path": "Packages/manifest.json"
+    },
+    {
+      "Kind": "File",
+      "Path": "Packages/packages-lock.json"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "ProjectSettings/GasCodeGen"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Assets/GAS/Editor/CodeGen"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Assets/GAS/Generated/CodeGen"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Assets/AutoChessDemo/Generated"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Tools/GasCodeGenCli"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Library/Bee"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "docs/adr"
+    },
+    {
+      "Kind": "File",
+      "Path": "方案讨论/针对2.0的ECS架构的迭代方案讨论/01-目标态架构共识/08-Luban-SourceGenerator配置生成链路Spec.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "方案讨论/针对2.0的ECS架构的迭代方案讨论/01-目标态架构共识/20-策划配置能力交叉审查Spec.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "方案讨论/针对2.0的ECS架构的迭代方案讨论/01-目标态架构共识/91-术语表.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "docs/reviews/RuntimeV1.1-D0-M2F-选路裁决.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "docs/reviews/RuntimeV1.1-D0-M2F-SpecADR规范冻结结果.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "Tools/Tests/GasCodeGen/README.md"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Tools/Tests/GasCodeGen/D0M2F"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "TestResults/GasCodeGen/N2-G0-D0-M2F/D0M2F-20260830T124005Z-c661f64e4c81"
+    }
+  ]
+}

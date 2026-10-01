@@ -1,0 +1,22 @@
+{
+  "Schema": "D0M2F-TarballArchiveIndex-v1",
+  "PackageName": "com.exhard.exgas.d0m2f-tarball",
+  "Archives": [
+    {
+      "GenerationId": "A",
+      "GenerationToken": "d0m2f-tarball-generation-a",
+      "PackageVersion": "1.0.0",
+      "FileName": "2ec173de21d85d1c42d7d6bb74942a4b701573c2fde58e5185f1c66869c392c5.tgz",
+      "Sha256": "2ec173de21d85d1c42d7d6bb74942a4b701573c2fde58e5185f1c66869c392c5",
+      "Length": 1326
+    },
+    {
+      "GenerationId": "B",
+      "GenerationToken": "d0m2f-tarball-generation-b",
+      "PackageVersion": "1.0.1",
+      "FileName": "b9c9596bd215263b7948efe9723b7eef083f8fbccda3f53d0120cd818a9a0cb7.tgz",
+      "Sha256": "b9c9596bd215263b7948efe9723b7eef083f8fbccda3f53d0120cd818a9a0cb7",
+      "Length": 1327
+    }
+  ]
+}

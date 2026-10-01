@@ -22,10 +22,10 @@ namespace GAS.Editor
         protected static string GetOutputPath(GasCodeGenContext context, string relativePath)
         {
             var path = Path.GetFullPath(Path.Combine(context.OutputDir, relativePath));
-            if (!IsUnderProjectRoot(context.ProjectRoot, path))
+            if (!IsUnderOutputRoot(context.OutputDir, path))
             {
                 throw new InvalidOperationException(
-                    $"Generated path escapes project root: {path}");
+                    $"Generated path escapes current output root: {path}");
             }
 
             var directory = Path.GetDirectoryName(path);
@@ -102,11 +102,11 @@ namespace GAS.Editor
         }
 
         /// <summary>
-        /// 判断生成路径是否仍位于 Unity 项目根目录内，避免相对路径穿越覆盖外部文件。
+        /// 判断生成路径是否仍位于本次 active/candidate 输出根内，避免 phase 穿越写入其它代际。
         /// </summary>
-        private static bool IsUnderProjectRoot(string projectRoot, string path)
+        private static bool IsUnderOutputRoot(string outputRoot, string path)
         {
-            var normalizedRoot = Path.GetFullPath(projectRoot)
+            var normalizedRoot = Path.GetFullPath(outputRoot)
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             return string.Equals(path, normalizedRoot, StringComparison.OrdinalIgnoreCase)
                    || path.StartsWith(
@@ -430,7 +430,7 @@ namespace GAS.Editor
             writer.WriteLine($"GeneratorVersion: `{manifest.GeneratorVersion}`");
             writer.WriteLine($"InputHash: `{context.InputHash}`");
             writer.WriteLine($"RowCount: `{context.Rows.Count}`");
-            writer.WriteLine($"OrphansDeleted: `{context.OrphansDeleted}`");
+            writer.WriteLine("OrphanGate: `Clean`");
             writer.WriteLine($"LegacyRuntimeImplementationArtifacts: `{legacyArtifacts}`");
             writer.WriteLine($"RuntimePureGlueArtifacts: `{CountRuntimePureGlue(manifest)}`");
             writer.WriteLine($"RuntimeLifecycleSystemArtifacts: `{lifecycleArtifacts}`");
@@ -441,7 +441,7 @@ namespace GAS.Editor
             writer.WriteLine("## Generation Contract");
             writer.WriteLine(string.Empty);
             writer.WriteLine("- Runtime v1 gameplay owner、Tick DAG、ECB playback 与 Boundary drain 均由手写 Runtime 持有。");
-            writer.WriteLine("- CodeGen 只保留 Luban normalized rows、Editor asmdef、生命周期防回流 marker 与 validation report。");
+            writer.WriteLine("- CodeGen 只生成 Luban normalized rows、三项 Runtime pure glue marker 与 validation report；stable asmdef 属于 route scaffold。");
             writer.WriteLine("- 旧 catalog、lookup、Baker、SystemGroup 与 Runtime lifecycle 产物不再生成。");
             writer.WriteLine(string.Empty);
             writer.WriteLine("## Rows");
@@ -501,7 +501,7 @@ namespace GAS.Editor
                     || !string.Equals(entry.Layer, "Runtime", StringComparison.Ordinal))
                     continue;
 
-                allowed.Add(ResolveProjectPath(context, entry.ProjectRelativePath));
+                allowed.Add(manifest.ResolvePhysicalPath(entry));
             }
 
             return EnumerateGeneratedRuntimeArtifacts(context)
@@ -509,49 +509,38 @@ namespace GAS.Editor
         }
 
         /// <summary>
-        /// 检查核心生成链必须存在的 Runtime asmdef，并确认它登记为 Runtime-visible assembly artifact。
+        /// 检查核心生成链必须存在且登记三项 Runtime pure glue；stable asmdef 不再属于 generation manifest。
         /// </summary>
         private static IReadOnlyList<string> CollectMissingRequiredArtifacts(
             GasCodeGenContext context,
             GasCodeGenManifest manifest)
         {
             var errors = new List<string>();
-            var runtimeAssemblyPath = Path.Combine(
-                context.OutputDir,
-                "Runtime",
-                "com.exhard.exgas.generated.runtime.asmdef");
-            var normalizedRuntimeAssemblyPath = Path.GetFullPath(runtimeAssemblyPath);
-            if (!File.Exists(normalizedRuntimeAssemblyPath))
-                errors.Add("Runtime/com.exhard.exgas.generated.runtime.asmdef 文件不存在。");
-
-            var registered = manifest.Entries.Any(entry =>
-                string.Equals(
-                    entry.ProjectRelativePath,
-                    ToProjectRelativePath(context, normalizedRuntimeAssemblyPath),
-                    StringComparison.OrdinalIgnoreCase)
-                && entry.RuntimeVisible
-                && string.Equals(entry.Layer, "Runtime", StringComparison.Ordinal)
-                && string.Equals(entry.GeneratedArtifactKind, "AssemblyDefinition", StringComparison.Ordinal));
-            if (!registered)
+            var requiredFiles = new[]
             {
-                errors.Add(
-                    "Runtime/com.exhard.exgas.generated.runtime.asmdef 未以 AssemblyDefinition/Runtime-visible 登记。");
-            }
-
-            if (File.Exists(normalizedRuntimeAssemblyPath)
-                && FileContainsAny(normalizedRuntimeAssemblyPath, new[] { "com.exhard.exgas.editor", "Luban", "SimpleJSON" }))
+                "RuntimeAbilityActivation.gen.cs",
+                "RuntimeActiveEffect.gen.cs",
+                "RuntimeEffectInstant.gen.cs",
+            };
+            for (var index = 0; index < requiredFiles.Length; index++)
             {
-                errors.Add("Runtime generated asmdef 引用了 Editor/Luban/SimpleJSON 依赖。");
+                var path = Path.GetFullPath(Path.Combine(context.OutputDir, "Runtime", requiredFiles[index]));
+                if (!File.Exists(path))
+                {
+                    errors.Add("Runtime/" + requiredFiles[index] + " 文件不存在。");
+                    continue;
+                }
+                var registered = manifest.Entries.Any(entry =>
+                    string.Equals(
+                        entry.ProjectRelativePath,
+                        manifest.GetPublishedProjectRelativePath(path),
+                        StringComparison.Ordinal)
+                    && entry.RuntimeVisible
+                    && string.Equals(entry.GeneratedArtifactKind, "RuntimePureGlue", StringComparison.Ordinal));
+                if (!registered)
+                    errors.Add("Runtime/" + requiredFiles[index] + " 未以 RuntimePureGlue 登记。");
             }
-
             return errors;
-        }
-
-        private static string ToProjectRelativePath(GasCodeGenContext context, string fullPath)
-        {
-            var relative = fullPath.Substring(context.ProjectRoot.Length)
-                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            return relative.Replace(Path.DirectorySeparatorChar, '/');
         }
 
         private static int CountRuntimeArtifactsContaining(
@@ -594,11 +583,5 @@ namespace GAS.Editor
                     || string.Equals(Path.GetExtension(path), ".asmdef", StringComparison.OrdinalIgnoreCase));
         }
 
-        private static string ResolveProjectPath(GasCodeGenContext context, string path)
-        {
-            return Path.GetFullPath(Path.IsPathRooted(path)
-                ? path
-                : Path.Combine(context.ProjectRoot, path.Replace('/', Path.DirectorySeparatorChar)));
-        }
     }
 }

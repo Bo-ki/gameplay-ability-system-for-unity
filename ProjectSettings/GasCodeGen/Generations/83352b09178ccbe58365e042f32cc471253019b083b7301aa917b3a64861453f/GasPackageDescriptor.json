@@ -1,0 +1,116 @@
+{
+  "Version": 2,
+  "SemanticIdentityAlgorithm": "TypedRowSnapshotSemanticIdentity-v1",
+  "ArtifactIdentityAlgorithm": "SHA-256",
+  "CanonicalIdentityEncoding": "LengthPrefixedFields-v1",
+  "ArtifactManifestHashDomain": "EX-GAS-ArtifactManifest-v3",
+  "SourceInputHash": "d7d4fc3a676b2d3740f14f6f6a8d2a78ff793311fd07bd6e00dcfa14d1f17ad0",
+  "SchemaHash": "3784bbc729ffa258c9a13192f58d4bad61a9cf34d3c8ad7dea7c2ed67c4bda2b",
+  "ContentHash": "45fdd6bd6c183af9a36f817355356e4d403e8ca93829053432b8ba2afdaf4023",
+  "LayoutHash": "a5109ba2d379c6d4ca9e20470c1981368319b9ae9bae3cff3194399624e822aa",
+  "ArtifactManifestHash": "ae78ebe3ee96ef046469f221aad5d623767703379695f8fff9a2fe8949e90236",
+  "CoreArtifactManifestHash": "1213cc6df164c3c723f8324bdb71507c13433e0323262cdd65cb92c5453b1ac7",
+  "AutoChessArtifactManifestHash": "2b7c08caa5c68fb4c8442c972d1284263cc95e8eff56b0926c994326e76a5420",
+  "CoreTreeSha256": "06a6daad23bd636c3391657c2edf25dc588dc944056ea38dd86b2a8919192a7c",
+  "AutoChessTreeSha256": "5c150acffc7455690247996cb1262baa252e2851b0766c21e8d141705d82b759",
+  "RequiredArtifactSetId": "EX-GAS-RuntimeV1-RequiredArtifacts-v1",
+  "FullSemanticEligibility": false,
+  "UnclosedSemanticRequirements": [
+    "CanonicalNormalizedSemanticGraph",
+    "TypedContract",
+    "LayoutProof",
+    "CapacityProof",
+    "RuleProvenanceAndOrdinals",
+    "RuntimeDescriptorBinding"
+  ],
+  "ArtifactEntries": [
+    {
+      "CanonicalPath": "Assets/AutoChessDemo/Generated/AutoChessGeneratedConfig.gen.cs",
+      "GeneratedArtifactKind": "RuntimeDemoConfig",
+      "GeneratedArtifactOwner": "AutoChessDemo",
+      "RuntimeVisible": true,
+      "ByteLength": 44370,
+      "ContentSha256": "2c3f96850b559c726035b16029b02193b012eecf2da31dc903bb897ab1278aa3",
+      "MetaByteLength": 240,
+      "MetaContentSha256": "2f4c16226cd115e8caddd78dd50b5c6914da5cba035dc1a45e8a5fe932e56e74",
+      "SourceComponent": "AutoChess"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Editor/LubanNormalizedRows.gen.cs",
+      "GeneratedArtifactKind": "NormalizedDefinitionRow",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "RuntimeVisible": false,
+      "ByteLength": 44314,
+      "ContentSha256": "5d4b1b7b6f1b906610a3578c795880aa65dd2d975491759a6a21492e54c00d51",
+      "MetaByteLength": 60,
+      "MetaContentSha256": "9e709d8921db674e35d3ec14eb8b988ebb7f59166da091a440b352c7770a202d",
+      "SourceComponent": "Core"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef",
+      "GeneratedArtifactKind": "AssemblyDefinition",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "RuntimeVisible": false,
+      "ByteLength": 621,
+      "ContentSha256": "ca5128dcb3500ccd3cfcb955d1e9ba590412e44e1569c4582eee6dad73cfae51",
+      "MetaByteLength": 163,
+      "MetaContentSha256": "4d9206a4a033f9fcc82b288003c2375936b9f3a477328f67f7574f87f323c855",
+      "SourceComponent": "Core"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md",
+      "GeneratedArtifactKind": "ValidationArtifact",
+      "GeneratedArtifactOwner": "EditorCi",
+      "RuntimeVisible": false,
+      "ByteLength": 3114,
+      "ContentSha256": "ac3b20ca7c6ecc72d88ccb3f76a3289f3ab545a8dcfe859d664a9b6d427c22bd",
+      "MetaByteLength": 155,
+      "MetaContentSha256": "9e39bdefef5c943f07754138efc9cc0ed718d059f205b84ddf5d95116784023b",
+      "SourceComponent": "Core"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs",
+      "GeneratedArtifactKind": "RuntimePureGlue",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "RuntimeVisible": true,
+      "ByteLength": 443,
+      "ContentSha256": "5b8df703714e7d80c293154618a83bc15f7f247f672b5bf134d2ddec766a1e04",
+      "MetaByteLength": 60,
+      "MetaContentSha256": "6a20cd7c2844d68255000bc9f09af88810616a788e554afeddcb21012c5ff51c",
+      "SourceComponent": "Core"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs",
+      "GeneratedArtifactKind": "RuntimePureGlue",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "RuntimeVisible": true,
+      "ByteLength": 438,
+      "ContentSha256": "0284ee4794f87c2babbabe8f8980be9f7bf605c646e0337c7175abd4c6f66d2e",
+      "MetaByteLength": 60,
+      "MetaContentSha256": "5cf455aedafd37d2a63f84ad1922bbd25739d43ac72a0b02c92128250d5ac00b",
+      "SourceComponent": "Core"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs",
+      "GeneratedArtifactKind": "RuntimePureGlue",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "RuntimeVisible": true,
+      "ByteLength": 439,
+      "ContentSha256": "a4bfafe671717e89b931681418a365ee26593b3e26aab1b11178fd9fb34b1500",
+      "MetaByteLength": 60,
+      "MetaContentSha256": "a9ea31c467784426fa33f05bc9c114c3d8b01b6f9546213469e49dcaa9ab70d4",
+      "SourceComponent": "Core"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Runtime/com.exhard.exgas.generated.runtime.asmdef",
+      "GeneratedArtifactKind": "AssemblyDefinition",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "RuntimeVisible": true,
+      "ByteLength": 511,
+      "ContentSha256": "17b66108850bd40c710dbef7bbf1bfb14a1be035b26debc88dba9486d193073a",
+      "MetaByteLength": 163,
+      "MetaContentSha256": "03c8652a0581f9a97e0a4bc009a55e874a77d3aec454a683b7cd69b73d7b88ea",
+      "SourceComponent": "Core"
+    }
+  ]
+}

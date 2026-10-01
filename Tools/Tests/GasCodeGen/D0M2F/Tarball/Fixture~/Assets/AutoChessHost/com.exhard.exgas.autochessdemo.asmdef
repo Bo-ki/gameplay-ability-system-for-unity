@@ -1,0 +1,8 @@
+{
+  "name": "com.exhard.exgas.autochessdemo",
+  "rootNamespace": "D0M2F.Tarball.Generated.AutoChess",
+  "references": [
+    "com.exhard.exgas.generated.runtime"
+  ],
+  "autoReferenced": true
+}

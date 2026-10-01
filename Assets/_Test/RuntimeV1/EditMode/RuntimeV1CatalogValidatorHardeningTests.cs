@@ -12,9 +12,6 @@ namespace GAS.RuntimeV1.Tests.EditMode
     public class RuntimeV1CatalogValidatorHardeningTests
     {
         private const ulong SchemaHash = 0x5101UL;
-        private const ulong ContentHash = 0x5202UL;
-        private const ulong AttributeLayoutHash = 0x5303UL;
-        private const ulong TagCatalogHash = 0x5404UL;
 
         /// <summary>
         /// 标识测试要污染的 AttributeLayout 浮点字段。
@@ -213,11 +210,11 @@ namespace GAS.RuntimeV1.Tests.EditMode
         private static GasCatalogValidationResult Validate(ref GasDefinitionCatalogBlob catalog)
         {
             var expectation = new GasCatalogValidationExpectation(
-                GasDefinitionCatalogSchema.Version,
-                SchemaHash,
-                ContentHash,
-                AttributeLayoutHash,
-                TagCatalogHash);
+                catalog.SchemaVersion,
+                catalog.SchemaHash,
+                catalog.ContentHash,
+                catalog.AttributeLayout.LayoutHash,
+                catalog.TagCatalog.CatalogHash);
             return GasDefinitionCatalogValidator.Validate(ref catalog, in expectation);
         }
 
@@ -243,7 +240,9 @@ namespace GAS.RuntimeV1.Tests.EditMode
                     PopulateInvalidAttribute(ref builder, ref root, field, valueKind);
                     AllocateEmptyTagCatalog(ref builder, ref root);
                     AllocateEmptyRuntimeArrays(ref builder, ref root);
-                    return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                    var catalog = builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                    GasDefinitionCatalogContentHasher.Stamp(ref catalog.Value);
+                    return catalog;
                 }
                 finally
                 {
@@ -265,7 +264,9 @@ namespace GAS.RuntimeV1.Tests.EditMode
                     builder.Allocate(ref root.AttributeLayout.Entries, 0);
                     PopulateTagCatalog(ref builder, ref root, ancestorRanges);
                     AllocateEmptyRuntimeArrays(ref builder, ref root);
-                    return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                    var catalog = builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                    GasDefinitionCatalogContentHasher.Stamp(ref catalog.Value);
+                    return catalog;
                 }
                 finally
                 {
@@ -294,7 +295,9 @@ namespace GAS.RuntimeV1.Tests.EditMode
                         modifierCaptureRange, useCaptureInstruction);
                     PopulateEffect(ref builder, ref root, definitionEvaluatorRange, definitionCaptureRange);
                     AllocateEmptyNonEffectArrays(ref builder, ref root);
-                    return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                    var catalog = builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                    GasDefinitionCatalogContentHasher.Stamp(ref catalog.Value);
+                    return catalog;
                 }
                 finally
                 {
@@ -303,15 +306,12 @@ namespace GAS.RuntimeV1.Tests.EditMode
             }
 
             /// <summary>
-            /// 写入测试 Catalog 与 expectation 共用的稳定 header。
+            /// 写入测试 Catalog 的稳定 schema 身份，其余 hash 在物化后 canonical 封印。
             /// </summary>
             private static void PopulateHeader(ref GasDefinitionCatalogBlob root)
             {
                 root.SchemaVersion = GasDefinitionCatalogSchema.Version;
                 root.SchemaHash = SchemaHash;
-                root.ContentHash = ContentHash;
-                root.AttributeLayout.LayoutHash = AttributeLayoutHash;
-                root.TagCatalog.CatalogHash = TagCatalogHash;
             }
 
             /// <summary>

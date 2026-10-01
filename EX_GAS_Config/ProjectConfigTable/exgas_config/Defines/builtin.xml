@@ -1,4 +1,36 @@
 <module name="">
+    <enum name="RuntimeV1AttributeDomainRole">
+        <var name="None" value="0"/>
+        <var name="Health" value="1"/>
+    </enum>
+
+    <enum name="RuntimeV1LogicalTargetPolicy">
+        <var name="Self" value="1"/>
+        <var name="FrozenAsc" value="2"/>
+    </enum>
+
+    <enum name="RuntimeV1AvatarTargetPolicy">
+        <var name="FollowAsc" value="1"/>
+        <var name="RequireSameAvatar" value="2"/>
+    </enum>
+
+    <enum name="RuntimeV1SpatialTargetPolicy">
+        <var name="None" value="1"/>
+        <var name="FrozenSpatial" value="2"/>
+    </enum>
+
+    <enum name="RuntimeV1TargetLifePolicy">
+        <var name="AliveOnly" value="1"/>
+        <var name="RequireDead" value="2"/>
+        <var name="AnyLifeState" value="3"/>
+    </enum>
+
+    <enum name="RuntimeV1EvaluatorKind">
+        <var name="None" value="0"/>
+        <var name="TargetMissingHealth" value="1"/>
+        <var name="SourceAttackStackCount" value="2"/>
+    </enum>
+
     <bean name="vector2" valueType="1" sep=",">
         <var name="x" type="float"/>
         <var name="y" type="float"/>
@@ -22,6 +54,24 @@
         <var name="MaxValue" type="float"/>
         <var name="UseMinValue" type="bool"/>
         <var name="UseMaxValue" type="bool"/>
+        <var name="DomainRole" type="RuntimeV1AttributeDomainRole"/>
+    </bean>
+
+    <bean name="RuntimeV1TargetPolicy" valueType="1">
+        <var name="LogicalTarget" type="RuntimeV1LogicalTargetPolicy"/>
+        <var name="Avatar" type="RuntimeV1AvatarTargetPolicy"/>
+        <var name="Spatial" type="RuntimeV1SpatialTargetPolicy"/>
+        <var name="Life" type="RuntimeV1TargetLifePolicy"/>
+    </bean>
+
+    <bean name="RuntimeV1Evaluator" valueType="1">
+        <var name="Kind" type="RuntimeV1EvaluatorKind"/>
+        <var name="AttributeSet" type="int"/>
+        <var name="Attribute" type="int"/>
+        <var name="BaseValue" type="float"/>
+        <var name="Coefficient" type="float"/>
+        <var name="Minimum" type="float"/>
+        <var name="Maximum" type="float"/>
     </bean>
     
     <bean name="GrantedAbility" valueType="1" sep=";">

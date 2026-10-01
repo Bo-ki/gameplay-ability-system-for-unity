@@ -238,6 +238,18 @@ namespace GAS.Runtime
     }
 
     /// <summary>
+    /// 保存 SpawnBatch 成功发布后注入首个 gameplay Tick 的初始 GameplayEffect；只允许无 payload 的闭世界定义。
+    /// </summary>
+    [InternalBufferCapacity(0)]
+    public struct PendingInitialGameplayEffect : IBufferElementData
+    {
+        public int DefinitionId;
+        public int ConfigOrdinal;
+        public ulong CausalityId;
+        public BoundaryTargetRef Target;
+    }
+
+    /// <summary>
     /// 保存不会因撤销或重授而移动的 Ability grant 长期槽。
     /// </summary>
     [InternalBufferCapacity(0)]

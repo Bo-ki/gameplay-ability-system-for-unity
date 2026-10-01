@@ -4,14 +4,25 @@ using System.Collections.Generic;
 namespace GAS.Runtime
 {
     /// <summary>
-    /// 标识 managed Gate 的单向生命周期，Unbound 安装态与 FaultClosed 终态均同步拒绝请求。
+    /// 标识 managed Gate 的单向生命周期，Unbound 安装态与任一生命周期 cutoff 后均同步拒绝请求。
     /// </summary>
     internal enum SessionIngressGatePhase : byte
     {
         Unbound = 0,
         Open = 1,
-        FaultClosing = 2,
-        FaultClosed = 3,
+        Closing = 2,
+        Closed = 3,
+    }
+
+    /// <summary>
+    /// 冻结首次关闭 Gate 的唯一原因，避免 BattleTerminal、SessionFault 与 OwnerDisposal 互相覆盖。
+    /// </summary>
+    internal enum SessionIngressCloseCause : byte
+    {
+        None = 0,
+        BattleTerminal = 1,
+        SessionFault = 2,
+        OwnerDisposal = 3,
     }
 
     /// <summary>
@@ -82,9 +93,14 @@ namespace GAS.Runtime
             new List<GasBoundaryJournalRecord>();
         private readonly Dictionary<ulong, GasBoundaryJournalRecord> _byRequestId =
             new Dictionary<ulong, GasBoundaryJournalRecord>();
+        private readonly Dictionary<GasRequestKey, GasRequestTerminal> _requestTerminals =
+            new Dictionary<GasRequestKey, GasRequestTerminal>();
+        private readonly List<GasRequestTerminal> _undrainedRequestTerminals =
+            new List<GasRequestTerminal>();
 
         private GasIngressAuthoritySnapshot _authority;
         private SessionIngressGatePhase _phase;
+        private SessionIngressCloseCause _closeCause;
         private ulong _nextRequestSequence = 1;
         private ulong _acceptedHighWatermark;
         private int _outstandingCount;
@@ -152,22 +168,41 @@ namespace GAS.Runtime
             {
                 var phaseStatus = GetPhaseRejectionStatus();
                 if (phaseStatus.HasValue)
-                    return Reject(draft.Context.RequestId, phaseStatus.Value);
+                    return Reject(
+                        draft.Context.SimulationEpoch,
+                        draft.Context.RequestId,
+                        phaseStatus.Value);
+
+                var profileStatus = ValidateRuntimeV1SupportProfile(draft, payload.Length);
+                if (profileStatus.HasValue)
+                    return Reject(
+                        draft.Context.SimulationEpoch,
+                        draft.Context.RequestId,
+                        profileStatus.Value);
 
                 var basicStatus = ValidateBasicRequest(draft, payload, out var payloadHash);
                 if (basicStatus.HasValue)
-                    return Reject(draft.Context.RequestId, basicStatus.Value);
+                    return Reject(
+                        draft.Context.SimulationEpoch,
+                        draft.Context.RequestId,
+                        basicStatus.Value);
 
                 if (_byRequestId.TryGetValue(draft.Context.RequestId, out var previous))
                     return ResolveDuplicate(previous, draft, payloadHash, payload);
 
                 var authorityStatus = ValidateAuthorityAndContract(draft);
                 if (authorityStatus.HasValue)
-                    return Reject(draft.Context.RequestId, authorityStatus.Value);
+                    return Reject(
+                        draft.Context.SimulationEpoch,
+                        draft.Context.RequestId,
+                        authorityStatus.Value);
 
                 var capacityStatus = ValidateCapacity(payload.Length);
                 if (capacityStatus.HasValue)
-                    return Reject(draft.Context.RequestId, capacityStatus.Value);
+                    return Reject(
+                        draft.Context.SimulationEpoch,
+                        draft.Context.RequestId,
+                        capacityStatus.Value);
 
                 return AppendAccepted(draft, payloadHash, payload);
             }
@@ -238,6 +273,63 @@ namespace GAS.Runtime
         }
 
         /// <summary>
+        /// 从持久 RequestTerminal ledger 幂等读取指定 key，drain 只影响交付队列而不影响读取。
+        /// </summary>
+        internal bool TryReadRequestTerminal(
+            in GasRequestKey requestKey,
+            out GasRequestTerminal terminal)
+        {
+            lock (_sync)
+                return _requestTerminals.TryGetValue(requestKey, out terminal);
+        }
+
+        /// <summary>
+        /// 按首次发布顺序原子取走当前尚未 drain 的 RequestTerminal。
+        /// </summary>
+        internal bool TryDrainRequestTerminals(out GasRequestTerminal[] terminals)
+        {
+            lock (_sync)
+            {
+                if (_undrainedRequestTerminals.Count == 0)
+                {
+                    terminals = Array.Empty<GasRequestTerminal>();
+                    return false;
+                }
+
+                terminals = _undrainedRequestTerminals.ToArray();
+                _undrainedRequestTerminals.Clear();
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// 将 Kernel 已提交的 typed result 原子写入 Accepted RequestKey 的唯一终态 ledger。
+        /// </summary>
+        internal GasRequestTerminalPublishStatus TryPublishRequestTerminal(
+            in GasRequestTerminal terminal)
+        {
+            lock (_sync)
+            {
+                if (!terminal.IsWellFormed())
+                    return GasRequestTerminalPublishStatus.InvalidTerminal;
+                if (_requestTerminals.TryGetValue(terminal.RequestKey, out var previous))
+                {
+                    return previous.Equals(terminal)
+                        ? GasRequestTerminalPublishStatus.Duplicate
+                        : GasRequestTerminalPublishStatus.Conflict;
+                }
+                if (_phase == SessionIngressGatePhase.Closed ||
+                    !TryResolveAcceptedRecord(in terminal.RequestKey, out var record))
+                    return GasRequestTerminalPublishStatus.UnknownRequest;
+                if (record.Kind != terminal.CommandKind)
+                    return GasRequestTerminalPublishStatus.InvalidTerminal;
+
+                PublishRequestTerminalUnsafe(in terminal);
+                return GasRequestTerminalPublishStatus.Published;
+            }
+        }
+
+        /// <summary>
         /// 原子关闭 Gate、终结全部 accepted-outstanding 并生成可重复读取的 FNV-1a 审计回执。
         /// </summary>
         internal GasIngressFaultCloseReceipt CloseForFault(ulong faultId)
@@ -246,13 +338,54 @@ namespace GAS.Runtime
                 throw new ArgumentOutOfRangeException(nameof(faultId), "FaultClose 必须携带非零 FaultId。");
             lock (_sync)
             {
-                if (_phase == SessionIngressGatePhase.FaultClosed)
-                    return _faultCloseReceipt;
+                if (_phase == SessionIngressGatePhase.Closed)
+                {
+                    return _closeCause == SessionIngressCloseCause.SessionFault
+                        ? _faultCloseReceipt
+                        : new GasIngressFaultCloseReceipt(
+                            faultId,
+                            0,
+                            0,
+                            0,
+                            0,
+                            _acceptedHighWatermark);
+                }
 
-                _phase = SessionIngressGatePhase.FaultClosing;
+                _phase = SessionIngressGatePhase.Closing;
+                _closeCause = SessionIngressCloseCause.SessionFault;
                 _faultCloseReceipt = BuildFaultCloseReceipt(faultId);
-                _phase = SessionIngressGatePhase.FaultClosed;
+                _journal.Clear();
+                _phase = SessionIngressGatePhase.Closed;
                 return _faultCloseReceipt;
+            }
+        }
+
+        /// <summary>
+        /// 在 BattleTerminal 收敛点同步关闭 Gate，并为全部尚无业务终态的 Accepted 请求发布战局终态。
+        /// </summary>
+        internal void CloseForBattleTerminal(
+            in BattleInstanceHandle battleInstance,
+            int outcomeCode)
+        {
+            if (!battleInstance.IsValid)
+                throw new ArgumentOutOfRangeException(
+                    nameof(battleInstance),
+                    "BattleTerminal 必须携带有效 BattleInstanceHandle。");
+            lock (_sync)
+            {
+                if (_phase == SessionIngressGatePhase.Closed)
+                    return;
+
+                _phase = SessionIngressGatePhase.Closing;
+                _closeCause = SessionIngressCloseCause.BattleTerminal;
+                PublishCutoffTerminals(
+                    GasRequestTerminalStatus.BattleTerminal,
+                    0,
+                    in battleInstance,
+                    outcomeCode,
+                    GasBoundaryCommandState.BattleTerminated);
+                _journal.Clear();
+                _phase = SessionIngressGatePhase.Closed;
             }
         }
 
@@ -263,16 +396,18 @@ namespace GAS.Runtime
         {
             lock (_sync)
             {
-                if (_phase == SessionIngressGatePhase.FaultClosed)
+                if (_phase == SessionIngressGatePhase.Closed)
                     return;
-                for (var index = 0; index < _acceptedLedger.Count; index++)
-                {
-                    var record = _acceptedLedger[index];
-                    if (record.MarkFaultTerminated())
-                        ReleaseOutstandingCapacity(record);
-                }
+                _phase = SessionIngressGatePhase.Closing;
+                _closeCause = SessionIngressCloseCause.OwnerDisposal;
+                PublishCutoffTerminals(
+                    GasRequestTerminalStatus.OwnerDisposal,
+                    0,
+                    default,
+                    0,
+                    GasBoundaryCommandState.OwnerDisposed);
                 _journal.Clear();
-                _phase = SessionIngressGatePhase.FaultClosed;
+                _phase = SessionIngressGatePhase.Closed;
             }
         }
 
@@ -294,7 +429,37 @@ namespace GAS.Runtime
             if (_phase == SessionIngressGatePhase.Unbound)
                 return GasCommandAcceptStatus.GateUnbound;
             if (_phase != SessionIngressGatePhase.Open)
+            {
+                if (_closeCause == SessionIngressCloseCause.BattleTerminal)
+                    return GasCommandAcceptStatus.BattleTerminalClosed;
+                if (_closeCause == SessionIngressCloseCause.OwnerDisposal)
+                    return GasCommandAcceptStatus.OwnerDisposed;
                 return GasCommandAcceptStatus.FaultClosed;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 在 payload hash、duplicate、权限与 RequestSequence 前拒绝本轮未实现的公开命令形状。
+        /// </summary>
+        private static GasCommandAcceptStatus? ValidateRuntimeV1SupportProfile(
+            in GasBoundaryCommandDraft draft,
+            int payloadLength)
+        {
+            if (draft.Kind == GasBoundaryCommandKind.Cancel ||
+                draft.Kind == GasBoundaryCommandKind.RemoveEffect)
+                return GasCommandAcceptStatus.UnsupportedByRuntimeV1Profile;
+
+            if (draft.Kind == GasBoundaryCommandKind.ApplyEffect &&
+                draft.Context.Target.Kind != GasBoundaryTargetKind.Asc)
+                return GasCommandAcceptStatus.UnsupportedByRuntimeV1Profile;
+
+            var isOneShotAbility = draft.Kind == GasBoundaryCommandKind.Activate ||
+                                   draft.Kind == GasBoundaryCommandKind.Commit;
+            if (isOneShotAbility &&
+                (payloadLength != 0 || draft.PayloadDescriptor.SchemaVersion != 0 ||
+                 draft.PayloadDescriptor.Kind != GasBoundaryCommandPayloadKind.None))
+                return GasCommandAcceptStatus.UnsupportedByRuntimeV1Profile;
             return null;
         }
 
@@ -339,11 +504,15 @@ namespace GAS.Runtime
             {
                 return new GasCommandAcceptResult(
                     GasCommandAcceptStatus.DuplicateAccepted,
+                    draft.Context.SimulationEpoch,
                     draft.Context.RequestId,
                     previous.RequestSequence);
             }
 
-            return Reject(draft.Context.RequestId, GasCommandAcceptStatus.RequestIdConflict);
+            return Reject(
+                draft.Context.SimulationEpoch,
+                draft.Context.RequestId,
+                GasCommandAcceptStatus.RequestIdConflict);
         }
 
         /// <summary>
@@ -438,7 +607,9 @@ namespace GAS.Runtime
             var commonStatus = ValidateResolvedTargetCommon(target, commandBattle);
             if (commonStatus.HasValue)
                 return commonStatus;
-            if (!target.TargetAsc.IsValid || target.SelectorStableId != 0 || target.DefinitionRuleIndex != 0)
+            if (!target.TargetAsc.IsValid || target.SelectorStableId != 0 ||
+                target.DefinitionRuleIndex != 0 || !HasCanonicalAvatarFields(target) ||
+                !HasCanonicalSpatialFields(target))
                 return GasCommandAcceptStatus.TargetInvalid;
             if (!_authority.TryGetAsc(target.TargetAsc, out var membership) ||
                 membership.State != GasAscRegistryState.Ready)
@@ -460,7 +631,8 @@ namespace GAS.Runtime
                 return commonStatus;
             return !target.TargetAsc.IsValid &&
                    target.SelectorStableId != 0 &&
-                   target.DefinitionRuleIndex == 0
+                   target.DefinitionRuleIndex == 0 &&
+                   HasNoAvatarOrSpatialFields(target)
                 ? (GasCommandAcceptStatus?)null
                 : GasCommandAcceptStatus.TargetInvalid;
         }
@@ -477,7 +649,8 @@ namespace GAS.Runtime
                 return commonStatus;
             return !target.TargetAsc.IsValid &&
                    target.SelectorStableId == 0 &&
-                   target.DefinitionRuleIndex >= 0
+                   target.DefinitionRuleIndex >= 0 &&
+                   HasNoAvatarOrSpatialFields(target)
                 ? (GasCommandAcceptStatus?)null
                 : GasCommandAcceptStatus.TargetInvalid;
         }
@@ -506,8 +679,40 @@ namespace GAS.Runtime
                    target.SimulationEpoch == 0 &&
                    !target.BattleInstance.IsValid &&
                    !target.TargetAsc.IsValid &&
+                   target.TargetAvatarStableId == 0 &&
+                   target.TargetAvatarBindingGeneration == 0 &&
+                   target.SpatialSnapshot.Equals(GasBoundarySpatialSnapshot.None) &&
                    target.SelectorStableId == 0 &&
                    target.DefinitionRuleIndex == 0;
+        }
+
+        /// <summary>
+        /// 校验 ASC 目标的 Avatar 字段要么完整出现，要么完全省略，禁止半截 generation。
+        /// </summary>
+        private static bool HasCanonicalAvatarFields(in BoundaryTargetRef target)
+        {
+            return (target.TargetAvatarStableId == 0 &&
+                    target.TargetAvatarBindingGeneration == 0) ||
+                   target.HasAvatarBinding;
+        }
+
+        /// <summary>
+        /// 校验 ASC 目标的空间字段要么为空，要么是有限且注册的 FrozenSpatial 变体。
+        /// </summary>
+        private static bool HasCanonicalSpatialFields(in BoundaryTargetRef target)
+        {
+            return target.SpatialSnapshot.Equals(GasBoundarySpatialSnapshot.None) ||
+                   target.HasFrozenSpatial;
+        }
+
+        /// <summary>
+        /// 校验 selector/rule 目标不夹带只能属于已解析 ASC 的 Avatar 或空间快照。
+        /// </summary>
+        private static bool HasNoAvatarOrSpatialFields(in BoundaryTargetRef target)
+        {
+            return target.TargetAvatarStableId == 0 &&
+                   target.TargetAvatarBindingGeneration == 0 &&
+                   target.SpatialSnapshot.Equals(GasBoundarySpatialSnapshot.None);
         }
 
         /// <summary>
@@ -524,8 +729,9 @@ namespace GAS.Runtime
                 case GasBoundaryCommandKind.Activate:
                     return ValidateActivateContract(draft);
                 case GasBoundaryCommandKind.Commit:
+                    return ValidateCommitContract(draft);
                 case GasBoundaryCommandKind.Cancel:
-                    return ValidateActivationContract(draft);
+                    return ValidateCancelContract(draft);
                 case GasBoundaryCommandKind.ApplyEffect:
                     return ValidateApplyEffectContract(draft);
                 case GasBoundaryCommandKind.RemoveEffect:
@@ -549,9 +755,23 @@ namespace GAS.Runtime
         }
 
         /// <summary>
-        /// 校验 Commit 与 Cancel 必须来自句柄 owner、无额外目标且使用 AbilityActivation 句柄。
+        /// 校验 Commit 必须来自句柄 owner，且非空目标只能是已通过通用权限校验的 ASC。
         /// </summary>
-        private GasCommandAcceptStatus? ValidateActivationContract(in GasBoundaryCommandDraft draft)
+        private GasCommandAcceptStatus? ValidateCommitContract(in GasBoundaryCommandDraft draft)
+        {
+            if (!draft.Context.HasSource)
+                return GasCommandAcceptStatus.SourceRequired;
+            var targetKind = draft.Context.Target.Kind;
+            if (draft.DefinitionId != 0 ||
+                (targetKind != GasBoundaryTargetKind.None && targetKind != GasBoundaryTargetKind.Asc))
+                return GasCommandAcceptStatus.InvalidRequest;
+            return ValidateHandle(draft, HandleKind.AbilityActivation);
+        }
+
+        /// <summary>
+        /// 校验 Cancel 必须来自句柄 owner、无额外目标且使用 AbilityActivation 句柄。
+        /// </summary>
+        private GasCommandAcceptStatus? ValidateCancelContract(in GasBoundaryCommandDraft draft)
         {
             if (!draft.Context.HasSource)
                 return GasCommandAcceptStatus.SourceRequired;
@@ -675,6 +895,7 @@ namespace GAS.Runtime
             record.MarkSealed();
             return new GasCommandAcceptResult(
                 GasCommandAcceptStatus.Accepted,
+                record.SimulationEpoch,
                 record.RequestId,
                 requestSequence);
         }
@@ -708,6 +929,19 @@ namespace GAS.Runtime
         }
 
         /// <summary>
+        /// 以完整公开 key 解析 accepted ledger，拒绝仅凭 RequestSequence 跨 Epoch 或 RequestId 命中。
+        /// </summary>
+        private bool TryResolveAcceptedRecord(
+            in GasRequestKey requestKey,
+            out GasBoundaryJournalRecord record)
+        {
+            record = FindByRequestSequence(requestKey.RequestSequence);
+            return record != null &&
+                   record.SimulationEpoch == requestKey.SimulationEpoch &&
+                   record.RequestId == requestKey.RequestId;
+        }
+
+        /// <summary>
         /// 以接受顺序汇总所有未消费记录并原子推进 FaultTerminated。
         /// </summary>
         private GasIngressFaultCloseReceipt BuildFaultCloseReceipt(ulong faultId)
@@ -720,17 +954,25 @@ namespace GAS.Runtime
             for (var index = 0; index < _acceptedLedger.Count; index++)
             {
                 var record = _acceptedLedger[index];
-                if (record.State != GasBoundaryCommandState.Sealed)
-                    continue;
+                if (record.State == GasBoundaryCommandState.Sealed)
+                {
+                    if (count == 0)
+                        first = record.RequestSequence;
+                    last = record.RequestSequence;
+                    count++;
+                    hash.AddUInt64(record.RequestSequence);
+                    hash.AddUInt64(record.CommandHash);
+                    if (record.MarkFaultTerminated())
+                        ReleaseOutstandingCapacity(record);
+                }
 
-                if (count == 0)
-                    first = record.RequestSequence;
-                last = record.RequestSequence;
-                count++;
-                hash.AddUInt64(record.RequestSequence);
-                hash.AddUInt64(record.CommandHash);
-                if (record.MarkFaultTerminated())
-                    ReleaseOutstandingCapacity(record);
+                var terminalBattle = record.BattleInstance;
+                PublishCutoffTerminalIfMissing(
+                    record,
+                    GasRequestTerminalStatus.SessionFault,
+                    faultId,
+                    in terminalBattle,
+                    0);
             }
 
             return new GasIngressFaultCloseReceipt(
@@ -740,6 +982,73 @@ namespace GAS.Runtime
                 count,
                 count == 0 ? 0UL : hash.Value,
                 _acceptedHighWatermark);
+        }
+
+        /// <summary>
+        /// 为指定生命周期 cutoff 补齐所有尚未终态的 Accepted 请求并推进对应 transport 审计状态。
+        /// </summary>
+        private void PublishCutoffTerminals(
+            GasRequestTerminalStatus terminalStatus,
+            ulong faultId,
+            in BattleInstanceHandle battleInstance,
+            int battleOutcomeCode,
+            GasBoundaryCommandState transportState)
+        {
+            for (var index = 0; index < _acceptedLedger.Count; index++)
+            {
+                var record = _acceptedLedger[index];
+                var terminalBattle = terminalStatus == GasRequestTerminalStatus.BattleTerminal
+                    ? battleInstance
+                    : record.BattleInstance;
+                PublishCutoffTerminalIfMissing(
+                    record,
+                    terminalStatus,
+                    faultId,
+                    in terminalBattle,
+                    battleOutcomeCode);
+
+                var transitioned = transportState == GasBoundaryCommandState.BattleTerminated
+                    ? record.MarkBattleTerminated()
+                    : record.MarkOwnerDisposed();
+                if (transitioned)
+                    ReleaseOutstandingCapacity(record);
+            }
+        }
+
+        /// <summary>
+        /// 仅在该 RequestKey 尚无业务结果时追加 cutoff terminal，已成功或拒绝的请求保持原终态。
+        /// </summary>
+        private void PublishCutoffTerminalIfMissing(
+            GasBoundaryJournalRecord record,
+            GasRequestTerminalStatus status,
+            ulong faultId,
+            in BattleInstanceHandle battleInstance,
+            int battleOutcomeCode)
+        {
+            var requestKey = new GasRequestKey(
+                record.SimulationEpoch,
+                record.RequestId,
+                record.RequestSequence);
+            if (_requestTerminals.ContainsKey(requestKey))
+                return;
+
+            var terminal = GasRequestTerminal.ForCutoff(
+                in requestKey,
+                record.Kind,
+                status,
+                faultId,
+                in battleInstance,
+                battleOutcomeCode);
+            PublishRequestTerminalUnsafe(in terminal);
+        }
+
+        /// <summary>
+        /// 在持有 Gate 锁时同时写入永久读取索引与一次性有序 drain 队列。
+        /// </summary>
+        private void PublishRequestTerminalUnsafe(in GasRequestTerminal terminal)
+        {
+            _requestTerminals.Add(terminal.RequestKey, terminal);
+            _undrainedRequestTerminals.Add(terminal);
         }
 
         /// <summary>
@@ -785,10 +1094,11 @@ namespace GAS.Runtime
         /// 创建不携带 RequestSequence 的显式拒绝结果。
         /// </summary>
         private static GasCommandAcceptResult Reject(
+            ulong simulationEpoch,
             ulong requestId,
             GasCommandAcceptStatus status)
         {
-            return new GasCommandAcceptResult(status, requestId, 0);
+            return new GasCommandAcceptResult(status, simulationEpoch, requestId, 0);
         }
     }
 }

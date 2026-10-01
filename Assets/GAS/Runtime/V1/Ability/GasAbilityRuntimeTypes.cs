@@ -77,6 +77,8 @@ namespace GAS.Runtime
         OwnerEnding = 107,
         DurableCapacityUnavailable = 108,
         DefinitionInvalid = 109,
+        ActivationRequirementFailed = 110,
+        TargetInvalid = 111,
     }
 
     /// <summary>

@@ -1,0 +1,7 @@
+{
+  "name": "com.exhard.exgas.d0m2f-tarball",
+  "version": "1.0.1",
+  "displayName": "EX-GAS D0-M2F Tarball B",
+  "description": "Immutable tarball generation B used only by the isolated D0-M2F probe.",
+  "unity": "6000.3"
+}

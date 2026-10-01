@@ -161,6 +161,7 @@ namespace GAS.AutoChessDemo
             var attributes = new NativeArray<PendingAttributeInitialization>(attributeCount, Allocator.Temp);
             var tags = new NativeArray<PendingTagInitialization>(0, Allocator.Temp);
             var abilities = new NativeArray<PendingGrantedAbilityInitialization>(abilityCount, Allocator.Temp);
+            var initialEffects = new NativeArray<PendingInitialGameplayEffect>(0, Allocator.Temp);
             var nextAttribute = 0;
             var nextAbility = 0;
             var configOrdinal = 0;
@@ -181,6 +182,7 @@ namespace GAS.AutoChessDemo
                     attributes.Dispose();
                     tags.Dispose();
                     abilities.Dispose();
+                    initialEffects.Dispose();
                     return false;
                 }
                 if (!BattleUnitDefinitions.TryGetValue(handles[index].Key, out var definition))
@@ -191,12 +193,13 @@ namespace GAS.AutoChessDemo
                     attributes.Dispose();
                     tags.Dispose();
                     abilities.Dispose();
+                    initialEffects.Dispose();
                     return false;
                 }
                 var unitAttributeStart = nextAttribute;
                 attributes[nextAttribute++] = CreateAttributeInitialization(0, definition.Health, ref configOrdinal);
                 attributes[nextAttribute++] = CreateAttributeInitialization(1, definition.Energy, ref configOrdinal);
-                attributes[nextAttribute++] = CreateAttributeInitialization(2, 20f, ref configOrdinal);
+                attributes[nextAttribute++] = CreateAttributeInitialization(2, definition.Attack, ref configOrdinal);
                 var unitAbilities = definition.CreateAbilityCodes();
                 var unitAbilityStart = nextAbility;
                 for (var abilityIndex = 0; abilityIndex < unitAbilities.Length; abilityIndex++)
@@ -243,12 +246,14 @@ namespace GAS.AutoChessDemo
                 ascs,
                 attributes,
                 tags,
-                abilities);
+                abilities,
+                initialEffects);
             battles.Dispose();
             ascs.Dispose();
             attributes.Dispose();
             tags.Dispose();
             abilities.Dispose();
+            initialEffects.Dispose();
             LastBootstrapFailure = failure;
             return failure == GasStageBSpawnFaultReason.None;
         }

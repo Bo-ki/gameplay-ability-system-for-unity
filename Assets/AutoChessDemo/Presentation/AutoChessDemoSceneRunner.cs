@@ -14,11 +14,8 @@ namespace GAS.AutoChessDemo
 {
     public sealed class AutoChessDemoSceneRunner : MonoBehaviour
     {
-        private const int WarmupMaxTicks = 32;
-
         [SerializeField] private bool runOnStart = true;
         [SerializeField] private int maxTicks = 100000;
-        [SerializeField] private int postVictoryFlushTicks = 4;
         [SerializeField] private int scenarioScale = 50;
         [SerializeField] private float scenarioHealthMultiplier = 2048f;
         [SerializeField] private float minimumProfileSeconds = 30f;
@@ -63,6 +60,9 @@ namespace GAS.AutoChessDemo
 
         private IEnumerator Start()
         {
+            if (RuntimeV1RunnableEvidence.IsRequested())
+                yield break;
+
             if (!runOnStart)
                 yield break;
 
@@ -81,8 +81,7 @@ namespace GAS.AutoChessDemo
                 SetLogScreenStatus("正在创建对局房间...");
                 yield return null;
 
-                AutoChessBattleValidationRun.RunWarmupPass(CreateWarmupOptions());
-                SetLogScreenStatus("预热完成，正在运行正式战斗...");
+                SetLogScreenStatus("运行 Runtime v1 正式战斗...");
                 for (var i = 0; i < profilerPreRunFrames; i++)
                     yield return null;
 
@@ -159,24 +158,10 @@ namespace GAS.AutoChessDemo
             yield break;
         }
 
-        private AutoChessBattleOptions CreateWarmupOptions()
-        {
-            return new AutoChessBattleOptions(
-                WarmupMaxTicks,
-                postVictoryFlushTicks,
-                scenarioScale,
-                captureOfficialToolDiff: false,
-                debuggerEnabled: false,
-                captureSystemTimings: false,
-                captureBufferPressure: false,
-                healthMultiplier: 1f);
-        }
-
         private AutoChessBattleOptions CreatePerformanceOptions()
         {
             return new AutoChessBattleOptions(
                 maxTicks,
-                postVictoryFlushTicks,
                 scenarioScale,
                 captureOfficialToolDiff: false,
                 debuggerEnabled: false,
@@ -190,7 +175,6 @@ namespace GAS.AutoChessDemo
         {
             return new AutoChessBattleOptions(
                 maxTicks,
-                postVictoryFlushTicks,
                 scenarioScale,
                 captureOfficialToolDiff: false,
                 debuggerEnabled: true,

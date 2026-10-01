@@ -56,7 +56,10 @@ namespace GAS.Runtime
                 slot.Handle.SimulationEpoch != request.SimulationEpoch ||
                 !slot.Handle.OwnerAsc.Equals(request.TargetAsc) ||
                 slot.DefinitionIndex != request.DefinitionIndex ||
-                slot.StackCount <= 0)
+                slot.StackCount <= 0 ||
+                slot.TargetAvatarStableId != request.TargetAvatarStableId ||
+                slot.TargetAvatarBindingGeneration != request.TargetAvatarBindingGeneration ||
+                !slot.SpatialSnapshot.Equals(request.SpatialSnapshot))
             {
                 result.Outcome = GasGameplayEffectApplicationOutcome.RejectedStaleBinding;
                 result.Failure = GasGameplayEffectTransactionFailure.InvalidIdentity;
@@ -308,15 +311,20 @@ namespace GAS.Runtime
                 return false;
             }
 
+            // ExecuteOnApplication 只控制当前 application 是否立即执行 period body；关闭时首次
+            // Duration/Infinite application 仅建立 ActiveEffect，不得偷偷产生 modifier 写入。
+            var executeOnApplication = isInstant || definition.ExecuteOnApplication != 0;
+            // 即使首个 Duration/Infinite application 不执行 modifier，也必须先验证完整静态
+            // evaluator/Modifier range；否则 malformed definition 会被错误地分配成 ActiveEffect。
             if (!PreflightModifiers(
-                    ref catalog,
-                    in definition,
-                    1,
-                    captures,
-                    valueViews,
-                    evaluatorStack,
-                    attributes,
-                    ref result))
+                        ref catalog,
+                        in definition,
+                        1,
+                        captures,
+                        valueViews,
+                        evaluatorStack,
+                        attributes,
+                        ref result))
                 return false;
 
             var allocation = default(GasSlabAllocation);
@@ -335,19 +343,19 @@ namespace GAS.Runtime
                 }
             }
 
-            if (!ApplyModifierWrites(
-                    ref catalog,
-                    in definition,
-                    in request,
-                    1,
-                    attributes,
-                    dirtyWords,
-                    captures,
-                    valueViews,
-                    evaluatorStack,
-                    mutationOutputs,
-                    mutationStart,
-                    ref result))
+            if (executeOnApplication && !ApplyModifierWrites(
+                        ref catalog,
+                        in definition,
+                        in request,
+                        1,
+                        attributes,
+                        dirtyWords,
+                        captures,
+                        valueViews,
+                        evaluatorStack,
+                        mutationOutputs,
+                        mutationStart,
+                        ref result))
             {
                 if (!isInstant)
                     RollbackAllocation(in allocation, activeEffects, ref activeEffectHead);
@@ -380,6 +388,9 @@ namespace GAS.Runtime
                 PeriodExecutionOrdinal = 0,
                 State = GasSlotBusinessState.Active,
                 Inhibited = 0,
+                TargetAvatarStableId = request.TargetAvatarStableId,
+                TargetAvatarBindingGeneration = request.TargetAvatarBindingGeneration,
+                SpatialSnapshot = request.SpatialSnapshot,
             };
             result.ActiveEffect = handle;
             result.Outcome = GasGameplayEffectApplicationOutcome.CreatedActive;
@@ -414,6 +425,16 @@ namespace GAS.Runtime
             var slot = activeEffects[existingIndex];
             if (slot.Header.StorageState != GasSlabSlotState.Live ||
                 slot.State != GasSlotBusinessState.Active)
+            {
+                result.Outcome = GasGameplayEffectApplicationOutcome.RejectedStaleBinding;
+                result.Failure = GasGameplayEffectTransactionFailure.InvalidIdentity;
+                return false;
+            }
+            // ActiveEffect 已经捕获 target 的 Avatar/Spatial 身份；rebind 或换空间样本不得借 stack merge
+            // 覆盖旧身份，否则同一长期 effect 会跨越冻结边界继续生效。
+            if (slot.TargetAvatarStableId != request.TargetAvatarStableId ||
+                slot.TargetAvatarBindingGeneration != request.TargetAvatarBindingGeneration ||
+                !slot.SpatialSnapshot.Equals(request.SpatialSnapshot))
             {
                 result.Outcome = GasGameplayEffectApplicationOutcome.RejectedStaleBinding;
                 result.Failure = GasGameplayEffectTransactionFailure.InvalidIdentity;
@@ -493,6 +514,9 @@ namespace GAS.Runtime
             slot.EndTick = nextEndTick;
             slot.NextPeriodTick = nextPeriodTick;
             slot.ApplicationId = request.ApplicationId;
+            slot.TargetAvatarStableId = request.TargetAvatarStableId;
+            slot.TargetAvatarBindingGeneration = request.TargetAvatarBindingGeneration;
+            slot.SpatialSnapshot = request.SpatialSnapshot;
             activeEffects[existingIndex] = slot;
             result.ActiveEffect = slot.Handle;
             result.Outcome = GasGameplayEffectApplicationOutcome.MergedStack;
@@ -857,15 +881,76 @@ namespace GAS.Runtime
                 return false;
             var attributeCount = catalog.AttributeLayout.Entries.Length;
             var tagCount = catalog.TagCatalog.Entries.Length;
+            var definition = catalog.GameplayEffects[request.DefinitionIndex];
             return activeEffectCapacity >= 0 && activeEffects.Length <= activeEffectCapacity &&
                    attributes.Length == attributeCount &&
                    dirtyWords.Length == WordCount(attributeCount) &&
                    tagCounts.Length == tagCount && tagPresence.Length == WordCount(tagCount) &&
                    request.CaptureValueCount == captures.Length &&
                    request.ValueViewCount == valueViews.Length &&
+                   ValidateTargetContext(ref catalog, in definition, in request) &&
                    AreFinite(captures) && AreFinite(valueViews) &&
-                   (catalog.GameplayEffects[request.DefinitionIndex].ModifierRange.Count == 0 ||
+                   (definition.ModifierRange.Count == 0 ||
                     evaluatorStack.IsCreated && evaluatorStack.Length > 0);
+        }
+
+        /// <summary>
+        /// 在最终 target transaction 再验证 Avatar/Spatial context，避免绕过 TargetResolve 产生隐式降级。
+        /// </summary>
+        private static bool ValidateTargetContext(
+            ref GasDefinitionCatalogBlob catalog,
+            in GasGameplayEffectDefinitionBlob definition,
+            in GasGameplayEffectApplicationRequest request)
+        {
+            var policy = definition.TargetPolicy;
+            var hasAvatar = request.TargetAvatarStableId != 0 ||
+                            request.TargetAvatarBindingGeneration != 0;
+            if (policy.Avatar == GasAvatarTargetPolicy.RequireSameAvatar)
+            {
+                if (!hasAvatar || request.TargetAvatarStableId == 0 ||
+                    request.TargetAvatarBindingGeneration == 0)
+                    return false;
+            }
+            else if (policy.Avatar == GasAvatarTargetPolicy.FollowAsc)
+            {
+                if (hasAvatar)
+                    return false;
+            }
+            else
+                return false;
+
+            var hasSpatial = !request.SpatialSnapshot.Equals(GasBoundarySpatialSnapshot.None);
+            if (policy.Spatial == GasSpatialTargetPolicy.None)
+                return !hasSpatial;
+            if (policy.Spatial == GasSpatialTargetPolicy.FrozenSpatial)
+                return request.SpatialSnapshot.IsValid &&
+                       HasRequiredSpatialVariant(
+                           ref catalog,
+                           definition.TargetDataRange,
+                           request.SpatialSnapshot.Variant);
+            return false;
+        }
+
+        /// <summary>
+        /// 验证 transaction 使用的 FrozenSpatial variant 与 Definition 唯一 Required descriptor 一致。
+        /// </summary>
+        private static bool HasRequiredSpatialVariant(
+            ref GasDefinitionCatalogBlob catalog,
+            GasCatalogRange range,
+            GasTargetDataVariant variant)
+        {
+            var count = 0;
+            for (var offset = 0; offset < range.Count; offset++)
+            {
+                var descriptor = catalog.TargetDataDescriptors[range.Start + offset];
+                if (descriptor.Variant < GasTargetDataVariant.FrozenSpatialPoint ||
+                    descriptor.Variant > GasTargetDataVariant.FrozenSpatialShape)
+                    continue;
+                count++;
+                if (descriptor.Variant != variant || descriptor.Required == 0)
+                    return false;
+            }
+            return count == 1;
         }
 
         /// <summary>

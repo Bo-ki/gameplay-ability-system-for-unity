@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <LanguageTargets>$(MSBuildToolsPath)\Microsoft.CSharp.targets</LanguageTargets>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>GasCanonicalSemanticsDeterminism</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\*.cs" Link="Semantics\%(Filename)%(Extension)" />
+    <Compile Include="..\..\Proofs\Typed\*.cs" Link="Proofs\Typed\%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

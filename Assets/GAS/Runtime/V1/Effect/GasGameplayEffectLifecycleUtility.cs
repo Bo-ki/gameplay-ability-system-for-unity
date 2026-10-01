@@ -108,7 +108,7 @@ namespace GAS.Runtime
         }
 
         /// <summary>
-        /// 只读估算当前 ASC 的 period claim 与 modifier 需求，供 WholeTick admission 预留事实和 Attribute scratch。
+        /// 按忽略 inhibition 的结构 due 上界估算 period claim 与 modifier，供 WholeTick admission 抵御 OwnerWave Tag 变化。
         /// </summary>
         internal static bool TryEstimateDue(
             ref GasDefinitionCatalogBlob catalog,
@@ -140,37 +140,48 @@ namespace GAS.Runtime
                     slot.State != GasSlotBusinessState.Active)
                     continue;
                 var definition = catalog.GameplayEffects[slot.DefinitionIndex];
-                if (!TryGetPeriodDecision(
-                        ref catalog,
-                        in definition,
-                        in slot,
-                        tagCounts,
-                        candidateTick,
-                        out var claim,
-                        out var execute,
-                        out _,
-                        out failure))
-                    return false;
-                if (claim == 0)
+                if (!IsStructurallyPeriodDue(in definition, in slot, candidateTick))
                     continue;
+                if (slot.ApplicationId == 0)
+                {
+                    failure = GasActiveEffectLifecycleFailure.InvalidIdentity;
+                    return false;
+                }
                 if (slot.ActiveCycleOrdinal == uint.MaxValue ||
                     slot.PeriodExecutionOrdinal >= int.MaxValue / 1024)
                 {
                     failure = GasActiveEffectLifecycleFailure.PeriodOrdinalOverflow;
                     return false;
                 }
-                claimCount++;
-                if (execute != 0)
+                if (!TryAddTick(candidateTick, (ulong)definition.PeriodTicks, out _))
                 {
-                    mutationCount += definition.ModifierRange.Count;
-                    if (mutationCount < 0)
-                    {
-                        failure = GasActiveEffectLifecycleFailure.PeriodOrdinalOverflow;
-                        return false;
-                    }
+                    failure = GasActiveEffectLifecycleFailure.InvalidTiming;
+                    return false;
                 }
+                if (definition.ModifierRange.Count < 0 ||
+                    claimCount == int.MaxValue ||
+                    mutationCount > int.MaxValue - definition.ModifierRange.Count)
+                {
+                    failure = GasActiveEffectLifecycleFailure.PeriodOrdinalOverflow;
+                    return false;
+                }
+                claimCount++;
+                mutationCount += definition.ModifierRange.Count;
             }
             return true;
+        }
+
+        /// <summary>
+        /// 判断不受 OwnerWave Tag/inhibition 投影影响的 period due 结构上界。
+        /// </summary>
+        internal static bool IsStructurallyPeriodDue(
+            in GasGameplayEffectDefinitionBlob definition,
+            in ActiveEffectSlot slot,
+            ulong candidateTick)
+        {
+            var projected = slot;
+            projected.Inhibited = 0;
+            return ShouldAdvancePeriod(in definition, in projected, candidateTick);
         }
 
         /// <summary>

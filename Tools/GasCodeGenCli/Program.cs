@@ -25,7 +25,27 @@ namespace GasCodeGenCliHost
                 Console.WriteLine($"Project: {projectRoot}");
                 Console.WriteLine("Input:   Luban JSON tables");
 
-                if (string.Equals(mode, "sourcegen-all", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(mode, "generation-verify", StringComparison.OrdinalIgnoreCase))
+                    return VerifyGenerationStore(projectRoot, recover: false);
+                if (string.Equals(mode, "generation-recover", StringComparison.OrdinalIgnoreCase))
+                    return VerifyGenerationStore(projectRoot, recover: true);
+                if (string.Equals(mode, "d1b-contract-tests", StringComparison.OrdinalIgnoreCase))
+                    return D1BSelfTest.RunContractSuite();
+                if (string.Equals(mode, "d1b-export-selectors", StringComparison.OrdinalIgnoreCase))
+                {
+                    return D1BSelfTest.ExportScenarioSelectors(
+                        projectRoot,
+                        FindArgumentValue(args, "--selectorAOutput"),
+                        FindArgumentValue(args, "--selectorBOutput"));
+                }
+                if (string.Equals(mode, "d1b-self-test", StringComparison.OrdinalIgnoreCase))
+                    return D1BSelfTest.RunScenario(
+                        projectRoot,
+                        FindArgumentValue(args, "--request"),
+                        FindArgumentValue(args, "--output"));
+
+                if (string.Equals(mode, "sourcegen-all", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(mode, "sourcegen", StringComparison.OrdinalIgnoreCase))
                     return GasCodeGenPipeline.TryRunAll(refreshAssetDatabase: false) ? 0 : 3;
 
                 if (string.Equals(mode, "autochess", StringComparison.OrdinalIgnoreCase)
@@ -34,8 +54,7 @@ namespace GasCodeGenCliHost
                     return GasCodeGenPipeline.TryRunAutoChessDemo(refreshAssetDatabase: false) ? 0 : 3;
                 }
 
-                if (string.Equals(mode, "sourcegen", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(mode, "core", StringComparison.OrdinalIgnoreCase)
+                if (string.Equals(mode, "core", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(mode, "sourcegen-core", StringComparison.OrdinalIgnoreCase))
                 {
                     return GasCodeGenPipeline.TryRunCore(refreshAssetDatabase: false) ? 0 : 3;
@@ -49,6 +68,29 @@ namespace GasCodeGenCliHost
                 WriteException(ex);
                 return 1;
             }
+        }
+
+        /// <summary>
+        /// 验证当前 selector/audit 一致性，并仅在显式 recover 模式下按六态矩阵关闭 intent。
+        /// </summary>
+        private static int VerifyGenerationStore(string projectRoot, bool recover)
+        {
+            using var store = recover
+                ? GasCodeGenGenerationStore.OpenForRecovery(projectRoot)
+                : GasCodeGenGenerationStore.Open(projectRoot);
+            if (recover)
+            {
+                var recovery = store.Recover();
+                Console.WriteLine(
+                    $"Recovery completed. OriginalState={recovery.OriginalState}, "
+                    + $"Outcome={recovery.Outcome}, AuditWritten={recovery.AuditWritten}");
+                return 0;
+            }
+            var activeRef = store.VerifyActive();
+            Console.WriteLine(
+                $"ActiveGenerationRef verified. GenerationId={activeRef.GenerationId}, "
+                + $"PromotionId={activeRef.PromotionId}");
+            return 0;
         }
 
         private static int RunUnityBatchmode(string projectRoot, string[] args)

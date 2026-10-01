@@ -1,0 +1,291 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exhard.local/schemas/D0M2F-ProbeResult-v1.json",
+  "title": "D0-M2F typed probe result",
+  "type": "object",
+  "required": [
+    "Schema",
+    "RunId",
+    "ProbeId",
+    "Status",
+    "Reason",
+    "Cases",
+    "Inputs",
+    "Protected",
+    "Fixture",
+    "Unity",
+    "RoleObservations"
+  ],
+  "properties": {
+    "Schema": {
+      "const": "D0M2F-ProbeResult-v1"
+    },
+    "RunId": {
+      "type": "string",
+      "pattern": "^D0M2F-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$"
+    },
+    "ProbeId": {
+      "enum": [
+        "T",
+        "S",
+        "X"
+      ]
+    },
+    "Status": {
+      "enum": [
+        "Passed",
+        "HardRejected",
+        "TimedOut",
+        "Inconclusive"
+      ]
+    },
+    "Reason": {
+      "enum": [
+        "None",
+        "PreStartMaterializerRequired",
+        "MultipleMutableSelectors",
+        "AuthorityMutationObserved",
+        "MixedGenerationObserved",
+        "CacheFallbackSelectorObserved",
+        "PerAssemblySelectorRequired",
+        "AssemblyInvalidationFailed",
+        "ActiveGeneratedSourceCoConsumptionRequired",
+        "StaleBeeOrRspDeterminedGeneration",
+        "TimeBoxExceeded",
+        "EvidenceIncomplete",
+        "HarnessFailure",
+        "SchemaViolation",
+        "CaseIdSetMismatch",
+        "ProtectedPathDrift",
+        "UnityProcessResidue",
+        "FixtureBoundaryViolation",
+        "InputIdentityDrift",
+        "SelectorConflictObserved",
+        "CacheOrStartupOrderDependent",
+        "WatcherFailure",
+        "CleanupFailure",
+        "UnityIdentityMismatch"
+      ]
+    },
+    "Cases": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/case"
+      }
+    },
+    "Inputs": {
+      "type": "object"
+    },
+    "Protected": {
+      "type": "object"
+    },
+    "Fixture": {
+      "type": "object"
+    },
+    "Unity": {
+      "type": "object"
+    },
+    "RoleObservations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/roleObservation"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "Status": {
+            "const": "Passed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "Reason": {
+            "const": "None"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "Status": {
+            "const": "HardRejected"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "Reason": {
+            "enum": [
+              "PreStartMaterializerRequired",
+              "MultipleMutableSelectors",
+              "AuthorityMutationObserved",
+              "MixedGenerationObserved",
+              "CacheFallbackSelectorObserved",
+              "PerAssemblySelectorRequired",
+              "AssemblyInvalidationFailed",
+              "ActiveGeneratedSourceCoConsumptionRequired",
+              "StaleBeeOrRspDeterminedGeneration"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "Status": {
+            "const": "TimedOut"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "Reason": {
+            "const": "TimeBoxExceeded"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "Status": {
+            "const": "Inconclusive"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "Reason": {
+            "enum": [
+              "EvidenceIncomplete",
+              "HarnessFailure",
+              "SchemaViolation",
+              "CaseIdSetMismatch",
+              "ProtectedPathDrift",
+              "UnityProcessResidue",
+              "FixtureBoundaryViolation",
+              "InputIdentityDrift",
+              "SelectorConflictObserved",
+              "CacheOrStartupOrderDependent",
+              "WatcherFailure",
+              "CleanupFailure",
+              "UnityIdentityMismatch"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ProbeId": {
+            "const": "X"
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "properties": {
+            "Status": {
+              "const": "HardRejected"
+            }
+          },
+          "required": [
+            "Status"
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "case": {
+      "type": "object",
+      "required": [
+        "CaseId",
+        "Status",
+        "Reason",
+        "Evidence"
+      ],
+      "properties": {
+        "CaseId": {
+          "type": "string",
+          "pattern": "^[TSX]-0[1-4]$"
+        },
+        "Status": {
+          "enum": [
+            "Passed",
+            "Failed",
+            "TimedOut",
+            "Inconclusive",
+            "NotRun"
+          ]
+        },
+        "Reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "Evidence": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "reason": {
+      "enum": [
+        "None",
+        "PreStartMaterializerRequired",
+        "MultipleMutableSelectors",
+        "AuthorityMutationObserved",
+        "MixedGenerationObserved",
+        "CacheFallbackSelectorObserved",
+        "PerAssemblySelectorRequired",
+        "AssemblyInvalidationFailed",
+        "ActiveGeneratedSourceCoConsumptionRequired",
+        "StaleBeeOrRspDeterminedGeneration",
+        "TimeBoxExceeded",
+        "EvidenceIncomplete",
+        "HarnessFailure",
+        "SchemaViolation",
+        "CaseIdSetMismatch",
+        "ProtectedPathDrift",
+        "UnityProcessResidue",
+        "FixtureBoundaryViolation",
+        "InputIdentityDrift",
+        "SelectorConflictObserved",
+        "CacheOrStartupOrderDependent",
+        "WatcherFailure",
+        "CleanupFailure",
+        "UnityIdentityMismatch"
+      ]
+    },
+    "roleObservation": {
+      "type": "object",
+      "required": [
+        "Path",
+        "Role"
+      ],
+      "properties": {
+        "Path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Role": {
+          "enum": [
+            "Authority",
+            "Derived",
+            "Cache"
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

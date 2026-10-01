@@ -1,0 +1,740 @@
+{
+  "SchemaVersion": 2,
+  "ManifestId": "runtime-v1-tier-b",
+  "ManifestVersion": 3,
+  "ManifestScope": "TierBExecutionSubManifest",
+  "SemanticOwner": "方案讨论/针对2.0的ECS架构的迭代方案讨论/01-目标态架构共识/10-AutoChess无头验收Spec.md",
+  "CanAuthorizeV0Exit": false,
+  "RequiredMasterScopes": [
+    "TierA-LegacyCharacterization",
+    "TierB-TargetSemanticConformance",
+    "R3-ThirdRoundFamilies"
+  ],
+  "Vectors": [
+    {
+      "VectorId": "TB-01",
+      "Version": 1,
+      "Description": "双 Activation 争抢同一 cost/cooldown",
+      "OwnerTask": "V3",
+      "NextOwnerTask": "V3",
+      "RequiredPass": true,
+      "Status": "Green",
+      "StatusReason": "N2-0 已把 cost 与 cooldown 竞争拆为两个互斥场景；均验证 canonical read-your-writes、失败者未提交及零额外资源写入。",
+      "ReviewRequired": false,
+      "LastRunEvidenceId": "9bf9a72b7d0ce51e5342e0089013dceae6ca9928115de6b4a5ff860527237013",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1TickDagPlayModeTests.cs",
+          "TestSourceHash": "d37c4978f788c7d3a7c15543a74f95447f65415d946ec0452a38c8a50f43a98b",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1TickDagPlayModeTests.Ability_竞争Commit仅首个事务成功",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1TickDagPlayModeTests.cs",
+          "TestSourceHash": "d37c4978f788c7d3a7c15543a74f95447f65415d946ec0452a38c8a50f43a98b",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1TickDagPlayModeTests.Ability_竞争Cooldown仅首个事务成功",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-02",
+      "Version": 1,
+      "Description": "Commit→Cancel 与 Cancel→Commit",
+      "OwnerTask": "V3",
+      "NextOwnerTask": "V3",
+      "RequiredPass": true,
+      "Status": "Green",
+      "StatusReason": "N2-0 已复核双向 canonical 顺序：Commit→Cancel 保留 commit/cost/cooldown，Cancel→Commit 保持零 commit 与零资源写入。",
+      "ReviewRequired": false,
+      "LastRunEvidenceId": "9bf9a72b7d0ce51e5342e0089013dceae6ca9928115de6b4a5ff860527237013",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1TickDagPlayModeTests.cs",
+          "TestSourceHash": "d37c4978f788c7d3a7c15543a74f95447f65415d946ec0452a38c8a50f43a98b",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1TickDagPlayModeTests.Ability_ActivateCommit分离且Commit后Cancel保留已提交工作",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1TickDagPlayModeTests.cs",
+          "TestSourceHash": "d37c4978f788c7d3a7c15543a74f95447f65415d946ec0452a38c8a50f43a98b",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1TickDagPlayModeTests.Ability_Cancel先于Commit_拒绝迟到Commit且不产生资源写入",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-03",
+      "Version": 1,
+      "Description": "Instant Ability End 后 cooldown 仍存活",
+      "OwnerTask": "V3",
+      "NextOwnerTask": "V3",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "N2 审查确认 cooldown 独立存活底座已存在，但 Definition 无自然 End 策略，Completed 无运行时路径，自动 Ending 也未进入 route/capacity 预留。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1TickDagPlayModeTests.cs",
+          "TestSourceHash": "d37c4978f788c7d3a7c15543a74f95447f65415d946ec0452a38c8a50f43a98b",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1TickDagPlayModeTests.Ability_ActivateCommit分离且Commit后Cancel保留已提交工作",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-04",
+      "Version": 1,
+      "Description": "普通 self GE 的 OwnerWave 可见性屏障",
+      "OwnerTask": "V3 + V4",
+      "NextOwnerTask": "V3 + V4",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "N2 审查确认 OwnerWave 屏障顺序正确，但 GE 尚无 GrantedTag 权威生命周期，无法证明同波不可见、publish 后下波可见。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1GameplayEffectTransactionTests.cs",
+          "TestSourceHash": "6f77b36ac5edb2c848942b70a8bed78dd2f14f3bf0bb161c025edfa4ff5df600",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1GameplayEffectTransactionTests.InstantAdd_在TargetTransaction内提交Attribute变更",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-05",
+      "Version": 1,
+      "Description": "同 target 前序 application 改变后序 requirement/immunity",
+      "OwnerTask": "V3 + V4",
+      "NextOwnerTask": "V3 + V4",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "N2 审查确认同 target shadow RYW 已存在，但 GE application 不能改变 Tag，且 immunity outcome 缺稳定 blocker provenance。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1GameplayEffectTransactionTests.cs",
+          "TestSourceHash": "6f77b36ac5edb2c848942b70a8bed78dd2f14f3bf0bb161c025edfa4ff5df600",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1GameplayEffectTransactionTests.RequirementRejected_不产生任何TargetAuthority写入",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1GameplayEffectTransactionTests.cs",
+          "TestSourceHash": "6f77b36ac5edb2c848942b70a8bed78dd2f14f3bf0bb161c025edfa4ff5df600",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1GameplayEffectTransactionTests.InvalidImmunityRange_拒绝且不产生TargetAuthority写入",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-06",
+      "Version": 1,
+      "Description": "source death 的 committed-work-wins",
+      "OwnerTask": "V3 + V4",
+      "NextOwnerTask": "V3 + V4",
+      "RequiredPass": true,
+      "Status": "Green",
+      "StatusReason": "N2-1A 已由双 ASC 真实链证明 committed-work-wins：source 先死亡后，已 Commit 的 FrozenAsc DirectEffect 仍命中远端，并保留稳定 source/target/causality。",
+      "ReviewRequired": false,
+      "LastRunEvidenceId": "9f79b61d94ed70667f4cd6019d6116060ea2ceff9d632a9cdacd4abf8b7a605b",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1TickDagPlayModeTests.cs",
+          "TestSourceHash": "d37c4978f788c7d3a7c15543a74f95447f65415d946ec0452a38c8a50f43a98b",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1TickDagPlayModeTests.Ability_Source在Commit后死亡_远端DirectEffect仍结算",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-07",
+      "Version": 1,
+      "Description": "AliveOnly 首死 reject 与 overkill 归属",
+      "OwnerTask": "V3 + V4",
+      "NextOwnerTask": "V3 + V4",
+      "RequiredPass": true,
+      "Status": "Green",
+      "StatusReason": "N2-0 已复核完整 target fan-in：唯一 death crossing、首个 lethal application 的 overkill/credit，以及后序 AliveOnly typed reject 均有 durable fact 断言。",
+      "ReviewRequired": false,
+      "LastRunEvidenceId": "9bf9a72b7d0ce51e5342e0089013dceae6ca9928115de6b4a5ff860527237013",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1TickDagPlayModeTests.cs",
+          "TestSourceHash": "d37c4978f788c7d3a7c15543a74f95447f65415d946ec0452a38c8a50f43a98b",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1TickDagPlayModeTests.EffectApplication_同TickDeathCrossing唯一且后续AliveOnly拒绝",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-08",
+      "Version": 2,
+      "Description": "Level/Edge/Event 与跨 ASC wait cancel-ack",
+      "OwnerTask": "V3",
+      "NextOwnerTask": "V3",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "协议、Slab 与跨 ASC cancel/owner-gone 底座已有测试；尚无 authored Ability program 到生产 TryBeginWait、T+1 wake 与 payload lifetime 的完整链路。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1AbilityWaitProtocolTests.cs",
+          "TestSourceHash": "87316d06148ad37dffc1078f6609505f97eac99208e06fec2fc070cff7c399b5",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1AbilityWaitProtocolTests.Level_Sample已真立即完成且恢复不早于下一Tick",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1AbilityWaitProtocolTests.cs",
+          "TestSourceHash": "87316d06148ad37dffc1078f6609505f97eac99208e06fec2fc070cff7c399b5",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1AbilityWaitProtocolTests.Edge与Event_只接受Sample之后的新序号",
+          "ExpectedCaseCount": 2,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1AbilityWaitSlabTransactionTests.cs",
+          "TestSourceHash": "8ab61b62edc06b9237d74c461f3eb8e8ecbe3d2b0362d8e6b80cf093f7a75b4e",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1AbilityWaitSlabTransactionTests.Level_SampleAndRegister即时完成且不分配Subscription",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1AbilityWaitSlabTransactionTests.cs",
+          "TestSourceHash": "8ab61b62edc06b9237d74c461f3eb8e8ecbe3d2b0362d8e6b80cf093f7a75b4e",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1AbilityWaitSlabTransactionTests.Edge与Event_Ack后拒绝旧Ordinal且PersistentWake单调",
+          "ExpectedCaseCount": 2,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1AbilityCancellationHandshakePlayModeTests.cs",
+          "TestSourceHash": "6f4bb372534dc5a6cbcab25c7b0355c8847f92751870ee1786eb97d5b6ca3d76",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1AbilityCancellationHandshakePlayModeTests.TickDag_跨Asc取消按三拍完成双端交接",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1AbilityCancellationHandshakePlayModeTests.cs",
+          "TestSourceHash": "6f4bb372534dc5a6cbcab25c7b0355c8847f92751870ee1786eb97d5b6ca3d76",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1AbilityCancellationHandshakePlayModeTests.TickDag_ObservedOwner缺失时TypedAck阻止Owner悬挂",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-09",
+      "Version": 1,
+      "Description": "9203 reapply/cap/due/end/expiry/inhibit/self-delete",
+      "OwnerTask": "V4",
+      "NextOwnerTask": "V4",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "缺少同一 9203 catalog 的端到端 reapply/cap、period、expiry、inhibit 与 self-delete 场景。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1CatalogTests.cs",
+          "TestSourceHash": "26d9875af213c645c09011eb1d43df66a7e3ee3dcf1b63e22f19e11df376fe8b",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1CatalogTests.Poison9203_全部冻结关键字段进入CompiledBlob",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1GameplayEffectTransactionTests.cs",
+          "TestSourceHash": "6f77b36ac5edb2c848942b70a8bed78dd2f14f3bf0bb161c025edfa4ff5df600",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1GameplayEffectTransactionTests.StackMerge_ExecuteOnApplication使用拟议StackCount并提交一次",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1GameplayEffectTransactionTests.cs",
+          "TestSourceHash": "6f77b36ac5edb2c848942b70a8bed78dd2f14f3bf0bb161c025edfa4ff5df600",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1GameplayEffectTransactionTests.StackMerge_达到上限时保持Count并执行Body",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1GameplayEffectLifecycleTests.cs",
+          "TestSourceHash": "93e6d76fa04da548eb885d7a9d8b552c4c88473b005bff63725d29b2f38e807e",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1GameplayEffectLifecycleTests.PeriodBeforeExpiry_先claim再移除",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1GameplayEffectLifecycleTests.cs",
+          "TestSourceHash": "93e6d76fa04da548eb885d7a9d8b552c4c88473b005bff63725d29b2f38e807e",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1GameplayEffectLifecycleTests.StackExpiry_移除一层并刷新时序",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1GameplayEffectLifecycleTests.cs",
+          "TestSourceHash": "93e6d76fa04da548eb885d7a9d8b552c4c88473b005bff63725d29b2f38e807e",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1GameplayEffectLifecycleTests.OngoingRequirement_抑制与恢复保留槽身份",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1GameplayEffectLifecycleTests.cs",
+          "TestSourceHash": "93e6d76fa04da548eb885d7a9d8b552c4c88473b005bff63725d29b2f38e807e",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1GameplayEffectLifecycleTests.ExpiryBeforePeriod_先移除再允许回收",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-10",
+      "Version": 1,
+      "Description": "LeaveGranted 与重复 grant provenance",
+      "OwnerTask": "V4 + V5",
+      "NextOwnerTask": "V4 + V5",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "未测试重复 grant 的 provenance 去重与归属。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1AbilityLifecycleTests.cs",
+          "TestSourceHash": "887344793a99df7578b8117c2a783ef1ee886e32490543655e3a044948124027",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1AbilityLifecycleTests.LeaveGranted_脱钩Effect句柄但保留冻结Provenance",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1GrantRemovalPlayModeTests.cs",
+          "TestSourceHash": "57d224668b3c884ef3b1d158d10b98bc60b258917e50c9d2340466359dcbdf7a",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1GrantRemovalPlayModeTests.LeaveGranted_脱钩Provenance后同Tick仍可激活",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-11",
+      "Version": 1,
+      "Description": "两轮 Cue active lifecycle",
+      "OwnerTask": "V4 + V5",
+      "NextOwnerTask": "V4 + V5",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "无对应 Runtime v1 Cue lifecycle 真实测试；不得用治理 wrapper 代替。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": []
+    },
+    {
+      "VectorId": "TB-12",
+      "Version": 1,
+      "Description": "Avatar rebind 与 FrozenSpatial",
+      "OwnerTask": "V1 + V3 + V6",
+      "NextOwnerTask": "V1 + V3 + V6",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "现有支撑测试只验证值对象，缺少 Avatar rebind projectile 与 FrozenSpatial 完整运行时链路。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "TierBAvatarRebindFrozenSpatialTests",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/GAS/Tests/TierBAvatarRebindFrozenSpatialTests.cs",
+          "TestSourceHash": "5caa81f86550d18b3c217f8dc9cbb8c3ad65acfbb8b59f4e663d2bf845d99991",
+          "TestId": "GAS.Tests.TierBAvatarRebindFrozenSpatialTests.BoundaryTargetRef_换绑保留Asc但改变目标身份",
+          "ExpectedCaseCount": 2,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "TierBAvatarRebindFrozenSpatialTests",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/GAS/Tests/TierBAvatarRebindFrozenSpatialTests.cs",
+          "TestSourceHash": "5caa81f86550d18b3c217f8dc9cbb8c3ad65acfbb8b59f4e663d2bf845d99991",
+          "TestId": "GAS.Tests.TierBAvatarRebindFrozenSpatialTests.FrozenSpatial_重采样与换绑不改写既有目标",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-13",
+      "Version": 1,
+      "Description": "双杀/平局与 multi-BattleInstance 终局隔离",
+      "OwnerTask": "V3 + V5 + V6",
+      "NextOwnerTask": "V3 + V5 + V6",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "N2-0 人工复核降级：现有测试手工种入 Dead lifecycle，只证明多 Battle winner/draw 隔离，未证明 replicated group 双杀的真实 application→death→terminal 因果链。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1TerminalResolveEditModeTests.cs",
+          "TestSourceHash": "0022903521c12c9bf4b1a77a22f00237f694b2b60e9a7e1c3e481346014d22b7",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1TerminalResolveEditModeTests.TerminalResolve_按Battle独立生成Winner与Draw",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-14",
+      "Version": 1,
+      "Description": "SpawnBatch 原子 Ready",
+      "OwnerTask": "V1 + V3 + V4",
+      "NextOwnerTask": "V1 + V3 + V4",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "缺少 initial-effect/outbox 失败与 initial duration/period ReadyTick 的完整断言。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1SpawnFinalizePlayModeTests.cs",
+          "TestSourceHash": "ef673eac0cad30312978a1977335147adb1cc164cda428df686356f9b5129a13",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1SpawnFinalizePlayModeTests.SpawnBatch_跨两个完整FixedStep整批发布Ready",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1SpawnFinalizePlayModeTests.cs",
+          "TestSourceHash": "ef673eac0cad30312978a1977335147adb1cc164cda428df686356f9b5129a13",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1SpawnFinalizePlayModeTests.SpawnBatch_任一成员失败时ZeroReady并整批Teardown",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1SpawnFinalizePlayModeTests.cs",
+          "TestSourceHash": "ef673eac0cad30312978a1977335147adb1cc164cda428df686356f9b5129a13",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1SpawnFinalizePlayModeTests.SpawnBatch_自洽子集截断时Manifest拒绝并清理遗漏成员",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-15",
+      "Version": 1,
+      "Description": "admission fault 零写、IngressClosed 与 exact outstanding membership",
+      "OwnerTask": "V3 + V5",
+      "NextOwnerTask": "V3 + V5",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "现有测试只覆盖单个 sealed request 与 close 后拒绝，未覆盖 close 前 unsealed/future-tail 的 exact sparse ledger membership。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1TickDagPlayModeTests.cs",
+          "TestSourceHash": "d37c4978f788c7d3a7c15543a74f95447f65415d946ec0452a38c8a50f43a98b",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1TickDagPlayModeTests.Admission_OwnerPlan容量失败零写并在OuterFence关闭Ingress",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-16",
+      "Version": 1,
+      "Description": "Boundary retry、无下一 tick teardown、NoFactReceipt 与 Result 后零事实",
+      "OwnerTask": "V5 + V6",
+      "NextOwnerTask": "V5 + V6",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "缺少零 ASC Session terminal、无下一 tick teardown 及 Result 后零新事实的组合场景。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1BoundaryDrainCoordinatorTests.cs",
+          "TestSourceHash": "98fc52c39f10ca3dbd782a7eda0275438150d3b9e61309932c01d29dd050d235",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1BoundaryDrainCoordinatorTests.Coordinator_真实Owner接管Fact并折回Idle",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1BoundaryDrainCoordinatorTests.cs",
+          "TestSourceHash": "98fc52c39f10ca3dbd782a7eda0275438150d3b9e61309932c01d29dd050d235",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1BoundaryDrainCoordinatorTests.Coordinator_Staging失败保留源并复用InFlightBatch",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1BoundaryDrainCoordinatorTests.cs",
+          "TestSourceHash": "98fc52c39f10ca3dbd782a7eda0275438150d3b9e61309932c01d29dd050d235",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1BoundaryDrainCoordinatorTests.Coordinator_空CleanupShell生成NoFactReceipt后移除",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1BoundaryDrainCoordinatorTests.cs",
+          "TestSourceHash": "98fc52c39f10ca3dbd782a7eda0275438150d3b9e61309932c01d29dd050d235",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1BoundaryDrainCoordinatorTests.WorldOwner_FinalDrain成功后移除Shell",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1BoundaryDrainCoordinatorTests.cs",
+          "TestSourceHash": "98fc52c39f10ca3dbd782a7eda0275438150d3b9e61309932c01d29dd050d235",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1BoundaryDrainCoordinatorTests.WorldOwner_FinalDrain失败不得进入Disposed",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1BoundaryDrainTests.cs",
+          "TestSourceHash": "02b78e70ffc60395e1927f6c241cc65c1d8856d975558ecbf554300ec643c0e9",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1BoundaryDrainTests.Drain接管_失败保留源记录且成功后保留LateTail",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1BoundaryDrainTests.cs",
+          "TestSourceHash": "02b78e70ffc60395e1927f6c241cc65c1d8856d975558ecbf554300ec643c0e9",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1BoundaryDrainTests.空CleanupShell_NoFactReceipt后才可折叠Idle",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        },
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.playmode",
+          "TestPlatform": "PlayMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/PlayMode/RuntimeV1TickDagPlayModeTests.cs",
+          "TestSourceHash": "d37c4978f788c7d3a7c15543a74f95447f65415d946ec0452a38c8a50f43a98b",
+          "TestId": "GAS.RuntimeV1.Tests.PlayMode.RuntimeV1TickDagPlayModeTests.BoundaryAcceptedShell_下一Kernel经EndFixed回收",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    },
+    {
+      "VectorId": "TB-17",
+      "Version": 1,
+      "Description": "Result 后零事实与不同 TickBatch 切分 semantic hash 等价",
+      "OwnerTask": "V5 + V7",
+      "NextOwnerTask": "V5 + V7",
+      "RequiredPass": true,
+      "Status": "Pending",
+      "StatusReason": "现有证据只覆盖 TickBatch hash 等价，未覆盖 ValidationResult 后零新事实。",
+      "ReviewRequired": true,
+      "LastRunEvidenceId": "",
+      "Approval": {
+        "ApprovedBy": "",
+        "ApprovedAtUtc": "",
+        "ApprovalRecordId": "",
+        "ApprovalRecordHash": "",
+        "ExpectedFailureSignature": ""
+      },
+      "Tests": [
+        {
+          "TestAssembly": "com.exhard.exgas.runtimev1.tests.editmode",
+          "TestPlatform": "EditMode",
+          "TestSourcePath": "Assets/_Test/RuntimeV1/EditMode/RuntimeV1IngressGateTests.cs",
+          "TestSourceHash": "03ca245a5a4ea5c9e2e4c5fbf95f30d619d9940653a57edbf1bf44b4c5d28de6",
+          "TestId": "GAS.RuntimeV1.Tests.EditMode.RuntimeV1IngressGateTests.TickBatch切分_不改变SemanticHash",
+          "ExpectedCaseCount": 1,
+          "ExpectedResult": "Passed"
+        }
+      ]
+    }
+  ]
+}

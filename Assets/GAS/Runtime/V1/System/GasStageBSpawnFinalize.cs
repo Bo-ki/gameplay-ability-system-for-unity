@@ -58,13 +58,14 @@ namespace GAS.Runtime
             NativeArray<GasStageBAscBootstrapRequest> ascs,
             NativeArray<PendingAttributeInitialization> attributes,
             NativeArray<PendingTagInitialization> tags,
-            NativeArray<PendingGrantedAbilityInitialization> abilities)
+            NativeArray<PendingGrantedAbilityInitialization> abilities,
+            NativeArray<PendingInitialGameplayEffect> initialEffects)
         {
             var failure = ValidateSessionRequest(in session);
             if (failure != GasStageBSpawnFaultReason.None)
                 return failure;
             if (!battles.IsCreated || !ascs.IsCreated || !attributes.IsCreated ||
-                !tags.IsCreated || !abilities.IsCreated)
+                !tags.IsCreated || !abilities.IsCreated || !initialEffects.IsCreated)
                 return GasStageBSpawnFaultReason.PendingInitializationInvalid;
             if (battles.Length > session.ScaleProfile.MaxBattleInstanceCount)
                 return GasStageBSpawnFaultReason.CapacityExceeded;
@@ -72,13 +73,22 @@ namespace GAS.Runtime
             failure = ValidateBattleRequests(session.SimulationEpoch, battles, ascs);
             if (failure != GasStageBSpawnFaultReason.None)
                 return failure;
-            failure = ValidateAscRequests(in session.ScaleProfile, ascs, attributes.Length, tags.Length, abilities.Length);
+            failure = ValidateAscRequests(in session.ScaleProfile, ascs, attributes.Length, tags.Length,
+                abilities.Length, initialEffects.Length);
             if (failure != GasStageBSpawnFaultReason.None)
                 return failure;
 
             ref var catalog = ref session.Catalog.Value;
-            failure = ValidateInitializationValues(ref catalog, ascs, attributes, tags, abilities);
-            return failure == GasStageBSpawnFaultReason.None && HasUniqueConfigOrdinals(attributes, tags, abilities)
+            failure = ValidateInitializationValues(
+                ref catalog,
+                session.SimulationEpoch,
+                ascs,
+                attributes,
+                tags,
+                abilities,
+                initialEffects);
+            return failure == GasStageBSpawnFaultReason.None &&
+                HasUniqueConfigOrdinals(attributes, tags, abilities, initialEffects)
                 ? GasStageBSpawnFaultReason.None
                 : failure == GasStageBSpawnFaultReason.None
                     ? GasStageBSpawnFaultReason.ConfigOrdinalInvalid
@@ -151,13 +161,15 @@ namespace GAS.Runtime
             NativeArray<GasStageBAscBootstrapRequest> ascs,
             int attributeCount,
             int tagCount,
-            int abilityCount)
+            int abilityCount,
+            int initialEffectCount)
         {
             if (ascs.Length > profile.MaxSpawnBatchSize || ascs.Length > profile.MaxAscRegistryCount)
                 return GasStageBSpawnFaultReason.CapacityExceeded;
             var nextAttribute = 0;
             var nextTag = 0;
             var nextAbility = 0;
+            var nextInitialEffect = 0;
             for (var index = 0; index < ascs.Length; index++)
             {
                 var asc = ascs[index];
@@ -170,14 +182,18 @@ namespace GAS.Runtime
                         nextTag, tagCount, profile.MaxPendingTagInitializationCount) ||
                     !HasExpectedRange(asc.GrantedAbilityInitializationStart, asc.GrantedAbilityInitializationCount,
                         nextAbility, abilityCount, profile.MaxPendingGrantedAbilityInitializationCount) ||
+                    !HasExpectedRange(asc.InitialGameplayEffectStart, asc.InitialGameplayEffectCount,
+                        nextInitialEffect, initialEffectCount, profile.MaxEffectOperationCount) ||
                     asc.GrantedAbilityInitializationCount > profile.MaxGrantedAbilityCount)
                     return GasStageBSpawnFaultReason.CapacityExceeded;
                 nextAttribute += asc.AttributeInitializationCount;
                 nextTag += asc.TagInitializationCount;
                 nextAbility += asc.GrantedAbilityInitializationCount;
+                nextInitialEffect += asc.InitialGameplayEffectCount;
             }
 
-            return nextAttribute == attributeCount && nextTag == tagCount && nextAbility == abilityCount
+            return nextAttribute == attributeCount && nextTag == tagCount && nextAbility == abilityCount &&
+                nextInitialEffect == initialEffectCount
                 ? GasStageBSpawnFaultReason.None
                 : GasStageBSpawnFaultReason.PendingInitializationInvalid;
         }
@@ -187,10 +203,12 @@ namespace GAS.Runtime
         /// </summary>
         private static GasStageBSpawnFaultReason ValidateInitializationValues(
             ref GasDefinitionCatalogBlob catalog,
+            ulong simulationEpoch,
             NativeArray<GasStageBAscBootstrapRequest> ascs,
             NativeArray<PendingAttributeInitialization> attributes,
             NativeArray<PendingTagInitialization> tags,
-            NativeArray<PendingGrantedAbilityInitialization> abilities)
+            NativeArray<PendingGrantedAbilityInitialization> abilities,
+            NativeArray<PendingInitialGameplayEffect> initialEffects)
         {
             for (var index = 0; index < ascs.Length; index++)
             {
@@ -200,7 +218,14 @@ namespace GAS.Runtime
                     !ValidateTagRange(ref catalog, tags,
                         asc.TagInitializationStart, asc.TagInitializationCount) ||
                     !ValidateAbilityRange(ref catalog, abilities,
-                        asc.GrantedAbilityInitializationStart, asc.GrantedAbilityInitializationCount))
+                        asc.GrantedAbilityInitializationStart, asc.GrantedAbilityInitializationCount) ||
+                    !ValidateInitialEffectRange(
+                        ref catalog,
+                        simulationEpoch,
+                        in asc,
+                        initialEffects,
+                        asc.InitialGameplayEffectStart,
+                        asc.InitialGameplayEffectCount))
                     return GasStageBSpawnFaultReason.PendingInitializationInvalid;
             }
             return GasStageBSpawnFaultReason.None;
@@ -272,12 +297,81 @@ namespace GAS.Runtime
         }
 
         /// <summary>
+        /// 验证初始 GameplayEffect 定义、目标和因果字段，禁止 SpawnFinalize 静默丢弃 unsupported payload。
+        /// </summary>
+        private static bool ValidateInitialEffectRange(
+            ref GasDefinitionCatalogBlob catalog,
+            ulong simulationEpoch,
+            in GasStageBAscBootstrapRequest owner,
+            NativeArray<PendingInitialGameplayEffect> values,
+            int start,
+            int count)
+        {
+            var previousOrdinal = -1;
+            for (var offset = 0; offset < count; offset++)
+            {
+                var value = values[start + offset];
+                if (!GasDefinitionCatalogLookup.TryGetGameplayEffectIndex(
+                        ref catalog,
+                        value.DefinitionId,
+                        out var definitionIndex))
+                    return false;
+                var definition = catalog.GameplayEffects[definitionIndex];
+                if (value.DefinitionId <= 0 ||
+                    definition.TargetPolicy.LogicalTarget != GasLogicalTargetPolicy.Self ||
+                    definition.TargetPolicy.Spatial != GasSpatialTargetPolicy.None ||
+                    definition.TargetPolicy.Life == GasTargetLifePolicy.RequireDead ||
+                    definition.CaptureRange.Count != 0 ||
+                    definition.ValueViewRange.Count != 0 ||
+                    definition.RequiredValueViews != GasAttributeValueViewMask.None ||
+                    definition.SetByCallerRange.Count != 0 ||
+                    definition.TargetDataRange.Count != 0 ||
+                    definition.EffectContextFieldRange.Count != 0 ||
+                    definition.DirectEffectProgramRange.Count != 0 ||
+                    definition.RemovalRequirementRange.Count != 0 ||
+                    value.ConfigOrdinal <= previousOrdinal || value.CausalityId == 0 ||
+                    value.Target.Kind != GasBoundaryTargetKind.Asc ||
+                    !value.Target.TargetAsc.IsValid ||
+                    !value.Target.TargetAsc.Equals(owner.OwnerAsc) ||
+                    !value.Target.BattleInstance.Equals(owner.BattleInstance) ||
+                    value.Target.ResolutionPolicy != GasBoundaryTargetResolutionPolicy.ResolveAtConsume ||
+                    value.Target.SimulationEpoch != simulationEpoch ||
+                    value.Target.BattleInstance.SimulationEpoch != simulationEpoch ||
+                    value.Target.SimulationEpoch == 0 ||
+                    !ValidateInitialAvatar(in value.Target, in owner, definition.TargetPolicy.Avatar))
+                    return false;
+                previousOrdinal = value.ConfigOrdinal;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 验证初始 self effect 的 Avatar 快照只能跟随当前 ASC 或精确锁存当前 binding。
+        /// </summary>
+        private static bool ValidateInitialAvatar(
+            in BoundaryTargetRef target,
+            in GasStageBAscBootstrapRequest owner,
+            GasAvatarTargetPolicy policy)
+        {
+            var hasAvatar = target.TargetAvatarStableId != 0 ||
+                            target.TargetAvatarBindingGeneration != 0;
+            if (policy == GasAvatarTargetPolicy.FollowAsc)
+                return !hasAvatar;
+            if (policy != GasAvatarTargetPolicy.RequireSameAvatar || !hasAvatar)
+                return false;
+            return owner.AvatarActorStableId != 0 && owner.ActorBindingGeneration != 0 &&
+                   target.TargetAvatarStableId == owner.AvatarActorStableId &&
+                   target.TargetAvatarBindingGeneration == owner.ActorBindingGeneration;
+        }
+
+        /// <summary>
         /// 验证 ConfigOrdinal 在整个 SpawnBatch 的三类初始化记录间全局唯一。
         /// </summary>
         private static bool HasUniqueConfigOrdinals(
             NativeArray<PendingAttributeInitialization> attributes,
             NativeArray<PendingTagInitialization> tags,
-            NativeArray<PendingGrantedAbilityInitialization> abilities)
+            NativeArray<PendingGrantedAbilityInitialization> abilities,
+            NativeArray<PendingInitialGameplayEffect> initialEffects)
         {
             for (var index = 0; index < attributes.Length; index++)
             {
@@ -304,6 +398,21 @@ namespace GAS.Runtime
                 for (var other = index + 1; other < abilities.Length; other++)
                     if (abilities[index].ConfigOrdinal == abilities[other].ConfigOrdinal)
                         return false;
+            for (var index = 0; index < initialEffects.Length; index++)
+            {
+                for (var other = index + 1; other < initialEffects.Length; other++)
+                    if (initialEffects[index].ConfigOrdinal == initialEffects[other].ConfigOrdinal)
+                        return false;
+                for (var other = 0; other < attributes.Length; other++)
+                    if (initialEffects[index].ConfigOrdinal == attributes[other].ConfigOrdinal)
+                        return false;
+                for (var other = 0; other < tags.Length; other++)
+                    if (initialEffects[index].ConfigOrdinal == tags[other].ConfigOrdinal)
+                        return false;
+                for (var other = 0; other < abilities.Length; other++)
+                    if (initialEffects[index].ConfigOrdinal == abilities[other].ConfigOrdinal)
+                        return false;
+            }
             return true;
         }
 

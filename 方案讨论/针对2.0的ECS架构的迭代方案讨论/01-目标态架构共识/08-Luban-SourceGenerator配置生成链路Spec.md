@@ -1,5 +1,9 @@
 # Luban / SourceGenerator 配置生成链路 Spec
 
+> D0-M2R 当前状态（2026-08-31）：正式 D0-M2S RunId `D0M2S-20260830T180951Z-fe75df12b9a2` 的 terminal 为 `Passed / None`；full-fault、SG-specific X、SG-01～SG-08 与 74/74 evidence closure 全部通过。当前 `AcceptedProductionRoute=StableGraphSourceGenerator`。
+>
+> 唯一 production selector 为 `Assets/GAS/CodeGen/Selector/Generation.GasCodeGenSourceGenerator.additionalfile`，immutable analyzer authority 为 `Assets/GAS/CodeGen/Analyzers/GasCodeGenSourceGenerator.dll`。当前 `D1Authorized=true`、`ProductionMigrationAuthorized=true`、`ProductionInstallAdmission=NotEvaluated`、`DeclaredFullSemanticEligibility=false`，下一门为 D1 production migration + route-specific E1；`RuntimeV1-Runnable-ClosedWorld` 状态不变。本文后续 tarball 专属段落只保留为 D0-M2F/D0-M2T 历史合同。
+
 ## 目的
 
 定义从 Excel / Luban 到 Definition & Generation Layer、Generated artifact、Bake plan、Runtime Definition Catalog / static lookup 的完整链路。
@@ -35,15 +39,17 @@ flowchart LR
     Candidate --> RuntimeArtifacts["Runtime artifacts\nids / Blob / lookup / pure evaluator"]
     Candidate --> BakingArtifacts["Baking artifacts\nBaker glue / install plan"]
     Candidate --> Reports["Editor/CI artifacts\nmanifest / validation / consumer map"]
-    Reports --> Gate["Compile / AOT / negative / scenario gate"]
-    Gate --> Promote["Atomic ActiveGenerationRef promotion"]
+    Reports --> Gate["Candidate semantic / layout / artifact\ncompile / AOT / negative / scenario gate"]
+    Candidate --> Gate
+    Gate --> RouteEvidence["Physical route evidence\nD0-M2S Passed / 74 of 74"]
+    RouteEvidence --> Publish["D1 SourceGenerator migration\nsingle selector atomic commit"]
     RuntimeArtifacts --> Catalog["GASDefinitionCatalogBlob\nsorted ids / definitions / schema hash"]
     RuntimeArtifacts --> Lookup["GASGeneratedDefinitionLookup\ncode -> index / static switch"]
     BakingArtifacts --> BakePipeline["GASGeneratedDefinitionBakePipeline"]
     Catalog --> Integration["RuntimeIntegrationPlan"]
     Lookup --> Integration
     BakePipeline --> Integration
-    Promote --> Integration
+    Publish --> Integration
 ```
 
 ## UML 类图
@@ -119,7 +125,9 @@ classDiagram
     GASGeneratedDefinitionBakingPlan --> GASGeneratedDefinitionIntegrationPlan
 ```
 
-## 时序图：真实 Luban gate 与原子 promotion
+## 时序图：D0-M2F 历史 tarball 候选 promotion（已 superseded）
+
+下图只保留当时进入 D0-M2T 的候选协议，不代表当前 production 路线；当前 SourceGenerator 时序以本文“production SourceGenerator selector 与线性化点”及 ADR-0001 为准。
 
 ```mermaid
 sequenceDiagram
@@ -136,8 +144,11 @@ sequenceDiagram
     Luban->>SourceGenerator: Typed rows + schema
     SourceGenerator->>Definition: Build canonical graph/contracts/proofs in memory
     Definition->>CI: Materialize content-addressed candidate + four hashes
-    CI->>CI: Validate bytes/compile/AOT/negative/scenario evidence
-    CI->>Promotion: Atomic swap ActiveGenerationRef
+    CI->>CI: Pre-seal semantic/layout/artifact validation
+    CI->>CI: Seal exact content-addressed immutable .tgz
+    CI->>CI: Validate exact archive bytes/Unity graph/AOT/negative/scenario evidence
+    CI->>Promotion: Submit qualified archive + complete target manifest bytes + audit binding
+    Note over CI,Promotion: historical hypothesis only; D0-M2T later rejected this tarball route
     Promotion->>Bake: Install exact promoted artifact manifest
     Bake->>Runtime: Load immutable Catalog with exact install identity
     Runtime->>Runtime: Core lanes read catalog blob + generated code->index lookup
@@ -165,7 +176,7 @@ sequenceDiagram
 18. 同一语义字段出现重复 owner、override/append 企图、非法 enum、越界 range、缺失引用或无法解析的 policy 时，bake 必须失败并输出 provenance；禁止 clamp、fallback 或保留旧值继续运行。
 19. Catalog 的 schema/content hash 基于验证后的 normalized semantic graph；Session 启动后只持有该不可变快照，不在 Runtime 重新合并 authoring/sidecar。
 20. normalized semantic graph 必须在单次调用内直接从 Luban schema/rows 构建；禁止先写 generated row C#，再扫描尚未重编译的 AppDomain factory。
-21. candidate 必须在独立 content-addressed root 完整生成并通过 validation 后，才允许以单一 `ActiveGenerationRef` 线性化；phase 不得逐个直写 active root。
+21. candidate 必须在独立 workspace 完整生成并通过 pre-seal semantic/layout/artifact validation，phase 不得逐个直写 active root。当前 emitter 产出的精确 C# bytes 必须封装进唯一 self-contained SourceGenerator selector；ordinary promotion 只原子替换该 selector，不能安装两个 active source root。
 22. Runtime install identity 固定为 `{SchemaHash, ContentHash, LayoutHash, ArtifactManifestHash}`；`SourceInputHash` 只用于复现/provenance，不能单独判定兼容。
 23. candidate 或 promotion 失败时 active generation 不变；回滚是显式重新 promotion 某个历史成功 manifest，不是 Runtime fallback。
 
@@ -209,7 +220,9 @@ Luban authoring semantic row
 | `LayoutHash` | Blob/range、AttributeLayout、TagCatalog、slot/payload/CapacityProof schema | 判定物理布局与 admission proof 兼容 |
 | `ArtifactManifestHash` | 按 canonical path/kind/owner 排序的每个 artifact byte hash | 判定本次安装是否为完整同代集合 |
 
-`SourceInputHash` 还应覆盖稳定 source identity、Luban/toolchain version 与 provenance 输入，但只用于复现。本链路的 hash 编码固定为版本化 canonical bytes 与完整 cryptographic digest；禁止使用当前 culture 字符串化、`AssemblyQualifiedName`、reflection 自然序或 32-bit 名称 hash 冒充上述身份。
+`ArtifactManifestHash` 必须覆盖完整受管 generation artifact 集，包括 C#、Blob/catalog、Editor Binding、validation/report、proof 与 required artifact；不得缩窄为 selector bundle 中的 C# source inventory。bundle 另以 `SourceArtifactInventoryHash` 绑定按 target assembly/hint/category/length/source SHA 排序的 C# subset。D1 required set 固定升级为 `EX-GAS-RuntimeV1-RequiredArtifacts-v2`，其 6 项 exact path/kind/owner/visibility/component/target/hint/category、contract hash `63f69551708194359d76c3772fb68983a3632d8994d818d7ec3e8c931ac74565` 与算法以 D0-M2R 接受裁决为准；descriptor 必须封存完整 candidate manifest bytes、`RequiredArtifactSetContractHash`、两个 manifest/inventory hash，并证明 5 个 required C# item 与 bundle entries 双向 bijection。
+
+canonical selector、candidate manifest 文件自身、descriptor、envelope、compile plan 和 generation record 不进入 `ArtifactManifestHash`。任何进入该 hash 的 artifact bytes 禁止反向嵌入 `ArtifactManifestHash` 或 `SelectorSha256`；C# source 还禁止嵌入自身 `SourceSha256` 或 `SourceArtifactInventoryHash` 的 raw/hex 表示。analyzer 与 immutable route scaffold 分别由 `AnalyzerSha256`、`RouteScaffoldSha256` 绑定。`SourceInputHash` 还应覆盖稳定 source identity、Luban/toolchain version 与 provenance 输入，但只用于复现。本链路的 hash 编码固定为版本化 canonical bytes 与完整 cryptographic digest；禁止使用当前 culture 字符串化、`AssemblyQualifiedName`、reflection 自然序或 32-bit 名称 hash 冒充上述身份。
 
 ### Luban Unity 编译边界
 
@@ -218,8 +231,10 @@ Luban C# 输出不是临时脚本缓存，也不是应当绕开 Unity 编译的�
 1. `TableClassCodeOutpuPath` 默认指向 `Assets/DataGenerated/Luban/CSharp`，由 Unity 正常编译 `cfg.*` 表行、bean、多态配置和 `Tables` API。
 2. `Assets/Plugins/LubanRuntime/Luban.Runtime.dll` 与 `Assets/Plugins/LubanRuntime/SimpleJSON.dll` 是该编译边界的显式依赖；缺失时应让生成/编译失败。
 3. `Assets/DataGenerated/Luban/Json/GAS` 是 JSON 数据输出边界；可被 loader / authoring / baking 使用，但 Runtime Core hot path 不直接查询。
-4. `Assets/GAS/Generated/CodeGen/Runtime` 是 GAS SourceGenerator Runtime 输出边界，只允许依赖 GAS Runtime 与 Unity DOTS 基础程序集，不引用 `cfg.*`、`Luban.Runtime`、`SimpleJSON`、JSON reader 或 managed row。
-5. `Assets/GAS/Generated/CodeGen/Editor` 是 Editor/Baking 输出边界，可引用 row source assembly，把 Luban / row 事实转换为 BlobAsset、Baker 输出和诊断报告。
+4. `<CandidateRoot>/<RuntimeGenerated>` 是候选 Runtime artifact 边界，只允许依赖 GAS Runtime 与 Unity DOTS 基础程序集，不引用 `cfg.*`、`Luban.Runtime`、`SimpleJSON`、JSON reader 或 managed row；其 source bytes 进入 selector bundle 中 `com.exhard.exgas.generated.runtime` entries。
+5. `<CandidateRoot>/<EditorGenerated>` 是候选 Editor/Baking artifact 边界，可引用 row source assembly，把 Luban / row 事实转换为 BlobAsset、Baker 输出和诊断报告；其 source bytes 进入 `com.exhard.exgas.generated.editor` entries，AutoChess entries 固定进入既有 `com.exhard.exgas.autochessdemo`。
+
+当前 Development pipeline 仍写 `Assets/GAS/Generated/CodeGen/{Runtime,Editor}`；这是 D1 必须迁移的 legacy implementation，不具有 release selector 或目标输出 authority。migration 后目录只保留 stable asmdef、`.meta` 与 analyzer-required anchor，不保留 generation-dependent active `.gen.cs`。
 
 ### Runtime Definition Catalog 消费链
 
@@ -305,13 +320,13 @@ SourceGenerator 的价值是批量生成 DOTS 友好的不可变数据、静态�
 4. `GasCodeGenManifest` 记录所有生成文件、输入 hash、Phase 名称和输出路径，用于清理孤儿 `.g.cs`、检查路径逃逸和支撑 CI diff。
 5. `GasCodeGenSettings` 或等价配置承载项目名前缀、generated namespace、输出目录、manifest 策略和是否写入版本控制；禁止在生成器中硬编码 `HeadlessAutoChess` 之类项目前缀。
 
-“SourceGenerator”在本 Spec 中指确定性源码生成子系统。Roslyn `IIncrementalGenerator` 是更长期的理想形态；若暂时仍通过 Unity Editor menu / offline tool 触发，也必须满足同一套输入、manifest、Phase、层级归属和 Runtime 依赖隔离契约。
+“SourceGenerator”在本 Spec 的语义层指确定性源码生成子系统；当前 production 物理消费固定为 Roslyn `IIncrementalGenerator`。Unity Editor menu / offline tool 只允许构造和验证 candidate、完整 manifest 与 selector bundle，不得把 generation-dependent `.gen.cs` 直接写回 Unity active source。
 
 推荐 Phase 切分：
 
 | Phase | 输出 | Runtime 可见性 |
 |---|---|---|
-| Assembly definition phase | generated runtime/editor asmdef、row source assembly references | asmdef 可见；Runtime asmdef 不引用 row source，Editor asmdef 可引用 row source |
+| Immutable route scaffold validation phase | 验证 stable runtime/editor asmdef、`.meta`、required anchors 与 row-source reference graph，计算 `RouteScaffoldSha256` | scaffold 可见且路线版本内固定；ordinary generation 不生成或替换 asmdef、`.meta`、anchor |
 | Stable id / catalog phase | `XAttr`、`XTag`、`XGE`、`XAbility`、`XCueCode`，以及 `AttributeLayout` / `TagCatalog` builder | 可见；必须 Burst 友好；Tag dense index 与 ancestor chain 由 Catalog 确定，不把单个 machine word 当作容量上限 |
 | Attribute / Tag projection phase | `AttributeInitValue`、id→layout index、Tag query program、可选派生 presence-word 访问器 | 可见；只生成 metadata、初始化投影和纯访问器；运行时唯一权威仍是固定 `AttributeValueSlot[]` / `TagCountSlot[]`，不得生成 Attribute/Tag component、dirty mirror 或第二套生命周期 |
 | Blob schema / builder phase | `GameplayEffectDefinition`、`AbilityDefinition`、`BuildFromRow` / `BuildFromDefinition` | Blob 可见；builder 多数在 Baking / initialization 使用 |
@@ -412,31 +427,65 @@ Luban / SourceGenerator 目标态要补齐“配置 -> DOTS 承载”的生成�
 
 ### ASM-01 生成程序集边界
 
-generated asmdef 也属于 SourceGenerator 输出，不手写维护依赖漂移：
+generated-code assembly graph 属于固定 `ImmutableRouteScaffold`，不是 ordinary SourceGenerator generation 输出：
 
-1. Runtime generated asmdef 只允许引用 GAS Runtime 与 Unity DOTS 基础程序集（`Unity.Collections`、`Unity.Entities` 等），不得引用 row source assembly、Editor、Luban、JSON reader 或 Demo assembly。
-2. Editor/Baking generated asmdef 允许引用实际 row source assembly，因为 row-based builder、lookup builder 和 Baker glue 只在 Editor / Baking 边界编译。
-3. row source assembly 引用必须从 `GasCodeGenContext.Rows` 推导，禁止在生成器代码中硬编码 `HeadlessAutoChess` 或其他项目名前缀。
-4. asmdef 必须进入 manifest，且 Runtime asmdef 标记为 Runtime，Editor/Baking asmdef 标记为非 runtime-visible。
+1. stable Runtime generated asmdef 只允许引用 GAS Runtime 与 Unity DOTS 基础程序集（`Unity.Collections`、`Unity.Entities` 等），不得引用 row source assembly、Editor、Luban、JSON reader 或 Demo assembly。
+2. stable Editor/Baking generated asmdef 允许引用实际 row source assembly，因为 row-based builder、lookup builder 和 Baker glue 只在 Editor / Baking 边界编译。
+3. AutoChess generated source 固定加入既有 `com.exhard.exgas.autochessdemo`，不得生成第四个 asmdef/asmref；row source reference graph 在路线迁移时由 `GasCodeGenContext.Rows` 推导并冻结，ordinary generation 只验证，不得动态改写。
+4. stable asmdef、`.meta` 与 required anchors 必须进入 `RouteScaffoldSha256` 和 candidate compile-plan identity；ordinary generation 不生成、不替换，也不把它们写入 `CandidateRoot`。
 
 ## Candidate、Promotion 与 LKG
 
 ### CandidateRoot
 
-每次 publish 生成新的 content-addressed `CandidateRoot`。所有 `.gen.cs`、Blob/catalog bytes、asmdef、Editor Binding、validation report、`CapacityProof` 与 manifest 只写入该 candidate；不得覆盖当前 active root，也不得在 candidate validation 前删除 active generation 的 orphan。
+每次 publish 生成新的 content-addressed `CandidateRoot`。所有候选 `.gen.cs`、Blob/catalog bytes、Editor Binding、validation report、`CapacityProof` 与 candidate manifest 只写入该 candidate；固定 asmdef、`.meta` 和 required anchors 以只读 `ImmutableRouteScaffold` 身份参与校验，不在 ordinary generation 中生成或替换。candidate 不得覆盖当前 active root，也不得在 validation 前删除 active generation 的 orphan。
 
-Candidate manifest 至少记录：CandidateId、SourceInputHash、四元 install identity、生成器版本、每个 artifact 的 canonical path/kind/owner/byte hash、RuleId summary、CapacityProofHash 和 required evidence id。
+Candidate manifest 至少记录：CandidateId、SourceInputHash、四元 install identity、`RequiredArtifactSetContractHash`、生成器版本、每个受管 generation artifact 的 canonical path/kind/owner/byte hash、RuleId summary、CapacityProofHash 和 required evidence id。candidate manifest 文件自身不参与其 `ArtifactManifestHash`；selector source subset 另计算 `SourceArtifactInventoryHash`，并在 descriptor 中与 required C# manifest items 建立双向 bijection。
 
-### Promotion 线性化点
+### D0-M2F 冻结的历史物理候选与角色闭包（已 superseded）
 
-CI 必须先完成 semantic/layout/capacity validation、artifact byte 对账、隔离 compilation、Burst/AOT、固定负例和所需 scenario，再以一次原子操作切换 `ActiveGenerationRef`。这一步是唯一 promotion 线性化点：
+下表是正式 D0-M2T 的实验输入，不是当前 production 选择；D0-M2T 已因 warm `PackageCache` fallback 否决该路线。
 
-1. 任一 gate 失败：candidate 失败，active generation 与 LKG 历史不变。
-2. promotion 自身失败：active ref 保持旧值，不允许一部分 active 文件来自 candidate。
-3. 成功后 orphan cleanup 只作用于已不再被任何 active/LKG manifest 引用的 generation。
-4. 回滚必须选择一个精确历史 `ArtifactManifestHash` 并执行新的原子 promotion，产生新的 PromotionId/audit record。
+| 对象 | 角色 | Unity 消费权限 |
+|---|---|---|
+| content-addressed immutable `.tgz` | Authority / immutable payload | payload |
+| `Packages/manifest.json` | Authority / mutable selector | `SoleUnitySelector` |
+| `Packages/packages-lock.json` | Derived | none |
+| `ProjectSettings/GasCodeGen/ActiveGenerationRef.json` | Derived | `AuditOnly` |
+| `Library/PackageCache/**`、解包目录、Bee/RSP | Cache / compiled projection | never selector |
 
-LKG 只属于发布控制面。运行中的 Session 固定其已安装 Catalog；新 Session 只安装当前 active generation。四元 identity 不匹配直接启动失败，Runtime 不读取旧 schema、managed row、sidecar、ScriptableObject 或历史 Catalog 做自动 fallback。
+D0-M2F 没有枚举完整故障实验将产生的事务/恢复对象；D0-M2T 实验曾要求 manifest 临时/备份、publish intent、owner sentinel 等对象统一归类为 Derived transaction/recovery artifact，`UnityConsumerAuthority=0` 且 `NeverFallbackSelector=true`。该要求保留为历史实验合同，不构成 tarball production 授权。
+
+正式 D0-M2T RunId `D0M2T-20260830T163229Z-3191c7b97729` 证明 missing Authority 时 warm `PackageCache` 仍成功消费 B，terminal 为 `RouteRejected / MissingOrCorruptAuthorityAccepted`；immutable tarball production 路线因此否决。随后 D0-M2S RunId `D0M2S-20260830T180951Z-fe75df12b9a2` 已通过完整 SourceGenerator 故障门，并由 D0-M2R 接受路线、授权 D1。
+
+### Unity selector 与 Promotion 线性化点（D0-M2F 历史 tarball 候选）
+
+D0-M2F 候选协议要求 CI 先构造包含目标 package dependency 的完整 manifest bytes，再以单文件原子 replace 提交整个 `Packages/manifest.json`。D0-M2T 已证明该候选无法阻止 Authority 缺失后的 warm cache 消费，所以下列规则只保留为历史实验合同：
+
+1. 任一 gate 失败：candidate 失败，manifest、已选 archive 与 LKG 历史不变。
+2. selector replace 失败：旧 manifest bytes 保持可验证；不得让一部分 active 文件来自 candidate。
+3. `ActiveGenerationRef` 可以记录 `PromotionId`、四元 install identity 与 archive/manifest binding，但只能作为 audit/promotion record。D0-M2F Probe X 仅证明其在 feasibility fixture 中 `UnityConsumerAuthority=0`；当前 SourceGenerator route-specific audit schema 另由 D0-M2R 冻结。
+4. `packages-lock.json`、manifest 临时/备份、publish intent、owner sentinel、PackageCache、解包目录、Bee/RSP 与任何 stable alias/materializer 均不得成为 fallback selector。
+5. 成功后 orphan cleanup 只作用于已不再被 active/LKG 记录引用的 Authority/Derived/Cache 对象。
+6. 回滚必须通过 manifest 原子选择精确历史 archive，并产生新的 `PromotionId` / audit record。
+
+上述 manifest/audit 写序是已否决 tarball 候选的历史问题。当前 SourceGenerator route 已冻结 selector commit 先于零选择权 audit write；Runtime 仍禁止读取旧 schema、managed row、sidecar、ScriptableObject 或历史 Catalog 做自动 fallback。
+
+### production SourceGenerator selector 与线性化点
+
+| 对象 | 角色 | Unity 选择权 |
+|---|---|---:|
+| `Assets/GAS/CodeGen/Selector/Generation.GasCodeGenSourceGenerator.additionalfile` | Authority / mutable `SoleUnitySelector` | 1 |
+| `Assets/GAS/CodeGen/Analyzers/GasCodeGenSourceGenerator.dll` | Authority / immutable analyzer | 0；路线版本内固定 |
+| analyzer `.meta`、stable asmdef、required anchors | ImmutableRouteScaffold | 0 |
+| compiler-generated C# / assemblies | Derived compilation projection | 0 |
+| `ActiveGenerationRef.json`、generation archive、descriptor、intent | DerivedAudit / evidence | 0 |
+| `Library/ScriptAssemblies/**` | Derived | 0 |
+| `Library/Bee/**`、RSP、driver/cache | Cache | 0 |
+
+selector 固定为 UTF-8 no-BOM、LF 的 `EX-GAS-SourceSelector-v1` header 加一行 canonical Base64 `GasSourceBundle-v1`。bundle 携带四元 identity、`RequiredArtifactSetContractHash`、`SourceArtifactInventoryHash`、analyzer/scaffold SHA、`FullSemanticEligibility=0` 以及按 target assembly/hint 排序的完整 C# source bytes 与 SHA；不得只保存指向另一份可变 payload 的裸路径。完整 wire 类型、宽度、常量、EOF 与 source-subset mapping 以 D0-M2R 接受裁决为准。
+
+candidate 在独立 Unity project 中用精确 production 相对路径和自己的 Bee 图验证三目标程序集共同 selector、analyzer、required marker 与真实输出。通过后 Store 必须先读取 canonical selector 的完整 previous snapshot，再以 fixed `PublishIntent.json` 的 no-overwrite `FileMode.CreateNew` 将 `CommitAttemptState=NotStarted`、`PreviousSelectorState=Missing|Present`（仅 `Present` 绑定 previous 完整 bytes/SHA）、target 完整 bytes/SHA、`DescriptorSha256`、`InstallEnvelopeSha256` 以及 required-contract/manifest/inventory/selector/analyzer/scaffold/compile-plan 全部 route snapshot 一次性写入并 flush，从而获得单 active `ExclusiveClaimId`；禁止先建不含 previous 的 claim 再补写。取得 claim 后必须重读 selector 与 intent previous 做 CAS 前置复核，漂移则 durable 记为 `Indeterminate`。`Present` 使用同目录 temp + flush + `File.Replace`，`Missing` 使用 no-overwrite atomic create-new/move。commit state 固定为 `NotStarted|Armed|Committed|CompetitionFailed|Indeterminate|NoOp`；只有 durable committed receipt、valid exclusive claim、全部 snapshot 重算与 selector==target 同时成立才补 audit。competition/indeterminate、未证明独占或 Armed 下 target-equal 一律 fail closed，不得冒领 PromotionId；same-target NoOp 不产生新 promotion/audit identity。rollback 必须把精确历史 selector 作为新 candidate 重新提交。
 
 ## 禁止方向
 
@@ -457,6 +506,8 @@ LKG 只属于发布控制面。运行中的 Session 固定其已安装 Catalog�
 15. 用一次生成写出的 row C# 配合当前 AppDomain 中旧 factory 继续生成 Catalog/hash。
 16. 把 `InputHash`、整数 `SchemaVersion` 或 revision 当作完整 install identity。
 17. 在 Runtime 保留旧 Catalog、managed row 或 sidecar 自动 fallback。
+18. 把 `ActiveGenerationRef`、stable alias、materializer、lock、PackageCache、解包目录或 Bee/RSP 作为第二 selector 或 fallback selector。
+19. 让任何 `ProvisionalOnly` 候选或已否决的 immutable tarball 路线进入 production；当前已接受的 SourceGenerator 也必须严格遵守冻结 selector/analyzer/scaffold 协议。
 
 ## 验收
 
@@ -466,7 +517,7 @@ LKG 只属于发布控制面。运行中的 Session 固定其已安装 Catalog�
 2. 真实 Luban process gate 通过后才导出 artifact。
 3. `.g.cs` 和 manifest 输出路径不能逃逸 project root。
 4. 生成器必须输出 Phase manifest：输入 hash、输出文件、归属层、是否进入 runtime assembly、是否 version-controlled，以及 orphan `.g.cs` 清理结果。
-5. Core generated 默认输出根目录为 `Assets/GAS/Generated/CodeGen`，并通过 generated runtime/editor asmdef 分层；AutoChessDemo 目录不能作为默认 glue 输出位置。asmdef 也由 Core pipeline 生成并进入 manifest：Runtime asmdef 只引用 GAS Runtime / Unity DOTS 基础程序集，Editor asmdef 才允许引用实际 row source assembly。
+5. Core generated 的候选输出根必须独立于 active root，并保持 runtime/editor assembly routing 分层；production 载体固定为 single selector bundle，`Assets/GAS/Generated/CodeGen` migration 后只保留 stable scaffold。Runtime asmdef 只引用 GAS Runtime / Unity DOTS 基础程序集，Editor asmdef 才允许引用实际 row source assembly，AutoChess generated 必须加入既有 AutoChess 程序集。
 6. Luban C# 输出必须在 Unity 编译域内通过编译；同时 Runtime assembly 扫描必须证明 GAS Runtime Core 与 generated runtime 不存在 `cfg.*`、`XLuban`、`SimpleJSON`、managed Luban row 或 JSON table reader 引用。
 7. Runtime-visible generated artifact 不得出现 `DefinitionRow`、row factory、`IReadOnlyList<*DefinitionRow>` 或 row snapshot。
 8. Core generated 命名必须对齐 `12-命名规范Spec.md`：Blob 根类型使用 `{Domain}DefinitionBlob`，lookup 使用 `{Domain}DefinitionLookup`，lookup builder 使用 `GASGeneratedDefinitionLookupBuilder`，框架产物使用 `GASGenerated*` 前缀，通用 component 使用 `GASGeneratedDefinitionBlobComponent<T>` / `GASDefinitionCodeComponent`。
@@ -487,6 +538,10 @@ LKG 只属于发布控制面。运行中的 Session 固定其已安装 Catalog�
 23. 模拟任意中间 phase、isolated compile、AOT、scenario 与 promotion 失败时，active generation byte-for-byte 不变，且没有 orphan cleanup 先行。
 24. rollback 必须通过精确历史 `ArtifactManifestHash` 的新 promotion 完成；验证 Runtime 没有自动 fallback 分支。
 25. `CapacityProof`、typed contract support result 与固定 RuleId 必须进入 candidate validation snapshot，并能反查到唯一 provenance。
+26. D0-M2F tuple 只作为 D0-M2T 历史实验输入保留；D0-M2T `RouteRejected` 后不得再表述为当前 production 选择。
+27. 当前固定为 `AcceptedProductionRoute=StableGraphSourceGenerator`、`D1Authorized=true`、`ProductionMigrationAuthorized=true`、`ProductionInstallAdmission=NotEvaluated`、`DeclaredFullSemanticEligibility=false`；下一门为 D1 production migration + route-specific E1，不重复 D0-M2S。
+28. D1 必须证明 exact `RequiredArtifactSetContractHash`、完整 `ArtifactManifestHash`、`SourceArtifactInventoryHash` 与 required C#↔bundle 双向 mapping 同时闭合；6 个 required item 任一 managed `.meta` 缺失或 byte-length/SHA 不一致必须失败；参与 manifest 的 artifact 不反向嵌入 manifest/selector hash，C# source 不嵌入自身 source/inventory hash。
+29. route-specific E1 必须覆盖 Missing 成功/中断、Present replace/中断、完整 NotStarted intent CreateNew+flush 后而 claim 后重读前的中断、claim 后 CAS previous 漂移、committed receipt 后 audit 失败、same-target NoOp、Present missing、corrupt/unknown、相同/不同 target 竞争、indeterminate target-equal、repeated recovery 与 direct-Unity scaffold missing/byte drift；所有负例断言非零、无 AddSource/promotion 且 selector 不变。
 
 ### AutoChess 业务链路后置验收
 

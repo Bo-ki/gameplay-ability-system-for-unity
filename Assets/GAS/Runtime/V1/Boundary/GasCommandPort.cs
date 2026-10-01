@@ -37,7 +37,7 @@ namespace GAS.Runtime
         }
 
         /// <summary>
-        /// 将 AbilityActivationHandle 固化为 Commit 候选并交给唯一 Gate 原子接受。
+        /// 将 AbilityActivationHandle 与 context 中可选的规范 ASC target 固化为 Commit 候选。
         /// </summary>
         public GasCommandAcceptResult RequestCommit(
             in GasBoundaryCommandContext context,
@@ -110,6 +110,24 @@ namespace GAS.Runtime
                 0,
                 payloadDescriptor,
                 payload);
+        }
+
+        /// <summary>
+        /// 从 Gate 持久 ledger 幂等读取指定 Accepted RequestKey 的唯一业务终态。
+        /// </summary>
+        public bool TryReadRequestTerminal(
+            in GasRequestKey requestKey,
+            out GasRequestTerminal terminal)
+        {
+            return _gate.TryReadRequestTerminal(in requestKey, out terminal);
+        }
+
+        /// <summary>
+        /// 按首次发布顺序取走尚未 drain 的 RequestTerminal，不删除可读取的持久 ledger。
+        /// </summary>
+        public bool TryDrainRequestTerminals(out GasRequestTerminal[] terminals)
+        {
+            return _gate.TryDrainRequestTerminals(out terminals);
         }
 
         /// <summary>

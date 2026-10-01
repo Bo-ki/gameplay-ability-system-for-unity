@@ -31,6 +31,78 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
+        /// 验证 SpawnInitializationTransaction 在 ReadyTick 建立 Duration/Period，且不偷跑首个 period body。
+        /// </summary>
+        [Test]
+        public void SpawnBatch_InitialEffect从ReadyTick开始计时并输出OutboxFact()
+        {
+            using var fixture = new RuntimeV1SpawnTestWorld();
+            Assert.That(fixture.RecordTwoAscBatch(includeInitialEffect: true),
+                Is.EqualTo(GasStageBSpawnFaultReason.None));
+
+            fixture.UpdateFixedStep();
+            fixture.AssertPendingBatch();
+
+            fixture.UpdateFixedStep();
+            fixture.AssertReadyBatchWithInitialEffect();
+
+            fixture.UpdateFixedStep();
+            Assert.That(fixture.ReadyInitialAttribute, Is.EqualTo(10f));
+            fixture.UpdateFixedStep();
+            Assert.That(fixture.ReadyInitialAttribute, Is.EqualTo(10f));
+            fixture.UpdateFixedStep();
+            Assert.That(fixture.ReadyInitialAttribute, Is.EqualTo(15f));
+        }
+
+        /// <summary>
+        /// 验证 initial effect 的 ASC outbox 预算不足时整批 Fault，任何成员都不进入 Ready。
+        /// </summary>
+        [Test]
+        public void SpawnBatch_InitialEffectOutbox预算不足时ZeroReady()
+        {
+            using var fixture = new RuntimeV1SpawnTestWorld(maxAscBoundaryFactCount: 0);
+            Assert.That(fixture.RecordTwoAscBatch(includeInitialEffect: true),
+                Is.EqualTo(GasStageBSpawnFaultReason.None));
+
+            fixture.UpdateFixedStep();
+            fixture.AssertPendingBatch();
+            fixture.UpdateFixedStep();
+            fixture.AssertFaultedBatch(GasStageBSpawnFaultReason.PendingInitializationInvalid);
+        }
+
+        /// <summary>
+        /// 验证事实预检只计算实际 phase-compatible Cue，声明但不适用的 Cue 不占用 outbox 配额。
+        /// </summary>
+        [Test]
+        public void SpawnBatch_InitialEffectFactDemand按实际Cue数量预检()
+        {
+            using var fixture = new RuntimeV1SpawnTestWorld(maxAscBoundaryFactCount: 1);
+            Assert.That(fixture.RecordTwoAscBatch(includeInitialEffect: true),
+                Is.EqualTo(GasStageBSpawnFaultReason.None));
+
+            fixture.UpdateFixedStep();
+            fixture.AssertPendingBatch();
+            fixture.UpdateFixedStep();
+            fixture.AssertReadyBatchWithInitialEffect();
+        }
+
+        /// <summary>
+        /// 验证多个 non-instant initial effect 在 Apply 前超过 ActiveEffect 上界即整批 zero-ready。
+        /// </summary>
+        [Test]
+        public void SpawnBatch_InitialEffectNonInstantActive上界预检()
+        {
+            using var fixture = new RuntimeV1SpawnTestWorld();
+            Assert.That(fixture.RecordTwoAscBatch(includeInitialEffect: true, initialEffectCount: 2),
+                Is.EqualTo(GasStageBSpawnFaultReason.None));
+
+            fixture.UpdateFixedStep();
+            fixture.AssertPendingBatch();
+            fixture.UpdateFixedStep();
+            fixture.AssertFaultedBatch(GasStageBSpawnFaultReason.PendingInitializationInvalid);
+        }
+
+        /// <summary>
         /// 验证任一 Pending 引用在 playback 后损坏时无成员 Ready，Session Faulted并于同轮 EndFixed转 cleanup shell。
         /// </summary>
         [Test]
@@ -174,9 +246,6 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         private const ulong Epoch = 41;
         private const ulong SpawnBatchId = 501;
         private const ulong SchemaHash = 1101;
-        private const ulong ContentHash = 1102;
-        private const ulong AttributeHash = 1103;
-        private const ulong TagHash = 1104;
 
         private readonly World _world;
         private readonly BlobAssetReference<GasDefinitionCatalogBlob> _catalog;
@@ -184,13 +253,15 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         private readonly PhysicsSystemGroup _physics;
         private readonly GasFixedTickSystemGroup _gas;
         private readonly EndFixedStepSimulationEntityCommandBufferSystem _endFixed;
+        private readonly int _maxAscBoundaryFactCount;
         private GasStageBBootstrapRecordGate _recordGate;
 
         /// <summary>
         /// 创建显式安装的新 Runtime group/kernel 与标准 Physics、EndFixed 的测试 World。
         /// </summary>
-        internal RuntimeV1SpawnTestWorld()
+        internal RuntimeV1SpawnTestWorld(int maxAscBoundaryFactCount = 4)
         {
+            _maxAscBoundaryFactCount = maxAscBoundaryFactCount;
             _catalog = CreateCatalog();
             _world = new World("Runtime v1 SpawnFinalize PlayMode test");
             _fixedStep = _world.CreateSystemManaged<FixedStepSimulationSystemGroup>();
@@ -234,13 +305,18 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         /// <summary>
         /// 通过标准 EndFixed singleton 记录一个 Battle、两个 ASC 的最小 Stage-B batch。
         /// </summary>
-        internal GasStageBSpawnFaultReason RecordTwoAscBatch()
+        internal GasStageBSpawnFaultReason RecordTwoAscBatch(
+            bool includeInitialEffect = false,
+            int initialEffectCount = 1)
         {
             using var battles = CreateBattleRequests();
-            using var ascs = CreateAscRequests();
+            using var ascs = CreateAscRequests(includeInitialEffect, initialEffectCount);
             using var attributes = CreateAttributeInitializations();
             using var tags = CreateTagInitializations();
             using var abilities = CreateAbilityInitializations();
+            using var initialEffects = includeInitialEffect
+                ? CreateInitialEffectInitializations(initialEffectCount)
+                : new NativeArray<PendingInitialGameplayEffect>(0, Allocator.Temp);
             var request = CreateSessionRequest();
             var endFixed = GetEndFixedSingleton();
 
@@ -255,6 +331,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 attributes,
                 tags,
                 abilities,
+                initialEffects,
                 out _);
         }
 
@@ -264,10 +341,14 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         internal GasStageBSpawnFaultReason RecordMembershipOrdinalOverflowBatch()
         {
             using var battles = CreateBattleRequests(int.MaxValue);
-            using var ascs = CreateAscRequests(int.MaxValue, int.MinValue);
+            using var ascs = CreateAscRequests(
+                false,
+                firstMembershipOrdinal: int.MaxValue,
+                secondMembershipOrdinal: int.MinValue);
             using var attributes = CreateAttributeInitializations();
             using var tags = CreateTagInitializations();
             using var abilities = CreateAbilityInitializations();
+            using var initialEffects = new NativeArray<PendingInitialGameplayEffect>(0, Allocator.Temp);
             var request = CreateSessionRequest();
 
             return GasStageBBootstrapRecorder.Record(
@@ -281,6 +362,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 attributes,
                 tags,
                 abilities,
+                initialEffects,
                 out _);
         }
 
@@ -428,6 +510,61 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             using var pendingMarkers = _world.EntityManager.CreateEntityQuery(
                 ComponentType.ReadOnly<GasSpawnBatchMarker>());
             Assert.That(pendingMarkers.CalculateEntityCount(), Is.Zero);
+        }
+
+        /// <summary>
+        /// 验证首个 ASC 的初始 Duration 已建立精确 ReadyTick、ActiveEffect 与唯一 lifecycle fact。
+        /// </summary>
+        internal void AssertReadyBatchWithInitialEffect()
+        {
+            AssertReadyBatch();
+            var registry = _world.EntityManager.GetBuffer<AscRegistrySlot>(GetSession());
+            var asc = registry[0].ResolveRuntimeEntity();
+            var activeEffects = _world.EntityManager.GetBuffer<ActiveEffectSlot>(asc);
+            var facts = _world.EntityManager.GetBuffer<BoundaryFactBuffer>(asc);
+            var liveCount = 0;
+            var liveIndex = -1;
+            for (var index = 0; index < activeEffects.Length; index++)
+            {
+                if (activeEffects[index].Header.StorageState != GasSlabSlotState.Live)
+                    continue;
+                liveCount++;
+                liveIndex = index;
+            }
+
+            Assert.That(liveCount, Is.EqualTo(1));
+            var effect = activeEffects[liveIndex];
+            Assert.That(effect.State, Is.EqualTo(GasSlotBusinessState.Active));
+            Assert.That(effect.StartTick, Is.EqualTo(1UL));
+            Assert.That(effect.EndTick, Is.EqualTo(5UL));
+            Assert.That(effect.NextPeriodTick, Is.EqualTo(3UL));
+            Assert.That(_world.EntityManager.GetBuffer<PendingInitialGameplayEffect>(asc).Length,
+                Is.Zero);
+            Assert.That(facts.Length, Is.EqualTo(1));
+            Assert.That(facts[0].Kind, Is.EqualTo(GasBoundaryFactKind.EffectLifecycle));
+            Assert.That(facts[0].SimulationTick, Is.EqualTo(1UL));
+            Assert.That(facts[0].Payload.StableId0, Is.Not.Zero);
+            Assert.That(facts[0].Payload.Integer0,
+                Is.EqualTo((long)GasGameplayEffectApplicationOutcome.CreatedActive));
+            Assert.That(facts[0].Payload.Integer1, Is.Zero);
+            Assert.That(facts[0].Payload.Integer2, Is.EqualTo(4501));
+            Assert.That(facts[0].Payload.StableId1, Is.Zero);
+            Assert.That(facts[0].Payload.StableId2, Is.EqualTo(effect.Handle.OwnerAsc.AscStableId));
+            Assert.That(facts[0].Payload.Generation1, Is.EqualTo(effect.Handle.OwnerAsc.AscGeneration));
+            Assert.That(facts[0].Payload.Generation2, Is.EqualTo(effect.Handle.OwnerAsc.AscGeneration));
+        }
+
+        /// <summary>
+        /// 返回初始 Duration effect 的当前属性值，供跨 Tick period 时序断言使用。
+        /// </summary>
+        internal float ReadyInitialAttribute
+        {
+            get
+            {
+                var registry = _world.EntityManager.GetBuffer<AscRegistrySlot>(GetSession());
+                var asc = registry[0].ResolveRuntimeEntity();
+                return _world.EntityManager.GetBuffer<AttributeValueSlot>(asc)[0].Current;
+            }
         }
 
         /// <summary>
@@ -637,6 +774,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         /// </summary>
         private GasStageBSessionBootstrapRequest CreateSessionRequest()
         {
+            ref var catalog = ref _catalog.Value;
             return new GasStageBSessionBootstrapRequest
             {
                 SimulationEpoch = Epoch,
@@ -645,11 +783,11 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 ScaleProfile = CreateScaleProfile(),
                 Catalog = _catalog,
                 CatalogExpectation = new GasCatalogValidationExpectation(
-                    GasDefinitionCatalogSchema.Version,
-                    SchemaHash,
-                    ContentHash,
-                    AttributeHash,
-                    TagHash),
+                    catalog.SchemaVersion,
+                    catalog.SchemaHash,
+                    catalog.ContentHash,
+                    catalog.AttributeLayout.LayoutHash,
+                    catalog.TagCatalog.CatalogHash),
             };
         }
 
@@ -674,6 +812,8 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         /// 构造两个稳定 ASC、连续 registry/ranges与不同 RNG 的请求。
         /// </summary>
         private static NativeArray<GasStageBAscBootstrapRequest> CreateAscRequests(
+            bool includeInitialEffect = false,
+            int initialEffectCount = 1,
             int firstMembershipOrdinal = 10,
             int secondMembershipOrdinal = 11)
         {
@@ -683,6 +823,16 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 new OwnerAscHandle(101, 1), battle, 0, firstMembershipOrdinal, 0, 0, 0);
             ascs[1] = CreateAscRequest(
                 new OwnerAscHandle(102, 1), battle, 1, secondMembershipOrdinal, 2, 1, 1);
+            if (includeInitialEffect)
+            {
+                var first = ascs[0];
+                first.InitialGameplayEffectCount = initialEffectCount;
+                ascs[0] = first;
+
+                var second = ascs[1];
+                second.InitialGameplayEffectStart = initialEffectCount;
+                ascs[1] = second;
+            }
             return ascs;
         }
 
@@ -757,9 +907,30 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
+        /// 构造只归属首个 ASC 的静态 self Duration effect，ConfigOrdinal 接续其余初始化记录。
+        /// </summary>
+        private static NativeArray<PendingInitialGameplayEffect> CreateInitialEffectInitializations(
+            int count = 1)
+        {
+            var battle = new BattleInstanceHandle(Epoch, 71, 1);
+            var values = new NativeArray<PendingInitialGameplayEffect>(count, Allocator.Temp);
+            for (var index = 0; index < count; index++)
+            {
+                values[index] = new PendingInitialGameplayEffect
+                {
+                    DefinitionId = 4501,
+                    ConfigOrdinal = 8 + index,
+                    CausalityId = 8801 + (ulong)index,
+                    Target = BoundaryTargetRef.ForAsc(battle, new OwnerAscHandle(101, 1)),
+                };
+            }
+            return values;
+        }
+
+        /// <summary>
         /// 构造满足 Session、Pending、slab 与 cleanup outbox 的版本化测试容量档位。
         /// </summary>
-        private static GasScaleProfile CreateScaleProfile()
+        private GasScaleProfile CreateScaleProfile()
         {
             return new GasScaleProfile
             {
@@ -782,18 +953,29 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 MaxNextTickRouteCount = 8,
                 MaxStructuralIntentCount = 8,
                 MaxSessionBoundaryFactCount = 4,
-                MaxAscBoundaryFactCount = 4,
+                MaxAscBoundaryFactCount = _maxAscBoundaryFactCount,
                 MaxPendingAttributeInitializationCount = 2,
                 MaxPendingTagInitializationCount = 1,
                 MaxPendingGrantedAbilityInitializationCount = 1,
                 MaxGrantedAbilityCount = 1,
+                MaxAbilityActivationCount = 1,
+                MaxAbilityContinuationCount = 1,
+                MaxAbilitySubscriptionCount = 1,
+                MaxCooldownGateCount = 1,
+                MaxActivationOwnedContributionCount = 1,
+                MaxEmittedApplicationRefCount = 1,
+                MaxActiveEffectCount = 1,
                 MaxPayloadRangeRecordCount = 2,
                 MaxPayloadValueCount = 8,
+                MaxAttributeAggregatorCount = 1,
+                MaxLiveDependencyCount = 1,
+                MaxLiveDependencyRouteCount = 1,
+                MaxPendingCommandCount = 2,
             };
         }
 
         /// <summary>
-        /// 构造包含两属性、父子 Tag 与一个 Ability 的最小合法 immutable Catalog。
+        /// 构造包含两属性、父子 Tag、一个 Ability 与一个初始 Effect 的最小合法 immutable Catalog。
         /// </summary>
         private static BlobAssetReference<GasDefinitionCatalogBlob> CreateCatalog()
         {
@@ -803,11 +985,12 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 ref var root = ref builder.ConstructRoot<GasDefinitionCatalogBlob>();
                 root.SchemaVersion = GasDefinitionCatalogSchema.Version;
                 root.SchemaHash = SchemaHash;
-                root.ContentHash = ContentHash;
                 PopulateAttributes(ref builder, ref root);
                 PopulateTags(ref builder, ref root);
                 PopulateAbility(ref builder, ref root);
-                return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                var catalog = builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                GasDefinitionCatalogContentHasher.Stamp(ref catalog.Value);
+                return catalog;
             }
             finally
             {
@@ -820,7 +1003,6 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         /// </summary>
         private static void PopulateAttributes(ref BlobBuilder builder, ref GasDefinitionCatalogBlob root)
         {
-            root.AttributeLayout.LayoutHash = AttributeHash;
             var entries = builder.Allocate(ref root.AttributeLayout.Entries, 2);
             entries[0] = CreateAttribute(201, 0, 10f);
             entries[1] = CreateAttribute(202, 1, 20f);
@@ -848,7 +1030,6 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         /// </summary>
         private static void PopulateTags(ref BlobBuilder builder, ref GasDefinitionCatalogBlob root)
         {
-            root.TagCatalog.CatalogHash = TagHash;
             var entries = builder.Allocate(ref root.TagCatalog.Entries, 2);
             var ancestors = builder.Allocate(ref root.TagCatalog.AncestorIndices, 3);
             ancestors[0] = 0;
@@ -888,6 +1069,76 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                     Life = GasTargetLifePolicy.AnyLifeState,
                 },
             };
+
+            builder.Allocate(ref root.GameplayEffectIndex, 1)[0] =
+                new GasDefinitionIndexEntry { DefinitionId = 4501, DefinitionIndex = 0 };
+            builder.Allocate(ref root.GameplayEffects, 1)[0] = new GasGameplayEffectDefinitionBlob
+            {
+                DefinitionId = 4501,
+                Lifetime = GasEffectLifetimePolicy.Duration,
+                TargetPolicy = new GasTargetPolicyBlob
+                {
+                    LogicalTarget = GasLogicalTargetPolicy.Self,
+                    Avatar = GasAvatarTargetPolicy.FollowAsc,
+                    Spatial = GasSpatialTargetPolicy.None,
+                    Life = GasTargetLifePolicy.AnyLifeState,
+                },
+                ModifierRange = new GasCatalogRange { Start = 0, Count = 1 },
+                EvaluatorProgramRange = new GasCatalogRange { Start = 0, Count = 1 },
+                CueRange = new GasCatalogRange { Start = 0, Count = 1 },
+                DurationTicks = 4,
+                PeriodTicks = 2,
+                ExpiryPolicy = GasExpiryPolicy.Remove,
+                ExpiryPeriodPolicy = GasExpiryPeriodPolicy.Stop,
+                ExpirySameTickPolicy = GasExpirySameTickPolicy.PeriodDueBeforeExpiry,
+                InhibitTimePolicy = GasInhibitTimePolicy.DurationContinues,
+                InhibitedPeriodPolicy = GasInhibitedPeriodPolicy.SkipExecution,
+                MissedPeriodPolicy = GasMissedPeriodPolicy.SkipNoCatchUp,
+                ExecuteOnApplication = 0,
+                Maxima = new GasDefinitionMaxima
+                {
+                    MaximumTargetCount = 1,
+                    MaximumPlannedApplicationCount = 1,
+                    MaximumModifierCount = 1,
+                    MaximumEvaluatorInstructionCount = 1,
+                    MaximumCueCount = 1,
+                },
+            };
+            builder.Allocate(ref root.Modifiers, 1)[0] = new GasModifierDefinitionBlob
+            {
+                AttributeLayoutIndex = 0,
+                Operation = GasModifierOperation.Add,
+                EvaluatorProgramRange = new GasCatalogRange { Start = 0, Count = 1 },
+            };
+            builder.Allocate(ref root.EvaluatorInstructions, 1)[0] = new GasEvaluatorInstructionBlob
+            {
+                Opcode = GasEvaluatorOpcode.PushConstant,
+                ConstantValue = 5f,
+            };
+            AllocateEmptyEffectCatalogArrays(ref builder, ref root);
+            builder.Allocate(ref root.CueReferences, 1)[0] = new GasCueReferenceBlob
+            {
+                CueDefinitionId = 4601,
+                CueDefinitionOrdinal = 0,
+                Phases = GasCuePhaseFlags.Executed,
+            };
+        }
+
+        /// <summary>
+        /// 分配初始 Effect 未使用的闭世界数组，保证 Catalog Blob 形状完整。
+        /// </summary>
+        private static void AllocateEmptyEffectCatalogArrays(
+            ref BlobBuilder builder,
+            ref GasDefinitionCatalogBlob root)
+        {
+            builder.Allocate(ref root.Requirements, 0);
+            builder.Allocate(ref root.RequirementTagIndices, 0);
+            builder.Allocate(ref root.CaptureDescriptors, 0);
+            builder.Allocate(ref root.DirectEffectProgramNodes, 0);
+            builder.Allocate(ref root.ValueViews, 0);
+            builder.Allocate(ref root.SetByCallerDescriptors, 0);
+            builder.Allocate(ref root.TargetDataDescriptors, 0);
+            builder.Allocate(ref root.EffectContextFieldDescriptors, 0);
         }
     }
 }

@@ -1,79 +1,127 @@
-using System.Collections.Generic;
+using System;
+using System.IO;
+using UnityEngine;
 
 namespace GAS.RuntimeV1.Tests.EditMode
 {
     /// <summary>
-    /// 表示 Tier B 目标语义向量当前是否已经由真实测试证明。
+    /// 表示 Runtime v1 Tier B 执行子清单的根文档，只承载治理数据，不判断语义是否通过。
     /// </summary>
-    internal enum TierBVectorStatus
+    [Serializable]
+    internal sealed class TierBVectorManifestDocument
     {
-        Red,
-        Green,
+        public int SchemaVersion;
+        public string ManifestId;
+        public int ManifestVersion;
+        public string ManifestScope;
+        public string SemanticOwner;
+        public bool CanAuthorizeV0Exit;
+        public string[] RequiredMasterScopes;
+        public TierBVectorManifestEntry[] Vectors;
     }
 
     /// <summary>
-    /// 保存一个 Tier B 最低向量的冻结编号、职责描述、实施 owner 与当前状态。
+    /// 表示一个 Tier B 向量的 owner、治理状态与真实测试证据引用。
     /// </summary>
-    internal readonly struct TierBVectorManifestEntry
+    [Serializable]
+    internal sealed class TierBVectorManifestEntry
     {
-        /// <summary>
-        /// 创建一条可由后续 V1-V7 逐项转绿的 Tier B 向量记录。
-        /// </summary>
-        public TierBVectorManifestEntry(
-            int number,
-            string description,
-            string owner,
-            TierBVectorStatus status)
-        {
-            Number = number;
-            Description = description;
-            Owner = owner;
-            Status = status;
-        }
-
-        public int Number { get; }
-
-        public string Description { get; }
-
-        public string Owner { get; }
-
-        public TierBVectorStatus Status { get; }
+        public string VectorId;
+        public int Version;
+        public string Description;
+        public string OwnerTask;
+        public string NextOwnerTask;
+        public bool RequiredPass;
+        public string Status;
+        public string StatusReason;
+        public bool ReviewRequired;
+        public string LastRunEvidenceId;
+        public TierBVectorApproval Approval;
+        public TierBVectorTestEvidence[] Tests;
     }
 
     /// <summary>
-    /// 维护 10B-08 冻结的 17 项 Tier B 最低固定向量及其实施归属。
+    /// 保存 ApprovedRed 所需的显式批准人与可追溯记录，空值不代表已经批准。
+    /// </summary>
+    [Serializable]
+    internal sealed class TierBVectorApproval
+    {
+        public string ApprovedBy;
+        public string ApprovedAtUtc;
+        public string ApprovalRecordId;
+        public string ApprovalRecordHash;
+        public string ExpectedFailureSignature;
+    }
+
+    /// <summary>
+    /// 描述一个必须由 Unity Test Runner 真实发现的测试方法及其源码指纹。
+    /// </summary>
+    [Serializable]
+    internal sealed class TierBVectorTestEvidence
+    {
+        public string TestAssembly;
+        public string TestPlatform;
+        public string TestSourcePath;
+        public string TestSourceHash;
+        public string TestId;
+        public int ExpectedCaseCount;
+        public string ExpectedResult;
+    }
+
+    /// <summary>
+    /// 从 Tools/Tests 下唯一 Tier B 执行子清单读取治理数据，避免 C# 与 runner 各维护一份状态。
     /// </summary>
     internal static class TierBVectorManifest
     {
-        private static readonly TierBVectorManifestEntry[] Manifest =
-        {
-            Create(1, "双 Activation 争抢同一 cost/cooldown", "V3"),
-            Create(2, "Commit→Cancel 与 Cancel→Commit", "V3"),
-            Create(3, "Instant Ability End 后 cooldown 仍存活", "V3"),
-            Create(4, "普通 self GE 的 OwnerWave 可见性屏障", "V3"),
-            Create(5, "同 target 前序 application 改变后序 requirement/immunity", "V3 + V4"),
-            Create(6, "source death 的 committed-work-wins", "V3 + V4"),
-            Create(7, "AliveOnly 首死 reject 与 overkill 归属", "V3 + V4"),
-            Create(8, "Level/Edge/Event 与跨 ASC wait cancel-ack", "V3"),
-            Create(9, "9203 reapply/cap/due/end/expiry/inhibit/self-delete", "V4"),
-            Create(10, "LeaveGranted 与重复 grant provenance", "V4 + V5"),
-            Create(11, "两轮 Cue active lifecycle", "V4 + V5"),
-            Create(12, "Avatar rebind 与 FrozenSpatial", "V1 + V3 + V6"),
-            Create(13, "双杀/平局与 multi-BattleInstance 终局隔离", "V3 + V6"),
-            Create(14, "SpawnBatch 原子 Ready", "V3 + V6"),
-            Create(15, "admission fault 零写与 IngressClosed", "V2 + V3"),
-            Create(16, "Boundary retry、无下一 tick teardown、NoFactReceipt 与 Result 后零事实", "V5 + V6"),
-            Create(17, "不同 TickBatch 切分不改变 semantic hash", "V7"),
-        };
-
-        public static IReadOnlyList<TierBVectorManifestEntry> Entries => Manifest;
+        internal const int CurrentSchemaVersion = 2;
+        internal const string RelativeManifestPath = "Tools/Tests/RuntimeV1TierBManifest.json";
 
         /// <summary>
-        /// 创建 V0 初始为 red 的 Tier B 清单项，避免各条目重复声明状态。
+        /// 读取并反序列化 Tier B 执行子清单；文件缺失或 JSON 无效时显式失败。
         /// </summary>
-        private static TierBVectorManifestEntry Create(int number, string description, string owner)
+        internal static TierBVectorManifestDocument Load()
         {
-            return new TierBVectorManifestEntry(number, description, owner, TierBVectorStatus.Red);
+            var manifestPath = GetManifestPath();
+            if (!File.Exists(manifestPath))
+                throw new FileNotFoundException("Runtime v1 Tier B manifest 不存在。", manifestPath);
+
+            var document = JsonUtility.FromJson<TierBVectorManifestDocument>(
+                File.ReadAllText(manifestPath));
+            if (document == null)
+                throw new InvalidDataException("Runtime v1 Tier B manifest JSON 无法解析。");
+
+            return document;
+        }
+
+        /// <summary>
+        /// 返回机器清单的绝对路径，供契约测试定位同一数据源。
+        /// </summary>
+        internal static string GetManifestPath()
+        {
+            var projectPath = Directory.GetParent(Application.dataPath);
+            if (projectPath == null)
+                throw new InvalidOperationException("无法从 Application.dataPath 定位 Unity 项目根目录。");
+
+            return Path.GetFullPath(Path.Combine(projectPath.FullName, RelativeManifestPath));
+        }
+
+        /// <summary>
+        /// 将仓库相对路径解析为本机绝对路径，禁止证据引用逃逸项目目录。
+        /// </summary>
+        internal static string ResolveProjectPath(string relativePath)
+        {
+            var projectPath = Directory.GetParent(Application.dataPath);
+            if (projectPath == null)
+                throw new InvalidOperationException("无法从 Application.dataPath 定位 Unity 项目根目录。");
+
+            var projectRoot = Path.GetFullPath(projectPath.FullName)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var resolvedPath = Path.GetFullPath(Path.Combine(projectRoot, relativePath));
+            var projectPrefix = projectRoot + Path.DirectorySeparatorChar;
+            if (!resolvedPath.StartsWith(projectPrefix, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Tier B test source 路径逃逸 Unity 项目：" + relativePath);
+
+            return resolvedPath;
         }
     }
 }

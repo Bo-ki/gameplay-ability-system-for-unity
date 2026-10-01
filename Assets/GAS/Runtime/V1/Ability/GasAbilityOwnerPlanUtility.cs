@@ -19,6 +19,7 @@ namespace GAS.Runtime
             DynamicBuffer<GrantedAbilitySlot> grants,
             DynamicBuffer<AbilityActivationSlot> activations,
             DynamicBuffer<AttributeValueSlot> attributes,
+            DynamicBuffer<TagCountSlot> tagCounts,
             DynamicBuffer<CooldownGateSlot> cooldowns,
             DynamicBuffer<PendingCommand> pendingCommands,
             NativeArray<GasOwnerPlanRecord> previousPlans,
@@ -32,7 +33,7 @@ namespace GAS.Runtime
                     break;
                 case GasBoundaryCommandKind.Activate:
                     PlanActivate(ref plan, simulationEpoch, candidateTick, ref catalog,
-                        grants, activations, attributes, cooldowns, pendingCommands,
+                        grants, activations, attributes, tagCounts, cooldowns, pendingCommands,
                         previousPlans, previousPlanCount);
                     break;
                 case GasBoundaryCommandKind.Commit:
@@ -87,7 +88,7 @@ namespace GAS.Runtime
                 SourceSequence = command.SourceSequence,
                 SubjectHandle = command.SubjectHandle,
                 Target = command.Target,
-                HasTarget = 1,
+                HasTarget = command.Target.Kind != GasBoundaryTargetKind.None ? (byte)1 : (byte)0,
                 CommandKind = command.CommandKind,
                 CostAttributeLayoutIndex = -1,
                 CooldownOwnedTagIndex = -1,
@@ -105,6 +106,7 @@ namespace GAS.Runtime
             DynamicBuffer<GrantedAbilitySlot> grants,
             DynamicBuffer<AbilityActivationSlot> activations,
             DynamicBuffer<AttributeValueSlot> attributes,
+            DynamicBuffer<TagCountSlot> tagCounts,
             DynamicBuffer<CooldownGateSlot> cooldowns,
             DynamicBuffer<PendingCommand> pendingCommands,
             NativeArray<GasOwnerPlanRecord> previousPlans,
@@ -125,6 +127,22 @@ namespace GAS.Runtime
             if (!TryGetDefinition(in grant, ref catalog, out var definition))
             {
                 plan.Result = GasAbilityCommandResult.DefinitionInvalid;
+                return;
+            }
+            if (!MatchesActivationRequirements(
+                    ref catalog,
+                    in definition,
+                    candidateTick,
+                    tagCounts,
+                    cooldowns,
+                    previousPlans,
+                    previousPlanCount,
+                    in plan.OwnerAsc,
+                    out var malformed))
+            {
+                plan.Result = malformed
+                    ? GasAbilityCommandResult.DefinitionInvalid
+                    : GasAbilityCommandResult.ActivationRequirementFailed;
                 return;
             }
             if (IsConcurrencyBlocked(in grant, in definition, activations, previousPlans, previousPlanCount))
@@ -182,6 +200,11 @@ namespace GAS.Runtime
                 plan.Result = GasAbilityCommandResult.DefinitionInvalid;
                 return;
             }
+            if (!MatchesCommitTarget(in plan, in definition.TargetPolicy))
+            {
+                plan.Result = GasAbilityCommandResult.TargetInvalid;
+                return;
+            }
             if (!CanPayCost(in definition, attributes, previousPlans, previousPlanCount, plan.OwnerAsc))
             {
                 plan.Result = GasAbilityCommandResult.CostUnavailable;
@@ -234,6 +257,28 @@ namespace GAS.Runtime
             plan.WasCancelled = 1;
             plan.Result = GasAbilityCommandResult.Ended;
             plan.BusinessAccepted = 1;
+        }
+
+        /// <summary>
+        /// 按 Ability 的闭世界策略校验 Commit 冻结目标，禁止 Self 静默吞掉远端 ASC。
+        /// </summary>
+        private static bool MatchesCommitTarget(
+            in GasOwnerPlanRecord plan,
+            in GasTargetPolicyBlob targetPolicy)
+        {
+            switch (targetPolicy.LogicalTarget)
+            {
+                case GasLogicalTargetPolicy.Self:
+                    return plan.HasTarget == 0 ||
+                           (plan.Target.Kind == GasBoundaryTargetKind.Asc &&
+                            plan.Target.TargetAsc.Equals(plan.OwnerAsc));
+                case GasLogicalTargetPolicy.FrozenAsc:
+                    return plan.HasTarget != 0 &&
+                           plan.Target.Kind == GasBoundaryTargetKind.Asc &&
+                           plan.Target.TargetAsc.IsValid;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>
@@ -391,6 +436,164 @@ namespace GAS.Runtime
                     return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// 在 tick-start TagCount 上叠加 due gate 释放与前序 Commit owned Tag，执行 activation requirement。
+        /// </summary>
+        private static bool MatchesActivationRequirements(
+            ref GasDefinitionCatalogBlob catalog,
+            in GasAbilityDefinitionBlob definition,
+            ulong candidateTick,
+            DynamicBuffer<TagCountSlot> tagCounts,
+            DynamicBuffer<CooldownGateSlot> cooldowns,
+            NativeArray<GasOwnerPlanRecord> plans,
+            int planCount,
+            in OwnerAscHandle owner,
+            out bool malformed)
+        {
+            malformed = false;
+            var range = definition.ActivationRequirementRange;
+            if (!IsRangeValid(in range, catalog.Requirements.Length))
+            {
+                malformed = true;
+                return false;
+            }
+            for (var offset = 0; offset < range.Count; offset++)
+            {
+                var requirement = catalog.Requirements[range.Start + offset];
+                if (requirement.Phase != GasRequirementPhase.AbilityActivation ||
+                    !MatchesActivationRequirement(
+                        ref catalog, in requirement, candidateTick, tagCounts, cooldowns,
+                        plans, planCount, in owner, out malformed))
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 按 All/Any/None 解释一条 Ability Tag requirement，并拒绝损坏的 Tag range。
+        /// </summary>
+        private static bool MatchesActivationRequirement(
+            ref GasDefinitionCatalogBlob catalog,
+            in GasRequirementBlob requirement,
+            ulong candidateTick,
+            DynamicBuffer<TagCountSlot> tagCounts,
+            DynamicBuffer<CooldownGateSlot> cooldowns,
+            NativeArray<GasOwnerPlanRecord> plans,
+            int planCount,
+            in OwnerAscHandle owner,
+            out bool malformed)
+        {
+            malformed = false;
+            var tags = requirement.TagIndexRange;
+            if (!IsRangeValid(in tags, catalog.RequirementTagIndices.Length) || tags.Count == 0)
+            {
+                malformed = true;
+                return false;
+            }
+            var matches = 0;
+            for (var offset = 0; offset < tags.Count; offset++)
+            {
+                var tagIndex = catalog.RequirementTagIndices[tags.Start + offset];
+                if (!TryGetShadowInclusiveCount(
+                        ref catalog, tagIndex, candidateTick, tagCounts, cooldowns,
+                        plans, planCount, in owner, out var inclusiveCount))
+                {
+                    malformed = true;
+                    return false;
+                }
+                if (inclusiveCount > 0)
+                    matches++;
+            }
+            switch (requirement.Match)
+            {
+                case GasTagRequirementMatch.All:
+                    return matches == tags.Count;
+                case GasTagRequirementMatch.Any:
+                    return matches > 0;
+                case GasTagRequirementMatch.None:
+                    return matches == 0;
+                default:
+                    malformed = true;
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// 计算一个 Tag 的 owner-plan shadow inclusive count，禁止读取本 Tick incoming target effect。
+        /// </summary>
+        private static bool TryGetShadowInclusiveCount(
+            ref GasDefinitionCatalogBlob catalog,
+            int tagIndex,
+            ulong candidateTick,
+            DynamicBuffer<TagCountSlot> tagCounts,
+            DynamicBuffer<CooldownGateSlot> cooldowns,
+            NativeArray<GasOwnerPlanRecord> plans,
+            int planCount,
+            in OwnerAscHandle owner,
+            out long inclusiveCount)
+        {
+            inclusiveCount = 0;
+            if (tagIndex < 0 || tagIndex >= tagCounts.Length ||
+                tagCounts.Length != catalog.TagCatalog.Entries.Length)
+                return false;
+            inclusiveCount = tagCounts[tagIndex].InclusiveCount;
+            for (var index = 0; index < cooldowns.Length; index++)
+            {
+                var slot = cooldowns[index];
+                if (slot.Header.StorageState == GasSlabSlotState.Live &&
+                    slot.State == GasSlotBusinessState.Active && slot.EndTick <= candidateTick &&
+                    slot.OwnedTagIndex >= 0 &&
+                    !TryApplyOwnedTagShadow(ref catalog, slot.OwnedTagIndex, tagIndex, -1, ref inclusiveCount))
+                    return false;
+            }
+            for (var index = 0; index < planCount; index++)
+            {
+                var plan = plans[index];
+                if (plan.BusinessAccepted == 0 || plan.CommandKind != GasBoundaryCommandKind.Commit ||
+                    !plan.OwnerAsc.Equals(owner) || plan.CooldownOwnedTagIndex < 0)
+                    continue;
+                if (!TryApplyOwnedTagShadow(
+                        ref catalog, plan.CooldownOwnedTagIndex, tagIndex, 1, ref inclusiveCount))
+                    return false;
+            }
+            return inclusiveCount >= 0;
+        }
+
+        /// <summary>
+        /// 若 owned Tag 的 ancestor chain 包含查询 Tag，则把 contribution delta 叠加到 shadow。
+        /// </summary>
+        private static bool TryApplyOwnedTagShadow(
+            ref GasDefinitionCatalogBlob catalog,
+            int ownedTagIndex,
+            int queryTagIndex,
+            int delta,
+            ref long inclusiveCount)
+        {
+            if (ownedTagIndex < 0 || ownedTagIndex >= catalog.TagCatalog.Entries.Length)
+                return false;
+            var ancestors = catalog.TagCatalog.Entries[ownedTagIndex].AncestorIndexRange;
+            if (!IsRangeValid(in ancestors, catalog.TagCatalog.AncestorIndices.Length) ||
+                ancestors.Count == 0)
+                return false;
+            for (var offset = 0; offset < ancestors.Count; offset++)
+            {
+                if (catalog.TagCatalog.AncestorIndices[ancestors.Start + offset] != queryTagIndex)
+                    continue;
+                inclusiveCount += delta;
+                return true;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 以减法验证 Catalog range，空 range 只允许合法半开区间起点。
+        /// </summary>
+        private static bool IsRangeValid(in GasCatalogRange range, int length)
+        {
+            return range.Start >= 0 && range.Count >= 0 && range.Start <= length &&
+                   range.Count <= length - range.Start;
         }
 
         /// <summary>

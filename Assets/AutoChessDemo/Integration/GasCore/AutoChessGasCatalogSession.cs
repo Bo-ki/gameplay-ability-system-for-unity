@@ -12,15 +12,10 @@ namespace GAS.AutoChessDemo
             => AutoChessBattleDefinitionCatalogBuilder.Catalog;
 
         /// <summary>
-        /// 返回与 Catalog header 精确匹配的 Stage-B 校验期望值。
+        /// 返回从 generated draft 独立冻结、且不读取最终候选 header 的 Stage-B 校验期望值。
         /// </summary>
         internal static GasCatalogValidationExpectation Expectation
-            => new GasCatalogValidationExpectation(
-                GasDefinitionCatalogSchema.Version,
-                AutoChessBattleDefinitionCatalogBuilder.SchemaHash,
-                AutoChessBattleDefinitionCatalogBuilder.ContentHash,
-                AutoChessBattleDefinitionCatalogBuilder.AttributeHash,
-                AutoChessBattleDefinitionCatalogBuilder.TagHash);
+            => AutoChessBattleDefinitionCatalogBuilder.Expectation;
 
         internal static bool TryInstall()
         {

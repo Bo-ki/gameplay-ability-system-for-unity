@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "EX-GAS-D1-E1-Terminal-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Schema", "RunId", "ProbeId", "Status", "Reason", "StartedUtc", "CompletedUtc",
+    "Inputs", "ToolIdentity", "ChildProcesses", "Protected", "Cases", "Cleanup", "EvidenceClosure",
+    "FailureDetail", "ProductionInstallAdmission", "DeclaredFullSemanticEligibility"
+  ],
+  "properties": {
+    "Schema": {"const": "EX-GAS-D1-E1-Terminal-v1"},
+    "RunId": {"type": "string", "pattern": "^D1E1-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$"},
+    "ProbeId": {"const": "D1-E1"},
+    "Status": {"enum": ["Passed", "Failed", "Inconclusive"]},
+    "Reason": {"enum": [
+      "None", "InputInvalid", "ToolIdentityDrift", "ProtectedPathDrift",
+      "TransactionContractFailure", "TransactionUnexpectedExit", "TransactionStateViolation",
+      "UnityUnexpectedExit", "UnityRawMissing", "UnityRawInvalid", "UnityBindingMismatch",
+      "RspOutputBindingMissing", "SelectorMutated", "AddSourceObserved", "PromotionObserved",
+      "HardGuardNotObserved", "CleanupFailure", "EvidenceIncomplete", "UnexpectedFailure"
+    ]},
+    "StartedUtc": {"type": "string", "format": "date-time"},
+    "CompletedUtc": {"type": "string", "format": "date-time"},
+    "Inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "UnityPath", "AnalyzerSha256", "SelectorASha256",
+        "TransactionSelectorBSha256", "UnitySelectorBSha256",
+        "StagedRouteScaffoldSha256", "ProductionRouteScaffoldSha256",
+        "ProductionExistingExact", "ProductionMissing", "StagedNew",
+        "TransactionAdapterPath"
+      ],
+      "properties": {
+        "UnityPath": {"type": "string", "minLength": 1},
+        "AnalyzerSha256": {"$ref": "#/$defs/sha256"},
+        "SelectorASha256": {"$ref": "#/$defs/sha256"},
+        "TransactionSelectorBSha256": {"$ref": "#/$defs/sha256"},
+        "UnitySelectorBSha256": {"$ref": "#/$defs/sha256"},
+        "StagedRouteScaffoldSha256": {"$ref": "#/$defs/sha256"},
+        "ProductionRouteScaffoldSha256": {"type": "null"},
+        "ProductionExistingExact": {"const": 6},
+        "ProductionMissing": {"const": 8},
+        "StagedNew": {"const": 8},
+        "TransactionAdapterPath": {"type": "string", "minLength": 1}
+      }
+    },
+    "ToolIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["BeforeSha256", "AfterSha256", "Unchanged"],
+      "properties": {
+        "BeforeSha256": {"$ref": "#/$defs/sha256"},
+        "AfterSha256": {"$ref": "#/$defs/sha256"},
+        "Unchanged": {"type": "boolean"}
+      }
+    },
+    "ChildProcesses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Transaction", "Unity", "Passed"],
+      "properties": {
+        "Transaction": {"$ref": "#/$defs/childProcess"},
+        "Unity": {"$ref": "#/$defs/childProcess"},
+        "Passed": {"type": "boolean"}
+      }
+    },
+    "Protected": {
+      "type": "object",
+      "required": ["Schema", "Unchanged", "BeforeSha256", "AfterSha256"],
+      "properties": {
+        "Schema": {"const": "EX-GAS-D1-E1-ProtectedComparison-v1"},
+        "Unchanged": {"type": "boolean"},
+        "BeforeSha256": {"$ref": "#/$defs/sha256"},
+        "AfterSha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "Cases": {
+      "type": "array",
+      "minItems": 33,
+      "maxItems": 33,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["CaseId", "Name", "Status", "Reason", "EvidencePath"],
+        "properties": {
+          "CaseId": {"type": "string", "pattern": "^(TR-[0-9]{2}|DU-[0-9]{2}|CL-01|EV-01)$"},
+          "Name": {"type": "string", "minLength": 1},
+          "Status": {"enum": ["Passed", "Failed", "Inconclusive"]},
+          "Reason": {"type": "string", "minLength": 1},
+          "EvidencePath": {"type": "string", "pattern": "^evidence/"}
+        }
+      }
+    },
+    "Cleanup": {
+      "type": "object",
+      "required": ["Schema", "RunId", "Passed", "RootRemoved"],
+      "properties": {
+        "Schema": {"const": "EX-GAS-D1-E1-Cleanup-v1"},
+        "RunId": {"type": "string"},
+        "Passed": {"type": "boolean"},
+        "RootRemoved": {"type": "boolean"}
+      }
+    },
+    "EvidenceClosure": {
+      "type": "object",
+      "required": [
+        "Schema", "Verified", "Partial", "DeclaredCount", "PhysicalCount",
+        "IndexPath", "IndexSha256", "CaseEvidenceVerified"
+      ],
+      "properties": {
+        "Schema": {"const": "EX-GAS-D1-E1-EvidenceClosure-v1"},
+        "Verified": {"type": "boolean"},
+        "Partial": {"const": false},
+        "DeclaredCount": {"type": "integer", "minimum": 1},
+        "PhysicalCount": {"type": "integer", "minimum": 1},
+        "IndexPath": {"const": "evidence-index.json"},
+        "IndexSha256": {"$ref": "#/$defs/sha256"},
+        "CaseEvidenceVerified": {"type": "boolean"}
+      }
+    },
+    "FailureDetail": {"type": "string"},
+    "ProductionInstallAdmission": {"const": "NotEvaluated"},
+    "DeclaredFullSemanticEligibility": {"const": false}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "childProcess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ExitCode", "TimedOut", "Passed"],
+      "properties": {
+        "ExitCode": {"type": ["integer", "null"]},
+        "TimedOut": {"type": "boolean"},
+        "Passed": {"type": "boolean"}
+      }
+    }
+  }
+}

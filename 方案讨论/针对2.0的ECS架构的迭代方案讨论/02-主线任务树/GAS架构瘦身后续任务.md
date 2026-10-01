@@ -1,12 +1,12 @@
 # GAS 架构瘦身后续任务
 
-> Owner：`02-主线任务树` | 最近归位：2026-06-07 | 状态：兼容索引，不作为默认领取入口
+> Owner：`02-主线任务树` | 最近归位：2026-08-29 | 状态：历史兼容索引，不可领取
 
-默认领取入口是 [R0-R8 叶子任务索引](R0-R8/README.md)。本文件只保留已完成瘦身批次、防回流检查和旧 proof 到当前任务树的映射，不再维护独立批次执行计划。
+当前唯一可领取路线是 [Runtime v1 不可兼容迁移](RuntimeV1不可兼容迁移/README.md)。[R0-R8](R0-R8/README.md) 与本文件只保留已完成瘦身批次、防回流检查和旧 proof 到当前任务树的历史映射，不再维护独立批次执行计划。
 
 当前代码事实见 `../00-当前架构事实/架构瘦身事实约束.md`、`../00-当前架构事实/Runtime主链事实.md`、`../00-当前架构事实/架构重划分审查事实.md` 和 `../00-当前架构事实/SourceGenerator链路复审事实.md`。每轮真实进度写入 `../04-当前进度状态/`；本文件不接收逐轮验证摘要。
 
-## 与当前 R 切片的映射
+## 与已归档 R 切片的历史映射
 
 | 旧瘦身批次 / 主题 | 当前归属 | 当前领取口径 |
 |---|---|---|
@@ -51,9 +51,10 @@ rg "GeneratedRuntimeBoundaryHits|GeneratedRuntimeLifecycleHits|GeneratedRuntimeR
 ## 交还规则
 
 1. 本文件不再新增 Batch F/G 或更新批次状态。
-2. 旧瘦身 proof 的长期事实写入 `../00-当前架构事实/`；短期验证写入 `../04-当前进度状态/`；新任务写入 R0-R8。
+2. 旧瘦身 proof 的长期事实写入 `../00-当前架构事实/`；短期验证写入 `../04-当前进度状态/`；新任务只写入 Runtime v1 V0-V7 路线。
 3. 不把“已 job 化”“已删除旧 helper”“x50 跑通”写成架构完成证明；必须给 owner-local / carrier / structural / Debugger / scale evidence。
 4. 不把 Debugger、Presentation、Replay 或 AutoChess runner 的格式化输出当机器验收源；它们必须从 structured evidence 派生。
+5. N0/N1/N2 只是 Runtime v1 路线的跨阶段实施检查点，不改变 V0-V7 owner、依赖顺序与退出门。
 
 ## 风险接受
 

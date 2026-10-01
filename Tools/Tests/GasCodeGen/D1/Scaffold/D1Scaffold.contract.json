@@ -1,0 +1,47 @@
+{
+  "Schema": "EX-GAS-D1-RouteScaffoldContract-v1",
+  "HashDomain": "EX-GAS-RouteScaffold-v1\u0000",
+  "StagedRouteScaffoldSha256": "f83b592cf943cbec6c6f4b72c0de0e4f93337826517d1972a64f7acec40b5af2",
+  "AnalyzerRelativePath": "Assets/GAS/CodeGen/Analyzers/GasCodeGenSourceGenerator.dll",
+  "SelectorRelativePath": "Assets/GAS/CodeGen/Selector/Generation.GasCodeGenSourceGenerator.additionalfile",
+  "MarkerType": "GAS.Generated.CodeGen.GasCodeGenSourceGeneratorMarker",
+  "TargetAssemblies": [
+    "com.exhard.exgas.generated.runtime",
+    "com.exhard.exgas.generated.editor",
+    "com.exhard.exgas.autochessdemo"
+  ],
+  "ProductionExistingFiles": [
+    "Assets/GAS/Generated/CodeGen/Runtime/com.exhard.exgas.generated.runtime.asmdef",
+    "Assets/GAS/Generated/CodeGen/Runtime/com.exhard.exgas.generated.runtime.asmdef.meta",
+    "Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef",
+    "Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef.meta",
+    "Assets/AutoChessDemo/com.exhard.exgas.autochessdemo.asmdef",
+    "Assets/AutoChessDemo/com.exhard.exgas.autochessdemo.asmdef.meta"
+  ],
+  "StagedNewFiles": [
+    "Assets/GAS/CodeGen/Analyzers/GasCodeGenSourceGenerator.dll.meta",
+    "Assets/GAS/CodeGen/Selector/Generation.GasCodeGenSourceGenerator.additionalfile.meta",
+    "Assets/GAS/Generated/CodeGen/Runtime/GasCodeGenSourceGeneratorRequired.cs",
+    "Assets/GAS/Generated/CodeGen/Runtime/GasCodeGenSourceGeneratorRequired.cs.meta",
+    "Assets/GAS/Generated/CodeGen/Editor/GasCodeGenSourceGeneratorRequired.cs",
+    "Assets/GAS/Generated/CodeGen/Editor/GasCodeGenSourceGeneratorRequired.cs.meta",
+    "Assets/AutoChessDemo/Generated/GasCodeGenSourceGeneratorRequired.cs",
+    "Assets/AutoChessDemo/Generated/GasCodeGenSourceGeneratorRequired.cs.meta"
+  ],
+  "Files": [
+    "Assets/GAS/CodeGen/Analyzers/GasCodeGenSourceGenerator.dll.meta",
+    "Assets/GAS/CodeGen/Selector/Generation.GasCodeGenSourceGenerator.additionalfile.meta",
+    "Assets/GAS/Generated/CodeGen/Runtime/com.exhard.exgas.generated.runtime.asmdef",
+    "Assets/GAS/Generated/CodeGen/Runtime/com.exhard.exgas.generated.runtime.asmdef.meta",
+    "Assets/GAS/Generated/CodeGen/Runtime/GasCodeGenSourceGeneratorRequired.cs",
+    "Assets/GAS/Generated/CodeGen/Runtime/GasCodeGenSourceGeneratorRequired.cs.meta",
+    "Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef",
+    "Assets/GAS/Generated/CodeGen/Editor/com.exhard.exgas.generated.editor.asmdef.meta",
+    "Assets/GAS/Generated/CodeGen/Editor/GasCodeGenSourceGeneratorRequired.cs",
+    "Assets/GAS/Generated/CodeGen/Editor/GasCodeGenSourceGeneratorRequired.cs.meta",
+    "Assets/AutoChessDemo/com.exhard.exgas.autochessdemo.asmdef",
+    "Assets/AutoChessDemo/com.exhard.exgas.autochessdemo.asmdef.meta",
+    "Assets/AutoChessDemo/Generated/GasCodeGenSourceGeneratorRequired.cs",
+    "Assets/AutoChessDemo/Generated/GasCodeGenSourceGeneratorRequired.cs.meta"
+  ]
+}

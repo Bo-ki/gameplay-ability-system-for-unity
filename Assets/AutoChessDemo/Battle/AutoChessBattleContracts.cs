@@ -24,7 +24,6 @@ namespace GAS.AutoChessDemo
     public readonly struct AutoChessBattleOptions
     {
         public readonly int MaxTicks;
-        public readonly int PostVictoryFlushTicks;
         public readonly int Scale;
         public readonly float HealthMultiplier;
         public readonly double MinimumBattleSeconds;
@@ -40,7 +39,6 @@ namespace GAS.AutoChessDemo
 
         public AutoChessBattleOptions(
             int maxTicks,
-            int postVictoryFlushTicks,
             int scale = 1,
             bool captureOfficialToolDiff = true,
             bool debuggerEnabled = true,
@@ -50,7 +48,6 @@ namespace GAS.AutoChessDemo
             double minimumBattleSeconds = 0d)
         {
             MaxTicks = maxTicks;
-            PostVictoryFlushTicks = postVictoryFlushTicks;
             Scale = scale;
             HealthMultiplier = healthMultiplier;
             MinimumBattleSeconds = minimumBattleSeconds;
@@ -64,7 +61,6 @@ namespace GAS.AutoChessDemo
         {
             return new AutoChessBattleOptions(
                 MaxTicks > 0 ? MaxTicks : 64,
-                PostVictoryFlushTicks >= 0 ? PostVictoryFlushTicks : 4,
                 Scale > 0 ? Scale : 1,
                 CaptureOfficialToolDiff,
                 DebuggerEnabled,
@@ -442,7 +438,7 @@ namespace GAS.AutoChessDemo
         public readonly int UnitCount;
         public readonly int BattleTicks;
         public readonly int TotalTicks;
-        public readonly int WarmupDroppedTicks;
+        public readonly int SpawnFinalizeMaintenanceTicks;
         public readonly int MeasuredTicks;
         public readonly int CommandCount;
         public readonly int AttributeChangeCount;
@@ -470,7 +466,6 @@ namespace GAS.AutoChessDemo
         public readonly int PresentationDroppedLineCount;
         public readonly int PeakBoundaryRingLength;
         public readonly int ReplayLag;
-        public readonly int ProcessWarmupRuns;
         public readonly int ProofOnlyApiMask;
         public readonly int ReselectTriggerMask;
         public readonly int RuntimeAccessContractEntryCount;
@@ -555,7 +550,7 @@ namespace GAS.AutoChessDemo
             int unitCount,
             int battleTicks,
             int totalTicks,
-            int warmupDroppedTicks,
+            int spawnFinalizeMaintenanceTicks,
             int measuredTicks,
             int commandCount,
             int attributeChangeCount,
@@ -583,7 +578,6 @@ namespace GAS.AutoChessDemo
             int presentationDroppedLineCount,
             int peakBoundaryRingLength,
             int replayLag,
-            int processWarmupRuns,
             int proofOnlyApiMask,
             int reselectTriggerMask,
             int runtimeAccessContractEntryCount,
@@ -667,7 +661,7 @@ namespace GAS.AutoChessDemo
             UnitCount = unitCount;
             BattleTicks = battleTicks;
             TotalTicks = totalTicks;
-            WarmupDroppedTicks = warmupDroppedTicks;
+            SpawnFinalizeMaintenanceTicks = spawnFinalizeMaintenanceTicks;
             MeasuredTicks = measuredTicks;
             CommandCount = commandCount;
             AttributeChangeCount = attributeChangeCount;
@@ -695,7 +689,6 @@ namespace GAS.AutoChessDemo
             PresentationDroppedLineCount = presentationDroppedLineCount;
             PeakBoundaryRingLength = peakBoundaryRingLength;
             ReplayLag = replayLag;
-            ProcessWarmupRuns = processWarmupRuns;
             ProofOnlyApiMask = proofOnlyApiMask;
             ReselectTriggerMask = reselectTriggerMask;
             RuntimeAccessContractEntryCount = runtimeAccessContractEntryCount;
@@ -782,7 +775,7 @@ namespace GAS.AutoChessDemo
         public readonly int ScenarioScale;
         public readonly int BattleTicks;
         public readonly int TotalTicks;
-        public readonly int WarmupDroppedTicks;
+        public readonly int SpawnFinalizeMaintenanceTicks;
         public readonly int MeasuredTicks;
         public readonly int AcceptedCommandCount;
         public readonly long ElapsedTicks;
@@ -806,7 +799,7 @@ namespace GAS.AutoChessDemo
             int scenarioScale,
             int battleTicks,
             int totalTicks,
-            int warmupDroppedTicks,
+            int spawnFinalizeMaintenanceTicks,
             int measuredTicks,
             int acceptedCommandCount,
             long elapsedTicks,
@@ -828,7 +821,7 @@ namespace GAS.AutoChessDemo
             ScenarioScale = scenarioScale;
             BattleTicks = battleTicks;
             TotalTicks = totalTicks;
-            WarmupDroppedTicks = warmupDroppedTicks;
+            SpawnFinalizeMaintenanceTicks = spawnFinalizeMaintenanceTicks;
             MeasuredTicks = measuredTicks;
             AcceptedCommandCount = acceptedCommandCount;
             ElapsedTicks = elapsedTicks;
@@ -855,7 +848,7 @@ namespace GAS.AutoChessDemo
                 ScenarioScale,
                 BattleTicks,
                 TotalTicks,
-                WarmupDroppedTicks,
+                SpawnFinalizeMaintenanceTicks,
                 MeasuredTicks,
                 AcceptedCommandCount,
                 ElapsedTicks,

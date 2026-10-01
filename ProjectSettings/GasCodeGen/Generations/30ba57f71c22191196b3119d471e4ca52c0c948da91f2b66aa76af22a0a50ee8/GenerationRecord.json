@@ -1,0 +1,21 @@
+{
+  "Version": 3,
+  "GenerationId": "30ba57f71c22191196b3119d471e4ca52c0c948da91f2b66aa76af22a0a50ee8",
+  "DescriptorSha256": "0d69f4cb193b87dfd45dfb2140c059b947202826fa288fc698b318be2e159768",
+  "InstallEnvelopeSha256": "ef952e36077c48f2caffebb0a1799f50b86b3a935380bf1e8024eb74a0d80396",
+  "SelectorSha256": "24dd8a907752df35edcbd75142226072b45b111c4eb68c572dd98db7cf1c575a",
+  "AnalyzerSha256": "b6cb1219f05c6874f0eed4bf10d4457a7debb44f28ee7013daa6d1a0a1e26934",
+  "RouteScaffoldSha256": "f83b592cf943cbec6c6f4b72c0de0e4f93337826517d1972a64f7acec40b5af2",
+  "CandidateCompilePlanSha256": "0aa127d83f1c1e58ef349fcd3eb3fc1e624692db29fea36e22cf5253c5eae2e2",
+  "RequiredArtifactSetId": "EX-GAS-RuntimeV1-RequiredArtifacts-v2",
+  "RequiredArtifactSetContractHash": "63f69551708194359d76c3772fb68983a3632d8994d818d7ec3e8c931ac74565",
+  "SourceInputHash": "002ce8ce5ab9fa49daa7a5ce5b35f2ffb24b8cc270197c98e1a7012eda59ad7e",
+  "SchemaHash": "3784bbc729ffa258c9a13192f58d4bad61a9cf34d3c8ad7dea7c2ed67c4bda2b",
+  "ContentHash": "45fdd6bd6c183af9a36f817355356e4d403e8ca93829053432b8ba2afdaf4023",
+  "LayoutHash": "a5109ba2d379c6d4ca9e20470c1981368319b9ae9bae3cff3194399624e822aa",
+  "ArtifactManifestHash": "fbb8b511f4362ecd210cf9b3c9c46dcb3a0440c684d84c195280f8fbc1e5c060",
+  "SourceArtifactInventoryHash": "9d15aca5d6f0a90c3423fc2faaf813604fb70bf6ea0805910f6bad57a133a51b",
+  "CandidateArtifactManifestSha256": "487afd8441f24f9c58e651e8415368276132dfc5c5640d29c9d50b93904f6a4e",
+  "FullSemanticEligibility": false,
+  "RecordSha256": "f769e6dd8db5b07fc05a52c5efcd3baabbc5a226b5cae13489325ea342d88cd9"
+}

@@ -1,0 +1,20 @@
+{
+    "name": "com.exhard.exgas.generated.runtime",
+    "rootNamespace": "",
+    "references": [
+        "com.exhard.exgas.runtime",
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Burst"
+    ],
+    "includePlatforms": [
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

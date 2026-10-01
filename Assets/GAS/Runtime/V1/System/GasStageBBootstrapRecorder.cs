@@ -4,7 +4,7 @@ using Unity.Entities;
 namespace GAS.Runtime
 {
     /// <summary>
-    /// 保存 Stage-B Session 安装所需的 Catalog、规则、容量与 SpawnBatch；本阶段契约明确不接受 initial-effect。
+    /// 保存 Stage-B Session 安装所需的 Catalog、规则、容量与 SpawnBatch。
     /// </summary>
     public struct GasStageBSessionBootstrapRequest
     {
@@ -75,6 +75,8 @@ namespace GAS.Runtime
         public int TagInitializationCount;
         public int GrantedAbilityInitializationStart;
         public int GrantedAbilityInitializationCount;
+        public int InitialGameplayEffectStart;
+        public int InitialGameplayEffectCount;
     }
 
     /// <summary>
@@ -86,7 +88,7 @@ namespace GAS.Runtime
         private const uint SessionOwnerGeneration = 1;
 
         /// <summary>
-        /// 全批 preflight 成功后仅记录无 initial-effect 的 Pending 拓扑，并一次性关闭 World-local 录入门。
+        /// 全批 preflight 成功后记录 Pending 拓扑与 typed initial-effect，首个 gameplay Tick 才注入效果命令。
         /// </summary>
         public static GasStageBSpawnFaultReason Record(
             EntityManager entityManager,
@@ -99,6 +101,7 @@ namespace GAS.Runtime
             NativeArray<PendingAttributeInitialization> attributeInitializations,
             NativeArray<PendingTagInitialization> tagInitializations,
             NativeArray<PendingGrantedAbilityInitialization> grantedAbilityInitializations,
+            NativeArray<PendingInitialGameplayEffect> initialGameplayEffects,
             out Entity deferredSession)
         {
             deferredSession = Entity.Null;
@@ -111,9 +114,14 @@ namespace GAS.Runtime
                 ascRequests,
                 attributeInitializations,
                 tagInitializations,
-                grantedAbilityInitializations);
+                grantedAbilityInitializations,
+                initialGameplayEffects);
             if (failure != GasStageBSpawnFaultReason.None)
                 return failure;
+
+            ref var profileCatalog = ref sessionRequest.Catalog.Value;
+            if (!GasRuntimeV1SupportProfile.ValidateBlob(ref profileCatalog).Succeeded)
+                return GasStageBSpawnFaultReason.ProfileInvalid;
 
             var commandBuffer = endFixed.CreateCommandBuffer(world);
             deferredSession = RecordBatch(
@@ -124,7 +132,8 @@ namespace GAS.Runtime
                 ascRequests,
                 attributeInitializations,
                 tagInitializations,
-                grantedAbilityInitializations);
+                grantedAbilityInitializations,
+                initialGameplayEffects);
             recordGate.Close();
             return GasStageBSpawnFaultReason.None;
         }
@@ -152,7 +161,8 @@ namespace GAS.Runtime
             NativeArray<GasStageBAscBootstrapRequest> ascRequests,
             NativeArray<PendingAttributeInitialization> attributeInitializations,
             NativeArray<PendingTagInitialization> tagInitializations,
-            NativeArray<PendingGrantedAbilityInitialization> grantedAbilityInitializations)
+            NativeArray<PendingGrantedAbilityInitialization> grantedAbilityInitializations,
+            NativeArray<PendingInitialGameplayEffect> initialGameplayEffects)
         {
             var manifest = CreateManifest(
                 in sessionRequest,
@@ -160,7 +170,8 @@ namespace GAS.Runtime
                 ascRequests,
                 attributeInitializations,
                 tagInitializations,
-                grantedAbilityInitializations);
+                grantedAbilityInitializations,
+                initialGameplayEffects);
             var ascArchetype = GasRuntimeV1Archetypes.CreateAsc(entityManager);
             var sessionArchetype = GasRuntimeV1Archetypes.CreateSession(entityManager);
             var deferredAscs = new NativeArray<Entity>(ascRequests.Length, Allocator.Temp);
@@ -187,7 +198,8 @@ namespace GAS.Runtime
                     in ascRequest,
                     attributeInitializations,
                     tagInitializations,
-                    grantedAbilityInitializations);
+                    grantedAbilityInitializations,
+                    initialGameplayEffects);
             }
 
             deferredAscs.Dispose();
@@ -209,8 +221,12 @@ namespace GAS.Runtime
             ref var catalog = ref request.Catalog.Value;
             commandBuffer.SetComponent(session, new GasSessionIdentity { SimulationEpoch = request.SimulationEpoch });
             commandBuffer.SetComponent(session, request.Config);
-            commandBuffer.SetComponent(session, GasDefinitionRegistry.Create(request.Catalog));
-            commandBuffer.SetComponent(session, GasCatalogRegistry.Create(ref catalog));
+            commandBuffer.SetComponent(session, GasDefinitionRegistry.Create(
+                request.Catalog,
+                in request.CatalogExpectation));
+            commandBuffer.SetComponent(session, GasCatalogRegistry.Create(
+                ref catalog,
+                in request.CatalogExpectation));
             commandBuffer.SetComponent(session, request.ScaleProfile);
             commandBuffer.SetComponent(session, new SimulationTickState { NextStableSequence = FirstStableSequence });
             commandBuffer.SetComponent(session, new GasSessionLifecycle
@@ -268,6 +284,8 @@ namespace GAS.Runtime
                 commandBuffer, session, request.ScaleProfile.MaxBoundaryCommandCount);
             PrepareBuffer<BoundaryCommandFrozenPayload>(
                 commandBuffer, session, request.ScaleProfile.MaxBoundaryCommandPayloadCount);
+            PrepareBuffer<GasRequestTerminalIntent>(
+                commandBuffer, session, request.ScaleProfile.MaxBoundaryCommandCount);
             PrepareBuffer<BoundaryFactBuffer>(
                 commandBuffer, session, request.ScaleProfile.MaxSessionBoundaryFactCount);
         }
@@ -319,7 +337,8 @@ namespace GAS.Runtime
             NativeArray<GasStageBAscBootstrapRequest> ascs,
             NativeArray<PendingAttributeInitialization> attributes,
             NativeArray<PendingTagInitialization> tags,
-            NativeArray<PendingGrantedAbilityInitialization> abilities)
+            NativeArray<PendingGrantedAbilityInitialization> abilities,
+            NativeArray<PendingInitialGameplayEffect> initialEffects)
         {
             var manifest = new GasSpawnBatchManifest
             {
@@ -330,12 +349,17 @@ namespace GAS.Runtime
                 ExpectedAttributeInitializationCount = attributes.Length,
                 ExpectedTagInitializationCount = tags.Length,
                 ExpectedGrantedAbilityInitializationCount = abilities.Length,
+                ExpectedInitialGameplayEffectCount = initialEffects.Length,
                 Pending = 1,
             };
             var hasher = GasSpawnBatchManifestHasher.Create(in manifest);
-            var definitions = GasDefinitionRegistry.Create(request.Catalog);
+            var definitions = GasDefinitionRegistry.Create(
+                request.Catalog,
+                in request.CatalogExpectation);
             ref var catalog = ref request.Catalog.Value;
-            var catalogRegistry = GasCatalogRegistry.Create(ref catalog);
+            var catalogRegistry = GasCatalogRegistry.Create(
+                ref catalog,
+                in request.CatalogExpectation);
             hasher.AddSessionAuthority(
                 in request.Config,
                 in request.ScaleProfile,
@@ -349,6 +373,8 @@ namespace GAS.Runtime
                 hasher.Add(tags[index]);
             for (var index = 0; index < abilities.Length; index++)
                 hasher.Add(abilities[index]);
+            for (var index = 0; index < initialEffects.Length; index++)
+                hasher.Add(initialEffects[index]);
             manifest.ContentHash = hasher.Finish();
             return manifest;
         }
@@ -413,6 +439,8 @@ namespace GAS.Runtime
                 TagInitializationCount = request.TagInitializationCount,
                 GrantedAbilityInitializationStart = request.GrantedAbilityInitializationStart,
                 GrantedAbilityInitializationCount = request.GrantedAbilityInitializationCount,
+                InitialGameplayEffectStart = request.InitialGameplayEffectStart,
+                InitialGameplayEffectCount = request.InitialGameplayEffectCount,
             };
             member.SetRuntimeEntity(deferredAsc);
             return member;
@@ -429,11 +457,14 @@ namespace GAS.Runtime
             in GasStageBAscBootstrapRequest request,
             NativeArray<PendingAttributeInitialization> attributeInitializations,
             NativeArray<PendingTagInitialization> tagInitializations,
-            NativeArray<PendingGrantedAbilityInitialization> grantedAbilityInitializations)
+            NativeArray<PendingGrantedAbilityInitialization> grantedAbilityInitializations,
+            NativeArray<PendingInitialGameplayEffect> initialGameplayEffects)
         {
             RecordAscComponents(commandBuffer, asc, in sessionRequest, in manifest, in request);
             ref var catalog = ref sessionRequest.Catalog.Value;
-            var catalogRegistry = GasCatalogRegistry.Create(ref catalog);
+            var catalogRegistry = GasCatalogRegistry.Create(
+                ref catalog,
+                in sessionRequest.CatalogExpectation);
             GasRuntimeV1Archetypes.TryInitializeFixedBuffers(commandBuffer, asc, in catalogRegistry);
             RecordInitializationBuffers(
                 commandBuffer,
@@ -442,7 +473,8 @@ namespace GAS.Runtime
                 in request,
                 attributeInitializations,
                 tagInitializations,
-                grantedAbilityInitializations);
+                grantedAbilityInitializations,
+                initialGameplayEffects);
             RecordAbilityBuffers(commandBuffer, asc, in sessionRequest.ScaleProfile);
             RecordEffectBuffers(commandBuffer, asc, in sessionRequest.ScaleProfile);
         }
@@ -513,7 +545,8 @@ namespace GAS.Runtime
             in GasStageBAscBootstrapRequest request,
             NativeArray<PendingAttributeInitialization> attributes,
             NativeArray<PendingTagInitialization> tags,
-            NativeArray<PendingGrantedAbilityInitialization> abilities)
+            NativeArray<PendingGrantedAbilityInitialization> abilities,
+            NativeArray<PendingInitialGameplayEffect> initialEffects)
         {
             var attributeBuffer = PrepareBuffer<PendingAttributeInitialization>(
                 commandBuffer, asc, profile.MaxPendingAttributeInitializationCount);
@@ -527,6 +560,10 @@ namespace GAS.Runtime
                 commandBuffer, asc, profile.MaxPendingGrantedAbilityInitializationCount);
             CopyRange(abilities, request.GrantedAbilityInitializationStart,
                 request.GrantedAbilityInitializationCount, abilityBuffer);
+            var initialEffectBuffer = PrepareBuffer<PendingInitialGameplayEffect>(
+                commandBuffer, asc, profile.MaxEffectOperationCount);
+            CopyRange(initialEffects, request.InitialGameplayEffectStart,
+                request.InitialGameplayEffectCount, initialEffectBuffer);
         }
 
         /// <summary>

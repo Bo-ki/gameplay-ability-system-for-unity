@@ -1,0 +1,50 @@
+{
+  "Schema": "D0M2F-AuthorityDerivedCache-v1",
+  "ProbeId": "Unassigned",
+  "Route": "Unselected",
+  "SoleUnityConsumedSelector": "",
+  "Observations": [
+    {
+      "Path": "",
+      "Role": "Authority",
+      "GenerationId": "",
+      "Mutable": null,
+      "UnityConsumed": null,
+      "IsSelector": null,
+      "ObservedReadCount": null,
+      "ObservedWriteCount": null,
+      "Evidence": {}
+    },
+    {
+      "Path": "",
+      "Role": "Derived",
+      "GenerationId": "",
+      "Mutable": null,
+      "UnityConsumed": null,
+      "IsSelector": false,
+      "ObservedReadCount": null,
+      "ObservedWriteCount": null,
+      "Evidence": {}
+    },
+    {
+      "Path": "",
+      "Role": "Cache",
+      "GenerationId": "",
+      "Mutable": null,
+      "UnityConsumed": null,
+      "IsSelector": false,
+      "ObservedReadCount": null,
+      "ObservedWriteCount": null,
+      "Evidence": {}
+    }
+  ],
+  "Assertions": {
+    "Complete": false,
+    "NonOverlapping": false,
+    "ExactlyOneUnityConsumedSelector": false,
+    "AuthorityAndDerivedDoNotOverlap": false,
+    "AuthorityAndCacheDoNotOverlap": false,
+    "DerivedAndCacheDoNotOverlap": false,
+    "CacheIsNotFallbackSelector": false
+  }
+}

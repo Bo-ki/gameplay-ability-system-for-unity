@@ -136,6 +136,8 @@ namespace GAS.Runtime
             entityManager.GetBuffer<BoundaryCommandInbox>(entity).EnsureCapacity(profile.MaxBoundaryCommandCount);
             entityManager.GetBuffer<BoundaryCommandFrozenPayload>(entity)
                 .EnsureCapacity(profile.MaxBoundaryCommandPayloadCount);
+            entityManager.GetBuffer<GasRequestTerminalIntent>(entity)
+                .EnsureCapacity(profile.MaxBoundaryCommandCount);
             entityManager.GetBuffer<BoundaryFactBuffer>(entity).EnsureCapacity(profile.MaxSessionBoundaryFactCount);
             return true;
         }
@@ -182,6 +184,7 @@ namespace GAS.Runtime
                 ComponentType.ReadWrite<SpawnBatchMemberManifestSlot>(),
                 ComponentType.ReadWrite<BoundaryCommandInbox>(),
                 ComponentType.ReadWrite<BoundaryCommandFrozenPayload>(),
+                ComponentType.ReadWrite<GasRequestTerminalIntent>(),
                 ComponentType.ReadWrite<BoundaryDrainState>(),
                 ComponentType.ReadWrite<BoundaryFactBuffer>(),
             };
@@ -210,6 +213,7 @@ namespace GAS.Runtime
                 ComponentType.ReadWrite<PendingAttributeInitialization>(),
                 ComponentType.ReadWrite<PendingTagInitialization>(),
                 ComponentType.ReadWrite<PendingGrantedAbilityInitialization>(),
+                ComponentType.ReadWrite<PendingInitialGameplayEffect>(),
                 ComponentType.ReadWrite<GrantedAbilitySlot>(),
                 ComponentType.ReadWrite<AbilityActivationSlot>(),
                 ComponentType.ReadWrite<AbilityContinuationSlot>(),
@@ -257,6 +261,7 @@ namespace GAS.Runtime
                    entityManager.HasComponent<SpawnBatchMemberManifestSlot>(entity) &&
                    entityManager.HasComponent<BoundaryCommandInbox>(entity) &&
                    entityManager.HasComponent<BoundaryCommandFrozenPayload>(entity) &&
+                   entityManager.HasComponent<GasRequestTerminalIntent>(entity) &&
                    entityManager.HasComponent<BoundaryFactBuffer>(entity);
         }
 
@@ -288,13 +293,14 @@ namespace GAS.Runtime
         }
 
         /// <summary>
-        /// 验证 SpawnFinalize 使用的三类 Pending 初始化 buffers 均已预挂载。
+        /// 验证 SpawnFinalize 使用的 Pending 初始化 buffers 均已预挂载。
         /// </summary>
         private static bool HasAscInitializationBuffers(EntityManager entityManager, Entity entity)
         {
             return entityManager.HasComponent<PendingAttributeInitialization>(entity) &&
                    entityManager.HasComponent<PendingTagInitialization>(entity) &&
-                   entityManager.HasComponent<PendingGrantedAbilityInitialization>(entity);
+                   entityManager.HasComponent<PendingGrantedAbilityInitialization>(entity) &&
+                   entityManager.HasComponent<PendingInitialGameplayEffect>(entity);
         }
 
         /// <summary>
@@ -441,6 +447,8 @@ namespace GAS.Runtime
                 .EnsureCapacity(profile.MaxPendingTagInitializationCount);
             entityManager.GetBuffer<PendingGrantedAbilityInitialization>(entity)
                 .EnsureCapacity(profile.MaxPendingGrantedAbilityInitializationCount);
+            entityManager.GetBuffer<PendingInitialGameplayEffect>(entity)
+                .EnsureCapacity(profile.MaxEffectOperationCount);
         }
 
         /// <summary>

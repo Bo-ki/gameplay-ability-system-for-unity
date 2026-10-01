@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 #if UNITY_EDITOR
@@ -11,6 +13,9 @@ using UnityEngine;
 namespace GAS.Editor
 {
 #if !GAS_CODEGEN_BOOTSTRAP_ONLY
+    /// <summary>
+    /// 提供离线与 Unity Editor 共用的 CodeGen 命令路由，并默认执行完整同代发布。
+    /// </summary>
     public static class GasCodeGenCli
     {
         public static int Run(string[] args)
@@ -26,7 +31,8 @@ namespace GAS.Editor
 #endif
 
                 var mode = ResolveMode(args);
-                if (string.Equals(mode, "sourcegen-all", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(mode, "sourcegen-all", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(mode, "sourcegen", StringComparison.OrdinalIgnoreCase))
                     return GasCodeGenPipeline.TryRunAll(refreshAssetDatabase: false) ? 0 : 3;
 
                 if (string.Equals(mode, "autochess", StringComparison.OrdinalIgnoreCase)
@@ -35,8 +41,7 @@ namespace GAS.Editor
                     return GasCodeGenPipeline.TryRunAutoChessDemo(refreshAssetDatabase: false) ? 0 : 3;
                 }
 
-                if (string.Equals(mode, "sourcegen", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(mode, "core", StringComparison.OrdinalIgnoreCase)
+                if (string.Equals(mode, "core", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(mode, "sourcegen-core", StringComparison.OrdinalIgnoreCase))
                 {
                     return GasCodeGenPipeline.TryRunCore(refreshAssetDatabase: false) ? 0 : 3;
@@ -246,6 +251,9 @@ namespace GAS.Editor
         }
     }
 
+    /// <summary>
+    /// 冻结一次生成所使用的设置、typed rows、输入身份与物理输出目录。
+    /// </summary>
     public sealed class GasCodeGenContext
     {
         private GasCodeGenContext(
@@ -282,7 +290,18 @@ namespace GAS.Editor
 
         public int OrphansDeleted { get; internal set; }
 
+        /// <summary>
+        /// 以项目配置的 active 输出目录创建代码生成上下文。
+        /// </summary>
         public static GasCodeGenContext Create(bool forceRefresh = false)
+        {
+            return Create(forceRefresh, null);
+        }
+
+        /// <summary>
+        /// 以指定物理输出目录创建上下文，使 phase 可在独立 candidate 中执行。
+        /// </summary>
+        internal static GasCodeGenContext Create(bool forceRefresh, string outputDirOverride)
         {
             var codeGenSettings = GasCodeGenEnvironment.IsOffline
                 ? GasCodeGenSettings.CreateDefault()
@@ -293,10 +312,12 @@ namespace GAS.Editor
 #endif
             GasCodeGenEnvironment.SetActiveSettings(codeGenSettings);
             var projectRoot = GasCodeGenEnvironment.ProjectRoot;
-            var outputDir = ResolveProjectPath(projectRoot, codeGenSettings.OutputPath);
+            var outputDir = string.IsNullOrWhiteSpace(outputDirOverride)
+                ? ResolveProjectPath(projectRoot, codeGenSettings.OutputPath)
+                : Path.GetFullPath(outputDirOverride);
             var rowTypes = GasRowScanner.Scan(forceRefresh);
             var rows = RowMetadataFactory.BuildAll(rowTypes, codeGenSettings);
-            var inputHash = ComputeInputHash(rows);
+            var inputHash = ComputeInputHash(rows, projectRoot, codeGenSettings);
 
             return new GasCodeGenContext(
                 projectRoot,
@@ -306,6 +327,24 @@ namespace GAS.Editor
                 codeGenSettings,
                 rowTypes,
                 rows);
+        }
+
+        /// <summary>
+        /// 复用同一输入快照创建另一物理输出视图，确保 core 与 demo 属于同一代 candidate。
+        /// </summary>
+        internal GasCodeGenContext WithOutputDir(string outputDir)
+        {
+            if (string.IsNullOrWhiteSpace(outputDir))
+                throw new ArgumentException("Output directory is required.", nameof(outputDir));
+
+            return new GasCodeGenContext(
+                ProjectRoot,
+                Path.GetFullPath(outputDir),
+                RootNamespace,
+                InputHash,
+                Settings,
+                RowTypes,
+                Rows);
         }
 
         private static string ResolveProjectPath(string projectRoot, string path)
@@ -318,13 +357,30 @@ namespace GAS.Editor
                 : Path.Combine(projectRoot, path));
         }
 
-        private static string ComputeInputHash(IReadOnlyList<RowMetadata> rows)
+        /// <summary>
+        /// 对 typed row 快照与全部 artifact-producing JSON 输入计算同一 SHA-256 身份。
+        /// </summary>
+        private static string ComputeInputHash(
+            IReadOnlyList<RowMetadata> rows,
+            string projectRoot,
+            GasCodeGenSettings settings)
         {
             var builder = new StringBuilder();
-            for (var i = 0; i < rows.Count; i++)
+            AppendInputHashField(builder, "OutputPath", settings.OutputPath);
+            AppendInputHashField(builder, "RootNamespace", settings.RootNamespace);
+            AppendInputHashField(
+                builder,
+                "RowTypePrefixesToStrip",
+                string.Join(",", settings.RowTypePrefixesToStrip ?? Array.Empty<string>()));
+            AppendInputHashField(builder, "ConfigProjectPath", settings.ConfigProjectPath);
+            AppendInputHashField(builder, "LubanCodeOutputPath", settings.LubanCodeOutputPath);
+            AppendInputHashField(builder, "LubanDataOutputPath", settings.LubanDataOutputPath);
+            var canonicalRows = new List<RowMetadata>(rows ?? Array.Empty<RowMetadata>());
+            canonicalRows.Sort(CompareRows);
+            for (var i = 0; i < canonicalRows.Count; i++)
             {
-                var row = rows[i];
-                builder.Append(row.RowType.AssemblyQualifiedName).Append('|')
+                var row = canonicalRows[i];
+                builder.Append(row.RowType.FullName ?? row.RowType.Name).Append('|')
                     .Append(row.DomainName).Append('|')
                     .Append(row.CodeFieldName).Append('|')
                     .Append(string.Join(",", row.BakerKeyFieldNames ?? Array.Empty<string>())).Append('|')
@@ -332,7 +388,8 @@ namespace GAS.Editor
                     .Append(row.RowFactoryTypeName).Append('|')
                     .Append(row.RowFactoryMethodName).Append('|');
 
-                var members = row.BlobMembers;
+                var members = new List<BlobMemberInfo>(row.BlobMembers ?? Array.Empty<BlobMemberInfo>());
+                members.Sort(CompareBlobMembers);
                 for (var j = 0; j < members.Count; j++)
                 {
                     builder.Append(members[j].Name).Append(':')
@@ -340,7 +397,8 @@ namespace GAS.Editor
                         .Append(members[j].RowAccessor).Append(';');
                 }
 
-                var rowValues = row.RowValues ?? Array.Empty<RowValueSnapshot>();
+                var rowValues = new List<RowValueSnapshot>(row.RowValues ?? Array.Empty<RowValueSnapshot>());
+                rowValues.Sort(CompareRowValues);
                 builder.Append("|Rows=").Append(rowValues.Count).Append('|');
                 for (var j = 0; j < rowValues.Count; j++)
                 {
@@ -353,8 +411,10 @@ namespace GAS.Editor
                     builder.Append('|');
                 }
 
-                builder.AppendLine();
+                builder.Append('\n');
             }
+
+            AppendArtifactInputFiles(builder, projectRoot, settings);
 
             using var sha = SHA256.Create();
             var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(builder.ToString()));
@@ -362,6 +422,142 @@ namespace GAS.Editor
             for (var i = 0; i < hash.Length; i++)
                 result.Append(hash[i].ToString("x2"));
             return result.ToString();
+        }
+
+        /// <summary>
+        /// 以长度前缀写入一个设置字段，避免配置值中的分隔符造成 hash 拼接歧义。
+        /// </summary>
+        private static void AppendInputHashField(StringBuilder builder, string name, string value)
+        {
+            var resolvedName = name ?? string.Empty;
+            var resolvedValue = value ?? string.Empty;
+            builder.Append(resolvedName.Length).Append(':').Append(resolvedName)
+                .Append('|')
+                .Append(resolvedValue.Length).Append(':').Append(resolvedValue)
+                .Append('\n');
+        }
+
+        /// <summary>
+        /// 纳入 Luban JSON 与 AutoChess 场景 sidecar，防止相同 row hash 掩盖 artifact byte 变化。
+        /// </summary>
+        private static void AppendArtifactInputFiles(
+            StringBuilder builder,
+            string projectRoot,
+            GasCodeGenSettings settings)
+        {
+            var paths = new List<string>();
+            var lubanRoot = ResolveProjectPath(projectRoot, settings.LubanDataOutputPath);
+            if (Directory.Exists(lubanRoot))
+                paths.AddRange(Directory.GetFiles(lubanRoot, "*.json", SearchOption.AllDirectories));
+
+            paths.Add(Path.Combine(
+                ResolveProjectPath(projectRoot, settings.ConfigProjectPath),
+                "Datas",
+                "AutoChessDemo",
+                "autochess.sourcegen.json"));
+            paths.Sort(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in paths)
+                AppendArtifactInputFile(builder, projectRoot, path);
+        }
+
+        /// <summary>
+        /// 以项目相对路径、长度和原始 bytes SHA-256 写入一个输入文件身份。
+        /// </summary>
+        private static void AppendArtifactInputFile(
+            StringBuilder builder,
+            string projectRoot,
+            string path)
+        {
+            var fullPath = Path.GetFullPath(path);
+            var normalizedProjectRoot = Path.GetFullPath(projectRoot)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (!IsUnderRoot(fullPath, normalizedProjectRoot))
+                throw new InvalidDataException("Artifact-producing input escapes project root: " + fullPath);
+
+            var relativePath = fullPath.Substring(normalizedProjectRoot.Length)
+                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Replace(Path.DirectorySeparatorChar, '/');
+            builder.Append("InputFile|").Append(relativePath).Append('|');
+            if (!File.Exists(fullPath))
+            {
+                builder.Append("<missing>\n");
+                return;
+            }
+
+            var bytes = File.ReadAllBytes(fullPath);
+            using var sha = SHA256.Create();
+            builder.Append(bytes.Length).Append('|')
+                .Append(Convert.ToBase64String(sha.ComputeHash(bytes)))
+                .Append('\n');
+        }
+
+        /// <summary>
+        /// 判断绝对路径是否等于项目根或位于其真实目录边界下。
+        /// </summary>
+        private static bool IsUnderRoot(string path, string root)
+        {
+            return string.Equals(path, root, StringComparison.OrdinalIgnoreCase)
+                   || path.StartsWith(
+                       root + Path.DirectorySeparatorChar,
+                       StringComparison.OrdinalIgnoreCase)
+                   || path.StartsWith(
+                       root + Path.AltDirectorySeparatorChar,
+                       StringComparison.OrdinalIgnoreCase);
+        }
+
+        // 按行类型全名稳定排序，避免程序集枚举顺序影响哈希。
+        private static int CompareRows(RowMetadata left, RowMetadata right)
+        {
+            var leftName = left?.RowType?.FullName ?? left?.RowType?.Name ?? string.Empty;
+            var rightName = right?.RowType?.FullName ?? right?.RowType?.Name ?? string.Empty;
+            return string.CompareOrdinal(leftName, rightName);
+        }
+
+        // 按 schema 名称稳定排序 Blob 成员，避免反射返回顺序影响输入哈希。
+        private static int CompareBlobMembers(BlobMemberInfo left, BlobMemberInfo right)
+        {
+            var result = string.CompareOrdinal(left?.Name, right?.Name);
+            if (result != 0)
+                return result;
+
+            result = string.CompareOrdinal(left?.BlobTypeName, right?.BlobTypeName);
+            if (result != 0)
+                return result;
+
+            return string.CompareOrdinal(left?.RowAccessor, right?.RowAccessor);
+        }
+
+        // 按业务键和规范化行值稳定排序，消除源数据行顺序漂移。
+        private static int CompareRowValues(RowValueSnapshot left, RowValueSnapshot right)
+        {
+            var result = left.Code.CompareTo(right.Code);
+            if (result != 0)
+                return result;
+
+            var leftKeys = left.BakerKeyValues ?? Array.Empty<int>();
+            var rightKeys = right.BakerKeyValues ?? Array.Empty<int>();
+            result = leftKeys.Count.CompareTo(rightKeys.Count);
+            if (result != 0)
+                return result;
+
+            for (var i = 0; i < leftKeys.Count; i++)
+            {
+                result = leftKeys[i].CompareTo(rightKeys[i]);
+                if (result != 0)
+                    return result;
+            }
+
+            var leftText = BuildCanonicalRowValue(left.Row);
+            var rightText = BuildCanonicalRowValue(right.Row);
+            return string.CompareOrdinal(leftText, rightText);
+        }
+
+        // 将行值转成可比较的规范文本，用于消除源数据行顺序造成的哈希漂移。
+        private static string BuildCanonicalRowValue(object row)
+        {
+            var builder = new StringBuilder();
+            AppendRowValueHash(builder, row);
+            return builder.ToString();
         }
 
         private static void AppendRowValueHash(StringBuilder builder, object row)
@@ -373,10 +569,31 @@ namespace GAS.Editor
             }
 
             var rowType = row.GetType();
-            foreach (var field in rowType.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            var members = new List<MemberInfo>();
+            members.AddRange(rowType.GetFields(BindingFlags.Public | BindingFlags.Instance));
+            foreach (var property in rowType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
-                builder.Append(field.Name).Append('=');
-                AppendValue(builder, field.GetValue(row));
+                if (property.CanRead
+                    && property.GetMethod != null
+                    && property.GetIndexParameters().Length == 0)
+                    members.Add(property);
+            }
+
+            members.Sort((left, right) =>
+            {
+                var result = string.CompareOrdinal(left.Name, right.Name);
+                return result != 0
+                    ? result
+                    : string.CompareOrdinal(left.MemberType.ToString(), right.MemberType.ToString());
+            });
+
+            foreach (var member in members)
+            {
+                builder.Append(member.Name).Append(':').Append(member.MemberType).Append('=');
+                var field = member as FieldInfo;
+                AppendValue(builder, field != null
+                    ? field.GetValue(row)
+                    : ((PropertyInfo)member).GetValue(row, null));
                 builder.Append(';');
             }
         }
@@ -408,7 +625,10 @@ namespace GAS.Editor
                 return;
             }
 
-            builder.Append(value);
+            var formattable = value as IFormattable;
+            builder.Append(formattable != null
+                ? formattable.ToString(null, CultureInfo.InvariantCulture)
+                : value.ToString());
         }
     }
 

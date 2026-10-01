@@ -1,0 +1,229 @@
+{
+  "Schema": "D0M2F-Contract-v1",
+  "ProbeResultSchema": "D0M2F-ProbeResult-v1",
+  "RequiredTopLevelFields": [
+    "Schema",
+    "RunId",
+    "ProbeId",
+    "Status",
+    "Reason",
+    "Cases",
+    "Inputs",
+    "Protected",
+    "Fixture",
+    "Unity",
+    "RoleObservations"
+  ],
+  "ProbeIds": [
+    "T",
+    "S",
+    "X"
+  ],
+  "ProbeStatuses": [
+    "Passed",
+    "HardRejected",
+    "TimedOut",
+    "Inconclusive"
+  ],
+  "ProbeAllowedStatuses": {
+    "T": [
+      "Passed",
+      "HardRejected",
+      "TimedOut",
+      "Inconclusive"
+    ],
+    "S": [
+      "Passed",
+      "HardRejected",
+      "TimedOut",
+      "Inconclusive"
+    ],
+    "X": [
+      "Passed",
+      "TimedOut",
+      "Inconclusive"
+    ]
+  },
+  "CaseStatuses": [
+    "Passed",
+    "Failed",
+    "TimedOut",
+    "Inconclusive",
+    "NotRun"
+  ],
+  "Reasons": {
+    "Passed": [
+      "None"
+    ],
+    "HardRejected": [
+      "PreStartMaterializerRequired",
+      "MultipleMutableSelectors",
+      "AuthorityMutationObserved",
+      "MixedGenerationObserved",
+      "CacheFallbackSelectorObserved",
+      "PerAssemblySelectorRequired",
+      "AssemblyInvalidationFailed",
+      "ActiveGeneratedSourceCoConsumptionRequired",
+      "StaleBeeOrRspDeterminedGeneration"
+    ],
+    "TimedOut": [
+      "TimeBoxExceeded"
+    ],
+    "Inconclusive": [
+      "EvidenceIncomplete",
+      "HarnessFailure",
+      "SchemaViolation",
+      "CaseIdSetMismatch",
+      "ProtectedPathDrift",
+      "UnityProcessResidue",
+      "FixtureBoundaryViolation",
+      "InputIdentityDrift",
+      "SelectorConflictObserved",
+      "CacheOrStartupOrderDependent",
+      "WatcherFailure",
+      "CleanupFailure",
+      "UnityIdentityMismatch"
+    ]
+  },
+  "Roles": [
+    "Authority",
+    "Derived",
+    "Cache"
+  ],
+  "CaseSets": {
+    "T": [
+      {
+        "CaseId": "T-01",
+        "Name": "DirectColdA",
+        "Purpose": "Direct cold Unity consumes generation A without a wrapper or materializer."
+      },
+      {
+        "CaseId": "T-02",
+        "Name": "SelectorSwitchBAllAssemblies",
+        "Purpose": "The A to B manifest selector switch binds Runtime, Editor, and AutoChess to generation B."
+      },
+      {
+        "CaseId": "T-03",
+        "Name": "MinimalKillRestart",
+        "Purpose": "The bounded selector-switch kill and restart window does not expose mixed generations."
+      },
+      {
+        "CaseId": "T-04",
+        "Name": "TarballRoleClosure",
+        "Purpose": "Manifest, archive, lock, PackageCache, and unpacked paths have complete non-overlapping roles."
+      }
+    ],
+    "S": [
+      {
+        "CaseId": "S-01",
+        "Name": "DirectColdA",
+        "Purpose": "Direct cold Unity consumes semantic generation A through the additional-file selector."
+      },
+      {
+        "CaseId": "S-02",
+        "Name": "SelectorSwitchBAllAssemblies",
+        "Purpose": "The A to B semantic selector switch binds Runtime, Editor, and AutoChess to generation B."
+      },
+      {
+        "CaseId": "S-03",
+        "Name": "StaleBeeRspExcluded",
+        "Purpose": "Stale Bee or response-file state cannot determine the final generated generation."
+      },
+      {
+        "CaseId": "S-04",
+        "Name": "SourceGeneratorRoleClosure",
+        "Purpose": "The semantic selector, generator outputs, and Bee artifacts have complete non-overlapping roles."
+      }
+    ],
+    "X": [
+      {
+        "CaseId": "X-01",
+        "Name": "SelectorConflictConstructed",
+        "Purpose": "ActiveGenerationRef=A and the actual candidate selector=B are both proven in the fixture."
+      },
+      {
+        "CaseId": "X-02",
+        "Name": "UnityConsumedCandidateSelector",
+        "Purpose": "Direct cold and bounded restart evidence proves Unity consumes the candidate selector."
+      },
+      {
+        "CaseId": "X-03",
+        "Name": "ActiveGenerationRefZeroConsumption",
+        "Purpose": "ActiveGenerationRef has zero Unity consumption authority and is only an audit or promotion record."
+      },
+      {
+        "CaseId": "X-04",
+        "Name": "ThreeAssembliesSameGeneration",
+        "Purpose": "Runtime, Editor, and AutoChess resolve to one generation under the selector conflict."
+      }
+    ]
+  },
+  "ProtectedPathSpecs": [
+    {
+      "Kind": "File",
+      "Path": "Packages/manifest.json"
+    },
+    {
+      "Kind": "File",
+      "Path": "Packages/packages-lock.json"
+    },
+    {
+      "Kind": "File",
+      "Path": "ProjectSettings/ProjectVersion.txt"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "ProjectSettings/GasCodeGen"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Assets/GAS/Runtime/V1"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Assets/GAS/Editor/CodeGen"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Assets/GAS/Generated/CodeGen"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Assets/AutoChessDemo/Generated"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Tools/GasCodeGenCli"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Library/Bee"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "docs/adr"
+    },
+    {
+      "Kind": "File",
+      "Path": "方案讨论/针对2.0的ECS架构的迭代方案讨论/01-目标态架构共识/08-Luban-SourceGenerator配置生成链路Spec.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "docs/reviews/RuntimeV1-完成后停顿审查与V1.1-D0-M2F单轮计划.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "Tools/Tests/GasCodeGen/N2-G0-D0-M1-evidence.md"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "TestResults/RuntimeV1Runnable/RV1-20260830T070718Z-ab754759ec68"
+    }
+  ],
+  "FrozenDeclarations": {
+    "D1Authorized": false,
+    "ProductionInstallAdmission": "NotEvaluated",
+    "DeclaredFullSemanticEligibility": false,
+    "HumanConfirmationRequiredAfterCandidateSelected": true
+  }
+}

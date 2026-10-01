@@ -34,7 +34,7 @@ namespace GAS.AutoChessDemo
             fact = default;
             if (entry.ReplayKind != EDebugReplayEventKind.GameplayEvent
                 || entry.GameplayEventType != EGameplayEventType.ExecutionCalculationOutputUpdated
-                || entry.EventCode != AutoChessBattleRules.ExecutionCalculationExecuteDamage)
+                || entry.EventCode != AutoChessBattleRules.GameplayEffectPlayerExecute)
             {
                 return false;
             }

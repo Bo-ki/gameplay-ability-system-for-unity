@@ -1,0 +1,135 @@
+{
+  "Version": 3,
+  "SemanticIdentityAlgorithm": "TypedRowSnapshotSemanticIdentity-v1",
+  "ArtifactIdentityAlgorithm": "SHA-256",
+  "CanonicalIdentityEncoding": "LengthPrefixedFields-v1",
+  "ArtifactManifestHashDomain": "EX-GAS-ArtifactManifest-v3",
+  "RequiredArtifactSetId": "EX-GAS-RuntimeV1-RequiredArtifacts-v2",
+  "RequiredArtifactSetContractHash": "63f69551708194359d76c3772fb68983a3632d8994d818d7ec3e8c931ac74565",
+  "SourceInputHash": "002ce8ce5ab9fa49daa7a5ce5b35f2ffb24b8cc270197c98e1a7012eda59ad7e",
+  "SchemaHash": "3784bbc729ffa258c9a13192f58d4bad61a9cf34d3c8ad7dea7c2ed67c4bda2b",
+  "ContentHash": "45fdd6bd6c183af9a36f817355356e4d403e8ca93829053432b8ba2afdaf4023",
+  "LayoutHash": "a5109ba2d379c6d4ca9e20470c1981368319b9ae9bae3cff3194399624e822aa",
+  "ArtifactManifestHash": "fbb8b511f4362ecd210cf9b3c9c46dcb3a0440c684d84c195280f8fbc1e5c060",
+  "CandidateArtifactManifestSha256": "487afd8441f24f9c58e651e8415368276132dfc5c5640d29c9d50b93904f6a4e",
+  "CandidateArtifactManifestBytesBase64": "ewogICJEb21haW4iOiAiRVgtR0FTLUNhbmRpZGF0ZUFydGlmYWN0TWFuaWZlc3QtdjEiLAogICJBcnRpZmFjdE1hbmlmZXN0SGFzaERvbWFpbiI6ICJFWC1HQVMtQXJ0aWZhY3RNYW5pZmVzdC12MyIsCiAgIkFydGlmYWN0TWFuaWZlc3RIYXNoIjogImZiYjhiNTExZjQzNjJlY2QyMTBjZjliM2M5YzQ2ZGNiM2EwNDQwYzY4NGQ4NGMxOTUyODBmOGZiYzFlNWMwNjAiLAogICJBcnRpZmFjdEVudHJpZXMiOiBbCiAgICB7CiAgICAgICJDYW5vbmljYWxQYXRoIjogIkFzc2V0cy9BdXRvQ2hlc3NEZW1vL0dlbmVyYXRlZC9BdXRvQ2hlc3NHZW5lcmF0ZWRDb25maWcuZ2VuLmNzIiwKICAgICAgIkdlbmVyYXRlZEFydGlmYWN0S2luZCI6ICJSdW50aW1lRGVtb0NvbmZpZyIsCiAgICAgICJHZW5lcmF0ZWRBcnRpZmFjdE93bmVyIjogIkF1dG9DaGVzc0RlbW8iLAogICAgICAiUnVudGltZVZpc2libGUiOiB0cnVlLAogICAgICAiQnl0ZUxlbmd0aCI6IDQzMzU1LAogICAgICAiQ29udGVudFNoYTI1NiI6ICIxNDMzZTVlM2FlZGJhOTc4NmE4NzRkODJjZjBkMGYwOTlhMWJkNDEyZjdhN2E2ZThmY2M5YTIyOTFjMTM2Y2NjIiwKICAgICAgIk1ldGFCeXRlTGVuZ3RoIjogNjAsCiAgICAgICJNZXRhQ29udGVudFNoYTI1NiI6ICJlYWFhZGZkNDYwNDZjNzAzNzhkYWY2ZTNlYjYyNTc5MmIwMThiMjgwODc1NTQwN2VlNDFjM2VlYzhiNjJiNDZkIiwKICAgICAgIlNvdXJjZUNvbXBvbmVudCI6ICJBdXRvQ2hlc3MiCiAgICB9LAogICAgewogICAgICAiQ2Fub25pY2FsUGF0aCI6ICJBc3NldHMvR0FTL0dlbmVyYXRlZC9Db2RlR2VuL0VkaXRvci9MdWJhbk5vcm1hbGl6ZWRSb3dzLmdlbi5jcyIsCiAgICAgICJHZW5lcmF0ZWRBcnRpZmFjdEtpbmQiOiAiTm9ybWFsaXplZERlZmluaXRpb25Sb3ciLAogICAgICAiR2VuZXJhdGVkQXJ0aWZhY3RPd25lciI6ICJEZWZpbml0aW9uQ29kZUdlbiIsCiAgICAgICJSdW50aW1lVmlzaWJsZSI6IGZhbHNlLAogICAgICAiQnl0ZUxlbmd0aCI6IDQ0MDY3LAogICAgICAiQ29udGVudFNoYTI1NiI6ICI0NTk1YzZjMzFmZDg3OTFjMzkwYjdjZWJkZGQwMTgxNTA5ZWUwNWM5MmRhNDc2MWY4YmM2ZWUzNTNiMmMxZmZlIiwKICAgICAgIk1ldGFCeXRlTGVuZ3RoIjogNjAsCiAgICAgICJNZXRhQ29udGVudFNoYTI1NiI6ICJjNzM5Yjg4YTE4ZGZhOGJjMjc2YjU0ZDgxNzI2MGFhOWY5Yjc4MGM4OWI2NjUwYTJkMjllNzQzNjZkN2Y2NmJiIiwKICAgICAgIlNvdXJjZUNvbXBvbmVudCI6ICJDb3JlIgogICAgfSwKICAgIHsKICAgICAgIkNhbm9uaWNhbFBhdGgiOiAiQXNzZXRzL0dBUy9HZW5lcmF0ZWQvQ29kZUdlbi9HYXNDb2RlR2VuVmFsaWRhdGlvblJlcG9ydC5tZCIsCiAgICAgICJHZW5lcmF0ZWRBcnRpZmFjdEtpbmQiOiAiVmFsaWRhdGlvbkFydGlmYWN0IiwKICAgICAgIkdlbmVyYXRlZEFydGlmYWN0T3duZXIiOiAiRWRpdG9yQ2kiLAogICAgICAiUnVudGltZVZpc2libGUiOiBmYWxzZSwKICAgICAgIkJ5dGVMZW5ndGgiOiAyNjcwLAogICAgICAiQ29udGVudFNoYTI1NiI6ICI3YzYwNDcxY2NmNzBkMmZlYjg0NmY3YjllYjJmZjAxZjBlMjU4NDgxY2RkNmQ3ZDhkYjdmY2UwYTk5NDVmNDdlIiwKICAgICAgIk1ldGFCeXRlTGVuZ3RoIjogNjAsCiAgICAgICJNZXRhQ29udGVudFNoYTI1NiI6ICI5NTM2Nzc3NTBkM2EyNTZlNDNhNTliZjhkYWQyODQ3MGRjZGQyODA2MDRmNWM5NTY3MDI5MjM3ZTdhNDFmN2RjIiwKICAgICAgIlNvdXJjZUNvbXBvbmVudCI6ICJDb3JlIgogICAgfSwKICAgIHsKICAgICAgIkNhbm9uaWNhbFBhdGgiOiAiQXNzZXRzL0dBUy9HZW5lcmF0ZWQvQ29kZUdlbi9SdW50aW1lL1J1bnRpbWVBYmlsaXR5QWN0aXZhdGlvbi5nZW4uY3MiLAogICAgICAiR2VuZXJhdGVkQXJ0aWZhY3RLaW5kIjogIlJ1bnRpbWVQdXJlR2x1ZSIsCiAgICAgICJHZW5lcmF0ZWRBcnRpZmFjdE93bmVyIjogIkRlZmluaXRpb25Db2RlR2VuIiwKICAgICAgIlJ1bnRpbWVWaXNpYmxlIjogdHJ1ZSwKICAgICAgIkJ5dGVMZW5ndGgiOiA0MjgsCiAgICAgICJDb250ZW50U2hhMjU2IjogIjIzNmE4ZGQ0MjJjMjI2YWUwNmIyYzkyM2EwMzU3NTZjNDBhMDFmMTYyODBjYTA1OWZkNjhkZDBiMTA0MmZmODAiLAogICAgICAiTWV0YUJ5dGVMZW5ndGgiOiA2MCwKICAgICAgIk1ldGFDb250ZW50U2hhMjU2IjogImRlMjEzMzQ4ZGJmYWU0N2E5OTAwMDEwOTZkYzhjMDdjNGE2MGVkOTkxM2NhN2E1OWFkZWY0ZTZmOTY0ZWViZjEiLAogICAgICAiU291cmNlQ29tcG9uZW50IjogIkNvcmUiCiAgICB9LAogICAgewogICAgICAiQ2Fub25pY2FsUGF0aCI6ICJBc3NldHMvR0FTL0dlbmVyYXRlZC9Db2RlR2VuL1J1bnRpbWUvUnVudGltZUFjdGl2ZUVmZmVjdC5nZW4uY3MiLAogICAgICAiR2VuZXJhdGVkQXJ0aWZhY3RLaW5kIjogIlJ1bnRpbWVQdXJlR2x1ZSIsCiAgICAgICJHZW5lcmF0ZWRBcnRpZmFjdE93bmVyIjogIkRlZmluaXRpb25Db2RlR2VuIiwKICAgICAgIlJ1bnRpbWVWaXNpYmxlIjogdHJ1ZSwKICAgICAgIkJ5dGVMZW5ndGgiOiA0MjMsCiAgICAgICJDb250ZW50U2hhMjU2IjogImI1YTAyYzM1NWEyOTQwODI5MjJiN2ZlZGM0MDg2OTNiMDQzNTE1NDg1Mzc3Y2EzNjk0OTZkM2ExYTAzN2Y1ZDkiLAogICAgICAiTWV0YUJ5dGVMZW5ndGgiOiA2MCwKICAgICAgIk1ldGFDb250ZW50U2hhMjU2IjogIjhkMjNiMTYxNGRjOWIwMDZjMDBlYjVkMWZmYTAxMjA2YWFlODBlYjMxMzg5ZmI2MGNmMjg4ZGMxOGY4NjVmMDAiLAogICAgICAiU291cmNlQ29tcG9uZW50IjogIkNvcmUiCiAgICB9LAogICAgewogICAgICAiQ2Fub25pY2FsUGF0aCI6ICJBc3NldHMvR0FTL0dlbmVyYXRlZC9Db2RlR2VuL1J1bnRpbWUvUnVudGltZUVmZmVjdEluc3RhbnQuZ2VuLmNzIiwKICAgICAgIkdlbmVyYXRlZEFydGlmYWN0S2luZCI6ICJSdW50aW1lUHVyZUdsdWUiLAogICAgICAiR2VuZXJhdGVkQXJ0aWZhY3RPd25lciI6ICJEZWZpbml0aW9uQ29kZUdlbiIsCiAgICAgICJSdW50aW1lVmlzaWJsZSI6IHRydWUsCiAgICAgICJCeXRlTGVuZ3RoIjogNDI0LAogICAgICAiQ29udGVudFNoYTI1NiI6ICJlYjhlYzI3ZmU3N2NiNWIwNTU2ZWUyYjA3NzMzYmM5MGUxMzczNTQ5ZDZhYTU3NjU4MDMwZjJmZTY5ZWE3NjM1IiwKICAgICAgIk1ldGFCeXRlTGVuZ3RoIjogNjAsCiAgICAgICJNZXRhQ29udGVudFNoYTI1NiI6ICIwYTkwYzgxZmQ2MDkwNDYxNTg2OTQ2MTE4MDk2ZTRjNGQwMTJiNWQwODdjNDU1NDUxNGViODBmNDExNDg0OWFiIiwKICAgICAgIlNvdXJjZUNvbXBvbmVudCI6ICJDb3JlIgogICAgfQogIF0KfQo=",
+  "SourceArtifactInventoryHash": "9d15aca5d6f0a90c3423fc2faaf813604fb70bf6ea0805910f6bad57a133a51b",
+  "SelectorSha256": "24dd8a907752df35edcbd75142226072b45b111c4eb68c572dd98db7cf1c575a",
+  "AnalyzerSha256": "b6cb1219f05c6874f0eed4bf10d4457a7debb44f28ee7013daa6d1a0a1e26934",
+  "RouteScaffoldSha256": "f83b592cf943cbec6c6f4b72c0de0e4f93337826517d1972a64f7acec40b5af2",
+  "CandidateCompilePlanSha256": "0aa127d83f1c1e58ef349fcd3eb3fc1e624692db29fea36e22cf5253c5eae2e2",
+  "TypedContractHash": "",
+  "LayoutProofHash": "",
+  "CapacityProofHash": "",
+  "FullSemanticEligibility": false,
+  "ArtifactEntries": [
+    {
+      "CanonicalPath": "Assets/AutoChessDemo/Generated/AutoChessGeneratedConfig.gen.cs",
+      "GeneratedArtifactKind": "RuntimeDemoConfig",
+      "GeneratedArtifactOwner": "AutoChessDemo",
+      "RuntimeVisible": true,
+      "ByteLength": 43355,
+      "ContentSha256": "1433e5e3aedba9786a874d82cf0d0f099a1bd412f7a7a6e8fcc9a2291c136ccc",
+      "MetaByteLength": 60,
+      "MetaContentSha256": "eaaadfd46046c70378daf6e3eb625792b018b2808755407ee41c3eec8b62b46d",
+      "SourceComponent": "AutoChess"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Editor/LubanNormalizedRows.gen.cs",
+      "GeneratedArtifactKind": "NormalizedDefinitionRow",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "RuntimeVisible": false,
+      "ByteLength": 44067,
+      "ContentSha256": "4595c6c31fd8791c390b7cebddd0181509ee05c92da4761f8bc6ee353b2c1ffe",
+      "MetaByteLength": 60,
+      "MetaContentSha256": "c739b88a18dfa8bc276b54d817260aa9f9b780c89b6650a2d29e74366d7f66bb",
+      "SourceComponent": "Core"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/GasCodeGenValidationReport.md",
+      "GeneratedArtifactKind": "ValidationArtifact",
+      "GeneratedArtifactOwner": "EditorCi",
+      "RuntimeVisible": false,
+      "ByteLength": 2670,
+      "ContentSha256": "7c60471ccf70d2feb846f7b9eb2ff01f0e258481cdd6d7d8db7fce0a9945f47e",
+      "MetaByteLength": 60,
+      "MetaContentSha256": "953677750d3a256e43a59bf8dad28470dcdd280604f5c9567029237e7a41f7dc",
+      "SourceComponent": "Core"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs",
+      "GeneratedArtifactKind": "RuntimePureGlue",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "RuntimeVisible": true,
+      "ByteLength": 428,
+      "ContentSha256": "236a8dd422c226ae06b2c923a035756c40a01f16280ca059fd68dd0b1042ff80",
+      "MetaByteLength": 60,
+      "MetaContentSha256": "de213348dbfae47a990001096dc8c07c4a60ed9913ca7a59adef4e6f964eebf1",
+      "SourceComponent": "Core"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs",
+      "GeneratedArtifactKind": "RuntimePureGlue",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "RuntimeVisible": true,
+      "ByteLength": 423,
+      "ContentSha256": "b5a02c355a294082922b7fedc408693b043515485377ca369496d3a1a037f5d9",
+      "MetaByteLength": 60,
+      "MetaContentSha256": "8d23b1614dc9b006c00eb5d1ffa01206aae80eb31389fb60cf288dc18f865f00",
+      "SourceComponent": "Core"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs",
+      "GeneratedArtifactKind": "RuntimePureGlue",
+      "GeneratedArtifactOwner": "DefinitionCodeGen",
+      "RuntimeVisible": true,
+      "ByteLength": 424,
+      "ContentSha256": "eb8ec27fe77cb5b0556ee2b07733bc90e1373549d6aa57658030f2fe69ea7635",
+      "MetaByteLength": 60,
+      "MetaContentSha256": "0a90c81fd6090461586946118096e4c4d012b5d087c4554514eb80f4114849ab",
+      "SourceComponent": "Core"
+    }
+  ],
+  "SourceMappings": [
+    {
+      "CanonicalPath": "Assets/AutoChessDemo/Generated/AutoChessGeneratedConfig.gen.cs",
+      "TargetAssembly": "com.exhard.exgas.autochessdemo",
+      "HintName": "AutoChessGeneratedConfig.gen.cs",
+      "Category": 3,
+      "SourceByteLength": 43355,
+      "SourceSha256": "1433e5e3aedba9786a874d82cf0d0f099a1bd412f7a7a6e8fcc9a2291c136ccc"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Editor/LubanNormalizedRows.gen.cs",
+      "TargetAssembly": "com.exhard.exgas.generated.editor",
+      "HintName": "LubanNormalizedRows.gen.cs",
+      "Category": 2,
+      "SourceByteLength": 44067,
+      "SourceSha256": "4595c6c31fd8791c390b7cebddd0181509ee05c92da4761f8bc6ee353b2c1ffe"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeAbilityActivation.gen.cs",
+      "TargetAssembly": "com.exhard.exgas.generated.runtime",
+      "HintName": "RuntimeAbilityActivation.gen.cs",
+      "Category": 1,
+      "SourceByteLength": 428,
+      "SourceSha256": "236a8dd422c226ae06b2c923a035756c40a01f16280ca059fd68dd0b1042ff80"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeActiveEffect.gen.cs",
+      "TargetAssembly": "com.exhard.exgas.generated.runtime",
+      "HintName": "RuntimeActiveEffect.gen.cs",
+      "Category": 1,
+      "SourceByteLength": 423,
+      "SourceSha256": "b5a02c355a294082922b7fedc408693b043515485377ca369496d3a1a037f5d9"
+    },
+    {
+      "CanonicalPath": "Assets/GAS/Generated/CodeGen/Runtime/RuntimeEffectInstant.gen.cs",
+      "TargetAssembly": "com.exhard.exgas.generated.runtime",
+      "HintName": "RuntimeEffectInstant.gen.cs",
+      "Category": 1,
+      "SourceByteLength": 424,
+      "SourceSha256": "eb8ec27fe77cb5b0556ee2b07733bc90e1373549d6aa57658030f2fe69ea7635"
+    }
+  ]
+}

@@ -8,6 +8,8 @@
 
 本文件不定义 semantic compiler 内部规则：canonical graph、typed support matrix、RuleId/provenance、Live/Grant/EmittedRef 与 CapacityProof 统一引用 [25](25-配置语义编译契约与CapacityProof统一裁决Spec.md)；candidate、四 hash、原子 promotion/LKG 统一引用 [08](08-Luban-SourceGenerator配置生成链路Spec.md)。
 
+当前物理发布状态以 `08` 的 D0-M2R delta 为准：immutable tarball 保持 D0-M2T 正式否决；随后 D0-M2S RunId `D0M2S-20260830T180951Z-fe75df12b9a2` 已通过 full-fault、SG-specific X、SG-01～SG-08 与 74/74 closure。当前 `AcceptedProductionRoute=StableGraphSourceGenerator`，唯一 selector 为 `Assets/GAS/CodeGen/Selector/Generation.GasCodeGenSourceGenerator.additionalfile`；`D1Authorized=true`、`ProductionMigrationAuthorized=true`、`ProductionInstallAdmission=NotEvaluated`、`DeclaredFullSemanticEligibility=false`，下一门为 D1 migration + route-specific E1，RuntimeV1 runnable 状态不变。
+
 ## 核心结论
 
 策划配置能力不是 Editor UI 功能集合，而是一条从业务意图到 Runtime Core definition catalog 的配置闭环：
@@ -71,8 +73,9 @@ flowchart LR
     SourceGen --> Candidate["Content-addressed candidate\nfour hashes / artifact bytes"]
     Candidate --> Gate["Config + CI Candidate Gate\nsemantic / layout / capacity / compile / scenario"]
     Gate --> Snapshot["Publish Validation Snapshot"]
-    Snapshot --> Promote["Atomic ActiveGenerationRef promotion"]
-    Promote --> Catalog["GASDefinitionCatalogBlob"]
+    Snapshot --> RouteGate["Physical route gate\nStableGraphSourceGenerator accepted"]
+    RouteGate --> Publish["D1 single selector promotion\nroute-specific E1 required"]
+    Publish --> Catalog["GASDefinitionCatalogBlob"]
     SourceGen --> Trace["Runtime Trace Preview"]
     Gate --> CI["Scenario Validation Evidence"]
     Catalog --> Runtime["Runtime Core\nread-only definition input"]
@@ -111,15 +114,17 @@ flowchart LR
 | `ImpactAnalysisId` | 解释受影响的业务包、Unit、Scenario、Scale profile 和 generated artifact |
 | `OfficialConceptCoverage` | 证明 Ability lifecycle、GE spec、Tag taxonomy、Cue parameters、AbilityTask mapping 和 ASC binding 已覆盖或给出拒绝理由 |
 | `SchemaHash / ContentHash` | 对齐 Definition Catalog 的版本和缓存失效 |
-| `LayoutHash / ArtifactManifestHash` | 证明布局/proof 与安装 artifact 是完整同代集合 |
-| `CandidateId / CandidateArtifactByteHashes` | 定位隔离验证的精确候选，不把 active 目录当 staging |
+| `LayoutHash / ArtifactManifestHash` | 证明布局/proof 与完整受管 candidate artifact 集（含 C#、Blob/catalog、validation/report、proof）是同代集合；不得把该 hash 缩窄为 C# subset |
+| `RequiredArtifactSetId / RequiredArtifactSetContractHash` | 冻结本版本 exact path/kind/owner/visibility/component/target/hint/category 集，防止先缩窄“受管集合”再让 manifest 自洽；D1 使用 `EX-GAS-RuntimeV1-RequiredArtifacts-v2` |
+| `SourceArtifactInventoryHash / SourceSubsetMapping` | 绑定 selector bundle 内按 target/hint 排序的 C# source inventory，并与 required C# manifest items 建立双向 bijection；不能替代四元 install identity |
+| `CandidateId / CandidateArtifactByteHashes` | 定位隔离验证的精确候选，不把 active 目录当 staging；selector、manifest 文件自身、descriptor、envelope、compile plan 与 generation record 不进入 `ArtifactManifestHash` |
 | `ContractMatrixHash / RuleIdSummary` | 证明 typed allow/deny 与诊断使用同一版本规则 |
 | `CapacityProofHash / ConsumerMapSummary` | 证明所有硬上界已生成且有 admission consumer |
 | `RuntimeTracePreviewId` | 证明配置将进入正确 Runtime record / lane |
 | `ScenarioValidationEvidenceId` | 证明最小业务场景和规模验收可执行 |
 | `SourceGeneratorGateSummary` | 证明 generated artifact 没有 lifecycle / ownership 越权 |
 | `DotsCoverageSummary` | 证明采用或拒绝的 DOTS 官方规则已记录 |
-| `PromotionId / ActiveGenerationRef` | 记录唯一原子 promotion 线性化点；失败时为空且 active 不变 |
+| `PromotionId / route-specific audit identity` | 记录 SourceGenerator selector promotion/audit identity；Store 先读取 canonical selector 完整 previous snapshot，再以 `FileMode.CreateNew` 将 `CommitAttemptState=NotStarted`、`PreviousSelectorState=Missing|Present`、仅 Present 时存在的 previous bytes 与其余字段一次写入并 flush fixed `PublishIntent.json`，取得单 active `ExclusiveClaimId` 后重读 selector 做 CAS 前置复核，漂移则 durable `Indeterminate`。intent 还绑定 target selector 完整 bytes、`DescriptorSha256`、`InstallEnvelopeSha256`、required-contract/manifest/inventory/selector/analyzer/scaffold/compile-plan SHA 与四元 identity；recovery 全量重算这些 snapshot。首次发布使用 no-overwrite atomic create-new/move，已有 selector 使用 `File.Replace`；只有 durable committed receipt + valid claim + 全 snapshot 重算 + selector==target 才补 audit，competition/indeterminate 不得冒领。canonical selector 出现完整 target bytes 是唯一线性化点，`ActiveGenerationRef` 只在 commit 后写且选择权为零；D0-M2F 的 `ActiveGenerationRef + Packages/manifest.json` 只保留为已被 D0-M2T supersede 的历史候选合同 |
 
 ## 官方规则对照
 
@@ -145,7 +150,7 @@ flowchart LR
 7. 至少一条 Ability Package 必须能绑定到 AutoChess 或等价 headless scenario，并输出 scenario validation evidence。
 8. Raw Table Advanced Mode 可存在，但所有默认策划路径必须通过 Business Template / Package / Change Set / Review Gate。
 9. Config Review Gate 必须执行 `24-GAS官方概念对照复核Spec.md` 的 concept coverage 检查；只通过 DOTS 规则或 schema 校验不等于 GAS 业务语义完整。
-10. Publish Validation Snapshot 只能由完整 candidate gate 产生；其四元 identity、artifact byte hashes、ContractMatrixHash 与 CapacityProofHash 必须和被 promotion 的 manifest 精确一致。
+10. Publish Validation Snapshot 只能由完整 candidate gate 产生；其四元 identity、artifact byte hashes、ContractMatrixHash 与 CapacityProofHash 必须和 SourceGenerator production selector bundle、analyzer、stable scaffold 及实际 promotion 精确一致。D1 在 route-specific E1 通过前仍不得生成 production install admission 成功结论。
 11. 任一 semantic/layout/capacity/compile/AOT/scenario/promotion 失败时 active generation 不变，不执行 active orphan cleanup，也不生成成功 PromotionId。
 12. 回滚必须选择历史成功 `ArtifactManifestHash` 执行新 promotion；Runtime 不自动读取旧 schema、managed row、sidecar、ScriptableObject 或历史 Catalog fallback。
 13. 一次生成与第二次生成结果一致；Config Review Gate 必须有“generated row C# 已写但 AppDomain factory 仍旧”的单遍陈旧负例。

@@ -8,6 +8,7 @@ namespace GAS.AutoChessDemo
         public const int AttributeSetCombat = AutoChessGeneratedConfig.AttributeSetCombat;
         public const int AttributeHealth = AutoChessGeneratedConfig.AttributeHealth;
         public const int AttributeEnergy = AutoChessGeneratedConfig.AttributeEnergy;
+        public const int AttributeAttack = AutoChessGeneratedConfig.AttributeAttack;
 
         public const int AbilityPlayerAttack = AutoChessGeneratedConfig.AbilityPlayerAttack;
         public const int AbilityEnemyAttack = AutoChessGeneratedConfig.AbilityEnemyAttack;
@@ -18,11 +19,6 @@ namespace GAS.AutoChessDemo
         public const int GameplayEffectEnemyAttackDamage = AutoChessGeneratedConfig.GameplayEffectEnemyAttackDamage;
         public const int GameplayEffectPlayerExecute = AutoChessGeneratedConfig.GameplayEffectPlayerExecute;
         public const int GameplayEffectPlayerPoison = AutoChessGeneratedConfig.GameplayEffectPlayerPoison;
-
-        public const int ExecutionCalculationExecuteDamage = AutoChessGeneratedConfig.ExecutionCalculationExecuteDamage;
-        public const int ExecutionCalculationExecuteDamageOutput = AutoChessGeneratedConfig.ExecutionCalculationExecuteDamageOutput;
-
-        public const int TagAttackCooldown = AutoChessGeneratedConfig.TagAttackCooldown;
 
         public static string GetTeamName(AutoChessTeam team)
         {
@@ -101,6 +97,7 @@ namespace GAS.AutoChessDemo
         public readonly int Slot;
         public readonly float Health;
         public readonly float Energy;
+        public readonly float Attack;
         public readonly int PrimaryAbilityCode;
         public readonly int FinisherAbilityCode;
         public readonly int ActiveAbilityCode;
@@ -119,6 +116,7 @@ namespace GAS.AutoChessDemo
             int slot,
             float health,
             float energy,
+            float attack,
             int primaryAbilityCode,
             int finisherAbilityCode,
             int activeAbilityCode,
@@ -136,6 +134,7 @@ namespace GAS.AutoChessDemo
             Slot = slot;
             Health = health;
             Energy = energy;
+            Attack = attack;
             PrimaryAbilityCode = primaryAbilityCode;
             FinisherAbilityCode = finisherAbilityCode;
             ActiveAbilityCode = activeAbilityCode;
@@ -160,6 +159,7 @@ namespace GAS.AutoChessDemo
                 Slot,
                 Health,
                 Energy,
+                Attack,
                 PrimaryAbilityCode,
                 FinisherAbilityCode,
                 ActiveAbilityCode,
@@ -309,6 +309,7 @@ namespace GAS.AutoChessDemo
                     plan.Slot,
                     plan.Health * healthMultiplier,
                     plan.Energy,
+                    plan.Attack,
                     plan.PrimaryAbilityCode,
                     plan.FinisherAbilityCode,
                     plan.ActiveAbilityCode,

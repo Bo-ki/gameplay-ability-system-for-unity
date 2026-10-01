@@ -65,6 +65,15 @@ namespace GAS.Runtime
         public int PayloadLength;
         public int CaptureValueCount;
         public int ValueViewCount;
+        /// <summary>
+        /// 保存本次 application 使用的冻结 Avatar 身份；FollowAsc 时保持零值。
+        /// </summary>
+        public ulong TargetAvatarStableId;
+        public uint TargetAvatarBindingGeneration;
+        /// <summary>
+        /// 保存本次 application 使用的 FrozenSpatial 快照；无空间策略时保持空值。
+        /// </summary>
+        public GasBoundarySpatialSnapshot SpatialSnapshot;
     }
 
     /// <summary>

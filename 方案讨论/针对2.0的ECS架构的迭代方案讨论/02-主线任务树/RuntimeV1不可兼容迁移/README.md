@@ -1,8 +1,10 @@
 # Runtime v1 不可兼容迁移
 
-> Owner：`02-主线任务树` | 状态：当前唯一可领取路线 | 最近更新：2026-08-24
+> Owner：`02-主线任务树` | 状态：当前唯一可领取路线 | 最近更新：2026-08-29
 
 本路线把当前 Runtime 一次性切换到 `01/17` 的单 Kernel / ASC slab / 单 Drain 目标。这里不复写设计规则。
+
+`HEAD 10cbd256` + dirty worktree 的 N2-G0 第一轮已完成 `CFG-01` Luban→generated Catalog、`NUM-01` Resource-only gate、`CFG-02` canonical FNV64 minimum 与 `CFG-08` 输入/TOCTOU 门；但 **N2-G0 仍只部分完成，V0-V7 均未整体完成**。下一轮先收口 `ActiveGenerationRef`、四 hash 外部 package descriptor、candidate compile gate 与三类 proof，之后才能领取 TB-03 自然结束；顺序见[当前窗口](../../04-当前进度状态/当前窗口.md)与[N2 停顿审查计划](../../04-当前进度状态/N2-停顿审查盘点与下一轮计划.md)。
 
 ## 必读
 
@@ -13,6 +15,18 @@
 - 总任务入口：[02 主线任务树](../README.md)
 
 ## 执行顺序
+
+### N1 实施检查点
+
+- N1-1 已把 Target、Terminal、Route、Boundary 统一为 `Prepare -> FinalPublishFaultReduce -> single decision token -> Publish`；最晚 BoundaryPrepare fatal 会同时阻止最早 Target 与全部后续 durable publisher。
+- RoutePrepare 同步修正 forwarded origin 二次消费、observed owner-gone 回执与 projected destination 死亡时的 source 回退容量证明。
+- N1-2 已把所有 structurally-due period slot 改为忽略 Tick 内可变 inhibition 的保守准入上界：预留一次 claim、完整 ModifierRange，并前置拒绝 identity、ordinal 与 tick 溢出。
+- N1-3 已建立三态 Tier-B 执行子清单与精确 TestId runner；N2-R0 因缺 authored Ability→生产 Wait 可达链将 TB-08 降为 Pending，当前为 4 Green / 0 ApprovedRed / 13 Pending。子清单 schema 2 明确不能冒充 Tier A/R3 master manifest；旧 Stacking 0-test 入口已退役并硬失败。
+- N1-4 shadow 承载、Persistent 分配、lookup 构建与目标规模证据尚未完成；V0-V7 不因上述局部闭环自动盖章。
+- N2-G0 第一轮已验证：AutoChess 完整 EditMode filter 1/1 Passed，首个 PlayerAttack `DamageApplied.Value == 12f`；`NUM-01` 相关回归 61/61；`CFG-02` 回归 26/26；官方 Luban+SourceGen 通过，raw JSON/sidecar/settings 输入身份、TOCTOU gate 与双跑 `InputHash 14ef9871…`、Core `ArtifactManifestHash 0583fb25…`、Demo `d6b3943a…` 稳定。
+- N2-G0 当前基础设施边界：`CFG-05` 仅保证生成进程存活时 fail-closed 双根事务目录交换，不是 crash-atomic，且无 `ActiveGenerationRef`/candidate compile gate；`CFG-07` 仅有 manifest v2 逐产物/`.meta` SHA-256 与聚合 hash，没有外部 descriptor 或 `TypedContract/LayoutProof/CapacityProof`。
+
+N0/N1 都不是新的迁移阶段，不改变以下依赖顺序，也不得被解释为 V3/V4/V5 已完成。
 
 ```text
 V0 -> V1 -> V2 -> V3 -> V4 -> V5 -> V6 -> V7
@@ -33,7 +47,7 @@ V2-V4 是同一个不可分割的 Runtime authority 集成窗口：允许在隔�
 
 ## ValidationVectorManifest 消费
 
-V0建立由`01/10`唯一拥有的versioned manifest。`TB-01..TB-17`覆盖第二轮业务向量，第三轮`R3-*`覆盖配置、target transaction、ingress/battle、runner/result与规模缺口；任何entry缺owner/test source/evidence或最终非green都阻止V6删除门与V7 release evidence：
+V0建立由`01/10`唯一拥有的versioned master manifest。当前机器文件只登记`TB-01..TB-17`，并被强制标记为不能授权 V0 的 Tier-B execution submanifest；Tier A、第三轮`R3-*`、input/semantic hash 总清单仍待补齐。`Pending`表示语义或覆盖尚未裁决并始终阻断；只有绑定真实失败、批准人、批准记录与可追溯证据的`ApprovedRed`才可被V0接受。缺 owner、缺 test source、重复、零发现或未经批准的 skipped 状态同样阻止V0。全部 required vector 最终 green 属于 V6 删除门、V7 与 release gate：
 
 | `10B-08` 向量 | 实现/验收 owner |
 |---|---|

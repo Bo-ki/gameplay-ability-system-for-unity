@@ -1,4 +1,5 @@
 using Unity.Collections;
+using Unity.Entities;
 
 namespace GAS.Runtime
 {
@@ -24,6 +25,15 @@ namespace GAS.Runtime
         internal const ulong RecordEndFixed = 1UL << 14;
         internal const ulong TickFinalize = 1UL << 15;
         internal const ulong AllGameplay = (1UL << 16) - 1;
+    }
+
+    /// <summary>
+    /// 定义 BattleOutcome 的稳定结果码；胜负阵营通过事实 payload 的 SideId/TeamId 携带。
+    /// </summary>
+    internal static class GasBattleOutcomeCode
+    {
+        internal const int Draw = 0;
+        internal const int Winner = 1;
     }
 
     /// <summary>
@@ -128,6 +138,10 @@ namespace GAS.Runtime
         public int DeathFactCount;
         public int CoreFactCount;
         public int BoundaryFactCount;
+        /// <summary>
+        /// 保存 admission 已为当前 Tick 预留的 BattleOutcome 上界。
+        /// </summary>
+        public int TerminalOutcomeDemand;
         public GasTickAdmissionFailureReason PostAdmissionFailure;
         public int AbilityRouteCount;
         public ulong FirstAbilityRouteStableSequence;
@@ -188,6 +202,7 @@ namespace GAS.Runtime
         public PendingCommand Command;
         public ulong OriginCommandSequence;
         public int OriginCommandKind;
+        public byte RequiresSourceConsume;
         public byte RequiresOwnerApply;
         public byte Used;
     }
@@ -296,6 +311,9 @@ namespace GAS.Runtime
         public ulong ApplicationId;
         public byte TargetIsAlive;
         public ulong CausalityId;
+        public ulong TargetAvatarStableId;
+        public uint TargetAvatarBindingGeneration;
+        public GasBoundarySpatialSnapshot SpatialSnapshot;
     }
 
     /// <summary>
@@ -313,6 +331,9 @@ namespace GAS.Runtime
         public ulong StartTick;
         public byte TargetIsAlive;
         public ulong CausalityId;
+        public ulong TargetAvatarStableId;
+        public uint TargetAvatarBindingGeneration;
+        public GasBoundarySpatialSnapshot SpatialSnapshot;
     }
 
     /// <summary>
@@ -346,6 +367,19 @@ namespace GAS.Runtime
         public byte TargetIsAlive;
         public ulong CausalityId;
         public GasBoundaryFactScope Scope;
+        /// <summary>
+        /// 指向 Tick-local capture 投影行；Source Snapshot 与 Target Snapshot 在同一行内按 descriptor ordinal 对齐。
+        /// </summary>
+        public int CaptureStart;
+        public int CaptureCount;
+        /// <summary>
+        /// 指向 Tick-local ValueView 投影行，Evaluator 只读取这段冻结数值。
+        /// </summary>
+        public int ValueViewStart;
+        public int ValueViewCount;
+        public ulong TargetAvatarStableId;
+        public uint TargetAvatarBindingGeneration;
+        public GasBoundarySpatialSnapshot SpatialSnapshot;
         public byte IsTargetResolveRejection;
         public GasGameplayEffectApplicationOutcome RejectionOutcome;
         public GasGameplayEffectTransactionFailure RejectionFailure;
@@ -421,6 +455,10 @@ namespace GAS.Runtime
         public GasBoundaryFactKind Kind;
         public OwnerAscHandle SourceAsc;
         public OwnerAscHandle TargetAsc;
+        /// <summary>
+        /// 保存 BattleInstance scope 的显式身份；Battle/Session fact 共用 Session 物理 outbox，但不能丢失逻辑战局代际。
+        /// </summary>
+        public BattleInstanceHandle BattleInstance;
         public ulong SimulationTick;
         public ushort SemanticPhaseOrdinal;
         public ushort WorkClassOrdinal;
@@ -471,6 +509,114 @@ namespace GAS.Runtime
     }
 
     /// <summary>
+    /// 保存单个 Ready ASC 在 TargetPrepare 阶段生成的完整 tick-local authority 快照。
+    /// </summary>
+    internal struct GasTargetShadowState
+    {
+        public Entity Target;
+        public OwnerAscHandle OwnerAsc;
+        public AscLifecycle Lifecycle;
+        public AscSlabHeads SlabHeads;
+        public GasPayloadRangeAllocatorState PayloadState;
+        public int ActiveEffectCount;
+        public int AttributeCount;
+        public int AttributeDirtyWordCount;
+        public int TagCount;
+        public int TagPresenceWordCount;
+        public int PayloadRangeCount;
+        public int PayloadValueCount;
+        public byte Prepared;
+    }
+
+    /// <summary>
+    /// 保存 FinalPublishFaultReduce 对整 Tick Target/Terminal/Route/Boundary 的唯一发布裁决。
+    /// </summary>
+    internal struct GasFinalPublishDecision
+    {
+        public GasTickAdmissionFailureReason FailureReason;
+        public byte Succeeded;
+    }
+
+    /// <summary>
+    /// 冻结 TerminalPrepare 对单个 BattleInstance 的最终业务镜像，发布阶段只按索引覆盖。
+    /// </summary>
+    internal struct GasTerminalBattlePublishIntent
+    {
+        public int BattleIndex;
+        public BattleInstanceSlot Value;
+        public byte Used;
+    }
+
+    /// <summary>
+    /// 冻结 TerminalPrepare 可能产生的 Session lifecycle 推进，避免 prepare 写入 authority。
+    /// </summary>
+    internal struct GasSessionLifecyclePublishIntent
+    {
+        public GasSessionLifecycle Value;
+        public byte Used;
+    }
+
+    /// <summary>
+    /// 冻结 RoutePrepare 对 owner-local PendingCommand 稳定槽的最终覆盖。
+    /// </summary>
+    internal struct GasPendingCommandSlotPublishIntent
+    {
+        public Entity Asc;
+        public int SlotIndex;
+        public PendingCommand Value;
+        public byte Used;
+    }
+
+    /// <summary>
+    /// 冻结 RoutePrepare 对单 ASC PendingCommand slab head 的最终值。
+    /// </summary>
+    internal struct GasPendingCommandHeadPublishIntent
+    {
+        public Entity Asc;
+        public GasSlabHead Value;
+        public byte Used;
+    }
+
+    /// <summary>
+    /// 冻结 BoundaryPrepare 的物理 owner、完整 fact 与 append 后 drain state。
+    /// </summary>
+    internal struct GasBoundaryFactPublishIntent
+    {
+        public Entity Owner;
+        public BoundaryFactBuffer Fact;
+        public BoundaryDrainState StateAfter;
+        public byte Used;
+    }
+
+    /// <summary>
+    /// 指定 final publish conformance fault 应在哪个 prepare 阶段收束后触发。
+    /// </summary>
+    internal enum GasFinalPublishPrepareStage : byte
+    {
+        None,
+        Terminal,
+        Route,
+        Boundary,
+    }
+
+    /// <summary>
+    /// 为 post-owner 原子发布测试提供显式 prepare 后故障点；正常 Session 不安装该组件。
+    /// </summary>
+    internal struct GasFinalPublishFaultInjection : IComponentData
+    {
+        public GasFinalPublishPrepareStage Stage;
+        public int FailAfterPreparedIntentCount;
+    }
+
+    /// <summary>
+    /// 为确定性 conformance fault 测试提供显式 Prepare 失败点；正常 Session 不安装该组件。
+    /// </summary>
+    internal struct GasTargetPrepareFaultInjection : IComponentData
+    {
+        public int FailAfterPreparedApplicationCount;
+    }
+
+    /// <summary>
     /// 由 Kernel 在 WorldUpdateAllocator 上一次创建完整 DAG scratch，任何字段都不得跨 Tick 保存。
     /// </summary>
     internal struct GasTickScratch
@@ -492,6 +638,43 @@ namespace GAS.Runtime
         public NativeArray<GasOwnerResourceDemand> OwnerDemands;
         public NativeArray<GasTargetResourceDemand> TargetDemands;
         public NativeArray<float> EvaluatorStack;
+        public NativeArray<GasTargetShadowState> TargetShadows;
+        public NativeArray<GasFinalPublishDecision> FinalPublishDecision;
+        public NativeArray<GasTerminalBattlePublishIntent> TerminalBattleIntents;
+        public NativeArray<GasSessionLifecyclePublishIntent> SessionLifecycleIntent;
+        public NativeArray<GasPendingCommandSlotPublishIntent> PendingCommandSlotIntents;
+        public NativeArray<GasPendingCommandHeadPublishIntent> PendingCommandHeadIntents;
+        public NativeArray<GasBoundaryFactPublishIntent> BoundaryFactIntents;
+        public NativeArray<GasRequestTerminalIntent> RequestTerminalIntents;
+        public NativeArray<ActiveEffectSlot> TargetActiveEffects;
+        public NativeArray<AttributeValueSlot> TargetAttributes;
+        public NativeArray<AttributeDirtyWord> TargetAttributeDirtyWords;
+        public NativeArray<TagCountSlot> TargetTagCounts;
+        public NativeArray<TagPresenceWord> TargetTagPresenceWords;
+        public NativeArray<GasPayloadRangeRecord> TargetPayloadRanges;
+        public NativeArray<GasPayloadValueSlot> TargetPayloadValues;
+        public int TargetActiveEffectStride;
+        public int TargetAttributeStride;
+        public int TargetAttributeDirtyWordStride;
+        public int TargetTagStride;
+        public int TargetTagPresenceWordStride;
+        public int TargetPayloadRangeStride;
+        public int TargetPayloadValueStride;
+        /// <summary>
+        /// 保存每条 source-bound spec 的定长 capture 投影行；行起点由 GasSourceSpecRecord 冻结。
+        /// </summary>
+        public NativeArray<float> CaptureValues;
+        /// <summary>
+        /// 保存每条 target application 的定长 ValueView 投影行；禁止 evaluator 直接读取 ECS。
+        /// </summary>
+        public NativeArray<float> ValueViews;
+        /// <summary>
+        /// 为既有 ActiveEffect period execution 保留的独立输入行，避免覆盖新 application snapshot。
+        /// </summary>
+        public NativeArray<float> PeriodCaptureValues;
+        public NativeArray<float> PeriodValueViews;
+        public int CaptureStride;
+        public int ValueViewStride;
 
         /// <summary>
         /// 按 ScaleProfile 逻辑上限创建全部定长容器，Job 只能在界内写入而不得扩容。
@@ -500,6 +683,44 @@ namespace GAS.Runtime
             in GasScaleProfile profile,
             AllocatorManager.AllocatorHandle allocator)
         {
+            return Create(in profile, default, allocator);
+        }
+
+        /// <summary>
+        /// 按 ScaleProfile 与 immutable Catalog 的生成期 descriptor maxima 创建 capture/value 输入平面。
+        /// </summary>
+        public static GasTickScratch Create(
+            in GasScaleProfile profile,
+            BlobAssetReference<GasDefinitionCatalogBlob> catalog,
+            AllocatorManager.AllocatorHandle allocator)
+        {
+            var captureStride = 1;
+            var valueViewStride = 1;
+            var evaluatorLength = 1;
+            var attributeCount = 0;
+            var tagCount = 0;
+            if (catalog.IsCreated)
+            {
+                ref var root = ref catalog.Value;
+                attributeCount = root.AttributeLayout.Entries.Length;
+                tagCount = root.TagCatalog.Entries.Length;
+                for (var index = 0; index < root.GameplayEffects.Length; index++)
+                {
+                    var definition = root.GameplayEffects[index];
+                    captureStride = Max(captureStride, definition.CaptureRange.Count);
+                    valueViewStride = Max(valueViewStride, definition.ValueViewRange.Count);
+                    evaluatorLength = Max(evaluatorLength, definition.EvaluatorProgramRange.Count);
+                }
+            }
+            var rowCount = Max(1, profile.MaxEffectOperationCount);
+            var captureLength = Product(rowCount, captureStride);
+            var valueViewLength = Product(rowCount, valueViewStride);
+            var targetCount = ClampLength(profile.MaxAscRegistryCount);
+            var activeEffectStride = ClampLength(profile.MaxActiveEffectCount);
+            var attributeDirtyWordStride = WordCount(attributeCount);
+            var tagPresenceWordStride = WordCount(tagCount);
+            var payloadRangeStride = ClampLength(profile.MaxPayloadRangeRecordCount);
+            var payloadValueStride = ClampLength(profile.MaxPayloadValueCount);
             return new GasTickScratch
             {
                 Execution = CreateArray<GasTickExecutionState>(1, allocator),
@@ -523,7 +744,47 @@ namespace GAS.Runtime
                 OwnerDemands = CreateArray<GasOwnerResourceDemand>(ClampLength(profile.MaxOwnerReservationCount), allocator),
                 TargetDemands = CreateArray<GasTargetResourceDemand>(ClampLength(profile.MaxTargetReservationCount), allocator),
                 EvaluatorStack = CreateArray<float>(
-                    ClampLength(profile.MaxEffectOperationCount), allocator),
+                    Max(1, Max(ClampLength(profile.MaxEffectOperationCount), evaluatorLength)), allocator),
+                TargetShadows = CreateArray<GasTargetShadowState>(targetCount, allocator),
+                FinalPublishDecision = CreateArray<GasFinalPublishDecision>(1, allocator),
+                TerminalBattleIntents = CreateArray<GasTerminalBattlePublishIntent>(
+                    ClampLength(profile.MaxBattleInstanceCount), allocator),
+                SessionLifecycleIntent = CreateArray<GasSessionLifecyclePublishIntent>(1, allocator),
+                PendingCommandSlotIntents = CreateArray<GasPendingCommandSlotPublishIntent>(
+                    Product(ClampLength(profile.MaxNextTickRouteCount), 2), allocator),
+                PendingCommandHeadIntents = CreateArray<GasPendingCommandHeadPublishIntent>(
+                    targetCount, allocator),
+                BoundaryFactIntents = CreateArray<GasBoundaryFactPublishIntent>(
+                    ClampLength(profile.MaxCoreFactCount), allocator),
+                RequestTerminalIntents = CreateArray<GasRequestTerminalIntent>(
+                    ClampLength(profile.MaxBoundaryCommandCount), allocator),
+                TargetActiveEffects = CreateArray<ActiveEffectSlot>(
+                    Product(targetCount, activeEffectStride), allocator),
+                TargetAttributes = CreateArray<AttributeValueSlot>(
+                    Product(targetCount, attributeCount), allocator),
+                TargetAttributeDirtyWords = CreateArray<AttributeDirtyWord>(
+                    Product(targetCount, attributeDirtyWordStride), allocator),
+                TargetTagCounts = CreateArray<TagCountSlot>(
+                    Product(targetCount, tagCount), allocator),
+                TargetTagPresenceWords = CreateArray<TagPresenceWord>(
+                    Product(targetCount, tagPresenceWordStride), allocator),
+                TargetPayloadRanges = CreateArray<GasPayloadRangeRecord>(
+                    Product(targetCount, payloadRangeStride), allocator),
+                TargetPayloadValues = CreateArray<GasPayloadValueSlot>(
+                    Product(targetCount, payloadValueStride), allocator),
+                TargetActiveEffectStride = activeEffectStride,
+                TargetAttributeStride = attributeCount,
+                TargetAttributeDirtyWordStride = attributeDirtyWordStride,
+                TargetTagStride = tagCount,
+                TargetTagPresenceWordStride = tagPresenceWordStride,
+                TargetPayloadRangeStride = payloadRangeStride,
+                TargetPayloadValueStride = payloadValueStride,
+                CaptureValues = CreateArray<float>(captureLength, allocator),
+                ValueViews = CreateArray<float>(valueViewLength, allocator),
+                PeriodCaptureValues = CreateArray<float>(captureStride, allocator),
+                PeriodValueViews = CreateArray<float>(valueViewStride, allocator),
+                CaptureStride = captureStride,
+                ValueViewStride = valueViewStride,
             };
         }
 
@@ -541,6 +802,32 @@ namespace GAS.Runtime
         private static int MaxLength(int left, int right)
         {
             return left > right ? left : right;
+        }
+
+        /// <summary>
+        /// 返回两个非负容量中的较大值，并为损坏 profile 提供最小合法行宽。
+        /// </summary>
+        private static int Max(int left, int right)
+        {
+            return left > right ? left : right;
+        }
+
+        /// <summary>
+        /// 计算定长输入平面大小；溢出时返回零让 admission 明确拒绝，而非主线程隐式扩容。
+        /// </summary>
+        private static int Product(int left, int right)
+        {
+            if (left <= 0 || right <= 0 || left > int.MaxValue / right)
+                return 0;
+            return left * right;
+        }
+
+        /// <summary>
+        /// 将 dense 元素数转换为 64 位 presence/dirty word 数量。
+        /// </summary>
+        private static int WordCount(int elementCount)
+        {
+            return elementCount <= 0 ? 0 : ((elementCount - 1) / 64) + 1;
         }
 
         /// <summary>

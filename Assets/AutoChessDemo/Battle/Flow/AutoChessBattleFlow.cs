@@ -5,8 +5,7 @@ namespace GAS.AutoChessDemo
 {
     internal sealed class AutoChessBattleFlow : System.IDisposable
     {
-        private const int WarmupRuntimeTicks = 3;
-        private const int SpawnFinalizeWarmupTicks = 2;
+        private const int SpawnFinalizeMaintenanceTicks = 2;
 
         private readonly AutoChessBattleOptions _options;
         private readonly AutoChessBattleProfileHooks _profileHooks;
@@ -18,7 +17,7 @@ namespace GAS.AutoChessDemo
         private Stopwatch _stopwatch;
         private long _measuredElapsedTicks;
         private int _measuredTicks;
-        private int _droppedWarmupTicks;
+        private int _spawnFinalizeMaintenanceTicks;
         private int _battleTicks;
         private int _totalTicks;
         private int _victoryTick;
@@ -67,31 +66,23 @@ namespace GAS.AutoChessDemo
             if (!CanAdvance)
                 return false;
 
-            var shouldRecordTiming = _droppedWarmupTicks >= WarmupRuntimeTicks;
-            OpenMeasuredWindowIfNeeded(shouldRecordTiming);
+            OpenMeasuredWindowIfNeeded(shouldRecordTiming: true);
 
             // 在本次固定 tick 前完成唯一 CommandPort 的确定性业务投递，避免绕过 Runtime v1 ingress。
             _session.QueueDeterministicCommands((ulong)(_totalTicks + 1));
 
-            var tickStart = shouldRecordTiming ? Stopwatch.GetTimestamp() : 0L;
-            if (!_runtime.AdvanceFixedTick(shouldRecordTiming, ref _runtimeTiming))
+            var tickStart = Stopwatch.GetTimestamp();
+            if (!_runtime.AdvanceFixedTick(recordTiming: true, ref _runtimeTiming))
                 return false;
 
-            if (shouldRecordTiming)
-            {
-                _measuredElapsedTicks += Stopwatch.GetTimestamp() - tickStart;
-                _measuredTicks++;
-            }
-            else
-            {
-                _droppedWarmupTicks++;
-            }
+            _measuredElapsedTicks += Stopwatch.GetTimestamp() - tickStart;
+            _measuredTicks++;
 
             _totalTicks++;
             _battleTicks++;
             UpdateVictoryState();
 
-            if (HasResolvedVictoryAndFlushed())
+            if (HasResolvedVictory())
                 return false;
 
             return !stopWhenMinimumBattleSecondsReachedWithoutWinner
@@ -123,7 +114,7 @@ namespace GAS.AutoChessDemo
                 _options.Scale,
                 _battleTicks,
                 _totalTicks,
-                _droppedWarmupTicks,
+                _spawnFinalizeMaintenanceTicks,
                 _measuredTicks,
                 _stopwatch.ElapsedTicks,
                 _stopwatch.Elapsed.TotalMilliseconds,
@@ -161,11 +152,11 @@ namespace GAS.AutoChessDemo
         {
             _stopwatch = Stopwatch.StartNew();
             _session.Open();
-            for (var warmupIndex = 0; warmupIndex < SpawnFinalizeWarmupTicks; warmupIndex++)
+            for (var maintenanceIndex = 0; maintenanceIndex < SpawnFinalizeMaintenanceTicks; maintenanceIndex++)
             {
                 if (!_runtime.AdvanceFixedTick(recordTiming: false, ref _runtimeTiming))
-                    throw new System.InvalidOperationException("Runtime v1 SpawnFinalize warmup batch 未执行。");
-                _droppedWarmupTicks++;
+                    throw new System.InvalidOperationException("Runtime v1 SpawnFinalize maintenance batch 未执行。");
+                _spawnFinalizeMaintenanceTicks++;
                 _totalTicks++;
             }
             if (!_session.QueueInitialAttack(availableTick: 1))
@@ -228,11 +219,9 @@ namespace GAS.AutoChessDemo
                 _victoryTick = _battleTicks;
         }
 
-        private bool HasResolvedVictoryAndFlushed()
+        private bool HasResolvedVictory()
         {
-            return _victoryTick >= 0
-                   && _battleTicks - _victoryTick >= _options.PostVictoryFlushTicks
-                   && HasReachedMinimumBattleSeconds();
+            return _victoryTick >= 0 && HasReachedMinimumBattleSeconds();
         }
 
         private bool HasReachedMinimumBattleSeconds()

@@ -1,17 +1,4 @@
 {
-  "executionCalculations": {
-    "executeDamage": 9401,
-    "executeDamageOutput": 9402,
-    "executeDamageFormula": {
-      "baseDamage": 16.0,
-      "missingHealthCoefficient": 0.5,
-      "minDamage": 12.0,
-      "maxDamage": 42.0
-    }
-  },
-  "tags": {
-    "attackCooldown": 1
-  },
   "validationScenario": {
     "scale": 50,
     "maxTicks": 96,
@@ -38,6 +25,7 @@
       "slot": 0,
       "health": 72.0,
       "energy": 8.0,
+      "attack": 16.0,
       "primaryAbility": "AbilityPlayerAttack",
       "finisherAbility": "AbilityPlayerExecute",
       "activeAbility": "AbilityPlayerPoison",
@@ -55,6 +43,7 @@
       "slot": 1,
       "health": 54.0,
       "energy": 8.0,
+      "attack": 14.0,
       "primaryAbility": "AbilityPlayerAttack",
       "finisherAbility": "AbilityPlayerExecute",
       "activeAbility": "AbilityPlayerPoison",
@@ -72,6 +61,7 @@
       "slot": 0,
       "health": 48.0,
       "energy": 8.0,
+      "attack": 12.0,
       "primaryAbility": "AbilityEnemyAttack",
       "finisherAbility": "None",
       "activeAbility": "None",
@@ -89,6 +79,7 @@
       "slot": 1,
       "health": 42.0,
       "energy": 8.0,
+      "attack": 10.0,
       "primaryAbility": "AbilityEnemyAttack",
       "finisherAbility": "None",
       "activeAbility": "None",

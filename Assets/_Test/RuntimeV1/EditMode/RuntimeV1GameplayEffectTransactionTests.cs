@@ -269,6 +269,120 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
+        /// 验证 Avatar rebind 不得借 stack merge 覆盖既有 ActiveEffect 的冻结代际身份。
+        /// </summary>
+        [Test]
+        public void AvatarRebind_StackMerge拒绝并保留原槽身份()
+        {
+            using var world = new World("Runtime v1 avatar rebind test");
+            var asc = CreateTarget(world, 10f);
+            using var catalog = CreateStackCatalog(
+                executeOnApplication: 0,
+                useStackCount: false,
+                targetPolicy: new GasTargetPolicyBlob
+                {
+                    LogicalTarget = GasLogicalTargetPolicy.FrozenAsc,
+                    Avatar = GasAvatarTargetPolicy.RequireSameAvatar,
+                    Spatial = GasSpatialTargetPolicy.None,
+                    Life = GasTargetLifePolicy.AliveOnly,
+                });
+            using var evaluatorStack = new NativeArray<float>(8, Allocator.Temp);
+            var head = SeedActiveStack(world, asc, 1, 20, 11, 81, 4);
+
+            var result = ApplyWithHead(
+                world,
+                asc,
+                catalog,
+                evaluatorStack,
+                201,
+                ref head,
+                9,
+                81,
+                5,
+                GasBoundarySpatialSnapshot.None);
+            var slot = world.EntityManager.GetBuffer<ActiveEffectSlot>(asc)[0];
+            var value = world.EntityManager.GetBuffer<AttributeValueSlot>(asc)[0];
+
+            Assert.That(result.Outcome,
+                Is.EqualTo(GasGameplayEffectApplicationOutcome.RejectedStaleBinding));
+            Assert.That(result.Failure,
+                Is.EqualTo(GasGameplayEffectTransactionFailure.InvalidIdentity));
+            Assert.That(slot.StackCount, Is.EqualTo(1));
+            Assert.That(slot.TargetAvatarStableId, Is.EqualTo(81UL));
+            Assert.That(slot.TargetAvatarBindingGeneration, Is.EqualTo(4U));
+            Assert.That(value.Current, Is.EqualTo(10f));
+            Assert.That(head.HighWater, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// 验证 FrozenSpatial reapply 只接受同一冻结样本，变更空间 token 时保持原槽与属性不变。
+        /// </summary>
+        [Test]
+        public void FrozenSpatial_空间样本变化拒绝StackMerge()
+        {
+            using var world = new World("Runtime v1 frozen spatial test");
+            var asc = CreateTarget(world, 10f);
+            var snapshot = new GasBoundarySpatialSnapshot(
+                GasTargetDataVariant.FrozenSpatialPoint,
+                1001,
+                0,
+                1f,
+                2f,
+                3f,
+                0f,
+                0f,
+                0f,
+                0f,
+                0f);
+            var reboundSnapshot = new GasBoundarySpatialSnapshot(
+                GasTargetDataVariant.FrozenSpatialPoint,
+                1002,
+                0,
+                1f,
+                2f,
+                3f,
+                0f,
+                0f,
+                0f,
+                0f,
+                0f);
+            using var catalog = CreateStackCatalog(
+                executeOnApplication: 0,
+                useStackCount: false,
+                targetPolicy: new GasTargetPolicyBlob
+                {
+                    LogicalTarget = GasLogicalTargetPolicy.FrozenAsc,
+                    Avatar = GasAvatarTargetPolicy.FollowAsc,
+                    Spatial = GasSpatialTargetPolicy.FrozenSpatial,
+                    Life = GasTargetLifePolicy.AliveOnly,
+                },
+                withFrozenSpatialDescriptor: true);
+            using var evaluatorStack = new NativeArray<float>(8, Allocator.Temp);
+            var head = SeedActiveStack(world, asc, 1, 20, 11, 0, 0, snapshot);
+
+            var result = ApplyWithHead(
+                world,
+                asc,
+                catalog,
+                evaluatorStack,
+                202,
+                ref head,
+                9,
+                0,
+                0,
+                reboundSnapshot);
+            var slot = world.EntityManager.GetBuffer<ActiveEffectSlot>(asc)[0];
+
+            Assert.That(result.Outcome,
+                Is.EqualTo(GasGameplayEffectApplicationOutcome.RejectedStaleBinding));
+            Assert.That(result.Failure,
+                Is.EqualTo(GasGameplayEffectTransactionFailure.InvalidIdentity));
+            Assert.That(slot.SpatialSnapshot, Is.EqualTo(snapshot));
+            Assert.That(slot.StackCount, Is.EqualTo(1));
+            Assert.That(head.HighWater, Is.EqualTo(1));
+        }
+
+        /// <summary>
         /// 验证 AcceptAndKeepLimit 在上限 reapply 时保持 stack count 但仍执行 application body。
         /// </summary>
         [Test]
@@ -339,7 +453,10 @@ namespace GAS.RuntimeV1.Tests.EditMode
             NativeArray<float> evaluatorStack,
             ulong applicationId,
             ref GasSlabHead activeEffectHead,
-            ulong startTick)
+            ulong startTick,
+            ulong targetAvatarStableId = 0,
+            uint targetAvatarBindingGeneration = 0,
+            GasBoundarySpatialSnapshot spatialSnapshot = default)
         {
             var em = world.EntityManager;
             var owner = new OwnerAscHandle(7, 1);
@@ -354,6 +471,9 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 TargetIsAlive = 1,
                 CaptureValueCount = 0,
                 ValueViewCount = 0,
+                TargetAvatarStableId = targetAvatarStableId,
+                TargetAvatarBindingGeneration = targetAvatarBindingGeneration,
+                SpatialSnapshot = spatialSnapshot,
             };
             ref var root = ref catalog.Value;
             GasGameplayEffectTransaction.TryApply(
@@ -384,7 +504,9 @@ namespace GAS.RuntimeV1.Tests.EditMode
             GasPeriodResetPolicy periodResetPolicy = GasPeriodResetPolicy.Never,
             GasStackLimitApplicationPolicy stackLimitApplicationPolicy =
                 GasStackLimitApplicationPolicy.RejectAtLimit,
-            int stackLimit = 3)
+            int stackLimit = 3,
+            GasTargetPolicyBlob? targetPolicy = null,
+            bool withFrozenSpatialDescriptor = false)
         {
             var builder = new BlobBuilder(Allocator.Temp);
             try
@@ -411,7 +533,10 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 {
                     DefinitionId = 101,
                     Lifetime = GasEffectLifetimePolicy.Duration,
-                    TargetPolicy = new GasTargetPolicyBlob { Life = GasTargetLifePolicy.AliveOnly },
+                    TargetPolicy = targetPolicy ?? DefaultTargetPolicy(),
+                    TargetDataRange = withFrozenSpatialDescriptor
+                        ? new GasCatalogRange { Start = 0, Count = 1 }
+                        : default,
                     ModifierRange = new GasCatalogRange { Start = 0, Count = modifierCount },
                     DurationTicks = 20,
                     PeriodTicks = 2,
@@ -462,7 +587,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
                         Opcode = GasEvaluatorOpcode.PushConstant,
                         ConstantValue = 1f,
                     };
-                AllocateEmptyArrays(ref root, builder);
+                AllocateEmptyArrays(ref root, builder, withFrozenSpatialDescriptor);
                 return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
             }
             finally
@@ -479,7 +604,10 @@ namespace GAS.RuntimeV1.Tests.EditMode
             Entity asc,
             int stackCount,
             ulong endTick,
-            ulong nextPeriodTick)
+            ulong nextPeriodTick,
+            ulong targetAvatarStableId = 0,
+            uint targetAvatarBindingGeneration = 0,
+            GasBoundarySpatialSnapshot spatialSnapshot = default)
         {
             var effects = world.EntityManager.GetBuffer<ActiveEffectSlot>(asc);
             effects.EnsureCapacity(4);
@@ -500,6 +628,9 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 NextPeriodTick = nextPeriodTick,
                 StackCount = stackCount,
                 State = GasSlotBusinessState.Active,
+                TargetAvatarStableId = targetAvatarStableId,
+                TargetAvatarBindingGeneration = targetAvatarBindingGeneration,
+                SpatialSnapshot = spatialSnapshot,
             };
             return head;
         }
@@ -534,7 +665,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
             {
                 DefinitionId = 100,
                 Lifetime = lifetime,
-                TargetPolicy = new GasTargetPolicyBlob { Life = GasTargetLifePolicy.AliveOnly },
+                TargetPolicy = DefaultTargetPolicy(),
                 ModifierRange = new GasCatalogRange { Start = 0, Count = 1 },
                 DurationTicks = durationTicks,
                 StackKey = GasStackKeyFields.None,
@@ -592,7 +723,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
             {
                 DefinitionId = 100,
                 Lifetime = lifetime,
-                TargetPolicy = new GasTargetPolicyBlob { Life = GasTargetLifePolicy.AliveOnly },
+                TargetPolicy = DefaultTargetPolicy(),
                 ModifierRange = new GasCatalogRange { Start = 0, Count = 2 },
                 DurationTicks = lifetime == GasEffectLifetimePolicy.Duration ? 3 : 0,
             };
@@ -661,7 +792,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
             {
                 DefinitionId = 100,
                 Lifetime = GasEffectLifetimePolicy.Instant,
-                TargetPolicy = new GasTargetPolicyBlob { Life = GasTargetLifePolicy.AliveOnly },
+                TargetPolicy = DefaultTargetPolicy(),
                 ApplicationRequirementRange = invalidImmunity
                     ? default
                     : new GasCatalogRange { Start = 0, Count = 1 },
@@ -682,11 +813,26 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
+        /// 返回测试 transaction 使用的完整 target policy，避免把零值枚举当作兼容默认值。
+        /// </summary>
+        private static GasTargetPolicyBlob DefaultTargetPolicy()
+        {
+            return new GasTargetPolicyBlob
+            {
+                LogicalTarget = GasLogicalTargetPolicy.Self,
+                Avatar = GasAvatarTargetPolicy.FollowAsc,
+                Spatial = GasSpatialTargetPolicy.None,
+                Life = GasTargetLifePolicy.AliveOnly,
+            };
+        }
+
+        /// <summary>
         /// 为测试 catalog 分配所有未使用的 BlobArray，确保每个 range 都可安全读取。
         /// </summary>
         private static void AllocateEmptyArrays(
             ref GasDefinitionCatalogBlob root,
-            BlobBuilder builder)
+            BlobBuilder builder,
+            bool withFrozenSpatialDescriptor = false)
         {
             builder.Allocate(ref root.AbilityIndex, 0);
             builder.Allocate(ref root.Abilities, 0);
@@ -697,7 +843,16 @@ namespace GAS.RuntimeV1.Tests.EditMode
             builder.Allocate(ref root.ValueViews, 0);
             builder.Allocate(ref root.EvaluatorInstructions, 0);
             builder.Allocate(ref root.SetByCallerDescriptors, 0);
-            builder.Allocate(ref root.TargetDataDescriptors, 0);
+            var targetDataDescriptors = builder.Allocate(
+                ref root.TargetDataDescriptors,
+                withFrozenSpatialDescriptor ? 1 : 0);
+            if (withFrozenSpatialDescriptor)
+                targetDataDescriptors[0] = new GasTargetDataDescriptorBlob
+                {
+                    Variant = GasTargetDataVariant.FrozenSpatialPoint,
+                    FieldOrdinal = 0,
+                    Required = 1,
+                };
             builder.Allocate(ref root.EffectContextFieldDescriptors, 0);
         }
     }

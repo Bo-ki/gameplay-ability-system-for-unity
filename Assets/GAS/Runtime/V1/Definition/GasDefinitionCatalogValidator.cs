@@ -32,6 +32,7 @@ namespace GAS.Runtime
         SetByCallerInvalid = 24,
         TargetDataInvalid = 25,
         EffectContextInvalid = 26,
+        AbilityCostTargetsHealth = 27,
     }
 
     /// <summary>
@@ -124,13 +125,13 @@ namespace GAS.Runtime
     public static class GasDefinitionCatalogValidator
     {
         /// <summary>
-        /// 按 header、布局、索引和 Definition 顺序完成 fail-closed 校验。
+        /// 先验证 schema 与结构语义，再核对 canonical 内容身份，保留最精确的失败原因。
         /// </summary>
         public static GasCatalogValidationResult Validate(
             ref GasDefinitionCatalogBlob catalog,
             in GasCatalogValidationExpectation expectation)
         {
-            var result = ValidateHeader(ref catalog, in expectation);
+            var result = ValidateSchemaHeader(ref catalog, in expectation);
             if (!result.Succeeded)
                 return result;
 
@@ -147,13 +148,19 @@ namespace GAS.Runtime
                 return result;
 
             result = ValidateAbilityDefinitions(ref catalog);
-            return result.Succeeded ? ValidateGameplayEffectDefinitions(ref catalog) : result;
+            if (!result.Succeeded)
+                return result;
+
+            result = ValidateGameplayEffectDefinitions(ref catalog);
+            return result.Succeeded
+                ? ValidateContentIdentity(ref catalog, in expectation)
+                : result;
         }
 
         /// <summary>
-        /// 精确匹配 schema/content/layout/tag hash，任一不符即拒绝安装。
+        /// 精确匹配 schema version/hash，阻止按错误结构继续遍历候选内容。
         /// </summary>
-        private static GasCatalogValidationResult ValidateHeader(
+        private static GasCatalogValidationResult ValidateSchemaHeader(
             ref GasDefinitionCatalogBlob catalog,
             in GasCatalogValidationExpectation expectation)
         {
@@ -164,13 +171,32 @@ namespace GAS.Runtime
             if (catalog.SchemaHash != expectation.SchemaHash)
                 return Failure(GasCatalogValidationError.SchemaHashMismatch);
 
-            if (catalog.ContentHash != expectation.ContentHash)
+            return Success();
+        }
+
+        /// <summary>
+        /// 结构语义通过后现算 canonical 三类 hash，并同时核对候选镜像与外部冻结期望。
+        /// </summary>
+        private static GasCatalogValidationResult ValidateContentIdentity(
+            ref GasDefinitionCatalogBlob catalog,
+            in GasCatalogValidationExpectation expectation)
+        {
+
+            var computedContentHash = GasDefinitionCatalogContentHasher.Compute(ref catalog);
+            if (catalog.ContentHash != computedContentHash
+                || expectation.ContentHash != computedContentHash)
                 return Failure(GasCatalogValidationError.ContentHashMismatch);
 
-            if (catalog.AttributeLayout.LayoutHash != expectation.AttributeLayoutHash)
+            var computedAttributeLayoutHash =
+                GasDefinitionCatalogContentHasher.ComputeAttributeLayout(ref catalog.AttributeLayout);
+            if (catalog.AttributeLayout.LayoutHash != computedAttributeLayoutHash
+                || expectation.AttributeLayoutHash != computedAttributeLayoutHash)
                 return Failure(GasCatalogValidationError.AttributeLayoutHashMismatch);
 
-            if (catalog.TagCatalog.CatalogHash != expectation.TagCatalogHash)
+            var computedTagCatalogHash =
+                GasDefinitionCatalogContentHasher.ComputeTagCatalog(ref catalog.TagCatalog);
+            if (catalog.TagCatalog.CatalogHash != computedTagCatalogHash
+                || expectation.TagCatalogHash != computedTagCatalogHash)
                 return Failure(GasCatalogValidationError.TagCatalogHashMismatch);
 
             return Success();
@@ -406,6 +432,18 @@ namespace GAS.Runtime
                     || !IsCostMutationContractValid(ref catalog, in definition.CostMutationContract)
                     || !IsCooldownGateContractValid(ref catalog, in definition.CooldownGateContract))
                     return Failure(GasCatalogValidationError.DefinitionPolicyInvalid, definitionId: definition.DefinitionId);
+
+                // OwnerWave cost 不拥有死亡事务，Runtime v1 在 Catalog 边界拒绝任何 Health cost。
+                var cost = definition.CostMutationContract;
+                if (cost.Enabled != 0 &&
+                    catalog.AttributeLayout.Entries[cost.AttributeLayoutIndex].DomainRole ==
+                    GasAttributeDomainRole.Health)
+                {
+                    return Failure(
+                        GasCatalogValidationError.AbilityCostTargetsHealth,
+                        definitionId: definition.DefinitionId,
+                        elementIndex: cost.AttributeLayoutIndex);
+                }
 
                 if (!IsTargetPolicyValid(definition.TargetPolicy))
                     return Failure(GasCatalogValidationError.TargetPolicyInvalid, definitionId: definition.DefinitionId);
@@ -1035,7 +1073,11 @@ namespace GAS.Runtime
 
             result = ValidateTargetData(ref catalog, definition.TargetDataRange, in definition.TargetPolicy, definition.DefinitionId);
             return result.Succeeded
-                ? ValidateEffectContext(ref catalog, definition.EffectContextFieldRange, definition.DefinitionId)
+                ? ValidateEffectContext(
+                    ref catalog,
+                    definition.EffectContextFieldRange,
+                    in definition.TargetPolicy,
+                    definition.DefinitionId)
                 : result;
         }
 
@@ -1177,6 +1219,7 @@ namespace GAS.Runtime
         private static GasCatalogValidationResult ValidateEffectContext(
             ref GasDefinitionCatalogBlob catalog,
             GasCatalogRange range,
+            in GasTargetPolicyBlob targetPolicy,
             int definitionId)
         {
             uint seenFields = 0;
@@ -1202,7 +1245,38 @@ namespace GAS.Runtime
                 seenFields |= fieldBit;
             }
 
+            // RequireSameAvatar 的 generation 是延迟消费时唯一的 Avatar 身份屏障，必须在 Definition
+            // contract 中声明为 Required；没有该字段的 Spec 不允许进入 Runtime v1。
+            if (targetPolicy.Avatar == GasAvatarTargetPolicy.RequireSameAvatar &&
+                !HasRequiredEffectContextField(
+                    ref catalog,
+                    range,
+                    GasEffectContextFieldKind.TargetAvatarBindingGeneration))
+            {
+                return Failure(
+                    GasCatalogValidationError.EffectContextInvalid,
+                    GasCatalogRangeKind.EffectContext,
+                    definitionId);
+            }
+
             return Success();
+        }
+
+        /// <summary>
+        /// 判断 EffectContext range 是否声明指定字段且显式标记为必填。
+        /// </summary>
+        private static bool HasRequiredEffectContextField(
+            ref GasDefinitionCatalogBlob catalog,
+            GasCatalogRange range,
+            GasEffectContextFieldKind field)
+        {
+            for (var offset = 0; offset < range.Count; offset++)
+            {
+                var descriptor = catalog.EffectContextFieldDescriptors[range.Start + offset];
+                if (descriptor.Field == field)
+                    return descriptor.Required != 0;
+            }
+            return false;
         }
 
         /// <summary>
@@ -1240,11 +1314,13 @@ namespace GAS.Runtime
         private static bool IsTargetPolicyValid(GasTargetPolicyBlob policy)
         {
             return policy.LogicalTarget >= GasLogicalTargetPolicy.Self
-                && policy.LogicalTarget <= GasLogicalTargetPolicy.ResolveAtCommit
+                // v1 只消费 TargetResolve 已冻结的 Self/FrozenAsc；ResolveAtCommit 没有可执行 resolver，
+                // 必须在 Catalog 安装前拒绝，不能让它进入运行时再伪装成业务拒绝。
+                && policy.LogicalTarget <= GasLogicalTargetPolicy.FrozenAsc
                 && policy.Avatar >= GasAvatarTargetPolicy.FollowAsc
                 && policy.Avatar <= GasAvatarTargetPolicy.RequireSameAvatar
                 && policy.Spatial >= GasSpatialTargetPolicy.None
-                && policy.Spatial <= GasSpatialTargetPolicy.ResampleAtApplication
+                && policy.Spatial <= GasSpatialTargetPolicy.FrozenSpatial
                 && policy.Life >= GasTargetLifePolicy.AliveOnly
                 && policy.Life <= GasTargetLifePolicy.AnyLifeState;
         }

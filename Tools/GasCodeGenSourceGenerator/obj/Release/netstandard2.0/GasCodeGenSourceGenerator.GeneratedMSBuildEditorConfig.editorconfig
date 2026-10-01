@@ -1,0 +1,8 @@
+is_global = true
+build_property.RootNamespace = Gas.CodeGen.SourceGenerator
+build_property.ProjectDir = E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Tools\GasCodeGenSourceGenerator\
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = 
+build_property.CsWinRTUseWindowsUIXamlProjections = false
+build_property.EffectiveAnalysisLevelStyle = 
+build_property.EnableCodeStyleSeverity = 

@@ -16,9 +16,6 @@ namespace GAS.RuntimeV1.Tests.EditMode
         private const int LegacyPoisonPeriodEffectId = 9204;
         private const int FinisherEffectId = 9207;
         private const ulong SchemaHash = 0x1101UL;
-        private const ulong ContentHash = 0x2202UL;
-        private const ulong AttributeLayoutHash = 0x3303UL;
-        private const ulong TagCatalogHash = 0x4404UL;
 
         /// <summary>
         /// 验证四种 requirement phase 通过独立 range 往返且没有压平成共享字段。
@@ -92,12 +89,52 @@ namespace GAS.RuntimeV1.Tests.EditMode
         {
             using var catalog = RuntimeV1CatalogTestBlobFactory.Create();
             ref var root = ref catalog.Value;
-            var expectation = CreateExpectation(mismatch);
+            var expectation = CreateExpectation(ref root, mismatch);
 
             var result = GasDefinitionCatalogValidator.Validate(ref root, in expectation);
 
             Assert.That(result.Succeeded, Is.False);
             Assert.That(result.Error, Is.EqualTo(expectedError));
+        }
+
+        /// <summary>
+        /// 验证两次独立 materialize 的同语义 Catalog 产生完全相同的三类 canonical hash。
+        /// </summary>
+        [Test]
+        public void CanonicalHash_同语义独立Blob三Hash相同()
+        {
+            using var firstCatalog = RuntimeV1CatalogTestBlobFactory.Create();
+            using var secondCatalog = RuntimeV1CatalogTestBlobFactory.Create();
+            ref var first = ref firstCatalog.Value;
+            ref var second = ref secondCatalog.Value;
+
+            Assert.That(second.ContentHash, Is.EqualTo(first.ContentHash));
+            Assert.That(second.AttributeLayout.LayoutHash, Is.EqualTo(first.AttributeLayout.LayoutHash));
+            Assert.That(second.TagCatalog.CatalogHash, Is.EqualTo(first.TagCatalog.CatalogHash));
+        }
+
+        /// <summary>
+        /// 验证候选复用另一 Catalog 的冻结身份后篡改 Ability level 会被内容哈希拒绝。
+        /// </summary>
+        [Test]
+        public void ContentHash_修改AbilityLevel且复用冻结Header必须拒绝()
+        {
+            using var sourceCatalog = RuntimeV1CatalogTestBlobFactory.Create();
+            using var candidateCatalog = RuntimeV1CatalogTestBlobFactory.Create();
+            ref var source = ref sourceCatalog.Value;
+            ref var candidate = ref candidateCatalog.Value;
+            var expectation = CreateExpectation(ref source, CatalogHeaderMismatch.None);
+            candidate.SchemaVersion = source.SchemaVersion;
+            candidate.SchemaHash = source.SchemaHash;
+            candidate.ContentHash = source.ContentHash;
+            candidate.AttributeLayout.LayoutHash = source.AttributeLayout.LayoutHash;
+            candidate.TagCatalog.CatalogHash = source.TagCatalog.CatalogHash;
+            candidate.Abilities[0].Level++;
+
+            var result = GasDefinitionCatalogValidator.Validate(ref candidate, in expectation);
+
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Error, Is.EqualTo(GasCatalogValidationError.ContentHashMismatch));
         }
 
         /// <summary>
@@ -131,8 +168,11 @@ namespace GAS.RuntimeV1.Tests.EditMode
             AssertPoisonCaptureAndProgram(ref root, in effect);
             Assert.That(effect.TargetPolicy.LogicalTarget, Is.EqualTo(GasLogicalTargetPolicy.FrozenAsc));
             Assert.That(effect.TargetPolicy.Life, Is.EqualTo(GasTargetLifePolicy.AliveOnly));
-            Assert.That(effect.ModifierRange.Count, Is.Zero, "9203 不得注入 dummy modifier");
-            Assert.That(effect.Maxima.MaximumEvaluatorInstructionCount, Is.EqualTo(5));
+            Assert.That(effect.ModifierRange.Count, Is.EqualTo(1));
+            var modifier = root.Modifiers[effect.ModifierRange.Start];
+            Assert.That(modifier.AttributeLayoutIndex, Is.Zero);
+            Assert.That(modifier.Operation, Is.EqualTo(GasModifierOperation.Add));
+            Assert.That(effect.Maxima.MaximumEvaluatorInstructionCount, Is.EqualTo(6));
         }
 
         /// <summary>
@@ -320,12 +360,14 @@ namespace GAS.RuntimeV1.Tests.EditMode
             Assert.That(capture.Owner, Is.EqualTo(GasCaptureOwner.Source));
             Assert.That(capture.Binding, Is.EqualTo(GasCaptureBinding.Snapshot));
             Assert.That(capture.Phase, Is.EqualTo(GasCapturePhase.SourceSpecProjection));
-            Assert.That(capture.ValueView, Is.EqualTo(GasAttributeValueView.Current));
-            Assert.That(effect.EvaluatorProgramRange.Count, Is.EqualTo(5));
+            Assert.That(capture.ValueView, Is.EqualTo(GasAttributeValueView.Base));
+            Assert.That(effect.EvaluatorProgramRange.Count, Is.EqualTo(6));
             Assert.That(catalog.EvaluatorInstructions[effect.EvaluatorProgramRange.Start].Opcode,
                 Is.EqualTo(GasEvaluatorOpcode.PushCapture));
             Assert.That(catalog.EvaluatorInstructions[effect.EvaluatorProgramRange.Start + 3].Opcode,
                 Is.EqualTo(GasEvaluatorOpcode.PushStackCount));
+            Assert.That(catalog.EvaluatorInstructions[effect.EvaluatorProgramRange.Start + 5].Opcode,
+                Is.EqualTo(GasEvaluatorOpcode.Negate));
         }
 
         /// <summary>
@@ -347,21 +389,27 @@ namespace GAS.RuntimeV1.Tests.EditMode
         /// </summary>
         private static GasCatalogValidationResult Validate(ref GasDefinitionCatalogBlob catalog)
         {
-            var expectation = CreateExpectation(CatalogHeaderMismatch.None);
+            var expectation = CreateExpectation(ref catalog, CatalogHeaderMismatch.None);
             return GasDefinitionCatalogValidator.Validate(ref catalog, in expectation);
         }
 
         /// <summary>
         /// 按测试维度构造唯一一处 header mismatch。
         /// </summary>
-        private static GasCatalogValidationExpectation CreateExpectation(CatalogHeaderMismatch mismatch)
+        private static GasCatalogValidationExpectation CreateExpectation(
+            ref GasDefinitionCatalogBlob catalog,
+            CatalogHeaderMismatch mismatch)
         {
             return new GasCatalogValidationExpectation(
-                mismatch == CatalogHeaderMismatch.SchemaVersion ? GasDefinitionCatalogSchema.Version + 1 : GasDefinitionCatalogSchema.Version,
-                mismatch == CatalogHeaderMismatch.SchemaHash ? SchemaHash + 1 : SchemaHash,
-                mismatch == CatalogHeaderMismatch.ContentHash ? ContentHash + 1 : ContentHash,
-                mismatch == CatalogHeaderMismatch.AttributeLayoutHash ? AttributeLayoutHash + 1 : AttributeLayoutHash,
-                mismatch == CatalogHeaderMismatch.TagCatalogHash ? TagCatalogHash + 1 : TagCatalogHash);
+                mismatch == CatalogHeaderMismatch.SchemaVersion ? catalog.SchemaVersion + 1 : catalog.SchemaVersion,
+                mismatch == CatalogHeaderMismatch.SchemaHash ? catalog.SchemaHash + 1 : catalog.SchemaHash,
+                mismatch == CatalogHeaderMismatch.ContentHash ? catalog.ContentHash + 1 : catalog.ContentHash,
+                mismatch == CatalogHeaderMismatch.AttributeLayoutHash
+                    ? catalog.AttributeLayout.LayoutHash + 1
+                    : catalog.AttributeLayout.LayoutHash,
+                mismatch == CatalogHeaderMismatch.TagCatalogHash
+                    ? catalog.TagCatalog.CatalogHash + 1
+                    : catalog.TagCatalog.CatalogHash);
         }
 
         /// <summary>
@@ -418,11 +466,14 @@ namespace GAS.RuntimeV1.Tests.EditMode
                     PopulateAbilities(ref builder, ref root, abilityContractMismatch);
                     PopulateCaptures(ref builder, ref root);
                     PopulateEvaluatorPrograms(ref builder, ref root);
+                    PopulateModifiers(ref builder, ref root);
                     PopulateSpecContracts(ref builder, ref root);
                     PopulateCuesAndValueViews(ref builder, ref root);
                     PopulateEffects(ref builder, ref root, withInvalidPoisonCaptureRange);
-                    builder.Allocate(ref root.Modifiers, 0);
-                    return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                    var catalog = builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                    ref var materializedCatalog = ref catalog.Value;
+                    GasDefinitionCatalogContentHasher.Stamp(ref materializedCatalog);
+                    return catalog;
                 }
                 finally
                 {
@@ -431,15 +482,12 @@ namespace GAS.RuntimeV1.Tests.EditMode
             }
 
             /// <summary>
-            /// 写入测试 Catalog 的冻结 schema/content header。
+            /// 写入测试 Catalog 的冻结 schema header，内容身份在 materialize 后统一封印。
             /// </summary>
             private static void PopulateHeader(ref GasDefinitionCatalogBlob root)
             {
                 root.SchemaVersion = GasDefinitionCatalogSchema.Version;
                 root.SchemaHash = SchemaHash;
-                root.ContentHash = ContentHash;
-                root.AttributeLayout.LayoutHash = AttributeLayoutHash;
-                root.TagCatalog.CatalogHash = TagCatalogHash;
             }
 
             /// <summary>
@@ -594,6 +642,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
                     GasCapturePhase.TargetStabilization, GasLiveCaptureScope.SameAsc, 0);
                 captures[4] = Capture(0, GasCaptureOwner.Source, GasCaptureBinding.Snapshot,
                     GasCapturePhase.SourceSpecProjection, GasLiveCaptureScope.None, 1);
+                captures[4].ValueView = GasAttributeValueView.Base;
             }
 
             /// <summary>
@@ -603,28 +652,54 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 ref BlobBuilder builder,
                 ref GasDefinitionCatalogBlob root)
             {
-                var instructions = builder.Allocate(ref root.EvaluatorInstructions, 17);
+                var instructions = builder.Allocate(ref root.EvaluatorInstructions, 19);
                 instructions[0] = Instruction(GasEvaluatorOpcode.PushCapture, operandIndex: 0);
                 instructions[1] = Instruction(GasEvaluatorOpcode.PushConstant, constantValue: 0.3f);
                 instructions[2] = Instruction(GasEvaluatorOpcode.Multiply);
                 instructions[3] = Instruction(GasEvaluatorOpcode.PushStackCount);
                 instructions[4] = Instruction(GasEvaluatorOpcode.Multiply);
-                instructions[5] = Instruction(GasEvaluatorOpcode.PushValueView, operandIndex: 2);
-                instructions[6] = Instruction(GasEvaluatorOpcode.PushValueView, operandIndex: 0);
-                instructions[7] = Instruction(GasEvaluatorOpcode.Subtract);
-                instructions[8] = Instruction(GasEvaluatorOpcode.PushConstant, constantValue: 0f);
-                instructions[9] = Instruction(GasEvaluatorOpcode.Maximum);
-                instructions[10] = Instruction(GasEvaluatorOpcode.PushConstant, constantValue: 0.5f);
-                instructions[11] = Instruction(GasEvaluatorOpcode.Multiply);
-                instructions[12] = Instruction(GasEvaluatorOpcode.PushConstant, constantValue: 16f);
-                instructions[13] = Instruction(GasEvaluatorOpcode.Add);
-                instructions[14] = Instruction(GasEvaluatorOpcode.PushConstant, constantValue: 12f);
-                instructions[15] = Instruction(GasEvaluatorOpcode.PushConstant, constantValue: 42f);
-                instructions[16] = Instruction(GasEvaluatorOpcode.Clamp);
+                instructions[5] = Instruction(GasEvaluatorOpcode.Negate);
+                instructions[6] = Instruction(GasEvaluatorOpcode.PushValueView, operandIndex: 2);
+                instructions[7] = Instruction(GasEvaluatorOpcode.PushValueView, operandIndex: 0);
+                instructions[8] = Instruction(GasEvaluatorOpcode.Subtract);
+                instructions[9] = Instruction(GasEvaluatorOpcode.PushConstant, constantValue: 0f);
+                instructions[10] = Instruction(GasEvaluatorOpcode.Maximum);
+                instructions[11] = Instruction(GasEvaluatorOpcode.PushConstant, constantValue: 0.5f);
+                instructions[12] = Instruction(GasEvaluatorOpcode.Multiply);
+                instructions[13] = Instruction(GasEvaluatorOpcode.PushConstant, constantValue: 16f);
+                instructions[14] = Instruction(GasEvaluatorOpcode.Add);
+                instructions[15] = Instruction(GasEvaluatorOpcode.PushConstant, constantValue: 12f);
+                instructions[16] = Instruction(GasEvaluatorOpcode.PushConstant, constantValue: 42f);
+                instructions[17] = Instruction(GasEvaluatorOpcode.Clamp);
+                instructions[18] = Instruction(GasEvaluatorOpcode.Negate);
             }
 
             /// <summary>
-            /// 写入 SetByCaller、每 Effect StableAsc TargetData 与 EffectContext 字段契约。
+            /// 写入 9203 与 9207 的 Health Add modifier，并绑定各自 evaluator/capture range。
+            /// </summary>
+            private static void PopulateModifiers(
+                ref BlobBuilder builder,
+                ref GasDefinitionCatalogBlob root)
+            {
+                var modifiers = builder.Allocate(ref root.Modifiers, 2);
+                modifiers[0] = new GasModifierDefinitionBlob
+                {
+                    AttributeLayoutIndex = 0,
+                    Operation = GasModifierOperation.Add,
+                    EvaluatorProgramRange = Range(0, 6),
+                    CaptureRange = Range(4, 1),
+                };
+                modifiers[1] = new GasModifierDefinitionBlob
+                {
+                    AttributeLayoutIndex = 0,
+                    Operation = GasModifierOperation.Add,
+                    EvaluatorProgramRange = Range(6, 13),
+                    CaptureRange = Range(0, 0),
+                };
+            }
+
+            /// <summary>
+            /// 写入 SetByCaller、每 Effect StableAsc TargetData 与 RequireSameAvatar context 字段契约。
             /// </summary>
             private static void PopulateSpecContracts(
                 ref BlobBuilder builder,
@@ -638,7 +713,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
                     Required = 1,
                 };
                 var targetData = builder.Allocate(ref root.TargetDataDescriptors, 3);
-                var context = builder.Allocate(ref root.EffectContextFieldDescriptors, 3);
+                var context = builder.Allocate(ref root.EffectContextFieldDescriptors, 6);
                 for (var index = 0; index < 3; index++)
                 {
                     targetData[index] = new GasTargetDataDescriptorBlob
@@ -647,10 +722,16 @@ namespace GAS.RuntimeV1.Tests.EditMode
                         FieldOrdinal = 0,
                         Required = 1,
                     };
-                    context[index] = new GasEffectContextFieldDescriptorBlob
+                    context[index * 2] = new GasEffectContextFieldDescriptorBlob
                     {
                         Field = GasEffectContextFieldKind.CausalityId,
                         FieldOrdinal = 0,
+                        Required = 1,
+                    };
+                    context[index * 2 + 1] = new GasEffectContextFieldDescriptorBlob
+                    {
+                        Field = GasEffectContextFieldKind.TargetAvatarBindingGeneration,
+                        FieldOrdinal = 1,
                         Required = 1,
                     };
                 }
@@ -668,7 +749,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 {
                     CueDefinitionId = 9301,
                     CueDefinitionOrdinal = 0,
-                    Phases = GasCuePhaseFlags.OnActive | GasCuePhaseFlags.WhileActive | GasCuePhaseFlags.Removed,
+                    Phases = GasCuePhaseFlags.OnActive,
                 };
                 cues[1] = new GasCueReferenceBlob
                 {
@@ -709,8 +790,8 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 effect.CaptureRange = Range(0, 4);
                 effect.SetByCallerRange = Range(0, 1);
                 effect.TargetDataRange = Range(0, 1);
-                effect.EffectContextFieldRange = Range(0, 1);
-                effect.Maxima = Maxima(captures: 4, setByCaller: 1, targetData: 1, context: 1);
+                effect.EffectContextFieldRange = Range(0, 2);
+                effect.Maxima = Maxima(captures: 4, setByCaller: 1, targetData: 1, context: 2);
                 return effect;
             }
 
@@ -725,10 +806,11 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 effect.RemovalRequirementRange = Range(2, 1);
                 effect.ImmunityRequirementRange = Range(3, 1);
                 effect.CaptureRange = withInvalidCaptureRange ? Range(4, 2) : Range(4, 1);
+                effect.ModifierRange = Range(0, 1);
                 effect.CueRange = Range(0, 1);
-                effect.EvaluatorProgramRange = Range(0, 5);
+                effect.EvaluatorProgramRange = Range(0, 6);
                 effect.TargetDataRange = Range(1, 1);
-                effect.EffectContextFieldRange = Range(1, 1);
+                effect.EffectContextFieldRange = Range(2, 2);
                 effect.PeriodTicks = 2;
                 effect.StackLimit = 3;
                 effect.StackKey = GasStackKeyFields.Definition | GasStackKeyFields.TargetAsc | GasStackKeyFields.SourceAsc;
@@ -740,8 +822,8 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 effect.ExpiryPeriodPolicy = GasExpiryPeriodPolicy.Reset;
                 effect.ExpirySameTickPolicy = GasExpirySameTickPolicy.PeriodDueBeforeExpiry;
                 effect.InhibitedPeriodPolicy = GasInhibitedPeriodPolicy.SkipExecution;
-                effect.Maxima = Maxima(requirements: 4, captures: 1, cues: 1,
-                    evaluatorInstructions: 5, targetData: 1, context: 1);
+                effect.Maxima = Maxima(requirements: 4, captures: 1, modifiers: 1, cues: 1,
+                    evaluatorInstructions: 6, targetData: 1, context: 2);
                 return effect;
             }
 
@@ -752,15 +834,16 @@ namespace GAS.RuntimeV1.Tests.EditMode
             {
                 var effect = BaseEffect(FinisherEffectId, GasEffectLifetimePolicy.InstantExecution, durationTicks: 0);
                 effect.CueRange = Range(1, 1);
+                effect.ModifierRange = Range(1, 1);
                 effect.ValueViewRange = Range(0, 3);
-                effect.EvaluatorProgramRange = Range(5, 12);
+                effect.EvaluatorProgramRange = Range(6, 13);
                 effect.TargetDataRange = Range(2, 1);
-                effect.EffectContextFieldRange = Range(2, 1);
+                effect.EffectContextFieldRange = Range(4, 2);
                 effect.RequiredValueViews = GasAttributeValueViewMask.Base
                     | GasAttributeValueViewMask.Current
                     | GasAttributeValueViewMask.DefinitionMaxValue;
-                effect.Maxima = Maxima(cues: 1, valueViews: 3,
-                    evaluatorInstructions: 12, targetData: 1, context: 1);
+                effect.Maxima = Maxima(modifiers: 1, cues: 1, valueViews: 3,
+                    evaluatorInstructions: 13, targetData: 1, context: 2);
                 return effect;
             }
 
@@ -925,6 +1008,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
             private static GasDefinitionMaxima Maxima(
                 int requirements = 0,
                 int captures = 0,
+                int modifiers = 0,
                 int directNodes = 0,
                 int directOutputs = 0,
                 int cues = 0,
@@ -940,6 +1024,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
                     MaximumPlannedApplicationCount = 1,
                     MaximumRequirementCount = requirements,
                     MaximumCaptureDescriptorCount = captures,
+                    MaximumModifierCount = modifiers,
                     MaximumDirectProgramNodeCount = directNodes,
                     MaximumDirectProgramOutputCount = directOutputs,
                     MaximumCueCount = cues,

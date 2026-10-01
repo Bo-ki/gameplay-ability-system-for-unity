@@ -18,6 +18,105 @@ namespace GAS.RuntimeV1.Tests.EditMode
             new BattleInstanceHandle(Epoch, 7001, 1);
 
         /// <summary>
+        /// 成功预计算只返回冻结 fact 与 StateAfter，旧追加入口再一次性提交相同结果。
+        /// </summary>
+        [Test]
+        public void TryPrepareFactAppend_成功预计算零写并由Append提交()
+        {
+            using var world = new World("Runtime v1 boundary append prepare success");
+            var fixture = CreateFixture(world);
+            var outbox = world.EntityManager.GetBuffer<BoundaryFactBuffer>(fixture.Asc);
+            var state = fixture.AscState;
+            var template = CreateAscBoundaryFact();
+            var templateBefore = template;
+
+            Assert.That(GasBoundaryDrainProtocol.TryPrepareFactAppend(
+                in state, in template, out var preparedFact, out var stateAfter, out var failure),
+                Is.True);
+            Assert.That(failure, Is.EqualTo(GasBoundaryDrainFailure.None));
+            Assert.That(outbox.Length, Is.Zero);
+            Assert.That(state, Is.EqualTo(fixture.AscState));
+            Assert.That(template, Is.EqualTo(templateBefore));
+            Assert.That(preparedFact.EventId.SimulationEpoch, Is.EqualTo(Epoch));
+            Assert.That(preparedFact.EventId.OwnerKind, Is.EqualTo(GasBoundaryOwnerKind.Asc));
+            Assert.That(preparedFact.EventId.OwnerStableId, Is.EqualTo(Owner.AscStableId));
+            Assert.That(preparedFact.EventId.OwnerGeneration, Is.EqualTo(Owner.AscGeneration));
+            Assert.That(preparedFact.EventId.OwnerSequence, Is.EqualTo(1));
+            Assert.That(stateAfter.NextOwnerSequence, Is.EqualTo(2));
+            Assert.That(stateAfter.Phase, Is.EqualTo(GasBoundaryDrainPhase.Pending));
+
+            Assert.That(GasBoundaryDrainProtocol.TryAppendFactWithSequence(
+                ref state, outbox, in template, out var sequence, out var appendFailure), Is.True);
+            Assert.That(appendFailure, Is.EqualTo(GasBoundaryDrainFailure.None));
+            Assert.That(sequence, Is.EqualTo(1));
+            Assert.That(outbox.Length, Is.EqualTo(1));
+            Assert.That(outbox[0], Is.EqualTo(preparedFact));
+            Assert.That(state, Is.EqualTo(stateAfter));
+        }
+
+        /// <summary>
+        /// 序号耗尽必须在预计算阶段拒绝，且旧追加入口不得写 outbox 或推进状态。
+        /// </summary>
+        [Test]
+        public void TryPrepareFactAppend_SequenceOverflow拒绝且零写()
+        {
+            using var world = new World("Runtime v1 boundary append sequence overflow");
+            var fixture = CreateFixture(world);
+            var outbox = world.EntityManager.GetBuffer<BoundaryFactBuffer>(fixture.Asc);
+            var state = fixture.AscState;
+            state.NextOwnerSequence = ulong.MaxValue;
+            var template = CreateAscBoundaryFact();
+
+            AssertPrepareRejectedWithoutWrite(
+                in state, outbox, in template, GasBoundaryDrainFailure.SequenceOverflow);
+        }
+
+        /// <summary>
+        /// InFlight 显式序号不得越过冻结 watermark 契约，失败时保持 owner 零写。
+        /// </summary>
+        [Test]
+        public void TryPrepareFactAppend_InFlightWatermark拒绝且零写()
+        {
+            using var world = new World("Runtime v1 boundary append in-flight watermark");
+            var fixture = CreateFixture(world);
+            var outbox = world.EntityManager.GetBuffer<BoundaryFactBuffer>(fixture.Asc);
+            var state = fixture.AscState;
+            state.NextOwnerSequence = 5;
+            state.Phase = GasBoundaryDrainPhase.InFlight;
+            state.BatchId = 77;
+            state.InFlightWatermark = 5;
+            var template = CreateAscBoundaryFact();
+            template.EventId.OwnerSequence = 5;
+
+            AssertPrepareRejectedWithoutWrite(
+                in state, outbox, in template, GasBoundaryDrainFailure.FactSequenceMismatch);
+        }
+
+        /// <summary>
+        /// 已冻结身份冲突或缺失事实 kind 均复用既有 append 校验，并保持 owner 零写。
+        /// </summary>
+        [Test]
+        public void TryPrepareFactAppend_身份或FactSchema非法拒绝且零写()
+        {
+            using var world = new World("Runtime v1 boundary append identity schema rejection");
+            var fixture = CreateFixture(world);
+            var outbox = world.EntityManager.GetBuffer<BoundaryFactBuffer>(fixture.Asc);
+            var state = fixture.AscState;
+            var identityMismatch = CreateAscBoundaryFact();
+            identityMismatch.EventId.SimulationEpoch = Epoch;
+            identityMismatch.EventId.OwnerKind = GasBoundaryOwnerKind.Asc;
+            identityMismatch.EventId.OwnerStableId = Owner.AscStableId + 1;
+            identityMismatch.EventId.OwnerGeneration = Owner.AscGeneration;
+            AssertPrepareRejectedWithoutWrite(
+                in state, outbox, in identityMismatch, GasBoundaryDrainFailure.FactOwnerMismatch);
+
+            var invalidSchema = CreateAscBoundaryFact();
+            invalidSchema.Kind = GasBoundaryFactKind.None;
+            AssertPrepareRejectedWithoutWrite(
+                in state, outbox, in invalidSchema, GasBoundaryDrainFailure.FactInvalid);
+        }
+
+        /// <summary>
         /// 非法后置 scope 必须在任何 append 前被预检拒绝。
         /// </summary>
         [Test]
@@ -33,6 +132,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 facts[0] = CreateAscFact(10, 0);
                 var invalidFact = facts[0];
                 invalidFact.Scope = GasBoundaryFactScope.BattleInstance;
+                invalidFact.BattleInstance = new BattleInstanceHandle(Epoch, Battle.BattleStableId + 1, 1);
                 facts[1] = invalidFact;
                 admission[0] = new GasAdmissionResult { Succeeded = 1 };
                 execution[0] = new GasTickExecutionState
@@ -49,6 +149,65 @@ namespace GAS.RuntimeV1.Tests.EditMode
                     Is.Zero);
                 Assert.That(world.EntityManager.GetComponentData<BoundaryDrainState>(fixture.Asc),
                     Is.EqualTo(fixture.AscState));
+            }
+            finally
+            {
+                facts.Dispose();
+                admission.Dispose();
+                execution.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// 合法 BattleInstance fact 必须写入唯一 Session outbox，并保留 Battle scope identity。
+        /// </summary>
+        [Test]
+        public void BoundaryProject_BattleScope路由SessionOutbox()
+        {
+            using var world = new World("Runtime v1 battle boundary project");
+            var fixture = CreateFixture(world);
+            var facts = new NativeArray<GasCoreFactRecord>(1, Allocator.TempJob);
+            var admission = new NativeArray<GasAdmissionResult>(1, Allocator.TempJob);
+            var execution = new NativeArray<GasTickExecutionState>(1, Allocator.TempJob);
+            try
+            {
+                facts[0] = new GasCoreFactRecord
+                {
+                    Scope = GasBoundaryFactScope.BattleInstance,
+                    Plane = GasBoundaryFactPlane.Gameplay,
+                    Kind = GasBoundaryFactKind.BattleOutcome,
+                    BattleInstance = Battle,
+                    SimulationTick = 1,
+                    SemanticPhaseOrdinal = 1,
+                    WorkClassOrdinal = 1,
+                    SemanticId = 200,
+                    OperationOrdinal = 0,
+                    FactOrdinal = 0,
+                };
+                admission[0] = new GasAdmissionResult { Succeeded = 1 };
+                execution[0] = new GasTickExecutionState
+                {
+                    GameplayEnabled = 1,
+                    CoreFactCount = 1,
+                };
+                RunProject(world, fixture, facts, admission, execution);
+
+                Assert.That(execution[0].PostAdmissionFailure,
+                    Is.EqualTo(GasTickAdmissionFailureReason.None));
+                Assert.That(execution[0].BoundaryFactCount, Is.EqualTo(1));
+                var sessionFacts = world.EntityManager.GetBuffer<BoundaryFactBuffer>(fixture.Session);
+                Assert.That(sessionFacts.Length, Is.EqualTo(1));
+                Assert.That(world.EntityManager.GetBuffer<BoundaryFactBuffer>(fixture.Asc).Length,
+                    Is.Zero);
+                var fact = sessionFacts[0];
+                Assert.That(fact.Scope, Is.EqualTo(GasBoundaryFactScope.BattleInstance));
+                Assert.That(fact.ScopeStableId, Is.EqualTo(Battle.BattleStableId));
+                Assert.That(fact.ScopeGeneration, Is.EqualTo(Battle.BattleGeneration));
+                Assert.That(fact.BattleInstanceId, Is.EqualTo(Battle.BattleStableId));
+                Assert.That(fact.BattleInstanceGeneration, Is.EqualTo(Battle.BattleGeneration));
+                Assert.That(fact.EventId.OwnerKind, Is.EqualTo(GasBoundaryOwnerKind.Session));
+                Assert.That(fact.EventId.OwnerStableId, Is.EqualTo(Epoch));
+                Assert.That(fact.EventId.OwnerSequence, Is.EqualTo(1));
             }
             finally
             {
@@ -98,6 +257,37 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
+        /// 同时验证纯预计算失败输出与旧追加入口都不改变输入、状态或 outbox。
+        /// </summary>
+        private static void AssertPrepareRejectedWithoutWrite(
+            in BoundaryDrainState state,
+            DynamicBuffer<BoundaryFactBuffer> outbox,
+            in BoundaryFactBuffer template,
+            GasBoundaryDrainFailure expectedFailure)
+        {
+            var stateBefore = state;
+            var templateBefore = template;
+            var outboxLengthBefore = outbox.Length;
+            Assert.That(GasBoundaryDrainProtocol.TryPrepareFactAppend(
+                in state, in template, out var preparedFact, out var stateAfter, out var failure),
+                Is.False);
+            Assert.That(failure, Is.EqualTo(expectedFailure));
+            Assert.That(preparedFact, Is.EqualTo(default(BoundaryFactBuffer)));
+            Assert.That(stateAfter, Is.EqualTo(default(BoundaryDrainState)));
+            Assert.That(state, Is.EqualTo(stateBefore));
+            Assert.That(template, Is.EqualTo(templateBefore));
+            Assert.That(outbox.Length, Is.EqualTo(outboxLengthBefore));
+
+            var appendState = state;
+            Assert.That(GasBoundaryDrainProtocol.TryAppendFactWithSequence(
+                ref appendState, outbox, in template, out var sequence, out var appendFailure), Is.False);
+            Assert.That(appendFailure, Is.EqualTo(expectedFailure));
+            Assert.That(sequence, Is.Zero);
+            Assert.That(appendState, Is.EqualTo(stateBefore));
+            Assert.That(outbox.Length, Is.EqualTo(outboxLengthBefore));
+        }
+
+        /// <summary>
         /// 创建包含 Session registry、ASC identity、membership 与预留 outbox 的最小 Job fixture。
         /// </summary>
         private static BoundaryProjectFixture CreateFixture(World world)
@@ -105,6 +295,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
             var manager = world.EntityManager;
             var session = manager.CreateEntity(
                 ComponentType.ReadWrite<AscRegistrySlot>(),
+                ComponentType.ReadWrite<BattleInstanceSlot>(),
                 ComponentType.ReadWrite<BoundaryDrainState>(),
                 ComponentType.ReadWrite<BoundaryFactBuffer>());
             var asc = manager.CreateEntity(
@@ -115,6 +306,14 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 ComponentType.ReadWrite<BoundaryFactBuffer>());
             manager.SetComponentData(session,
                 BoundaryDrainState.Create(Epoch, GasBoundaryOwnerKind.Session, Epoch, 1, 1));
+            var battles = manager.GetBuffer<BattleInstanceSlot>(session);
+            battles.Add(new BattleInstanceSlot
+            {
+                Header = GasSlabSlotHeader.CreateLive(Battle.BattleGeneration),
+                Handle = Battle,
+                BattleInstanceId = Battle.BattleStableId,
+                State = GasBattleInstanceState.Ready,
+            });
             var sessionFacts = manager.GetBuffer<BoundaryFactBuffer>(session);
             sessionFacts.EnsureCapacity(4);
             var ascState = BoundaryDrainState.Create(
@@ -162,20 +361,82 @@ namespace GAS.RuntimeV1.Tests.EditMode
         {
             var lookupSystem = world.CreateSystemManaged<BoundaryProjectLookupSystem>();
             lookupSystem.Update();
-            new GasBoundaryProjectJob
+            var targetShadows = new NativeArray<GasTargetShadowState>(1, Allocator.TempJob);
+            var boundaryIntents = new NativeArray<GasBoundaryFactPublishIntent>(facts.Length, Allocator.TempJob);
+            var decision = new NativeArray<GasFinalPublishDecision>(1, Allocator.TempJob);
+            try
             {
-                Session = fixture.Session,
-                SimulationEpoch = Epoch,
-                CoreFacts = facts,
-                Admission = admission,
-                Registries = lookupSystem.Registries,
-                AscIdentities = lookupSystem.AscIdentities,
-                AscLifecycles = lookupSystem.AscLifecycles,
-                Memberships = lookupSystem.Memberships,
-                Drains = lookupSystem.Drains,
-                BoundaryFacts = lookupSystem.BoundaryFacts,
-                Execution = execution,
-            }.Run();
+                targetShadows[0] = new GasTargetShadowState
+                {
+                    Target = fixture.Asc,
+                    OwnerAsc = Owner,
+                    Lifecycle = world.EntityManager.GetComponentData<AscLifecycle>(fixture.Asc),
+                    Prepared = 1,
+                };
+                new GasBoundaryProjectPrepareJob
+                {
+                    Session = fixture.Session,
+                    SimulationEpoch = Epoch,
+                    CoreFacts = facts,
+                    Admission = admission,
+                    Registries = lookupSystem.Registries,
+                    AscIdentities = lookupSystem.AscIdentities,
+                    TargetShadows = targetShadows,
+                    Memberships = lookupSystem.Memberships,
+                    Battles = lookupSystem.Battles,
+                    Drains = lookupSystem.Drains,
+                    BoundaryFacts = lookupSystem.BoundaryFacts,
+                    FaultInjections = lookupSystem.FaultInjections,
+                    BoundaryIntents = boundaryIntents,
+                    Execution = execution,
+                }.Run();
+                decision[0] = new GasFinalPublishDecision
+                {
+                    FailureReason = execution[0].PostAdmissionFailure,
+                    Succeeded = execution[0].PostAdmissionFailure ==
+                        GasTickAdmissionFailureReason.None ? (byte)1 : (byte)0,
+                };
+                new GasBoundaryPublishJob
+                {
+                    Decision = decision,
+                    BoundaryIntents = boundaryIntents,
+                    Drains = lookupSystem.Drains,
+                    BoundaryFacts = lookupSystem.BoundaryFacts,
+                    Execution = execution,
+                }.Run();
+            }
+            finally
+            {
+                targetShadows.Dispose();
+                boundaryIntents.Dispose();
+                decision.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// 创建一条 EventId 尚未冻结、可由 ASC owner 追加的 Boundary fact 模板。
+        /// </summary>
+        private static BoundaryFactBuffer CreateAscBoundaryFact()
+        {
+            return new BoundaryFactBuffer
+            {
+                Scope = GasBoundaryFactScope.Asc,
+                Plane = GasBoundaryFactPlane.Gameplay,
+                ScopeStableId = Owner.AscStableId,
+                ScopeGeneration = Owner.AscGeneration,
+                SourceAsc = Owner,
+                TargetAsc = Owner,
+                SimulationTick = 1,
+                SemanticPhaseOrdinal = 10,
+                WorkClassOrdinal = 1,
+                SemanticId = 100,
+                Kind = GasBoundaryFactKind.AttributeChanged,
+                Payload = new BoundaryFactPayload
+                {
+                    SchemaVersion = 1,
+                    Kind = GasBoundaryPayloadKind.AttributeDelta,
+                },
+            };
         }
 
         /// <summary>
@@ -229,10 +490,11 @@ namespace GAS.RuntimeV1.Tests.EditMode
         {
             public BufferLookup<AscRegistrySlot> Registries;
             public ComponentLookup<GasAscIdentity> AscIdentities;
-            public ComponentLookup<AscLifecycle> AscLifecycles;
             public ComponentLookup<AscBattleMembership> Memberships;
+            public BufferLookup<BattleInstanceSlot> Battles;
             public ComponentLookup<BoundaryDrainState> Drains;
             public BufferLookup<BoundaryFactBuffer> BoundaryFacts;
+            public ComponentLookup<GasFinalPublishFaultInjection> FaultInjections;
 
             /// <summary>
             /// 在 Update 时捕获本 World 的安全 lookup。
@@ -241,10 +503,11 @@ namespace GAS.RuntimeV1.Tests.EditMode
             {
                 Registries = GetBufferLookup<AscRegistrySlot>(true);
                 AscIdentities = GetComponentLookup<GasAscIdentity>(true);
-                AscLifecycles = GetComponentLookup<AscLifecycle>(true);
                 Memberships = GetComponentLookup<AscBattleMembership>(true);
+                Battles = GetBufferLookup<BattleInstanceSlot>(true);
                 Drains = GetComponentLookup<BoundaryDrainState>();
                 BoundaryFacts = GetBufferLookup<BoundaryFactBuffer>();
+                FaultInjections = GetComponentLookup<GasFinalPublishFaultInjection>(true);
             }
         }
     }

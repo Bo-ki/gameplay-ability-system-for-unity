@@ -1,0 +1,11 @@
+{
+  "name": "com.exhard.exgas.generated.editor",
+  "rootNamespace": "D0M1.Generated.Editor",
+  "references": [
+    "com.exhard.exgas.generated.runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": true
+}

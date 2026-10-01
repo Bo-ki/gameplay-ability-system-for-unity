@@ -185,6 +185,83 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
+        /// 验证 TargetPrepare 已完成 mutation 后发生 Session fatal 时，完整 shadow 被丢弃且 durable authority 零写。
+        /// </summary>
+        [Test]
+        public void TargetPrepare_FatalReduce丢弃完整Shadow且不写Durable()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(withEffect: true);
+            var beforeTick = fixture.CurrentTick;
+            var beforeTarget = fixture.CaptureTargetAuthority();
+            fixture.InjectTargetPrepareFailureAfter(1);
+            var accepted = fixture.SubmitApplyEffect(8510, fixture.CurrentTick);
+
+            Assert.That(accepted.IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            AssertTargetPrepareFault(
+                fixture, beforeTick, in beforeTarget, expectedMutationCount: 1);
+        }
+
+        /// <summary>
+        /// 验证 Duration application 已在 shadow 分配 ActiveEffect/slab 后 fatal，durable 仍完整回滚。
+        /// </summary>
+        [Test]
+        public void TargetPrepare_DurationFatal丢弃ActiveEffect与SlabShadow()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(periodEffect: true);
+            var beforeTick = fixture.CurrentTick;
+            var beforeTarget = fixture.CaptureTargetAuthority();
+            fixture.InjectTargetPrepareFailureAfter(1);
+
+            Assert.That(fixture.SubmitApplyEffect(8511, fixture.CurrentTick).IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            AssertTargetPrepareFault(
+                fixture, beforeTick, in beforeTarget, expectedMutationCount: 0);
+        }
+
+        /// <summary>
+        /// 验证 lethal application 已在 shadow 形成 Death provenance 后 fatal，生命周期业务字段不发布。
+        /// </summary>
+        [Test]
+        public void TargetPrepare_LethalFatal丢弃DeathLifecycleShadow()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(lethalEffect: true);
+            var beforeTick = fixture.CurrentTick;
+            var beforeTarget = fixture.CaptureTargetAuthority();
+            fixture.InjectTargetPrepareFailureAfter(1);
+
+            Assert.That(fixture.SubmitApplyEffect(8512, fixture.CurrentTick).IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            AssertTargetPrepareFault(
+                fixture, beforeTick, in beforeTarget, expectedMutationCount: 1);
+        }
+
+        /// <summary>
+        /// 统一验证 Prepare 后 fatal 的控制证据、完整 target gameplay 回滚与零 Boundary 发布。
+        /// </summary>
+        private static void AssertTargetPrepareFault(
+            RuntimeV1TickDagTestWorld fixture,
+            ulong beforeTick,
+            in RuntimeV1TargetAuthoritySnapshot beforeTarget,
+            int expectedMutationCount)
+        {
+            Assert.That(fixture.CurrentTick, Is.EqualTo(beforeTick));
+            fixture.AssertTargetAuthorityUnchanged(in beforeTarget);
+            Assert.That(fixture.SessionLifecycle.State, Is.EqualTo(GasSessionLifecycleState.Faulted));
+            var latch = fixture.EntityManager.GetComponentData<SessionFaultLatch>(fixture.Session);
+            Assert.That(latch.Detected, Is.EqualTo(1));
+            Assert.That(
+                latch.ReasonCode,
+                Is.EqualTo((int)GasTickAdmissionFailureReason.PostAdmissionInvariantViolation));
+            Assert.That(fixture.Diagnostics.ApplicationOutcomeCount, Is.EqualTo(1));
+            Assert.That(fixture.Diagnostics.AttributeMutationCount, Is.EqualTo(expectedMutationCount));
+            Assert.That(fixture.Diagnostics.BoundaryFactCount, Is.Zero);
+        }
+
+        /// <summary>
         /// 验证 Duration GameplayEffect 在 due tick 实际重放 modifier，并输出携带 current delta 的 PeriodTick fact。
         /// </summary>
         [Test]
@@ -195,7 +272,9 @@ namespace GAS.RuntimeV1.Tests.PlayMode
 
             Assert.That(accepted.IsAccepted, Is.True);
             fixture.TickBatch();
-            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(97f));
+            // 冻结 9203 语义关闭 ExecuteOnApplication：首次 application 只建立
+            // ActiveEffect，modifier 必须等到其绝对 NextPeriodTick 才执行。
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(100f));
             Assert.That(
                 fixture.TryDequeueBoundaryBatch(out var applicationBatch),
                 Is.True,
@@ -208,14 +287,17 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 fact => fact.Kind == GasBoundaryFactKind.EffectLifecycle), Is.True);
 
             fixture.TickBatch();
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(97f));
+            Assert.That(fixture.TryDequeueBoundaryBatch(out var periodBatch), Is.True);
+            Assert.That(periodBatch.Facts.Any(
+                fact => fact.Kind == GasBoundaryFactKind.PeriodTick), Is.True);
 
             Assert.That(fixture.Diagnostics.AdmissionSucceeded, Is.EqualTo(1));
             Assert.That(fixture.Diagnostics.ApplicationOutcomeCount, Is.EqualTo(1));
             Assert.That(fixture.Diagnostics.AttributeMutationCount, Is.EqualTo(1));
             Assert.That(fixture.Diagnostics.CoreFactCount, Is.EqualTo(2));
             Assert.That(fixture.Diagnostics.BoundaryFactCount, Is.EqualTo(2));
-            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(94f));
-            Assert.That(fixture.TryDequeueBoundaryBatch(out var periodBatch), Is.True);
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(97f));
             var periodFact = periodBatch.Facts.First(
                 fact => fact.Kind == GasBoundaryFactKind.PeriodTick);
             Assert.That(periodFact.Payload.Integer0, Is.EqualTo(1L));
@@ -300,8 +382,13 @@ namespace GAS.RuntimeV1.Tests.PlayMode
 
             fixture.AssertAdmissionFault(in before, accepted.RequestSequence);
             var rejected = fixture.SubmitApplyEffect(902, before.Tick.CurrentTick);
+            var rejectedTail = fixture.SubmitApplyEffect(903, before.Tick.CurrentTick + 1);
             Assert.That(rejected.Status, Is.EqualTo(GasCommandAcceptStatus.FaultClosed));
             Assert.That(rejected.IsAccepted, Is.False);
+            Assert.That(rejected.RequestSequence, Is.Zero);
+            Assert.That(rejectedTail.Status, Is.EqualTo(GasCommandAcceptStatus.FaultClosed));
+            Assert.That(rejectedTail.IsAccepted, Is.False);
+            Assert.That(rejectedTail.RequestSequence, Is.Zero);
         }
 
         /// <summary>
@@ -328,6 +415,8 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             activation = fixture.Activations[0];
             Assert.That(activation.Phase, Is.EqualTo(GasAbilityActivationPhase.Ended));
             Assert.That(activation.Header.StorageState, Is.EqualTo(GasSlabSlotState.Tombstone));
+            Assert.That(activation.EndReason, Is.EqualTo(GasAbilityEndReason.Cancelled));
+            Assert.That(activation.WasCancelled, Is.EqualTo(1));
             Assert.That(activation.CommitSequence, Is.Not.Zero);
             Assert.That(fixture.Attributes[0].Current, Is.EqualTo(90f));
             Assert.That(fixture.Cooldowns.Length, Is.EqualTo(1));
@@ -342,12 +431,42 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
-        /// 验证同 ASC 两个竞争 CommitPlan 按 canonical order read-your-writes，失败者保持未提交且零副作用。
+        /// 验证 Cancel 先于 Commit 时只结束未提交 Activation，迟到 Commit 不得写入 cost 或 cooldown。
+        /// </summary>
+        [Test]
+        public void Ability_Cancel先于Commit_拒绝迟到Commit且不产生资源写入()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(withAbility: true);
+            var grant = fixture.GrantedAbilities[0].Handle;
+
+            Assert.That(fixture.SubmitActivate(1005, grant).IsAccepted, Is.True);
+            fixture.TickBatch();
+            var activation = fixture.Activations[0];
+            Assert.That(activation.Phase, Is.EqualTo(GasAbilityActivationPhase.RunningUncommitted));
+
+            Assert.That(fixture.SubmitCancel(1006, activation.Handle).IsAccepted, Is.True);
+            Assert.That(fixture.SubmitCommit(1007, activation.Handle).IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            activation = fixture.Activations[0];
+            Assert.That(activation.Phase, Is.EqualTo(GasAbilityActivationPhase.Ended));
+            Assert.That(activation.EndReason, Is.EqualTo(GasAbilityEndReason.Cancelled));
+            Assert.That(activation.WasCancelled, Is.EqualTo(1));
+            Assert.That(activation.CommitSequence, Is.Zero);
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(100f));
+            Assert.That(fixture.Cooldowns.Length, Is.Zero);
+        }
+
+        /// <summary>
+        /// 验证同 ASC 两个竞争 CommitPlan 按 canonical order 读取前序 cost，失败者保持未提交且零副作用。
         /// </summary>
         [Test]
         public void Ability_竞争Commit仅首个事务成功()
         {
-            using var fixture = new RuntimeV1TickDagTestWorld(withAbility: true, costDelta: -60f);
+            using var fixture = new RuntimeV1TickDagTestWorld(
+                withAbility: true,
+                costDelta: -60f,
+                withCooldown: false);
             var grant = fixture.GrantedAbilities[0].Handle;
             Assert.That(fixture.SubmitActivate(1101, grant).IsAccepted, Is.True);
             Assert.That(fixture.SubmitActivate(1102, grant).IsAccepted, Is.True);
@@ -360,6 +479,31 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             fixture.TickBatch();
 
             Assert.That(fixture.Attributes[0].Current, Is.EqualTo(40f));
+            Assert.That(fixture.Activations[0].Phase, Is.EqualTo(GasAbilityActivationPhase.Committed));
+            Assert.That(fixture.Activations[1].Phase,
+                Is.EqualTo(GasAbilityActivationPhase.RunningUncommitted));
+            Assert.That(fixture.Cooldowns.Length, Is.Zero);
+        }
+
+        /// <summary>
+        /// 验证同 ASC 两个竞争 CommitPlan 按 canonical order 读取前序 cooldown，失败者不扣费。
+        /// </summary>
+        [Test]
+        public void Ability_竞争Cooldown仅首个事务成功()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(withAbility: true, costDelta: -10f);
+            var grant = fixture.GrantedAbilities[0].Handle;
+            Assert.That(fixture.SubmitActivate(1111, grant).IsAccepted, Is.True);
+            Assert.That(fixture.SubmitActivate(1112, grant).IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            var first = fixture.Activations[0].Handle;
+            var second = fixture.Activations[1].Handle;
+            Assert.That(fixture.SubmitCommit(1113, first).IsAccepted, Is.True);
+            Assert.That(fixture.SubmitCommit(1114, second).IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(90f));
             Assert.That(fixture.Activations[0].Phase, Is.EqualTo(GasAbilityActivationPhase.Committed));
             Assert.That(fixture.Activations[1].Phase,
                 Is.EqualTo(GasAbilityActivationPhase.RunningUncommitted));
@@ -389,6 +533,134 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 Is.EqualTo(GasAbilityActivationPhase.RunningUncommitted));
             Assert.That(fixture.Attributes[0].Current, Is.EqualTo(100f));
             Assert.That(fixture.Cooldowns.Length, Is.Zero);
+        }
+
+        /// <summary>
+        /// 验证 source 在同 Tick 先死亡后，已经 Commit 的远端 DirectEffect 仍按冻结计划结算。
+        /// </summary>
+        [Test]
+        public void Ability_Source在Commit后死亡_远端DirectEffect仍结算()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(committedRemoteWork: true);
+            Assert.That(
+                fixture.OwnerAsc.AscStableId,
+                Is.LessThan(fixture.RemoteOwnerAsc.AscStableId));
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(5f));
+            Assert.That(fixture.Attributes[1].Current, Is.EqualTo(100f));
+            Assert.That(fixture.RemoteAttributes[0].Current, Is.EqualTo(100f));
+
+            var grant = fixture.GrantedAbilities[0].Handle;
+            Assert.That(fixture.SubmitActivate(1301, grant).IsAccepted, Is.True);
+            fixture.TickBatch();
+            var activation = fixture.Activations[0].Handle;
+
+            var commit = fixture.SubmitCommitTo(1302, in activation, fixture.RemoteOwnerAsc);
+            var lethal = fixture.SubmitApplyEffectFrom(
+                1303,
+                fixture.RemoteOwnerAsc,
+                fixture.OwnerAsc);
+            Assert.That(commit.IsAccepted, Is.True);
+            Assert.That(lethal.IsAccepted, Is.True);
+            fixture.TickBatch();
+
+            var committed = fixture.Activations[0];
+            Assert.That(committed.Phase, Is.EqualTo(GasAbilityActivationPhase.Committed));
+            Assert.That(committed.CommitSequence, Is.Not.Zero);
+            Assert.That(fixture.Cooldowns, Has.Length.EqualTo(1));
+            Assert.That(fixture.Cooldowns[0].State, Is.EqualTo(GasSlotBusinessState.Active));
+            Assert.That(fixture.Lifecycle.State, Is.EqualTo(GasAscLifecycleState.Dead));
+            Assert.That(fixture.Lifecycle.DeathSourceAsc, Is.EqualTo(fixture.RemoteOwnerAsc));
+            Assert.That(fixture.Lifecycle.DeathOverkill, Is.EqualTo(3f));
+            Assert.That(fixture.Attributes[0].Current, Is.Zero);
+            Assert.That(fixture.Attributes[1].Base, Is.EqualTo(99f));
+            Assert.That(fixture.Attributes[1].Current, Is.EqualTo(99f));
+            var remoteState = fixture.RemoteLifecycle.State;
+            Assert.That(
+                remoteState == GasAscLifecycleState.Ready ||
+                remoteState == GasAscLifecycleState.Alive,
+                Is.True);
+            Assert.That(fixture.RemoteAttributes[0].Current, Is.EqualTo(92f));
+            Assert.That(fixture.Diagnostics.SourceSpecCount, Is.EqualTo(2));
+            Assert.That(fixture.Diagnostics.ApplicationOutcomeCount, Is.EqualTo(2));
+            Assert.That(fixture.Diagnostics.AttributeMutationCount, Is.EqualTo(2));
+            Assert.That(fixture.Diagnostics.DeathFactCount, Is.EqualTo(1));
+            AssertCommittedRemoteFacts(fixture, committed.CommitSequence);
+        }
+
+        /// <summary>
+        /// 验证 Self Ability 的远端显式 target 被 owner plan 拒绝，不能静默回退 self 并消费资源。
+        /// </summary>
+        [Test]
+        public void Ability_Self携远端显式Target_拒绝且不消费资源()
+        {
+            using var fixture = new RuntimeV1TickDagTestWorld(
+                withAbility: true,
+                withRemoteAsc: true);
+            var grant = fixture.GrantedAbilities[0].Handle;
+            Assert.That(fixture.SubmitActivate(1311, grant).IsAccepted, Is.True);
+            fixture.TickBatch();
+            var activation = fixture.Activations[0].Handle;
+
+            Assert.That(
+                fixture.SubmitCommitTo(1312, in activation, fixture.RemoteOwnerAsc).IsAccepted,
+                Is.True);
+            fixture.TickBatch();
+
+            Assert.That(fixture.Activations[0].Phase,
+                Is.EqualTo(GasAbilityActivationPhase.RunningUncommitted));
+            Assert.That(fixture.Activations[0].CommitSequence, Is.Zero);
+            Assert.That(fixture.Attributes[0].Current, Is.EqualTo(100f));
+            Assert.That(fixture.RemoteAttributes[0].Current, Is.EqualTo(100f));
+            Assert.That(fixture.Cooldowns.Length, Is.Zero);
+            Assert.That(fixture.Diagnostics.SourceSpecCount, Is.Zero);
+            Assert.That(fixture.Diagnostics.ApplicationOutcomeCount, Is.Zero);
+        }
+
+        /// <summary>
+        /// 聚合双 ASC outbox，验证远端应用、source death 与 Commit causality 均形成唯一事实。
+        /// </summary>
+        private static void AssertCommittedRemoteFacts(
+            RuntimeV1TickDagTestWorld fixture,
+            ulong commitSequence)
+        {
+            var factCount = 0;
+            var deathFactCount = 0;
+            var remoteMutationCount = 0;
+            var remoteAppliedCount = 0;
+            while (fixture.TryDequeueBoundaryBatch(out var batch))
+            {
+                factCount += batch.Facts.Count;
+                for (var index = 0; index < batch.Facts.Count; index++)
+                {
+                    var fact = batch.Facts[index];
+                    if (fact.Kind == GasBoundaryFactKind.Death)
+                    {
+                        deathFactCount++;
+                        Assert.That(fact.SourceAsc, Is.EqualTo(fixture.RemoteOwnerAsc));
+                        Assert.That(fact.TargetAsc, Is.EqualTo(fixture.OwnerAsc));
+                    }
+                    if (fact.Kind == GasBoundaryFactKind.AttributeChanged &&
+                        fact.TargetAsc.Equals(fixture.RemoteOwnerAsc))
+                    {
+                        remoteMutationCount++;
+                        Assert.That(fact.SourceAsc, Is.EqualTo(fixture.OwnerAsc));
+                        Assert.That(fact.Payload.Scalar0, Is.EqualTo(-8f));
+                    }
+                    if (fact.Kind == GasBoundaryFactKind.EffectLifecycle &&
+                        fact.TargetAsc.Equals(fixture.RemoteOwnerAsc) &&
+                        fact.Payload.Integer0 ==
+                        (long)GasGameplayEffectApplicationOutcome.AppliedInstant)
+                    {
+                        remoteAppliedCount++;
+                        Assert.That(fact.SourceAsc, Is.EqualTo(fixture.OwnerAsc));
+                        Assert.That(fact.ParentCausalityId, Is.EqualTo(commitSequence));
+                    }
+                }
+            }
+            Assert.That(factCount, Is.EqualTo(5));
+            Assert.That(deathFactCount, Is.EqualTo(1));
+            Assert.That(remoteMutationCount, Is.EqualTo(1));
+            Assert.That(remoteAppliedCount, Is.EqualTo(1));
         }
 
         /// <summary>
@@ -444,16 +716,13 @@ namespace GAS.RuntimeV1.Tests.PlayMode
     }
 
     /// <summary>
-    /// 使用正式 WorldOwner 与 Stage-B recorder 构造一战局一 ASC 的最小 Ready Session。
+    /// 使用正式 WorldOwner 与 Stage-B recorder 构造一战局、可选双 ASC 的最小 Ready Session。
     /// </summary>
     internal sealed class RuntimeV1TickDagTestWorld : IDisposable
     {
         private const ulong Epoch = 61;
         private const ulong SpawnBatchId = 601;
         private const ulong SchemaHash = 6101;
-        private const ulong ContentHash = 6102;
-        private const ulong AttributeHash = 6103;
-        private const ulong TagHash = 6104;
         private const int EffectDefinitionId = 6201;
         private const float FixedDeltaTime = 0.05f;
 
@@ -466,12 +735,17 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         private readonly bool _withEffect;
         private readonly bool _lethalEffect;
         private readonly bool _periodEffect;
+        private readonly bool _withRemoteAsc;
+        private readonly bool _committedRemoteWork;
 
         internal Entity Session { get; private set; }
         internal Entity Asc { get; private set; }
+        internal Entity RemoteAsc { get; private set; }
         internal AscLifecycle Lifecycle => EntityManager.GetComponentData<AscLifecycle>(Asc);
+        internal AscLifecycle RemoteLifecycle => EntityManager.GetComponentData<AscLifecycle>(RemoteAsc);
         internal BattleInstanceHandle Battle { get; } = new BattleInstanceHandle(Epoch, 71, 1);
         internal OwnerAscHandle OwnerAsc { get; } = new OwnerAscHandle(101, 1);
+        internal OwnerAscHandle RemoteOwnerAsc { get; } = new OwnerAscHandle(202, 1);
 
         internal ulong CurrentTick => EntityManager.GetComponentData<SimulationTickState>(Session).CurrentTick;
         internal GasTickDiagnostics Diagnostics => EntityManager.GetComponentData<GasTickDiagnostics>(Session);
@@ -480,7 +754,10 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         internal DynamicBuffer<GrantedAbilitySlot> GrantedAbilities => EntityManager.GetBuffer<GrantedAbilitySlot>(Asc);
         internal DynamicBuffer<AbilityActivationSlot> Activations => EntityManager.GetBuffer<AbilityActivationSlot>(Asc);
         internal DynamicBuffer<CooldownGateSlot> Cooldowns => EntityManager.GetBuffer<CooldownGateSlot>(Asc);
+        internal DynamicBuffer<ActiveEffectSlot> ActiveEffects => EntityManager.GetBuffer<ActiveEffectSlot>(Asc);
         internal DynamicBuffer<AttributeValueSlot> Attributes => EntityManager.GetBuffer<AttributeValueSlot>(Asc);
+        internal DynamicBuffer<AttributeValueSlot> RemoteAttributes =>
+            EntityManager.GetBuffer<AttributeValueSlot>(RemoteAsc);
         internal float FixedTimestep => _world.GetExistingSystemManaged<FixedStepSimulationSystemGroup>().Timestep;
         internal float MaximumDeltaTime => _world.MaximumDeltaTime;
 
@@ -509,21 +786,27 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
-        /// 安装正式拓扑、记录最小 SpawnBatch，并用两次完整批次发布 Ready。
+        /// 安装正式拓扑、按场景记录单/双 ASC SpawnBatch，并用两次完整批次发布 Ready。
         /// </summary>
         internal RuntimeV1TickDagTestWorld(
             int maxOwnerPlanCount = 4,
             bool withAbility = false,
             float costDelta = -10f,
+            bool withCooldown = true,
             bool withEffect = false,
             bool lethalEffect = false,
-            bool periodEffect = false)
+            bool periodEffect = false,
+            bool withRemoteAsc = false,
+            bool committedRemoteWork = false)
         {
-            _withAbility = withAbility;
-            _withEffect = withEffect || lethalEffect || periodEffect;
+            _withAbility = withAbility || committedRemoteWork;
+            _withEffect = withEffect || lethalEffect || periodEffect || committedRemoteWork;
             _lethalEffect = lethalEffect;
             _periodEffect = periodEffect;
-            _catalog = withAbility ? CreateAbilityCatalog(costDelta) :
+            _withRemoteAsc = withRemoteAsc || committedRemoteWork;
+            _committedRemoteWork = committedRemoteWork;
+            _catalog = committedRemoteWork ? CreateCommittedRemoteWorkCatalog() :
+                withAbility ? CreateAbilityCatalog(costDelta, withCooldown) :
                 _withEffect ? CreateEffectCatalog(_lethalEffect, _periodEffect) : CreateEmptyCatalog();
             _world = new World("Runtime v1 Tick DAG PlayMode test");
             _owner = GasRuntimeWorldOwner.Install(_world);
@@ -610,6 +893,44 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
+        /// 通过唯一 typed Port 从显式 source 向另一个 Ready ASC 提交无 payload Effect。
+        /// </summary>
+        internal GasCommandAcceptResult SubmitApplyEffectFrom(
+            ulong requestId,
+            in OwnerAscHandle source,
+            in OwnerAscHandle targetOwner)
+        {
+            var target = BoundaryTargetRef.ForAsc(Battle, targetOwner);
+            var context = new GasBoundaryCommandContext(
+                Epoch,
+                requestId,
+                requestId + 1000,
+                CurrentTick,
+                true,
+                Battle,
+                source,
+                target);
+            return _owner.Port.RequestApplyEffect(
+                context,
+                EffectDefinitionId,
+                BoundaryCommandPayloadDescriptor.None,
+                ReadOnlySpan<byte>.Empty);
+        }
+
+        /// <summary>
+        /// 在当前 Session 安装一次性 TargetPrepare conformance fault 点。
+        /// </summary>
+        internal void InjectTargetPrepareFailureAfter(int preparedApplicationCount)
+        {
+            EntityManager.AddComponentData(
+                Session,
+                new GasTargetPrepareFaultInjection
+                {
+                    FailAfterPreparedApplicationCount = preparedApplicationCount,
+                });
+        }
+
+        /// <summary>
         /// 通过唯一 typed Port 提交当前 Tick due 的 GrantedAbility 激活请求。
         /// </summary>
         internal GasCommandAcceptResult SubmitActivate(ulong requestId, in GrantedAbilityHandle grant)
@@ -625,6 +946,20 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         internal GasCommandAcceptResult SubmitCommit(ulong requestId, in AbilityActivationHandle activation)
         {
             var context = CreateAbilityContext(requestId);
+            return _owner.Port.RequestCommit(
+                context, activation, BoundaryCommandPayloadDescriptor.None, ReadOnlySpan<byte>.Empty);
+        }
+
+        /// <summary>
+        /// 通过唯一 typed Port 把规范 ASC target 与 Activation Commit 原子冻结。
+        /// </summary>
+        internal GasCommandAcceptResult SubmitCommitTo(
+            ulong requestId,
+            in AbilityActivationHandle activation,
+            in OwnerAscHandle targetOwner)
+        {
+            var target = BoundaryTargetRef.ForAsc(Battle, targetOwner);
+            var context = CreateAbilityContext(requestId, in target);
             return _owner.Port.RequestCommit(
                 context, activation, BoundaryCommandPayloadDescriptor.None, ReadOnlySpan<byte>.Empty);
         }
@@ -693,6 +1028,17 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         /// </summary>
         private GasBoundaryCommandContext CreateAbilityContext(ulong requestId)
         {
+            var target = BoundaryTargetRef.None;
+            return CreateAbilityContext(requestId, in target);
+        }
+
+        /// <summary>
+        /// 构造 source 与 subject owner 一致、target 由调用方显式冻结的 Ability 请求上下文。
+        /// </summary>
+        private GasBoundaryCommandContext CreateAbilityContext(
+            ulong requestId,
+            in BoundaryTargetRef target)
+        {
             return new GasBoundaryCommandContext(
                 Epoch,
                 requestId,
@@ -701,7 +1047,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 true,
                 Battle,
                 OwnerAsc,
-                BoundaryTargetRef.None);
+                target);
         }
 
         /// <summary>
@@ -718,6 +1064,91 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 EntityManager.GetBuffer<PendingCommand>(Asc).Length,
                 EntityManager.GetBuffer<BoundaryFactBuffer>(Asc).Length,
                 EntityManager.GetBuffer<BoundaryFactBuffer>(Session).Length);
+        }
+
+        /// <summary>
+        /// 逐值冻结 TargetPrepare 可能发布的三个组件与七类 buffer 权威面。
+        /// </summary>
+        internal RuntimeV1TargetAuthoritySnapshot CaptureTargetAuthority()
+        {
+            return new RuntimeV1TargetAuthoritySnapshot(
+                EntityManager.GetComponentData<AscLifecycle>(Asc),
+                EntityManager.GetComponentData<AscSlabHeads>(Asc),
+                EntityManager.GetComponentData<GasPayloadRangeAllocatorState>(Asc),
+                CopyBuffer(EntityManager.GetBuffer<ActiveEffectSlot>(Asc)),
+                CopyBuffer(EntityManager.GetBuffer<AttributeValueSlot>(Asc)),
+                CopyBuffer(EntityManager.GetBuffer<AttributeDirtyWord>(Asc)),
+                CopyBuffer(EntityManager.GetBuffer<TagCountSlot>(Asc)),
+                CopyBuffer(EntityManager.GetBuffer<TagPresenceWord>(Asc)),
+                CopyBuffer(EntityManager.GetBuffer<GasPayloadRangeRecord>(Asc)),
+                CopyBuffer(EntityManager.GetBuffer<GasPayloadValueSlot>(Asc)));
+        }
+
+        /// <summary>
+        /// 验证 Target fatal 后所有可发布权威组件与 buffer 的长度、顺序和值均保持不变。
+        /// </summary>
+        internal void AssertTargetAuthorityUnchanged(in RuntimeV1TargetAuthoritySnapshot before)
+        {
+            AssertLifecycleGameplayFieldsUnchanged(in before.Lifecycle);
+            Assert.That(EntityManager.GetComponentData<AscSlabHeads>(Asc), Is.EqualTo(before.Slabs));
+            Assert.That(
+                EntityManager.GetComponentData<GasPayloadRangeAllocatorState>(Asc),
+                Is.EqualTo(before.PayloadState));
+            AssertBufferEquals(before.ActiveEffects, EntityManager.GetBuffer<ActiveEffectSlot>(Asc));
+            AssertBufferEquals(before.Attributes, EntityManager.GetBuffer<AttributeValueSlot>(Asc));
+            AssertBufferEquals(
+                before.AttributeDirtyWords,
+                EntityManager.GetBuffer<AttributeDirtyWord>(Asc));
+            AssertBufferEquals(before.TagCounts, EntityManager.GetBuffer<TagCountSlot>(Asc));
+            AssertBufferEquals(
+                before.TagPresenceWords,
+                EntityManager.GetBuffer<TagPresenceWord>(Asc));
+            AssertBufferEquals(
+                before.PayloadRanges,
+                EntityManager.GetBuffer<GasPayloadRangeRecord>(Asc));
+            AssertBufferEquals(
+                before.PayloadValues,
+                EntityManager.GetBuffer<GasPayloadValueSlot>(Asc));
+        }
+
+        /// <summary>
+        /// 逐项验证生命周期业务字段回滚，同时允许并要求 fault-close 控制态关闭 ingress。
+        /// </summary>
+        private void AssertLifecycleGameplayFieldsUnchanged(in AscLifecycle before)
+        {
+            var actual = EntityManager.GetComponentData<AscLifecycle>(Asc);
+            Assert.That(actual.State, Is.EqualTo(before.State));
+            Assert.That(actual.ReadyTick, Is.EqualTo(before.ReadyTick));
+            Assert.That(actual.TerminalTick, Is.EqualTo(before.TerminalTick));
+            Assert.That(actual.DeathTick, Is.EqualTo(before.DeathTick));
+            Assert.That(actual.DeathTransitionId, Is.EqualTo(before.DeathTransitionId));
+            Assert.That(actual.DeathApplicationId, Is.EqualTo(before.DeathApplicationId));
+            Assert.That(actual.DeathSourceAsc, Is.EqualTo(before.DeathSourceAsc));
+            Assert.That(actual.DeathOverkill, Is.EqualTo(before.DeathOverkill));
+            Assert.That(actual.IngressClosed, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// 将 DynamicBuffer 复制为不依赖 World 生命周期的逐值测试快照。
+        /// </summary>
+        private static T[] CopyBuffer<T>(DynamicBuffer<T> buffer)
+            where T : unmanaged, IBufferElementData
+        {
+            var values = new T[buffer.Length];
+            for (var index = 0; index < buffer.Length; index++)
+                values[index] = buffer[index];
+            return values;
+        }
+
+        /// <summary>
+        /// 逐元素验证 durable buffer，避免只比较长度造成原子性测试假绿。
+        /// </summary>
+        private static void AssertBufferEquals<T>(T[] expected, DynamicBuffer<T> actual)
+            where T : unmanaged, IBufferElementData
+        {
+            Assert.That(actual.Length, Is.EqualTo(expected.Length));
+            for (var index = 0; index < expected.Length; index++)
+                Assert.That(actual[index], Is.EqualTo(expected[index]), $"buffer index {index}");
         }
 
         /// <summary>
@@ -759,9 +1190,10 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         {
             using var battles = CreateBattleRequests();
             using var ascs = CreateAscRequests();
-            using var attributes = new NativeArray<PendingAttributeInitialization>(0, Allocator.Temp);
+            using var attributes = CreateAttributeInitializations();
             using var tags = new NativeArray<PendingTagInitialization>(0, Allocator.Temp);
             using var abilities = CreateAbilityInitializations();
+            using var initialEffects = new NativeArray<PendingInitialGameplayEffect>(0, Allocator.Temp);
             var request = CreateSessionRequest(maxOwnerPlanCount);
             var failure = GasStageBBootstrapRecorder.Record(
                 EntityManager,
@@ -774,6 +1206,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 attributes,
                 tags,
                 abilities,
+                initialEffects,
                 out _);
             Assert.That(failure, Is.EqualTo(GasStageBSpawnFaultReason.None));
         }
@@ -791,14 +1224,14 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 abilities[0] = new PendingGrantedAbilityInitialization
                 {
                     LayoutIndex = 0,
-                    ConfigOrdinal = 0,
+                    ConfigOrdinal = _committedRemoteWork ? 1 : 0,
                 };
             }
             return abilities;
         }
 
         /// <summary>
-        /// 查询两轮后唯一 Session/ASC 并确认 Stage-B 已完整发布 Ready。
+        /// 查询两轮后的唯一 Session 与单/双 ASC，并确认 Stage-B 已完整发布 Ready。
         /// </summary>
         private void ResolveReadyEntities()
         {
@@ -808,8 +1241,15 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             Assert.That(query.CalculateEntityCount(), Is.EqualTo(1));
             Session = query.GetSingletonEntity();
             var registry = EntityManager.GetBuffer<AscRegistrySlot>(Session);
-            Assert.That(registry.Length, Is.EqualTo(1));
+            Assert.That(registry.Length, Is.EqualTo(_withRemoteAsc ? 2 : 1));
+            Assert.That(registry[0].OwnerAsc, Is.EqualTo(OwnerAsc));
             Asc = registry[0].ResolveRuntimeEntity();
+            if (_withRemoteAsc)
+            {
+                Assert.That(registry[1].OwnerAsc, Is.EqualTo(RemoteOwnerAsc));
+                Assert.That(registry[1].State, Is.EqualTo(GasAscRegistryState.Ready));
+                RemoteAsc = registry[1].ResolveRuntimeEntity();
+            }
             Assert.That(SessionLifecycle.State, Is.EqualTo(GasSessionLifecycleState.Ready));
             Assert.That(CurrentTick, Is.Zero);
             Assert.That(registry[0].State, Is.EqualTo(GasAscRegistryState.Ready));
@@ -820,6 +1260,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         /// </summary>
         private GasStageBSessionBootstrapRequest CreateSessionRequest(int maxOwnerPlanCount)
         {
+            ref var catalog = ref _catalog.Value;
             return new GasStageBSessionBootstrapRequest
             {
                 SimulationEpoch = Epoch,
@@ -830,19 +1271,22 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                     RuleVersion = 1,
                     BoundaryPolicyVersion = 1,
                 },
-                ScaleProfile = CreateScaleProfile(maxOwnerPlanCount),
+                ScaleProfile = CreateScaleProfile(
+                    maxOwnerPlanCount,
+                    _withRemoteAsc,
+                    _committedRemoteWork),
                 Catalog = _catalog,
                 CatalogExpectation = new GasCatalogValidationExpectation(
-                    GasDefinitionCatalogSchema.Version,
-                    SchemaHash,
-                    ContentHash,
-                    AttributeHash,
-                    TagHash),
+                    catalog.SchemaVersion,
+                    catalog.SchemaHash,
+                    catalog.ContentHash,
+                    catalog.AttributeLayout.LayoutHash,
+                    catalog.TagCatalog.CatalogHash),
             };
         }
 
         /// <summary>
-        /// 构造包含唯一 Ready 成员范围的 Battle 请求。
+        /// 构造包含单个或两个 Ready 成员范围的 Battle 请求。
         /// </summary>
         private NativeArray<GasStageBBattleBootstrapRequest> CreateBattleRequests()
         {
@@ -851,18 +1295,20 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             {
                 BattleInstance = Battle,
                 MemberStart = 0,
-                MemberCount = 1,
+                MemberCount = _withRemoteAsc ? 2 : 1,
                 MembershipOrdinalRoot = 10,
             };
             return values;
         }
 
         /// <summary>
-        /// 构造唯一 ASC 的稳定成员关系，三类初始化 range 均为空。
+        /// 构造 source 与可选 remote ASC 的稳定成员关系及连续初始化 range。
         /// </summary>
         private NativeArray<GasStageBAscBootstrapRequest> CreateAscRequests()
         {
-            var values = new NativeArray<GasStageBAscBootstrapRequest>(1, Allocator.Temp);
+            var values = new NativeArray<GasStageBAscBootstrapRequest>(
+                _withRemoteAsc ? 2 : 1,
+                Allocator.Temp);
             values[0] = new GasStageBAscBootstrapRequest
             {
                 OwnerAsc = OwnerAsc,
@@ -875,8 +1321,61 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 ActorBindingGeneration = 1,
                 RandomState0 = 3000,
                 RandomState1 = 4000,
+                AttributeInitializationStart = 0,
+                AttributeInitializationCount = _committedRemoteWork ? 1 : 0,
+                GrantedAbilityInitializationStart = 0,
                 GrantedAbilityInitializationCount = _withAbility ? 1 : 0,
             };
+            if (_withRemoteAsc)
+            {
+                values[1] = new GasStageBAscBootstrapRequest
+                {
+                    OwnerAsc = RemoteOwnerAsc,
+                    BattleInstance = Battle,
+                    RegistryOrdinal = 1,
+                    ScenarioUnitId = 901,
+                    MembershipOrdinal = 11,
+                    OwnerActorStableId = 1001,
+                    AvatarActorStableId = 2001,
+                    ActorBindingGeneration = 1,
+                    RandomState0 = 3001,
+                    RandomState1 = 4001,
+                    AttributeInitializationStart = _committedRemoteWork ? 1 : 0,
+                    AttributeInitializationCount = _committedRemoteWork ? 1 : 0,
+                    GrantedAbilityInitializationStart = _withAbility ? 1 : 0,
+                    GrantedAbilityInitializationCount = 0,
+                };
+            }
+            return values;
+        }
+
+        /// <summary>
+        /// 为 committed-work 场景显式冻结 source=5、remote=100 的 Health 初值。
+        /// </summary>
+        private NativeArray<PendingAttributeInitialization> CreateAttributeInitializations()
+        {
+            var values = new NativeArray<PendingAttributeInitialization>(
+                _committedRemoteWork ? 2 : 0,
+                Allocator.Temp);
+            if (_committedRemoteWork)
+            {
+                values[0] = new PendingAttributeInitialization
+                {
+                    LayoutIndex = 0,
+                    ConfigOrdinal = 0,
+                    HasExplicitValue = 1,
+                    BaseValue = 5f,
+                    CurrentValue = 5f,
+                };
+                values[1] = new PendingAttributeInitialization
+                {
+                    LayoutIndex = 0,
+                    ConfigOrdinal = 2,
+                    HasExplicitValue = 1,
+                    BaseValue = 100f,
+                    CurrentValue = 100f,
+                };
+            }
             return values;
         }
 
@@ -947,9 +1446,12 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
-        /// 构造满足单命令 Stage-C DAG 与 Stage-B 空初始化的最小合法 ScaleProfile。
+        /// 构造满足 Stage-C DAG 与条件化双 ASC 初始化的最小合法 ScaleProfile。
         /// </summary>
-        private static GasScaleProfile CreateScaleProfile(int maxOwnerPlanCount)
+        private static GasScaleProfile CreateScaleProfile(
+            int maxOwnerPlanCount,
+            bool withRemoteAsc,
+            bool withAttributeInitialization)
         {
             return new GasScaleProfile
             {
@@ -958,9 +1460,9 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 ProfileHash = 6001,
                 MaxFixedTicksPerBatch = 1,
                 MaximumDeltaTimeTicks = 1,
-                MaxSpawnBatchSize = 1,
+                MaxSpawnBatchSize = withRemoteAsc ? 2 : 1,
                 MaxBattleInstanceCount = 1,
-                MaxAscRegistryCount = 1,
+                MaxAscRegistryCount = withRemoteAsc ? 2 : 1,
                 MaxBoundaryCommandCount = 4,
                 MaxBoundaryCommandPayloadCount = 16,
                 MaxOwnerPlanCount = maxOwnerPlanCount,
@@ -971,6 +1473,7 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 MaxCoreFactCount = 8,
                 MaxNextTickRouteCount = 4,
                 MaxStructuralIntentCount = 4,
+                MaxPendingAttributeInitializationCount = withAttributeInitialization ? 1 : 0,
                 MaxPendingGrantedAbilityInitializationCount = 1,
                 MaxGrantedAbilityCount = 2,
                 MaxAbilityActivationCount = 4,
@@ -992,9 +1495,179 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
+        /// 构造 FrozenAsc Ability、远端 Instant Effect、Health 与 cost 资源的 committed-work 验收 Catalog。
+        /// </summary>
+        private static BlobAssetReference<GasDefinitionCatalogBlob> CreateCommittedRemoteWorkCatalog()
+        {
+            var builder = new BlobBuilder(Allocator.Temp);
+            try
+            {
+                ref var root = ref builder.ConstructRoot<GasDefinitionCatalogBlob>();
+                InitializeCatalogHeader(ref root);
+                var attributes = builder.Allocate(ref root.AttributeLayout.Entries, 2);
+                attributes[0] = new GasAttributeLayoutEntryBlob
+                {
+                    AttributeId = 1,
+                    LayoutIndex = 0,
+                    DefaultValue = 100f,
+                    MinimumValue = 0f,
+                    MaximumValue = 100f,
+                    ClampMinimum = 1,
+                    ClampMaximum = 1,
+                    DomainRole = GasAttributeDomainRole.Health,
+                };
+                attributes[1] = new GasAttributeLayoutEntryBlob
+                {
+                    AttributeId = 2,
+                    LayoutIndex = 1,
+                    DefaultValue = 100f,
+                    MinimumValue = 0f,
+                    MaximumValue = 100f,
+                    ClampMinimum = 1,
+                    ClampMaximum = 1,
+                    DomainRole = GasAttributeDomainRole.None,
+                };
+                builder.Allocate(ref root.TagCatalog.Entries, 0);
+                builder.Allocate(ref root.TagCatalog.AncestorIndices, 0);
+                builder.Allocate(ref root.AbilityIndex, 1)[0] =
+                    new GasDefinitionIndexEntry { DefinitionId = 7001, DefinitionIndex = 0 };
+                builder.Allocate(ref root.Abilities, 1)[0] = CreateCommittedRemoteAbility();
+                builder.Allocate(ref root.GameplayEffectIndex, 1)[0] =
+                    new GasDefinitionIndexEntry
+                    {
+                        DefinitionId = EffectDefinitionId,
+                        DefinitionIndex = 0,
+                    };
+                builder.Allocate(ref root.GameplayEffects, 1)[0] = CreateCommittedRemoteEffect();
+                builder.Allocate(ref root.Requirements, 0);
+                builder.Allocate(ref root.RequirementTagIndices, 0);
+                builder.Allocate(ref root.CaptureDescriptors, 0);
+                builder.Allocate(ref root.Modifiers, 1)[0] = new GasModifierDefinitionBlob
+                {
+                    AttributeLayoutIndex = 0,
+                    Operation = GasModifierOperation.Add,
+                    EvaluatorProgramRange = new GasCatalogRange { Start = 0, Count = 1 },
+                };
+                builder.Allocate(ref root.DirectEffectProgramNodes, 1)[0] =
+                    new GasDirectEffectProgramNodeBlob
+                    {
+                        NodeOrdinal = 0,
+                        EffectDefinitionId = EffectDefinitionId,
+                        MaximumTargetCount = 1,
+                        MaximumOutputCount = 1,
+                    };
+                builder.Allocate(ref root.CueReferences, 0);
+                builder.Allocate(ref root.ValueViews, 0);
+                builder.Allocate(ref root.EvaluatorInstructions, 1)[0] =
+                    new GasEvaluatorInstructionBlob
+                    {
+                        Opcode = GasEvaluatorOpcode.PushConstant,
+                        ConstantValue = -8f,
+                    };
+                builder.Allocate(ref root.SetByCallerDescriptors, 0);
+                builder.Allocate(ref root.TargetDataDescriptors, 1)[0] =
+                    new GasTargetDataDescriptorBlob
+                    {
+                        Variant = GasTargetDataVariant.StableAsc,
+                        FieldOrdinal = 0,
+                        Required = 1,
+                    };
+                builder.Allocate(ref root.EffectContextFieldDescriptors, 0);
+                var catalog = builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                GasDefinitionCatalogContentHasher.Stamp(ref catalog.Value);
+                return catalog;
+            }
+            finally
+            {
+                builder.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// 创建扣除一点 owner 资源、冻结远端 ASC 并发射一个 DirectEffect 的 Ability。
+        /// </summary>
+        private static GasAbilityDefinitionBlob CreateCommittedRemoteAbility()
+        {
+            return new GasAbilityDefinitionBlob
+            {
+                DefinitionId = 7001,
+                Level = 1,
+                TargetPolicy = CreateFrozenAscTargetPolicy(),
+                CostMutationContract = new GasCostMutationContractBlob
+                {
+                    Enabled = 1,
+                    AttributeLayoutIndex = 1,
+                    BaseDelta = -1f,
+                    CurrentDelta = -1f,
+                },
+                CooldownGateContract = new GasCooldownGateContractBlob
+                {
+                    Enabled = 1,
+                    GateKey = 9001,
+                    DurationTicks = 2,
+                    OwnedTagIndex = -1,
+                },
+                DirectEffectProgramRange = new GasCatalogRange { Start = 0, Count = 1 },
+                Maxima = new GasDefinitionMaxima
+                {
+                    MaximumTargetCount = 1,
+                    MaximumPlannedApplicationCount = 1,
+                    MaximumDirectProgramNodeCount = 1,
+                    MaximumDirectProgramOutputCount = 1,
+                },
+            };
+        }
+
+        /// <summary>
+        /// 创建对冻结 ASC Health 施加 -8 的 Instant GameplayEffect。
+        /// </summary>
+        private static GasGameplayEffectDefinitionBlob CreateCommittedRemoteEffect()
+        {
+            return new GasGameplayEffectDefinitionBlob
+            {
+                DefinitionId = EffectDefinitionId,
+                Lifetime = GasEffectLifetimePolicy.Instant,
+                TargetPolicy = CreateFrozenAscTargetPolicy(),
+                ModifierRange = new GasCatalogRange { Start = 0, Count = 1 },
+                EvaluatorProgramRange = new GasCatalogRange { Start = 0, Count = 1 },
+                TargetDataRange = new GasCatalogRange { Start = 0, Count = 1 },
+                ExpiryPolicy = GasExpiryPolicy.Remove,
+                ExpiryPeriodPolicy = GasExpiryPeriodPolicy.Stop,
+                ExpirySameTickPolicy = GasExpirySameTickPolicy.ExpiryBeforePeriodDue,
+                InhibitTimePolicy = GasInhibitTimePolicy.DurationContinues,
+                InhibitedPeriodPolicy = GasInhibitedPeriodPolicy.None,
+                MissedPeriodPolicy = GasMissedPeriodPolicy.SkipNoCatchUp,
+                Maxima = new GasDefinitionMaxima
+                {
+                    MaximumTargetCount = 1,
+                    MaximumPlannedApplicationCount = 1,
+                    MaximumModifierCount = 1,
+                    MaximumEvaluatorInstructionCount = 1,
+                    MaximumTargetDataCount = 1,
+                },
+            };
+        }
+
+        /// <summary>
+        /// 返回 FollowAsc、无空间采样且 AliveOnly 的 FrozenAsc target policy。
+        /// </summary>
+        private static GasTargetPolicyBlob CreateFrozenAscTargetPolicy()
+        {
+            return new GasTargetPolicyBlob
+            {
+                LogicalTarget = GasLogicalTargetPolicy.FrozenAsc,
+                Avatar = GasAvatarTargetPolicy.FollowAsc,
+                Spatial = GasSpatialTargetPolicy.None,
+                Life = GasTargetLifePolicy.AliveOnly,
+            };
+        }
+
+        /// <summary>
         /// 构造带一个 owner-local cost/cooldown Ability 与一个资源 Attribute 的合法 Catalog。
         /// </summary>
-        private static BlobAssetReference<GasDefinitionCatalogBlob> CreateAbilityCatalog(float costDelta)
+        private static BlobAssetReference<GasDefinitionCatalogBlob> CreateAbilityCatalog(
+            float costDelta,
+            bool withCooldown)
         {
             var builder = new BlobBuilder(Allocator.Temp);
             try
@@ -1016,8 +1689,10 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 var indices = builder.Allocate(ref root.AbilityIndex, 1);
                 indices[0] = new GasDefinitionIndexEntry { DefinitionId = 7001, DefinitionIndex = 0 };
                 var abilities = builder.Allocate(ref root.Abilities, 1);
-                abilities[0] = CreateAbilityDefinition(costDelta);
-                return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                abilities[0] = CreateAbilityDefinition(costDelta, withCooldown);
+                var catalog = builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                GasDefinitionCatalogContentHasher.Stamp(ref catalog.Value);
+                return catalog;
             }
             finally
             {
@@ -1093,7 +1768,9 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                     ConstantValue = period ? -3f : lethal ? -8f : 5f,
                 };
                 AllocateEmptyEffectCatalogArrays(ref builder, ref root);
-                return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                var catalog = builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                GasDefinitionCatalogContentHasher.Stamp(ref catalog.Value);
+                return catalog;
             }
             finally
             {
@@ -1136,7 +1813,9 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         /// <summary>
         /// 创建费用直接改写 Attribute、冷却持续两 Tick 的最小 Ability 定义。
         /// </summary>
-        private static GasAbilityDefinitionBlob CreateAbilityDefinition(float costDelta)
+        private static GasAbilityDefinitionBlob CreateAbilityDefinition(
+            float costDelta,
+            bool withCooldown)
         {
             return new GasAbilityDefinitionBlob
             {
@@ -1158,10 +1837,10 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 },
                 CooldownGateContract = new GasCooldownGateContractBlob
                 {
-                    Enabled = 1,
-                    GateKey = 9001,
-                    DurationTicks = 2,
-                    OwnedTagIndex = -1,
+                    Enabled = withCooldown ? (byte)1 : (byte)0,
+                    GateKey = withCooldown ? 9001 : 0,
+                    DurationTicks = withCooldown ? 2 : 0,
+                    OwnedTagIndex = withCooldown ? -1 : 0,
                 },
             };
         }
@@ -1177,7 +1856,9 @@ namespace GAS.RuntimeV1.Tests.PlayMode
                 ref var root = ref builder.ConstructRoot<GasDefinitionCatalogBlob>();
                 InitializeCatalogHeader(ref root);
                 AllocateEmptyCatalogArrays(ref builder, ref root);
-                return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                var catalog = builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                GasDefinitionCatalogContentHasher.Stamp(ref catalog.Value);
+                return catalog;
             }
             finally
             {
@@ -1186,15 +1867,12 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         }
 
         /// <summary>
-        /// 写入两个测试 Catalog 共享的冻结 schema/content/layout header。
+        /// 写入测试 Catalog 的稳定 schema 身份，其余 hash 在物化后 canonical 封印。
         /// </summary>
         private static void InitializeCatalogHeader(ref GasDefinitionCatalogBlob root)
         {
             root.SchemaVersion = GasDefinitionCatalogSchema.Version;
             root.SchemaHash = SchemaHash;
-            root.ContentHash = ContentHash;
-            root.AttributeLayout.LayoutHash = AttributeHash;
-            root.TagCatalog.CatalogHash = TagHash;
         }
 
         /// <summary>
@@ -1284,6 +1962,50 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             PendingCount = pendingCount;
             AscFactCount = ascFactCount;
             SessionFactCount = sessionFactCount;
+        }
+    }
+
+    /// <summary>
+    /// 冻结 TargetPrepare/Publish 覆盖的完整 target durable authority。
+    /// </summary>
+    internal readonly struct RuntimeV1TargetAuthoritySnapshot
+    {
+        internal readonly AscLifecycle Lifecycle;
+        internal readonly AscSlabHeads Slabs;
+        internal readonly GasPayloadRangeAllocatorState PayloadState;
+        internal readonly ActiveEffectSlot[] ActiveEffects;
+        internal readonly AttributeValueSlot[] Attributes;
+        internal readonly AttributeDirtyWord[] AttributeDirtyWords;
+        internal readonly TagCountSlot[] TagCounts;
+        internal readonly TagPresenceWord[] TagPresenceWords;
+        internal readonly GasPayloadRangeRecord[] PayloadRanges;
+        internal readonly GasPayloadValueSlot[] PayloadValues;
+
+        /// <summary>
+        /// 保存 TargetPublish 的全部组件与逐元素 buffer 快照。
+        /// </summary>
+        internal RuntimeV1TargetAuthoritySnapshot(
+            AscLifecycle lifecycle,
+            AscSlabHeads slabs,
+            GasPayloadRangeAllocatorState payloadState,
+            ActiveEffectSlot[] activeEffects,
+            AttributeValueSlot[] attributes,
+            AttributeDirtyWord[] attributeDirtyWords,
+            TagCountSlot[] tagCounts,
+            TagPresenceWord[] tagPresenceWords,
+            GasPayloadRangeRecord[] payloadRanges,
+            GasPayloadValueSlot[] payloadValues)
+        {
+            Lifecycle = lifecycle;
+            Slabs = slabs;
+            PayloadState = payloadState;
+            ActiveEffects = activeEffects;
+            Attributes = attributes;
+            AttributeDirtyWords = attributeDirtyWords;
+            TagCounts = tagCounts;
+            TagPresenceWords = tagPresenceWords;
+            PayloadRanges = payloadRanges;
+            PayloadValues = payloadValues;
         }
     }
 }

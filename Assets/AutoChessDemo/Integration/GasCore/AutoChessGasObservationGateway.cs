@@ -677,7 +677,7 @@ namespace GAS.AutoChessDemo
                     module = EGasStructuredLogModule.ExecutionCalculation;
                     domain = EGameplayFactDomain.ExecutionCalculation;
                     gameplayEventType = EGameplayEventType.ExecutionCalculationOutputUpdated;
-                    eventCode = AutoChessBattleRules.ExecutionCalculationExecuteDamage;
+                    eventCode = AutoChessBattleRules.GameplayEffectPlayerExecute;
                     value = payload.Scalar0;
                     oldValue = payload.Scalar1;
                     newValue = payload.Scalar2;

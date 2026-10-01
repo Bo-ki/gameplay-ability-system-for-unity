@@ -1,0 +1,196 @@
+{
+  "Schema": "D0M2S-Contract-v1",
+  "TerminalSchema": "D0M2S-Terminal-v1",
+  "RunIdPattern": "^D0M2S-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$",
+  "RouteUnderTest": "StableGraphSourceGenerator",
+  "DecisionInput": {
+    "Path": "docs/reviews/RuntimeV1.1-D0-M2R-ImmutableTarball路线否决与SourceGenerator恢复裁决.md",
+    "Sha256": "7ee474685006c8904d199619339e8e2bfce2c6a95d6a8c9ae6c7129449bcd903"
+  },
+  "UnityIdentity": {
+    "VersionPrefix": "6000.3.14f1",
+    "Sha256": "611b5785ece71684351029e7f64857f49949f87543a8de1ea45490eff8535262"
+  },
+  "FrozenTerminalFields": {
+    "AcceptedProductionRoute": "None",
+    "AcceptedSoleUnityConsumedSelector": "NotFrozen",
+    "D1Authorized": false,
+    "ProductionInstallAdmission": "NotEvaluated",
+    "DeclaredFullSemanticEligibility": false,
+    "ProductionMigrationAuthorized": false,
+    "NextGate": "D0-M2R-SourceGeneratorConfirmation"
+  },
+  "AggregateStatuses": [
+    "Passed",
+    "RouteRejected",
+    "Inconclusive"
+  ],
+  "CaseStatuses": [
+    "Passed",
+    "Failed",
+    "Inconclusive",
+    "NotRun"
+  ],
+  "Reasons": {
+    "Passed": [
+      "None"
+    ],
+    "RouteRejected": [
+      "ColdBaselineFailed",
+      "AtomicSelectorViolation",
+      "CompileKillRecoveryFailed",
+      "MissingSelectorAccepted",
+      "CorruptSelectorAccepted",
+      "GeneratorIdentityDriftAccepted",
+      "StaleArtifactSelected",
+      "AuditOrCacheSelected",
+      "DuplicateSelectorAccepted",
+      "LegacyGeneratedSourceAccepted",
+      "MixedGenerationObserved",
+      "CommonSelectorIdentityFailed"
+    ],
+    "Inconclusive": [
+      "HarnessFailure",
+      "TimeBoxExceeded",
+      "EvidenceIncomplete",
+      "InputIdentityDrift",
+      "UnityIdentityMismatch",
+      "ToolIdentityDrift",
+      "ProtectedPathDrift",
+      "FilesystemBoundaryViolation",
+      "UnityProcessResidue",
+      "CleanupFailure",
+      "SchemaViolation"
+    ]
+  },
+  "CaseSet": [
+    {
+      "CaseId": "SG-01",
+      "Name": "ColdAIdentity"
+    },
+    {
+      "CaseId": "SG-02",
+      "Name": "AtomicSelectorSwitch"
+    },
+    {
+      "CaseId": "SG-03",
+      "Name": "GeneratorKillRestart"
+    },
+    {
+      "CaseId": "SG-04",
+      "Name": "MissingCorruptInputs"
+    },
+    {
+      "CaseId": "SG-05",
+      "Name": "SourceGeneratorSpecificXPositive"
+    },
+    {
+      "CaseId": "SG-06",
+      "Name": "CompetingAuthorityFailClosed"
+    },
+    {
+      "CaseId": "SG-07",
+      "Name": "BoundaryCleanup"
+    },
+    {
+      "CaseId": "SG-08",
+      "Name": "EvidenceClosure"
+    }
+  ],
+  "ToolPathSpecs": [
+    {
+      "Kind": "File",
+      "Path": "Tools/Tests/GasCodeGen/Run-N2-G0-D0-M2S.ps1"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Tools/Tests/GasCodeGen/D0M2S"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Tools/Tests/GasCodeGen/D0M2F/SourceGenerator/Fixture~"
+    }
+  ],
+  "ProtectedPathSpecs": [
+    {
+      "Kind": "File",
+      "Path": "Packages/manifest.json"
+    },
+    {
+      "Kind": "File",
+      "Path": "Packages/packages-lock.json"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "ProjectSettings/GasCodeGen"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Assets/GAS/Editor/CodeGen"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Assets/GAS/Generated/CodeGen"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Assets/AutoChessDemo/Generated"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Tools/GasCodeGenCli"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Library/Bee"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "docs/adr"
+    },
+    {
+      "Kind": "File",
+      "Path": "方案讨论/针对2.0的ECS架构的迭代方案讨论/01-目标态架构共识/08-Luban-SourceGenerator配置生成链路Spec.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "方案讨论/针对2.0的ECS架构的迭代方案讨论/01-目标态架构共识/20-策划配置能力交叉审查Spec.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "方案讨论/针对2.0的ECS架构的迭代方案讨论/01-目标态架构共识/91-术语表.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "docs/reviews/RuntimeV1.1-D0-M2F-选路裁决.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "docs/reviews/RuntimeV1.1-D0-M2F-SpecADR规范冻结结果.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "docs/reviews/RuntimeV1.1-D0-M2R-ImmutableTarball路线否决与SourceGenerator恢复裁决.md"
+    },
+    {
+      "Kind": "File",
+      "Path": "Tools/Tests/GasCodeGen/README.md"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Tools/Tests/GasCodeGen/D0M2F"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "Tools/Tests/GasCodeGen/D0M2T"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "TestResults/GasCodeGen/N2-G0-D0-M2F/D0M2F-20260830T124005Z-c661f64e4c81"
+    },
+    {
+      "Kind": "Tree",
+      "Path": "TestResults/GasCodeGen/N2-G0-D0-M2T/D0M2T-20260830T163229Z-3191c7b97729"
+    }
+  ]
+}

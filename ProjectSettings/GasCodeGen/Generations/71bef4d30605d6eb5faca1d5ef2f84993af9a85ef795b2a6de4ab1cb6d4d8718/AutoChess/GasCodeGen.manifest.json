@@ -1,0 +1,28 @@
+{
+  "ManifestVersion": 3,
+  "GeneratorVersion": "EX-GAS-CodeGen-v3",
+  "OutputRoot": "Assets/AutoChessDemo/Generated",
+  "InputHash": "14ef98716e107c9f17d5c81265f1c8ffa73f913822bbda63e3647385e0fe9aff",
+  "ArtifactManifestHash": "af93a19df5ac51c9fc5ea94e41c3f2fe07e49b8576e1fa190a0eb0ba4c88fe6d",
+  "Entries": [
+    {
+      "PhaseName": "AutoChessDemoConfig",
+      "FileName": "AutoChessGeneratedConfig.gen.cs",
+      "ProjectRelativePath": "Assets/AutoChessDemo/Generated/AutoChessGeneratedConfig.gen.cs",
+      "Layer": "Runtime",
+      "RuntimeVisible": true,
+      "ArtifactCategory": "RuntimeDemoConfig",
+      "GeneratedArtifactKind": "RuntimeDemoConfig",
+      "GeneratedArtifactOwner": "AutoChessDemo",
+      "MayAllocate": false,
+      "MayOwnLifecycle": false,
+      "MayOwnStructuralChange": false,
+      "MayOwnNativeContainer": false,
+      "VersionControlled": true,
+      "ByteLength": 45582,
+      "ContentSha256": "1cc6a6a1397754201a573543e1f1613ae5a3e9dc1a439059dfdee5c3c7e4b9a6",
+      "MetaByteLength": 240,
+      "MetaContentSha256": "2f4c16226cd115e8caddd78dd50b5c6914da5cba035dc1a45e8a5fe932e56e74"
+    }
+  ]
+}

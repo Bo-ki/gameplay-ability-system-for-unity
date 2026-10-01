@@ -1,0 +1,9 @@
+E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Tools\GasCodeGenSourceGenerator\bin\Release\netstandard2.0\GasCodeGenSourceGenerator.deps.json
+E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Tools\GasCodeGenSourceGenerator\bin\Release\netstandard2.0\GasCodeGenSourceGenerator.dll
+E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Tools\GasCodeGenSourceGenerator\bin\Release\netstandard2.0\GasCodeGenSourceGenerator.pdb
+E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Tools\GasCodeGenSourceGenerator\obj\Release\netstandard2.0\GasCodeGenSourceGenerator.csproj.AssemblyReference.cache
+E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Tools\GasCodeGenSourceGenerator\obj\Release\netstandard2.0\GasCodeGenSourceGenerator.GeneratedMSBuildEditorConfig.editorconfig
+E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Tools\GasCodeGenSourceGenerator\obj\Release\netstandard2.0\GasCodeGenSourceGenerator.csproj.CoreCompileInputs.cache
+E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Tools\GasCodeGenSourceGenerator\obj\Release\netstandard2.0\GasCodeGenSourceGenerator.sourcelink.json
+E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Tools\GasCodeGenSourceGenerator\obj\Release\netstandard2.0\GasCodeGenSourceGenerator.dll
+E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity\Tools\GasCodeGenSourceGenerator\obj\Release\netstandard2.0\GasCodeGenSourceGenerator.pdb

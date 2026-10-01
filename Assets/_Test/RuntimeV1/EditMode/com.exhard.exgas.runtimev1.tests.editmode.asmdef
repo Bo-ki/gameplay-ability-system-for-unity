@@ -3,6 +3,8 @@
     "rootNamespace": "",
     "references": [
         "com.exhard.exgas.runtime",
+        "com.exhard.exgas.editor",
+        "com.exhard.exgas.autochessdemo",
         "Unity.Collections",
         "Unity.Entities"
     ],
@@ -11,8 +13,10 @@
     ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
-    "overrideReferences": false,
-    "precompiledReferences": [],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll"
+    ],
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],

@@ -39,20 +39,21 @@ namespace GAS.Runtime
         public ulong ContentHash;
 
         /// <summary>
-        /// 从已创建的 immutable Catalog 构造 Session registry 快照。
+        /// 从已创建的 immutable Catalog 与外部安装期望构造 Session registry 快照。
         /// </summary>
-        public static GasDefinitionRegistry Create(BlobAssetReference<GasDefinitionCatalogBlob> catalog)
+        public static GasDefinitionRegistry Create(
+            BlobAssetReference<GasDefinitionCatalogBlob> catalog,
+            in GasCatalogValidationExpectation expectation)
         {
             if (!catalog.IsCreated)
                 return default;
 
-            ref var root = ref catalog.Value;
             return new GasDefinitionRegistry
             {
                 Catalog = catalog,
-                SchemaVersion = root.SchemaVersion,
-                SchemaHash = root.SchemaHash,
-                ContentHash = root.ContentHash,
+                SchemaVersion = expectation.SchemaVersion,
+                SchemaHash = expectation.SchemaHash,
+                ContentHash = expectation.ContentHash,
             };
         }
     }
@@ -70,9 +71,11 @@ namespace GAS.Runtime
         public ulong TagCatalogHash;
 
         /// <summary>
-        /// 从 Definition Catalog 根投影固定逻辑长度与 layout/catalog 哈希。
+        /// 从 Definition Catalog 投影固定逻辑长度，并从外部安装期望冻结 layout/catalog 哈希。
         /// </summary>
-        public static GasCatalogRegistry Create(ref GasDefinitionCatalogBlob catalog)
+        public static GasCatalogRegistry Create(
+            ref GasDefinitionCatalogBlob catalog,
+            in GasCatalogValidationExpectation expectation)
         {
             var attributeCount = catalog.AttributeLayout.Entries.Length;
             var tagCount = catalog.TagCatalog.Entries.Length;
@@ -82,8 +85,8 @@ namespace GAS.Runtime
                 AttributeDirtyWordCount = CalculateWordCount(attributeCount),
                 TagCount = tagCount,
                 TagPresenceWordCount = CalculateWordCount(tagCount),
-                AttributeLayoutHash = catalog.AttributeLayout.LayoutHash,
-                TagCatalogHash = catalog.TagCatalog.CatalogHash,
+                AttributeLayoutHash = expectation.AttributeLayoutHash,
+                TagCatalogHash = expectation.TagCatalogHash,
             };
         }
 
@@ -126,6 +129,7 @@ namespace GAS.Runtime
         public int ExpectedAttributeInitializationCount;
         public int ExpectedTagInitializationCount;
         public int ExpectedGrantedAbilityInitializationCount;
+        public int ExpectedInitialGameplayEffectCount;
         public ulong ContentHash;
         public byte Pending;
     }
@@ -226,6 +230,8 @@ namespace GAS.Runtime
         public int TagInitializationCount;
         public int GrantedAbilityInitializationStart;
         public int GrantedAbilityInitializationCount;
+        public int InitialGameplayEffectStart;
+        public int InitialGameplayEffectCount;
         internal Entity RuntimeEntity;
 
         /// <summary>
@@ -267,6 +273,7 @@ namespace GAS.Runtime
             hasher.Add(manifest.ExpectedAttributeInitializationCount);
             hasher.Add(manifest.ExpectedTagInitializationCount);
             hasher.Add(manifest.ExpectedGrantedAbilityInitializationCount);
+            hasher.Add(manifest.ExpectedInitialGameplayEffectCount);
             return hasher;
         }
 
@@ -368,6 +375,47 @@ namespace GAS.Runtime
         }
 
         /// <summary>
+        /// 加入一个 SpawnBatch 初始 GameplayEffect 记录，冻结定义、目标与因果身份。
+        /// </summary>
+        internal void Add(PendingInitialGameplayEffect value)
+        {
+            Add(value.DefinitionId);
+            Add(value.ConfigOrdinal);
+            Add(value.CausalityId);
+            AddTarget(in value.Target);
+        }
+
+        /// <summary>
+        /// 按字段顺序加入 initial-effect 的稳定目标引用。
+        /// </summary>
+        private void AddTarget(in BoundaryTargetRef target)
+        {
+            Add((byte)target.Kind);
+            Add((byte)target.ResolutionPolicy);
+            Add(target.SimulationEpoch);
+            Add(target.BattleInstance.SimulationEpoch);
+            Add(target.BattleInstance.BattleStableId);
+            Add(target.BattleInstance.BattleGeneration);
+            Add(target.TargetAsc.AscStableId);
+            Add(target.TargetAsc.AscGeneration);
+            Add(target.TargetAvatarStableId);
+            Add(target.TargetAvatarBindingGeneration);
+            Add((byte)target.SpatialSnapshot.Variant);
+            Add(target.SpatialSnapshot.StableId0);
+            Add(target.SpatialSnapshot.StableId1);
+            Add(target.SpatialSnapshot.Scalar0);
+            Add(target.SpatialSnapshot.Scalar1);
+            Add(target.SpatialSnapshot.Scalar2);
+            Add(target.SpatialSnapshot.Scalar3);
+            Add(target.SpatialSnapshot.Scalar4);
+            Add(target.SpatialSnapshot.Scalar5);
+            Add(target.SpatialSnapshot.Scalar6);
+            Add(target.SpatialSnapshot.Scalar7);
+            Add(target.SelectorStableId);
+            Add(target.DefinitionRuleIndex);
+        }
+
+        /// <summary>
         /// 返回当前冻结内容哈希；零值被保留给未初始化 manifest。
         /// </summary>
         internal readonly ulong Finish()
@@ -386,6 +434,8 @@ namespace GAS.Runtime
             Add(member.TagInitializationCount);
             Add(member.GrantedAbilityInitializationStart);
             Add(member.GrantedAbilityInitializationCount);
+            Add(member.InitialGameplayEffectStart);
+            Add(member.InitialGameplayEffectCount);
         }
 
         /// <summary>

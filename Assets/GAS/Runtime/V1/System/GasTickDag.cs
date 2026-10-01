@@ -33,6 +33,17 @@ namespace GAS.Runtime
         /// </summary>
         internal static GasTickScratch CreateScratch(
             ref SystemState state,
+            in GasScaleProfile profile,
+            BlobAssetReference<GasDefinitionCatalogBlob> catalog)
+        {
+            return GasTickScratch.Create(in profile, catalog, state.WorldUpdateAllocator);
+        }
+
+        /// <summary>
+        /// 保留仅供无 Catalog 的布局测试使用的 scratch 构造入口；正式 Kernel 必须传入 immutable Catalog。
+        /// </summary>
+        internal static GasTickScratch CreateScratch(
+            ref SystemState state,
             in GasScaleProfile profile)
         {
             return GasTickScratch.Create(in profile, state.WorldUpdateAllocator);
@@ -65,6 +76,7 @@ namespace GAS.Runtime
             in GasScaleProfile profile,
             in GasDefinitionRegistry definitions,
             in GasTickScratch scratch,
+            EntityCommandBuffer targetShadowCommands,
             JobHandle dependency)
         {
             dependency = SchedulePlanAndAdmission(
@@ -82,6 +94,7 @@ namespace GAS.Runtime
                 in profile,
                 definitions.Catalog,
                 in scratch,
+                targetShadowCommands,
                 dependency);
             return ScheduleFinalize(ref state, session, in scratch, dependency);
         }
@@ -149,6 +162,7 @@ namespace GAS.Runtime
                 Registries = state.GetBufferLookup<AscRegistrySlot>(true),
                 AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
                 AscLifecycles = state.GetComponentLookup<AscLifecycle>(true),
+                ActorBindings = state.GetComponentLookup<GasActorBinding>(true),
                 ResolvedTargets = scratch.ResolvedTargets,
                 EffectOperations = scratch.EffectOperations,
                 TargetResolveRejections = scratch.TargetResolveRejections,
@@ -169,6 +183,8 @@ namespace GAS.Runtime
                 Registries = state.GetBufferLookup<AscRegistrySlot>(true),
                 AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
                 AscLifecycles = state.GetComponentLookup<AscLifecycle>(true),
+                Memberships = state.GetComponentLookup<AscBattleMembership>(true),
+                Battles = state.GetBufferLookup<BattleInstanceSlot>(true),
                 SlabHeads = state.GetComponentLookup<AscSlabHeads>(true),
                 Grants = state.GetBufferLookup<GrantedAbilitySlot>(true),
                 Activations = state.GetBufferLookup<AbilityActivationSlot>(true),
@@ -181,14 +197,40 @@ namespace GAS.Runtime
                 AttributeDirtyWords = state.GetBufferLookup<AttributeDirtyWord>(true),
                 TagCounts = state.GetBufferLookup<TagCountSlot>(true),
                 TagPresenceWords = state.GetBufferLookup<TagPresenceWord>(true),
+                PayloadStates = state.GetComponentLookup<GasPayloadRangeAllocatorState>(true),
+                PayloadRanges = state.GetBufferLookup<GasPayloadRangeRecord>(true),
+                PayloadValues = state.GetBufferLookup<GasPayloadValueSlot>(true),
                 BoundaryDrains = state.GetComponentLookup<BoundaryDrainState>(true),
                 BoundaryFacts = state.GetBufferLookup<BoundaryFactBuffer>(true),
+                RequestTerminalBuffers = state.GetBufferLookup<GasRequestTerminalIntent>(true),
                 SourceSpecs = scratch.SourceSpecs,
                 ApplicationOutcomes = scratch.ApplicationOutcomes,
                 AttributeMutations = scratch.AttributeMutations,
                 MutationOutcomes = scratch.MutationOutcomes,
                 CoreFacts = scratch.CoreFacts,
                 EvaluatorStack = scratch.EvaluatorStack,
+                TargetShadows = scratch.TargetShadows,
+                FinalPublishDecision = scratch.FinalPublishDecision,
+                TerminalBattleIntents = scratch.TerminalBattleIntents,
+                SessionLifecycleIntent = scratch.SessionLifecycleIntent,
+                PendingCommandSlotIntents = scratch.PendingCommandSlotIntents,
+                PendingCommandHeadIntents = scratch.PendingCommandHeadIntents,
+                BoundaryFactIntents = scratch.BoundaryFactIntents,
+                RequestTerminalIntents = scratch.RequestTerminalIntents,
+                TargetActiveEffects = scratch.TargetActiveEffects,
+                TargetAttributes = scratch.TargetAttributes,
+                TargetAttributeDirtyWords = scratch.TargetAttributeDirtyWords,
+                TargetTagCounts = scratch.TargetTagCounts,
+                TargetTagPresenceWords = scratch.TargetTagPresenceWords,
+                TargetPayloadRanges = scratch.TargetPayloadRanges,
+                TargetPayloadValues = scratch.TargetPayloadValues,
+                TargetActiveEffectStride = scratch.TargetActiveEffectStride,
+                TargetAttributeStride = scratch.TargetAttributeStride,
+                TargetAttributeDirtyWordStride = scratch.TargetAttributeDirtyWordStride,
+                TargetTagStride = scratch.TargetTagStride,
+                TargetTagPresenceWordStride = scratch.TargetTagPresenceWordStride,
+                TargetPayloadRangeStride = scratch.TargetPayloadRangeStride,
+                TargetPayloadValueStride = scratch.TargetPayloadValueStride,
                 Admission = scratch.Admission,
                 Execution = scratch.Execution,
             }.Schedule(dependency);
@@ -224,7 +266,7 @@ namespace GAS.Runtime
         }
 
         /// <summary>
-        /// 无条件排出 admission 后九个 gameplay/投影节点，失败时各节点统一入口 no-op。
+        /// 无条件排出 admission 后的完整 gameplay/投影节点链，失败时各节点统一入口 no-op。
         /// </summary>
         private static JobHandle ScheduleDownstream(
             ref SystemState state,
@@ -233,6 +275,7 @@ namespace GAS.Runtime
             in GasScaleProfile profile,
             BlobAssetReference<GasDefinitionCatalogBlob> catalog,
             in GasTickScratch scratch,
+            EntityCommandBuffer targetShadowCommands,
             JobHandle dependency)
         {
             dependency = new GasAscOwnerCommandWaveJob
@@ -264,10 +307,20 @@ namespace GAS.Runtime
             }.Schedule(dependency);
             dependency = new GasSourceSpecProjectionJob
             {
+                Session = session,
+                SimulationEpoch = simulationEpoch,
+                Catalog = catalog,
                 Admission = scratch.Admission,
                 EffectOperations = scratch.EffectOperations,
                 TargetResolveRejections = scratch.TargetResolveRejections,
+                Registries = state.GetBufferLookup<AscRegistrySlot>(true),
+                Attributes = state.GetBufferLookup<AttributeValueSlot>(true),
+                AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
                 SourceSpecs = scratch.SourceSpecs,
+                CaptureValues = scratch.CaptureValues,
+                ValueViews = scratch.ValueViews,
+                CaptureStride = scratch.CaptureStride,
+                ValueViewStride = scratch.ValueViewStride,
                 Execution = scratch.Execution,
             }.Schedule(dependency);
             dependency = new GasGroupWorkByTargetJob
@@ -276,7 +329,7 @@ namespace GAS.Runtime
                 SourceSpecs = scratch.SourceSpecs,
                 Execution = scratch.Execution,
             }.Schedule(dependency);
-            dependency = new GasAscTargetStateWaveJob
+            dependency = new GasAscTargetPrepareJob
             {
                 Session = session,
                 SimulationEpoch = simulationEpoch,
@@ -284,19 +337,43 @@ namespace GAS.Runtime
                 Catalog = catalog,
                 Admission = scratch.Admission,
                 SourceSpecs = scratch.SourceSpecs,
+                CaptureValues = scratch.CaptureValues,
+                ValueViews = scratch.ValueViews,
+                PeriodCaptureValues = scratch.PeriodCaptureValues,
+                PeriodValueViews = scratch.PeriodValueViews,
+                CaptureStride = scratch.CaptureStride,
+                ValueViewStride = scratch.ValueViewStride,
                 EvaluatorStack = scratch.EvaluatorStack,
                 Registries = state.GetBufferLookup<AscRegistrySlot>(true),
                 AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
-                AscLifecycles = state.GetComponentLookup<AscLifecycle>(false),
-                SlabHeads = state.GetComponentLookup<AscSlabHeads>(),
-                ActiveEffects = state.GetBufferLookup<ActiveEffectSlot>(),
-                Attributes = state.GetBufferLookup<AttributeValueSlot>(),
-                AttributeDirtyWords = state.GetBufferLookup<AttributeDirtyWord>(),
-                TagCounts = state.GetBufferLookup<TagCountSlot>(),
-                TagPresenceWords = state.GetBufferLookup<TagPresenceWord>(),
-                PayloadStates = state.GetComponentLookup<GasPayloadRangeAllocatorState>(),
-                PayloadRanges = state.GetBufferLookup<GasPayloadRangeRecord>(),
-                PayloadValues = state.GetBufferLookup<GasPayloadValueSlot>(),
+                AscLifecycles = state.GetComponentLookup<AscLifecycle>(true),
+                SlabHeads = state.GetComponentLookup<AscSlabHeads>(true),
+                ActiveEffects = state.GetBufferLookup<ActiveEffectSlot>(true),
+                ActorBindings = state.GetComponentLookup<GasActorBinding>(true),
+                Attributes = state.GetBufferLookup<AttributeValueSlot>(true),
+                AttributeDirtyWords = state.GetBufferLookup<AttributeDirtyWord>(true),
+                TagCounts = state.GetBufferLookup<TagCountSlot>(true),
+                TagPresenceWords = state.GetBufferLookup<TagPresenceWord>(true),
+                PayloadStates = state.GetComponentLookup<GasPayloadRangeAllocatorState>(true),
+                PayloadRanges = state.GetBufferLookup<GasPayloadRangeRecord>(true),
+                PayloadValues = state.GetBufferLookup<GasPayloadValueSlot>(true),
+                FaultInjections = state.GetComponentLookup<GasTargetPrepareFaultInjection>(true),
+                ShadowCommands = targetShadowCommands,
+                TargetShadows = scratch.TargetShadows,
+                ShadowActiveEffects = scratch.TargetActiveEffects,
+                ShadowAttributes = scratch.TargetAttributes,
+                ShadowAttributeDirtyWords = scratch.TargetAttributeDirtyWords,
+                ShadowTagCounts = scratch.TargetTagCounts,
+                ShadowTagPresenceWords = scratch.TargetTagPresenceWords,
+                ShadowPayloadRanges = scratch.TargetPayloadRanges,
+                ShadowPayloadValues = scratch.TargetPayloadValues,
+                ActiveEffectStride = scratch.TargetActiveEffectStride,
+                AttributeStride = scratch.TargetAttributeStride,
+                AttributeDirtyWordStride = scratch.TargetAttributeDirtyWordStride,
+                TagStride = scratch.TargetTagStride,
+                TagPresenceWordStride = scratch.TargetTagPresenceWordStride,
+                PayloadRangeStride = scratch.TargetPayloadRangeStride,
+                PayloadValueStride = scratch.TargetPayloadValueStride,
                 ApplicationOutcomes = scratch.ApplicationOutcomes,
                 AttributeMutations = scratch.AttributeMutations,
                 MutationOutcomes = scratch.MutationOutcomes,
@@ -311,13 +388,64 @@ namespace GAS.Runtime
                 CoreFacts = scratch.CoreFacts,
                 Execution = scratch.Execution,
             }.Schedule(dependency);
-            dependency = new GasStableFactMergeTerminalResolveJob
+            dependency = new GasTargetPublishPreflightJob
             {
+                Session = session,
+                SimulationEpoch = simulationEpoch,
+                Profile = profile,
                 Admission = scratch.Admission,
+                OwnerPlans = scratch.OwnerPlans,
+                TargetShadows = scratch.TargetShadows,
+                ShadowActiveEffects = scratch.TargetActiveEffects,
+                ShadowAttributes = scratch.TargetAttributes,
+                ShadowAttributeDirtyWords = scratch.TargetAttributeDirtyWords,
+                ShadowTagCounts = scratch.TargetTagCounts,
+                ShadowTagPresenceWords = scratch.TargetTagPresenceWords,
+                ShadowPayloadRanges = scratch.TargetPayloadRanges,
+                ShadowPayloadValues = scratch.TargetPayloadValues,
+                ActiveEffectStride = scratch.TargetActiveEffectStride,
+                AttributeStride = scratch.TargetAttributeStride,
+                AttributeDirtyWordStride = scratch.TargetAttributeDirtyWordStride,
+                TagStride = scratch.TargetTagStride,
+                TagPresenceWordStride = scratch.TargetTagPresenceWordStride,
+                PayloadRangeStride = scratch.TargetPayloadRangeStride,
+                PayloadValueStride = scratch.TargetPayloadValueStride,
+                AscLifecycles = state.GetComponentLookup<AscLifecycle>(true),
+                AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
+                SlabHeads = state.GetComponentLookup<AscSlabHeads>(true),
+                PayloadStates = state.GetComponentLookup<GasPayloadRangeAllocatorState>(true),
+                Registries = state.GetBufferLookup<AscRegistrySlot>(true),
+                Grants = state.GetBufferLookup<GrantedAbilitySlot>(true),
+                Activations = state.GetBufferLookup<AbilityActivationSlot>(true),
+                Continuations = state.GetBufferLookup<AbilityContinuationSlot>(true),
+                Subscriptions = state.GetBufferLookup<AbilitySubscriptionSlot>(true),
+                ActiveEffects = state.GetBufferLookup<ActiveEffectSlot>(true),
+                Attributes = state.GetBufferLookup<AttributeValueSlot>(true),
+                AttributeDirtyWords = state.GetBufferLookup<AttributeDirtyWord>(true),
+                TagCounts = state.GetBufferLookup<TagCountSlot>(true),
+                TagPresenceWords = state.GetBufferLookup<TagPresenceWord>(true),
+                PayloadRanges = state.GetBufferLookup<GasPayloadRangeRecord>(true),
+                PayloadValues = state.GetBufferLookup<GasPayloadValueSlot>(true),
+                Execution = scratch.Execution,
+            }.Schedule(dependency);
+            dependency = new GasStableFactMergeTerminalPrepareJob
+            {
+                Session = session,
+                SimulationEpoch = simulationEpoch,
+                Admission = scratch.Admission,
+                Registries = state.GetBufferLookup<AscRegistrySlot>(true),
+                AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
+                Memberships = state.GetComponentLookup<AscBattleMembership>(true),
+                TargetShadows = scratch.TargetShadows,
+                SessionLifecycles = state.GetComponentLookup<GasSessionLifecycle>(true),
+                Battles = state.GetBufferLookup<BattleInstanceSlot>(true),
+                FaultInjections = state.GetComponentLookup<GasFinalPublishFaultInjection>(true),
+                BattleIntents = scratch.TerminalBattleIntents,
+                SessionLifecycleIntent = scratch.SessionLifecycleIntent,
                 CoreFacts = scratch.CoreFacts,
                 Execution = scratch.Execution,
             }.Schedule(dependency);
-            dependency = new GasGroupNextTickRouteByDestinationJob
+            dependency = new GasNextTickRoutePrepareJob
             {
                 Session = session,
                 SimulationEpoch = simulationEpoch,
@@ -325,13 +453,16 @@ namespace GAS.Runtime
                 Admission = scratch.Admission,
                 Registries = state.GetBufferLookup<AscRegistrySlot>(true),
                 AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
-                AscLifecycles = state.GetComponentLookup<AscLifecycle>(true),
-                SlabHeads = state.GetComponentLookup<AscSlabHeads>(),
-                PendingCommands = state.GetBufferLookup<PendingCommand>(),
+                TargetShadows = scratch.TargetShadows,
+                SlabHeads = state.GetComponentLookup<AscSlabHeads>(true),
+                PendingCommands = state.GetBufferLookup<PendingCommand>(true),
+                FaultInjections = state.GetComponentLookup<GasFinalPublishFaultInjection>(true),
+                SlotIntents = scratch.PendingCommandSlotIntents,
+                HeadIntents = scratch.PendingCommandHeadIntents,
                 AbilityRoutes = scratch.AbilityRoutes,
                 Execution = scratch.Execution,
             }.Schedule(dependency);
-            dependency = new GasBoundaryProjectJob
+            dependency = new GasBoundaryProjectPrepareJob
             {
                 Session = session,
                 SimulationEpoch = simulationEpoch,
@@ -339,11 +470,29 @@ namespace GAS.Runtime
                 Admission = scratch.Admission,
                 Registries = state.GetBufferLookup<AscRegistrySlot>(true),
                 AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
-                AscLifecycles = state.GetComponentLookup<AscLifecycle>(true),
+                TargetShadows = scratch.TargetShadows,
                 Memberships = state.GetComponentLookup<AscBattleMembership>(true),
-                Drains = state.GetComponentLookup<BoundaryDrainState>(),
-                BoundaryFacts = state.GetBufferLookup<BoundaryFactBuffer>(),
+                Battles = state.GetBufferLookup<BattleInstanceSlot>(true),
+                Drains = state.GetComponentLookup<BoundaryDrainState>(true),
+                BoundaryFacts = state.GetBufferLookup<BoundaryFactBuffer>(true),
+                FaultInjections = state.GetComponentLookup<GasFinalPublishFaultInjection>(true),
+                BoundaryIntents = scratch.BoundaryFactIntents,
                 Execution = scratch.Execution,
+            }.Schedule(dependency);
+            dependency = new GasRequestTerminalPrepareJob
+            {
+                Admission = scratch.Admission,
+                SealedCommands = scratch.SealedCommands,
+                OwnerPlans = scratch.OwnerPlans,
+                ApplicationOutcomes = scratch.ApplicationOutcomes,
+                Intents = scratch.RequestTerminalIntents,
+                Execution = scratch.Execution,
+            }.Schedule(dependency);
+            dependency = new GasSessionFinalPublishFaultReduceJob
+            {
+                Admission = scratch.Admission,
+                Execution = scratch.Execution,
+                Decision = scratch.FinalPublishDecision,
             }.Schedule(dependency);
             dependency = ScheduleFaultLatch(
                 ref state,
@@ -352,6 +501,97 @@ namespace GAS.Runtime
                 in scratch,
                 dependency,
                 includePostAdmissionFailure: 1);
+            dependency = new GasAscTargetPublishJob
+            {
+                Decision = scratch.FinalPublishDecision,
+                TargetShadows = scratch.TargetShadows,
+                ShadowActiveEffects = scratch.TargetActiveEffects,
+                ShadowAttributes = scratch.TargetAttributes,
+                ShadowAttributeDirtyWords = scratch.TargetAttributeDirtyWords,
+                ShadowTagCounts = scratch.TargetTagCounts,
+                ShadowTagPresenceWords = scratch.TargetTagPresenceWords,
+                ShadowPayloadRanges = scratch.TargetPayloadRanges,
+                ShadowPayloadValues = scratch.TargetPayloadValues,
+                ActiveEffectStride = scratch.TargetActiveEffectStride,
+                AttributeStride = scratch.TargetAttributeStride,
+                AttributeDirtyWordStride = scratch.TargetAttributeDirtyWordStride,
+                TagStride = scratch.TargetTagStride,
+                TagPresenceWordStride = scratch.TargetTagPresenceWordStride,
+                PayloadRangeStride = scratch.TargetPayloadRangeStride,
+                PayloadValueStride = scratch.TargetPayloadValueStride,
+                AscLifecycles = state.GetComponentLookup<AscLifecycle>(),
+                SlabHeads = state.GetComponentLookup<AscSlabHeads>(),
+                PayloadStates = state.GetComponentLookup<GasPayloadRangeAllocatorState>(),
+                ActiveEffects = state.GetBufferLookup<ActiveEffectSlot>(),
+                Attributes = state.GetBufferLookup<AttributeValueSlot>(),
+                AttributeDirtyWords = state.GetBufferLookup<AttributeDirtyWord>(),
+                TagCounts = state.GetBufferLookup<TagCountSlot>(),
+                TagPresenceWords = state.GetBufferLookup<TagPresenceWord>(),
+                PayloadRanges = state.GetBufferLookup<GasPayloadRangeRecord>(),
+                PayloadValues = state.GetBufferLookup<GasPayloadValueSlot>(),
+            }.Schedule(dependency);
+            dependency = new GasAbilityLifecyclePublishJob
+            {
+                Session = session,
+                SimulationEpoch = simulationEpoch,
+                Decision = scratch.FinalPublishDecision,
+                OwnerPlans = scratch.OwnerPlans,
+                Execution = scratch.Execution,
+                Registries = state.GetBufferLookup<AscRegistrySlot>(true),
+                AscIdentities = state.GetComponentLookup<GasAscIdentity>(true),
+                AscLifecycles = state.GetComponentLookup<AscLifecycle>(true),
+                SlabHeads = state.GetComponentLookup<AscSlabHeads>(),
+                Grants = state.GetBufferLookup<GrantedAbilitySlot>(),
+                Activations = state.GetBufferLookup<AbilityActivationSlot>(),
+                Continuations = state.GetBufferLookup<AbilityContinuationSlot>(true),
+                Subscriptions = state.GetBufferLookup<AbilitySubscriptionSlot>(true),
+            }.Schedule(dependency);
+            dependency = new GasSessionFinalPublishFaultReduceJob
+            {
+                Admission = scratch.Admission,
+                Execution = scratch.Execution,
+                Decision = scratch.FinalPublishDecision,
+            }.Schedule(dependency);
+            dependency = ScheduleFaultLatch(
+                ref state,
+                session,
+                simulationEpoch,
+                in scratch,
+                dependency,
+                includePostAdmissionFailure: 1);
+            dependency = new GasTerminalPublishJob
+            {
+                Session = session,
+                Decision = scratch.FinalPublishDecision,
+                BattleIntents = scratch.TerminalBattleIntents,
+                SessionLifecycleIntent = scratch.SessionLifecycleIntent,
+                Battles = state.GetBufferLookup<BattleInstanceSlot>(),
+                SessionLifecycles = state.GetComponentLookup<GasSessionLifecycle>(),
+            }.Schedule(dependency);
+            dependency = new GasNextTickRoutePublishJob
+            {
+                Decision = scratch.FinalPublishDecision,
+                SlotIntents = scratch.PendingCommandSlotIntents,
+                HeadIntents = scratch.PendingCommandHeadIntents,
+                SlabHeads = state.GetComponentLookup<AscSlabHeads>(),
+                PendingCommands = state.GetBufferLookup<PendingCommand>(),
+            }.Schedule(dependency);
+            dependency = new GasBoundaryPublishJob
+            {
+                Decision = scratch.FinalPublishDecision,
+                BoundaryIntents = scratch.BoundaryFactIntents,
+                Drains = state.GetComponentLookup<BoundaryDrainState>(),
+                BoundaryFacts = state.GetBufferLookup<BoundaryFactBuffer>(),
+                Execution = scratch.Execution,
+            }.Schedule(dependency);
+            dependency = new GasRequestTerminalPublishJob
+            {
+                Session = session,
+                Decision = scratch.FinalPublishDecision,
+                Intents = scratch.RequestTerminalIntents,
+                Execution = scratch.Execution,
+                TerminalBuffers = state.GetBufferLookup<GasRequestTerminalIntent>(),
+            }.Schedule(dependency);
             return new GasRecordEndFixedJob
                 { Admission = scratch.Admission, Execution = scratch.Execution }.Schedule(dependency);
         }

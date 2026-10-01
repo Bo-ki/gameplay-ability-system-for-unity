@@ -86,6 +86,8 @@ namespace GAS.Runtime
     public sealed class GasRuntimeWorldOwner : IDisposable
     {
         private const string RegistrationEntityName = "GAS_RuntimeV1_WorldOwner";
+        private const int BoundaryDrainFaultReasonCodeBase = 21000;
+        private const int RequestTerminalBridgeFaultReasonCode = 21100;
 
         private readonly World _world;
         private readonly SimulationSystemGroup _simulation;
@@ -109,7 +111,8 @@ namespace GAS.Runtime
             Unity.Collections.NativeArray<GasStageBAscBootstrapRequest> ascRequests,
             Unity.Collections.NativeArray<PendingAttributeInitialization> attributeInitializations,
             Unity.Collections.NativeArray<PendingTagInitialization> tagInitializations,
-            Unity.Collections.NativeArray<PendingGrantedAbilityInitialization> grantedAbilityInitializations)
+            Unity.Collections.NativeArray<PendingGrantedAbilityInitialization> grantedAbilityInitializations,
+            Unity.Collections.NativeArray<PendingInitialGameplayEffect> initialGameplayEffects)
         {
             EnsureUsable();
             using var query = _world.EntityManager.CreateEntityQuery(new EntityQueryDesc
@@ -136,7 +139,86 @@ namespace GAS.Runtime
                 attributeInitializations,
                 tagInitializations,
                 grantedAbilityInitializations,
+                initialGameplayEffects,
                 out _);
+        }
+
+        /// <summary>
+        /// 通过公开稳定 owner 与 definition 解析唯一 bootstrap grant，不向调用方暴露 Entity 或 ECS buffer。
+        /// </summary>
+        public GasBootstrapGrantReceipt ResolveBootstrapGrantedAbility(
+            in OwnerAscHandle ownerAsc,
+            int abilityDefinitionId)
+        {
+            EnsureUsable();
+            if (!ownerAsc.IsValid || abilityDefinitionId <= 0)
+            {
+                return new GasBootstrapGrantReceipt(
+                    GasBootstrapGrantResolveStatus.InvalidRequest,
+                    0,
+                    in ownerAsc,
+                    abilityDefinitionId,
+                    default);
+            }
+
+            using var query = _world.EntityManager.CreateEntityQuery(
+                ComponentType.ReadOnly<GasActiveSessionAuthority>(),
+                ComponentType.ReadOnly<GasSessionIdentity>(),
+                ComponentType.ReadOnly<AscRegistrySlot>());
+            if (query.CalculateEntityCount() != 1)
+            {
+                return new GasBootstrapGrantReceipt(
+                    GasBootstrapGrantResolveStatus.SessionUnavailable,
+                    0,
+                    in ownerAsc,
+                    abilityDefinitionId,
+                    default);
+            }
+
+            var session = query.GetSingletonEntity();
+            var epoch = _world.EntityManager.GetComponentData<GasSessionIdentity>(session)
+                .SimulationEpoch;
+            if (!TryResolveReadyAsc(session, epoch, in ownerAsc, out var asc) ||
+                !_world.EntityManager.HasBuffer<GrantedAbilitySlot>(asc))
+            {
+                return new GasBootstrapGrantReceipt(
+                    GasBootstrapGrantResolveStatus.OwnerNotReady,
+                    epoch,
+                    in ownerAsc,
+                    abilityDefinitionId,
+                    default);
+            }
+
+            var grants = _world.EntityManager.GetBuffer<GrantedAbilitySlot>(asc, true);
+            var resolved = default(GrantedAbilityHandle);
+            var matchCount = 0;
+            for (var index = 0; index < grants.Length; index++)
+            {
+                var grant = grants[index];
+                if (grant.Header.StorageState != GasSlabSlotState.Live ||
+                    grant.GrantSourceKind != GasAbilityGrantSourceKind.Bootstrap ||
+                    grant.DefinitionId != abilityDefinitionId ||
+                    grant.RemovalState != GasGrantedAbilityRemovalState.None ||
+                    grant.ProvenanceDetached != 0 ||
+                    !grant.Handle.IsValid ||
+                    grant.Handle.SimulationEpoch != epoch ||
+                    !grant.Handle.OwnerAsc.Equals(ownerAsc))
+                    continue;
+                resolved = grant.Handle;
+                matchCount++;
+            }
+
+            var status = matchCount == 0
+                ? GasBootstrapGrantResolveStatus.GrantNotFound
+                : matchCount == 1
+                    ? GasBootstrapGrantResolveStatus.Resolved
+                    : GasBootstrapGrantResolveStatus.AmbiguousGrant;
+            return new GasBootstrapGrantReceipt(
+                status,
+                epoch,
+                in ownerAsc,
+                abilityDefinitionId,
+                matchCount == 1 ? resolved : default);
         }
 
         /// <summary>
@@ -418,16 +500,42 @@ namespace GAS.Runtime
                 return;
 
             _world.EntityManager.CompleteAllTrackedJobs();
-            if (!_boundaryDrain.TryDrain(
+            if (!PublishRequestTerminalIntents())
+            {
+                CloseForInfrastructureFault(RequestTerminalBridgeFaultReasonCode);
+                throw new InvalidOperationException(
+                    "Runtime v1 RequestTerminal bridge violated its unique Accepted RequestKey contract.");
+            }
+
+            var closedForFault = CloseDetectedFault();
+            var closedForBattle = !closedForFault && CloseDetectedBattleTerminal();
+            GasBoundaryDrainRunResult drainResult;
+            bool drained;
+            try
+            {
+                drained = _boundaryDrain.TryDrain(
                     _world.EntityManager,
-                    out var drainResult))
+                    out drainResult);
+            }
+            catch (Exception exception)
+            {
+                LastBoundaryDrainFailure = GasBoundaryDrainFailure.StagingRejected;
+                CloseForBoundaryDrainFailure(GasBoundaryDrainFailure.StagingRejected);
+                throw CreateBoundaryDrainException(
+                    "batch drain",
+                    GasBoundaryDrainFailure.StagingRejected,
+                    exception);
+            }
+            if (!drained)
             {
                 LastBoundaryDrainFailure = drainResult.Failure;
+                CloseForBoundaryDrainFailure(drainResult.Failure);
                 throw CreateBoundaryDrainException("batch drain", drainResult.Failure);
             }
             LastBoundaryDrainFailure = drainResult.Failure;
+
             _ingressSystem.AcknowledgeConsumedAfterBatch(_world.EntityManager);
-            if (!CloseDetectedFault())
+            if (!closedForFault && !closedForBattle)
                 RefreshAuthoritySnapshot();
         }
 
@@ -440,6 +548,19 @@ namespace GAS.Runtime
         {
             return new InvalidOperationException(
                 "Runtime v1 Boundary " + phase + " failed: " + failure);
+        }
+
+        /// <summary>
+        /// 构造保留原始 staging 异常的确定性 Boundary Drain 错误。
+        /// </summary>
+        private static InvalidOperationException CreateBoundaryDrainException(
+            string phase,
+            GasBoundaryDrainFailure failure,
+            Exception innerException)
+        {
+            return new InvalidOperationException(
+                "Runtime v1 Boundary " + phase + " failed: " + failure,
+                innerException);
         }
 
         /// <summary>
@@ -677,6 +798,198 @@ namespace GAS.Runtime
         }
 
         /// <summary>
+        /// 从 Session registry 解析唯一 Ready ASC，bootstrap resolver 不向调用方泄露内部 Entity。
+        /// </summary>
+        private bool TryResolveReadyAsc(
+            Entity session,
+            ulong simulationEpoch,
+            in OwnerAscHandle ownerAsc,
+            out Entity asc)
+        {
+            var slots = _world.EntityManager.GetBuffer<AscRegistrySlot>(session, true);
+            for (var index = 0; index < slots.Length; index++)
+            {
+                var slot = slots[index];
+                if (slot.Header.StorageState != GasSlabSlotState.Live ||
+                    slot.State != GasAscRegistryState.Ready ||
+                    !slot.OwnerAsc.Equals(ownerAsc))
+                    continue;
+                asc = slot.ResolveRuntimeEntity();
+                if (!_world.EntityManager.Exists(asc) ||
+                    !_world.EntityManager.HasComponent<GasAscIdentity>(asc) ||
+                    !_world.EntityManager.HasComponent<AscLifecycle>(asc))
+                    break;
+                var identity = _world.EntityManager.GetComponentData<GasAscIdentity>(asc);
+                var lifecycle = _world.EntityManager.GetComponentData<AscLifecycle>(asc);
+                return identity.SimulationEpoch == simulationEpoch &&
+                       identity.OwnerAsc.Equals(ownerAsc) &&
+                       (lifecycle.State == GasAscLifecycleState.Ready ||
+                        lifecycle.State == GasAscLifecycleState.Alive) &&
+                       lifecycle.IngressClosed == 0;
+            }
+
+            asc = Entity.Null;
+            return false;
+        }
+
+        /// <summary>
+        /// 把 final-publish 写入的 unmanaged terminal intent 一次交给 Gate，冲突由调用方提升为 SessionFault。
+        /// </summary>
+        private bool PublishRequestTerminalIntents()
+        {
+            using var query = _world.EntityManager.CreateEntityQuery(
+                ComponentType.ReadOnly<GasSessionIdentity>(),
+                ComponentType.ReadWrite<GasRequestTerminalIntent>());
+            var count = query.CalculateEntityCount();
+            if (count == 0)
+                return true;
+            if (count != 1)
+                return false;
+
+            var intents = _world.EntityManager.GetBuffer<GasRequestTerminalIntent>(
+                query.GetSingletonEntity());
+            for (var index = 0; index < intents.Length; index++)
+            {
+                var terminal = intents[index].Terminal;
+                var status = _ingressGate.TryPublishRequestTerminal(in terminal);
+                if (status != GasRequestTerminalPublishStatus.Published &&
+                    status != GasRequestTerminalPublishStatus.Duplicate)
+                    return false;
+            }
+
+            intents.Clear();
+            return true;
+        }
+
+        /// <summary>
+        /// 在 fence 观察到已发布 BattleTerminal 时与 Gate 共锁关闭 tail，并区分战局终局与 Session fault。
+        /// </summary>
+        private bool CloseDetectedBattleTerminal()
+        {
+            using var query = _world.EntityManager.CreateEntityQuery(
+                ComponentType.ReadOnly<GasActiveSessionAuthority>(),
+                ComponentType.ReadWrite<BattleInstanceSlot>(),
+                ComponentType.ReadWrite<BoundaryCommandInbox>(),
+                ComponentType.ReadOnly<AscRegistrySlot>());
+            if (query.CalculateEntityCount() != 1)
+                return false;
+
+            var session = query.GetSingletonEntity();
+            var battles = _world.EntityManager.GetBuffer<BattleInstanceSlot>(session, true);
+            var found = false;
+            var terminalBattle = default(BattleInstanceHandle);
+            var outcomeCode = 0;
+            for (var index = 0; index < battles.Length; index++)
+            {
+                var battle = battles[index];
+                if (battle.Header.StorageState != GasSlabSlotState.Live ||
+                    (battle.State != GasBattleInstanceState.Terminal &&
+                     battle.State != GasBattleInstanceState.OutcomeFrozen))
+                    continue;
+                if (!found || ComesBefore(in battle.Handle, in terminalBattle))
+                {
+                    found = true;
+                    terminalBattle = battle.Handle;
+                    outcomeCode = battle.OutcomeCode;
+                }
+            }
+            if (!found)
+                return false;
+
+            _ingressGate.CloseForBattleTerminal(in terminalBattle, outcomeCode);
+            CloseBattleIngress(session);
+            CloseAscIngress(session);
+            return true;
+        }
+
+        /// <summary>
+        /// 将 Boundary Drain 失败映射到稳定 SessionFault reason，并在抛错前同步关闭 Gate authority。
+        /// </summary>
+        private void CloseForBoundaryDrainFailure(GasBoundaryDrainFailure failure)
+        {
+            CloseForInfrastructureFault(BoundaryDrainFaultReasonCodeBase + (int)failure);
+        }
+
+        /// <summary>
+        /// 在 managed fence 原子锁存基础设施 SessionFault，再复用唯一 fault close 收敛点补齐请求终态。
+        /// </summary>
+        private void CloseForInfrastructureFault(int reasonCode)
+        {
+            using var query = _world.EntityManager.CreateEntityQuery(
+                ComponentType.ReadOnly<GasActiveSessionAuthority>(),
+                ComponentType.ReadOnly<GasSessionIdentity>(),
+                ComponentType.ReadOnly<SimulationTickState>(),
+                ComponentType.ReadWrite<GasSessionLifecycle>(),
+                ComponentType.ReadWrite<SessionFaultLatch>());
+            if (query.CalculateEntityCount() != 1)
+            {
+                _ingressGate.CloseForFault(
+                    CreateInfrastructureFaultId(0, 0, reasonCode));
+                return;
+            }
+
+            var session = query.GetSingletonEntity();
+            var latch = _world.EntityManager.GetComponentData<SessionFaultLatch>(session);
+            if (latch.Detected == 0 || latch.FaultId == 0)
+            {
+                var epoch = _world.EntityManager.GetComponentData<GasSessionIdentity>(session)
+                    .SimulationEpoch;
+                var tick = _world.EntityManager.GetComponentData<SimulationTickState>(session)
+                    .CurrentTick;
+                latch = new SessionFaultLatch
+                {
+                    FaultId = CreateInfrastructureFaultId(epoch, tick, reasonCode),
+                    FaultEpoch = epoch,
+                    FaultTick = tick,
+                    ReasonCode = reasonCode,
+                    Detected = 1,
+                };
+                _world.EntityManager.SetComponentData(session, latch);
+                var lifecycle = _world.EntityManager.GetComponentData<GasSessionLifecycle>(session);
+                lifecycle.State = GasSessionLifecycleState.Faulted;
+                _world.EntityManager.SetComponentData(session, lifecycle);
+            }
+
+            if (CloseDetectedFault())
+                return;
+
+            var receipt = _ingressGate.CloseForFault(latch.FaultId);
+            latch.IngressClosed = 1;
+            latch.OutstandingFirstRequestSequence = receipt.FirstRequestSequence;
+            latch.OutstandingLastRequestSequence = receipt.LastRequestSequence;
+            latch.OutstandingRequestCount = receipt.OutstandingCount;
+            latch.OutstandingRequestHash = receipt.OutstandingFnv1A64Hash;
+            _world.EntityManager.SetComponentData(session, latch);
+        }
+
+        /// <summary>
+        /// 从 Epoch、已提交 Tick 与稳定 reason 构造非零平台无关基础设施 FaultId。
+        /// </summary>
+        private static ulong CreateInfrastructureFaultId(
+            ulong simulationEpoch,
+            ulong simulationTick,
+            int reasonCode)
+        {
+            var hash = GasBoundaryFnv1A64.Create();
+            hash.AddUInt64(simulationEpoch);
+            hash.AddUInt64(simulationTick);
+            hash.AddInt32(reasonCode);
+            return hash.Value == 0 ? 1UL : hash.Value;
+        }
+
+        /// <summary>
+        /// 按 Battle stable id 与 generation 比较两个终局身份，禁止依赖 buffer 物理顺序。
+        /// </summary>
+        private static bool ComesBefore(
+            in BattleInstanceHandle left,
+            in BattleInstanceHandle right)
+        {
+            return left.BattleStableId < right.BattleStableId ||
+                   (left.BattleStableId == right.BattleStableId &&
+                    left.BattleGeneration < right.BattleGeneration);
+        }
+
+        /// <summary>
         /// 在 batch fence 发现 Detected fault 时执行与 CommandPort 共锁的 close 并回写固定证据。
         /// </summary>
         private bool CloseDetectedFault()
@@ -733,15 +1046,17 @@ namespace GAS.Runtime
             latch.OutstandingRequestCount = receipt.OutstandingCount;
             latch.OutstandingRequestHash = receipt.OutstandingFnv1A64Hash;
             _world.EntityManager.SetComponentData(session, latch);
-            TerminateInbox(session);
+            TerminateInbox(session, GasBoundaryCommandState.FaultTerminated);
             CloseBattleIngress(session);
             CloseAscIngress(session);
         }
 
         /// <summary>
-        /// 将尚未成功消费的 ECS inbox 条目标记为 FaultTerminated并保留其审计内容。
+        /// 将尚未成功消费的 ECS inbox 条目标记为精确 cutoff 终态并保留其审计内容。
         /// </summary>
-        private void TerminateInbox(Entity session)
+        private void TerminateInbox(
+            Entity session,
+            GasBoundaryCommandState terminalState)
         {
             var inbox = _world.EntityManager.GetBuffer<BoundaryCommandInbox>(session);
             for (var index = 0; index < inbox.Length; index++)
@@ -750,7 +1065,7 @@ namespace GAS.Runtime
                 if (command.State != GasBoundaryCommandState.Pending &&
                     command.State != GasBoundaryCommandState.Sealed)
                     continue;
-                command.State = GasBoundaryCommandState.FaultTerminated;
+                command.State = terminalState;
                 inbox[index] = command;
             }
         }

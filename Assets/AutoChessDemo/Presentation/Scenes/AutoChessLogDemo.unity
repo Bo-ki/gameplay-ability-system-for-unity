@@ -160,7 +160,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   runOnStart: 1
   maxTicks: 100000
-  postVictoryFlushTicks: 4
   scenarioScale: 50
   scenarioHealthMultiplier: 2048
   minimumProfileSeconds: 30

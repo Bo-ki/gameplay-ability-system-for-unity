@@ -126,7 +126,9 @@ namespace GAS.Runtime
             var identity = state.EntityManager.GetComponentData<GasSessionIdentity>(session);
             var profile = state.EntityManager.GetComponentData<GasScaleProfile>(session);
             var definitions = state.EntityManager.GetComponentData<GasDefinitionRegistry>(session);
-            var scratch = GasTickDag.CreateScratch(ref state, in profile);
+            var scratch = GasTickDag.CreateScratch(ref state, in profile, definitions.Catalog);
+            var targetShadowCommands = endFixed.CreateCommandBuffer(state.WorldUnmanaged);
+            targetShadowCommands.ShouldPlayback = false;
             dependency = GasTickDag.ScheduleModeCapture(
                 ref state,
                 session,
@@ -139,7 +141,8 @@ namespace GAS.Runtime
                 profile.MaxSpawnBatchSize,
                 gatherDependency,
                 commandBuffer,
-                dependency);
+                dependency,
+                scratch);
             state.Dependency = GasTickDag.ScheduleGameplay(
                 ref state,
                 session,
@@ -147,6 +150,7 @@ namespace GAS.Runtime
                 in profile,
                 in definitions,
                 in scratch,
+                targetShadowCommands,
                 dependency);
         }
     }

@@ -30,6 +30,23 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             fixture.AdvanceUntilRunnableWakeCount(in seed, 2);
             fixture.AssertPersistentWakeResults(in seed, in payloads);
         }
+
+        /// <summary>
+        /// 验证 RoutePrepare 已同时冻结目的端分配与源端消费后发生 fatal 时，两端 durable slab 均零写。
+        /// </summary>
+        [Test]
+        public void TickDag_RoutePrepare故障同时保留源命令与目的端()
+        {
+            using var fixture = new RuntimeV1AbilityWaitDagTestWorld();
+            fixture.SeedPendingWait(GasAbilityWaitSemantic.Event);
+            var beforeTick = fixture.CurrentTick;
+            var before = fixture.CapturePendingRouteAuthority();
+            fixture.InjectFinalPublishFailure(GasFinalPublishPrepareStage.Route, 2);
+
+            fixture.TickBatch();
+
+            fixture.AssertRoutePrepareFault(beforeTick, in before);
+        }
     }
 
     /// <summary>
@@ -102,6 +119,94 @@ namespace GAS.RuntimeV1.Tests.PlayMode
             EntityManager.SetComponentData(_runtime.Asc, heads);
             EnqueueCommand(_runtime.Asc, in registration);
             return new RuntimeV1AbilityWaitSeed(in grant, in activation, in continuation);
+        }
+
+        /// <summary>
+        /// 捕获 route 发布涉及的 owner/observed PendingCommand head 与完整物理槽。
+        /// </summary>
+        internal RuntimeV1PendingRouteAuthoritySnapshot CapturePendingRouteAuthority()
+        {
+            Assert.That(TryFindCommand(
+                _runtime.Asc, GasAbilityPendingCommandKind.WaitRegistration, out _), Is.True);
+            Assert.That(EntityManager.GetBuffer<PendingCommand>(_observedEntity).Length, Is.Zero);
+            return new RuntimeV1PendingRouteAuthoritySnapshot(
+                EntityManager.GetComponentData<AscSlabHeads>(_runtime.Asc).PendingCommand,
+                EntityManager.GetComponentData<AscSlabHeads>(_observedEntity).PendingCommand,
+                CopyCommands(_runtime.Asc),
+                CopyCommands(_observedEntity));
+        }
+
+        /// <summary>
+        /// 在 Session 安装指定后半程 prepare 阶段的一次性确定性故障点。
+        /// </summary>
+        internal void InjectFinalPublishFailure(
+            GasFinalPublishPrepareStage stage,
+            int preparedIntentCount)
+        {
+            EntityManager.AddComponentData(_runtime.Session, new GasFinalPublishFaultInjection
+            {
+                Stage = stage,
+                FailAfterPreparedIntentCount = preparedIntentCount,
+            });
+        }
+
+        /// <summary>
+        /// 推进一个完整 FixedStep，供 final-publish 故障用例精确观察单 Tick 结果。
+        /// </summary>
+        internal void TickBatch()
+        {
+            _runtime.TickBatch();
+        }
+
+        /// <summary>
+        /// 断言 route prepare fatal 不推进 Tick、不发布任一端 PendingCommand，并锁存 Session fault。
+        /// </summary>
+        internal void AssertRoutePrepareFault(
+            ulong beforeTick,
+            in RuntimeV1PendingRouteAuthoritySnapshot before)
+        {
+            Assert.That(CurrentTick, Is.EqualTo(beforeTick));
+            AssertPendingAuthority(
+                _runtime.Asc, in before.OwnerHead, before.OwnerCommands);
+            AssertPendingAuthority(
+                _observedEntity, in before.ObservedHead, before.ObservedCommands);
+            Assert.That(
+                EntityManager.GetComponentData<GasSessionLifecycle>(_runtime.Session).State,
+                Is.EqualTo(GasSessionLifecycleState.Faulted));
+            var latch = EntityManager.GetComponentData<SessionFaultLatch>(_runtime.Session);
+            Assert.That(latch.Detected, Is.EqualTo(1));
+            Assert.That(latch.ReasonCode,
+                Is.EqualTo((int)GasTickAdmissionFailureReason.PostAdmissionInvariantViolation));
+            Assert.That(EntityManager.GetComponentData<GasTickDiagnostics>(
+                _runtime.Session).BoundaryFactCount, Is.Zero);
+        }
+
+        /// <summary>
+        /// 逐字段复验一个 ASC 的 PendingCommand slab 未被 publish 改写。
+        /// </summary>
+        private void AssertPendingAuthority(
+            Entity asc,
+            in GasSlabHead expectedHead,
+            PendingCommand[] expectedCommands)
+        {
+            Assert.That(EntityManager.GetComponentData<AscSlabHeads>(asc).PendingCommand,
+                Is.EqualTo(expectedHead));
+            var actual = EntityManager.GetBuffer<PendingCommand>(asc);
+            Assert.That(actual.Length, Is.EqualTo(expectedCommands.Length));
+            for (var index = 0; index < actual.Length; index++)
+                Assert.That(actual[index], Is.EqualTo(expectedCommands[index]), "slot=" + index);
+        }
+
+        /// <summary>
+        /// 将 PendingCommand 物理槽复制到 managed 快照，避免测试断言继续引用可变 DynamicBuffer。
+        /// </summary>
+        private PendingCommand[] CopyCommands(Entity asc)
+        {
+            var source = EntityManager.GetBuffer<PendingCommand>(asc);
+            var copy = new PendingCommand[source.Length];
+            for (var index = 0; index < source.Length; index++)
+                copy[index] = source[index];
+            return copy;
         }
 
         /// <summary>
@@ -538,6 +643,32 @@ namespace GAS.RuntimeV1.Tests.PlayMode
         {
             First = first;
             Second = second;
+        }
+    }
+
+    /// <summary>
+    /// 保存 RoutePrepare 前 owner/observed 两端 PendingCommand 的完整 durable authority。
+    /// </summary>
+    internal readonly struct RuntimeV1PendingRouteAuthoritySnapshot
+    {
+        internal readonly GasSlabHead OwnerHead;
+        internal readonly GasSlabHead ObservedHead;
+        internal readonly PendingCommand[] OwnerCommands;
+        internal readonly PendingCommand[] ObservedCommands;
+
+        /// <summary>
+        /// 冻结两端 slab head 与物理槽副本，供 publish-token 失败后逐项比较。
+        /// </summary>
+        internal RuntimeV1PendingRouteAuthoritySnapshot(
+            in GasSlabHead ownerHead,
+            in GasSlabHead observedHead,
+            PendingCommand[] ownerCommands,
+            PendingCommand[] observedCommands)
+        {
+            OwnerHead = ownerHead;
+            ObservedHead = observedHead;
+            OwnerCommands = ownerCommands;
+            ObservedCommands = observedCommands;
         }
     }
 }

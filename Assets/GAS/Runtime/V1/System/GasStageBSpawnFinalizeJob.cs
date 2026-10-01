@@ -19,8 +19,24 @@ namespace GAS.Runtime
             int maximumDestroyCount,
             JobHandle gatherDependency,
             EntityCommandBuffer endFixed,
-            JobHandle dependency)
+            JobHandle dependency,
+            GasTickScratch bootstrapScratch = default)
         {
+            var bootstrapEvaluatorStack = bootstrapScratch.EvaluatorStack;
+            var bootstrapAttributeMutations = bootstrapScratch.AttributeMutations;
+            var ownsBootstrapEvaluatorStack = false;
+            var ownsBootstrapAttributeMutations = false;
+            if (!bootstrapEvaluatorStack.IsCreated)
+            {
+                bootstrapEvaluatorStack = new NativeArray<float>(0, Allocator.TempJob);
+                ownsBootstrapEvaluatorStack = true;
+            }
+            if (!bootstrapAttributeMutations.IsCreated)
+            {
+                bootstrapAttributeMutations = new NativeArray<GasAttributeMutationRecord>(
+                    0, Allocator.TempJob);
+                ownsBootstrapAttributeMutations = true;
+            }
             var recordedDestroys = new NativeList<Entity>(
                 maximumDestroyCount < 0 ? 0 : maximumDestroyCount,
                 Allocator.TempJob);
@@ -29,9 +45,15 @@ namespace GAS.Runtime
             job.Session = session;
             job.BatchMarkedAscs = batchMarkedAscs.AsDeferredJobArray();
             job.RecordedDestroyEntities = recordedDestroys;
+            job.BootstrapEvaluatorStack = bootstrapEvaluatorStack;
+            job.BootstrapAttributeMutations = bootstrapAttributeMutations;
             var combinedDependency = JobHandle.CombineDependencies(dependency, gatherDependency);
             var handle = job.Schedule(combinedDependency);
             handle = recordedDestroys.Dispose(handle);
+            if (ownsBootstrapEvaluatorStack)
+                handle = bootstrapEvaluatorStack.Dispose(handle);
+            if (ownsBootstrapAttributeMutations)
+                handle = bootstrapAttributeMutations.Dispose(handle);
             return batchMarkedAscs.Dispose(handle);
         }
 
@@ -46,6 +68,9 @@ namespace GAS.Runtime
             JobHandle dependency)
         {
             var handle = dependency;
+            var bootstrapEvaluatorStack = new NativeArray<float>(0, Allocator.TempJob);
+            var bootstrapAttributeMutations = new NativeArray<GasAttributeMutationRecord>(
+                0, Allocator.TempJob);
             var initialCapacity = batchMarkedAscs.Length > sessions.Length
                 ? batchMarkedAscs.Length
                 : sessions.Length;
@@ -57,11 +82,15 @@ namespace GAS.Runtime
                 job.Session = sessions[index];
                 job.BatchMarkedAscs = batchMarkedAscs;
                 job.RecordedDestroyEntities = recordedDestroys;
+                job.BootstrapEvaluatorStack = bootstrapEvaluatorStack;
+                job.BootstrapAttributeMutations = bootstrapAttributeMutations;
                 job.ForceCardinalityFault = 1;
                 handle = job.Schedule(handle);
             }
             handle = sessions.Dispose(handle);
             handle = recordedDestroys.Dispose(handle);
+            handle = bootstrapEvaluatorStack.Dispose(handle);
+            handle = bootstrapAttributeMutations.Dispose(handle);
             return batchMarkedAscs.Dispose(handle);
         }
     }
@@ -80,6 +109,9 @@ namespace GAS.Runtime
         public byte ForceCardinalityFault;
         public EntityCommandBuffer EndFixed;
         [ReadOnly] public EntityStorageInfoLookup EntityStorage;
+        // evaluator 会在定长 scratch 栈上写入 postfix 中间值，不能声明为只读。
+        public NativeArray<float> BootstrapEvaluatorStack;
+        public NativeArray<GasAttributeMutationRecord> BootstrapAttributeMutations;
 
         [ReadOnly] public ComponentLookup<GasSessionIdentity> SessionIdentities;
         [ReadOnly] public ComponentLookup<GasActiveSessionAuthority> ActiveSessionAuthorities;
@@ -91,13 +123,14 @@ namespace GAS.Runtime
         public ComponentLookup<GasSessionLifecycle> SessionLifecycles;
         public ComponentLookup<GasSpawnBatchManifest> SpawnManifests;
         public ComponentLookup<SessionFaultLatch> FaultLatches;
-        [ReadOnly] public ComponentLookup<BoundaryDrainState> Drains;
+        public ComponentLookup<BoundaryDrainState> Drains;
         public BufferLookup<BattleInstanceSlot> Battles;
         public BufferLookup<AscRegistrySlot> Registries;
         public BufferLookup<SpawnBatchMemberManifestSlot> SpawnManifestMembers;
         [ReadOnly] public BufferLookup<BoundaryCommandInbox> Inboxes;
         [ReadOnly] public BufferLookup<BoundaryCommandFrozenPayload> FrozenPayloads;
-        [ReadOnly] public BufferLookup<BoundaryFactBuffer> BoundaryFacts;
+        [ReadOnly] public BufferLookup<GasRequestTerminalIntent> RequestTerminalIntents;
+        public BufferLookup<BoundaryFactBuffer> BoundaryFacts;
 
         [ReadOnly] public ComponentLookup<GasAscIdentity> AscIdentities;
         public ComponentLookup<GasSpawnBatchMarker> SpawnMarkers;
@@ -114,6 +147,7 @@ namespace GAS.Runtime
         public BufferLookup<PendingAttributeInitialization> PendingAttributes;
         public BufferLookup<PendingTagInitialization> PendingTags;
         public BufferLookup<PendingGrantedAbilityInitialization> PendingAbilities;
+        public BufferLookup<PendingInitialGameplayEffect> PendingInitialEffects;
         public BufferLookup<GrantedAbilitySlot> GrantedAbilities;
         [ReadOnly] public BufferLookup<AbilityActivationSlot> Activations;
         [ReadOnly] public BufferLookup<AbilityContinuationSlot> Continuations;
@@ -121,7 +155,8 @@ namespace GAS.Runtime
         [ReadOnly] public BufferLookup<CooldownGateSlot> Cooldowns;
         [ReadOnly] public BufferLookup<ActivationOwnedContributionSlot> OwnedContributions;
         [ReadOnly] public BufferLookup<EmittedApplicationRefSlot> EmittedApplications;
-        [ReadOnly] public BufferLookup<ActiveEffectSlot> ActiveEffects;
+        // initial effect 在 Ready 发布前直接写入 target-owned ActiveEffect slab。
+        public BufferLookup<ActiveEffectSlot> ActiveEffects;
         [ReadOnly] public BufferLookup<GasPayloadRangeRecord> PayloadRangeRecords;
         [ReadOnly] public BufferLookup<GasPayloadValueSlot> PayloadValues;
         [ReadOnly] public BufferLookup<AttributeAggregatorSlot> Aggregators;
@@ -145,13 +180,14 @@ namespace GAS.Runtime
             SessionLifecycles = state.GetComponentLookup<GasSessionLifecycle>();
             SpawnManifests = state.GetComponentLookup<GasSpawnBatchManifest>();
             FaultLatches = state.GetComponentLookup<SessionFaultLatch>();
-            Drains = state.GetComponentLookup<BoundaryDrainState>(true);
+            Drains = state.GetComponentLookup<BoundaryDrainState>();
             Battles = state.GetBufferLookup<BattleInstanceSlot>();
             Registries = state.GetBufferLookup<AscRegistrySlot>();
             SpawnManifestMembers = state.GetBufferLookup<SpawnBatchMemberManifestSlot>();
             Inboxes = state.GetBufferLookup<BoundaryCommandInbox>(true);
             FrozenPayloads = state.GetBufferLookup<BoundaryCommandFrozenPayload>(true);
-            BoundaryFacts = state.GetBufferLookup<BoundaryFactBuffer>(true);
+            RequestTerminalIntents = state.GetBufferLookup<GasRequestTerminalIntent>(true);
+            BoundaryFacts = state.GetBufferLookup<BoundaryFactBuffer>();
             InitializeAscLookups(ref state);
         }
 
@@ -175,6 +211,7 @@ namespace GAS.Runtime
             PendingAttributes = state.GetBufferLookup<PendingAttributeInitialization>();
             PendingTags = state.GetBufferLookup<PendingTagInitialization>();
             PendingAbilities = state.GetBufferLookup<PendingGrantedAbilityInitialization>();
+            PendingInitialEffects = state.GetBufferLookup<PendingInitialGameplayEffect>();
             GrantedAbilities = state.GetBufferLookup<GrantedAbilitySlot>();
             Activations = state.GetBufferLookup<AbilityActivationSlot>(true);
             Continuations = state.GetBufferLookup<AbilityContinuationSlot>(true);
@@ -182,7 +219,7 @@ namespace GAS.Runtime
             Cooldowns = state.GetBufferLookup<CooldownGateSlot>(true);
             OwnedContributions = state.GetBufferLookup<ActivationOwnedContributionSlot>(true);
             EmittedApplications = state.GetBufferLookup<EmittedApplicationRefSlot>(true);
-            ActiveEffects = state.GetBufferLookup<ActiveEffectSlot>(true);
+            ActiveEffects = state.GetBufferLookup<ActiveEffectSlot>();
             PayloadRangeRecords = state.GetBufferLookup<GasPayloadRangeRecord>(true);
             PayloadValues = state.GetBufferLookup<GasPayloadValueSlot>(true);
             Aggregators = state.GetBufferLookup<AttributeAggregatorSlot>(true);
@@ -213,6 +250,7 @@ namespace GAS.Runtime
             SpawnManifestMembers.Update(ref state);
             Inboxes.Update(ref state);
             FrozenPayloads.Update(ref state);
+            RequestTerminalIntents.Update(ref state);
             BoundaryFacts.Update(ref state);
             UpdateAscLookups(ref state);
         }
@@ -237,6 +275,7 @@ namespace GAS.Runtime
             PendingAttributes.Update(ref state);
             PendingTags.Update(ref state);
             PendingAbilities.Update(ref state);
+            PendingInitialEffects.Update(ref state);
             GrantedAbilities.Update(ref state);
             Activations.Update(ref state);
             Continuations.Update(ref state);
@@ -338,6 +377,7 @@ namespace GAS.Runtime
                    Drains.HasComponent(session) && Battles.HasBuffer(session) && Registries.HasBuffer(session) &&
                    SpawnManifestMembers.HasBuffer(session) &&
                    Inboxes.HasBuffer(session) && FrozenPayloads.HasBuffer(session) &&
+                   RequestTerminalIntents.HasBuffer(session) &&
                    BoundaryFacts.HasBuffer(session);
         }
 
@@ -358,7 +398,8 @@ namespace GAS.Runtime
                    manifest.ExpectedAscCount <= snapshot.Profile.MaxSpawnBatchSize &&
                    manifest.ExpectedAttributeInitializationCount >= 0 &&
                    manifest.ExpectedTagInitializationCount >= 0 &&
-                   manifest.ExpectedGrantedAbilityInitializationCount >= 0;
+                   manifest.ExpectedGrantedAbilityInitializationCount >= 0 &&
+                   manifest.ExpectedInitialGameplayEffectCount >= 0;
         }
 
         /// <summary>
@@ -397,6 +438,7 @@ namespace GAS.Runtime
                    SpawnManifestMembers[session].Capacity >= profile.MaxAscRegistryCount &&
                    Inboxes[session].Capacity >= profile.MaxBoundaryCommandCount &&
                    FrozenPayloads[session].Capacity >= profile.MaxBoundaryCommandPayloadCount &&
+                   RequestTerminalIntents[session].Capacity >= profile.MaxBoundaryCommandCount &&
                    BoundaryFacts[session].Capacity >= profile.MaxSessionBoundaryFactCount;
         }
 
@@ -409,9 +451,12 @@ namespace GAS.Runtime
         {
             var battles = Battles[session];
             var registry = Registries[session];
+            if (RequestTerminalIntents[session].Length != 0)
+                return GasStageBSpawnFaultReason.AuthorityWrittenBeforeFinalize;
             if (battles.Length > snapshot.Profile.MaxBattleInstanceCount ||
                 registry.Length > snapshot.Profile.MaxAscRegistryCount ||
-                registry.Length > snapshot.Profile.MaxSpawnBatchSize)
+                registry.Length > snapshot.Profile.MaxSpawnBatchSize ||
+                Inboxes[session].Length > snapshot.Profile.MaxBoundaryCommandCount)
                 return GasStageBSpawnFaultReason.CapacityExceeded;
 
             var failure = ValidateManifest(session, battles, registry, in snapshot);
@@ -463,12 +508,14 @@ namespace GAS.Runtime
                     ref hasher,
                     out var attributeCount,
                     out var tagCount,
-                    out var abilityCount))
+                    out var abilityCount,
+                    out var initialEffectCount))
                 return GasStageBSpawnFaultReason.SpawnBatchMismatch;
             AddPendingValuesToManifestHash(registry, ref hasher);
             return attributeCount == manifest.ExpectedAttributeInitializationCount &&
                    tagCount == manifest.ExpectedTagInitializationCount &&
                    abilityCount == manifest.ExpectedGrantedAbilityInitializationCount &&
+                   initialEffectCount == manifest.ExpectedInitialGameplayEffectCount &&
                    hasher.Finish() == manifest.ContentHash
                 ? GasStageBSpawnFaultReason.None
                 : GasStageBSpawnFaultReason.SpawnBatchMismatch;
@@ -502,11 +549,13 @@ namespace GAS.Runtime
             ref GasSpawnBatchManifestHasher hasher,
             out int attributeCount,
             out int tagCount,
-            out int abilityCount)
+            out int abilityCount,
+            out int initialEffectCount)
         {
             attributeCount = 0;
             tagCount = 0;
             abilityCount = 0;
+            initialEffectCount = 0;
             for (var index = 0; index < members.Length; index++)
             {
                 var member = members[index];
@@ -518,12 +567,14 @@ namespace GAS.Runtime
                         attributeCount,
                         tagCount,
                         abilityCount,
+                        initialEffectCount,
                         in manifest))
                     return false;
                 hasher.AddMember(in member);
                 attributeCount += member.AttributeInitializationCount;
                 tagCount += member.TagInitializationCount;
                 abilityCount += member.GrantedAbilityInitializationCount;
+                initialEffectCount += member.InitialGameplayEffectCount;
             }
             return true;
         }
@@ -538,6 +589,7 @@ namespace GAS.Runtime
             int expectedAttributeStart,
             int expectedTagStart,
             int expectedAbilityStart,
+            int expectedInitialEffectStart,
             in GasSpawnBatchManifest manifest)
         {
             var asc = member.ResolveRuntimeEntity();
@@ -568,7 +620,8 @@ namespace GAS.Runtime
                        in member,
                        expectedAttributeStart,
                        expectedTagStart,
-                       expectedAbilityStart);
+                       expectedAbilityStart,
+                       expectedInitialEffectStart);
         }
 
         /// <summary>
@@ -579,7 +632,8 @@ namespace GAS.Runtime
             return AscIdentities.HasComponent(asc) && Memberships.HasComponent(asc) &&
                    ActorBindings.HasComponent(asc) && RandomStates.HasComponent(asc) &&
                    SpawnMarkers.HasComponent(asc) && PendingAttributes.HasBuffer(asc) &&
-                   PendingTags.HasBuffer(asc) && PendingAbilities.HasBuffer(asc);
+                   PendingTags.HasBuffer(asc) && PendingAbilities.HasBuffer(asc) &&
+                   PendingInitialEffects.HasBuffer(asc);
         }
 
         /// <summary>
@@ -590,14 +644,17 @@ namespace GAS.Runtime
             in SpawnBatchMemberManifestSlot member,
             int expectedAttributeStart,
             int expectedTagStart,
-            int expectedAbilityStart)
+            int expectedAbilityStart,
+            int expectedInitialEffectStart)
         {
             return member.AttributeInitializationStart == expectedAttributeStart &&
                    member.AttributeInitializationCount == PendingAttributes[asc].Length &&
                    member.TagInitializationStart == expectedTagStart &&
                    member.TagInitializationCount == PendingTags[asc].Length &&
                    member.GrantedAbilityInitializationStart == expectedAbilityStart &&
-                   member.GrantedAbilityInitializationCount == PendingAbilities[asc].Length;
+                   member.GrantedAbilityInitializationCount == PendingAbilities[asc].Length &&
+                   member.InitialGameplayEffectStart == expectedInitialEffectStart &&
+                   member.InitialGameplayEffectCount == PendingInitialEffects[asc].Length;
         }
 
         /// <summary>
@@ -622,6 +679,12 @@ namespace GAS.Runtime
             for (var ownerIndex = 0; ownerIndex < registry.Length; ownerIndex++)
             {
                 var values = PendingAbilities[registry[ownerIndex].ResolveRuntimeEntity()];
+                for (var index = 0; index < values.Length; index++)
+                    hasher.Add(values[index]);
+            }
+            for (var ownerIndex = 0; ownerIndex < registry.Length; ownerIndex++)
+            {
+                var values = PendingInitialEffects[registry[ownerIndex].ResolveRuntimeEntity()];
                 for (var index = 0; index < values.Length; index++)
                     hasher.Add(values[index]);
             }
@@ -685,17 +748,22 @@ namespace GAS.Runtime
                 return GasStageBSpawnFaultReason.AscLayoutInvalid;
             var identity = AscIdentities[asc];
             var membership = Memberships[asc];
+            var binding = ActorBindings[asc];
             var lifecycle = AscLifecycles[asc];
             var drain = Drains[asc];
             var payloadRanges = PayloadRangeStates[asc];
             if (identity.SimulationEpoch != snapshot.Identity.SimulationEpoch || identity.OwnerAsc != slot.OwnerAsc ||
                 membership.BattleInstance != slot.BattleInstance || lifecycle.State != GasAscLifecycleState.Pending ||
                 lifecycle.ReadyTick != 0 || !HasExpectedMembership(battles, ordinal, membership.MembershipOrdinal) ||
-                ActorBindings[asc].BindingGeneration == 0 ||
+                 binding.BindingGeneration == 0 ||
                 drain.SimulationEpoch != snapshot.Identity.SimulationEpoch ||
                 drain.OwnerKind != GasBoundaryOwnerKind.Asc ||
                 drain.OwnerStableId != slot.OwnerAsc.AscStableId ||
                 drain.OwnerGeneration != slot.OwnerAsc.AscGeneration ||
+                drain.Phase != GasBoundaryDrainPhase.Idle ||
+                drain.NextOwnerSequence != 1 ||
+                drain.InFlightWatermark != 0 ||
+                BoundaryFacts[asc].Length != 0 ||
                 payloadRanges.SimulationEpoch != snapshot.Identity.SimulationEpoch ||
                 payloadRanges.OwnerAsc != slot.OwnerAsc || !IsEmpty(payloadRanges.Records) ||
                 payloadRanges.ValueHighWater != 0 ||
@@ -709,7 +777,13 @@ namespace GAS.Runtime
                 return GasStageBSpawnFaultReason.AuthorityWrittenBeforeFinalize;
 
             ref var catalog = ref snapshot.Definitions.Catalog.Value;
-            return ValidatePending(asc, ref catalog);
+            return ValidatePending(
+                asc,
+                in identity,
+                in membership,
+                in binding,
+                ref catalog,
+                snapshot.Identity.SimulationEpoch);
         }
 
         /// <summary>
@@ -725,7 +799,8 @@ namespace GAS.Runtime
                    AttributeValues.HasBuffer(asc) && AttributeDirtyWords.HasBuffer(asc) &&
                    TagCounts.HasBuffer(asc) && TagPresenceWords.HasBuffer(asc) &&
                    PendingAttributes.HasBuffer(asc) && PendingTags.HasBuffer(asc) &&
-                   PendingAbilities.HasBuffer(asc) && GrantedAbilities.HasBuffer(asc) &&
+                   PendingAbilities.HasBuffer(asc) && PendingInitialEffects.HasBuffer(asc) &&
+                   GrantedAbilities.HasBuffer(asc) &&
                    Activations.HasBuffer(asc) && Continuations.HasBuffer(asc) &&
                    Subscriptions.HasBuffer(asc) && Cooldowns.HasBuffer(asc) &&
                    OwnedContributions.HasBuffer(asc) && EmittedApplications.HasBuffer(asc) &&
@@ -804,10 +879,23 @@ namespace GAS.Runtime
         /// <summary>
         /// 验证三类 Pending 的 index/definition 与每类非负递增 ConfigOrdinal。
         /// </summary>
-        private GasStageBSpawnFaultReason ValidatePending(Entity asc, ref GasDefinitionCatalogBlob catalog)
+        private GasStageBSpawnFaultReason ValidatePending(
+            Entity asc,
+            in GasAscIdentity identity,
+            in AscBattleMembership membership,
+            in GasActorBinding binding,
+            ref GasDefinitionCatalogBlob catalog,
+            ulong simulationEpoch)
         {
             if (!ValidAttributes(PendingAttributes[asc], ref catalog) ||
-                !ValidTags(PendingTags[asc], ref catalog))
+                !ValidTags(PendingTags[asc], ref catalog) ||
+                !ValidInitialEffects(
+                    PendingInitialEffects[asc],
+                    in identity,
+                    in membership,
+                    in binding,
+                    ref catalog,
+                    simulationEpoch))
                 return GasStageBSpawnFaultReason.PendingInitializationInvalid;
             return ValidAbilities(PendingAbilities[asc], ref catalog)
                 ? GasStageBSpawnFaultReason.None
@@ -879,6 +967,76 @@ namespace GAS.Runtime
         }
 
         /// <summary>
+        /// 验证 ASC Pending 初始 GameplayEffect 的闭世界定义、目标和因果身份。
+        /// </summary>
+        private static bool ValidInitialEffects(
+            DynamicBuffer<PendingInitialGameplayEffect> values,
+            in GasAscIdentity identity,
+            in AscBattleMembership membership,
+            in GasActorBinding binding,
+            ref GasDefinitionCatalogBlob catalog,
+            ulong simulationEpoch)
+        {
+            var previous = -1;
+            for (var index = 0; index < values.Length; index++)
+            {
+                var value = values[index];
+                if (!GasDefinitionCatalogLookup.TryGetGameplayEffectIndex(
+                        ref catalog,
+                        value.DefinitionId,
+                        out var definitionIndex))
+                    return false;
+                var definition = catalog.GameplayEffects[definitionIndex];
+                if (value.DefinitionId <= 0 ||
+                    definition.TargetPolicy.LogicalTarget != GasLogicalTargetPolicy.Self ||
+                    definition.TargetPolicy.Spatial != GasSpatialTargetPolicy.None ||
+                    definition.TargetPolicy.Life == GasTargetLifePolicy.RequireDead ||
+                    definition.ApplicationRequirementRange.Count != 0 ||
+                    definition.OngoingRequirementRange.Count != 0 ||
+                    definition.ImmunityRequirementRange.Count != 0 ||
+                    definition.CaptureRange.Count != 0 ||
+                    definition.ValueViewRange.Count != 0 ||
+                    definition.RequiredValueViews != GasAttributeValueViewMask.None ||
+                    definition.SetByCallerRange.Count != 0 ||
+                    definition.TargetDataRange.Count != 0 ||
+                    definition.EffectContextFieldRange.Count != 0 ||
+                    definition.DirectEffectProgramRange.Count != 0 ||
+                    definition.RemovalRequirementRange.Count != 0 ||
+                    value.ConfigOrdinal <= previous || value.CausalityId == 0 ||
+                    value.Target.Kind != GasBoundaryTargetKind.Asc ||
+                    !value.Target.TargetAsc.IsValid ||
+                    !value.Target.TargetAsc.Equals(identity.OwnerAsc) ||
+                    !value.Target.BattleInstance.Equals(membership.BattleInstance) ||
+                    value.Target.ResolutionPolicy != GasBoundaryTargetResolutionPolicy.ResolveAtConsume ||
+                    value.Target.SimulationEpoch != simulationEpoch ||
+                    value.Target.BattleInstance.SimulationEpoch != simulationEpoch ||
+                    !ValidateInitialAvatar(in value.Target, in binding, definition.TargetPolicy.Avatar))
+                    return false;
+                previous = value.ConfigOrdinal;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 验证初始 self effect 的 Avatar policy 不会把未冻结 binding 静默降级。
+        /// </summary>
+        private static bool ValidateInitialAvatar(
+            in BoundaryTargetRef target,
+            in GasActorBinding binding,
+            GasAvatarTargetPolicy policy)
+        {
+            var hasAvatar = target.TargetAvatarStableId != 0 ||
+                            target.TargetAvatarBindingGeneration != 0;
+            if (policy == GasAvatarTargetPolicy.FollowAsc)
+                return !hasAvatar;
+            if (policy != GasAvatarTargetPolicy.RequireSameAvatar || !hasAvatar)
+                return false;
+            return binding.AvatarActorStableId != 0 && binding.BindingGeneration != 0 &&
+                   target.TargetAvatarStableId == binding.AvatarActorStableId &&
+                   target.TargetAvatarBindingGeneration == binding.BindingGeneration;
+        }
+
+        /// <summary>
         /// 验证全批三类 Pending 共享的 ConfigOrdinal 不重复。
         /// </summary>
         private bool HasUniqueConfigOrdinals(DynamicBuffer<AscRegistrySlot> registry)
@@ -898,12 +1056,16 @@ namespace GAS.Runtime
                 for (var index = 0; index < abilities.Length; index++)
                     if (CountOrdinal(registry, abilities[index].ConfigOrdinal) != 1)
                         return false;
+                var initialEffects = PendingInitialEffects[asc];
+                for (var index = 0; index < initialEffects.Length; index++)
+                    if (CountOrdinal(registry, initialEffects[index].ConfigOrdinal) != 1)
+                        return false;
             }
             return true;
         }
 
         /// <summary>
-        /// 统计一个 ConfigOrdinal 在 batch 三类 Pending buffers 的总次数。
+        /// 统计一个 ConfigOrdinal 在 batch 全部 Pending buffers 的总次数。
         /// </summary>
         private int CountOrdinal(DynamicBuffer<AscRegistrySlot> registry, int ordinal)
         {
@@ -922,6 +1084,10 @@ namespace GAS.Runtime
                 var abilities = PendingAbilities[asc];
                 for (var index = 0; index < abilities.Length; index++)
                     if (abilities[index].ConfigOrdinal == ordinal)
+                        count++;
+                var initialEffects = PendingInitialEffects[asc];
+                for (var index = 0; index < initialEffects.Length; index++)
+                    if (initialEffects[index].ConfigOrdinal == ordinal)
                         count++;
             }
             return count;
@@ -980,6 +1146,8 @@ namespace GAS.Runtime
                    tags.Length <= profile.MaxPendingTagInitializationCount &&
                    abilities.Capacity >= profile.MaxPendingGrantedAbilityInitializationCount &&
                    abilities.Length <= profile.MaxPendingGrantedAbilityInitializationCount &&
+                   PendingInitialEffects[asc].Capacity >= profile.MaxEffectOperationCount &&
+                   PendingInitialEffects[asc].Length <= profile.MaxEffectOperationCount &&
                    abilities.Length <= profile.MaxGrantedAbilityCount &&
                    HasAbilityCapacities(asc, in profile) && HasEffectCapacities(asc, in profile) &&
                    PendingCommands[asc].Capacity >= profile.MaxPendingCommandCount &&
@@ -1014,6 +1182,76 @@ namespace GAS.Runtime
         }
 
         /// <summary>
+        /// 将已部分执行的 SpawnBatch 恢复为 Pending canonical state，保证失败路径零 Ready、零 authority。
+        /// </summary>
+        private void ResetBatchAuthority(DynamicBuffer<AscRegistrySlot> registry)
+        {
+            for (var index = 0; index < registry.Length; index++)
+                ResetAscAuthority(registry[index].ResolveRuntimeEntity());
+        }
+
+        /// <summary>
+        /// 清除单个 ASC 在 ApplyAsc 期间可能写入的全部 gameplay authority 与 Boundary outbox。
+        /// </summary>
+        private void ResetAscAuthority(Entity asc)
+        {
+            ResetAttributeAuthority(asc);
+            ResetTagAuthority(asc);
+            ClearRuntimeBuffers(asc);
+            SlabHeads[asc] = AscSlabHeads.CreateEmpty();
+            BoundaryFacts[asc].Clear();
+            var drain = Drains[asc];
+            drain.NextOwnerSequence = 1;
+            drain.Phase = GasBoundaryDrainPhase.Idle;
+            drain.BatchId = 0;
+            drain.InFlightWatermark = 0;
+            Drains[asc] = drain;
+            if (AscLifecycles.HasComponent(asc))
+                AscLifecycles[asc] = new AscLifecycle { State = GasAscLifecycleState.Pending };
+            if (SpawnMarkers.HasComponent(asc))
+                SpawnMarkers.SetComponentEnabled(asc, true);
+        }
+
+        /// <summary>
+        /// 将 Attribute 值与 dirty 位图恢复为 SpawnPending 的全零基线。
+        /// </summary>
+        private void ResetAttributeAuthority(Entity asc)
+        {
+            var attributes = AttributeValues[asc];
+            for (var index = 0; index < attributes.Length; index++)
+                attributes[index] = default;
+            var dirty = AttributeDirtyWords[asc];
+            for (var index = 0; index < dirty.Length; index++)
+                dirty[index] = default;
+        }
+
+        /// <summary>
+        /// 将 Tag exact/inclusive 计数与 presence 位图恢复为零基线。
+        /// </summary>
+        private void ResetTagAuthority(Entity asc)
+        {
+            var tags = TagCounts[asc];
+            for (var index = 0; index < tags.Length; index++)
+                tags[index] = default;
+            var presence = TagPresenceWords[asc];
+            for (var index = 0; index < presence.Length; index++)
+                presence[index] = default;
+        }
+
+        /// <summary>
+        /// 清空所有可变 runtime buffers，释放本轮尚未对外可见的临时槽位。
+        /// </summary>
+        private void ClearRuntimeBuffers(Entity asc)
+        {
+            GrantedAbilities[asc].Clear();
+            ActiveEffects[asc].Clear();
+            PendingAttributes[asc].Clear();
+            PendingTags[asc].Clear();
+            PendingAbilities[asc].Clear();
+            PendingInitialEffects[asc].Clear();
+        }
+
+        /// <summary>
         /// 全批验证成功后写最小 bootstrap authority，再统一发布所有 Ready 状态。
         /// </summary>
         private void PublishBatch(Entity session, in GasStageBSessionSnapshot snapshot)
@@ -1024,7 +1262,23 @@ namespace GAS.Runtime
             for (var index = 0; index < registry.Length; index++)
             {
                 var slot = registry[index];
-                ApplyAsc(slot.ResolveRuntimeEntity(), ref catalog, in snapshot, readyTick);
+                if (!ApplyAsc(
+                        slot.ResolveRuntimeEntity(),
+                        ref catalog,
+                        in snapshot,
+                        readyTick))
+                {
+                    ResetBatchAuthority(registry);
+                    FaultAndRecordTeardown(session, GasStageBSpawnFaultReason.PendingInitializationInvalid);
+                    return;
+                }
+            }
+
+            for (var index = 0; index < registry.Length; index++)
+            {
+                var slot = registry[index];
+                var asc = slot.ResolveRuntimeEntity();
+                CommitReadyAsc(asc, readyTick);
                 slot.ReadyTick = readyTick;
                 slot.State = GasAscRegistryState.Ready;
                 registry[index] = slot;
@@ -1050,9 +1304,9 @@ namespace GAS.Runtime
         }
 
         /// <summary>
-        /// 应用 Stage-B 无 initial-effect 最小契约并发布一个 ASC Ready。
+        /// 在 Ready 可见性发布前完成一个 ASC 的完整 bootstrap transaction。
         /// </summary>
-        private void ApplyAsc(
+        private bool ApplyAsc(
             Entity asc,
             ref GasDefinitionCatalogBlob catalog,
             in GasStageBSessionSnapshot snapshot,
@@ -1061,14 +1315,594 @@ namespace GAS.Runtime
             ApplyAllAttributeDefaults(asc, ref catalog);
             ApplyTags(asc, ref catalog);
             ApplyAbilities(asc, ref catalog, in snapshot);
+            if (!TryApplyInitialEffects(asc, ref catalog, in snapshot, readyTick))
+                return false;
+            return true;
+        }
+
+        /// <summary>
+        /// 在全批 Apply 成功后提交单个 ASC 的 Ready lifecycle，并清除本次 bootstrap 输入。
+        /// </summary>
+        private void CommitReadyAsc(Entity asc, ulong readyTick)
+        {
             PendingAttributes[asc].Clear();
             PendingTags[asc].Clear();
             PendingAbilities[asc].Clear();
+            PendingInitialEffects[asc].Clear();
             SpawnMarkers.SetComponentEnabled(asc, false);
             AscLifecycles[asc] = new AscLifecycle
             {
                 State = GasAscLifecycleState.Ready,
                 ReadyTick = readyTick,
+            };
+        }
+
+        /// <summary>
+        /// 在 SpawnFinalize shadow 验证完成后直接提交 self initial effects，不经过 Boundary ingress。
+        /// </summary>
+        private bool TryApplyInitialEffects(
+            Entity sourceAsc,
+            ref GasDefinitionCatalogBlob catalog,
+            in GasStageBSessionSnapshot snapshot,
+            ulong readyTick)
+        {
+            if (!AscIdentities.HasComponent(sourceAsc) || !Memberships.HasComponent(sourceAsc) ||
+                !Drains.HasComponent(sourceAsc) || !BoundaryFacts.HasBuffer(sourceAsc))
+                return false;
+            var owner = AscIdentities[sourceAsc].OwnerAsc;
+            var battle = Memberships[sourceAsc].BattleInstance;
+            var pending = PendingInitialEffects[sourceAsc];
+            if (!CanReserveInitialFacts(
+                    sourceAsc,
+                    pending,
+                    in snapshot.Profile,
+                    ref catalog))
+                return false;
+            var mutationStart = 0;
+            for (var index = 0; index < pending.Length; index++)
+            {
+                var effect = pending[index];
+                if (!GasDefinitionCatalogLookup.TryGetGameplayEffectIndex(
+                        ref catalog, effect.DefinitionId, out var definitionIndex))
+                    return false;
+                var request = new GasGameplayEffectApplicationRequest
+                {
+                    SimulationEpoch = snapshot.Identity.SimulationEpoch,
+                    SourceAsc = owner,
+                    TargetAsc = owner,
+                    DefinitionIndex = definitionIndex,
+                    ApplicationId = BuildInitialApplicationId(
+                        snapshot.Identity.SimulationEpoch,
+                        snapshot.Manifest.SpawnBatchId,
+                        owner,
+                        effect.ConfigOrdinal,
+                        effect.DefinitionId),
+                    StartTick = readyTick,
+                    CausalityId = effect.CausalityId,
+                    TargetIsAlive = 1,
+                    CaptureValueCount = 0,
+                    ValueViewCount = 0,
+                    TargetAvatarStableId = effect.Target.TargetAvatarStableId,
+                    TargetAvatarBindingGeneration = effect.Target.TargetAvatarBindingGeneration,
+                    SpatialSnapshot = GasBoundarySpatialSnapshot.None,
+                };
+                var heads = SlabHeads[sourceAsc];
+                var applied = GasGameplayEffectTransaction.TryApply(
+                    ref catalog,
+                    in request,
+                    ActiveEffects[sourceAsc],
+                    AttributeValues[sourceAsc],
+                    AttributeDirtyWords[sourceAsc],
+                    TagCounts[sourceAsc],
+                    TagPresenceWords[sourceAsc],
+                    ref heads.ActiveEffect,
+                    snapshot.Profile.MaxActiveEffectCount,
+                    default,
+                    default,
+                    BootstrapEvaluatorStack,
+                    BootstrapAttributeMutations,
+                    mutationStart,
+                    out var result);
+                if (!applied || result.Outcome == GasGameplayEffectApplicationOutcome.None)
+                    return false;
+                if (!AppendInitialEffectFacts(
+                        sourceAsc,
+                        in battle,
+                        in effect,
+                        in request,
+                        in result,
+                        ref catalog,
+                        readyTick,
+                        ref mutationStart))
+                    return false;
+                SlabHeads[sourceAsc] = heads;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 预留初始 effect 的 ActiveEffect、mutation 与 ASC outbox 容量，禁止提交中途扩容。
+        /// </summary>
+        private bool CanReserveInitialFacts(
+            Entity asc,
+            DynamicBuffer<PendingInitialGameplayEffect> pending,
+            in GasScaleProfile profile,
+            ref GasDefinitionCatalogBlob catalog)
+        {
+            var demand = 0;
+            var activeEffectDemand = 0;
+            var mutationDemand = 0;
+            var evaluatorDemand = 0;
+            for (var index = 0; index < pending.Length; index++)
+            {
+                if (!GasDefinitionCatalogLookup.TryGetGameplayEffectIndex(
+                        ref catalog, pending[index].DefinitionId, out var definitionIndex))
+                    return false;
+                var definition = catalog.GameplayEffects[definitionIndex];
+                if (definition.Lifetime == GasEffectLifetimePolicy.Duration ||
+                    definition.Lifetime == GasEffectLifetimePolicy.Infinite)
+                {
+                    if (activeEffectDemand == int.MaxValue)
+                        return false;
+                    activeEffectDemand++;
+                }
+                if (definition.ModifierRange.Count < 0 ||
+                    definition.ModifierRange.Count > int.MaxValue - 1)
+                    return false;
+                // Duration/Infinite 且关闭 ExecuteOnApplication 时只建立 ActiveEffect，
+                // 预检不得为本次不会发生的 modifier mutation/fact 预留 outbox。
+                var appliesModifiersOnApplication =
+                    definition.Lifetime == GasEffectLifetimePolicy.Instant ||
+                    definition.Lifetime == GasEffectLifetimePolicy.InstantExecution ||
+                    definition.ExecuteOnApplication != 0;
+                var modifierFactDemand = appliesModifiersOnApplication
+                    ? definition.ModifierRange.Count
+                    : 0;
+                var effectDemand = 1 + modifierFactDemand;
+                var cueDemand = CountInitialCueFacts(in definition, ref catalog);
+                if (cueDemand < 0 || cueDemand > int.MaxValue - effectDemand)
+                    return false;
+                effectDemand += cueDemand;
+                if (definition.Lifetime == GasEffectLifetimePolicy.InstantExecution)
+                {
+                    if (effectDemand == int.MaxValue)
+                        return false;
+                    effectDemand++;
+                }
+                if (effectDemand < 0 || demand > int.MaxValue - effectDemand)
+                    return false;
+                demand += effectDemand;
+                if (mutationDemand > int.MaxValue - modifierFactDemand)
+                    return false;
+                mutationDemand += modifierFactDemand;
+                for (var modifier = 0; modifier < definition.ModifierRange.Count; modifier++)
+                {
+                    var value = catalog.Modifiers[definition.ModifierRange.Start + modifier];
+                    if (value.EvaluatorProgramRange.Count > evaluatorDemand)
+                        evaluatorDemand = value.EvaluatorProgramRange.Count;
+                }
+            }
+
+            var state = Drains[asc];
+            var outbox = BoundaryFacts[asc];
+            if (state.SimulationEpoch == 0 || state.OwnerKind != GasBoundaryOwnerKind.Asc ||
+                state.OwnerStableId != AscIdentities[asc].OwnerAsc.AscStableId ||
+                state.OwnerGeneration != AscIdentities[asc].OwnerAsc.AscGeneration ||
+                state.Phase != GasBoundaryDrainPhase.Idle || state.NextOwnerSequence == 0 ||
+                state.NextOwnerSequence == ulong.MaxValue || state.InFlightWatermark != 0 ||
+                activeEffectDemand > profile.MaxActiveEffectCount ||
+                ActiveEffects[asc].Length > profile.MaxActiveEffectCount - activeEffectDemand ||
+                mutationDemand > 0 &&
+                (!BootstrapAttributeMutations.IsCreated ||
+                 mutationDemand > BootstrapAttributeMutations.Length) ||
+                evaluatorDemand > 0 &&
+                (!BootstrapEvaluatorStack.IsCreated || evaluatorDemand > BootstrapEvaluatorStack.Length))
+                return false;
+            if (demand < 0 || demand > profile.MaxAscBoundaryFactCount ||
+                outbox.Length > profile.MaxAscBoundaryFactCount - demand ||
+                demand > int.MaxValue - outbox.Length ||
+                outbox.Capacity < outbox.Length + demand ||
+                (ulong)demand > ulong.MaxValue - state.NextOwnerSequence)
+                return false;
+            return true;
+        }
+
+        /// <summary>
+        /// 统计 AppendInitialDefinitionFacts 实际会写出的 Cue 数量，严格复用 phase filter 与 instant fallback。
+        /// </summary>
+        private static int CountInitialCueFacts(
+            in GasGameplayEffectDefinitionBlob definition,
+            ref GasDefinitionCatalogBlob catalog)
+        {
+            if (definition.CueRange.Count < 0 || definition.CueRange.Start < 0 ||
+                definition.CueRange.Start > catalog.CueReferences.Length - definition.CueRange.Count)
+                return -1;
+            var phases = definition.Lifetime == GasEffectLifetimePolicy.InstantExecution
+                ? GasCuePhaseFlags.OnActive | GasCuePhaseFlags.Executed
+                : GasCuePhaseFlags.OnActive;
+            var count = 0;
+            for (var cue = 0; cue < definition.CueRange.Count; cue++)
+            {
+                var reference = catalog.CueReferences[definition.CueRange.Start + cue];
+                if ((reference.Phases & phases) == GasCuePhaseFlags.None)
+                    continue;
+                if (count == int.MaxValue)
+                    return -1;
+                count++;
+            }
+            return definition.Lifetime == GasEffectLifetimePolicy.InstantExecution && count == 0
+                ? 1
+                : count;
+        }
+
+        /// <summary>
+        /// 为 SpawnBatch 中一条初始 effect 生成不会与普通 application 混淆的稳定 application identity。
+        /// </summary>
+        private static ulong BuildInitialApplicationId(
+            ulong simulationEpoch,
+            ulong spawnBatchId,
+            in OwnerAscHandle owner,
+            int configOrdinal,
+            int definitionId)
+        {
+            var hash = GasBoundaryFnv1A64.Create();
+            hash.AddUInt64(simulationEpoch);
+            hash.AddUInt64(spawnBatchId);
+            hash.AddUInt64(owner.AscStableId);
+            hash.AddUInt32(owner.AscGeneration);
+            hash.AddInt32(configOrdinal);
+            hash.AddInt32(definitionId);
+            return hash.Value == 0 ? 1UL : hash.Value;
+        }
+
+        /// <summary>
+        /// 按正式 TargetWave 的事实语义发布 initial effect lifecycle、mutation、execution 与 Cue facts。
+        /// </summary>
+        private bool AppendInitialEffectFacts(
+            Entity asc,
+            in BattleInstanceHandle battle,
+            in PendingInitialGameplayEffect pending,
+            in GasGameplayEffectApplicationRequest request,
+            in GasGameplayEffectApplicationResult result,
+            ref GasDefinitionCatalogBlob catalog,
+            ulong readyTick,
+            ref int mutationStart)
+        {
+            var definition = catalog.GameplayEffects[request.DefinitionIndex];
+            var membership = Memberships[asc];
+            var state = Drains[asc];
+            var outbox = BoundaryFacts[asc];
+            var operationOrdinal = pending.ConfigOrdinal;
+            if (!AppendInitialFact(
+                    ref state,
+                    outbox,
+                    CreateInitialEffectFact(
+                        in membership,
+                        in battle,
+                        in request,
+                        in result,
+                        definition.DefinitionId,
+                        readyTick,
+                        operationOrdinal)))
+                return false;
+
+            for (var modifier = 0; modifier < result.MutationCount; modifier++)
+            {
+                if (!BootstrapAttributeMutations.IsCreated ||
+                    mutationStart + modifier < 0 ||
+                    mutationStart + modifier >= BootstrapAttributeMutations.Length)
+                    return false;
+                var mutation = BootstrapAttributeMutations[mutationStart + modifier];
+                if (!AppendInitialFact(
+                        ref state,
+                        outbox,
+                        CreateInitialMutationFact(
+                            in membership,
+                            in battle,
+                            in request,
+                            in mutation,
+                            definition.DefinitionId,
+                            readyTick,
+                            operationOrdinal,
+                            modifier,
+                            ref catalog)))
+                    return false;
+            }
+            mutationStart += result.MutationCount;
+            if (!AppendInitialDefinitionFacts(
+                    ref state,
+                    outbox,
+                    in membership,
+                    in battle,
+                    in request,
+                    in definition,
+                    ref catalog,
+                    readyTick,
+                    operationOrdinal))
+                return false;
+            Drains[asc] = state;
+            return true;
+        }
+
+        /// <summary>
+        /// 追加一条自包含 initial fact，并让 DrainProtocol 分配唯一 OwnerSequence。
+        /// </summary>
+        private static bool AppendInitialFact(
+            ref BoundaryDrainState state,
+            DynamicBuffer<BoundaryFactBuffer> outbox,
+            in BoundaryFactBuffer fact)
+        {
+            return GasBoundaryDrainProtocol.TryAppendFactWithSequence(
+                ref state,
+                outbox,
+                in fact,
+                out _,
+                out _);
+        }
+
+        /// <summary>
+        /// 创建 initial effect lifecycle fact，冻结 definition、outcome、application 与 causality identity。
+        /// </summary>
+        private static BoundaryFactBuffer CreateInitialEffectFact(
+            in AscBattleMembership membership,
+            in BattleInstanceHandle battle,
+            in GasGameplayEffectApplicationRequest request,
+            in GasGameplayEffectApplicationResult result,
+            int definitionId,
+            ulong readyTick,
+            int operationOrdinal)
+        {
+            return CreateInitialFactHeader(
+                in membership,
+                in battle,
+                in request,
+                readyTick,
+                GasBoundaryFactKind.EffectLifecycle,
+                2,
+                operationOrdinal,
+                int.MaxValue,
+                new BoundaryFactPayload
+                {
+                    SchemaVersion = 1,
+                    Kind = GasBoundaryPayloadKind.IntegerPair,
+                    Integer0 = (long)result.Outcome,
+                    Integer1 = ((long)(byte)result.Failure << 32) |
+                               (uint)result.AppliedModifierCount,
+                    Integer2 = definitionId,
+                    StableId0 = request.ApplicationId,
+                    StableId1 = 0,
+                    StableId2 = result.ActiveEffect.IsValid
+                        ? result.ActiveEffect.OwnerAsc.AscStableId
+                        : request.TargetAsc.AscStableId,
+                    Generation0 = result.ActiveEffect.IsValid
+                        ? result.ActiveEffect.SlotGeneration
+                        : 0,
+                    Generation1 = request.TargetAsc.AscGeneration,
+                    Generation2 = request.TargetAsc.AscGeneration,
+                });
+        }
+
+        /// <summary>
+        /// 创建 initial Attribute mutation fact，复用正式 mutation payload 字段布局。
+        /// </summary>
+        private static BoundaryFactBuffer CreateInitialMutationFact(
+            in AscBattleMembership membership,
+            in BattleInstanceHandle battle,
+            in GasGameplayEffectApplicationRequest request,
+            in GasAttributeMutationRecord mutation,
+            int definitionId,
+            ulong readyTick,
+            int operationOrdinal,
+            int modifierOrdinal,
+            ref GasDefinitionCatalogBlob catalog)
+        {
+            var attributeId = mutation.AttributeLayoutIndex >= 0 &&
+                              mutation.AttributeLayoutIndex < catalog.AttributeLayout.Entries.Length
+                ? catalog.AttributeLayout.Entries[mutation.AttributeLayoutIndex].AttributeId
+                : 0;
+            return CreateInitialFactHeader(
+                in membership,
+                in battle,
+                in request,
+                readyTick,
+                GasBoundaryFactKind.AttributeChanged,
+                1,
+                operationOrdinal,
+                modifierOrdinal,
+                new BoundaryFactPayload
+                {
+                    SchemaVersion = 1,
+                    Kind = GasBoundaryPayloadKind.AttributeDelta,
+                    Integer0 = attributeId,
+                    Integer1 = ((long)(uint)mutation.AttributeLayoutIndex << 32) |
+                               mutation.Revision,
+                    Integer2 = definitionId,
+                    Scalar0 = mutation.RequestedBaseDelta,
+                    Scalar1 = mutation.RequestedCurrentDelta,
+                    Scalar2 = mutation.PreviousBase,
+                    Scalar3 = mutation.PreviousCurrent,
+                    Scalar4 = mutation.UnclampedBase,
+                    Scalar5 = mutation.UnclampedCurrent,
+                    Scalar6 = mutation.AppliedBase,
+                    Scalar7 = mutation.AppliedCurrent,
+                    Scalar8 = mutation.AppliedBase - mutation.PreviousBase,
+                    Scalar9 = mutation.AppliedCurrent - mutation.PreviousCurrent,
+                    StableId0 = request.ApplicationId,
+                    StableId1 = 0,
+                    StableId2 = ComposeInitialContributorId(
+                        request.ApplicationId,
+                        modifierOrdinal),
+                    Generation0 = 0,
+                    Generation1 = mutation.PreviousRevision,
+                });
+        }
+
+        /// <summary>
+        /// 创建拥有稳定 phase/ordinal 的 initial execution 与 Cue facts。
+        /// </summary>
+        private static bool AppendInitialDefinitionFacts(
+            ref BoundaryDrainState state,
+            DynamicBuffer<BoundaryFactBuffer> outbox,
+            in AscBattleMembership membership,
+            in BattleInstanceHandle battle,
+            in GasGameplayEffectApplicationRequest request,
+            in GasGameplayEffectDefinitionBlob definition,
+            ref GasDefinitionCatalogBlob catalog,
+            ulong readyTick,
+            int operationOrdinal)
+        {
+            if (definition.Lifetime == GasEffectLifetimePolicy.InstantExecution &&
+                !AppendInitialFact(
+                    ref state,
+                    outbox,
+                    CreateInitialFactHeader(
+                        in membership,
+                        in battle,
+                        in request,
+                        readyTick,
+                        GasBoundaryFactKind.ExecutionCalculation,
+                        4,
+                        operationOrdinal,
+                        0,
+                        CreateDefinitionPayload(
+                            in request,
+                            definition.DefinitionId,
+                            GasBoundaryFactKind.ExecutionCalculation))))
+                return false;
+
+            if (definition.Lifetime == GasEffectLifetimePolicy.InstantExecution &&
+                definition.CueRange.Count == 0)
+                return AppendInitialFact(
+                    ref state,
+                    outbox,
+                    CreateInitialFactHeader(
+                        in membership,
+                        in battle,
+                        in request,
+                        readyTick,
+                        GasBoundaryFactKind.Cue,
+                        5,
+                        operationOrdinal,
+                        0,
+                        CreateDefinitionPayload(
+                            in request,
+                            definition.DefinitionId,
+                            GasBoundaryFactKind.Cue)));
+
+            var emittedCue = false;
+            for (var cue = 0; cue < definition.CueRange.Count; cue++)
+            {
+                var reference = catalog.CueReferences[definition.CueRange.Start + cue];
+                var phases = definition.Lifetime == GasEffectLifetimePolicy.InstantExecution
+                    ? GasCuePhaseFlags.OnActive | GasCuePhaseFlags.Executed
+                    : GasCuePhaseFlags.OnActive;
+                if ((reference.Phases & phases) == GasCuePhaseFlags.None)
+                    continue;
+                if (!AppendInitialFact(
+                        ref state,
+                        outbox,
+                        CreateInitialFactHeader(
+                            in membership,
+                            in battle,
+                            in request,
+                            readyTick,
+                            GasBoundaryFactKind.Cue,
+                            definition.Lifetime == GasEffectLifetimePolicy.InstantExecution ? (ushort)5 : (ushort)4,
+                            operationOrdinal,
+                            reference.CueDefinitionOrdinal,
+                            CreateDefinitionPayload(
+                                in request,
+                                definition.DefinitionId,
+                                GasBoundaryFactKind.Cue))))
+                    return false;
+                emittedCue = true;
+            }
+            if (definition.Lifetime == GasEffectLifetimePolicy.InstantExecution && !emittedCue)
+                return AppendInitialFact(
+                    ref state,
+                    outbox,
+                    CreateInitialFactHeader(
+                        in membership,
+                        in battle,
+                        in request,
+                        readyTick,
+                        GasBoundaryFactKind.Cue,
+                        5,
+                        operationOrdinal,
+                        0,
+                        CreateDefinitionPayload(
+                            in request,
+                            definition.DefinitionId,
+                            GasBoundaryFactKind.Cue)));
+            return true;
+        }
+
+        /// <summary>
+        /// 创建 execution/Cue fact 的稳定 payload。
+        /// </summary>
+        private static BoundaryFactPayload CreateDefinitionPayload(
+            in GasGameplayEffectApplicationRequest request,
+            int definitionId,
+            GasBoundaryFactKind kind)
+        {
+            return new BoundaryFactPayload
+            {
+                SchemaVersion = 1,
+                Kind = GasBoundaryPayloadKind.IntegerPair,
+                Integer0 = (long)kind,
+                Integer1 = request.ApplicationId > long.MaxValue
+                    ? long.MaxValue
+                    : (long)request.ApplicationId,
+                Integer2 = definitionId,
+                StableId0 = request.ApplicationId,
+                StableId1 = request.CausalityId,
+            };
+        }
+
+        /// <summary>
+        /// 为 bootstrap modifier 生成与普通 application 相同的稳定 contributor 身份。
+        /// </summary>
+        private static ulong ComposeInitialContributorId(
+            ulong applicationId,
+            int modifierOrdinal)
+        {
+            var value = applicationId ^
+                        (0x9E3779B97F4A7C15UL * (ulong)(modifierOrdinal + 1));
+            return value == 0 ? 1UL : value;
+        }
+
+        /// <summary>
+        /// 创建 ASC-scoped fact 的稳定身份、phase、scope 与 payload 头部。
+        /// </summary>
+        private static BoundaryFactBuffer CreateInitialFactHeader(
+            in AscBattleMembership membership,
+            in BattleInstanceHandle battle,
+            in GasGameplayEffectApplicationRequest request,
+            ulong readyTick,
+            GasBoundaryFactKind kind,
+            ushort phase,
+            int operationOrdinal,
+            int factOrdinal,
+            in BoundaryFactPayload payload)
+        {
+            return new BoundaryFactBuffer
+            {
+                Scope = GasBoundaryFactScope.Asc,
+                Plane = GasBoundaryFactPlane.Gameplay,
+                ScopeStableId = request.TargetAsc.AscStableId,
+                ScopeGeneration = request.TargetAsc.AscGeneration,
+                BattleInstanceId = battle.BattleStableId,
+                BattleInstanceGeneration = battle.BattleGeneration,
+                OwnerScenarioUnitId = membership.ScenarioUnitId,
+                SourceAsc = request.SourceAsc,
+                TargetAsc = request.TargetAsc,
+                SimulationTick = readyTick,
+                SemanticPhaseOrdinal = phase,
+                WorkClassOrdinal = 1,
+                ParentCausalityId = request.CausalityId,
+                SemanticId = request.ApplicationId,
+                Kind = kind,
+                Payload = payload,
             };
         }
 

@@ -59,7 +59,7 @@ namespace GAS.AutoChessDemo
                 performanceResult.Units.Length,
                 performanceResult.BattleTicks,
                 performanceResult.TotalTicks,
-                performanceResult.WarmupDroppedTicks,
+                performanceResult.SpawnFinalizeMaintenanceTicks,
                  performanceResult.MeasuredTicks,
                  performanceResult.AcceptedCommandCount,
                  observation.AttributeFactCount,
@@ -88,7 +88,6 @@ namespace GAS.AutoChessDemo
                  presentation.DroppedLineCount,
                  observation.RingHighWater,
                  0,
-                 scenario.ProcessWarmupRuns,
                  0,
                  reselectTriggerMask,
                  AutoChessGasRuntimeAccessContract.EntryCount,
@@ -395,7 +394,7 @@ namespace GAS.AutoChessDemo
                    + $"units={evidence.UnitCount}, "
                    + $"battleTicks={evidence.BattleTicks}, "
                    + $"totalTicks={evidence.TotalTicks}, "
-                   + $"warmupDroppedTicks={evidence.WarmupDroppedTicks}, "
+                   + $"spawnFinalizeMaintenanceTicks={evidence.SpawnFinalizeMaintenanceTicks}, "
                    + $"measuredTicks={evidence.MeasuredTicks}, "
                    + $"commands={evidence.CommandCount}, "
                    + $"runtimeV1BoundaryFacts={evidence.CoreFactCount}, "
@@ -481,7 +480,6 @@ namespace GAS.AutoChessDemo
                    + $"officialDiffSeparatePass={evidence.OfficialDiffSeparatePass}, "
                    + $"physicsDisabledReason={evidence.PhysicsDisabledReason}, "
                    + $"renderDisabledReason={evidence.RenderDisabledReason}, "
-                   + $"processWarmupRuns={evidence.ProcessWarmupRuns}, "
                    + $"totalElapsedMs={evidence.TotalElapsedMilliseconds:0.000}, "
                     + $"runtimeV1BoundarySequenceHash=0x{evidence.FactsHash:X8}, "
                     + $"summaryHash=0x{evidence.SummaryHash:X8}, "

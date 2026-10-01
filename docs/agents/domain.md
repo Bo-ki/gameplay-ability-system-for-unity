@@ -8,7 +8,7 @@ Use a single-context layout:
 
 - `CONTEXT.md` at the repo root: canonical domain glossary, created lazily by `grill-with-docs` when terms are resolved.
 - `docs/adr/`: architecture decision records, created lazily when a hard-to-reverse decision needs to be recorded.
-- `方案讨论/针对2.0的ECS架构的迭代方案讨论/当前路线/`: existing supporting architecture and task context for EX-GAS 2.0.
+- `方案讨论/针对2.0的ECS架构的迭代方案讨论/`: existing supporting architecture and task context for EX-GAS 2.0. Its current unique executable entry is `02-主线任务树/RuntimeV1不可兼容迁移/README.md`.
 
 If `CONTEXT.md` or `docs/adr/` does not exist yet, proceed silently. Do not create them just because they are missing; create them only when a domain term or architectural decision has actually been resolved.
 

@@ -1,0 +1,17 @@
+{
+  "Version": 2,
+  "UnityConsumerAuthority": 0,
+  "GenerationId": "30ba57f71c22191196b3119d471e4ca52c0c948da91f2b66aa76af22a0a50ee8",
+  "PromotionId": "1ff03d835df2472cab443651df474bf0",
+  "ExclusiveClaimId": "1257a0af12b94546a035fad21c1fdd17",
+  "SelectorSha256": "24dd8a907752df35edcbd75142226072b45b111c4eb68c572dd98db7cf1c575a",
+  "DescriptorSha256": "0d69f4cb193b87dfd45dfb2140c059b947202826fa288fc698b318be2e159768",
+  "InstallEnvelopeSha256": "ef952e36077c48f2caffebb0a1799f50b86b3a935380bf1e8024eb74a0d80396",
+  "RequiredArtifactSetContractHash": "63f69551708194359d76c3772fb68983a3632d8994d818d7ec3e8c931ac74565",
+  "ArtifactManifestHash": "fbb8b511f4362ecd210cf9b3c9c46dcb3a0440c684d84c195280f8fbc1e5c060",
+  "SourceArtifactInventoryHash": "9d15aca5d6f0a90c3423fc2faaf813604fb70bf6ea0805910f6bad57a133a51b",
+  "AnalyzerSha256": "b6cb1219f05c6874f0eed4bf10d4457a7debb44f28ee7013daa6d1a0a1e26934",
+  "RouteScaffoldSha256": "f83b592cf943cbec6c6f4b72c0de0e4f93337826517d1972a64f7acec40b5af2",
+  "CandidateCompilePlanSha256": "0aa127d83f1c1e58ef349fcd3eb3fc1e624692db29fea36e22cf5253c5eae2e2",
+  "AuditSha256": "cb87ecfa704425bc5a523610d3f54001493172d87bf4d2aaffcd675553e3836c"
+}

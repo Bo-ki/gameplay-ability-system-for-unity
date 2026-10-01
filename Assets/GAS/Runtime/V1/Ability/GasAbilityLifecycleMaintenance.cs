@@ -99,6 +99,75 @@ namespace GAS.Runtime
         }
 
         /// <summary>
+        /// 在 CommitPlan 的直接工作已冻结后，为受限 one-shot Activation 建立 normal Ending 屏障。
+        /// </summary>
+        internal static bool TryBeginCommittedOneShotNormalEnd(
+            in GasOwnerPlanRecord committedPlan,
+            DynamicBuffer<AbilityActivationSlot> activations)
+        {
+            if (committedPlan.BusinessAccepted == 0 ||
+                committedPlan.CommandKind != GasBoundaryCommandKind.Commit ||
+                committedPlan.Result != GasAbilityCommandResult.Committed ||
+                committedPlan.ProducesCommittedWork == 0 ||
+                committedPlan.StableSequence == 0 ||
+                !committedPlan.OwnerAsc.IsValid ||
+                !committedPlan.Activation.IsValid ||
+                !committedPlan.GrantedAbility.IsValid ||
+                !committedPlan.Activation.OwnerAsc.Equals(committedPlan.OwnerAsc) ||
+                !TryResolveActivation(in committedPlan.Activation, activations, out var activation) ||
+                !activation.GrantedAbility.Equals(committedPlan.GrantedAbility) ||
+                activation.Phase != GasAbilityActivationPhase.Committed ||
+                activation.CommitSequence != committedPlan.StableSequence ||
+                activation.EndReason != GasAbilityEndReason.None ||
+                activation.WasCancelled != 0)
+                return false;
+
+            activation.Phase = GasAbilityActivationPhase.Ending;
+            activation.EndReason = GasAbilityEndReason.Completed;
+            activation.WasCancelled = 0;
+            activation.LastCommandResult = GasAbilityCommandResult.Ended;
+            activations[activation.Handle.SlotIndex] = activation;
+            return true;
+        }
+
+        /// <summary>
+        /// 对 SupportProfile 已保证无 wait 的 terminal owner 收口全部 Activation，并精确释放 grant child。
+        /// </summary>
+        internal static bool TryFinalizeOneShotOwnerTerminal(
+            in OwnerAscHandle owner,
+            DynamicBuffer<GrantedAbilitySlot> grants,
+            DynamicBuffer<AbilityActivationSlot> activations,
+            DynamicBuffer<AbilityContinuationSlot> continuations,
+            DynamicBuffer<AbilitySubscriptionSlot> subscriptions,
+            ref AscSlabHeads heads,
+            out int finalizedActivationCount)
+        {
+            finalizedActivationCount = 0;
+            if (!owner.IsValid || HasLiveWaitState(continuations, subscriptions) ||
+                !ValidateOwnerTerminalShape(in owner, grants, activations))
+                return false;
+
+            var endingCount = 0;
+            for (var index = 0; index < activations.Length; index++)
+            {
+                var activation = activations[index];
+                if (activation.Header.StorageState != GasSlabSlotState.Live)
+                    continue;
+                activation.Phase = GasAbilityActivationPhase.Ending;
+                activation.EndReason = GasAbilityEndReason.OwnerTerminal;
+                activation.WasCancelled = 1;
+                activation.LastCommandResult = GasAbilityCommandResult.Ended;
+                activations[index] = activation;
+                endingCount++;
+            }
+
+            if (!RunPostCommand(grants, activations, continuations, ref heads))
+                return false;
+            finalizedActivationCount = endingCount;
+            return true;
+        }
+
+        /// <summary>
         /// 回收前一 Tick 留下的 tombstones，使 late generation 永远不能命中新对象。
         /// </summary>
         private static bool RecycleTombstones(
@@ -347,6 +416,101 @@ namespace GAS.Runtime
                     return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// 拒绝把本轮未支持的 Continuation 或 Subscription 静默折叠为 OwnerTerminal。
+        /// </summary>
+        private static bool HasLiveWaitState(
+            DynamicBuffer<AbilityContinuationSlot> continuations,
+            DynamicBuffer<AbilitySubscriptionSlot> subscriptions)
+        {
+            for (var index = 0; index < continuations.Length; index++)
+            {
+                if (continuations[index].Header.StorageState == GasSlabSlotState.Live)
+                    return true;
+            }
+            for (var index = 0; index < subscriptions.Length; index++)
+            {
+                if (subscriptions[index].Header.StorageState == GasSlabSlotState.Live)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 在写入 OwnerTerminal 前证明 activation/grant 关系与闭世界阶段均可 no-fail 收口。
+        /// </summary>
+        private static bool ValidateOwnerTerminalShape(
+            in OwnerAscHandle owner,
+            DynamicBuffer<GrantedAbilitySlot> grants,
+            DynamicBuffer<AbilityActivationSlot> activations)
+        {
+            for (var index = 0; index < activations.Length; index++)
+            {
+                var activation = activations[index];
+                if (activation.Header.StorageState != GasSlabSlotState.Live)
+                    continue;
+                if (!activation.Handle.IsValid || !activation.Handle.OwnerAsc.Equals(owner) ||
+                    activation.Handle.SlotIndex != index ||
+                    activation.Handle.SlotGeneration != activation.Header.Generation ||
+                    (activation.Phase != GasAbilityActivationPhase.RunningUncommitted &&
+                     activation.Phase != GasAbilityActivationPhase.Committed) ||
+                    activation.EndReason != GasAbilityEndReason.None || activation.WasCancelled != 0 ||
+                    activation.ContinuationCount != 0 ||
+                    (activation.Phase == GasAbilityActivationPhase.Committed) !=
+                    (activation.CommitSequence != 0) ||
+                    !TryResolveGrant(activation.GrantedAbility, grants, out _))
+                    return false;
+            }
+
+            for (var index = 0; index < grants.Length; index++)
+            {
+                var grant = grants[index];
+                if (grant.Header.StorageState != GasSlabSlotState.Live)
+                    continue;
+                if (!grant.Handle.IsValid || !grant.Handle.OwnerAsc.Equals(owner) ||
+                    grant.Handle.SlotIndex != index ||
+                    grant.Handle.SlotGeneration != grant.Header.Generation ||
+                    grant.ChildActivationCount != CountLiveChildren(grant.Handle, activations))
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 统计一个 live grant 当前仍拥有的 Activation，用于 child count 精确释放前置证明。
+        /// </summary>
+        private static int CountLiveChildren(
+            in GrantedAbilityHandle grant,
+            DynamicBuffer<AbilityActivationSlot> activations)
+        {
+            var childCount = 0;
+            for (var index = 0; index < activations.Length; index++)
+            {
+                var activation = activations[index];
+                if (activation.Header.StorageState == GasSlabSlotState.Live &&
+                    activation.GrantedAbility.Equals(grant))
+                    childCount++;
+            }
+            return childCount;
+        }
+
+        /// <summary>
+        /// 解析完整 typed handle 对应的 live Activation，不接受仅索引或 generation 命中。
+        /// </summary>
+        private static bool TryResolveActivation(
+            in AbilityActivationHandle handle,
+            DynamicBuffer<AbilityActivationSlot> activations,
+            out AbilityActivationSlot activation)
+        {
+            activation = default;
+            if (!handle.IsValid || handle.SlotIndex < 0 || handle.SlotIndex >= activations.Length)
+                return false;
+            activation = activations[handle.SlotIndex];
+            return activation.Header.StorageState == GasSlabSlotState.Live &&
+                   activation.Header.Generation == handle.SlotGeneration &&
+                   activation.Handle.Equals(handle);
         }
 
         /// <summary>

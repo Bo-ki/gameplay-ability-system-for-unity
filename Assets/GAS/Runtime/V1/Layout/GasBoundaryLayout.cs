@@ -106,6 +106,23 @@ namespace GAS.Runtime
     }
 
     /// <summary>
+    /// 承载 final-publish 后由 managed fence 交给唯一 Gate ledger 的 typed RequestTerminal intent。
+    /// </summary>
+    [InternalBufferCapacity(0)]
+    internal struct GasRequestTerminalIntent : IBufferElementData
+    {
+        public GasRequestTerminal Terminal;
+
+        /// <summary>
+        /// 从已经完成 invariant 校验的公开终态创建单次桥接 intent。
+        /// </summary>
+        internal static GasRequestTerminalIntent Create(in GasRequestTerminal terminal)
+        {
+            return new GasRequestTerminalIntent { Terminal = terminal };
+        }
+    }
+
+    /// <summary>
     /// 冻结 outbox 物理 owner 与两阶段接管身份，使 owner 销毁后的空 shell 仍能生成 NoFactReceipt。
     /// </summary>
     public struct BoundaryDrainState : ICleanupComponentData

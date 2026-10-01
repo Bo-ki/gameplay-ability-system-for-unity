@@ -3,6 +3,7 @@
     "rootNamespace": "",
     "references": [
         "com.exhard.exgas.runtime",
+        "com.exhard.exgas.autochessdemo",
         "Unity.Collections",
         "Unity.Entities",
         "Unity.Physics"

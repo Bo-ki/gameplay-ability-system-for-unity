@@ -1,0 +1,110 @@
+{
+  "Schema": "D0M2F-ThreatRegister-v1",
+  "Threats": [
+    {
+      "ThreatId": "TH-01",
+      "Severity": "P0",
+      "Disposition": "HardRejected",
+      "Reason": "PreStartMaterializerRequired",
+      "Description": "The route requires a wrapper or pre-start materializer that direct Unity startup can bypass."
+    },
+    {
+      "ThreatId": "TH-02",
+      "Severity": "P0",
+      "Disposition": "HardRejected",
+      "Reason": "MultipleMutableSelectors",
+      "Description": "More than one mutable input can independently select a generation."
+    },
+    {
+      "ThreatId": "TH-03",
+      "Severity": "P0",
+      "Disposition": "HardRejected",
+      "Reason": "AuthorityMutationObserved",
+      "Description": "Unity, UPM, or the harness writes bytes classified as immutable authority."
+    },
+    {
+      "ThreatId": "TH-04",
+      "Severity": "P0",
+      "Disposition": "HardRejected",
+      "Reason": "MixedGenerationObserved",
+      "Description": "Runtime, Editor, and AutoChess do not resolve to one generation."
+    },
+    {
+      "ThreatId": "TH-05",
+      "Severity": "P0",
+      "Disposition": "HardRejected",
+      "Reason": "CacheFallbackSelectorObserved",
+      "Description": "A lock file, PackageCache, unpack directory, Bee output, or response file acts as a fallback selector."
+    },
+    {
+      "ThreatId": "TH-06",
+      "Severity": "P0",
+      "Disposition": "HardRejected",
+      "Reason": "PerAssemblySelectorRequired",
+      "Description": "The SourceGenerator route needs a different selector or token per assembly."
+    },
+    {
+      "ThreatId": "TH-07",
+      "Severity": "P0",
+      "Disposition": "HardRejected",
+      "Reason": "AssemblyInvalidationFailed",
+      "Description": "One or more of Runtime, Editor, and AutoChess do not recompile after the selector changes."
+    },
+    {
+      "ThreatId": "TH-08",
+      "Severity": "P0",
+      "Disposition": "HardRejected",
+      "Reason": "ActiveGeneratedSourceCoConsumptionRequired",
+      "Description": "The candidate requires existing active generated source to participate in compilation."
+    },
+    {
+      "ThreatId": "TH-09",
+      "Severity": "P0",
+      "Disposition": "HardRejected",
+      "Reason": "StaleBeeOrRspDeterminedGeneration",
+      "Description": "Stale Bee or response-file state determines the final generation."
+    },
+    {
+      "ThreatId": "TH-10",
+      "Severity": "P0",
+      "Disposition": "Inconclusive",
+      "Reason": "SelectorConflictObserved",
+      "Description": "The forced ActiveGenerationRef versus candidate-selector conflict has more than one Unity consumer."
+    },
+    {
+      "ThreatId": "TH-11",
+      "Severity": "P0",
+      "Disposition": "Inconclusive",
+      "Reason": "CacheOrStartupOrderDependent",
+      "Description": "The forced conflict result depends on cache state or startup order."
+    },
+    {
+      "ThreatId": "TH-12",
+      "Severity": "P0",
+      "Disposition": "Inconclusive",
+      "Reason": "ProtectedPathDrift",
+      "Description": "A production protected path changes between J0 and J2."
+    },
+    {
+      "ThreatId": "TH-13",
+      "Severity": "P0",
+      "Disposition": "Inconclusive",
+      "Reason": "FixtureBoundaryViolation",
+      "Description": "The disposable fixture escapes its owned root or contains a hardlink or reparse point."
+    },
+    {
+      "ThreatId": "TH-14",
+      "Severity": "P1",
+      "Disposition": "Inconclusive",
+      "Reason": "EvidenceIncomplete",
+      "Description": "Required raw evidence or an identity binding is missing and cannot support a route conclusion."
+    },
+    {
+      "ThreatId": "TH-15",
+      "Severity": "P1",
+      "Disposition": "TimedOut",
+      "Reason": "TimeBoxExceeded",
+      "Description": "A bounded probe exceeds its fixed time box; the run is not automatically extended."
+    }
+  ]
+}

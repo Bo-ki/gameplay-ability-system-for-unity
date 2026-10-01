@@ -1,0 +1,7 @@
+{
+  "name": "com.exhard.exgas.d0m1-slot",
+  "version": "1.0.0",
+  "displayName": "EX-GAS D0-M1 Slot",
+  "description": "Isolated immutable UPM slot used only by the D0-M1 experiment.",
+  "unity": "6000.3"
+}

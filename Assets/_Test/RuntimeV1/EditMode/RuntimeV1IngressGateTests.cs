@@ -16,6 +16,8 @@ namespace GAS.RuntimeV1.Tests.EditMode
             new BattleInstanceHandle(SimulationEpoch, 301, 2);
         private static readonly OwnerAscHandle SourceAsc =
             new OwnerAscHandle(501, 3);
+        private static readonly OwnerAscHandle TargetAsc =
+            new OwnerAscHandle(502, 4);
 
         /// <summary>
         /// 验证权限输入数组与命令 payload 均在进入持久事实源时完成深复制。
@@ -119,6 +121,153 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
+        /// 验证 Boundary 目标不接受半截 Avatar generation 或未注册空间变体。
+        /// </summary>
+        [Test]
+        public void TargetRef_冻结Avatar与Spatial字段必须完整()
+        {
+            var gate = CreateGate(4, 0);
+            var port = new GasCommandPort(gate);
+            var partialAvatarTarget = BoundaryTargetRef.ForAsc(
+                in Battle,
+                in SourceAsc,
+                0,
+                7);
+            var partialContext = CreateApplyEffectContext(31, partialAvatarTarget);
+            var partial = port.RequestApplyEffect(
+                in partialContext,
+                9203,
+                BoundaryCommandPayloadDescriptor.None,
+                ReadOnlySpan<byte>.Empty);
+            AssertRejected(partial, GasCommandAcceptStatus.TargetInvalid);
+
+            var invalidSpatial = new GasBoundarySpatialSnapshot(
+                GasTargetDataVariant.StableAsc,
+                0,
+                0,
+                0f,
+                0f,
+                0f,
+                0f,
+                0f,
+                0f,
+                0f,
+                0f);
+            var spatialTarget = BoundaryTargetRef.ForFrozenSpatial(
+                in Battle,
+                in SourceAsc,
+                in invalidSpatial);
+            var spatialContext = CreateApplyEffectContext(32, spatialTarget);
+            var spatial = port.RequestApplyEffect(
+                in spatialContext,
+                9203,
+                BoundaryCommandPayloadDescriptor.None,
+                ReadOnlySpan<byte>.Empty);
+            AssertRejected(spatial, GasCommandAcceptStatus.TargetInvalid);
+        }
+
+        /// <summary>
+        /// 验证冻结 Avatar/spatial 字段进入 exact duplicate 头比较，变更 generation 不复用序号。
+        /// </summary>
+        [Test]
+        public void TargetRef_冻结字段参与Duplicate与SemanticIdentity()
+        {
+            var gate = CreateGate(4, 0);
+            var port = new GasCommandPort(gate);
+            var snapshot = new GasBoundarySpatialSnapshot(
+                GasTargetDataVariant.FrozenSpatialPoint,
+                71,
+                0,
+                1f,
+                2f,
+                3f,
+                0f,
+                0f,
+                0f,
+                0f,
+                0f);
+            var target = BoundaryTargetRef.ForAsc(
+                in Battle,
+                in SourceAsc,
+                81,
+                4,
+                in snapshot);
+            var context = CreateApplyEffectContext(41, target);
+            var first = port.RequestApplyEffect(
+                in context,
+                9203,
+                BoundaryCommandPayloadDescriptor.None,
+                ReadOnlySpan<byte>.Empty);
+            var duplicate = port.RequestApplyEffect(
+                in context,
+                9203,
+                BoundaryCommandPayloadDescriptor.None,
+                ReadOnlySpan<byte>.Empty);
+            var reboundTarget = BoundaryTargetRef.ForAsc(
+                in Battle,
+                in SourceAsc,
+                81,
+                5,
+                in snapshot);
+            var reboundContext = CreateApplyEffectContext(41, reboundTarget);
+            var conflict = port.RequestApplyEffect(
+                in reboundContext,
+                9203,
+                BoundaryCommandPayloadDescriptor.None,
+                ReadOnlySpan<byte>.Empty);
+
+            Assert.That(first.Status, Is.EqualTo(GasCommandAcceptStatus.Accepted));
+            Assert.That(duplicate.Status, Is.EqualTo(GasCommandAcceptStatus.DuplicateAccepted));
+            Assert.That(conflict.Status, Is.EqualTo(GasCommandAcceptStatus.RequestIdConflict));
+        }
+
+        /// <summary>
+        /// 验证规范 ASC target 只对 Commit 开放，Activate/Cancel 与延迟 selector/rule 继续 fail closed。
+        /// </summary>
+        [Test]
+        public void AbilityCommandTarget_仅Commit接受规范Asc()
+        {
+            var gate = CreateGate(8, 0);
+            var port = new GasCommandPort(gate);
+            var target = BoundaryTargetRef.ForAsc(in Battle, in TargetAsc);
+            var activation = new AbilityActivationHandle(SimulationEpoch, SourceAsc, 3, 7);
+            var grant = new GrantedAbilityHandle(SimulationEpoch, SourceAsc, 2, 5);
+
+            var commitContext = CreateAbilityContext(51, in target);
+            var commit = port.RequestCommit(
+                in commitContext, in activation,
+                BoundaryCommandPayloadDescriptor.None, ReadOnlySpan<byte>.Empty);
+            var activateContext = CreateAbilityContext(52, in target);
+            var activate = port.RequestActivate(
+                in activateContext, in grant,
+                BoundaryCommandPayloadDescriptor.None, ReadOnlySpan<byte>.Empty);
+            var cancelContext = CreateAbilityContext(53, in target);
+            var cancel = port.RequestCancel(
+                in cancelContext, in activation,
+                BoundaryCommandPayloadDescriptor.None, ReadOnlySpan<byte>.Empty);
+            var selector = BoundaryTargetRef.ForBattleSelector(in Battle, 91);
+            var selectorContext = CreateAbilityContext(54, in selector);
+            var selectorCommit = port.RequestCommit(
+                in selectorContext, in activation,
+                BoundaryCommandPayloadDescriptor.None, ReadOnlySpan<byte>.Empty);
+            var rule = BoundaryTargetRef.ForDefinitionRule(in Battle, 2);
+            var ruleContext = CreateAbilityContext(55, in rule);
+            var ruleCommit = port.RequestCommit(
+                in ruleContext, in activation,
+                BoundaryCommandPayloadDescriptor.None, ReadOnlySpan<byte>.Empty);
+
+            Assert.That(commit.Status, Is.EqualTo(GasCommandAcceptStatus.Accepted));
+            AssertRejected(activate, GasCommandAcceptStatus.InvalidRequest);
+            AssertRejected(cancel, GasCommandAcceptStatus.InvalidRequest);
+            AssertRejected(selectorCommit, GasCommandAcceptStatus.InvalidRequest);
+            AssertRejected(ruleCommit, GasCommandAcceptStatus.InvalidRequest);
+            Assert.That(gate.TryFreezeIngressWindow(out var records), Is.True);
+            Assert.That(records, Has.Length.EqualTo(1));
+            Assert.That(records[0].Kind, Is.EqualTo(GasBoundaryCommandKind.Commit));
+            Assert.That(records[0].Target, Is.EqualTo(target));
+        }
+
+        /// <summary>
         /// 验证 Freeze 固定当前 cutoff，锁释放后接受的记录只进入下一次 tail window。
         /// </summary>
         [Test]
@@ -144,6 +293,37 @@ namespace GAS.RuntimeV1.Tests.EditMode
             Assert.That(gate.TryFreezeIngressWindow(out var emptyWindow, out var emptyCutoff), Is.False);
             Assert.That(emptyWindow, Is.Empty);
             Assert.That(emptyCutoff, Is.Zero);
+        }
+
+        /// <summary>
+        /// 验证相同语义输入在一次窗口或拆成两个 TickBatch 时得到相同 semantic hash，传输序号不参与语义指纹。
+        /// </summary>
+        [Test]
+        public void TickBatch切分_不改变SemanticHash()
+        {
+            var wholeGate = CreateGate();
+            var wholePort = new GasCommandPort(wholeGate);
+            RequestActivate(wholePort, 51, Array.Empty<byte>(), 11, 3);
+            RequestActivate(wholePort, 52, Array.Empty<byte>(), 12, 3);
+            Assert.That(wholeGate.TryFreezeIngressWindow(out var wholeWindow), Is.True);
+
+            var splitGate = CreateGate();
+            var splitPort = new GasCommandPort(splitGate);
+            RequestActivate(splitPort, 51, Array.Empty<byte>(), 11, 3);
+            Assert.That(splitGate.TryFreezeIngressWindow(out var firstWindow), Is.True);
+            RequestActivate(splitPort, 52, Array.Empty<byte>(), 12, 3);
+            Assert.That(splitGate.TryFreezeIngressWindow(out var secondWindow), Is.True);
+
+            Assert.That(
+                GasCommandIngressSystem.ComputeSemanticHash(
+                    wholeWindow[0], 1, (ushort)wholeWindow[0].Kind),
+                Is.EqualTo(GasCommandIngressSystem.ComputeSemanticHash(
+                    firstWindow[0], 1, (ushort)firstWindow[0].Kind)));
+            Assert.That(
+                GasCommandIngressSystem.ComputeSemanticHash(
+                    wholeWindow[1], 1, (ushort)wholeWindow[1].Kind),
+                Is.EqualTo(GasCommandIngressSystem.ComputeSemanticHash(
+                    secondWindow[0], 1, (ushort)secondWindow[0].Kind)));
         }
 
         /// <summary>
@@ -251,6 +431,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 new[]
                 {
                     new GasIngressAscAuthority(SourceAsc, Battle, GasAscRegistryState.Ready),
+                    new GasIngressAscAuthority(TargetAsc, Battle, GasAscRegistryState.Ready),
                 });
             Assert.That(gate.ReplaceAuthoritySnapshot(snapshot), Is.True);
             return gate;
@@ -282,6 +463,42 @@ namespace GAS.RuntimeV1.Tests.EditMode
                     PayloadSchemaVersion,
                     GasBoundaryCommandPayloadKind.AbilityRequest);
             return port.RequestActivate(in context, in ability, in descriptor, payload);
+        }
+
+        /// <summary>
+        /// 创建带显式 ASC 目标的 ApplyEffect 上下文，供 Boundary target contract 测试复用。
+        /// </summary>
+        private static GasBoundaryCommandContext CreateApplyEffectContext(
+            ulong requestId,
+            in BoundaryTargetRef target)
+        {
+            return new GasBoundaryCommandContext(
+                SimulationEpoch,
+                requestId,
+                requestId + 100,
+                0,
+                true,
+                Battle,
+                SourceAsc,
+                target);
+        }
+
+        /// <summary>
+        /// 创建 source 与 Activation owner 一致、target 由场景显式冻结的 Ability 上下文。
+        /// </summary>
+        private static GasBoundaryCommandContext CreateAbilityContext(
+            ulong requestId,
+            in BoundaryTargetRef target)
+        {
+            return new GasBoundaryCommandContext(
+                SimulationEpoch,
+                requestId,
+                requestId + 100,
+                0,
+                true,
+                Battle,
+                SourceAsc,
+                target);
         }
 
         /// <summary>

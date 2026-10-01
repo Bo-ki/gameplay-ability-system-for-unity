@@ -11,6 +11,8 @@ namespace GAS.RuntimeV1.Tests.EditMode
     [TestFixture]
     public class RuntimeV1LifecycleDefinitionValidationTests
     {
+        private const ulong SchemaHash = 1UL;
+
         /// <summary>
         /// 验证 StackingId 没有对应物理字段时不能进入 Runtime v1 Catalog。
         /// </summary>
@@ -70,8 +72,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
             var builder = new BlobBuilder(Allocator.Temp);
             ref var root = ref builder.ConstructRoot<GasDefinitionCatalogBlob>();
             root.SchemaVersion = GasDefinitionCatalogSchema.Version;
-            root.SchemaHash = 1;
-            root.ContentHash = 2;
+            root.SchemaHash = SchemaHash;
             builder.Allocate(ref root.AttributeLayout.Entries, 1)[0] = new GasAttributeLayoutEntryBlob
             {
                 AttributeId = 1,
@@ -79,10 +80,8 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 MinimumValue = -100f,
                 MaximumValue = 100f,
             };
-            root.AttributeLayout.LayoutHash = 3;
             builder.Allocate(ref root.TagCatalog.Entries, 0);
             builder.Allocate(ref root.TagCatalog.AncestorIndices, 0);
-            root.TagCatalog.CatalogHash = 4;
             builder.Allocate(ref root.GameplayEffectIndex, 1)[0] = new GasDefinitionIndexEntry
             {
                 DefinitionId = 100,
@@ -115,15 +114,23 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 MissedPeriodPolicy = GasMissedPeriodPolicy.SkipNoCatchUp,
             };
             AllocateEmptyArrays(ref root, builder);
-            return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+            var catalog = builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+            GasDefinitionCatalogContentHasher.Stamp(ref catalog.Value);
+            return catalog;
         }
 
         /// <summary>
-        /// 执行与测试 header 完全匹配的 Catalog validator。
+        /// 重新封印测试后置 policy 变更，再执行与当前内容完全匹配的 Catalog validator。
         /// </summary>
         private static GasCatalogValidationResult Validate(ref GasDefinitionCatalogBlob catalog)
         {
-            var expectation = new GasCatalogValidationExpectation(1, 1, 2, 3, 4);
+            GasDefinitionCatalogContentHasher.Stamp(ref catalog);
+            var expectation = new GasCatalogValidationExpectation(
+                catalog.SchemaVersion,
+                catalog.SchemaHash,
+                catalog.ContentHash,
+                catalog.AttributeLayout.LayoutHash,
+                catalog.TagCatalog.CatalogHash);
             return GasDefinitionCatalogValidator.Validate(ref catalog, in expectation);
         }
 

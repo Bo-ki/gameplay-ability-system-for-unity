@@ -355,16 +355,17 @@ namespace GAS.Runtime
         }
 
         /// <summary>
-        /// 为唯一物理 owner 分配持久 OwnerSequence 并追加一条自包含 Boundary fact。
+        /// 纯计算最终 EventId 与追加后的 DrainState，校验失败或成功均不写入 outbox。
         /// </summary>
-        private static bool TryAppendFactRecord(
-            ref BoundaryDrainState state,
-            DynamicBuffer<BoundaryFactBuffer> outbox,
+        internal static bool TryPrepareFactAppend(
+            in BoundaryDrainState state,
             in BoundaryFactBuffer fact,
-            out BoundaryFactBuffer appendedFact,
+            out BoundaryFactBuffer preparedFact,
+            out BoundaryDrainState stateAfter,
             out GasBoundaryDrainFailure failure)
         {
-            appendedFact = default;
+            preparedFact = default;
+            stateAfter = default;
             if (!TryValidateFactAppend(in state, in fact, out failure))
                 return false;
 
@@ -382,16 +383,16 @@ namespace GAS.Runtime
                 return false;
             }
 
-            appendedFact = fact;
-            appendedFact.EventId.SimulationEpoch = state.SimulationEpoch;
-            appendedFact.EventId.OwnerKind = state.OwnerKind;
-            appendedFact.EventId.OwnerStableId = state.OwnerStableId;
-            appendedFact.EventId.OwnerGeneration = state.OwnerGeneration;
-            appendedFact.EventId.OwnerSequence = state.NextOwnerSequence;
-            outbox.Add(appendedFact);
-            state.NextOwnerSequence++;
-            if (state.Phase == GasBoundaryDrainPhase.Idle)
-                state.Phase = GasBoundaryDrainPhase.Pending;
+            preparedFact = fact;
+            preparedFact.EventId.SimulationEpoch = state.SimulationEpoch;
+            preparedFact.EventId.OwnerKind = state.OwnerKind;
+            preparedFact.EventId.OwnerStableId = state.OwnerStableId;
+            preparedFact.EventId.OwnerGeneration = state.OwnerGeneration;
+            preparedFact.EventId.OwnerSequence = state.NextOwnerSequence;
+            stateAfter = state;
+            stateAfter.NextOwnerSequence++;
+            if (stateAfter.Phase == GasBoundaryDrainPhase.Idle)
+                stateAfter.Phase = GasBoundaryDrainPhase.Pending;
             return true;
         }
 
@@ -406,16 +407,20 @@ namespace GAS.Runtime
             out GasBoundaryDrainFailure failure)
         {
             ownerSequence = 0;
-            BoundaryFactBuffer appendedFact;
-            var accepted = TryAppendFactRecord(
-                ref state,
-                outbox,
+            if (!TryPrepareFactAppend(
+                in state,
                 in fact,
-                out appendedFact,
-                out failure);
-            if (accepted)
-                ownerSequence = appendedFact.EventId.OwnerSequence;
-            return accepted;
+                out var preparedFact,
+                out var stateAfter,
+                out failure))
+            {
+                return false;
+            }
+
+            outbox.Add(preparedFact);
+            state = stateAfter;
+            ownerSequence = preparedFact.EventId.OwnerSequence;
+            return true;
         }
 
         /// <summary>

@@ -524,6 +524,15 @@ namespace GAS.Runtime
         }
 
         /// <summary>
+        /// 判断 outbound kind 是否定义了 destination 消失后的类型化 owner-gone 回执。
+        /// </summary>
+        internal static bool SupportsObservedOwnerGoneResponse(int commandKind)
+        {
+            return commandKind == (int)GasAbilityPendingCommandKind.WaitUnsubscribe ||
+                   commandKind == (int)GasAbilityPendingCommandKind.WaitRegistration;
+        }
+
+        /// <summary>
         /// route destination 已消失时把 registration/unsubscribe 转为 owner 可消费的类型化终态消息。
         /// </summary>
         internal static bool TryCreateObservedOwnerGoneResponse(

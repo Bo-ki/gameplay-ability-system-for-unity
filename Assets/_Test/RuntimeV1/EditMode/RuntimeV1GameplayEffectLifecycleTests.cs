@@ -155,6 +155,161 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
+        /// 验证 PauseSchedule 当前不 claim 时，admission 仍按结构 due 预留一次 claim 与全部 modifier。
+        /// </summary>
+        [Test]
+        public void PeriodAdmission_PauseSchedule抑制槽仍预留完整上界()
+        {
+            using var world = new World("Runtime v1 period admission pause schedule test");
+            var entity = CreateEntity(world, 1);
+            using var catalog = CreateCatalog(
+                GasExpirySameTickPolicy.PeriodDueBeforeExpiry,
+                GasExpiryPolicy.Remove,
+                GasExpiryPeriodPolicy.Stop,
+                10,
+                2,
+                withOngoingRequirement: true,
+                inhibitedPeriodPolicy: GasInhibitedPeriodPolicy.PauseSchedule,
+                modifierCount: 3);
+            CreateSlot(world, entity, catalog, 10, 2, 1, inhibited: 1);
+
+            AssertPeriodDecision(world, entity, catalog, 2, expectedClaim: 0, expectedExecute: 0);
+            Assert.That(
+                Estimate(world, entity, catalog, 2, out var claims, out var mutations, out var failure),
+                Is.True);
+            Assert.That(failure, Is.EqualTo(GasActiveEffectLifecycleFailure.None));
+            Assert.That(claims, Is.EqualTo(1));
+            Assert.That(mutations, Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// 验证 SkipExecution 不执行 body 时，admission 仍为 OwnerWave 后恢复保留完整 modifier。
+        /// </summary>
+        [Test]
+        public void PeriodAdmission_SkipExecution仍预留完整Modifier上界()
+        {
+            using var world = new World("Runtime v1 period admission skip execution test");
+            var entity = CreateEntity(world, 1);
+            using var catalog = CreateCatalog(
+                GasExpirySameTickPolicy.PeriodDueBeforeExpiry,
+                GasExpiryPolicy.Remove,
+                GasExpiryPeriodPolicy.Stop,
+                10,
+                2,
+                withOngoingRequirement: true,
+                inhibitedPeriodPolicy: GasInhibitedPeriodPolicy.SkipExecution,
+                modifierCount: 3);
+            CreateSlot(world, entity, catalog, 10, 2, 1);
+
+            AssertPeriodDecision(world, entity, catalog, 2, expectedClaim: 1, expectedExecute: 0);
+            Assert.That(
+                Estimate(world, entity, catalog, 2, out var claims, out var mutations, out var failure),
+                Is.True);
+            Assert.That(failure, Is.EqualTo(GasActiveEffectLifecycleFailure.None));
+            Assert.That(claims, Is.EqualTo(1));
+            Assert.That(mutations, Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// 验证结构 due 槽缺失正式 ApplicationId 时在 admission 估算阶段失败。
+        /// </summary>
+        [Test]
+        public void PeriodAdmission_结构Due缺失ApplicationId前置失败()
+        {
+            using var world = new World("Runtime v1 period admission identity test");
+            var entity = CreateEntity(world, 0);
+            using var catalog = CreateCatalog(
+                GasExpirySameTickPolicy.PeriodDueBeforeExpiry,
+                GasExpiryPolicy.Remove,
+                GasExpiryPeriodPolicy.Stop,
+                10,
+                2,
+                modifierCount: 1);
+            CreateSlot(world, entity, catalog, 10, 2, 1, applicationId: 0);
+
+            Assert.That(
+                Estimate(world, entity, catalog, 2, out var claims, out var mutations, out var failure),
+                Is.False);
+            Assert.That(failure, Is.EqualTo(GasActiveEffectLifecycleFailure.InvalidIdentity));
+            Assert.That(claims, Is.Zero);
+            Assert.That(mutations, Is.Zero);
+        }
+
+        /// <summary>
+        /// 验证 PauseSchedule 隐藏的结构 due tick 加法回绕也会在 admission 估算阶段失败。
+        /// </summary>
+        [Test]
+        public void PeriodAdmission_结构DueTick加法回绕前置失败()
+        {
+            using var world = new World("Runtime v1 period admission timing test");
+            var entity = CreateEntity(world, 0);
+            using var catalog = CreateCatalog(
+                GasExpirySameTickPolicy.PeriodDueBeforeExpiry,
+                GasExpiryPolicy.Remove,
+                GasExpiryPeriodPolicy.Stop,
+                10,
+                2,
+                inhibitedPeriodPolicy: GasInhibitedPeriodPolicy.PauseSchedule,
+                modifierCount: 1);
+            CreateSlot(
+                world,
+                entity,
+                catalog,
+                ulong.MaxValue,
+                ulong.MaxValue,
+                1,
+                inhibited: 1);
+
+            Assert.That(
+                Estimate(
+                    world,
+                    entity,
+                    catalog,
+                    ulong.MaxValue,
+                    out var claims,
+                    out var mutations,
+                    out var failure),
+                Is.False);
+            Assert.That(failure, Is.EqualTo(GasActiveEffectLifecycleFailure.InvalidTiming));
+            Assert.That(claims, Is.Zero);
+            Assert.That(mutations, Is.Zero);
+        }
+
+        /// <summary>
+        /// 验证 PauseSchedule 隐藏的结构 due ordinal 溢出也会在 admission 估算阶段失败。
+        /// </summary>
+        [TestCase(true)]
+        [TestCase(false)]
+        public void PeriodAdmission_结构DueOrdinal溢出前置失败(bool overflowActiveCycle)
+        {
+            using var world = new World("Runtime v1 period admission ordinal test");
+            var entity = CreateEntity(world, 0);
+            using var catalog = CreateCatalog(
+                GasExpirySameTickPolicy.PeriodDueBeforeExpiry,
+                GasExpiryPolicy.Remove,
+                GasExpiryPeriodPolicy.Stop,
+                10,
+                2,
+                inhibitedPeriodPolicy: GasInhibitedPeriodPolicy.PauseSchedule,
+                modifierCount: 1);
+            CreateSlot(world, entity, catalog, 10, 2, 1, inhibited: 1);
+            var effects = world.EntityManager.GetBuffer<ActiveEffectSlot>(entity);
+            var slot = effects[0];
+            if (overflowActiveCycle)
+                slot.ActiveCycleOrdinal = uint.MaxValue;
+            else
+                slot.PeriodExecutionOrdinal = uint.MaxValue;
+            effects[0] = slot;
+
+            Assert.That(
+                Estimate(world, entity, catalog, 2, out var claims, out var mutations, out var failure),
+                Is.False);
+            Assert.That(failure, Is.EqualTo(GasActiveEffectLifecycleFailure.PeriodOrdinalOverflow));
+            Assert.That(claims, Is.Zero);
+            Assert.That(mutations, Is.Zero);
+        }
+
+        /// <summary>
         /// 验证 period tick 回绕在预检阶段拒绝且不修改 slot/head。
         /// </summary>
         [Test]
@@ -302,7 +457,9 @@ namespace GAS.RuntimeV1.Tests.EditMode
             BlobAssetReference<GasDefinitionCatalogBlob> catalog,
             ulong endTick,
             ulong nextPeriodTick,
-            int stackCount)
+            int stackCount,
+            ulong applicationId = 1,
+            byte inhibited = 0)
         {
             var effects = world.EntityManager.GetBuffer<ActiveEffectSlot>(entity);
             var head = GasSlabHead.CreateEmpty();
@@ -320,8 +477,10 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 StartTick = 0,
                 EndTick = endTick,
                 NextPeriodTick = nextPeriodTick,
+                ApplicationId = applicationId,
                 StackCount = stackCount,
                 State = GasSlotBusinessState.Active,
+                Inhibited = inhibited,
             };
             return head;
         }
@@ -350,6 +509,63 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
+        /// 调用 admission 结构 due 估算并统一传入当前 simulation epoch。
+        /// </summary>
+        private static bool Estimate(
+            World world,
+            Entity entity,
+            BlobAssetReference<GasDefinitionCatalogBlob> catalog,
+            ulong candidateTick,
+            out int claims,
+            out int mutations,
+            out GasActiveEffectLifecycleFailure failure)
+        {
+            ref var root = ref catalog.Value;
+            return GasGameplayEffectLifecycleUtility.TryEstimateDue(
+                ref root,
+                1,
+                candidateTick,
+                world.EntityManager.GetBuffer<ActiveEffectSlot>(entity),
+                world.EntityManager.GetBuffer<TagCountSlot>(entity),
+                4,
+                out claims,
+                out mutations,
+                out failure);
+        }
+
+        /// <summary>
+        /// 验证当前 Tag/inhibition 投影下 target writer 的实际 period 决策。
+        /// </summary>
+        private static void AssertPeriodDecision(
+            World world,
+            Entity entity,
+            BlobAssetReference<GasDefinitionCatalogBlob> catalog,
+            ulong candidateTick,
+            byte expectedClaim,
+            byte expectedExecute)
+        {
+            ref var root = ref catalog.Value;
+            var effects = world.EntityManager.GetBuffer<ActiveEffectSlot>(entity);
+            var definition = root.GameplayEffects[0];
+            var slot = effects[0];
+            Assert.That(
+                GasGameplayEffectLifecycleUtility.TryGetPeriodDecision(
+                    ref root,
+                    in definition,
+                    in slot,
+                    world.EntityManager.GetBuffer<TagCountSlot>(entity),
+                    candidateTick,
+                    out var claim,
+                    out var execute,
+                    out _,
+                    out var failure),
+                Is.True);
+            Assert.That(failure, Is.EqualTo(GasActiveEffectLifecycleFailure.None));
+            Assert.That(claim, Is.EqualTo(expectedClaim));
+            Assert.That(execute, Is.EqualTo(expectedExecute));
+        }
+
+        /// <summary>
         /// 构建包含 duration/period/expiry 与可选 ongoing requirement 的最小 catalog。
         /// </summary>
         private static BlobAssetReference<GasDefinitionCatalogBlob> CreateCatalog(
@@ -360,7 +576,9 @@ namespace GAS.RuntimeV1.Tests.EditMode
             int periodTicks,
             bool withOngoingRequirement = false,
             bool noStack = false,
-            GasMissedPeriodPolicy missedPeriodPolicy = GasMissedPeriodPolicy.SkipNoCatchUp)
+            GasMissedPeriodPolicy missedPeriodPolicy = GasMissedPeriodPolicy.SkipNoCatchUp,
+            GasInhibitedPeriodPolicy inhibitedPeriodPolicy = GasInhibitedPeriodPolicy.SkipExecution,
+            int modifierCount = 0)
         {
             var builder = new BlobBuilder(Allocator.Temp);
             ref var root = ref builder.ConstructRoot<GasDefinitionCatalogBlob>();
@@ -388,7 +606,8 @@ namespace GAS.RuntimeV1.Tests.EditMode
             {
                 DefinitionId = 100,
                 Lifetime = GasEffectLifetimePolicy.Duration,
-                TargetPolicy = new GasTargetPolicyBlob { Life = GasTargetLifePolicy.AliveOnly },
+                TargetPolicy = DefaultTargetPolicy(),
+                ModifierRange = new GasCatalogRange { Start = 0, Count = modifierCount },
                 OngoingRequirementRange = withOngoingRequirement
                     ? new GasCatalogRange { Start = 0, Count = 1 }
                     : default,
@@ -413,7 +632,7 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 ExpiryPeriodPolicy = expiryPeriodPolicy,
                 ExpirySameTickPolicy = sameTickPolicy,
                 InhibitTimePolicy = GasInhibitTimePolicy.DurationContinues,
-                InhibitedPeriodPolicy = GasInhibitedPeriodPolicy.SkipExecution,
+                InhibitedPeriodPolicy = inhibitedPeriodPolicy,
                 MissedPeriodPolicy = missedPeriodPolicy,
             };
             var requirements = builder.Allocate(
@@ -431,8 +650,22 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 };
                 requirementTags[0] = 0;
             }
-            AllocateEmptyArrays(ref root, builder);
+            AllocateEmptyArrays(ref root, builder, modifierCount);
             return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+        }
+
+        /// <summary>
+        /// 返回测试 lifecycle 使用的完整 target policy，避免把零值枚举当作兼容默认值。
+        /// </summary>
+        private static GasTargetPolicyBlob DefaultTargetPolicy()
+        {
+            return new GasTargetPolicyBlob
+            {
+                LogicalTarget = GasLogicalTargetPolicy.Self,
+                Avatar = GasAvatarTargetPolicy.FollowAsc,
+                Spatial = GasSpatialTargetPolicy.None,
+                Life = GasTargetLifePolicy.AliveOnly,
+            };
         }
 
         /// <summary>
@@ -440,12 +673,13 @@ namespace GAS.RuntimeV1.Tests.EditMode
         /// </summary>
         private static void AllocateEmptyArrays(
             ref GasDefinitionCatalogBlob root,
-            BlobBuilder builder)
+            BlobBuilder builder,
+            int modifierCount)
         {
             builder.Allocate(ref root.AbilityIndex, 0);
             builder.Allocate(ref root.Abilities, 0);
             builder.Allocate(ref root.CaptureDescriptors, 0);
-            builder.Allocate(ref root.Modifiers, 0);
+            builder.Allocate(ref root.Modifiers, modifierCount);
             builder.Allocate(ref root.DirectEffectProgramNodes, 0);
             builder.Allocate(ref root.CueReferences, 0);
             builder.Allocate(ref root.ValueViews, 0);

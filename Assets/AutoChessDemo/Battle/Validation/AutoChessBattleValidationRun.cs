@@ -490,7 +490,6 @@ namespace GAS.AutoChessDemo
             IAutoChessPresentationOutboxBridge presentationOutboxBridge,
             int maxPresentationLines)
         {
-            RunProcessWarmupBattles(scenario);
             var repeatRunEvidence = RunRepeatRunCleanupProbe(scenario);
 
             var performanceResult = RunGeneratedScenario(
@@ -528,31 +527,6 @@ namespace GAS.AutoChessDemo
                 true,
                 presentationOutboxBridge,
                 maxPresentationLines);
-        }
-
-        public static void RunProcessWarmupBattles(AutoChessGeneratedScenarioProfile scenario)
-        {
-            for (var i = 0; i < scenario.ProcessWarmupRuns; i++)
-            {
-                RunWarmupPass(CreateGeneratedScenarioOptions(
-                    scenario,
-                    captureOfficialToolDiff: false,
-                    debuggerEnabled: false,
-                    captureSystemTimings: false,
-                    captureBufferPressure: false));
-            }
-        }
-
-        public static void RunWarmupPass(AutoChessBattleOptions options)
-        {
-            try
-            {
-                AutoChessBattleManager.RunDefault(options);
-            }
-            finally
-            {
-                AutoChessBattleManager.ShutdownRuntime();
-            }
         }
 
         public static AutoChessRepeatRunEvidence RunRepeatRunCleanupProbe(
@@ -860,7 +834,6 @@ namespace GAS.AutoChessDemo
         {
             return new AutoChessBattleOptions(
                 scenario.MaxTicks,
-                scenario.PostVictoryFlushTicks,
                 scenario.Scale,
                 captureOfficialToolDiff,
                 debuggerEnabled,
@@ -880,7 +853,6 @@ namespace GAS.AutoChessDemo
             replayOptions = replayOptions.Normalize();
             return new AutoChessBattleOptions(
                 Math.Max(1, performanceResult.BattleTicks),
-                replayOptions.PostVictoryFlushTicks,
                 replayOptions.Scale,
                 captureOfficialToolDiff,
                 debuggerEnabled,

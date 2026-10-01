@@ -9,6 +9,7 @@ namespace GAS.Runtime
     public static class GasDefinitionCatalogSchema
     {
         public const int Version = 1;
+        public const ulong Hash = 0x4753415356310001UL;
     }
 
     /// <summary>
@@ -38,6 +39,7 @@ namespace GAS.Runtime
         Ongoing = 2,
         Removal = 3,
         Immunity = 4,
+        AbilityActivation = 5,
     }
 
     /// <summary>
@@ -540,6 +542,7 @@ namespace GAS.Runtime
         public int DefinitionId;
         public int Level;
         public int MaxConcurrentActivations;
+        public GasCatalogRange ActivationRequirementRange;
         public GasCostMutationContractBlob CostMutationContract;
         public GasCooldownGateContractBlob CooldownGateContract;
         public GasTargetPolicyBlob TargetPolicy;

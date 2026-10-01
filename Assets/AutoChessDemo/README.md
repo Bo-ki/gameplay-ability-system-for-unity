@@ -38,8 +38,8 @@
 ```powershell
 dotnet build com.exhard.exgas.runtime.csproj --no-restore -p:UseSharedCompilation=false
 dotnet build com.exhard.exgas.autochessdemo.csproj --no-restore -p:UseSharedCompilation=false
-E:\Unity\UnityEditor\6000.3.14f1\Editor\Unity.exe -batchmode -nographics -projectPath E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity-dots-gas-v1 -runTests -testPlatform EditMode -testResults TestResults/EditMode.xml -logFile Logs/EditMode.log
-E:\Unity\UnityEditor\6000.3.14f1\Editor\Unity.exe -batchmode -nographics -projectPath E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity-dots-gas-v1 -runTests -testPlatform PlayMode -testResults TestResults/PlayMode.xml -logFile Logs/PlayMode.log
+E:\Unity\UnityEditor\6000.3.14f1\Editor\Unity.exe -batchmode -nographics -projectPath E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity -runTests -testPlatform EditMode -testResults TestResults/EditMode.xml -logFile Logs/EditMode.log
+E:\Unity\UnityEditor\6000.3.14f1\Editor\Unity.exe -batchmode -nographics -projectPath E:\Unity\UnityProjects\_Git\gameplay-ability-system-for-unity -runTests -testPlatform PlayMode -testResults TestResults/PlayMode.xml -logFile Logs/PlayMode.log
 ```
 
 Unity 缓存、测试日志和构建产物不纳入提交；未经明确要求不 push。

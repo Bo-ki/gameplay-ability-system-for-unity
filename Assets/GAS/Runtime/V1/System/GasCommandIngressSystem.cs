@@ -43,6 +43,9 @@ namespace GAS.Runtime
     internal partial class GasCommandIngressSystem : SystemBase
     {
         private const ushort ExternalCommandSemanticPhaseOrdinal = 1;
+        // 外部 Ability 命令共享同一语义 work class，随后由调用方提供的 SourceSequence
+        // 决定同一 owner 的正式先后；CommandKind 只作为完全同序的最终稳定 tie-breaker。
+        private const ushort ExternalCommandWorkClassOrdinal = 1;
         private readonly List<ulong> _deliveredRequestSequences = new List<ulong>();
         private readonly List<ulong> _acknowledgedForCompaction = new List<ulong>();
         private EntityQuery _sessionQuery;
@@ -205,7 +208,7 @@ namespace GAS.Runtime
             int payloadOffset)
         {
             var semanticPhase = ExternalCommandSemanticPhaseOrdinal;
-            var workClass = (ushort)record.Kind;
+            var workClass = ExternalCommandWorkClassOrdinal;
             return new GasIngressTransferRecord
             {
                 SimulationEpoch = record.SimulationEpoch,
@@ -235,7 +238,7 @@ namespace GAS.Runtime
         /// <summary>
         /// 计算排除 RequestId/RequestSequence 的完整业务语义指纹，transport 到达顺序不得参与。
         /// </summary>
-        private static ulong ComputeSemanticHash(
+        internal static ulong ComputeSemanticHash(
             GasBoundaryJournalRecord record,
             ushort semanticPhase,
             ushort workClass)
@@ -295,6 +298,10 @@ namespace GAS.Runtime
             hash.AddUInt64(target.BattleInstance.BattleStableId);
             hash.AddUInt32(target.BattleInstance.BattleGeneration);
             AddOwner(ref hash, target.TargetAsc);
+            hash.AddUInt64(target.TargetAvatarStableId);
+            hash.AddUInt32(target.TargetAvatarBindingGeneration);
+            var spatialSnapshot = target.SpatialSnapshot;
+            hash.AddSpatialSnapshot(in spatialSnapshot);
             hash.AddUInt64(target.SelectorStableId);
             hash.AddInt32(target.DefinitionRuleIndex);
         }

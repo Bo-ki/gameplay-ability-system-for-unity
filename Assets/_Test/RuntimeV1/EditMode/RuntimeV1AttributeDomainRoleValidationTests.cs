@@ -12,9 +12,6 @@ namespace GAS.RuntimeV1.Tests.EditMode
     public class RuntimeV1AttributeDomainRoleValidationTests
     {
         private const ulong SchemaHash = 0x6101UL;
-        private const ulong ContentHash = 0x6202UL;
-        private const ulong AttributeLayoutHash = 0x6303UL;
-        private const ulong TagCatalogHash = 0x6404UL;
 
         /// <summary>
         /// 验证唯一 Health 属性在启用零下限 clamp 时可以通过 Catalog 安装校验。
@@ -65,16 +62,16 @@ namespace GAS.RuntimeV1.Tests.EditMode
         }
 
         /// <summary>
-        /// 使用测试固定 header 调用与安装端相同的 Catalog validator。
+        /// 使用已 canonical 封印的测试 header 调用与安装端相同的 Catalog validator。
         /// </summary>
         private static GasCatalogValidationResult Validate(ref GasDefinitionCatalogBlob catalog)
         {
             var expectation = new GasCatalogValidationExpectation(
-                GasDefinitionCatalogSchema.Version,
-                SchemaHash,
-                ContentHash,
-                AttributeLayoutHash,
-                TagCatalogHash);
+                catalog.SchemaVersion,
+                catalog.SchemaHash,
+                catalog.ContentHash,
+                catalog.AttributeLayout.LayoutHash,
+                catalog.TagCatalog.CatalogHash);
             return GasDefinitionCatalogValidator.Validate(ref catalog, in expectation);
         }
 
@@ -90,16 +87,15 @@ namespace GAS.RuntimeV1.Tests.EditMode
                 ref var root = ref builder.ConstructRoot<GasDefinitionCatalogBlob>();
                 root.SchemaVersion = GasDefinitionCatalogSchema.Version;
                 root.SchemaHash = SchemaHash;
-                root.ContentHash = ContentHash;
-                root.AttributeLayout.LayoutHash = AttributeLayoutHash;
-                root.TagCatalog.CatalogHash = TagCatalogHash;
 
                 var attributes = builder.Allocate(ref root.AttributeLayout.Entries, entries.Length);
                 for (var index = 0; index < entries.Length; index++)
                     attributes[index] = entries[index];
 
                 AllocateEmptyArrays(ref builder, ref root);
-                return builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                var catalog = builder.CreateBlobAssetReference<GasDefinitionCatalogBlob>(Allocator.Persistent);
+                GasDefinitionCatalogContentHasher.Stamp(ref catalog.Value);
+                return catalog;
             }
             finally
             {

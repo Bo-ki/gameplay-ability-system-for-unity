@@ -23,6 +23,8 @@ namespace GAS.Runtime
         Sealed = 1,
         Consumed = 2,
         FaultTerminated = 3,
+        BattleTerminated = 4,
+        OwnerDisposed = 5,
     }
 
     /// <summary>
@@ -43,6 +45,118 @@ namespace GAS.Runtime
     {
         None = 0,
         ResolveAtConsume = 1,
+    }
+
+    /// <summary>
+    /// 保存在 Boundary 侧冻结的空间 TargetData 变体；它只能表示已注册的空间样本，不能退化成逻辑 ASC。
+    /// </summary>
+    public readonly struct GasBoundarySpatialSnapshot : IEquatable<GasBoundarySpatialSnapshot>
+    {
+        public readonly GasTargetDataVariant Variant;
+        public readonly ulong StableId0;
+        public readonly ulong StableId1;
+        public readonly float Scalar0;
+        public readonly float Scalar1;
+        public readonly float Scalar2;
+        public readonly float Scalar3;
+        public readonly float Scalar4;
+        public readonly float Scalar5;
+        public readonly float Scalar6;
+        public readonly float Scalar7;
+
+        /// <summary>
+        /// 返回没有冻结空间数据的规范空值。
+        /// </summary>
+        public static GasBoundarySpatialSnapshot None => default;
+
+        /// <summary>
+        /// 判断空间变体与全部数值槽是否形成可跨 Tick 搬运的有限快照。
+        /// </summary>
+        public bool IsValid => Variant >= GasTargetDataVariant.FrozenSpatialPoint &&
+                               Variant <= GasTargetDataVariant.FrozenSpatialShape &&
+                               IsFinite(Scalar0) && IsFinite(Scalar1) &&
+                               IsFinite(Scalar2) && IsFinite(Scalar3) &&
+                               IsFinite(Scalar4) && IsFinite(Scalar5) &&
+                               IsFinite(Scalar6) && IsFinite(Scalar7);
+
+        /// <summary>
+        /// 创建携带稳定标识与固定标量槽的空间快照；具体槽含义由生成的 TargetData schema 解释。
+        /// </summary>
+        public GasBoundarySpatialSnapshot(
+            GasTargetDataVariant variant,
+            ulong stableId0,
+            ulong stableId1,
+            float scalar0,
+            float scalar1,
+            float scalar2,
+            float scalar3,
+            float scalar4,
+            float scalar5,
+            float scalar6,
+            float scalar7)
+        {
+            Variant = variant;
+            StableId0 = stableId0;
+            StableId1 = stableId1;
+            Scalar0 = scalar0;
+            Scalar1 = scalar1;
+            Scalar2 = scalar2;
+            Scalar3 = scalar3;
+            Scalar4 = scalar4;
+            Scalar5 = scalar5;
+            Scalar6 = scalar6;
+            Scalar7 = scalar7;
+        }
+
+        /// <summary>
+        /// 比较两个空间快照的变体、稳定标识与全部标量槽。
+        /// </summary>
+        public bool Equals(GasBoundarySpatialSnapshot other)
+        {
+            return Variant == other.Variant &&
+                   StableId0 == other.StableId0 && StableId1 == other.StableId1 &&
+                   Scalar0 == other.Scalar0 && Scalar1 == other.Scalar1 &&
+                   Scalar2 == other.Scalar2 && Scalar3 == other.Scalar3 &&
+                   Scalar4 == other.Scalar4 && Scalar5 == other.Scalar5 &&
+                   Scalar6 == other.Scalar6 && Scalar7 == other.Scalar7;
+        }
+
+        /// <summary>
+        /// 比较对象是否为相同空间快照。
+        /// </summary>
+        public override bool Equals(object obj)
+        {
+            return obj is GasBoundarySpatialSnapshot other && Equals(other);
+        }
+
+        /// <summary>
+        /// 计算覆盖空间快照全部稳定槽的哈希码。
+        /// </summary>
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hashCode = (int)Variant;
+                hashCode = (hashCode * 397) ^ (int)(StableId0 ^ (StableId0 >> 32));
+                hashCode = (hashCode * 397) ^ (int)(StableId1 ^ (StableId1 >> 32));
+                hashCode = (hashCode * 397) ^ Scalar0.GetHashCode();
+                hashCode = (hashCode * 397) ^ Scalar1.GetHashCode();
+                hashCode = (hashCode * 397) ^ Scalar2.GetHashCode();
+                hashCode = (hashCode * 397) ^ Scalar3.GetHashCode();
+                hashCode = (hashCode * 397) ^ Scalar4.GetHashCode();
+                hashCode = (hashCode * 397) ^ Scalar5.GetHashCode();
+                hashCode = (hashCode * 397) ^ Scalar6.GetHashCode();
+                return (hashCode * 397) ^ Scalar7.GetHashCode();
+            }
+        }
+
+        /// <summary>
+        /// 判断浮点槽不是 NaN 或无穷，避免空间样本污染确定性链。
+        /// </summary>
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
     }
 
     /// <summary>
@@ -86,6 +200,9 @@ namespace GAS.Runtime
         IngressPayloadBytesExceeded = 21,
         RequestIdConflict = 22,
         RequestSequenceExhausted = 23,
+        UnsupportedByRuntimeV1Profile = 24,
+        BattleTerminalClosed = 25,
+        OwnerDisposed = 26,
     }
 
     /// <summary>
@@ -98,8 +215,22 @@ namespace GAS.Runtime
         public readonly ulong SimulationEpoch;
         public readonly BattleInstanceHandle BattleInstance;
         public readonly OwnerAscHandle TargetAsc;
+        public readonly ulong TargetAvatarStableId;
+        public readonly uint TargetAvatarBindingGeneration;
+        public readonly GasBoundarySpatialSnapshot SpatialSnapshot;
         public readonly ulong SelectorStableId;
         public readonly int DefinitionRuleIndex;
+
+        /// <summary>
+        /// 判断该目标是否携带完整的冻结 Avatar stable identity 与 binding generation。
+        /// </summary>
+        public bool HasAvatarBinding => TargetAvatarStableId != 0 &&
+                                         TargetAvatarBindingGeneration != 0;
+
+        /// <summary>
+        /// 判断该目标是否携带有效 FrozenSpatial TargetData。
+        /// </summary>
+        public bool HasFrozenSpatial => SpatialSnapshot.IsValid;
 
         /// <summary>
         /// 返回不携带任何目标的规范空引用。
@@ -119,7 +250,69 @@ namespace GAS.Runtime
                 battleInstance,
                 targetAsc,
                 0,
+                0,
+                GasBoundarySpatialSnapshot.None,
+                0,
                 0);
+        }
+
+        /// <summary>
+        /// 创建携带冻结 Avatar stable identity 与 binding generation 的 ASC 目标引用。
+        /// </summary>
+        public static BoundaryTargetRef ForAsc(
+            in BattleInstanceHandle battleInstance,
+            in OwnerAscHandle targetAsc,
+            ulong targetAvatarStableId,
+            uint targetAvatarBindingGeneration)
+        {
+            return new BoundaryTargetRef(
+                GasBoundaryTargetKind.Asc,
+                battleInstance.SimulationEpoch,
+                battleInstance,
+                targetAsc,
+                targetAvatarStableId,
+                targetAvatarBindingGeneration,
+                GasBoundarySpatialSnapshot.None,
+                0,
+                0);
+        }
+
+        /// <summary>
+        /// 创建同时冻结 Avatar 与空间 TargetData 的 ASC 目标引用。
+        /// </summary>
+        public static BoundaryTargetRef ForAsc(
+            in BattleInstanceHandle battleInstance,
+            in OwnerAscHandle targetAsc,
+            ulong targetAvatarStableId,
+            uint targetAvatarBindingGeneration,
+            in GasBoundarySpatialSnapshot spatialSnapshot)
+        {
+            return new BoundaryTargetRef(
+                GasBoundaryTargetKind.Asc,
+                battleInstance.SimulationEpoch,
+                battleInstance,
+                targetAsc,
+                targetAvatarStableId,
+                targetAvatarBindingGeneration,
+                spatialSnapshot,
+                0,
+                0);
+        }
+
+        /// <summary>
+        /// 创建只冻结空间样本而不要求 Avatar 仍存在的 ASC 目标引用。
+        /// </summary>
+        public static BoundaryTargetRef ForFrozenSpatial(
+            in BattleInstanceHandle battleInstance,
+            in OwnerAscHandle targetAsc,
+            in GasBoundarySpatialSnapshot spatialSnapshot)
+        {
+            return ForAsc(
+                in battleInstance,
+                in targetAsc,
+                0,
+                0,
+                in spatialSnapshot);
         }
 
         /// <summary>
@@ -134,6 +327,9 @@ namespace GAS.Runtime
                 battleInstance.SimulationEpoch,
                 battleInstance,
                 default,
+                0,
+                0,
+                GasBoundarySpatialSnapshot.None,
                 selectorStableId,
                 0);
         }
@@ -151,6 +347,9 @@ namespace GAS.Runtime
                 battleInstance,
                 default,
                 0,
+                0,
+                GasBoundarySpatialSnapshot.None,
+                0,
                 definitionRuleIndex);
         }
 
@@ -164,6 +363,9 @@ namespace GAS.Runtime
                    SimulationEpoch == other.SimulationEpoch &&
                    BattleInstance.Equals(other.BattleInstance) &&
                    TargetAsc.Equals(other.TargetAsc) &&
+                   TargetAvatarStableId == other.TargetAvatarStableId &&
+                   TargetAvatarBindingGeneration == other.TargetAvatarBindingGeneration &&
+                   SpatialSnapshot.Equals(other.SpatialSnapshot) &&
                    SelectorStableId == other.SelectorStableId &&
                    DefinitionRuleIndex == other.DefinitionRuleIndex;
         }
@@ -188,6 +390,10 @@ namespace GAS.Runtime
                 hashCode = (hashCode * 397) ^ (int)(SimulationEpoch ^ (SimulationEpoch >> 32));
                 hashCode = (hashCode * 397) ^ BattleInstance.GetHashCode();
                 hashCode = (hashCode * 397) ^ TargetAsc.GetHashCode();
+                hashCode = (hashCode * 397) ^ (int)(TargetAvatarStableId ^
+                                                     (TargetAvatarStableId >> 32));
+                hashCode = (hashCode * 397) ^ (int)TargetAvatarBindingGeneration;
+                hashCode = (hashCode * 397) ^ SpatialSnapshot.GetHashCode();
                 hashCode = (hashCode * 397) ^ (int)(SelectorStableId ^ (SelectorStableId >> 32));
                 return (hashCode * 397) ^ DefinitionRuleIndex;
             }
@@ -201,6 +407,9 @@ namespace GAS.Runtime
             ulong simulationEpoch,
             BattleInstanceHandle battleInstance,
             OwnerAscHandle targetAsc,
+            ulong targetAvatarStableId,
+            uint targetAvatarBindingGeneration,
+            GasBoundarySpatialSnapshot spatialSnapshot,
             ulong selectorStableId,
             int definitionRuleIndex)
         {
@@ -209,6 +418,9 @@ namespace GAS.Runtime
             SimulationEpoch = simulationEpoch;
             BattleInstance = battleInstance;
             TargetAsc = targetAsc;
+            TargetAvatarStableId = targetAvatarStableId;
+            TargetAvatarBindingGeneration = targetAvatarBindingGeneration;
+            SpatialSnapshot = spatialSnapshot;
             SelectorStableId = selectorStableId;
             DefinitionRuleIndex = definitionRuleIndex;
         }
@@ -254,6 +466,21 @@ namespace GAS.Runtime
         public readonly BoundaryTargetRef Target;
 
         /// <summary>
+        /// 转发目标冻结 Avatar stable identity，避免调用方绕过 command context 读取 ECS。
+        /// </summary>
+        public ulong TargetAvatarStableId => Target.TargetAvatarStableId;
+
+        /// <summary>
+        /// 转发目标冻结 Avatar binding generation，作为 RequireSameAvatar 的代际屏障。
+        /// </summary>
+        public uint TargetAvatarBindingGeneration => Target.TargetAvatarBindingGeneration;
+
+        /// <summary>
+        /// 转发目标 FrozenSpatial 快照，保证 context 读取与 journal 使用同一不可变值。
+        /// </summary>
+        public GasBoundarySpatialSnapshot TargetSpatialSnapshot => Target.SpatialSnapshot;
+
+        /// <summary>
         /// 使用完整稳定身份、独立 SourceSequence 与可用 Tick 创建请求上下文。
         /// </summary>
         public GasBoundaryCommandContext(
@@ -283,21 +510,28 @@ namespace GAS.Runtime
     public readonly struct GasCommandAcceptResult
     {
         public readonly GasCommandAcceptStatus Status;
+        public readonly ulong SimulationEpoch;
         public readonly ulong RequestId;
         public readonly ulong RequestSequence;
 
         public bool IsAccepted => Status == GasCommandAcceptStatus.Accepted ||
                                   Status == GasCommandAcceptStatus.DuplicateAccepted;
 
+        public GasRequestKey RequestKey => IsAccepted
+            ? new GasRequestKey(SimulationEpoch, RequestId, RequestSequence)
+            : default;
+
         /// <summary>
         /// 创建携带状态、请求身份与已分配序号的接受结果。
         /// </summary>
         internal GasCommandAcceptResult(
             GasCommandAcceptStatus status,
+            ulong simulationEpoch,
             ulong requestId,
             ulong requestSequence)
         {
             Status = status;
+            SimulationEpoch = simulationEpoch;
             RequestId = requestId;
             RequestSequence = requestSequence;
         }
@@ -318,7 +552,7 @@ namespace GAS.Runtime
             ReadOnlySpan<byte> payload);
 
         /// <summary>
-        /// 请求提交一个存活激活实例，并把 payload 深复制到持久 journal。
+        /// 请求提交一个存活激活实例；context 可携规范 ASC target，payload 深复制到持久 journal。
         /// </summary>
         GasCommandAcceptResult RequestCommit(
             in GasBoundaryCommandContext context,
@@ -352,6 +586,18 @@ namespace GAS.Runtime
             in ActiveEffectHandle activeEffect,
             in BoundaryCommandPayloadDescriptor payloadDescriptor,
             ReadOnlySpan<byte> payload);
+
+        /// <summary>
+        /// 读取指定 Accepted RequestKey 的唯一业务终态，drain 后仍可幂等读取。
+        /// </summary>
+        bool TryReadRequestTerminal(
+            in GasRequestKey requestKey,
+            out GasRequestTerminal terminal);
+
+        /// <summary>
+        /// 按首次发布顺序取走当前尚未 drain 的 RequestTerminal；持久 ledger 继续支持精确读取。
+        /// </summary>
+        bool TryDrainRequestTerminals(out GasRequestTerminal[] terminals);
     }
 
     /// <summary>
@@ -499,6 +745,30 @@ namespace GAS.Runtime
         }
 
         /// <summary>
+        /// 将仍未消费的 Sealed 记录推进到 BattleTerminated，避免把战局终局误记为 Session fault。
+        /// </summary>
+        internal bool MarkBattleTerminated()
+        {
+            if (State != GasBoundaryCommandState.Sealed)
+                return false;
+
+            State = GasBoundaryCommandState.BattleTerminated;
+            return true;
+        }
+
+        /// <summary>
+        /// 将仍未消费的 Sealed 记录推进到 OwnerDisposed，保留 teardown 的独立审计语义。
+        /// </summary>
+        internal bool MarkOwnerDisposed()
+        {
+            if (State != GasBoundaryCommandState.Sealed)
+                return false;
+
+            State = GasBoundaryCommandState.OwnerDisposed;
+            return true;
+        }
+
+        /// <summary>
         /// 比较除 RequestSequence 外所有请求头字段，供 exact duplicate 判定复用。
         /// </summary>
         private bool HasSameHeader(in GasBoundaryCommandDraft draft)
@@ -574,6 +844,10 @@ namespace GAS.Runtime
             hash.AddUInt32(Target.BattleInstance.BattleGeneration);
             hash.AddUInt64(Target.TargetAsc.AscStableId);
             hash.AddUInt32(Target.TargetAsc.AscGeneration);
+            hash.AddUInt64(Target.TargetAvatarStableId);
+            hash.AddUInt32(Target.TargetAvatarBindingGeneration);
+            var spatialSnapshot = Target.SpatialSnapshot;
+            hash.AddSpatialSnapshot(in spatialSnapshot);
             hash.AddUInt64(Target.SelectorStableId);
             hash.AddInt32(Target.DefinitionRuleIndex);
             hash.AddUInt64(Handle.SimulationEpoch);
@@ -658,6 +932,32 @@ namespace GAS.Runtime
         {
             AddUInt32((uint)value);
             AddUInt32((uint)(value >> 32));
+        }
+
+        /// <summary>
+        /// 按固定字段顺序追加完整 FrozenSpatial 快照，保证空间数值进入命令指纹。
+        /// </summary>
+        internal void AddSpatialSnapshot(in GasBoundarySpatialSnapshot snapshot)
+        {
+            AddByte((byte)snapshot.Variant);
+            AddUInt64(snapshot.StableId0);
+            AddUInt64(snapshot.StableId1);
+            AddFloat(snapshot.Scalar0);
+            AddFloat(snapshot.Scalar1);
+            AddFloat(snapshot.Scalar2);
+            AddFloat(snapshot.Scalar3);
+            AddFloat(snapshot.Scalar4);
+            AddFloat(snapshot.Scalar5);
+            AddFloat(snapshot.Scalar6);
+            AddFloat(snapshot.Scalar7);
+        }
+
+        /// <summary>
+        /// 以 IEEE-754 原始位模式追加浮点值，避免平台格式化差异污染语义哈希。
+        /// </summary>
+        internal void AddFloat(float value)
+        {
+            AddUInt32(unchecked((uint)BitConverter.SingleToInt32Bits(value)));
         }
 
         /// <summary>
